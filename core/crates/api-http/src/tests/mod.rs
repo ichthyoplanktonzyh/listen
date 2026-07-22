@@ -5,6 +5,8 @@ use persistence_sqlite::SqliteRepository;
 use std::collections::BTreeSet;
 use tower::ServiceExt;
 
+mod semantic_embedding;
+
 fn test_state() -> ApiState {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     ApiState::new(
@@ -24,7 +26,11 @@ fn test_state() -> ApiState {
         .with_corpus_index_repository(repo.clone())
         .with_coach_dashboard_repository(repo.clone())
         .with_semantic_task_repository(repo.clone())
-        .with_llm_provider_profile_repository(repo.clone()),
+        .with_production_corpus_repository(repo.clone())
+        .with_personal_expression_repository(repo.clone())
+        .with_llm_provider_profile_repository(repo.clone())
+        .with_realtime_conversation_repository(repo.clone())
+        .with_reading_position_repository(repo.clone()),
         repo,
         "secret",
     )
@@ -32,6 +38,169 @@ fn test_state() -> ApiState {
 
 fn test_app() -> Router {
     router(test_state())
+}
+
+#[tokio::test]
+async fn personal_expression_is_explicit_versioned_and_channel_honest() {
+    let app = test_app();
+    let create = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/personal-expression/patterns")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "language":"en",
+                        "source":{"kind":"reading","text":"I ended up fixing it.","media_id":"media-that-may-disappear","media_fingerprint":"source-fp","start_ms":10,"end_ms":20},
+                        "name":"Ended up",
+                        "pattern_text":"I ended up {result}.",
+                        "slots":[{"name":"result","required":true}],
+                        "note":"My real outcomes",
+                        "system_construction_id":null
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create.status(), StatusCode::CREATED);
+    let body = to_bytes(create.into_body(), usize::MAX).await.unwrap();
+    let pattern: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let pattern_id = pattern["id"].as_str().unwrap();
+    let version_id = pattern["current_version"]["id"].as_str().unwrap();
+
+    let writing = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/v1/personal-expression/patterns/{pattern_id}/attempts"
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "pattern_version_id":version_id,
+                    "channel":"writing",
+                    "assistance":"no_text",
+                    "response_text":"I ended up fixing the release after dinner.",
+                    "self_assessment":"expressed"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(writing.status(), StatusCode::CREATED);
+
+    let invalid_speaking = app
+        .clone()
+        .oneshot(
+            Request::post(format!(
+                "/v1/personal-expression/patterns/{pattern_id}/attempts"
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "pattern_version_id":version_id,
+                    "channel":"speaking",
+                    "assistance":"no_text",
+                    "response_text":"I ended up fixing it.",
+                    "raw_transcript":"raw",
+                    "self_assessment":"partly_expressed"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid_speaking.status(), StatusCode::BAD_REQUEST);
+
+    let export = app
+        .clone()
+        .oneshot(
+            Request::get("/v1/personal-expression/export?language=en")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(export.status(), StatusCode::OK);
+    let body = to_bytes(export.into_body(), usize::MAX).await.unwrap();
+    let bundle: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(bundle["schema"], "llplayer.personal-expression.v1");
+    assert_eq!(
+        bundle["patterns"][0]["versions"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        bundle["patterns"][0]["attempts"].as_array().unwrap().len(),
+        1
+    );
+
+    let read = app
+        .oneshot(
+            Request::get(format!("/v1/personal-expression/patterns/{pattern_id}"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    let body = to_bytes(read.into_body(), usize::MAX).await.unwrap();
+    let persisted: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(persisted["source"]["text"], "I ended up fixing it.");
+    assert!(persisted["current_version"]["system_construction_id"].is_null());
+}
+
+#[tokio::test]
+async fn realtime_provider_registration_is_write_only_and_listable() {
+    let app = test_app();
+    let secret = "realtime-api-secret-not-returned";
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "display_name":"QA OpenAI",
+                        "adapter_kind":"open_ai_realtime",
+                        "base_url":"wss://api.openai.com/v1/realtime",
+                        "model_id":"gpt-realtime",
+                        "voice":"marin",
+                        "secret":secret
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let text = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!text.contains(secret));
+    assert!(!text.contains("auth_ref"));
+    assert!(text.contains("has_credential"));
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -142,6 +311,9 @@ mod media_subtitles;
 mod openapi;
 mod phonetic_analysis;
 mod practice;
+mod reading;
 mod semantic;
 mod speech_language;
+mod syntax;
 mod timelines;
+mod tts;

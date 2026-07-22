@@ -1,6 +1,6 @@
 # Current Data Model
 
-Last updated: 2026-07-11, Phase 3.8 recording-asset backend foundation.
+Last updated: 2026-07-18, Phase 3.16 durable personal expression assets.
 
 All persisted time values are non-negative integer milliseconds. Public IDs are
 opaque SHA-256 strings generated from a namespace and stable fingerprint; they
@@ -25,6 +25,11 @@ do not contain database row numbers or player-library identifiers.
 | Learning event | `sha256("learning-event:" + kind/subject/timestamp)` |
 | Listening Inbox item | `sha256("listening-inbox-item:" + session/target/timestamp)` |
 | Recording asset | `sha256("recording-asset:" + audio SHA-256/target/source start/timestamp)` |
+| User sentence pattern | Server-minted opaque ID at explicit user save; independent of source/canonical construction |
+| User sentence pattern version | Pattern + append-only version number + creation fingerprint |
+| Personal expression attempt | Pattern + immutable version + completed learner response/time |
+| Writing feedback finding | Attempt + learner revision/hash + project category/span/message + provider/version |
+| Writing finding disposition | Finding + accept/reject + resulting immutable attempt/revision + timestamp |
 
 Media path is mutable metadata, not identity. Registering the same media
 fingerprint updates path/title metadata while retaining the media ID.
@@ -69,6 +74,9 @@ Lexical learning state is split by purpose:
 | `lexical_capability_history` | Before/after capability state audit trail, including override clear |
 | `lexical_occurrences` | Durable source sentence/media snapshot |
 | `lexical_observations` | Sentence-specific heard/not-heard result |
+| `production_corpus_documents` | Rebuildable final learner-response documents with attempt/rubric/source and factual assistance provenance |
+| `production_corpus_entries` | Lemma-keyed token occurrences with surface form and Unicode-scalar span into one document |
+| `production_corpus_documents_fts` | Trigger-maintained phrase-search companion over document text |
 
 Updating a global status never rewrites historical observations. An observation
 is the current per-(entry, sentence) verdict, not an append-only log: its id is
@@ -99,6 +107,12 @@ assets:
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
 | `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
 | `recording_assets` | Local recording path plus transcription-ready audio metadata and durable target/source snapshots |
+| `writing_feedback_findings` | Append-only provider/manual suggestions bound to one exact typed learner revision |
+| `writing_finding_dispositions` | Append-only learner accept/reject facts; acceptance cites a later typed revision |
+| `writing_drafts` | Mutable non-evidence scratch projection keyed by rubric; deleted after immutable submission |
+| `user_sentence_patterns` | Durable user-owned asset with current searchable name/text and immutable source snapshot JSON |
+| `user_sentence_pattern_versions` | Append-only user edits; old template text/slots/system ref remain unchanged |
+| `personal_expression_attempts` | Immutable completed speaking or writing use of one exact pattern version |
 
 `PracticeAttempt` owns what the user tried and how it was evaluated. It may create
 `LexicalObservation` evidence, but it must not silently change global
@@ -107,6 +121,18 @@ assets:
 Shadowing uses `PracticeResult::Completed` when a recording finishes without an
 objective evaluator. This is an activity fact with `score = null`: it creates no
 channelized observation, review item, recognition evidence, or content-fit feedback.
+
+`UserSentencePattern` is a separate durable asset aggregate. Its source media,
+track, sentence and semantic candidate IDs are optional navigation hints inside
+the source snapshot JSON; no media/subtitle foreign key may cascade an asset.
+`system_construction_id` is optional reference metadata on a version and never
+replaces user-owned `pattern_text`.
+
+Personal-expression attempts preserve the channel, assistance, learner response,
+self-assessment and exact immutable version. Writing rejects recording/raw-ASR
+facts; speaking requires a recording asset. Neither channel writes or implies the
+other channel's capability, and these facts do not write learning observations,
+projection proposals or confirmation decisions.
 
 `ReviewItem` owns scheduling targets, not lexical identity. `LexicalEntry` remains
 the authoritative vocabulary learning asset. Anki export or AnkiConnect should
@@ -197,7 +223,17 @@ learning_events
 recording_assets
   ├── practice_attempt_id nullable, ON DELETE SET NULL
   └── media_id nullable, ON DELETE SET NULL
+
+semantic_task_attempts (authoritative immutable facts)
+  └── production_corpus_documents (rebuildable projection; cascade on attempt deletion)
+        └── production_corpus_entries (rebuildable lemma occurrences)
 ```
+
+`ProductionGapReview` is an ephemeral read model over the last two branches. It
+has no identity, table, lifecycle, writer, cascade, or export semantics. Absence
+from `production_corpus_entries` is only a corpus fact; even a `ready` review does
+not become speaking/writing observation or capability projection without the
+separate Phase 3.17 confirmation path.
 
 Losing or deleting media/subtitle rows preserves lexical occurrence snapshots and
 status history. Media availability changes should archive replaceable content;
@@ -210,6 +246,36 @@ Word, chunk, and phone timelines share the same resource lifecycle:
 ```text
 candidate -> active -> archived
 ```
+
+`SyntacticAnalysis` is currently an ephemeral, rebuildable analysis artifact,
+not a timeline or user asset. Its identity isolates the source text/token
+snapshot, language, contract, provider, runtime, model checksum, and profile
+configuration. Phase 3.9.1 adds no SQLite row and grants no deletion/cascade or
+learning-evidence semantics.
+
+The Phase 3.9.2 HTTP batch returns one independently validated artifact per
+source sentence. Reference B evidence, syntax-aware SenseGroup spans, and
+dependency matches carry/reference that same artifact ID. The batch is still
+ephemeral: no new SQLite authority, cascade, or canonical identity is created.
+Invalid/missing sentences contain an explicit fallback reason and no artifact.
+
+Phase 3.9.3 persists only capability lifecycle JSON and rebuildable track-cache JSON in Application Support,
+not SQLite. Capability status is `not_installed/downloading/ready/partial/failed/stale/disabled`. Track-cache
+identity covers subtitle text and token snapshot, language, analysis profile and the combined provider/runtime/
+model/requirements/sidecar delivery checksum. Subtitle or delivery changes therefore expose stale and require
+rebuild; uninstall may delete every syntax cache without deleting a user or learning asset.
+
+`SenseGroupAnalysis` retains its existing independent candidate/active/archive
+lifecycle. `rule-based-sense-group/v1` and `syntax-aware-sense-group/v1` are
+different provider runs rather than in-place upgrades. A syntax-aware run stores
+the source syntactic artifact ID/provider descriptor in `metrics_json`, while
+`chunk_timeline_dependency=false` makes the non-relationship explicit.
+
+`DependencyMatchCandidate` is an ephemeral query result over a validated,
+qualified syntactic artifact. Its matcher-local key, subtitle token span and
+bindings are diagnostics for a later curated layer; they are not a
+`ConstructionId`, canonical key, durable occurrence, capability fact, or user
+asset.
 
 SQLite enforces one active resource per track/resource kind with partial unique
 indexes. `created_by`, parent IDs, publication markers, and model/provider
@@ -229,6 +295,7 @@ boundary, but the Rust and Flutter models now wrap them in typed envelopes:
 | `WordTimeline.metrics_json` | `TimelineMetrics` | lifecycle/provenance metrics |
 | `ChunkTimeline.metrics_json` | `TimelineMetrics` | partitioner and parent timing metrics |
 | `PhoneTimeline.metrics_json` | `TimelineMetrics` | phonetic analysis provenance metrics |
+| `SenseGroupAnalysis.metrics_json` | `TimelineMetrics` | optional source syntactic artifact/provider provenance; never a ChunkTimeline parent |
 | `ChunkTimelineChunk.evidence_json` | `ChunkEvidence` | boundary/evidence payload |
 | `PhoneTimeline.sound_analysis.rhythm_frame` | `RhythmFrame` | audible-structure map: A/B/C references, prominence anchors, phrase-scoped nuclei, weak groups, compression spans, phrase boundaries, connected-speech refs, hotspots, and signal-source quality |
 | `LLTimelineDocument.rhythm_frames[].rhythm_frame` | `RhythmFrame` | first-class WordTimeline-derived rhythm resource keyed by sentence for WordTimeline-only imports/exports |
@@ -274,6 +341,14 @@ flapping candidates. `RhythmConnectedSpeechRef.divergence = teachable_rule`
 means the actual or predicted connected form matches B; `clip_specific` means
 the C-side audio evidence goes beyond B. Pure B predictions use
 `signal_sources = ["text_prior"]` and `claim_status = "predicted"`.
+
+Phase 3.9's resumed A/B/C rework adds optional `citation_structure`,
+`predicted_structure`, and `actual_structure` to each connected-speech ref.
+Each structure contains perceptual groups, IPA, a compact learner cue, and the
+written token indices contributing sound to each group. This makes a linking
+boundary shift explicit (`pick up`: A `/pɪk | ʌp/`, B `/pɪ.kʌp/`, cue
+`pɪ-kʌp`). B is rule-predicted; C is emitted only from audio-backed observed
+phones. Timing/prosody may support C grouping but cannot invent a segmental C.
 
 Production LLTimeline artifacts may include `kind = "rhythm_word_acoustic_cues"`
 with a flat `payload.cues[]` list keyed by `sentence_id` and `token_index`.
@@ -345,6 +420,42 @@ expansion is ephemeral overlay state, not a fourth persisted Rhythm mode.
 - Schema v33 adds `recording_assets`; mutable file paths are metadata, while byte
   length and SHA-256 support later integrity checks and the language/format/sample
   fields are the explicit Phase 3.14 recording-transcription seam.
+- Schema v38 adds Writing finding/disposition facts with UPDATE/DELETE triggers.
+  A suggestion is never a learner response; only a later typed `AttemptResponse`
+  in a new immutable attempt can be cited as the result of acceptance. The same
+  migration adds mutable `writing_drafts`, isolated from every evidence writer.
+- Schema v39 adds `production_corpus_documents`, `production_corpus_entries`,
+  and `production_corpus_documents_fts`. Full response text is stored once per
+  document; token rows cite half-open Unicode-scalar spans. Incremental rubric
+  replacement and full replacement are transactional. The projection writes no
+  lexical observation, capability state/history, or template identity and can
+  be deleted/rebuilt from immutable semantic attempts.
+- Schema v43 adds `user_sentence_patterns`, append-only
+  `user_sentence_pattern_versions`, and immutable `personal_expression_attempts`.
+  Only explicit pattern deletion cascades within this aggregate. Source media
+  deletion cannot cascade because source identity lives only in the immutable
+  JSON snapshot. Attempts are read-only handoff facts for 3.17, not projection
+  or proposal rows.
+- Schema v44 adds append-only `projection_proposals` and `projection_decisions`.
+  A proposal stores channel, algorithm version, conclusion, evidence window,
+  exact evidence references and an immutable fallback snapshot. Decisions never
+  rewrite proposals. Confirmation atomically updates the existing projection
+  slot and `lexical_capability_history`; rejection does not touch capability
+  state. Override remains separate and wins in the effective read model.
+- Rebuild/backfill for v44 is explicit replay, not migration-time inference:
+  v43 capability state/history and observations migrate byte-for-byte, proposal
+  tables start empty, and replay appends/supersedes by algorithm/evidence version.
 - Review scheduling v1 is recorded as `listen_review_v1_heuristic_proxy`: `again` returns in
   10 minutes, `hard` in one day, and successful intervals grow from 3 to 7 days before doubling.
   The durable attempts remain the evidence history; the schedule row is a replaceable read model.
+# Phase 3.15.8 / schema v42 delta (2026-07-16)
+
+- `semantic_embedding_index` is a rebuildable read model: `(model_fingerprint, source_kind, source_id)`
+  primary key, language/channel filters, source-text SHA-256, dimension, float32 little-endian BLOB, and
+  `indexed_at_ms`.
+- The table contains no authoritative text, attempt, learning observation/evidence, capability/proposal,
+  review, or portable asset identity. Full delete/rebuild is always valid.
+- A vector is readable only when descriptor fingerprint, dimension, source identity, and current source
+  text hash match. Model/runtime/purpose/index changes and source edits are stale, never migrated in place.
+- `production_lexeme` rows are distinct read sources derived from production entries and scoped by
+  language/channel. They enrich an existing gap target but do not create one.

@@ -103,7 +103,7 @@ pub fn router(state: ApiState) -> Router {
 // crates/api-http/src/routes/phonetic_analysis.rs
 // crates/api-http/src/routes/timelines.rs
 // crates/api-http/src/routes/vocabulary.rs
-// crates/api-http/src/m18.rs
+// crates/api-http/src/routes/lexical_entries.rs
 // crates/api-http/src/speech_jobs.rs
 ```
 

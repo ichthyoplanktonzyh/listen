@@ -79,10 +79,8 @@ impl SecretStore for KeychainSecretStore {
     fn delete(&self, auth_ref: &LlmAuthRef) -> Result<(), SecretStoreError> {
         if let Some(account) = account_of(auth_ref) {
             // Deleting a non-existent item is fine; ignore not-found.
-            let _ = security_framework::passwords::delete_generic_password(
-                KEYCHAIN_SERVICE,
-                account,
-            );
+            let _ =
+                security_framework::passwords::delete_generic_password(KEYCHAIN_SERVICE, account);
         }
         Ok(())
     }

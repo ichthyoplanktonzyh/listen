@@ -2,6 +2,1362 @@
 
 ## Unreleased
 
+- 2026-07-22: 设计资产落库 —— `design-notes/` 新增三份 listen 视觉稿（refs #28）。
+  `listen-visual-identity.html`（整体气质定稿，暗色墨绿炭 `#1a2420` + 信号青 `#4db8a8`
+  + 琥珀 `#e6b45c`，是 #28 宪章的视觉锚点）、`listen-mark-exploration.html`（wordmark/
+  符号四方向探索，#32 的取材来源）、`listen-motion.html`（动效语言，已列出可直接抄进
+  #32 的 motion token：`--dur-tap/hover/base/slow/ambient` + 三条 ease）。此前这三份稿子
+  只在本地未提交，导致 #28 指向 `blob/HEAD/...visual-identity.html` 的链接是断的；本次
+  提交修复断链，并给后续设计 slice（#29–#32）一个仓内可引用的事实来源。纯文档，不含代码，
+  不触及测试。
+
+- 2026-07-21: 设置最小窗口尺寸 640×560（closes #19，refs #18, #12）。#18 的收尾残留：
+  AppBar 改成纯图标后仍有一个**硬地板 480px**（实测 470 溢出 10px、460 溢出 20px、
+  440 溢出 40px，与 locale 无关，因为图标宽度固定），再往下只能把四组菜单折成单个
+  overflow popup，牺牲可发现性去迁就一个不该被支持的形态。
+  根因不在 AppBar：app 从来没设过窗口下限（`MainFlutterWindow.swift` 只有
+  `setFrame`，无 `contentMinSize`），而 480 低于仓库里**所有**断点（最小的
+  `sidePanelTabLabels` 是 520）——低于 520 时工作台、侧栏、播放控件、首页早已全部
+  处于最降级形态，继续为更窄的宽度加退化分支是在为不存在的形态写代码。正确的边界是
+  给窗口设下限，而不是让每个 widget 各自防御到 0px。
+  顺带一提，默认窗口是 `MainMenu.xib` 里的 800×600，**正好落在 #18 修掉的溢出区间里**。
+  取值 640×560：宽度在 480 硬地板之上留足余量，且 640 已是测试里当作"紧凑桌面布局"的
+  标准宽度；高度 560 让精讲练习窗（自身 clamp 在 360–560）减去工具栏后仍落在其区间内。
+  常量以 `ListenBreakpoints.minWindowWidth/Height` 为单一事实来源并写明依据，Swift 侧
+  引用同名常量。新增 `window_min_size_test.dart` 3 例：**解析 Swift 源文件断言两侧数值
+  一致**（跨语言常量最容易各改各的，仓库里已有 `breakpoint_discipline_test.dart` 读源文件
+  的先例）、断言下限严格大于 480 硬地板、以及在恰好最小尺寸下 en/zh 两 locale 渲染无
+  overflow。两次变异验证：把 Swift 侧改成 400 → 漂移那例变红；把 Dart 下限改成 470 →
+  硬地板与实际渲染两例同时变红。
+  已跑 `flutter build macos --debug` 确认 Swift 改动真能编译。
+  analyze 零告警，全量测试 517 项绿。
+
+- 2026-07-21: 修复 `PlayerAppBar` 在窄窗口下的布局溢出（closes #18，refs #12）。
+  四个带文字标签的菜单按钮 + 设置图标全部固定宽度、没有任何窄屏退化路径，en locale
+  下窗口窄于 836px 时 AppBar 的 title `Row` 被挤爆，debug 下显示黄黑条纹
+  （800px 溢出 36px、760px 溢出 76px、700px 溢出 136px）。zh 不受影响——
+  「内容/字幕/学习」比 `Content/Subtitles/Learning` 短，**这是 locale 相关的布局 bug**。
+  新增 `ListenBreakpoints.appBarLabels = 860`，低于它时菜单按钮只留图标；
+  **阈值按最长的 locale 定而不是最短的**，注释里写明 en 实测需要 836，取 860 留余量，
+  以免将来某个更长的翻译又把溢出带回来。下拉箭头在窄形态下保留——只剩图标时若连箭头
+  都没有，按钮会读成普通动作而不是"能展开菜单"。「更多」菜单本来就是纯图标，不受影响。
+  `player_app_bar_test.dart` 8 例：新增窄屏回归（en/zh × 700/760/800 六种组合断言
+  无 `takeException`）与"窄屏下标签消失但 tooltip 仍在、菜单仍可展开并派发"。
+  变异验证：把阈值改成 0（等价于恒显标签）后两条新用例立刻变红。
+  **残留已知问题**：约 480px 以下纯图标形态仍会溢出（此时与 locale 无关）。根因是
+  全 app 没有设最小窗口尺寸（`MainFlutterWindow.swift` 未设 `contentMinSize`），
+  而该宽度低于仓库里所有其他断点，属于另一个层面的决定，未在本刀处理。
+  analyze 零告警，全量测试 514 项绿。
+
+- 2026-07-21: 首页入口层级收敛——rail 管"去哪儿"，卡片管"看什么"（closes #17，refs #12）。
+  宽窗口首页此前把同一批目的地渲染了两遍：左侧 rail 与卡片区的「到期任务与学习资产」
+  两两完全重合（字幕资源/词汇本/我的表达/复习/学习教练），打开媒体/打开 URL 同样两处都有。
+  两处视觉权重不同（rail 是紧凑列表项，卡片带副标题）暗示层级不同，实际调的是同一个回调。
+  按职责拆开：rail 只留导航（我的学习 5 项 + 设置），拿掉重复的打开媒体/打开 URL；
+  卡片区只留内容动作（继续当前内容、添加来源、媒体库），学习卡改为 `if (compact)`。
+  **方向刻意与 #12 原始判断相反**：媒体载入后 `MediaWorkbench` 会盖住 `ListeningHome`，
+  AppBar 才是唯一常驻入口，所以收敛对象是首页这两层，AppBar 一项没动。
+  关键是不能把窄窗口的路径一起删掉——rail 在 760px 以下整体消失，学习卡正是那时的
+  唯一路径，因此是宽度条件渲染而非直接删除，每个宽度恰好一层拥有它们，不需要新控件。
+  `listening_home_test.dart` 从 5 例增至 7 例：宽窗断言每个目的地"恰好一处"（此前那条
+  测试写的是 `findsNWidgets(2)`，把重复当成了预期行为），窄窗断言全部仍可达。
+  变异验证：把 `if (compact)` 改成 `if (false)`（等价于"直接删卡片"这个更省事的做法）后，
+  窄窗那例立刻变红——这正是它存在的理由。analyze 零告警，全量测试 512 项绿。
+
+- 2026-07-21: 「更多」菜单按语义分节（#16 收尾，refs #12）。导出日志（诊断）与
+  词汇导出/导入、词表导入（数据管理）此前平铺在一起，读起来是一堆没有关系的动作。
+  用已有的 `_MenuHeader` 加「诊断」「数据管理」两个分节头 + 一条 `PopupMenuDivider`，
+  新增 l10n key `diagnostics` / `dataManagement`（en/zh；没有复用 `diagnosis`——
+  那个在 zh 下是"句子诊断"，属于另一个领域概念）。
+  `player_app_bar_test.dart` 的对应用例同步断言两个分节头存在，且菜单项集合不变
+  （分节头不带 value，不会混进派发列表）。
+  至此 #16 全部完成：必填回调 25 → 22，AppBar 不再持有任何依赖当前选中态的操作，
+  仓库内 AppBar 链路英文硬编码归零。analyze 零告警，全量测试 511 项绿。
+
+- 2026-07-21: 「纠正词元」从全局菜单移入 `WordLearningPanel`（#16 第四刀，refs #12）。
+  与短语候选相反，这个功能**没有重复**，且是全应用唯一入口——后端 `correct_lemma` 是
+  完整实现（写 lemma override、带"目标词已是独立词条"的冲突检测，
+  `crates/application/src/lexical.rs`），删掉等于让一个已实现的后端能力彻底无法触达。
+  问题只在位置：它依赖 `learningController.selectedToken`，放在全局菜单里，无选中词时
+  同样是裸 `return` 静默失败。
+  改为 `WordLearningPanel` 动作行上的一个可选按钮（`onCorrectLemma == null` 时不渲染），
+  沿现成的可选回调管道透传，与 `onOpenListeningDictionary` 同型：组合根 → `SidePanel`
+  → 面板，组合根 → `ReadingChannelHost` → `ReadingWordInspector` → 面板，听/读两条
+  路径都能触达。`correctCurrentLemmaFlow` 本体不动。必填回调 23 → 22。
+  新增 `vocabulary_book_test.dart` 一例：不传回调时按钮不存在，传了才渲染且点击派发。
+  做过变异验证——把 `if (widget.onCorrectLemma != null)` 改成 `if (true)` 后该例立刻变红，
+  确认不是空断言。analyze 零告警，全量测试 511 项绿。
+
+- 2026-07-21: 删除 AppBar「短语候选」入口——同一功能的劣化第二套（#16 第三刀，refs #12）。
+  短语候选早就有一条更好的上下文入口：`TokenLine` 把候选内联渲染成字幕行上的可点击下划线
+  胶囊（`PhraseUnderlineSpan`，带 tooltip 与状态色），点击直接走 `openPhraseFlow` 存进
+  词汇本，候选还随 cue 自动刷新（`MediaSessionCoordinator` / 组合根各一处 `loadPhraseCandidates`）。
+  AppBar 那一项打开的是同一批数据的候选列表对话框，而且**无当前 cue 时是裸 `return`
+  静默失败**——用户在首页点它不会有任何反馈。
+  连带删除只被它引用的死代码：`showCurrentPhraseCandidatesFlow`、`showPhraseCandidates`
+  （**复数**，候选列表对话框，~90 行）、组合根的 `_showCurrentPhraseCandidates`，
+  以及随之变孤儿的 l10n key `phraseCandidates` / `noPhraseCandidates`（en/zh 各一）。
+  活路径全部保留并已由测试守住：`LearningState.phraseCandidates`、`loadPhraseCandidates`、
+  `TokenLine` 胶囊渲染（`learning_assets_ui_test.dart` 覆盖点击派发）、
+  `showPhraseCandidate`（**单数**，短语详情弹窗，仍用 `phraseCandidatesHint` /
+  `confirmPhrase`）、`openPhraseFlow`。必填回调 24 → 23。
+  analyze 零告警，全量测试 510 项绿。
+
+- 2026-07-21: 删除 AppBar 死参数 `onSearchOpenSubtitles` 及其身后的不可达分支
+  （#16 第二刀，refs #12）。`PlayerAppBar.onSelected` 里有
+  `if (value == 'opensubtitles')`，但 `itemBuilder` 里**没有任何 value 为
+  `'opensubtitles'` 的菜单项**——这个必填回调从来不会触发，`main.dart` 的传参也是死代码。
+  字幕菜单里真正的 OpenSubtitles 搜索是主/副字幕各自的 `primary-search`/`secondary-search`
+  两项（标题本就是 `l.text('openSubtitles')`），不受影响。
+  顺着删下去发现它还挡着一段不可达代码：`searchOpenSubtitlesFlow` 的 `bool? secondary`
+  之所以可空，是为了在 null 时补弹一个"装到主字幕还是副字幕"的对话框，而**只有这个死回调
+  会传 null**。既然入口不存在，该分支永远跑不到，遂把 `secondary` 收成 `required bool`
+  并删掉 18 行对话框（`usePrimary`/`useSecondary` 两个 l10n key 另有活的调用方，保留）。
+  必填回调 25 → 24。analyze 零告警，全量测试 510 项绿。
+
+- 2026-07-21: AppBar 补测试安全网 + 本地化最后两处英文硬编码（#16 第一刀，refs #12）。
+  新增 `test/player_app_bar_test.dart`（6 例）：AppBar 是媒体载入后唯一常驻的入口面
+  （`MediaWorkbench` 会在 Stack 里盖住 `ListeningHome`），此前却没有任何 widget 测试，
+  接下来要动菜单结构，先把结构钉住。按 `PopupMenuItem<String>.value` 而非标签断言四组菜单
+  的成员与顺序——主/副字幕两组标签完全相同，按标签查找无法区分是哪一行触发了回调。
+  写测试时发现一个此前没人注意到的事实：**四个带文字标签的菜单按钮 + 设置图标塞不进
+  800×600**，默认测试画布下 `AppBar` 的 title Row 直接 overflow，因此全部用例跑在
+  1400×900。这条已单独记入 #16 待评估。
+  同时修掉两处英文硬编码：`player_app_bar.dart` 的 `'Correct selected lemma'` 与
+  `learning_flows.dart` 里 `_LemmaCorrectionDialog` 的 `'Correct lemma'`（后者是原 issue
+  漏掉的第二处，同一条链路上），统一走新增的 l10n key `correctLemma`（en/zh）。
+  末例是一条通用回归闸：zh locale 下逐个展开四组菜单，断言每个菜单项文本都含汉字，
+  任何绕过 `AppLocalizations` 的英文串都会立刻变红。全量测试 510 项绿。
+
+- 2026-07-21: 播放器浮层提出为 `PlayerOverlays`（#15 追加刀，refs #12）。精讲练习窗、
+  hunting 提示卡、切片播放窗这三个"浮在当前通道之上"的窗口与通道机制无关，整体搬到
+  `widgets/layout/player_overlays.dart` 并自带 `ListenableBuilder`。收益是可度量的：
+  `practiceController` 与 `slicePlayerController` 在整个组合根里只被这段 build 读到
+  （`SidePanel`/`PlaybackBar`/`PlayerStage` 都不碰），因此双双移出聚合
+  `Listenable.merge`，**11 → 9 项**（拆分前 13）。
+  过程中发现并修掉一个自己引入的真实布局回归：外层 Stack 的子树换成
+  `PlayerOverlays` 后，内层若是裸 `Stack`，它的子节点全是 `Positioned`（
+  `IntensivePracticeWindow` 的头注明确写了"必须是 Stack 的直接子节点，Positioned 的
+  parent data 才有效"），在 Stack 给非定位子节点的 loose 约束下会塌缩成 0×0，三个浮层
+  直接从屏幕上消失。改为 `Positioned.fill` 包住内层 Stack，几何与拆分前逐像素一致。
+  新增 `test/player_overlays_test.dart` 把这条钉住：断言浮层 Stack 尺寸等于外层
+  （1200×900）且提示卡保持 18px 上边距。同样做了变异验证——把 `Positioned.fill` 换成
+  `IgnorePointer` 后测试报 `Size(0.0, 0.0)` 立刻变红。`main.dart` 2013 → 1922 行。
+  全量测试 504 项绿。
+
+- 2026-07-21: 通道选择收敛为 `ContentChannelCoordinator`，`immersiveStage` 三元嵌套改 switch
+  （#15 第四刀，refs #12）。新增 `controllers/content_channel_coordinator.dart`：把
+  `_selectContentChannel` 里四个分支各自重复的"先拆掉别的通道"收敛成一处，`selected` 由三个
+  通道协调器的 `isOpen` 派生。它**刻意不是 ChangeNotifier**——自身无状态，`selected` 是派生值。
+  `ContentChannel` 枚举从 `widgets/layout/content_channel_switcher.dart` 迁到
+  `models/content_channel.dart`：通道机制是领域逻辑，协调器不该 import widget 层
+  （`ContentChannelAvailability` 是"为什么这个 chip 不可点"的呈现概念，留在 switcher 里）。
+  组合根 build 里 118 行的 `immersiveStage` 三元嵌套变成 4 分支 switch，读起来与
+  `ContentChannel` 一一对应。
+  聚合 `Listenable.merge` 从 13 项降到 **11 项**（拆分前 13）：新增
+  `contentChannels.selection` 一个句柄取代 `readingController + writingChannel +
+  speakingActions` 三项，组合根从此看不到各通道内部的页面态抖动；`speakingTaskController`
+  也一并移出——它在组合根 build 里只作为参数传给 `SpeakingChannelHost`，状态读取全在 host 内部。
+  配套在 `ReadingChannelCoordinator` 上加 `openChanges` getter，明确"关心通道选择的监听者
+  该听哪个"，避免误听协调器自身的页面态通知。
+  新增 `test/content_channel_switching_test.dart`：按组合根同款接线（一个
+  `ListenableBuilder` 监听 `selection`，`selectedChannel`/`immersiveStage` 全部派生）挂载
+  `MediaWorkbench`，点击切换器走完 听→读→写→说→听 主链路，逐步断言当前 host 类型与
+  上一个通道确实被拆掉。做过一次变异验证：去掉协调器里的写作拆除后该测试立刻变红
+  （说通道停在 writing），确认不是空测试。`main.dart` 2039 → 2013 行。全量测试 503 项绿。
+
+- 2026-07-21: 口语通道页面态提出为 `SpeakingChannelCoordinator` + `SpeakingChannelHost`
+  （#15 第三刀，refs #12）。这一刀与前两刀的差别是：会话与音频焦点规则本就在
+  `SpeakingActionsCoordinator` 里，留在组合根的是它上面一层的**页面态**——L1 理解检查
+  （`_speakingL1CheckSource/_speakingL1PlayCount`）、实时会话开关（`_realtimeConversationOpen`）、
+  以及会话所服务的个人表达 pattern（`_activePersonalPattern`）。新协调器持有
+  `SpeakingActionsCoordinator` 而不是取代它，`isOpen` 直接转发。
+  `_closeSpeakingSurface` 里纠缠的三件事按依赖方向拆开：自评弹窗、回评审队列、回个人表达页
+  都是组合根拥有的 dialog/flow，改为 `askPersonalExpressionAssessment`/`onReturnToReview`/
+  `onReturnToPersonalExpression` 三个 bind seam，协调器只决定"何时该问、该回哪里"；
+  3.17 handoff 事实的落库逻辑本身留在协调器。`_speakingTargetCandidates` 与
+  `_containsSpeakingTarget`（词边界匹配、非 ASCII 走子串）是纯函数，整体搬入。
+  两处等价化的守卫内置：`closeL1Check()`/`closeRealtimeConversation()` 自带"未打开则不动"
+  短路，因此三个调用点（`_selectContentChannel`、`onMediaSwitched`、写作通道的
+  `closeOtherChannels`）不再各自写 `if (xxx != null)`。`speakingChannel` **不需要**进组合根的
+  聚合 merge——`selectedChannel` 与 `immersiveStage` 的分支条件都是 `speakingActions.isOpen`
+  （已在 merge 里），三向子分支整个在 host 内部。新增
+  `test/speaking_channel_coordinator_test.dart`（9 项）覆盖候选目标的词边界/非 ASCII/
+  ASR 不可靠三条规则、实时会话与 L1 检查的开启前置条件、以及关闭表面时"未完成的个人表达
+  会话不落库"。`main.dart` 2231 → 2039 行。全量测试 502 项绿。
+
+- 2026-07-21: 写作通道提出为 `WritingChannelCoordinator` + `WritingChannelHost`（#15 第二刀，
+  refs #12）。新增 `controllers/writing_channel_coordinator.dart`（3 个页面态字段
+  `studioSource/kind/playCount` + `openTask/close/speakText/playSource`）与
+  `widgets/channels/writing_channel.dart`（`WritingTaskStudio` 分支 + 自带
+  `ListenableBuilder`）。两处刻意的形制调整：(1) 跨通道收尾（关口语 L1 检查、关口语会话、
+  关阅读）不进写作协调器，改为 `closeOtherChannels` seam 由组合根注入——写作通道不该知道
+  "阅读""口语"是什么，这块归 #15 第四刀的通道协调器；(2) `speakWritingText` 原先在协调逻辑里
+  直接 `ScaffoldMessenger` 弹 SnackBar，现改为 `Future<bool> speakText()` 返回合成是否可用，
+  由 host 在有 context 的地方提示，协调器层不再依赖 widget。本地化 prompt/rubric 模板同阅读刀，
+  由 host 从 context 自取。顺带修掉本刀自身引入的一个回归：`writingChannel.isOpen` 同时驱动
+  组合根 build 里的 `selectedChannel` 与 `immersiveStage` 分支，而 host 的
+  `ListenableBuilder` 只覆盖 studio 子树，因此 `writingChannel` 必须留在组合根顶部的聚合
+  `Listenable.merge` 里（否则从通道切换器打开写作时组合根不重建，studio 不出现）——merge 列表
+  回到 14 项，真正的瘦身要等第四刀把通道选择收敛进 `ContentChannelCoordinator`。新增
+  `test/writing_channel_coordinator_test.dart`（5 项）覆盖锚定播放头所在段落、无字幕轨为空操作、
+  切换写作类型重置回放计数、关闭清空 source、以及合成不可用时的返回值契约。
+  `main.dart` 2329 → 2231 行。全量测试 493 项绿。
+
+- 2026-07-21: 阅读通道视图提出为 `ReadingChannelHost`（#15 第一刀收尾，refs #12）。新增
+  `widgets/channels/reading_channel.dart`：`_readingView()` 的四表面选择（任务工作台 >
+  读听对照 > 听力回述 > 阅读器+词条检视器）整体搬入 StatelessWidget，顺序与每个回调原样保留。
+  本地化模板（`readingTaskTemplate`/`listeningRetellTemplate`）改由 host 自己从 context 取，
+  组合根不再为阅读分支持有 `l`；`PersonalExpressionSourceView` 的构造也搬进 host（只读它
+  已持有的 player/subtitle），组合根侧只剩 `onSaveSentencePattern` 一个回调。原先的
+  `api != null` 分支守卫去掉——host 只在组合根 `api != null` 的分支下构造，`api` 收为非空参数。
+  host 自带 `ListenableBuilder`（readingChannel + reading/learning/settings/subtitle），
+  组合根顶部的聚合 `Listenable.merge` 因此摘掉 `readingChannel`（14 → 13 项，#12 第 2 项的
+  首笔收益）。新增 `test/reading_channel_host_test.dart`（4 项）覆盖静息态是阅读器、
+  词条检视器开合、对照卡→回述面板的让位、以及任务工作台优先级最高。`main.dart` 2418 → 2329 行
+  （本刀累计 2639 → 2329）。全量测试 488 项绿。
+
+- 2026-07-21: 阅读通道页面状态机从组合根提出（#15 第一刀，refs #12）。新增
+  `controllers/reading_channel_coordinator.dart`：`ReadingChannelCoordinator` 接管
+  `_PlayerScreenState` 里的 8 个阅读页面态字段（任务工作台/读听对照/听力回述/词条检视器
+  各自的 source，听力回述播放计数，以及阅读游标的防抖计时器与最后保存锚点）与 12 个相关方法
+  （`open/close/openWord/openTask/openDiff/openListeningCheck/playRange/savePosition` 等）。
+  形制照抄 `SpeakingActionsCoordinator`（`isOpen` + open/close + `bind()` 注入
+  `getApi/isMounted` 与宿主 seam），getter 名镜像原字段名，便于逐处比对。`api`/`isMounted`
+  走 bind seam 而非构造参数，`close()` 因此保持无参，可直接作为 `closeReading` 回调传给
+  口语协调器。切片回放与词条打开经 `openSlicePlayback`/`openWord` 两个回调回到宿主，
+  协调器本身不依赖 widget 层。行为等价搬运：`setState` 换成 `notifyListeners()`（组合根
+  build 顶部的 `Listenable.merge` 加入 `readingChannel`），唯一签名变化是
+  `openListeningCheck` 去掉了原先从未使用的 `paragraph` 形参。新增
+  `test/reading_channel_coordinator_test.dart`（8 项，走注入 transport 的假后端）覆盖游标恢复、
+  任务/对照/回述三个面板的开合、`close()` 一次性收尾全部表面、切片回放 occurrence 快照，
+  以及游标写入的防抖与去重。`main.dart` 2639 → 2418 行。全量测试 484 项绿。
+
+- 2026-07-21: 内核降级播放状态改走本地化（承接上一条的副作用修复）。
+  `media_session_coordinator.dart` 里 `'Playing locally; core unavailable: $coreError'`
+  是硬编码英文，违反"用户可见文案一律走 `AppLocalizations`"的约定；此前被
+  `startsWith('Playing')` 吞掉所以看不见，上一条把它放出来后这个问题才显形。新增
+  `statusPlayingCoreUnavailable`（en/zh），措辞同时点明"本地播放中"与"本地内核不可用"。
+  顺带核对了 en/zh 的键覆盖：zh 多出的 9 个 `l1_difficulty_*` 是有意为之——`l1Difficulty()`
+  在缺键时回落到后端给出的英文解释，因此 en 侧本就不该有这些键，不是遗漏。
+- 2026-07-21: 集中响应式断点 + 三个小修（#14，refs #12）。(1) 新增
+  `lib/theme/breakpoints.dart`：9 处散落在 `LayoutBuilder` 里的宽度阈值收敛为
+  `ListenBreakpoints` 的语义化常量（含 issue 未列出的 `reading_word_inspector.dart` 980）。
+  数值相同但理由不同的（760 出现在首页侧栏与播放控制条、900 出现在播放控制条与阅读面板）
+  保留为两个常量而非合并——它们各自来自所在部件的可用宽度，本就可以独立漂移；播放控制条
+  900 的原有注释原样搬进常量文档。新增 `test/breakpoint_discipline_test.dart` 扫描 `lib/`，
+  禁止再出现裸数字阈值（仿 `theme_palette_discipline_test.dart`，三位数以上才算断点，
+  避免误伤 `maxWidth <= 0` 这类退化约束守卫）。(2) `_timingQuality` 去掉 map 查找上的 `!`：
+  数据缺失时返回空串而非崩溃；`side_panel.dart` 调用侧本就有 timings 非空守卫，
+  `diagnosis_card.dart` 的显示条件顺带收紧为非 null 且非空。(3) 修复 `dispose()` 里最后一次
+  进度保存与 sidecar 关停的竞态：`requestStop()` 会 `_client.close(force: true)`，与
+  `unawaited(saveProgress(...))` 并发即中断在途请求、丢掉退出时的播放位置。改为抽出
+  `_stopApiAfterFinalProgressSave()`，保存完成后再串行 `requestStop`（2s 超时兜底），
+  仍不阻塞 `dispose` 本身；app 先退出时由 sidecar 的孤儿 watchdog 回收。(4) 首页"本地内核"
+  卡片不再用 `statusText.startsWith('Playing')` 判断——Slice 3 本地化后该前缀对中文永远不成立，
+  播放中会把"正在播放 X"当成内核状态显示。改为 `PlayerState` 新增 `statusIsPlayback` 标志
+  （与既有 `statusIsError` 同构），由 `setStatus(..., playback: true)` 在两处播放状态设置点标注，
+  组合根据此过滤后传入更名后的 `coreStatusText`。顺带修掉旧启发式的一个副作用：
+  "Playing locally; core unavailable: …" 这条真正的内核降级消息此前也被前缀匹配吞掉，
+  现在标为非 playback、可以正常显示。新增两项测试（播放标志的置位/清除、zh 语言下的卡片渲染）。
+  analyze 零告警，Flutter 476 项测试通过。
+- 2026-07-21: sidecar 正常退出改走优雅关闭。桌面端 `dispose()` 原先发 SIGKILL，sidecar 因此
+  在常规退出时也拿不到 graceful 路径、数据库只能靠崩溃恢复。有了孤儿 watchdog 兜底后，
+  `LocalApi.kill()` 改名 `requestStop()` 并改发 SIGINT：常规退出优雅关库，若 app 先一步消失
+  则由 watchdog 在 2s 内回收。连带修掉两个由此暴露的问题：(1) 强制退出兜底原先只挂在
+  `orphaned()` 分支上，改发 SIGINT 后走的是 ctrl_c 分支，兜底永不武装、graceful drain 卡住
+  就会重新变成孤儿——现改为无论哪个分支触发都武装；(2) SIGINT 处理器原先要等 `axum::serve`
+  首次 poll 才安装，而握手在那之前打印，父进程一见握手就发信号会落到默认动作上被杀——现改为
+  在 `main` 开头即安装（新增 `Interrupt` 类型，non-unix 回落 `ctrl_c`）。
+  `tests/orphan_watchdog.rs` 更名 `tests/shutdown_lifecycle.rs` 并新增 SIGINT 用例：断言退出码
+  为 0（若信号未被处理则是被信号杀死、无退出码，测试首次运行正是这样失败并暴露了竞态）。
+  实机复核：`osascript quit` 后 app 与 sidecar 死亡间隔 266ms，远小于 watchdog 的 0~2s 轮询
+  窗口，证明 `dispose()` 确实执行且 SIGINT 确实送达。api-http 66 项、Flutter 473 项测试通过。
+- 2026-07-21: 修复 api-http sidecar 在桌面端异常退出后成为孤儿进程。桌面端只在 `dispose()`
+  里关闭 sidecar，而崩溃、强制退出、任何 SIGKILL 都不会执行 `dispose()`，sidecar 随即被过继给
+  pid 1 长期滞留——每次这样的退出泄漏一个进程、一条数据库连接和一个端口（本机实测确有 PPID=1
+  的残留）。修复放在 sidecar 一侧（这是唯一能覆盖父进程被 SIGKILL 的位置）：启动时记录父 pid，
+  每 2s 比对一次 `getppid()`，一旦变化即走既有的 graceful shutdown；若 5s 内没退干净则强制
+  `exit(0)`，避免挂住的连接把进程留下。启动时父 pid 已是 1 的合法场景（如已守护化）不会被误判。
+  新增 `crates/api-http/tests/orphan_watchdog.rs`：经中间 shell 拉起 sidecar，先断言父进程健在
+  时 4s 内不自杀（防止误杀比泄漏更糟），再 SIGKILL 父进程并断言 sidecar 20s 内退出；已验证该
+  测试在停用 watchdog 后会以 "sidecar outlived its parent" 失败。测试使用临时 HOME 与
+  `LLPLAYERNEXT_DB`，不触碰真实数据库。另在真实路径复核：`flutter run` 起 app 后 SIGKILL
+  app 进程，sidecar 1s 内自行退出、无残留。api-http 65 项测试通过。
+  注：桌面端 `dispose()` 目前发的是 SIGKILL（`LocalApi.kill()`），sidecar 因此在正常退出时也
+  拿不到 graceful 路径；SQLite 本身崩溃安全，故未一并改动。
+- 2026-07-21: 修复设置对话框在组合根重建时整棵树崩溃。`_SettingsDialogState.didUpdateWidget`
+  无条件重跑 `_initFromWidget()`，而后者会重新赋值 4 个 `late final` TextEditingController，
+  第二次即抛 `LateInitializationError`，并级联出 deactivated-ancestor、
+  `renderObject.child == child`、`_dependents.isEmpty`、Duplicate GlobalKey 等一连串断言，
+  最终红屏 + Lost connection。触发条件是"对话框打开时组合根重建"——切界面语言早已能触发，
+  Slice 4 的外观切换只是让它变成必经路径。改为：控制器在 `initState` 建一次并持有到销毁，
+  `didUpdateWidget` 只重新采纳标量设置，且仅在宿主真的改了对应路径时才覆写文本框（否则会
+  丢掉用户未保存的输入）；`_initFromWidget` 更名为 `_adoptSettings` 以反映语义。
+  仓库内 `word_learning_panel`/`intensive_practice_window`/`listening_dictionary_entry_view`
+  已是此写法，本次是让唯一的例外对齐既有约定。新增回归测试：宿主在对话框打开期间切换
+  themeMode，断言不抛异常、对话框存活、主题生效且采纳新值（已验证该测试在修复前会以生产
+  同款 `LateInitializationError` 失败）。全量 473 项测试通过。
+- 2026-07-21: 推进 GitHub #13（#12 Slice 4）：实现暗色主题 `ListenTheme.dark()` 并支持
+  跟随系统/浅色/深色三态切换与持久化。`light()`/`dark()` 收敛为共享的 `_build(ColorScheme)`，
+  组件主题（appBar/card/dialog/menu/input/slider/switch/chip/tooltip 等）一律从 scheme 派生，
+  浅色输出与改造前逐项等价；`ColorScheme` 没有槽位的两个色（disabled 前景、text/outline 按钮的
+  pressed 主色）提取为 `ListenSchemeShades` 扩展，作为唯一真源同时供主题与调用点使用。
+  暗色表面锚定在 `ListenColors.player` 近黑上（新增 15 个 `dark*` 常量），品牌青在暗色下提亮为
+  `#5cc6b8` 以满足 AA。新增 `themeMode` 设置字段（AppSettings/SettingsController/settings_dialog
+  外观三选/settings_flow 回写）与全局 `appThemeMode` ValueNotifier，`MaterialApp` 接
+  `darkTheme` + `themeMode`，`_loadSettings()` 启动时回灌，重启后保持。
+  关键前置工作：13 个 chrome 组件文件中 168 处硬编码亮度相关色（surface/border/muted/fog/
+  selected/disabled/infoSurface 与 primary/accent/info/error）全部改为 `Theme.of(context)
+  .colorScheme.*`，否则暗色下必然出现白底与低对比文字；`capabilityAssessmentColor` 等 4 个
+  枚举→色映射函数改为显式接收 `ColorScheme`。按需求保留 `widgets/subtitle/` 覆盖层的独立暗色
+  词汇（渲染在任意视频帧之上，不随主题切换）。新增 6 项测试：暗色 scheme 断言、双主题组件结构
+  一致性、WCAG AA 对比度逐对校验（正文/次要文字/四个状态色/容器对）、`themeModeFromSetting`
+  映射、themeMode 端到端生效，以及一条源码级不变量测试（`theme_palette_discipline_test.dart`）
+  防止后续再把浅色常量写回 chrome。flutter analyze 零告警，全量 472 项测试通过。
+  注：作者本机系统为浅色，暗色外观仅经上述程序化校验，未做人工目视确认。
+- 2026-07-21: 修复 debug 模式下应用永久卡在启动页（白屏 + "Starting local core..."）。Slice 3 把
+  `_connectApi()` 的首行状态文案换成 `l.text('statusStartingCore')` 后，该调用经 `initState`
+  同步执行，`AppLocalizations.of(context)` 在 initState 完成前访问 InheritedWidget 触发断言抛出；
+  异常又落在 `try` 之外，逃逸成未捕获的 unawaited future，于是 `connectingApi` 永远为 `true`、
+  `api` 永远为 `null`，`LocalApi.connect()` 从未执行到 `Process.start`（实测无任何 api-http 子进程）。
+  改为经 `addPostFrameCallback` 在首帧后发起连接，并把 `try` 上移包住整个函数体，使同步段的任何
+  异常都走错误态而非静默无限转圈。实测：未捕获异常归零，sidecar 正常拉起，进入首页。
+  注：此前怀疑的"僵尸进程锁 SQLite"已证伪——系统无 api-http 残留、无 `-wal`/`-shm`，
+  sidecar 单独启动握手仅 0.22s。
+- 2026-07-21: 推进 GitHub #12（Slice 3）：统一错误呈现 + 本地化全部状态栏硬编码字符串。
+  `PlayerController.setStatus` 新增 `error` 标志（`statusIsError` 进入 PlayerState）；错误状态
+  在播放条状态行以 error 色 + 图标渲染，并由组合根监听、每条新错误弹一次 SnackBar。约 90 处
+  硬编码 `setStatus('English...')` 全部改走本地化 key（新增 en/zh 各 ~135 词条）：main.dart 与
+  四个 flow 文件直接用 `l.text`；media_session/vocabulary/media_library 等沿用既有 text seam；
+  resource_actions/playback_actions/practice_actions/listening_inbox/subtitle_sources 的 bind
+  新增可选 `text` seam（缺省回退 key，测试断言 key）；speaking_actions 与 backend_event 补
+  text 注入。同时本地化两处反向硬编码中文：main.dart 个人表达自评对话框（peAssess* 词条）与
+  review_queue_screen 整屏（reviewTitle/reviewKind*/reviewHint*/评分按钮等 ~38 词条），
+  presence 选择值由 '出现/没出现' 改为语义值 present/absent。更新 6 个测试文件的期望到 key
+  约定。flutter analyze 无告警，Flutter 466 项全过。
+
+- 2026-07-21: 推进 GitHub #12（Slice 2b）：逐词/逐块/逐音素高亮游标退出聚合通知。
+  `currentWordToken`/`currentChunkIndex`/`currentDetectedPhone` 从 `SubtitleState` 移出，
+  改为 `SubtitleController` 内部专用 `ValueNotifier`（对外暴露 `*Listenable`）——此前逐词
+  高亮每个词边界、音素彩带每个音素（开启时 10-20Hz）都会经 `Listenable.merge` 重建整棵树。
+  消费方改为局部订阅：PlayerStage 的 TokenLine（merge position/word/chunk，chunk 高亮关闭
+  时不挂 position tick）、声音结构区域（merge position/word）、SidePanel 的 DiagnosisCard
+  实时音素显示（ValueListenableBuilder）。`clearSpeechEnhancements` 同步重置游标。
+  新增回归测试：updateCurrentWord 触发 scoped 通知且聚合通知为 0。Flutter 466 项全过。
+
+- 2026-07-21: 推进 GitHub #12（Slice 2a）：消除播放期 10Hz 全树重建。`position` 从
+  `PlayerState` 移出，改为 `PlayerController` 内部专用 `ValueNotifier`（`positionListenable`），
+  `setPosition` 不再触发聚合 `notifyListeners`——此前每 100ms 一次的位置轮询会经
+  `Listenable.merge` 重建整个 Scaffold（AppBar/首页/工作台/侧栏/播放条）。真正渲染实时进度的
+  四处改为局部订阅：PlaybackControls 的进度条与时间标签（compact/full 各自最小包裹）、
+  PlayerStage 的 TokenLine（仅 chunk 高亮开启时才挂 10Hz tick）、音素彩带、节奏彩带区域。
+  同步读取方（saveProgress、循环判断、flows）经 getter 不受影响。删除无人使用的
+  `positionFraction`。新增回归测试：10 次 position tick 聚合通知为 0、位置通知去重。
+  flutter analyze 无告警，Flutter 465 项全过。
+
+- 2026-07-21: 推进 GitHub #12（Slice 1）：修复 `Store` selector slot 泄漏。`StoreBuilder`/
+  `StoreBuilder2` 不再调用 `Store.select()` 注册 slot，改为监听聚合通知并本地 memoize 选值——
+  内联闭包不再随父级 rebuild 无限累积 `ValueNotifier`，顺带修复旧实现不处理 `store` 实例
+  变化导致监听残留在旧 store 上的 bug。`Store` 新增 `dispose()`（释放全部 slot notifier）与
+  `debugSlotCount`（测试用），并在文档中明确 slot 仅供长生命周期 selector 使用的契约。
+  新增回归测试：20 次父级 rebuild 后 slot 数为 0、新闭包仍持续跟踪更新、store 换绑后旧 store
+  更新被忽略、dispose 释放 notifier。Flutter 464 项全过。
+
+- 2026-07-21: 完成 GitHub #9（前端）：移除 Speaking/Writing 的 rubric 自评，LLM 反馈改为
+  带完整上下文的教师式自由文本。Speaking 去掉 assessing 阶段（阶段条剩 听/录/核对/完成），
+  ready_feedback 保存录音、确认词汇目标后直接「完成任务」进 done，不再写 self_assessment
+  judgment；Writing 去掉意义自检（selfVerdicts/selfAssessment），提交修订只写 attempt 与
+  finding dispositions。两个 studio 的逐点 LLM judgment + 逐点纠正（adjudicateLlm）替换为
+  新的 LlmFeedbackAssist 组件（请求 `POST /v1/llm/providers/{id}/feedback`，展示 prose 点评，
+  不落库）；Reading 的 rubric 自评与逐点 judge 保持不变。main.dart 的 pattern-production
+  收尾改为弹一次性自评选择（personal expression 3.17 交接事实仍必填）。OpenAPI 登记新路由。
+  flutter analyze 无告警，Flutter 459 项全过，api-http 52+12 项全过。
+
+- 2026-07-21: 推进 GitHub #9（后端）：新增输出通道自由文本反馈 seam。application 增加
+  `OutputFeedbackRequest/Draft` 与 `OutputFeedbackProvider` trait（携带 source_transcript +
+  prompt_snapshot + learner_response 完整上下文）；`feedback_on_semantic_attempt` use case
+  从存储的 attempt/rubric 组装请求、调 provider、返回 ephemeral 草稿（不落库、不写
+  observation/projection）；llm-provider 以 `{feedback: string}` schema 实现（prompt 版本
+  output-feedback/v1，教师式定性点评、禁止打分）；HTTP 新增
+  `POST /v1/llm/providers/{id}/feedback`。Reading 的 rubric judge seam 原样保留。
+  contract 测试补双协议一致性与空反馈拒绝两条，15 项全过。
+
+- 2026-07-21: 推进 GitHub #7（问题四）：realtime provider 对话框的 Qwen 配置支持中国站。
+  选择 Qwen 适配器后新增 Region 下拉（International dashscope-intl / China Model Studio），
+  中国站模式提供 Workspace ID 输入并实时拼出
+  `wss://{workspaceId}.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime`，未填 workspace
+  时占位 endpoint 不允许保存。flutter analyze 通过。
+
+- 2026-07-21: 推进 GitHub #7（问题五）：提交 Qwen Omni Realtime 真实 provider 集成测试
+  `crates/realtime-provider/tests/qwen_integration.rs`。测试以 `#[ignore]` + `QWEN_API_KEY`
+  / `QWEN_WORKSPACE_ID` 环境变量门控，不含任何有效密钥；覆盖 WebSocket 握手 + Bearer 认证、
+  SessionReady、PCM 音频发送、事件接收与关闭。realtime-provider 增加 rustls dev 依赖。
+
+- 2026-07-21: 修复 GitHub #5（D-319-22）：精听练习窗口切换相邻句不再闪烁。根因：切句会新建
+  practice item，`_createItemFromDraft` 先把 `item` 置空再等待 API，而窗口挂载条件是
+  `item != null`，在途期间整窗被卸载、返回后重挂。现挂载条件放宽为 `draft != null ||
+  item != null`（draft 在切句时同步更新、只有关闭才清空），窗口内容也只依赖 draft 渲染
+  prompt（在途期间 `busy` 已禁用提交），实现原位更新；prompt 视图补显 `controller.error`，
+  避免创建失败时窗口驻留却看不到错误。新增「item 在途期间 prompt 持续可见」回归测试；
+  全量 459 项 Flutter 测试通过。
+
+- 2026-07-21: 修复 GitHub #1（D-319-12）：首页新增「我的表达」稳定主入口。左侧「我的学习」
+  在词汇与复习之间加入「我的表达」项，资产区新增同名卡片（含摘要文案，中英文案均补充
+  `personalExpressions`/`personalExpressionSummary`）；点击进入既有 PersonalExpressionScreen
+  （标题、搜索、新建、列表齐备），返回后回到首页。资产区网格改为每行最多 3 张卡并自动换行，
+  避免 5 张卡挤在一行。补充宽/窄两种布局的入口 widget 测试。
+
+- 2026-07-20 21:06 CST: 撤销 Owner Journeys v2 Q3 初版并登记 D-319-23/GitHub #6。初版未按
+  代码核对，错误臆造 Hunting 启动后的目标数/预算常驻 UI、三态作答后的影响说明、证据跳转与 fit
+  反馈，同时遗漏 `I` 加入 Listening Inbox、`Shift+I` 开始/结束泛听、`Shift+P` 暂停捕获并快速
+  检查。按 owner 裁决改为低打扰契约：目标只在出现点前后短暂 priming/check；作答成功只安静
+  后台记录并关闭提示，错误才打断；详细影响留给用户主动打开的 evidence/history。Q3 重写为八个
+  基于真实入口的步骤，原 Q3.1–Q3.5 全部作废，不计为产品 FAIL；同步 correction 与 subtraction
+  audit，D-319-04 收窄为显式回访入口问题。
+
+- 2026-07-20 20:54 CST: Q2.6 按重写后的真实入口补测 PASS：有字幕媒体 → 右侧文稿当前句 →
+  「测一下？」→「整句听写」→ 练习窗口播放/暂停，当前句边界与停止行为成立。同时发现相邻句
+  导航独立 P2：点击上一句/下一句时当前练习 panel 瞬间消失后返回；登记 D-319-22/GitHub #5，
+  目标为窗口/panel 持续驻留、只在原位更新句子与练习内容。Q2 整体仍因 D-319-20/21 FAIL。
+
+- 2026-07-20 20:48 CST: 记录 Owner Journeys v2 Q2：Q2.1–Q2.3、Q2.5 有字幕主场景、Q2.7
+  PASS；Q2.4 因结束泛听摘要缺少本次实际时长改判 FAIL，并登记 D-319-20/GitHub #3；无字幕
+  媒体点击精听仍暴露不可执行的当前句/短段任务，登记 D-319-21/GitHub #4，要求真实 unavailable
+  状态与字幕导入/生成恢复动作。Q2.6 原文“选择一条句子，播放来源一次”没有对应清晰入口，属于
+  QA 脚本错误而非 owner FAIL；现已重写为“右侧文稿选当前句 → 测一下？ → 整句听写 → 练习窗口顶部
+  圆形播放/暂停”的可执行步骤，等待单项重测。
+
+- 2026-07-20 20:14 CST: 记录 Phase 3.19 Owner Journeys v2 的 Q1 首轮结果：Q1.3「复习」与
+  Q1.5 Coach 主入口 PASS；Q1.1/Q1.2 因首页「我的学习」缺少「我的表达」主入口 FAIL，Q1.4
+  因词条详情缺少「证据与历史」入口 FAIL。Run 1 的 D-319-12、D-319-09 分别补充 Run 2
+  复现证据并登记 GitHub #1/#2；两项保持独立 P1 入口缺陷，修复前不允许用顶部高级菜单或
+  内部路径绕过。
+
+- 2026-07-20 14:46 CST: 将 Phase 3.19 提升为 subtraction-first 产品硬门：遗留 P1、入口、任务
+  边界、结果可见性与返回路径未收口，且 Phase 3.x 假需求/假 fallback 未完成 KEEP/SIMPLIFY/
+  REMOVE/UNAVAILABLE/DEFER RESEARCH 审计前，禁止规划或建设任何新功能。新增 LOOP-024/025，
+  同步 PROJECT/ROADMAP/STATE/AGENT 与 correction plan。Run 1 J0–J5 保留为历史证据，新增
+  `3.19-OWNER-JOURNEYS-V2.md` 作为 Run 2 目标体验契约：固定首页/内容工作台主入口，并为媒体库、
+  泛听/精听、狩猎、Review、证据建议、我的表达、说写选区、Coach、Realtime、Embedding、TTS
+  逐步写明准备、准确点击、即时反馈、任务边界、持久写入、回访位置与失败条件；主入口缺失直接
+  FAIL，禁止让 owner 用高级菜单、开发者工具或内部知识替产品寻找路径。新增 live subtraction
+  audit，已对媒体模式、fit、Hunting、Review、evidence/proposal、Speaking、Personal Expression、
+  Coach、Realtime、Embedding、TTS 与数据完整性路径给出首轮 KEEP/SIMPLIFY/REMOVE/PROVE 裁决。
+
+- 2026-07-20 13:54 CST: Phase 3.19 owner Run 1 完成首轮全局旅程：J0 packaged-app smoke 全部
+  PASS，J1/J2 部分通过并暴露 Review 驻留体验、精听/泛听语义、任务输入单位、效果可见性、
+  Personal Expression IA/选区等 P1 缺口；J3 麦克风权限、J4 embedding 安装阻塞，J5 在 UX
+  裁决前延期。新增 ADR 0025/0026、项目 glossary 与 product-correction 计划，把显式有界
+  ContentSelection 和 goal-preserving fallback 固化进 PROJECT/REQUIREMENTS/ROADMAP/STATE/AGENT。
+  以 owner 原始症状先建立红测试，再修复 Review 当前页播放/暂停及 Realtime 捕获前主动请求
+  macOS 麦克风权限；两项定向回归、Flutter analyze、456 项 Flutter 全量测试及 macOS Debug
+  build 通过，等待重打 package 后 owner 复测。当前 release 结论为 DO NOT RELEASE YET，
+  冷启动数据不通过伪造学习记录解锁。
+
+- 2026-07-19 08:42 CST: 将 Phase 3.19 release acceptance 从粗粒度 QA 索引扩写为可直接执行的
+  owner 测试脚本。新增统一 PASS/FAIL/BLOCKED/N/A 记录协议、数据库副本与停止规则、合法 writer
+  对比严格只读 surface 的边界、七个推荐执行批次；J0–J5 与 multilingual check 细化为逐步准备、
+  操作、预期结果和记录栏，完整覆盖 content fit/Hunting/≥8 Review cards、Speaking/Role Reply、
+  Personal Expression version/export/offline/delete、proposal reject/confirm/override/rebuild、Coach typed
+  return/source loss、realtime failure matrix、embedding lifecycle/scale、TTS audio focus/cache。附加只读
+  SQLite count snapshot 与原 phase QA disposition 映射；所有 owner 结论仍保持 pending。
+
+- 2026-07-19 00:44 CST: 启动 Phase 3.19 Product Validation & Release Closeout。Phase 3.x
+  进入 feature freeze，把 3.4/3.5/3.14/3.15.7/3.15.8/3.15.9/3.16/3.17/3.18 分散的 owner QA
+  合并为五条风险优先端到端旅程，并建立统一 release acceptance、P0/P1 defect policy 与 owner
+  ACCEPT / DO NOT RELEASE 出口；不新增产品能力、不预定 Phase 4。首轮自动基线全绿：full strict
+  Rust 685、Flutter 453、contracts 5 examples，0 failed；macOS release build、zip integrity、解压后
+  deep/strict ad-hoc signature、sidecar/runtime/notices 均通过。真实 GUI 首次启动、媒体、麦克风、
+  provider、embedding scale、TTS 听感和 owner 数据旅程仍明确 pending，未由实现者代验。
+
+- 2026-07-18 23:17 CST: Phase 3.18 Cross-modal Coach code complete。按 `main@88223b0b`
+  重审并收紧旧 PLAN：Coach 只聚合、解释和编排既有事实/资产，不创建综合等级、跨通道蕴含或
+  第二 capability authority。SQLite bounded live read model 分层返回四通道 attempt、supporting
+  judgment、adjudication、observation、proposal、confirmed projection、history 与 personal-
+  expression attempt；effective assessment 保持 3.17 override 优先，unassessed 不算失败。新增
+  typed provenance/immutable snapshot/source-unavailable 降级、provider-independent availability、
+  typed Review/Hunting/Cross-modal Review/Personal Expression destination 与 Flutter return context；
+  无 schema/cache/rebuild 或 learning writer。Rust 受影响 crate 250 unit tests + 23 integration/
+  migration tests、strict Clippy、Flutter analyze/453 tests、contracts 全绿。owner 真实数据/来源失联/
+  GUI QA 留 `3.18-MANUAL-QA.md`，未执行或冒充相邻阶段 owner QA。
+
+- 2026-07-18 21:02 CST: Phase 3.17 Four-channel Projection & Cross-modal Review code complete。
+  按 `main@5bf8fbd3` 重审 authority 与真实 evidence 底盘，新增 SQLite v44 append-only proposal/
+  decision、Reading v1/Listening v2/Speaking v1 独立算法、Writing `insufficient_evidence`、显式
+  confirmation 唯一 projection writer、override 优先、history、算法 supersede 与全语言 rebuild。
+  observation append 和旧 upgrade confirmation 不再直写 projection；cross-modal read model 不把
+  unassessed 当失败，并保留 source ref/immutable snapshot。OpenAPI、typed Dart client、词典资产层
+  proposal gate 与跨通道队列贯通。`UserSentencePattern`、分通道 immutable attempts、Hunting List、
+  corpus/embedding 边界及 FocusTarget 拒绝保持不变；owner 真实库/重启/来源丢失体验留
+  `3.17-MANUAL-QA.md`，未执行或冒充相关 owner QA。
+
+- 2026-07-18 20:20 CST: Phase 3.16 Personal Expression & Sentence Patterns code complete。
+  按 `main@c86a5952` 重审旧 PLAN，并以三 consumer razor 拒绝通用 FocusTarget：不迁移已验收的
+  Hunting List，不以 3.17 未来 consumer 提前泛化。新增 SQLite v43 durable
+  `UserSentencePattern`、不可变来源快照/append-only version/slots、分通道 immutable attempt，
+  来源媒体无 FK cascade；system construction ref 可空且不覆盖用户模板。CRUD/search/history/
+  typed JSON export、OpenAPI/Flutter client、Reading 句内显式收藏与“我的表达”资产旅程贯通；
+  Writing 保存用户 typed response，Speaking 复用既有录音→local ASR→corrected transcript 住户。
+  embedding/corpus 只可提供显式候选 provenance，零自动收藏/扩写及 observation/projection/
+  proposal/confirmation writer。Rust workspace、strict Clippy、contracts、Flutter analyze/full tests
+  全绿；owner 真实媒体/麦克风/重启/来源删除/离线体验留 `3.16-MANUAL-QA.md`，未执行或夹带
+  3.15.7/3.15.8/3.15.9 的独立 owner QA。
+
+- 2026-07-16 22:21 CST: Phase 3.15.8 Semantic Embedding code complete。先以真实 FastEmbed
+  all-MiniLM-L6-v2/ONNX 与 Ollama all-minilm 两条异构路径 spike；两者虽同为 384-d MiniLM，
+  数值空间显著不同，因此 fingerprint 固定 provider/model revision/runtime/artifact SHA/dimension/
+  normalization/purpose/index schema，禁止跨空间比较与迁移。新增 provider deep module、显式
+  +0B-base 本地模型 lifecycle、OpenAI-compatible seam、SQLite v42 float32 BLOB 原子可重建索引，
+  media + written/spoken local-authoritative production 按意思 top-K 与 source/model provenance。
+  3.15.6 原 top-K/readiness/ranking 不变，只给既有 target additive near-semantic clue，明确不是
+  synonym/capability truth，零 attempt/evidence/observation/capability/proposal/review/corpus writer，
+  3.17 gate 保留。OpenAPI/typed Dart/词汇册 install-rebuild-search-disable-delete UI 贯通；验证含
+  真实 production adapter smoke、Rust workspace、strict Clippy、contracts、Flutter analyze/full、
+  macOS Debug build。owner 首次安装/离线/大语料体验 QA 留独立清单；未执行 3.15.7 provider/
+  device QA、3.15.9 听感 QA或 hunting 毫秒 flaky 修复。
+
+- 2026-07-16 17:32 CST: Phase 3.15.6 Cross-channel Production Gap Review 实现。以 3.15.5
+  rebuildable corpus 与 reading/listening capability、成功 observation、recognition contexts
+  做只读 gap-(c) join；排序固定为 ECDICT BNC rank band → 接收证据强度 → 近期性 → lemma，
+  只返回 top-K 并逐项解释。新增 `empty/starter/ready` 诚实降级：owner 真实只读副本探针仅
+  1 document / 1 token / 1 lemma，因此不做小样本伪校准，starter 靶子明确不是能力结论。
+  词典资产页新增最小复盘入口并回到既有词汇/复习动作；全链路零 attempt/evidence/observation/
+  capability/projection writer。spoken、embedding 近义、durable template 与确认门分别留给
+  3.15.7、3.15.8、3.16、3.17。
+
+- 2026-07-16 18:10 CST: Phase 3.15.9 TTS code complete。新增 application provider-neutral
+  synthesis port 与 local-runtime manager（校验、voice 选择、稳定 cache key、single-flight、原子
+  发布、统计/清理），macOS production 使用零下载离线 `/usr/bin/say` system voice；HTTP/OpenAPI/
+  typed Dart client 贯通。Flutter 以共享 auxiliary audio controller 统一 dictionary remote audio
+  与 TTS，播放前获取焦点并在替换/录音/真实 reference/销毁时释放。词典标准音频与真人 slice
+  继续优先，缺失才 synthetic fallback；personal corpus/Writing 只朗读 learner-owned text。
+  TTS 零 learning repository/writer，保持 3.15.5 projection-vs-authoritative-asset 边界。验证：真实
+  system speech smoke、Rust manager/route/OpenAPI、contracts、Flutter 全量 442 项、analyze 全绿；
+  owner GUI 听感 QA 保留清单，未冒充已验收。
+
+- 2026-07-16 16:15 CST: Phase 3.15.9 TTS 开工审计并将 PLAN 修订为 READY v2。按
+  `main@1614ed74` 实际底盘否决“直接照搬 Piper/七态下载生命周期”的预设：macOS 系统语音
+  已提供零下载、离线、多语言 voice 与文件输出，v1 先以其作为本地 adapter，Piper 保留为经
+  质量/许可/体积审计后的跨平台候选。新计划把浅的“文本→音频”深化为 provider/voice 描述、
+  规范化请求、稳定 cache identity、single-flight/原子发布、取消与资源清理的 synthesis module；
+  明确 dictionary 标准音频优先/TTS 明示 fallback、真人 slice 优先、Writing 只读 learner text，
+  以及零 attempt/corpus/observation/judgment/projection writer。Flutter 将统一 remote pronunciation
+  与 TTS 的 auxiliary playback/单音频焦点，但各场景保留独立 surface。
+
+- 2026-07-16 16:07 CST: Phase 3.15.5 Personal Production Corpus 完成。新增 SQLite v39
+  document + lemma occurrence + FTS5 可重建投影；Writing typed attempt 成功落库后 best-effort
+  增量刷新，全量 reindex 先派生后单事务替换，失败保留旧投影。完整回答每 document 只存一份，
+  token 保存 surface/lemma/Unicode-scalar span；新增 exact lemma/phrase FTS HTTP API、OpenAPI 与
+  Flutter 词典「我的产出」（次数、回答、revision/assistance、原 attempt revision 链，加载/空/
+  不可用三态）。原 `scaffolding: bool` 修正为 factual assistance provenance，零 spoken writer、
+  零 observation/capability writer。3.16 边界裁定为可重建语料投影 vs 显式 durable 模板资产。
+  v39 migration 遵守 additive/idempotent 约定并通过 v29/v30 旧库升级回归。验证：production
+  persistence 3 项、api-http 端到端、Clippy strict、Flutter 全量 437 项、contracts 全绿；
+  `flutter analyze --fatal-infos --fatal-warnings` 干净。Rust workspace 复跑只命中一个既有 hunting
+  check 毫秒级 event-id 碰撞 flaky，单测立即复跑通过，未扩张本 phase 修改该领域。
+
+- 2026-07-16 14:58 CST: 补充项目级产品开放性与 conversation 多 surface 原则。`AGENT.md`
+  明确 phase scope、既有 UI 容器和架构模式不是永久产品禁令，只有平台/物理资源、延迟、
+  协议/网络、成本、隐私安全、数据正确性与兼容性等真实工程条件构成硬约束；共享深模块复用
+  事实和生命周期但不强制界面同形。同步 `PROJECT.md`、`REQUIREMENTS.md`、`ROADMAP.md`、
+  `STATE.md` 及 `3.15.7-PLAN.md`：首个当前内容锚定对话不排斥未来 GPT-like 开放聊天、角色扮演等场景原生
+  surface；它们共享 session/turn/audio/transcript、个人产出语料与 finalized-session 复盘处理，
+  复盘呈现可为独立页、聊天内卡片、后台生成或稍后回访。ROADMAP 同步 P1–P6 实际顺序并移除
+  已取消 3.12.1 的旧资格门表述。
+
+- 2026-07-16 13:50 CST: Phase 3.12.2 与 3.15 收口 + P2–P6 立 phase。owner QA 通过：
+  3.12.2 真实 provider 下三 Studio「AI 出题 + AI 判定 + 纠正」端到端通过（新增
+  `3.12.2-CLOSEOUT.md`，PLAN 置 COMPLETE）；3.15 按 `3.15-MANUAL-QA.md` 真实内容/重启/
+  窄窗口/音频焦点验收通过（CLOSEOUT 状态翻正，Deferred 中 3.12.1 资格门表述更正为已由
+  3.12.2 取代）。按 discuss §11 裁决新建五个 phase（压在 3.16–3.18 前，取插入编号）：
+  `3.15.5-personal-production-corpus`（P2，产出语料可重建投影、写作先行、scaffolding 仅
+  预留字段、开工裁 3.16 边界）、`3.15.6-production-gap-review`（P3，gap-(c) 复盘；本轮
+  评审把参照系排序提升为 v1 核心，小 N 走 3.10 式诚实降级，UI 克制到管线验证级）、
+  `3.15.7-realtime-speech-conversation`（P4，realtime 中立 seam，OpenAI+Qwen，中立必须
+  owner 可实测）、`3.15.8-semantic-embedding`（P5）、`3.15.9-tts-speech-synthesis`
+  （P6，正交、建议 3.15.5 后即插）。STATE.md 更新当前位置/执行序列/语义能力边界（judge
+  三级资格口径由显示诚实边界取代）并压缩已收口 phase 冗述；下一执行 3.15.5。
+
+- 2026-07-16 13:15 CST: Phase 3.12.2 Slice 3 — LLM judgment 显示接线复制到 Speaking +
+  Writing（纯 Flutter，后端 judge 用例本就按 attempt_id + response_revision 取存量作答，
+  purpose 无关，零后端改动）。三个 Studio 现共用新抽取的 `LlmJudgmentAssist`
+  widget（`widgets/panels/llm_judgment_assist.dart`，Reading 内嵌实现迁移至此——第三住户
+  出现后才抽取的显示件，共享本地化键 `llmAssist*` 取代 `readingTaskAi*`）；provider 选择
+  逻辑收敛到 `coach_llm.dart` 的 `pickLlmProviderId` + `preferredLlmProviderId`（列表失败
+  吞掉、入口隐藏，manual 路径永不依赖 provider）。Speaking：`SpeakingTaskController` 在
+  attempt 落库后解析 judge provider，新增 `requestLlmJudgment`/`adjudicateLlm`，assessing/
+  done 阶段显示可纠正 AI 反馈，retryOnce 重置 LLM 判定；LLM 判定与用户自评并存、互不改写。
+  Writing：内容/组织判定走同一 SemanticJudgeProvider（区别于 Harper 表面 finding），
+  `WritingTaskController` 判定**最新 attempt 的最新 revision**（revising 侧栏判初稿 rev1，
+  提交修改稿后旧判定清空、done 页可对 rev2 重新请求，判定永不跨 revision 冒充）。全程守
+  显示诚实边界：evidence_class `heuristic_proxy`、append-only adjudication 引用 LLM
+  judgment id、零 observation/projection。新增 Speaking/Writing 控制器各两条测试（判定+
+  纠正诚实性、无 judgment-capable provider 时入口隐藏且零 judge 调用）。验证：flutter
+  analyze 干净、完整 flutter test 434 通过；无契约改动。
+
+- 2026-07-16 11:53 CST: Phase 3.12.2 Slice 2 — Reading LLM rubric 生成接线。后端新增
+  `POST /v1/llm/providers/{id}/rubric`（routes/llm.rs `generate_rubric_via_llm_provider`）：调用
+  `SemanticRubricProvider` 生成理解题草稿并**只返回内容草稿、不落库**——身份/版本/来源快照仍
+  只在用户保存已审阅 rubric 的正常 create 路径铸造，vendor 层永不成为 rubric 身份写者（守
+  ADR 0021）；provider 失败一律不返回、走标准化 secret-free 错误。OpenAPI v1.yaml 补路径，
+  route-drift 门通过。Flutter：新增 `RubricDraftView`（客户端分配 p1..pN point_id）、
+  `generateRubricViaLlmProvider` API；`ReadingTaskController` openTask 一次解析 judge/rubric 两个
+  provider，editing 阶段新增 `generateRubric`——AI 生成的题目载入**可编辑模板**（不自动应用），
+  用户复核/增删后保存；保存时若来自 AI 草稿则记录诚实 `llm` provenance（携带 model_id/prompt/
+  schema），否则 `manual`。`ReadingTaskSheet` editing 阶段新增「AI 生成理解题」入口（无 rubric
+  provider 时隐藏）。新增本地化键、后端 rubric 路由测试与控制器生成测试。验证：cargo test
+  api-http 44 / llm-provider 12、validate-contracts、fmt/clippy strict 全绿；flutter analyze 干净、
+  完整 flutter test 430 通过。
+
+- 2026-07-16 11:29 CST: fix(llm-provider) — OpenAI 兼容适配器改用广泛兼容的 `json_object`
+  结构化输出模式，schema 内嵌进 prompt，取代此前硬编码的 `json_schema` response_format。
+  DeepSeek 等众多"OpenAI 兼容"端点只支持 `{"type":"json_object"}`，对 `json_schema` 直接回
+  HTTP 400，导致 probe 与 judge/rubric 全部失败（owner 用 deepseek-v4-flash 实测 `/judge`
+  报 `unexpected status 400`）。语义层本就对解析结果做 schema 后校验（不符即 SchemaInvalid、
+  不写 judgment），故不依赖 wire 层强约束；`json_object` 模式需 prompt 含 "json" 词元并携带
+  schema 形状，均已在 system 提示中保证。Anthropic 走 tool_use 不受影响，中立契约套件
+  `drafts[0]==drafts[1]` 仍成立。新增回归测试钉住请求体使用 `json_object` 且 schema 入
+  prompt；llm-provider 13 测试通过，fmt/clippy 干净。
+
+- 2026-07-16 11:10 CST: Phase 3.12.2 Slice 1 — Reading LLM judgment 显示接线（纯 Flutter，
+  复用 3.12 已就绪的 `POST /v1/llm/providers/{id}/judge`）。`coach_llm.dart` 新增 typed
+  `llmProviders()` 与 `judgeViaLlmProvider()`；`ReadingTaskController` 提交作答后惰性解析首个
+  允许 `semantic_judgment` 的 provider（优先有凭证者，失败静默不阻塞 manual 路径），新增
+  `requestLlmJudgment` 与 append-only `adjudicateLlm`（镜像 manual adjudicate，永不改写原
+  judgment 行）。`ReadingTaskSheet` 在 assessing/done 阶段新增「请求 AI 反馈」入口与逐点 LLM
+  判定展示：标注「AI 辅助反馈 · 可纠正」「仅供参考，不计入能力档案」，可 adjudicate；无
+  judgment-capable provider 时整块隐藏。LLM 判定与用户自评并存不互相改写，evidence_class 保持
+  `heuristic_proxy`，零 observation/projection。新增本地化键与两条控制器测试（请求→纠正→
+  heuristic 边界 / 无 provider 隐藏）；flutter analyze 全绿，reading task controller+sheet 11 测试通过。
+
+- 2026-07-16 10:58 CST: 产品方向讨论沉淀 + Phase 划分裁决。新增 discuss
+  `conversation-output-corpus-and-model-categories.zh.md`：把 realtime 语音对话定为**独立中立
+  模型类别**（中立在能力类别层成立，非一个 seam 通吃），对话厂商与证据文稿解耦（用户音频统一
+  走本地 whisper.cpp）；说/写统一为**个人输出产出语料库**（写作 attempts 现成先行）；复盘 =
+  跨通道 gap-(c)「能认不能产出」描述性画像，不自动写 projection；从整个产品推导 10 类模型地图
+  与本地/云落位。裁决：取消 Phase 3.12.1（留出集资格门对个人工具过度），改显示诚实边界；新增
+  Phase 序列 P1（studio LLM 反馈接线，folder 3.12.2）→ P2 产出语料 → P3 gap 复盘 → P4 realtime
+  （首批 OpenAI Realtime + 千问）→ P5 嵌入 / P6 TTS；3.18 收窄为聚合、3.17 保留投影确认门。
+  新增 `.planning/phases/3.12.2-studio-llm-feedback/3.12.2-PLAN.md`（Slice 1 Reading judgment
+  显示 / Slice 2 Reading rubric 生成 / Slice 3 复制到 Speaking+Writing）。仅规划文档，无代码变更。
+
+- 2026-07-16 08:39 CST: Phase 3.15 Writing Studio v1 code complete，进入 owner 手工 QA。
+  PLAN 按 3.14 closeout 保鲜并建立 Reference Matrix；确认
+  Writing 自有 editor/revision 状态机，不复制 Reading/Speaking controller 或虚构通用 lifecycle
+  interface。新增 `one_sentence_summary` / `opinion_response`、Summary/Dictogloss/Opinion 多稿 typed-only validator 与
+  Dictogloss playback/prompt 条件；新增项目自有分层 Writing finding/provenance 和 accept/reject
+  disposition；接受必须引用一个保留原文 hash 并含后续 typed revision 的新 immutable attempt，
+  provider suggestion 不能静默成为用户稿。schema v38 新增可变但非证据的 durable scratch 与
+  append-only finding/disposition；Writing 当前内容通道、自有 editor 状态机、600ms autosave/重启
+  恢复、来源折叠、请求后 feedback、固定 rubric 意义自评、Harper 0.40 离线表面 finding、历史复写
+  参照和 Unicode-safe diff 已落地。finding/manual judgment/observation/projection 继续分离，v1 零
+  writing observation/projection writer；真实内容、窄窗口与音频焦点留 `3.15-MANUAL-QA.md`。
+
+- 2026-07-15 23:40 CST: Phase 3.14 Speaking Studio v1 Slice 0–5 code complete。
+  内容 Speaking 通道现支持 10–60 秒 L2 retelling 与 full sentence/keywords/no text 三档
+  Role Reply；延迟复述从 review asset 进入同一状态机，不建独立首页。链路串通麦克风权限、
+  单一音频焦点、RecordingAsset、独立短录音 whisper.cpp job、raw/corrected transcript、
+  ASR reliability、请求后逐点自评、append-only adjudication、一次立即重说与显式复习难度。
+  新增单录音客观时长/≥120ms 停顿/waveform facts；无 qualified judge 时完整降级为这些事实 +
+  用户自评，不显示综合口语分。只有 completed L2/Role + 非 unreliable ASR + corrected literal hit +
+  用户显式确认，才写 assistance-aware `SpeakingProduction` observation，且零 projection；L1 核对
+  独立复用 typed listening fact。Reading/Speaking lifecycle audit 证实资源副作用不同，未抽取
+  pass-through interface。严格回归 Rust 581、contracts、Flutter analyze 与完整 Flutter tests
+  423 项 Flutter tests 通过；owner 按 `3.14-MANUAL-QA.md` 在可热重启版本统一体验真实麦克风/
+  真人普通话/GUI。
+
+- 2026-07-15 22:49 CST: Phase 3.14 Slice 1 code complete，并启动内容通道 L2 retelling
+  surface。新增独立 Speaking 状态机，串通固定信息点 rubric、麦克风权限、单一音频焦点、
+  RecordingAsset、短录音 ASR、raw/corrected transcript 核对、append-only spoken attempt、
+  用户请求后的逐点自评 judgment 与最多一次立即重说；ASR uncertainty/失败不会写成口语失败。
+  Speaking 作为当前内容通道打开整面阶段自适应场景，录音时不显示 transcript/feedback，核对后
+  才能请求自评；无独立首页、Reading 复制、固定三栏或弹层。来源/用户录音切源前均暂停其他
+  声源，退出恢复原主媒体位置但不自动播放。Role Reply 事实守卫已具 assistance/prompt snapshot，
+  UI 与延迟资产入口留后续 Slice；Reading/Speaking lifecycle interface 进入第二住户实证审计，
+  尚未抽取 mega abstraction。
+
+- 2026-07-15 22:19 CST: Phase 3.14 Slice 0 短录音 ASR 与底盘预检 code complete。
+  新增独立 `RecordingAsset -> RecordingTranscriptionJob` API/runtime/client contract，校验
+  16k mono PCM16、文件长度和 SHA-256，支持语言、取消、raw segment transcript、latency
+  与完整 provider/runtime/model/recording provenance；不导入字幕、不评分、不写学习证据。
+  真实新闻英文 14s（348ms）与取消 60s（122ms）通过；普通话 TTS coverage（560ms）发现
+  whisper.cpp `-ojf` 中文 token 非法 UTF-8，独立路径改用可靠的 `-oj` segment JSON。
+  Reference Matrix 复核后继续排除 H5P 固定答案、iSpraak 逐词/总分与 Sentence Paths 未核验
+  评分语义；真人普通话麦克风 QA 留 owner 最小步骤。Slice 1 同步落地 durable raw/corrected
+  transcript 分离、L2/RoleReply 必须关联录音、RoleReply assistance/prompt snapshot 与 typed
+  Flutter request；继续复用 v35 append-only semantic attempt，零 judgment/observation/projection，
+  不提前抽取 Reading/Speaking 生命周期 interface。
+
+- 2026-07-15 21:53 CST: Phase 3.13.5 正式收口并以实际底盘修订 3.14–3.18 PLAN。
+  3.14 Speaking Studio 升为 READY v2 并新增 Reference Matrix；后续统一采用内容通道与
+  资产旅程的混合导航，任务共享层收窄为第二住户验证后抽取的生命周期 interface，明确
+  禁止复制 Reading controller、固定三栏、常驻反馈与多阶段弹层。
+
+- 2026-07-15 20:30 CST: Phase 3.13.5 真实媒体走查修复阅读查词的可见出口：整面
+  阅读器不再把已更新的词汇状态藏在旧 SidePanel 中；显式点击单词后，宽窗口展开
+  360–460px 当前单词右侧栏，窄窗口使用可关闭覆盖层。收起不清空选择、不改变阅读
+  游标；词汇状态、能力覆盖、阅读标记、来源回听与听力词典继续复用既有语义。阅读器
+  同时补齐词汇概览及“干净正文 / 阅读标记 / 听力推测”分离视图，不合成含混认识率。
+
+- 2026-07-15 19:51 CST: Phase 3.13.5 进入 Flutter 实施前清偿裁决一致性：PLAN 的
+  Scope/Key Work 改写为混合导航与阶段自适应容器，明确保留首次 manual rubric 创建、
+  append-only 重做、来源 capability gating 与单一音频焦点；PROJECT/REQUIREMENTS/
+  ROADMAP/STATE 同步内容会话 + 资产驱动两条旅程，新增 UI-018 验收口径。
+
+- 2026-07-15 19:34 CST: Phase 3.13.5 Slice 0 走查裁决落地 + 原型 v2。owner+codex
+  评审结论"方向通过、布局退回"写入 PLAN（五项裁决表）；宏观旅程讨论（参照
+  每日英语听力"资源首页→学习页→模式菜单"）后导航定为**混合模型**：首页 +
+  内容工作台（听/读/说/写通道切换器一跳、听保留三子姿态、⌘1–4）+ 资产层
+  （词典/复习/我的表达/Coach 承接跨媒体任务），四通道平级 Studio rail 不建
+  （field razor）。原型 v2 重做七屏：首页（分组 rail + 四通道进度继续卡 +
+  到期资产 + 全局迷你播放条）、工作台通道切换（含退出/返回语义注记）、
+  阅读器 v2（默认干净、翻译默认隐藏、词汇概览分列阅读标记/听力推测不合成
+  认识率、透镜三态分视图、句子 hover/点击选中/键盘聚焦）、任务容器阶段
+  自适应（作答期反馈隐藏防泄露、口语录音中心化、写作编辑器≥60%、stepper
+  不可跳未来、含可重做）、表面行为约束（白名单→行为规则）。补 meta charset。
+  Reference Matrix v2：逐项"明确不借鉴"列、新增每日英语听力参考行、裁决
+  状态节。维护债清偿：外部参考库 §2 着色表述对齐词汇透镜裁决（PROJECT/
+  REQUIREMENTS 核对无矛盾无需改）。浏览器实测：本地 HTTP 干净加载下七屏
+  渲染与全部交互（透镜/概览/任务三阶段/录音状态机/反馈请求制）通过；
+  Artifact 已更新同 URL。
+
+- 2026-07-15 18:41 CST: Phase 3.13.5 Slice 0 交付：低保真 HTML 原型
+  `spikes/studio-shell-ux-prototype/index.html`（七屏，底部切换条 + 方向键：
+  A 姿态扩展 / B Studio 切换两导航候选各带取舍与裁决点；C 阅读器——干净/
+  词汇透镜一键切换、着色来源诚实区分（实线=阅读标记、虚线=听力证据/投影）、
+  句子悬停工具栏替代 chip 排、材料级词汇概览；D/E/F 共享任务容器三区布局
+  （来源/产出/反馈 + 阶段常显 stepper）分别入住 3.13 阅读任务、3.14 录音
+  循环骨架（可交互状态机 mock）、3.15 写作分层反馈骨架；G 表面语法规则
+  草案含现状六表面迁移映射）。已发布为 Artifact 供 owner 走查。同步交付
+  `3.13.5-REFERENCE-MATRIX.md`（借鉴/不借鉴/契约映射/证据等级 + 表面规则
+  草案 + 五项待裁决清单）。PLAN guardrail 按 owner 意见修正：全文词汇状态
+  着色从禁项改为"词汇透镜"（防 Lute 记账语义与通道误导，默认态随 Slice 0
+  裁决）。浏览器实测七屏渲染与交互（透镜/录音状态机/stepper）通过。
+
+- 2026-07-15 14:59 CST: 立项 Phase 3.13.5 Studio Shell UX（owner 裁决）。owner
+  确认四个 UX 痛点（阅读不像阅读为核心、入口藏深、表面类型六种无规则、任务
+  流繁琐），确立"场景原生 UX"原则（阅读像阅读器，听/说/写各符合其场景），
+  沿 3.35 插入式 UI phase 先例在 3.14 前插入独立 phase。PLAN 交付范围：Slice 0
+  低保真原型把门（导航模型两候选 + 阅读器化 + 共享任务容器 + 3.14/3.15 骨架
+  预演 + Reference Matrix）、导航与入口落地、阅读器化正文（文内工具栏替代
+  chip 排）、共享任务容器迁入 3.13 任务流、真实媒体走查（合并 3.13 剩余
+  owner 走查项）。guardrail：只改承载方式不改学习语义、低保真裁决前不写
+  Flutter、不重开 3.35 听力工作台改版。STATE 决策/下一步更新，3.14 PLAN 上游
+  输入增补 3.13.5 依赖。
+
+- 2026-07-15 14:42 CST: 修复 3.13 owner GUI 走查首个缺陷：阅读姿态"听整段"/
+  逐句 chip 与听测面板播放全部无法回听。根因：`_playReadingRange` 与
+  ListeningCheckPanel 手写的 occurrence map 缺 `media_fingerprint_snapshot`，
+  共享 `OccurrenceMediaResolver` 在 linked-media 路径之前即以 invalidSnapshot
+  拒绝（后端 QA 为纯 HTTP、widget 测试回调为假，接线层缺口未被覆盖）。修复：
+  occurrence 构造收敛为 `currentMediaSliceOccurrence` helper（归属 resolver
+  文件，形状契约单一来源），两个调用点携带当前播放器 fingerprint；fingerprint
+  缺席仍诚实降级为显式错误。新增
+  `test/reading_slice_occurrence_test.dart` 回归（helper→resolver 真实链路 +
+  降级用例）。验证：flutter analyze 零问题、flutter test 409 全绿。
+
+- 2026-07-15 13:45 CST: Studio 3.13–3.16 外部参考库入库。将 owner 委托 codex 的
+  外部项目调研经批判性修订后收入
+  `.planning/discuss/studio-3.13-3.16-external-reference-library.zh.md`：A 级
+  优先级按 3.13 CODE COMPLETE 现状重排（3.13 参考降级为 GUI 走查对照 +
+  Slice 7 预备，A 级集中到下一 phase 3.14：Sentence Paths / H5P Speak the
+  Words / iSpraak，Harper spike 可提前排）；Reference Matrix 模板新增
+  "对应既有契约/不变量"与"证据等级"必填列（3.13 v2→v2.1 validator 证伪
+  教训 + evidence-class 纪律）；H5P Essay 从"无 LLM 默认路径"重定位为
+  "目标表达字面命中"客观展示参考（无 LLM 路径维持 rubric 对照 + 自评）；
+  剔除正文无依据的 ReadingTree/InsightGUIDE；闭源 Sentence Paths 标注
+  heuristic_proxy。3.14/3.15/3.16 PLAN 各增"外部参考输入"节并要求开工
+  修订时建立各自 REFERENCE-MATRIX。STATE 下一步工作同步指针。
+
+- 2026-07-15 03:30 CST: Phase 3.13 Slice 6 完成 + phase CODE COMPLETE。真实媒体后端
+  全链路 QA：隔离 DB + 真实 sidecar + CNN10 真实 mp4/244 句 whisper 转写，新闻段
+  20/20 通过（位置往返、rubric 409→lookup 恢复、阅读 attempt/自评/adjudication、
+  听侧独立 rubric + 隐藏文本 attempt、读听两侧可发现、真实词条阅读标记 204 且零
+  projection），对话段（31 个 speaker-turn cue）rubric/attempt/judgment 通过；形成
+  可追溯读听差异结论（read=yes / listen=partial → diffMixed）。撰写
+  `3.13-REAL-MEDIA-QA.md`（含 owner GUI 走查清单）与 `3.13-CLOSEOUT.md`，PLAN 置
+  CODE COMPLETE，STATE 更新（下一 phase 3.14；Slice 7 LLM 接线随 owner 3.12.1
+  裁决）。
+
+- 2026-07-15 02:30 CST: Phase 3.13 Slice 5 完成：reading observation writer（显式标记）。
+  domain 显式扩展封闭枚举 `ObservationTaskType::ReadingContextMarking` +
+  `observation_spec_for_reading_marking`（capability=Reading；assistance 按标记时翻译
+  可见性记 FullText/None——只有无辅助的阅读观察未来才可能独立支撑 acquired，镜像
+  listening 不变量）；application `record_reading_marking` 刻意窄于 listening 标记路径
+  （不写 legacy LexicalObservation、不写 recognition evidence、零 projection——channelized
+  writer 只对 Listening 通道重投影，结构性成立）；HTTP `POST /v1/reading/markings` +
+  OpenAPI。Flutter：`WordLearningPanel` 在阅读姿态下显示"读懂了/读不懂"按钮（词点击
+  经合成 token 映射回真实 cue，sentence 上下文正确）。负向测试：阅读标记不漏入
+  listening 通道/legacy 表/projection/history，未知词条 404 且零写入；无翻译标记为
+  None-assistance。验证：domain/application/persistence/api-http 12 套件全绿（persistence
+  reading 6 项、api-http reading 4 项），validate-contracts 通过，flutter analyze 零问题 /
+  test 406 全绿。
+
+- 2026-07-15 01:55 CST: Phase 3.13 Slice 4 完成：只听对照 + 读听差异解释卡。PLAN 记
+  v2.1 修正：v2"同 rubric 双条件配对"被 3.11 validator 证伪（ReadingComprehension 强制
+  文本可见、复述类强制隐藏），改为**同 source segment 双 rubric 事实并置**（阅读理解 vs
+  L1 复述），不改 3.11 契约。实现：`ReadingTaskController` 泛化 purpose（听侧 attempt
+  诚实记 source_text_visible=false + l1_trigger=user_requested + 实际播放次数，UI 强制
+  至少听一遍才可提交）；听测以 `ListeningCheckPanel` 整面替换阅读视图（文本因此天然
+  隐藏，且刻意非模态——切片窗保持可操作）；复述模板优先镜像阅读侧 rubric points；
+  `reading_diff.dart` 纯归约（adjudication 最新者生效 → 必答点 yes/partial/no/
+  unassessed，abstain/缺席=未评估不算失败）+ `ReadingDiffController` 读端聚合（跨
+  rubric 不做逐点比较）+ 四象限 possibilities 解释卡对话框；阅读视图锚定段落新增
+  "读听对照"chip。验证：flutter analyze 零问题 / test 406 全绿（新增 diff 归约 6 项、
+  explanation 1 项、diff controller 2 项、听侧条件 payload 1 项）。
+
+- 2026-07-15 01:10 CST: Phase 3.13 Slice 3 完成：段落任务全链路（manual rubric + 自评）。
+  后端新增 additive 读端点 `GET /v1/semantic/rubrics/lookup`（按 source 身份六元组查最新
+  rubric——客户端无法重推服务端 fingerprint id，409 后无从定位既有 rubric 是真实缺口；
+  repository/use case/OpenAPI/route-drift 齐备）。Flutter：semantic DTO 首个真实 consumer
+  落地（`models/semantic_task.dart` 手写 + 直接 pin `gold-fixture-v1.json` 的 5 项契约测
+  试）、`SemanticApi` part（sha256 与 Rust `transcript_sha256` 对齐）、`ReadingTaskController`
+  状态机（lookup→模板编辑→rubric v1→作答→逐点自评→adjudication；409 并发回退 lookup；
+  覆盖/部分 span 取全响应且按 Unicode scalar 计数）、`ReadingTaskSheet` 底部工作流 +
+  段落"任务"chip + 切片回听计数进 attempt 的诚实 `audio_play_count`。自评 judgment 记
+  `evidence_class=self_assessment` + provenance 注明 span 语义，不冒充 gold；全程零
+  observation/projection 写入。重要契约事实（PLAN v2 裁决 1 修正预告）：3.11 validator
+  规定 ReadingComprehension 必须 source_text_visible=true，同 rubric"只读/只听"配对不成
+  立，Slice 4 读听差异改为同 source segment 双 rubric 事实并置，届时记 PLAN v2.1。验证：
+  Rust workspace 33 套件全绿（api-http 新增 lookup + 客户端 payload 端到端 2 项），clippy
+  零告警，validate-contracts 通过；flutter analyze 零问题 / test 396 全绿（新增 controller
+  5 项、sheet 1 项、契约 5 项）。
+
+- 2026-07-15 00:05 CST: Phase 3.13 Slice 2 完成：阅读位置持久化。schema v37
+  `reading_positions`（track 键控 upsert，刻意非 append-only——位置是游标不是证据）；
+  domain `ReadingPosition` + `ReadingPositionRepository` trait（Disabled 降级：读回 None
+  写报错）+ `ReadingUseCases`（空 anchor 拒绝）+ SQLite 实现；HTTP
+  `GET/PUT /v1/reading/positions/{track_id}` + OpenAPI 路径与 `ReadingPosition` schema
+  （route-drift 门通过）。Flutter：`ReadingPositionView` 手写 DTO + fixture 契约测试
+  （ADR 0014）、`ReadingApi` part、进入阅读姿态时恢复游标（拉取失败静默从头开始）、
+  段落锚定 800ms 防抖写入 + 关闭时冲刷、失败 best-effort 不打扰。验证：cargo
+  workspace 33 套件全绿（persistence 113 含新增 3 项、api-http 含新增 2 项路由测试）、
+  clippy 无新告警、validate-contracts 通过、flutter analyze 零问题 / test 385 全绿。
+
+- 2026-07-14 23:05 CST: Phase 3.13 Slice 1 完成：阅读姿态 UI 骨架。新增
+  `ReadingController`（Store 模式：paragraphs 派生、anchorCueId 阅读游标、翻译投影按
+  段落时间范围中点匹配副字幕轨）与 `ReadingView`（替换 MediaWorkbench 播放区：段落流
+  排版、词点击经合成 token 映射回真实 cue 进词汇面板、锚定段落显示整段/逐句回听 chip
+  走 3.5.7 切片窗、翻译全局开关、非语音分隔段弱化显示、进入时暂停主播放/退出恢复原
+  播放状态）。`composeParagraphCue` 合成段落 cue 复用 TokenLine 流排（TokenLine 新增
+  textAlign 参数，默认 center 不变）；side panel 姿态区新增"读一下？"入口（有 track
+  即可用，不要求当前句）。ReadingView 自监听 controller。新增 9 项 controller/组合/
+  widget 测试；flutter analyze 零问题，flutter test 383 全绿。
+
+- 2026-07-14 22:25 CST: Phase 3.13 Slice 0 完成：段落 read model spike 通过。真实数据
+  证伪 PLAN v1 的"gap 阈值分段"假设（whisper 转写 244 cue 仅 2 个非零间隙），落地
+  两级派生纯函数 `deriveReadingParagraphs`（标点/说话人/间隙/runaway 断句 → 说话人/
+  间隙/词数软上限组段，非语音 cue 成分隔段，段落身份=首 cue id）；`♪` 计句终符、
+  含词歌词行算阅读内容。新闻 49 段中位 37 词、歌词 8 段中位 49 词，目检通过。新增
+  dev 工具 `dump_sentences`（Rust example，产线切句导出）与 `paragraph_spike.dart`；
+  12 项单测，flutter analyze 零问题 / test 374 全绿，clippy/fmt 通过。结论与已知
+  限制见 `3.13-SLICE0-SPIKE.md`。
+
+- 2026-07-14 21:55 CST: Phase 3.13 Reading Studio v1 开工：PLAN 按上游落地现状修订为
+  v2 并建分支 `claude/3.13-reading-studio-v1`。关键裁决：读听差异直接骑在 3.11
+  `SemanticTaskConditions`（source_text_visible/audio_play_count）+
+  `judgments_directly_comparable` 上，读端派生聚合、不新增权威表；段落 read model
+  为派生投影不落库；阅读位置定为 v37 upsert cursor 不进 append-only 事实族；无 LLM
+  默认路径 = manual rubric + 用户自评 manual judgment；semantic Dart DTO 由本 phase
+  作为首个真实 consumer 交付（ADR 0014）；reading observation 收窄为用户显式标记
+  （capability=Reading）；provider-backed rubric/judgment 为后置切片，跟随 owner
+  3.12.1 资格裁决。执行方式变更：本 phase 起由 Claude 全程实现（codex 无额度）。
+
+- 2026-07-14 21:30 CST: Phase 3.9.4 收口。Slice 4 QA：Rust workspace 614 tests、
+  clippy strict、fmt、contracts、flutter analyze/test 362 全绿；隔离 DB + 真实 spaCy
+  capability + 两条真实字幕轨道的后端 HTTP 全链路实测通过（持久化/激活/幂等/
+  cache-hit 补偿/force/文本回退生成/syntax 接管 active），临时 track cache 已清理。
+  撰写 `3.9.4-REAL-MEDIA-QA.md`（含 owner GUI 清单）与 `3.9.4-CLOSEOUT.md`，
+  更新 STATE，phase 分支合回 main。
+
+- 2026-07-14 21:05 CST: Phase 3.9.4 Slice 3 完成：语义分组获得播放跟随与点击跳转，
+  按 ADR 0016 投影实现——新增纯函数 `senseGroupPlaybackRange`（token span →
+  WordTiming min/max，容忍乱序/缺失，无匹配返回 null），TokenLine 缓存投影（列表
+  identity 变化才重算，播放 tick 只做区间比较），点击合成 DisplayChunk 复用既有
+  onChunk → seekChunk 通路与 offset 换算；semantic 纯模式改为与 prosodic 同级的
+  实线胶囊并复用 chunk 高亮设置，删除 provisional 虚线画笔与 tooltip；compare 模式
+  保持 prosodic 底 + 虚线差异标记不变。新增投影 helper 六类单测与 TokenLine
+  semantic 高亮/点击/null 投影/compare 回归 widget 测试；flutter analyze 无告警，
+  flutter test 362 全绿。
+
+- 2026-07-14 20:47 CST: Phase 3.9.4 Slice 2 完成：Flutter speech-enhancement 加载在
+  sense group 为空且非请求错误时触发一次文本规则回退生成并激活（每 track 单次守卫，
+  失败降级为空并记录 errors）；设置页 semantic/compare 选项标注"可用/数据未就绪"短
+  状态，未就绪且选中语义相关模式时 grouping 下拉 helper 显示逐词回退说明（中英文案）。
+  新增 controller 三场景测试与 SettingsDialog 两态 widget 测试（该文件首个 widget
+  测试基建）；监督评审中修正了 codex 无法在 sandbox 验证的测试 fixture 非法下拉值
+  （ruleHintsLevel/soundPatternDisplayMode/phonemeRibbonStyle/phoneticAnalysisPreference）
+  并把长文案从选项文本移入 helperText 以消除真实 RenderFlex 溢出。flutter analyze
+  无告警，flutter test 353 全绿。
+
+- 2026-07-14 20:29 CST: Phase 3.9.4 Slice 1 完成：track syntax-analysis 的新鲜
+  batch 与 cache-hit batch 都通过 application 用例持久化并激活 SenseGroup，失败仅记录
+  tracing warning、不影响 syntax 响应，capability unavailable 早退保持无副作用。扩展
+  api-http ready fake-provider 集成测试，覆盖首次 syntax batch 的 groups 一致性、cache hit
+  幂等和 force 重算不重复。
+
+- 2026-07-14 20:20 CST: Phase 3.9.4 Slice 0 完成：application 新增
+  `MediaAnalysisUseCases::persist_sense_group_analysis_from_batch`，把语法分析 batch 中
+  已算好的 sense groups 映射持久化为 `SenseGroupAnalysis` 并激活；text/id 推导与既有
+  生成路径抽公共 helper；幂等（active 同 id 跳过）、syntax 接管 fallback active
+  （fingerprint 含 provider_id）、空 batch 返回 None。新增 6 个单测覆盖混合/纯回退/
+  幂等/接管/双入口一致性/空 batch；application 65 tests、clippy -D warnings、fmt 全绿。
+
+- 2026-07-14 20:03 CST: 建立 Phase 3.9.4 SenseGroup UX Unification（分支
+  `phase/3.9.4-sensegroup-ux-unification`）。核实语义分组四层断链（syntax 分析不落
+  SQLite、syntax-aware 生成入口为死参数、Flutter 无生成/激活调用方、加载只认 active），
+  写入 `3.9.4-CONTEXT.md` 决策 D1–D6（时间戳走 ADR 0016 投影、持久化直接映射
+  batch、幂等激活、cache-hit 补偿、Flutter 触发文本回退、编排收在 application）与
+  `3.9.4-PLAN.md` Slice 0–4；上游桌面方案文档归档至 phase design-notes。
+
+- 2026-07-14 20:50 CST: Phase 2.24 严格收口。AppServices 变为 composition-only，三个
+  深模块与六个窄模块承接用例；Flutter raw return 约 97→1，production Rust wildcard 归零，
+  Python production entry 1433→262 行。最终 Rust 608、Flutter 348、Python 11、contracts 5
+  全绿，fmt/clippy strict 与 architecture guard 通过；详见 `2.24-CLOSEOUT.md`。
+
+- 2026-07-14 20:28 CST: Phase 2.24 Rust hygiene gate 收口：生产代码 86 处 wildcard imports
+  全部展开并清除未使用依赖，测试 prelude 仍可局部使用 `super::*`；architecture guard 新增生产
+  wildcard 回归检查。同步清理历史 fmt/clippy 基线，`cargo fmt --all -- --check` 与
+  `cargo clippy --workspace --all-targets -- -D warnings` 首次全绿，workspace 所有 test targets
+  编译通过。
+
+- 2026-07-14 19:55 CST: Phase 2.24 `AppServices` 深化完成：practice session、review
+  scheduling、hunting 与 listening inbox 归入 `PracticeUseCases`，lexical evidence 通过显式
+  collaborator 写入。application 中散布的 18 个 `impl AppServices` 已全部删除；顶层仅剩
+  composition/builders 与 9 个聚合模块访问器，workspace production check 与全部 test targets
+  编译通过。
+
+- 2026-07-14 19:41 CST: Phase 2.24 第二个深用例族完成：media/subtitle、四类 timeline、
+  transcription/phonetic derived resources、corpus、content-fit、diagnosis 与 coach material
+  统一进入 `MediaAnalysisUseCases`，共享资源失效与 provenance 边界，并显式依赖 lexical
+  collaborator。api-http、local-runtime 与测试均删除旧 `AppServices` 直调；application 59、
+  local-runtime 14、api-http 48、persistence 121 tests 全绿。
+
+- 2026-07-14 19:18 CST: Phase 2.24 首个深用例族完成原地替换：lexical normalization、
+  entries/capability evidence、sense folders、vocabulary transfer 与 recognition upgrade 统一进入
+  `LexicalLearningUseCases`，只持有该一致性边界需要的 ports；api-http、跨域协作者和持久化测试
+  均通过 module interface，旧 `AppServices` lexical 直出方法删除。Application 59、api-http
+  48、persistence 121 tests 全绿，workspace tests 可完整编译。
+
+- 2026-07-14 18:53 CST: Phase 2.24 Flutter raw-return ledger 收敛完成：vocabulary
+  list/import 与 OpenSubtitles search 建模，未使用的全局 LLTimeline import 客户端入口删除；
+  vocabulary book 同步改为 typed details。仅保留 vocabulary export 这一项经审定的开放版本文档
+  例外，并以 transport contract 验证 additive fields 无损透传。Analyze、相关 51 tests 与
+  architecture guard 全绿。
+
+- 2026-07-14 18:42 CST: Phase 2.24 typed-resource 第六批：learning resources、transcription
+  providers/models/jobs 与 phonetic providers/models/jobs/feedback 全部改为显式领域模型，
+  三个 UI surface 和 subtitle source coordinator 不再读取匿名 wire maps；raw-return
+  allowlist 从 26 降至 5。Flutter analyze、相关 23 tests 与 architecture guard 全绿。
+
+- 2026-07-14 18:17 CST: Phase 2.24 typed-resource 第五批：LLM provider registration、corpus
+  search、subtitle import/lifecycle 与 word/chunk/phone timeline lifecycle 全部在 LocalApi
+  seam 解码为既有领域模型，调用侧旧 `fromJson` 被原地删除；raw-return allowlist 从 42 降至
+  26。Flutter analyze 与相关 38 tests 全绿。
+
+- 2026-07-14 17:49 CST: Flutter typed-resource 第四批将 MediaItem、chunk partition、syntax
+  status、learner profile/L1 specialty、capability override、lemma normalization 移至 LocalApi
+  解码，UI/occurrence resolver/settings 删除对应 map field knowledge；补充 learner/L1 contract
+  tests。raw-return allowlist 从 51 项继续降至 42 项，analyze、定向 17 tests、全量 347
+  tests 与 guard 全绿。
+
+- 2026-07-14 17:44 CST: 继续压缩 Flutter raw-return allowlist：cold-start candidates、
+  sense-group analysis/summary/lifecycle 与 LLTimeline export 改为 LocalApi typed decoding，
+  controller/widget 删除 wire parsing。补齐 `LLTimelineDocument` 及其 export children 的
+  `toJson`，同一个领域对象同时服务 UI 与无损 JSON 导出；相关 43 tests、timeline round-trip、
+  analyze 与 architecture guard 全绿，allowlist 再减少 8 项。
+
+- 2026-07-14 17:34 CST: Phase 2.24 Flutter typed-resource 第二批：字幕轨道、词时间、
+  word/chunk/phone timeline summaries、pronunciation provider/analysis 与 phonetic analysis
+  在 LocalApi 边界解码，controller/coordinator/event flow 删除对应 wire-shape knowledge。
+  新增 raw-return allowlist 守卫，使剩余 transport DTO 债务可审计且禁止净新增；Flutter
+  analyze、定向 23 tests 与全量 346 tests 全绿。另将 pronunciation/timing 9 个方法从
+  `AppServices` 原地替换为仅持有 4 个相关 port/provider 集的 `PronunciationUseCases`；
+  application/local-runtime/api-http 共 109 tests 全绿。
+
+- 2026-07-14 17:23 CST: 继续 Phase 2.24 高内聚治理。删除语义不明的 `m18.rs`/
+  `m18_ui.dart`，分别替换为 lexical entries、learning resources、subtitle search HTTP
+  modules 与 `learning_assets_ui.dart`。新增 Dictionary/Recording use-case modules；Flutter
+  lexical、dictionary、pronunciation、language、syntax、timeline、content-fit、media-triage、
+  LLM-probe caller clusters 改为 resource-client typed decoding。SQLite 1350 行 subtitle
+  persistence 按 7 个 repository 职责拆分；Python production CLI 1433→262 行，核心实现按
+  I/O/acoustics/report/conversion/audio/alignment/orchestration 拆分。新增并接入 contract 流程的
+  architecture coupling guard。Rust 205、Flutter 345、Python 11 tests 与 analyze 全绿。
+
+- 2026-07-14 16:53 CST: 启动 Phase 2.24 Flutter typed-resource slice：diagnosis API client
+  直接解码并返回 `Diagnosis`，主 controller 删除 `fromJson(await api...)` wire-shape 知识；
+  新增 transport seam contract test。`flutter analyze` 与 API/learning-workflow 相关 16 tests
+  全绿。
+
+- 2026-07-14 16:48 CST: 完成 Phase 2.24 runtime ownership 尾项：M18 learning-resource
+  lifecycle、OpenSubtitles provider 和 syntax capability manager/cache I/O 从 api-http
+  迁入 local-runtime，HTTP 层缩回协议映射；resource install 复用 ArtifactDownloader 并由
+  deterministic fake 覆盖校验失败、原子发布和清理。开始深化 AppServices，将 semantic task
+  与 LLM provider/secret、learner profile singleton lifecycle 原地替换为只持有所需
+  repository 的 use-case modules，不保留旧直出 wrapper。application/local-runtime/
+  api-http/persistence-sqlite 共 219 个定向 tests 全绿；learner profile 后续切片另通过 4 个
+  L1 聚合测试与 36 个 HTTP tests。
+
+- 2026-07-14 16:28 CST: 执行 Phase 2.24 首批高耦合治理。speech-analysis 的 17 个公开
+  implementation modules 改为 private，通过 timing/chunking/phonetics/audible-structure
+  curated facade 暴露能力；删除 application 6 个无 caller legacy engine wrappers。
+  新增无 Axum 依赖的 local-runtime crate，原地迁出 transcription/phonetic/speech-batch/
+  sound-line coordinators 与 event payload，新增并实际接入 Tokio/fake ProcessRunner、
+  Reqwest/fake ArtifactDownloader，共享 tool discovery 不再跨 workflow 私借。删除
+  TimelineResourceRepository/LearningAssetRepository/ReviewRepository 三个 fat ports，
+  按 word/chunk/sense/phone、capability/entry/observation/content/bundle、
+  review/hunting/recognition-upgrade 拆为 12 个窄端口，Sqlite 直接实现且无聚合桥接。
+
+- 2026-07-14 15:58 CST: 建立 Phase 2.24 System Cohesion & Coupling Consolidation，新增
+  CONTEXT/BASELINE/PLAN，记录 `api-http` runtime ownership、speech/application 公共类型泄漏、
+  宽 repository/AppServices、Flutter raw JSON client、Rust/Python locality 五组治理目标；明确
+  deep-module/seam 裁决（单实现纯算法禁止机械加 trait）、P0→P2 六步执行顺序、完整测试门槛
+  与 3.13 前推荐工程关口。同步新增 ARCH-011，并更新 ROADMAP/STATE。
+
+- 2026-07-14 12:10 CST: 机械拆分 `dictionary-provider/src/lib.rs`（1425 → 15 行 lib +
+  按上游资源分模块：cedict 523（中文词典+拼音发音，共享 CC-CEDICT 索引）/ ecdict 271 /
+  edict 253 / free_dictionary 155 / support 10（共享 `ResourceSignature`）/ tests 271）。
+  逐字搬移；跨模块可见性最小升级：`resolve`/`numbered_pinyin_to_marks`/
+  `parse_free_dictionary_phonetics`/`ResourceSignature` 升 `pub(crate)`（测试与共享所需）。
+  doc comment 逐行对拍与原文件完全一致。`cargo test` 8 全绿（与基线同数）、workspace
+  测试零失败、clippy 告警 28 与基线持平。
+
+- 2026-07-14 11:40 CST: 机械拆分 `models/types.dart`（1657 → 12 行 library + 5 个 part
+  文件：lexical 504 / pronunciation 452 / media_fit 283 / dictionary 237 / diagnosis 171
+  行），沿 `models/timeline.dart` 既有 part 模式，40 个类逐字搬移、消费端 import 零改动。
+  `flutter analyze` 零问题、`flutter test` 344 全通过。
+
+- 2026-07-14 11:20 CST: 机械拆分 `api_service.dart`（1629 → 263 行核心 + 9 个按资源域的
+  part 文件，各 73–345 行）。`LocalApi` 保留 connect/transport/`_request`/events/close
+  生命周期；143 个资源方法逐字搬入 `services/api/{media,subtitles,timelines,speech,
+  transcription,lexical,practice,listening_hunting,coach_llm}.dart` 的 `extension on
+  LocalApi`（part 共享库作用域，私有 `_request` 照常可用；唯一文本改动是 media.dart 里
+  static `_isAudio` 按 Dart 规则加 `LocalApi.` 限定）。29 个消费文件 import 与调用点
+  零改动。附带 spike 结论：放弃从 OpenAPI 生成 Dart DTO——types.dart 的模型类携带领域
+  便利方法（如 `triageQueue`），生成会破坏该设计；防漂移继续走既有 `test/contract/`
+  对拍测试（已 12 个）+ Rust 侧 OpenAPI parity test。`flutter analyze` 零问题、
+  `flutter test` 344 全通过。
+
+- 2026-07-14 10:40 CST: 删除 46 方法的 fat `SubtitleRepository` trait 及其 4 组 blanket
+  桥接 impl（repositories.rs 1375 → 848 行）。消费侧窄 trait（`SubtitleTrackRepository`/
+  `PronunciationRepository`/`TimelineResourceRepository`/`LLTimelineResourceRepository`）
+  早已存在且 AppServices 全部经窄 trait 依赖——fat trait 只是实现侧聚合，导致每加一个
+  持久化方法要同步写 4 处（fat trait + 窄 trait + 桥接 + sqlite impl）。现
+  `persistence-sqlite/subtitles.rs` 直接按资源 impl 4 个窄 trait（方法体逐字不变，仅
+  lltimeline 两方法挪至文件尾自成 impl 块），新增方法今后只写 2 处。测试导入改窄
+  trait。`cargo test --workspace` 608 全绿，clippy 告警 30 与基线持平（零回归）。
+
+- 2026-07-14 10:05 CST: main.dart 拆分 S9 —— 3.9.3 合并带来的 `_checkSyntaxCapability`
+  能力监控（方法 + busy/ready/analyzed 三个状态标志）逐字搬入
+  `SubtitleSourcesCoordinator.checkSyntaxCapability`（字幕轨分析域的自然归属）；2 秒轮询
+  Timer 生命周期留在宿主 `initState`/`dispose`。新增 2 例隔离测试（ready 轨道恰好分析
+  一次、not_installed 时保持静默）。`flutter analyze` 零问题、`flutter test` 344 全通过
+  （342 + 2）。
+
+- 2026-07-14 09:35 CST: main.dart 拆分 S8 —— 词汇/学习类对话框与导航流程迁往
+  `widgets/flows/learning_flows.dart`（沿用 flows 顶层函数模式）：
+  `openLearningAssetsFlow`/`openLearningResourcesFlow`/`showCurrentPhraseCandidatesFlow`/
+  `openPhraseFlow`/`correctCurrentLemmaFlow`/`showVocabularyFlow`/`openReviewQueueFlow`/
+  `openCoachDashboardFlow`/`importWordListFlow`。宿主保留同名薄 wrapper。顺带修复新
+  widget test 暴露的潜在缺陷：correct-lemma 对话框此前在退场动画期间就 dispose
+  `TextEditingController`（debug 断言隐患），改由 `_LemmaCorrectionDialog` 自持生命周期。
+  新增 `test/learning_flows_test.dart`（3 例：无选中 token no-op、修正词元发
+  POST /lexical-normalization/correct、null api 不导航）。main.dart 1737 → 1551 行。
+  `flutter analyze` 零问题、`flutter test` 337 全通过（334 + 3）。
+
+- 2026-07-14 09:05 CST: main.dart 拆分 S7b —— 字幕资源类对话框/导航流程迁往
+  `widgets/flows/subtitle_resource_flows.dart`（沿用 `media_import_flows.dart` 顶层
+  flow 函数既有模式，非 coordinator）：`deleteSubtitleResourceFlow`/
+  `exportSubtitleResourceFlow`/`generateSubtitlesFlow`/`openTranscriptionCenterFlow`/
+  `openPhoneticAnalysisCenterFlow`/`openSubtitleResourcesFlow`/`openColdStartMarkingFlow`。
+  宿主保留同名薄 wrapper 转调（R3：最小化 build 改动面）；`_generateSubtitles` 的
+  setState 任务登记改注入 `recordTaskStatus` 回调（刻意不复用 `_setTaskStatus`，
+  后者会额外覆盖 player status 文本，保持逐字语义）。新增
+  `test/subtitle_resource_flows_test.dart`（4 例 widget test：删除取消/确认发
+  DELETE、导出 null-api 不弹窗、导出双格式渲染与 dismissal）。main.dart
+  1842 → 1737 行。`flutter analyze` 零问题、`flutter test` 334 全通过（330 + 4）。
+
+- 2026-07-14 08:52 CST: main.dart 拆分 S7a —— 抽出 `SubtitleSourcesCoordinator`（仅上下文
+  无关子集）：`ensureCurrentPronunciation`/`analyzePhonetics`/`handleDrop`/`isMediaPath`/
+  `isSubtitlePath` 逐字搬到 `lib/controllers/subtitle_sources_coordinator.dart`，注入
+  `getApi`/`isMounted`/`showSnackBar`/`setTaskStatus`/`openMediaPath`/`openSubtitlePath`。
+  对话框驱动的来源流程（delete/export/generate/import word list/cold-start 等）按 S5 既定
+  裁决留在宿主，后续 S7b 评估迁往 `widgets/flows/` 既有模式。逻辑/字符串不变。新增
+  `test/subtitle_sources_coordinator_test.dart`（9 例：扩展名分类、drop 路由/前置守卫/
+  不支持类型、发音缓存与去重、phonetics 无轨守卫/成功派发/失败上报）。main.dart
+  1937 → 1842 行。`flutter analyze` 零问题、`flutter test` 330 全通过（321 + 9）。
+
+- 2026-07-14 08:47 CST: main.dart 拆分 S6 —— 抽出 `MediaLibraryCoordinator`。首页媒体库/
+  triage 动作 9 个方法（`recordRecentMedia`/`prefetchHomeSummary`/`loadMediaLibrary`/
+  `openLibraryEntry`/`startExtensiveFromLibrary`/`startIntensiveFromLibrary`/
+  `setLibraryTriageIntent`/`toggleFamiliarSupply`/`continueRecentMedia`）逐字搬到
+  `lib/controllers/media_library_coordinator.dart`；coordinator 自持 `savedVocabulary`/
+  `mediaLibrary` 两个首页汇总事实（原 State 字段），`setState` 改注入 `requestRebuild`；
+  media-session 操作按 PLAN R5 走注入回调（`openMediaPath`/`openMedia`）而非直接持有
+  coordinator。逻辑/字符串不变。新增 `test/media_library_coordinator_test.dart`（11 例：
+  加载成功/失败保留旧值/null API no-op、缺失文件守卫、triage 就地替换与失败上报、continue
+  回退拣选器/重开近期路径、recordRecentMedia 无媒体 no-op）。main.dart 2051 → 1937 行。
+  `flutter analyze` 零问题、`flutter test` 321 全通过（310 + 11）。
+
+- 2026-07-14 01:15 CST: main.dart 拆分 S5 —— 抽出 `VocabularyActionsCoordinator`（仅上下文无关
+  数据方法）。vocabulary 入口大量 BuildContext 耦合（`showDialog`/`Navigator.push`/
+  `MaterialPageRoute`），按代码库约定「coordinator 无 context、对话框留宿主」，这些导航/对话框
+  方法保留在 State；可抽子集为 10 个纯数据方法：`loadWordEntries`/`loadPhraseEntries`/
+  `loadPhraseCandidates`/`openWord`/`setSelectedWordStatus`/`setCapabilityOverride`/
+  `saveSelectedLearningContent`/`recordCurrentSource`/`markFirstWord`/`observeSelected`，连同
+  私有 `_sourceFor`（仅被这些方法使用，随之内化）逐字搬到
+  `lib/controllers/vocabulary_actions_coordinator.dart`，注入 `getApi`/`isMounted`/`text`/
+  `refreshDiagnosis`，其余用归位后的 `settings.resolveLearningLanguage`。逻辑/字符串不变。新增
+  `test/vocabulary_actions_coordinator_test.dart`（markFirstWord 必刷 diagnosis、无选择的
+  observeSelected 静默 no-op）。main.dart 2206 → 2051 行。`flutter analyze` 零问题、`flutter test`
+  310 全通过（308 + 2）。
+
+- 2026-07-14 00:50 CST: main.dart 拆分 S3+S4（合并）—— 抽出 `PracticeActionsCoordinator`。
+  精听练习与 shadowing 深度交织（`_navigatePracticeSentence` 同时派发 cloze 与 shadowing、
+  `_replayPracticeWindow`/`_setShadowingStep` 共享），故合为单个 coordinator 避免跨 coordinator
+  循环依赖。19 个方法（四种练习启动、练习窗循环、提交、录音/回放/ABA、rate/step、external/
+  slice-window shadowing、复习保存、句子导航、teardown）逐字搬到
+  `lib/controllers/practice_actions_coordinator.dart`；注入 `getApi`/`isMounted`/`refreshDiagnosis`/
+  `seekCue`，`tools` 由持有的 settings 内部派生，其余全用 S2.5 归位后的 `playbackActions.*` 与
+  `settings.resolveLearningLanguage`。逻辑/字符串不变；~24 处调用点改走 coordinator。新增
+  `test/practice_actions_coordinator_test.dart`（4 例：无 draft replay no-op、submit 必刷 diagnosis
+  回调、无目标句不 seek、无 attempt 不改状态）。main.dart 2469 → 2206 行。`flutter analyze`
+  零问题、`flutter test` 308 全通过（304 + 4）。
+
+- 2026-07-14 00:25 CST: main.dart 拆分 S2.5 —— 把跨领域共享 glue helper 归位到自然属主，
+  为后续 coordinator 抽取降低注入面。`_mediaTimeMs` 与 `_currentPracticeChunk(s)` 迁入
+  `PlaybackActionsCoordinator`（已持 `mediaTime`/`currentChunkRef`/subtitle）；`_learningLanguage`
+  改为 `SettingsController.resolveLearningLanguage(trackLanguage)`，main.dart 16 处调用点改为
+  `settingsController.resolveLearningLanguage(subtitleController.primaryTrack?.language)`。
+  `ListeningInboxCoordinator` 随之去掉 `mediaTimeMs` 注入，直接用 `playbackActions.mediaTimeMs`。
+  `_sourceFor`（仅 vocab 使用）留待 vocab slice。逻辑逐字不变；新增 3 例测试（coordinators_test
+  的 mediaTimeMs/practice-chunk 空态、settings_test 的 resolveLearningLanguage 优先级）。
+  `flutter analyze` 零问题、`flutter test` 304 全通过（301 + 3）。
+
+- 2026-07-14 00:05 CST: main.dart 拆分 S2 —— 抽出 `ListeningInboxCoordinator`。把
+  `_captureListeningInbox` / `_refreshListeningInbox` / `_replayListeningInboxItem` /
+  `_processListeningInboxItem` 四个方法逐字搬到 `lib/controllers/listening_inbox_coordinator.dart`
+  （注入 `getApi`/`isMounted`/`mediaTimeMs` + 复用既有 `playbackActions`），逻辑/字符串不变。
+  `_hardInterruptListening` 与 `_toggleExtensiveListening`（含 `showDialog` 与跨 slice
+  `_refreshDiagnosis` 依赖）暂留 State，待其依赖抽出后处理；两个 `loopRange` 方法后续归入
+  `PlaybackActionsCoordinator`。新增 `test/listening_inbox_coordinator_test.dart`（3 例：process
+  review-item 分支、null-range replay 守卫、null-api no-op）。main.dart 2527 → 2476 行。
+  `flutter analyze` 零问题、`flutter test` 301 全通过（298 + 3）。
+
+- 2026-07-13 23:40 CST: main.dart 拆分 S1 —— 抽出 `HuntingActionsCoordinator`。把
+  `_toggleHuntingMode` / `_reindexHuntingCorpus` / `_answerHuntingCheck` 三个方法逐字搬到
+  `lib/controllers/hunting_actions_coordinator.dart`，仅做 seam 改写（`api`→`getApi()`、
+  `mounted`→`isMounted()`、`l.text`→注入 `text()`、controller 接收者按现有 coordinator 短命名）；
+  逻辑/分支/字符串不变。`_PlayerScreenState` 新增 `huntingActions` 字段 + `initState` bind，
+  3 处调用点改走 coordinator。新增 `test/hunting_actions_coordinator_test.dart`（5 例：toggle
+  启/停、reindex 成功/失败、null-api no-op），复用既有 `LocalApi.withTransport` fake。main.dart
+  2578 → 2527 行。`flutter analyze` 零问题、`flutter test` 298 全通过（293 + 5）。
+
+- 2026-07-13 23:20 CST: 立 `main.dart` Coordinator 抽取治理 mini-phase 的可执行 PLAN
+  （`.planning/phases/main-dart-coordinator-extraction/PLAN.md`）。核实 `_PlayerScreenState`
+  从 2.23 的 1457 行回涨至 2578 行，且无任何测试 mount `PlayerScreen`、State 无 DI，故整屏
+  widget 测试不可行；测试网改建在代码库既有的 Coordinator 隔离单测层。PLAN 按现有
+  `media_session_coordinator` 模板，分 Slice 0（fakes + 前置）+ S1–S7（Hunting / Inbox /
+  Shadowing / Practice / Vocabulary / MediaLibrary / SubtitleSources），逐 Slice test-first、
+  逐字搬移、analyze+test+对拍验证；`initState`/`dispose`/`build`/视图组合与高频 `_onPosition`
+  保留在 State。属语义重构（非机械搬移），与本次 lexical/timeline 两个纯机械拆分区分。
+
+- 2026-07-13 23:05 CST: 机械拆分 `apps/desktop/lib/models/timeline.dart`（2837 → 10 行 library +
+  6 个 part 文件，最大 `rhythm.dart` 965 行，均低于 AGENT.md 1500 行阈值）。采用 Dart
+  `part`/`part of`：原文件零 import、完全自包含，故 43 处 `import 'models/timeline.dart'` 全部
+  保持不变。按子领域切分：`timeline/subtitle.dart`（token/cue/track/capabilities）、`word_chunk.dart`
+  （Word/Chunk timeline + evidence + SenseGroup）、`sound.dart`（PhoneTimeline + sound 原语）、
+  `rhythm.dart`（RhythmFrame 模型全族）、`document.dart`（LLTimeline document/metadata/artifact/
+  DetectedPhone）、`display.dart`（DisplayChunk/partition/cursor）。逐字搬移，脚本验证 2618 非空行
+  与原文完全一致（仅 dart format 空行规整）。`flutter analyze` 零问题、`flutter test` 293 全通过、
+  未违反 ADR 0014（手写解析不变，仅分文件）。
+
+- 2026-07-13 22:47 CST: 机械拆分 `persistence-sqlite/src/lexical.rs`（1801 → 948 行，低于
+  AGENT.md 1500 行阈值）。按子领域抽出三个子模块：`lexical/import_export.rs`（bulk
+  import/export + capability-state 持久化的两个 inherent impl 块 + `merge_imported_entry`）、
+  `lexical/capability.rs`（capability profile/state 读写 helper）、`lexical/rows.rs`（row 反序列化
+  + sense-folder/observation reader）。`LearningAssetRepository` trait impl 因 Rust 不允许 trait
+  impl 跨文件拆分，保留在 `lexical.rs`。纯搬移不改逻辑；`export_lexical_assets`/
+  `import_lexical_assets` 升为 `pub(crate)` 以保持 tests 可见。`cargo test -p persistence-sqlite`
+  110+5+6 全绿，workspace build 通过，clippy 告警数 19 与拆分前完全一致（零回归）。
+
+- 2026-07-13 22:25 CST: Phase 3.9.3 完整收口并冻结。最终 `jsonl-v2` 修复带前导空格字幕的
+  spaCy SPACE token/head 重映射，delivery identity 现同时绑定 provider/requirements/sidecar/model；
+  真实 244 cue App 路径为 243 analyzed + 1 `invalid_sentence` 隔离，首次 rebuild 2.10s、同 fingerprint
+  hot hit 0.11s。实测完成 clean install、restart persistence、stale/update、模型损坏 partial/恢复、
+  disable/enable、cancel/retry 和 uninstall；取消安装改为终止完整 venv/ensurepip process group，确认
+  staging 零残留。Rust workspace/Clippy/contracts/Python、Flutter analyze/test、release backend 与 macOS
+  build 全绿；QUALIFICATION、REAL-MEDIA-QA、codebase、STATE、PLAN、CLOSEOUT 已同步。
+
+- 2026-07-13 21:54 CST: Phase 3.9.3 交付 App 内可选句法 capability 竖切片。后端新增持久化
+  `not_installed/downloading/ready/partial/failed/stale/disabled` 状态、版本化 Application Support
+  安装目录和 install/cancel/retry(update)/verify/enable/disable/uninstall HTTP 路径；fully pinned
+  runtime/model 在 staging 校验后原子发布，基础 bundle 仍不含 Python/runtime/model。spaCy JSONL
+  adapter 改为 probe/analyze 共享长驻进程，支持主动 idle release、崩溃单次恢复和 lifecycle shutdown。
+  整轨分析新增 subtitle/token/language/model/config fingerprint、single-flight、逐句 partial 隔离、cache
+  hit/stale/force rebuild；Flutter 设置页提供完整动作、进度/错误/当前轨道状态，安装完成或打开未分析
+  轨道时静默后台启动，相同 fingerprint 复用。新增 Rust/HTTP/Dart DTO/transport/widget tests 与 OpenAPI；
+  未安装不启动 Python、不弹窗、不阻塞字幕或播放，B `want_to`/C/ChunkTimeline/Construction 边界未变。
+
+- 2026-07-13 21:33 CST: 新建 Phase 3.9.3 Syntax Capability Delivery & Lifecycle，基于冻结的
+  3.9.2 最终提交 `71be2c20` 建立独立分支与 phase 文档。计划把已资格 spaCy Provider 补成
+  App 内可安装/校验/取消/重试/更新/停用/卸载的可选能力，并交付持久状态机、长驻 sidecar、
+  整轨 fingerprint cache、stale/rebuild、自动后台分析和 Flutter 完整用户路径；未安装零打扰、
+  base bundle +0B、B/want-to/C/ChunkTimeline/Construction identity 边界保持不变。
+
+- 2026-07-13 19:30 CST: Phase 3.9.2 Syntax Provider Product Activation 收口。corrected v2
+  holdout、逐 query qualification、spaCy opt-in lifecycle、单 batch/逐句共享编排、真实媒体与
+  missing/corrupt/invalid/timeout 降级全部通过；contracts、句法相关 crates 与 Rust workspace
+  全绿。最终裁决为 spaCy artifact + B `going_to`/`used_to`/`have_to` + SenseGroup + matcher
+  qualified，B `want_to` fallback-only；base bundle +0B，C/ChunkTimeline/Construction identity
+  边界冻结。PLAN/STATE/CLOSEOUT 已更新，phase 转 COMPLETED。
+
+- 2026-07-13 19:22 CST: Phase 3.9.2 激活可选 spaCy 共享句法产品 capability。application
+  新增单次 probe/batch、逐句 finalise 的 consumer orchestrator；同一 artifact ID 供已资格
+  B（`going_to` / `used_to` / `have_to`）、syntax-aware SenseGroup 与 dependency candidate
+  matcher 共用，`want_to` 继续精确 text fallback。新增 HTTP/OpenAPI composition、未配置/timeout/
+  坏树逐句隔离测试；base 路径不启动 Python。fresh opt-in 安装以 fully pinned spaCy 3.8.13 +
+  `en_core_web_sm` 3.8.0 实测通过 probe 与 development v2，clean install 162,250,752 bytes，
+  base bundle +0B；runtime/model/training-data 许可与安装/刷新/停用/卸载分别审计。模型 identity
+  排除非内容 `__pycache__/*.pyc` 后在 research/fresh venv 稳定一致；真实媒体 244 cues 中唯一
+  双 root 句单独 fallback，不影响其余句，句法仍不进入 C、不替代 ChunkTimeline、不铸造
+  Construction identity。
+
+- 2026-07-13 18:57 CST: Phase 3.9.2 Slice 0 建立 corrected syntax qualification v2。冻结旧 v1
+  历史，新增 development/validation v2、独立 digest 与 scorer，把 attachment gold、产品歧义
+  policy 和 artifact validity 分层，并改为逐 consumer query 授权。spaCy 开发/锁定验证均达到
+  100% lexical/exact mapping、零 silent/tree issue；`going_to`、`used_to`、`have_to` 各自 100%
+  qualified。basic dependency 无法稳定区分 want-to wh subject/object，且锁定歧义例 raw allow，
+  因而 `want_to` 明确为 `fallback_only`，不能再整体否决 artifact，也不能整体放行 provider。
+
+- 2026-07-13 18:45 CST: 新建 Phase 3.9.2 Syntax Provider Qualification Correction and Product
+  Activation。纠正 3.9.1 将 `Which team do you want to win?` 的保守 block policy 当作唯一
+  parser attachment gold 的评估错误；冻结旧报告，另建 v2 subject/object 清晰最小对照和
+  ambiguous-abstain gate。首选 spaCy 作单一产品候选；若修正版资格通过，则在不让 Python/model
+  成为基础产品硬依赖的前提下，让 B、syntax-aware SenseGroup 与 Construction candidate matcher
+  共享同一 validated artifact，并保留 C/ChunkTimeline/Construction identity 边界和无模型 fallback。
+
+- 2026-07-13 16:53 CST: Phase 3.9.1 Shared Syntactic Analysis Provider 收口。完整 contracts 与
+  Rust workspace 测试通过；PLAN/STATE/CLOSEOUT 记录负向资格结论：Stanza/spaCy 共享中立契约、
+  token mapping、sidecar failure taxonomy、B/SenseGroup consumer 与 Construction candidate
+  matcher 均已验证，但两个候选都因锁定 wh-extraction 高风险假阳性不得激活。模型、runtime、
+  treebank/training provenance 分层审计完成；无模型产品路径保持原 B 与 rule SenseGroup，句法
+  不进入 C、不替代 ChunkTimeline、不铸造 Construction identity。
+
+- 2026-07-13 16:48 CST: Phase 3.9.1 Slice 6 建立 Construction dependency matcher seam 与真实
+  媒体 QA。matcher 只在 qualified + activatable artifact 上输出带 source artifact、subtitle
+  token span 与 bindings 的可重建候选，类型和序列化守卫证明不会铸造 Construction canonical/
+  occurrence identity 或 capability。以 owner 本地 244 cue / 1773 word 新闻字幕运行 Stanza/
+  spaCy：两者 lexical mapping 100%、exact span 98.76%、零静默错位且刷新确定；Stanza 零树错误，
+  spaCy 在一个口语残句产生双 root 并被 validator 闭合拒绝。生产 SenseGroup 对真实 Stanza
+  输出保持教学粒度和 `New York City` 多词短语完整性；missing/corrupt/invalid sidecar 均不生成
+  draft。报告不复制字幕正文，未资格候选仍不接入产品，B/SenseGroup 保留原 fallback，C 与
+  ChunkTimeline 未改动。
+
+- 2026-07-13 16:36 CST: Phase 3.9.1 Slice 5 新增独立 syntax-aware SenseGroup Provider。
+  新增 `syntax-aware-sense-group/v1` / `dependency_teaching_partition_v1`，与既有
+  `rule-based-sense-group/v1` 分开 fingerprint、持久化和 candidate/active/archive 生命周期；
+  metrics 引用 syntactic artifact/descriptor 并显式记录 `chunk_timeline_dependency=false`。
+  dependency clause/conj/subordinator/PP subtree 只提出 boundary/head/NP-PP-clause label，强标点、
+  phrase candidate 完整性、min 2/hard max 8 与典型 3–5 组教学粒度仍作最终裁决；错误 snapshot
+  或低 coverage 精确返回原 rule partition。新增 4 项 syntax partition fixture 和 rule/syntax
+  双 run 持久化回归；未资格 Provider 在 application gate 被拒绝，现有 HTTP 默认生成路径保持
+  rule Provider，ChunkTimeline 代码与生命周期均未改动。
+
+- 2026-07-13 16:27 CST: Phase 3.9.1 Slice 4 建立 Reference B 句法 consumer seam。
+  `ConnectedSpeechContext` 将 validator activatable 与外部 provider qualification 设为两个独立
+  gate；未资格/缺失 artifact 与原 `predict_default_connected` 输出逐项相同。本阶段只把锁定
+  验证通过的 future/motion `going to`、habitual/state（含 `get used to`）和 `have to do with`
+  idiom 用中立 UPOS/lemma/features 映射作保守门控；失败的 `want to` wh-extraction 仍固定走
+  现有 text heuristic。B evidence 区分 `prediction_provenance:syntax_model`（带 artifact ID）
+  与 `text_heuristic`，但 status 仍为 `PossibleByRule`，不冒充 C/audio evidence。新增 5 项
+  syntax consumer/fallback 回归；speech-analysis 175 单元 + 12 集成测试全通过。
+
+- 2026-07-13 16:22 CST: Phase 3.9.1 Slice 3 完成冻结评估与负资格判定。
+  开发集仅用于 neutral query/mapping 调整；随后按预登记 digest 对验证集每个候选只运行一次。
+  Stanza 1.13.0/en_ewt 与 spaCy 3.8.13/en_core_web_sm 3.8.0 均达到 100% lexical/exact
+  mapping、零静默错位/树错误，并在 future/motion `going to`、habitual/state `used to`、
+  obligation/idiom `have to` 对上满分；但两者都在 multi-token wh-extraction
+  `Which team ... want to win` 产生一项高风险 `wanna` 假阳性，依锁定零容忍 gate 判为
+  `not_qualified`，未添加 validation-specific 特例。资源 gate 均通过（Stanza/spaCy cold p95
+  2.63/1.21s、warm p95 106.4/4.1ms、RSS 0.86/0.32GB、产品包 +0B）；runtime/model/
+  treebank 分层许可证、精确 installed-tree checksum/size 和 raw case reports 已审计，Stanza
+  传递训练数据 provenance 不完整仍独立保持 research-only。
+
+- 2026-07-13 16:10 CST: Phase 3.9.1 Slice 2 新增隔离式 Python 句法研究 Provider。
+  新建 `syntactic-provider` Rust crate 与版本化 JSONL sidecar，Stanza/spaCy 均只输出同一
+  provider-neutral draft；进程边界保持 stdout 纯协议、stderr 诊断，lazy runtime/model
+  探测和 runtime missing/model missing/corrupt/unsupported language/invalid output/timeout
+  闭合失败不会生成 artifact。token 映射覆盖 Unicode scalar offset、缩约 N:1、缩写 1:N、
+  normalized overlap 与显式 unaligned；Stanza/spaCy 原生标签在适配器内归一化，产品包不
+  链接 Python/model。新增 opt-in 隔离 venv、研究资产分层许可证 manifest、8 项 Python
+  sidecar contract 与 4 项 Rust process contract，并纳入全局 contract validator。
+
+- 2026-07-13 15:56 CST: Phase 3.9.1 Slice 1 建立 provider-neutral Rust 契约。
+  domain 新增版本化 `SyntacticAnalysis`、完整 provider/runtime/model/checksum provenance、
+  Unicode scalar char span 多对多映射、UD 字段、source/config/model 隔离 fingerprint，以及
+  span/coverage/HEAD/单 root/无环/sentence ownership validator；application 新增 draft-only
+  `SyntacticAnalysisProvider`、capability 与 closed error taxonomy，并由 server-side finalizer
+  铸造 artifact identity、拒绝 invalid provider 输出。fake provider、缩约 N:1、低 coverage
+  abstain、坏 span/head/cycle 和模型升级重算测试通过；本 slice 不增加持久化或 parser runtime。
+
+- 2026-07-13 14:21 CST: Phase 3.9.1 Slice 0 建立共享句法 Provider 的可执行研究边界。
+  新增 ADR 0023，锁定 provider-neutral、可重建 artifact、Unicode scalar half-open char span
+  1:N/N:1 token 映射、closed validation/abstain 降级、隔离 provider/runtime/model/config 的缓存
+  身份，以及不得填充 C、替代 ChunkTimeline 或铸造 Construction identity 的边界。新增 24 条
+  开发/锁定验证歧义 fixture（含真实 CNN10 字幕短摘录与受控最小对照）、4 条 mapping contract
+  fixture 和无 parser 依赖的 validator；预登记 alignment/关键歧义/失败/延迟/内存/体积 gate，
+  并分别审计 Stanza/spaCy runtime、model weights 与 UD/treebank 许可，未知项保持 research-only。
+
+- 2026-07-13 13:59 CST: 新建 Phase 3.9.1 Shared Syntactic Analysis Provider。确定以
+  UD/CoNLL-U 语义建立共享、可重建的 token-aligned 句法 artifact，通过现有 Python sidecar
+  模式先评估 Stanza/spaCy，供 Reference B、SenseGroup 与 Construction 共用；明确模型缺席
+  时保留现有保守 B 与标点/长度 SenseGroup，句法结果不得填充 C、替代 ChunkTimeline 或铸造
+  Construction canonical identity。新增 CAP-011/012，锁定 char-span 1:N/N:1 token 映射、
+  开发/验证集分离、真实字幕歧义评估及代码/runtime/model/treebank 分层许可证审计。
+
+- 2026-07-13 13:25 CST: Phase 3.9 英语语流规则第二批。Reference B 规则源升级为 v3；Phrase
+  rule 新增上下文门控，不再把字面相邻词无条件缩约：`going to` 只接受动词补语候选并阻断
+  专名/限定词/常见地点歧义，`want to` 对 wh-extraction 歧义保守缺席，`used to` 区分
+  habitual 与 `be used to + NP/gerund`。新增 `gotta`、`hafta/hasta`、`had to`、habitual
+  `used to`、`supposed to/ought to`、安全层 `trying to`，以及
+  `lemme/gimme/kinda/sorta/outta/lotta/lotsa/dunno` 的完整 A→B 音素结构；weak form 补标点、话语
+  起始 `/h/`、`the + vowel` 阻断。新增正例、motion/NP/疑问抽取/形容词 used-to 等反例和
+  UI 结构断言；speech-analysis 170 项测试全通过。规则与来源同步登记到 3.9 catalog。
+  `connected_speech_rules.rs` 达到规模线后，将构式/弱读阻断提取到 `context.rs`（主文件回落
+  到 1403 行），为下一批音节规则保留清晰模块边界。
+
+- 2026-07-13 12:17 CST: Phase 3.9 第 4 项启动：新增 General American 英语语流完整规则目录，
+  按 `B-safe` / `B-context` / `C-only` / `dialect` 记录音素环境、阻断条件、口音范围、来源和
+  实现状态，明确“全部纳入目录”不等于把声学渐变现象伪造成 B。首批 B 扩展：硬编码
+  `did you` 改为通用 `/t,d,s,z/ + /j/` coalescence，并修正输出为 `/dɪdʒu/`；新增 `/n/`
+  在双唇/软腭音前的部位同化、V#V `[j]/[w]` 连接、跨词弱功能词前的美式 flap；词内 flap
+  加入“重读元音后、非重读元音前”条件，`/t,d/` 删除收紧为词尾辅音簇 + 辅音环境。新增
+  标点/强边界阻断，避免跨逗号等标点触发 linking/assimilation/deletion；新增规则环境与
+  反例测试，speech-analysis 全部 165 项回归通过。
+
+- 2026-07-13 10:57 CST: 修复长句 A/B/C 结构带后半句不可见。新增三视图共用的跟随式
+  sentence viewport：紧凑模式按当前 token/播放节点自动横向定位，左右渐隐提示仍有内容；
+  展开按钮切换为可换行、可纵向滚动的完整句结构。A 跟随单词，B 同时跟随规则跨度与普通
+  文本跨度，C 跟随当前音频节点；切换视图不再只能看到句首。新增长句第 11 节点定位和完整
+  展开回归测试，中英 tooltip 同步补齐。
+
+- 2026-07-13 10:47 CST: 修正 Rhythm C 证据门控。播放器不再把 text/WordTimeline 派生的
+  RhythmFrame 作为“预测 C”显示；C 现在同时要求当前句已加载音素，且 frame 自身
+  `phone_evidence_coverage > 0`。无音素证据时只提供当前句/全轨音频分析入口，A/B 仍可正常
+  使用。新增四象限回归测试锁定“有 frame 无 phones”“有 phones 无 frame phone evidence”
+  均不得显示 C。
+
+- 2026-07-13 10:30 CST: 修复导入过 LLTimeline 后刷新听感结构仍显示不可用。Flutter 资源
+  加载不再用带 artifacts 的旧文档整体覆盖后端新导出文档；现在保留新导出的 WordTimeline
+  派生 RhythmFrame，仅把旧 artifacts 合并回来。新增回归测试覆盖“旧文档无 rhythm frames、
+  新导出有 rhythm frames”的真实 QA 场景。
+
+- 2026-07-13 10:12 CST: 将 Phase 3.9 A/B/C audible-structure 两批实现合入已完成
+  Phase 3.12 的 main；保留 3.12 收口事实，并将 3.9 状态切换为主工作区真实媒体 QA 与
+  增量修正。后续工作从 main 新建专用阶段分支，不在 main 直接开发。
+
 - 2026-07-13 09:24 CST: Phase 3.12 Vendor-neutral LLM Provider 收口，CODE COMPLETE。
   创建 `3.12-CLOSEOUT.md`（五切片 0/1/2/2b/3 交付清单、七项 Key Decisions、四条 exit signal
   逐条核验通过、验证记录、QA 归属、Deferred 清单）；PLAN 置 CODE COMPLETE；STATE.md 主线
@@ -73,6 +1429,19 @@
   api-http 53 全通过；新文件 clippy 零告警；validate-contracts OK；git diff --check 通过。
   本 phase 判定默认**不获任何显示资格**（资格评估属 3.12.1）；剩余：真实 OS-keychain
   SecretStore 实现、provider-backed HTTP 路由与工厂、最小设置 UI、closeout。
+- 2026-07-13 08:40 CST: 扩展 Phase 3.9 B 预测可听结构到 weak form、contraction、
+  assimilation、deletion 与 flapping。Deletion 由空预测改为在完整跨词结构中移除词尾
+  `/t|d/`（如 `last call`：`/læst | kɔl/ → /læs.kɔl/`）；flapping 不再只
+  输出孤立 `DX`，而是在完整词内把元音间 `/t|d/` 替换为 `/ɾ/`。其余三类使用完整规则
+  音素生成可听结构；新增测试确保所有类别都有 A/B 且纯文本规则不生成 C。
+
+- 2026-07-13 08:28 CST: 恢复 Phase 3.9 的 A/B/C audible-structure 算法与 UI 重构并完成
+  linking 首条竖切片。`RhythmConnectedSpeechRef` 新增向后兼容的 A citation、B predicted、
+  C actual 可听结构（音组、IPA、学习者 cue、书写 token 来源映射）；`pick up` 的文本规则现
+  输出 `/pɪk | ʌp/ → /pɪ.kʌp/` 与 `pɪ-kʌp`，不再只显示 linking 类别。C 仅在存在
+  observed phone evidence 时生成，timing/prosody 只作边界与分组证据。Flutter B ribbon
+  直接呈现书写结构到可听结构的变化，C ribbon 展示 phone-segmental 支持的实际音组；OpenAPI、
+  Dart model、Rust/Flutter/contract 回归同步扩展。Phase 3.12 继续在独立 worktree 并行推进。
 
 - 2026-07-12 19:20 CST: 清除 speech-analysis 既有 deny 级 clippy error。
   `sense_group_partition.rs` 测试里的恒真断言 `assert!(any_span_covers || true, ...)`

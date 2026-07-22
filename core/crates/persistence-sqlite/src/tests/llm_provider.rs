@@ -73,6 +73,7 @@ fn registering_a_provider_never_writes_the_secret_to_the_database() {
 
     let secret = "sk-super-secret-key-DO-NOT-PERSIST";
     let saved = services
+        .llm_providers()
         .register_llm_provider(sample_profile(None), secret, &store)
         .unwrap();
 
@@ -96,20 +97,36 @@ fn provider_profile_round_trips_and_lists() {
     let services = provider_services(&repo);
 
     let profile = sample_profile(Some(LlmAuthRef::new("kc://llm/example")));
-    let saved = services.save_llm_provider_profile(profile.clone()).unwrap();
+    let saved = services
+        .llm_providers()
+        .save_llm_provider_profile(profile.clone())
+        .unwrap();
     assert_eq!(saved, profile);
 
-    let fetched = services.llm_provider_profile(&profile.id).unwrap().unwrap();
+    let fetched = services
+        .llm_providers()
+        .llm_provider_profile(&profile.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(fetched, profile);
 
-    let listed = services.list_llm_provider_profiles().unwrap();
+    let listed = services
+        .llm_providers()
+        .list_llm_provider_profiles()
+        .unwrap();
     assert_eq!(listed, vec![profile.clone()]);
 
     // Upsert (edit) replaces in place rather than duplicating.
     let mut edited = profile.clone();
     edited.display_name = "Renamed".into();
-    services.save_llm_provider_profile(edited.clone()).unwrap();
-    let listed = services.list_llm_provider_profiles().unwrap();
+    services
+        .llm_providers()
+        .save_llm_provider_profile(edited.clone())
+        .unwrap();
+    let listed = services
+        .llm_providers()
+        .list_llm_provider_profiles()
+        .unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].display_name, "Renamed");
 }
@@ -121,15 +138,25 @@ fn deleting_a_provider_also_removes_its_secret() {
     let store = InMemorySecretStore::new();
 
     let saved = services
+        .llm_providers()
         .register_llm_provider(sample_profile(None), "sk-key", &store)
         .unwrap();
     let auth_ref = saved.auth_ref.clone().unwrap();
     assert!(store.resolve(&auth_ref).unwrap().is_some());
 
-    services.delete_llm_provider(&saved.id, &store).unwrap();
+    services
+        .llm_providers()
+        .delete_llm_provider(&saved.id, &store)
+        .unwrap();
 
     // Both the profile and its credential are gone.
-    assert!(services.llm_provider_profile(&saved.id).unwrap().is_none());
+    assert!(
+        services
+            .llm_providers()
+            .llm_provider_profile(&saved.id)
+            .unwrap()
+            .is_none()
+    );
     assert!(store.resolve(&auth_ref).unwrap().is_none());
 }
 
@@ -140,6 +167,7 @@ fn resolving_a_deleted_secret_degrades_to_none_not_error() {
     let store = InMemorySecretStore::new();
 
     let saved = services
+        .llm_providers()
         .register_llm_provider(sample_profile(None), "sk-key", &store)
         .unwrap();
     // Simulate the key being removed from the keychain out of band.
@@ -147,7 +175,10 @@ fn resolving_a_deleted_secret_degrades_to_none_not_error() {
 
     // The dispatcher resolves to None and degrades honestly instead of failing.
     assert_eq!(
-        services.resolve_llm_provider_secret(&saved, &store).unwrap(),
+        services
+            .llm_providers()
+            .resolve_llm_provider_secret(&saved, &store)
+            .unwrap(),
         None
     );
 }

@@ -1,5 +1,18 @@
 use crate::lexical::lexical_unit_for_entry;
-use crate::*;
+use crate::{
+    ApplicationError, CapabilityConclusion, CapabilityFilter, CapabilityOverride,
+    CapabilityOverrideSource, CapabilityProjection, CapabilityProjectionSource,
+    CreateLexicalObservation, ExternalVocabularyImport, ExternalVocabularyImportSummary,
+    LISTENING_CONFIDENCE_TASK, LanguageCode, LearningChangeSource, LearningObservation,
+    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalLearningUseCases, LexicalObservation,
+    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, MediaAvailability, MediaId, MediaItem,
+    ObservationOrigin, ObservationResult, ObservationSpec, RecognitionEvidenceSourceKind,
+    RecordSpeakingProduction, SubtitleSentenceId, VocabularyAssetBundle, clean_optional,
+    clean_required, learning_observation_id, normalize_lemma, normalize_phrase, now_ms,
+    observation_spec_for_marking, observation_spec_for_reading_marking,
+    observation_spec_for_speaking_production, require_text,
+};
 
 /// Marks capability projections inferred from a legacy linear status write,
 /// as opposed to the one-shot v22 backfill
@@ -18,7 +31,7 @@ pub(crate) struct ObservationContext {
     pub media_id: Option<MediaId>,
 }
 
-impl AppServices {
+impl LexicalLearningUseCases {
     pub fn create_lexical_sense_folder(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -28,7 +41,7 @@ impl AppServices {
         external_ref: Option<String>,
     ) -> Result<LexicalSenseFolder, ApplicationError> {
         if self
-            .learning_assets
+            .lexical_entries
             .lexical_details(lexical_entry_id)?
             .is_none()
         {
@@ -49,7 +62,7 @@ impl AppServices {
             created_at_ms: now,
             updated_at_ms: now,
         };
-        self.learning_assets.create_lexical_sense_folder(&folder)
+        self.lexical_content.create_lexical_sense_folder(&folder)
     }
 
     pub fn update_lexical_sense_folder(
@@ -71,7 +84,7 @@ impl AppServices {
             created_at_ms: 0,
             updated_at_ms: now_ms(),
         };
-        self.learning_assets.update_lexical_sense_folder(&folder)
+        self.lexical_content.update_lexical_sense_folder(&folder)
     }
 
     pub fn delete_lexical_sense_folder(
@@ -79,7 +92,7 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
         sense_id: &LexicalSenseId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.lexical_content
             .delete_lexical_sense_folder(lexical_entry_id, sense_id)
     }
 
@@ -89,7 +102,7 @@ impl AppServices {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.lexical_content
             .assign_occurrence_to_lexical_sense_folder(lexical_entry_id, sense_id, occurrence_id)
     }
 
@@ -99,7 +112,7 @@ impl AppServices {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.lexical_content
             .unassign_occurrence_from_lexical_sense_folder(
                 lexical_entry_id,
                 sense_id,
@@ -111,7 +124,7 @@ impl AppServices {
         &self,
         lexical_entry_id: &LexicalEntryId,
     ) -> Result<Option<LexicalCapabilityProfile>, ApplicationError> {
-        self.learning_assets
+        self.lexical_capabilities
             .lexical_capability_profile(lexical_entry_id, None)
     }
 
@@ -127,7 +140,7 @@ impl AppServices {
             source: CapabilityOverrideSource::UserSelection,
             updated_at_ms: now,
         });
-        let profile = self.learning_assets.set_lexical_capability_override(
+        let profile = self.lexical_capabilities.set_lexical_capability_override(
             lexical_entry_id,
             None,
             capability,
@@ -161,7 +174,7 @@ impl AppServices {
             let dim = target.dimension(capability);
             if let Some(proj) = &dim.projection {
                 let current = self
-                    .learning_assets
+                    .lexical_capabilities
                     .lexical_capability_profile(lexical_entry_id, None)?;
                 let current_dim = current
                     .as_ref()
@@ -186,23 +199,24 @@ impl AppServices {
                 {
                     continue;
                 }
-                self.learning_assets.set_lexical_capability_projection(
-                    lexical_entry_id,
-                    None,
-                    capability,
-                    Some(CapabilityProjection {
-                        conclusion: proj.conclusion,
-                        source,
-                        algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
-                        confidence: None,
-                        evidence_as_of_ms: None,
-                        updated_at_ms: changed_at_ms,
-                    }),
-                    changed_at_ms,
-                )?;
+                self.lexical_capabilities
+                    .set_lexical_capability_projection(
+                        lexical_entry_id,
+                        None,
+                        capability,
+                        Some(CapabilityProjection {
+                            conclusion: proj.conclusion,
+                            source,
+                            algorithm_version: LEGACY_STATUS_COMPAT_ALGORITHM_VERSION.into(),
+                            confidence: None,
+                            evidence_as_of_ms: None,
+                            updated_at_ms: changed_at_ms,
+                        }),
+                        changed_at_ms,
+                    )?;
             } else {
                 let current = self
-                    .learning_assets
+                    .lexical_capabilities
                     .lexical_capability_profile(lexical_entry_id, None)?;
                 let current_dim = current
                     .as_ref()
@@ -212,20 +226,21 @@ impl AppServices {
                 if current_dim.user_override.is_some() || current_dim.projection.is_none() {
                     continue;
                 }
-                self.learning_assets.set_lexical_capability_projection(
-                    lexical_entry_id,
-                    None,
-                    capability,
-                    None,
-                    changed_at_ms,
-                )?;
+                self.lexical_capabilities
+                    .set_lexical_capability_projection(
+                        lexical_entry_id,
+                        None,
+                        capability,
+                        None,
+                        changed_at_ms,
+                    )?;
             }
         }
         // Re-derive the legacy status column from the profile: the writer
         // ladder may have kept a task-grade evidence conclusion, and callers
         // write the raw status onto the entry row before syncing.
         if let Some(profile) = self
-            .learning_assets
+            .lexical_capabilities
             .lexical_capability_profile(lexical_entry_id, None)?
         {
             self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
@@ -239,18 +254,18 @@ impl AppServices {
         profile: &LexicalCapabilityProfile,
     ) -> Result<(), ApplicationError> {
         let legacy = profile.legacy_status_view();
-        let details = self.learning_assets.lexical_details(lexical_entry_id)?;
-        if let Some(mut details) = details {
-            if details.entry.status != legacy {
-                details.entry.status = legacy;
-                details.entry.updated_at_ms = now_ms();
-                details.entry.learning_updated_at_ms = details.entry.updated_at_ms;
-                self.learning_assets.upsert_lexical_entry(
-                    &details.entry,
-                    None,
-                    LearningChangeSource::CapabilityOverrideSync,
-                )?;
-            }
+        let details = self.lexical_entries.lexical_details(lexical_entry_id)?;
+        if let Some(mut details) = details
+            && details.entry.status != legacy
+        {
+            details.entry.status = legacy;
+            details.entry.updated_at_ms = now_ms();
+            details.entry.learning_updated_at_ms = details.entry.updated_at_ms;
+            self.lexical_entries.upsert_lexical_entry(
+                &details.entry,
+                None,
+                LearningChangeSource::CapabilityOverrideSync,
+            )?;
         }
         Ok(())
     }
@@ -276,7 +291,7 @@ impl AppServices {
             }
         }
         let normalized = normalized.into_iter().collect::<Vec<_>>();
-        self.learning_assets
+        self.lexical_entries
             .lexical_entries_by_keys(&language, kind, &normalized)
     }
 
@@ -313,59 +328,90 @@ impl AppServices {
             source_ref,
             occurred_at_ms,
         };
-        self.learning_assets
+        self.learning_observations
             .append_learning_observation(&observation)?;
-        if spec.capability == LexicalCapability::Listening {
-            self.reproject_listening_from_evidence(lexical_entry_id, occurred_at_ms)?;
-        }
+        self.refresh_projection_proposal(lexical_entry_id, spec.capability, occurred_at_ms)?;
         Ok(())
     }
 
-    /// Recomputes the listening projection from the channelized evidence
-    /// stream (ADR 0019, `listening-projection-v1`) and refreshes the legacy
-    /// status compat view. Runs after every listening observation append —
-    /// all writers funnel through [`Self::append_channelized_observation`].
-    pub(crate) fn reproject_listening_from_evidence(
+    /// Phase 3.17's sole automatic long-term writer creates a correctable
+    /// proposal. It never mutates projection/override; confirmation owns that.
+    pub(crate) fn refresh_projection_proposal(
         &self,
         lexical_entry_id: &LexicalEntryId,
+        capability: LexicalCapability,
         now: u64,
     ) -> Result<(), ApplicationError> {
-        let observations = self.learning_assets.list_learning_observations(
+        let observations = self.learning_observations.list_learning_observations(
             lexical_entry_id,
-            Some(LexicalCapability::Listening),
+            Some(capability),
             LISTENING_PROJECTION_EVIDENCE_LIMIT,
             0,
         )?;
-        let Some(projection) = listening_projection_v1(&observations, now) else {
+        let (_, Some(proposal)) =
+            crate::projection_proposal_v1(lexical_entry_id, capability, &observations, now)
+        else {
             return Ok(());
         };
-        // Recency guard (ADR 0019 decision 2): a non-evidence writer (compat
-        // downgrade, import) newer than our newest decisive evidence wins
-        // until newer evidence arrives.
-        let current = self
-            .learning_assets
-            .lexical_capability_profile(lexical_entry_id, None)?;
-        if let Some(existing) = current.as_ref().and_then(|profile| {
-            profile
-                .dimension(LexicalCapability::Listening)
-                .projection
-                .as_ref()
-        }) && existing.source != CapabilityProjectionSource::EvidenceProjection
-            && projection
-                .evidence_as_of_ms
-                .is_some_and(|as_of| existing.updated_at_ms > as_of)
-        {
-            return Ok(());
-        }
-        let profile = self.learning_assets.set_lexical_capability_projection(
-            lexical_entry_id,
-            None,
-            LexicalCapability::Listening,
-            Some(projection),
-            now,
-        )?;
-        self.sync_legacy_status_from_profile(lexical_entry_id, &profile)?;
+        self.lexical_capabilities
+            .save_projection_proposal(&proposal)?;
         Ok(())
+    }
+
+    /// Reading-posture word marking (Phase 3.13 Slice 5): one explicit user
+    /// act on one word writes exactly one reading-channel observation.
+    /// Deliberately narrower than the listening marking path — no legacy
+    /// `LexicalObservation` row, no recognition evidence, and no projection
+    /// (reading has no qualified automatic projection until 3.17; the
+    /// channelized writer only reprojects the listening channel).
+    pub fn record_reading_marking(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        sentence_id: Option<&SubtitleSentenceId>,
+        surface_form: &str,
+        media_id: Option<MediaId>,
+        translation_visible: bool,
+        understood: bool,
+    ) -> Result<(), ApplicationError> {
+        require_text(surface_form, "surface_form")?;
+        self.lexical_entries
+            .lexical_details(lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        let occurred_at_ms = now_ms();
+        self.append_channelized_observation(
+            lexical_entry_id,
+            observation_spec_for_reading_marking(understood, translation_visible),
+            ObservationContext {
+                surface_form: Some(surface_form.to_owned()),
+                sentence_id: sentence_id.cloned(),
+                media_id,
+            },
+            ObservationOrigin::UserMarking,
+            sentence_id.map(|id| format!("reading-marking:{}", id.as_str())),
+            occurred_at_ms,
+        )
+    }
+
+    pub fn record_speaking_production(
+        &self,
+        input: RecordSpeakingProduction,
+    ) -> Result<(), ApplicationError> {
+        require_text(&input.surface_form, "surface_form")?;
+        self.lexical_entries
+            .lexical_details(&input.lexical_entry_id)?
+            .ok_or(ApplicationError::NotFound("lexical entry"))?;
+        self.append_channelized_observation(
+            &input.lexical_entry_id,
+            observation_spec_for_speaking_production(input.assistance),
+            ObservationContext {
+                surface_form: Some(input.surface_form),
+                sentence_id: input.sentence_id,
+                media_id: input.media_id,
+            },
+            ObservationOrigin::PracticeTask,
+            Some(input.source_ref),
+            input.occurred_at_ms,
+        )
     }
 
     pub fn create_lexical_observation(
@@ -374,29 +420,29 @@ impl AppServices {
     ) -> Result<LexicalObservation, ApplicationError> {
         require_text(&input.original_form, "original_form")?;
         let mut entry = self
-            .learning_assets
+            .lexical_entries
             .lexical_details(&input.lexical_entry_id)?
             .map(|details| details.entry)
             .ok_or(ApplicationError::NotFound("lexical entry"))?;
-        if let Some(source) = input.source.as_ref() {
-            if source.end_ms < source.start_ms {
-                return Err(ApplicationError::Validation("source context"));
-            }
+        if let Some(source) = input.source.as_ref()
+            && source.end_ms < source.start_ms
+        {
+            return Err(ApplicationError::Validation("source context"));
         }
         let created_at_ms = now_ms();
-        let observation = self
-            .learning_assets
-            .create_lexical_observation(&LexicalObservation {
-                id: domain::lexical_observation_id(&input.lexical_entry_id, &input.sentence_id),
-                lexical_entry_id: input.lexical_entry_id,
-                sentence_id: input.sentence_id,
-                original_form: input.original_form,
-                result: input.result,
-                created_at_ms,
-            })?;
+        let observation =
+            self.learning_observations
+                .create_lexical_observation(&LexicalObservation {
+                    id: domain::lexical_observation_id(&input.lexical_entry_id, &input.sentence_id),
+                    lexical_entry_id: input.lexical_entry_id,
+                    sentence_id: input.sentence_id,
+                    original_form: input.original_form,
+                    result: input.result,
+                    created_at_ms,
+                })?;
         if let Some(source) = input.source.as_ref() {
             entry.updated_at_ms = created_at_ms;
-            self.learning_assets.upsert_lexical_entry(
+            self.lexical_entries.upsert_lexical_entry(
                 &entry,
                 Some(source),
                 LearningChangeSource::UserSelection,
@@ -438,7 +484,7 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<(), ApplicationError> {
-        self.learning_assets
+        self.learning_observations
             .clear_lexical_observation(lexical_entry_id, sentence_id)
     }
 
@@ -446,6 +492,8 @@ impl AppServices {
     /// `status` and `capability_filter` are optional, additive filters (the
     /// legacy status axis stays available while the four-channel capability axis
     /// becomes the primary lens).
+    // Mirrors the repository's validated query axes at the HTTP use-case seam.
+    #[allow(clippy::too_many_arguments)]
     pub fn list_vocabulary(
         &self,
         language: &str,
@@ -456,7 +504,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
-        self.learning_assets.list_lexical_entries(
+        self.lexical_entries.list_lexical_entries(
             &LanguageCode::parse(language)?,
             kind,
             status,
@@ -468,7 +516,7 @@ impl AppServices {
     }
 
     pub fn export_vocabulary(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
-        self.learning_assets.export_assets()
+        self.vocabulary_assets.export_assets()
     }
 
     pub fn import_vocabulary(
@@ -495,7 +543,7 @@ impl AppServices {
                 })
                 .collect();
         }
-        self.learning_assets.import_assets(&effective)
+        self.vocabulary_assets.import_assets(&effective)
     }
 
     pub fn update_lexical_learning_content(
@@ -504,7 +552,7 @@ impl AppServices {
         user_definition: Option<String>,
         personal_note: Option<String>,
     ) -> Result<LexicalEntryDetails, ApplicationError> {
-        self.learning_assets.update_lexical_learning_content(
+        self.lexical_content.update_lexical_learning_content(
             id,
             clean_optional(user_definition),
             clean_optional(personal_note),
@@ -526,7 +574,7 @@ impl AppServices {
                 continue;
             }
             let normalization = self.normalize_lexical_form(language.as_str(), &word)?;
-            let existing = self.learning_assets.lexical_entry_by_key(
+            let existing = self.lexical_entries.lexical_entry_by_key(
                 &language,
                 LexicalEntryKind::Word,
                 &normalization.normalized,
@@ -571,7 +619,7 @@ impl AppServices {
                     .as_ref()
                     .map_or(imported_at_ms, |entry| entry.learning_updated_at_ms),
             };
-            self.learning_assets.upsert_lexical_entry(
+            self.lexical_entries.upsert_lexical_entry(
                 &entry,
                 None,
                 LearningChangeSource::Import,

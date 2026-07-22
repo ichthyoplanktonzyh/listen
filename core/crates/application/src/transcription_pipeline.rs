@@ -1,7 +1,11 @@
 use std::path::Path;
 use std::process::Stdio;
 
-use crate::*;
+use crate::{
+    ApplicationError, ForcedAlignRequest, ForcedAlignSidecar, MediaAnalysisUseCases,
+    SubtitleSentence, SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimelinePipelineResult,
+    WordTiming, forced_align_segments, save_word_timeline_snapshot_with_metrics,
+};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
@@ -12,7 +16,7 @@ const SOUND_LINE_DTW_ALGORITHM_ID: &str = "sound-line-whisper-dtw";
 const SOUND_LINE_DTW_ALGORITHM_VERSION: &str = "phase-2.22";
 const SOUND_LINE_DTW_CONFIG_HASH: &str = "sound-line-whisper-json-full-dtw-v1";
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub async fn store_transcription_text_word_timeline(
         &self,
         track_id: &SubtitleTrackId,
@@ -22,7 +26,7 @@ impl AppServices {
             .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
-        let timings = match speech_analysis::asr_timing::extract_word_timings_from_json(
+        let timings = match speech_analysis::timing::extract_word_timings_from_json(
             whisper_json_bytes,
             &track.sentences,
         ) {
@@ -79,7 +83,7 @@ impl AppServices {
             .subtitle_tracks
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
-        let active_text_timeline = self.timelines.active_word_timeline(&track.id)?;
+        let active_text_timeline = self.word_timelines.active_word_timeline(&track.id)?;
         let dtw_timeline_id = active_text_timeline
             .as_ref()
             .map(|timeline| timeline.id.clone());
@@ -92,7 +96,7 @@ impl AppServices {
             .map(|timeline| timeline.words.clone())
         {
             Some(words) => words,
-            None => match speech_analysis::asr_timing::extract_word_timings_from_json(
+            None => match speech_analysis::timing::extract_word_timings_from_json(
                 whisper_json_bytes,
                 &track.sentences,
             ) {
@@ -119,13 +123,13 @@ impl AppServices {
 
         let mut forced_aligned_timeline_id = None;
         let mut final_timeline_id = None;
-        if forced_aligned_word_count > 0 {
-            if let Ok(timeline_id) = save_word_timeline_snapshot_with_metrics(
+        if forced_aligned_word_count > 0
+            && let Ok(timeline_id) = save_word_timeline_snapshot_with_metrics(
                 self,
                 &track.id,
                 &timings,
-                speech_analysis::forced_align::PROVIDER_ID,
-                speech_analysis::forced_align::PROVIDER_VERSION,
+                speech_analysis::timing::FORCED_ALIGN_PROVIDER_ID,
+                speech_analysis::timing::FORCED_ALIGN_PROVIDER_VERSION,
                 "mms-fa-v1-whisper-segment-window",
                 TimelineStatus::Candidate,
                 parent_timeline_id.as_ref(),
@@ -133,19 +137,19 @@ impl AppServices {
                     "line": "sound",
                     "source": "forced_alignment",
                 }))),
-            ) {
-                parent_timeline_id = Some(timeline_id.clone());
-                forced_aligned_timeline_id = Some(timeline_id.clone());
-                final_timeline_id = Some(timeline_id);
-            }
+            )
+        {
+            parent_timeline_id = Some(timeline_id.clone());
+            forced_aligned_timeline_id = Some(timeline_id.clone());
+            final_timeline_id = Some(timeline_id);
         }
 
         let wav_bytes = tokio::fs::read(audio_wav_path).await.ok();
         if let Some(wav_bytes) = wav_bytes.as_deref()
-            && let Ok(refined) = speech_analysis::pause_refinement::refine_word_timings_from_pcm_wav(
+            && let Ok(refined) = speech_analysis::timing::refine_word_timings_from_pcm_wav(
                 wav_bytes,
                 &timings,
-                &speech_analysis::pause_refinement::PauseRefinementConfig::default(),
+                &speech_analysis::timing::PauseRefinementConfig::default(),
             )
             && !refined.pauses.is_empty()
         {
@@ -154,8 +158,8 @@ impl AppServices {
                 self,
                 &track.id,
                 &refined_timings,
-                speech_analysis::pause_refinement::PROVIDER_ID,
-                speech_analysis::pause_refinement::PROVIDER_VERSION,
+                speech_analysis::timing::PAUSE_REFINEMENT_PROVIDER_ID,
+                speech_analysis::timing::PAUSE_REFINEMENT_PROVIDER_VERSION,
                 "pause-refinement-default-v1",
                 TimelineStatus::Candidate,
                 parent_timeline_id.as_ref(),
@@ -194,9 +198,7 @@ impl AppServices {
         if let (Some(timeline_id), Some(wav_bytes)) =
             (final_timeline_id.as_ref(), wav_bytes.as_deref())
             && let Ok(acoustic_analysis) =
-                speech_analysis::word_acoustics::analyze_word_acoustics_from_pcm_wav(
-                    wav_bytes, &timings,
-                )
+                speech_analysis::timing::analyze_word_acoustics_from_pcm_wav(wav_bytes, &timings)
             && let Ok(cue_count) =
                 self.store_rhythm_word_acoustic_analysis(&track.id, timeline_id, &acoustic_analysis)
         {
@@ -266,10 +268,10 @@ impl AppServices {
             return 0;
         }
         let Ok(aligned) =
-            serde_json::from_slice::<speech_analysis::forced_align::AlignOutput>(&output.stdout)
+            serde_json::from_slice::<speech_analysis::timing::AlignOutput>(&output.stdout)
         else {
             return 0;
         };
-        speech_analysis::forced_align::merge_alignments(timings, &aligned.timings, sentences)
+        speech_analysis::timing::merge_alignments(timings, &aligned.timings, sentences)
     }
 }

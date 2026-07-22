@@ -6,7 +6,7 @@
 //! §3.4). Profiles are mutable config, so upsert replaces on conflict.
 
 use application::{ApplicationError, LlmProviderProfileRepository};
-use domain::*;
+use domain::{LlmAuthRef, LlmProviderProfile, LlmProviderProfileId};
 use rusqlite::{OptionalExtension, Row, params};
 
 use super::{SqliteRepository, from_json, json, repo};
@@ -69,9 +69,7 @@ impl LlmProviderProfileRepository for SqliteRepository {
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError> {
         let connection = self.connection.lock().expect("sqlite mutex poisoned");
         let mut statement = connection
-            .prepare(
-                "SELECT profile_json FROM llm_provider_profiles ORDER BY created_at_ms, id",
-            )
+            .prepare("SELECT profile_json FROM llm_provider_profiles ORDER BY created_at_ms, id")
             .map_err(repo)?;
         let rows = statement
             .query_map([], profile_from_row)
@@ -81,10 +79,7 @@ impl LlmProviderProfileRepository for SqliteRepository {
         Ok(rows)
     }
 
-    fn delete_provider_profile(
-        &self,
-        id: &LlmProviderProfileId,
-    ) -> Result<(), ApplicationError> {
+    fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError> {
         self.connection
             .lock()
             .expect("sqlite mutex poisoned")

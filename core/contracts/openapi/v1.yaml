@@ -331,6 +331,42 @@ paths:
         - { name: word, in: query, required: true, schema: { type: string } }
       responses:
         "200": { description: Canonical word pronunciation and variants }
+  /v1/speech-synthesis/capability:
+    get:
+      operationId: speechSynthesisCapability
+      description: Local-first provider and installed voice availability plus rebuildable cache usage.
+      responses:
+        "200":
+          description: Current speech synthesis capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechSynthesisCapability" }
+  /v1/speech-synthesis:
+    post:
+      operationId: synthesizeSpeech
+      description: Synthesize learner-facing auxiliary audio without writing learning facts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SpeechSynthesisRequest" }
+      responses:
+        "200":
+          description: A local, rebuildable synthetic speech asset
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechSynthesisAsset" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/speech-synthesis/cache:
+    delete:
+      operationId: clearSpeechSynthesisCache
+      description: Delete rebuildable synthesized audio without touching learning assets.
+      responses:
+        "200":
+          description: Capability after cache clear
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeechSynthesisCapability" }
   /v1/pronunciation/analyze-sentence:
     post:
       operationId: analyzeSentencePronunciation
@@ -621,6 +657,86 @@ paths:
               schema:
                 type: array
                 items: { $ref: "#/components/schemas/SenseGroupAnalysisSummary" }
+  /v1/subtitles/{track_id}/syntactic-consumers:
+    post:
+      operationId: runSyntacticConsumers
+      description: Runs the optional qualified syntax provider once for the track and shares per-sentence artifacts across Reference B, SenseGroup, and dependency candidate matching; unavailable or invalid syntax returns explicit existing fallbacks.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patterns:
+                  type: array
+                  items: { $ref: "#/components/schemas/SyntacticDependencyPattern" }
+      responses:
+        "200":
+          description: Shared syntax consumer batch or explicit fallback batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SyntacticConsumerBatch"
+  /v1/subtitles/{track_id}/syntax-analysis:
+    get:
+      operationId: trackSyntaxAnalysisStatus
+      responses:
+        "200":
+          description: Current cache state; stale means the track or qualified model fingerprint changed
+    post:
+      operationId: runTrackSyntaxAnalysis
+      description: Reuses or rebuilds the optional whole-track syntax batch cache; each sentence remains independently validated.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force: { type: boolean, default: false }
+                patterns:
+                  type: array
+                  items: { $ref: "#/components/schemas/SyntacticDependencyPattern" }
+      responses:
+        "200":
+          description: Track cache status and optional shared consumer batch
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, fingerprint, cache_hit, sentence_count, analyzed_sentence_count, fallback_sentence_count]
+                properties:
+                  status: { type: string, enum: [unavailable, analyzing, ready, partial, failed, stale] }
+                  fingerprint: { type: string }
+                  cache_hit: { type: boolean }
+                  sentence_count: { type: integer, minimum: 0 }
+                  analyzed_sentence_count: { type: integer, minimum: 0 }
+                  fallback_sentence_count: { type: integer, minimum: 0 }
+                  batch: { $ref: "#/components/schemas/SyntacticConsumerBatch" }
+  /v1/syntax/capability:
+    get:
+      operationId: syntaxCapability
+      responses:
+        "200":
+          description: Persisted optional syntax capability state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyntaxCapabilityView" }
+  /v1/syntax/capability/install:
+    post: { operationId: installSyntaxCapability, responses: { "200": { description: Installation started } } }
+  /v1/syntax/capability/cancel:
+    post: { operationId: cancelSyntaxCapability, responses: { "200": { description: Installation cancelled } } }
+  /v1/syntax/capability/validate:
+    post: { operationId: validateSyntaxCapability, responses: { "200": { description: Installation validated } } }
+  /v1/syntax/capability/enable:
+    post: { operationId: enableSyntaxCapability, responses: { "200": { description: Capability enabled } } }
+  /v1/syntax/capability/disable:
+    post: { operationId: disableSyntaxCapability, responses: { "200": { description: Capability disabled } } }
+  /v1/syntax/capability/uninstall:
+    post: { operationId: uninstallSyntaxCapability, responses: { "200": { description: Capability uninstalled } } }
+  /v1/syntax/capability/update:
+    post: { operationId: updateSyntaxCapability, responses: { "200": { description: Capability update started } } }
   /v1/sense-group-analyses/{analysis_id}:
     get:
       operationId: senseGroupAnalysis
@@ -1081,6 +1197,63 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingAsset" }
+    delete:
+      operationId: deleteRecordingAsset
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Deleted recording metadata
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAsset" }
+  /v1/recordings/{id}/audio-facts:
+    get:
+      operationId: recordingAudioFacts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Objective duration, pause, and waveform facts; never a speaking score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingAudioFacts" }
+  /v1/recording-transcriptions:
+    post:
+      operationId: createRecordingTranscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRecordingTranscription" }
+      responses:
+        "200":
+          description: Queued short-recording transcription; never a speaking score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/recording-transcriptions/{job_id}:
+    get:
+      operationId: recordingTranscriptionJob
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Ephemeral short-recording transcription state and raw ASR result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
+  /v1/recording-transcriptions/{job_id}/cancel:
+    post:
+      operationId: cancelRecordingTranscription
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Cancelled short-recording transcription
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
   /v1/shadowing/comparisons:
     post:
       operationId: compareShadowing
@@ -1095,16 +1268,6 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShadowingComparison" }
-    delete:
-      operationId: deleteRecordingAsset
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
-      responses:
-        "200":
-          description: Deleted recording metadata
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/RecordingAsset" }
   /v1/listening-inbox/items:
     get:
       operationId: listListeningInboxItems
@@ -1154,6 +1317,7 @@ paths:
       operationId: coachDashboard
       parameters:
         - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 365, default: 7 } }
+        - { name: language, in: query, required: false, schema: { type: string, default: en } }
       responses:
         "200":
           description: Read-only diagnostic dashboard with channel-ready availability and traceable suggestions
@@ -1161,7 +1325,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [period_start_ms, period_end_ms, generated_at_ms, channels, suggestions, starter_checklist, materials]
+                required: [period_start_ms, period_end_ms, generated_at_ms, channels, suggestions, starter_checklist, materials, features]
                 properties:
                   period_start_ms: { type: integer, minimum: 0 }
                   period_end_ms: { type: integer, minimum: 0 }
@@ -1170,7 +1334,7 @@ paths:
                     type: array
                     items:
                       type: object
-                      required: [channel, status, metrics]
+                      required: [channel, status, metrics, effective_assessments]
                       properties:
                         channel: { enum: [listening, reading, speaking, writing] }
                         status: { enum: [available, unassessed] }
@@ -1179,21 +1343,35 @@ paths:
                           type: array
                           items:
                             type: object
-                            required: [key, value, source]
+                            required: [key, value, source, authority_layer]
                             properties:
                               key: { type: string }
                               value: { type: integer, minimum: 0 }
                               source: { type: string }
+                              authority_layer: { type: string }
+                        effective_assessments:
+                          type: object
+                          required: [acquired, not_acquired, unassessed]
+                          properties:
+                            acquired: { type: integer, minimum: 0 }
+                            not_acquired: { type: integer, minimum: 0 }
+                            unassessed: { type: integer, minimum: 0 }
                   suggestions:
                     type: array
                     items:
                       type: object
-                      required: [kind, title_key, reason_key, action, evidence_source, evidence_count]
+                      required: [id, kind, title_key, reason_key, destination, evidence_source, evidence_count]
                       properties:
+                        id: { type: string }
                         kind: { type: string }
                         title_key: { type: string }
                         reason_key: { type: string }
-                        action: { type: string }
+                        destination:
+                          type: object
+                          required: [kind]
+                          properties:
+                            kind: { enum: [review_queue, hunting_list, cross_modal_review, personal_expression, content_home] }
+                            language: { type: string }
                         evidence_source: { type: string }
                         evidence_count: { type: integer, minimum: 0 }
                   starter_checklist:
@@ -1218,6 +1396,15 @@ paths:
                         triage_intent: { type: [string, "null"] }
                         graduation_candidate: { type: boolean }
                         recommended_intent: { type: [string, "null"], enum: [pin_extensive, pin_intensive, null] }
+                  features:
+                    type: array
+                    items:
+                      type: object
+                      required: [feature, status, reason]
+                      properties:
+                        feature: { type: string }
+                        status: { enum: [configured, not_configured] }
+                        reason: { type: string }
   /v1/coach/materials/{media_id}/graduate:
     post:
       operationId: graduateCoachMaterial
@@ -1246,11 +1433,70 @@ paths:
                 type: array
                 items:
                   type: object
-                  required: [id, occurred_at_ms, result]
+                  required: [id, occurred_at_ms, result, source_kind, snapshot, source_available]
                   properties:
                     id: { type: string }
                     occurred_at_ms: { type: integer, minimum: 0 }
                     result: { type: string }
+                    source_kind: { type: string }
+                    snapshot: { type: string }
+                    source_available: { type: boolean }
+                    unavailable_reason: { type: string }
+  /v1/reading/positions/{track_id}:
+    get:
+      operationId: readingPosition
+      description: >
+        Phase 3.13 reading cursor: one overwritable row per subtitle track.
+        Deliberately not append-only — the position is a cursor, not
+        evidence; reading history lives in the semantic-task family.
+      parameters:
+        - name: track_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The saved reading position, or null when never saved.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ReadingPosition" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
+    put:
+      operationId: saveReadingPosition
+      parameters:
+        - name: track_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [anchor_cue_id, paragraph_index]
+              properties:
+                media_id:
+                  type: [string, "null"]
+                anchor_cue_id:
+                  type: string
+                  description: First cue id of the paragraph the reader is at.
+                paragraph_index:
+                  type: integer
+                  minimum: 0
+                  description: Display hint; anchor_cue_id is the durable key.
+      responses:
+        "200":
+          description: The upserted reading position.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReadingPosition" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/semantic/rubrics:
     post:
       operationId: createSemanticRubric
@@ -1280,6 +1526,84 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticRubric" }
+  /v1/reading/markings:
+    post:
+      operationId: recordReadingMarking
+      description: >
+        Explicit reading-posture word marking (Phase 3.13): one user act on
+        one word writes one reading-channel observation. Assistance records
+        whether a translation was visible. Paragraph task results never
+        write word-level observations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, translation_visible, understood]
+              properties:
+                lexical_entry_id: { type: string }
+                sentence_id: { type: [string, "null"] }
+                surface_form: { type: string }
+                media_id: { type: [string, "null"] }
+                translation_visible: { type: boolean }
+                understood: { type: boolean }
+      responses:
+        "204":
+          description: Observation appended (idempotent on identical replay).
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/semantic/rubrics/lookup:
+    get:
+      operationId: lookupSemanticRubric
+      description: >
+        Read-side rubric lookup by source identity (Phase 3.13). Returns the
+        latest version matching the segment, purpose, response language, and
+        source snapshot hash, or null — clients cannot re-derive the
+        server-minted fingerprint id.
+      parameters:
+        - { name: media_id, in: query, schema: { type: string } }
+        - {
+            name: start_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: end_ms,
+            in: query,
+            required: true,
+            schema: { type: integer, minimum: 0 },
+          }
+        - {
+            name: purpose,
+            in: query,
+            required: true,
+            schema: { $ref: "#/components/schemas/SemanticTaskKind" },
+          }
+        - {
+            name: response_language,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+        - {
+            name: source_sha256,
+            in: query,
+            required: true,
+            schema: { type: string },
+          }
+      responses:
+        "200":
+          description: The latest matching rubric, or null.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/SemanticRubric" }
+                  - { type: "null" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/semantic/rubrics/{id}:
     get:
       operationId: semanticRubric
@@ -1350,6 +1674,128 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
+  /v1/semantic/writing-drafts/{id}:
+    get:
+      operationId: writingDraft
+      description: Reads mutable crash-recovery text for a rubric; this projection is not learning evidence.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Draft or null
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/WritingDraft" }
+                  - { type: "null" }
+    put:
+      operationId: saveWritingDraft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt_snapshot, transcript]
+              properties:
+                prompt_snapshot: { type: string, minLength: 1 }
+                transcript: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Saved scratch projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingDraft" }
+    delete:
+      operationId: deleteWritingDraft
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Draft removed }
+  /v1/semantic/attempts/{id}/writing-findings:
+    get:
+      operationId: writingFindings
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Append-only feedback findings for one writing attempt
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+    post:
+      operationId: createWritingFinding
+      description: Records a provider finding against one exact learner revision without changing learner text.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_revision, layer, severity, message, provenance]
+              properties:
+                response_revision: { type: integer, minimum: 1 }
+                layer: { $ref: "#/components/schemas/WritingFeedbackLayer" }
+                severity: { $ref: "#/components/schemas/WritingFindingSeverity" }
+                source_span: { $ref: "#/components/schemas/WritingSourceSpan" }
+                message: { type: string, minLength: 1 }
+                suggested_replacement: { type: [string, "null"] }
+                provenance: { $ref: "#/components/schemas/WritingFeedbackProvenance" }
+      responses:
+        "200":
+          description: Persisted writing feedback finding
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+  /v1/semantic/attempts/{id}/writing-findings/local:
+    post:
+      operationId: generateLocalWritingFindings
+      description: Runs the bundled offline rule checker only after an explicit learner request and appends revision-bound heuristic findings.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response_revision]
+              properties:
+                response_revision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Persisted local findings, possibly empty
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
+  /v1/semantic/attempts/{id}/speaking-targets:
+    post:
+      operationId: confirmSpeakingTarget
+      description: User confirms a literal lexical target produced in a completed constructed-speaking response.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lexical_entry_id, surface_form, sentence_id]
+              properties:
+                lexical_entry_id: { type: string }
+                surface_form: { type: string, minLength: 1 }
+                sentence_id: { type: [string, "null"] }
+      responses:
+        "204": { description: Idempotent speaking observation appended }
   /v1/semantic/attempts/{id}/judgments:
     get:
       operationId: semanticAttemptJudgments
@@ -1435,6 +1881,105 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/JudgmentAdjudication" }
+  /v1/semantic/writing-findings/{id}/dispositions:
+    get:
+      operationId: writingFindingDispositions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Append-only learner decisions for one writing finding
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WritingFindingDisposition" }
+    post:
+      operationId: createWritingFindingDisposition
+      description: Records accept/reject; acceptance cites a new immutable attempt with a later learner revision and never applies provider text.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { $ref: "#/components/schemas/WritingFindingDecision" }
+                resulting_attempt_id: { type: [string, "null"] }
+                resulting_response_revision: { type: [integer, "null"], minimum: 1 }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Persisted writing finding disposition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WritingFindingDisposition" }
+  /v1/realtime/providers:
+    get:
+      operationId: listRealtimeProviders
+      responses:
+        "200":
+          description: Secret-free realtime provider profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
+    post:
+      operationId: registerRealtimeProvider
+      description: The credential is write-only and stored in the OS keychain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRealtimeProvider" }
+      responses:
+        "200":
+          description: Secret-free saved profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
+  /v1/realtime/providers/{id}:
+    delete:
+      operationId: deleteRealtimeProvider
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "204": { description: Profile and keychain credential deleted }
+  /v1/realtime/conversations/ws:
+    get:
+      operationId: connectRealtimeConversation
+      description: Authenticated local WebSocket upgrade; binary frames carry neutral PCM16/24 kHz.
+      parameters:
+        - { name: profile_id, in: query, required: true, schema: { type: string } }
+        - { name: language, in: query, required: false, schema: { type: string, default: en } }
+        - { name: instructions, in: query, required: false, schema: { type: string } }
+      responses:
+        "101": { description: WebSocket switching protocols }
+  /v1/realtime/sessions:
+    post:
+      operationId: saveRealtimeSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Saved local session fact }
+  /v1/realtime/turns:
+    post:
+      operationId: saveRealtimeTurn
+      description: Finalized learner turns require a completed local Whisper transcript.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Saved immutable turn fact and best-effort spoken projection }
   /v1/llm/providers:
     get:
       operationId: listLlmProviders
@@ -1546,6 +2091,91 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticJudgment" }
+  /v1/llm/providers/{id}/feedback:
+    post:
+      operationId: feedbackViaLlmProvider
+      description: >
+        Gives teacher-style free-text qualitative feedback on one stored
+        output-task attempt (speaking/writing). The provider receives the
+        rubric source transcript, the task prompt snapshot, and the learner
+        response; the reply is ephemeral — nothing is persisted and no
+        observation/projection is written. Reading keeps the per-point judge
+        route instead. On any provider error nothing is returned and a
+        standardized, secret-free error is surfaced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attempt_id, response_revision]
+              properties:
+                attempt_id: { type: string }
+                response_revision: { type: integer }
+      responses:
+        "200":
+          description: Free-text feedback (not persisted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [feedback]
+                properties:
+                  feedback: { type: string }
+                  model_id: { type: [string, "null"] }
+                  prompt_version: { type: [string, "null"] }
+  /v1/llm/providers/{id}/rubric:
+    post:
+      operationId: generateRubricViaLlmProvider
+      description: >
+        Generates a scoring-rubric draft (information points only) for one source
+        segment through the provider. Returns a content-only draft; identity,
+        versioning, and persistence stay in the manual save path, so the vendor
+        layer never mints or stores a rubric. On any provider error nothing is
+        returned and a standardized, secret-free error is surfaced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, source_language, response_language, transcript_snapshot]
+              properties:
+                purpose: { $ref: "#/components/schemas/SemanticTaskKind" }
+                source_language: { type: string }
+                response_language: { type: string }
+                transcript_snapshot: { type: string }
+      responses:
+        "200":
+          description: Rubric draft (points only, not persisted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [points]
+                properties:
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      required: [importance, statement]
+                      properties:
+                        importance: { $ref: "#/components/schemas/RubricPointImportance" }
+                        statement: { type: string }
+                        accepted_paraphrase_notes: { type: [string, "null"] }
+                  model_id: { type: [string, "null"] }
+                  prompt_version: { type: [string, "null"] }
+                  schema_version: { type: [string, "null"] }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates
@@ -1727,6 +2357,72 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
+  /v1/review/cross-modal:
+    get:
+      operationId: crossModalReviewGaps
+      description: Returns traceable lexical gaps; unassessed channels are never failures.
+      parameters:
+        - { name: language, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        "200":
+          description: Cross-modal review candidates with immutable evidence fallback.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/CrossModalReviewCandidate" } }
+  /v1/projections/rebuild:
+    post:
+      operationId: rebuildProjectionProposals
+      parameters:
+        - { name: language, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Replayed immutable evidence into versioned proposals without changing projections or overrides.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProjectionAudit" } }
+  /v1/projections/entries/{id}:
+    get:
+      operationId: listProjectionProposals
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Proposal history for one lexical entry.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProjectionProposal" } }
+    post:
+      operationId: auditProjectionEntry
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Four independent qualification reports and refreshed proposals.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectionAudit" }
+  /v1/projections/proposals/{id}/decision:
+    post:
+      operationId: decideProjectionProposal
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [confirm, reject] }
+                note: { type: [string, "null"] }
+      responses:
+        "200":
+          description: Append-only decision; confirmation is the sole projection writer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectionProposal" }
   /v1/learning-resources:
     get:
       operationId: learningResources
@@ -1825,6 +2521,232 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/CorpusReindexResult" }
+  /v1/production-corpus/search:
+    get:
+      operationId: searchProductionCorpus
+      description: Searches the rebuildable corpus of learner-authored writing by normalized lemma or FTS phrase.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Learner-output occurrences with their one-copy response document and assistance provenance
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ProductionCorpusHit" } }
+  /v1/production-corpus/reindex:
+    post:
+      operationId: reindexProductionCorpus
+      responses:
+        "200":
+          description: Atomically rebuilds the production corpus from immutable writing attempts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionCorpusReindexResult" }
+  /v1/production-gap/review:
+    get:
+      operationId: productionGapReview
+      description: Returns a read-only, reference-ranked gap-(c) review over receptive facts and the rebuildable production corpus.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: channel, in: query, schema: { $ref: "#/components/schemas/ProductionChannel", default: written } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, minimum: 1, maximum: 20 } }
+      responses:
+        "200":
+          description: Descriptive top-K practice candidates; readiness communicates empty or small-N degradation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionGapReview" }
+  /v1/personal-expression/patterns:
+    get:
+      operationId: listSentencePatterns
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+        - { name: query, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: User-owned personal expression assets
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternAsset" } }
+    post:
+      operationId: createSentencePattern
+      description: Explicitly creates a durable pattern; candidates never call this endpoint automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSentencePattern" }
+      responses:
+        "201":
+          description: Created pattern
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+  /v1/personal-expression/patterns/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: sentencePattern
+      responses:
+        "200":
+          description: Pattern with current immutable version and source snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+    put:
+      operationId: reviseSentencePattern
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SentencePatternVersionInput" }
+      responses:
+        "200":
+          description: Pattern after appending a version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+    delete:
+      operationId: deleteSentencePattern
+      responses:
+        "204": { description: Explicitly deleted pattern and its own history }
+  /v1/personal-expression/patterns/{id}/versions:
+    get:
+      operationId: sentencePatternVersions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Immutable version history
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
+  /v1/personal-expression/patterns/{id}/attempts:
+    get:
+      operationId: personalExpressionAttempts
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Channel-separated use history and 3.17 handoff facts
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionAttempt" } }
+    post:
+      operationId: recordPersonalExpressionAttempt
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordPersonalExpressionAttempt" }
+      responses:
+        "201":
+          description: Immutable completed use fact; not an observation or projection
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalExpressionAttempt" }
+  /v1/personal-expression/export:
+    get:
+      operationId: exportPersonalExpression
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Portable durable pattern, version, snapshot, and use-history bundle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PersonalExpressionExportBundle" }
+  /v1/semantic-embedding/capability:
+    get:
+      operationId: semanticEmbeddingCapability
+      responses:
+        "200":
+          description: Optional local semantic capability without triggering installation or network access
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/install:
+    post:
+      operationId: installSemanticEmbedding
+      description: Explicitly downloads, validates, and enables the local embedding model.
+      responses:
+        "200":
+          description: Installed local capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/enable:
+    post:
+      operationId: enableSemanticEmbedding
+      responses:
+        "200":
+          description: Enabled installed capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/disable:
+    post:
+      operationId: disableSemanticEmbedding
+      responses:
+        "200":
+          description: Disabled capability; exact search remains available
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding:
+    delete:
+      operationId: uninstallSemanticEmbedding
+      description: Deletes local model bytes and derived vectors, never learning facts or corpus sources.
+      responses:
+        "200":
+          description: Uninstalled capability
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-embedding/reindex:
+    post:
+      operationId: rebuildSemanticEmbedding
+      description: Atomically rebuilds the complete derived vector index from current media and learner-output corpus projections.
+      responses:
+        "200":
+          description: Current capability and indexed source count
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+  /v1/semantic-search:
+    get:
+      operationId: semanticSearch
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: language, in: query, schema: { type: string } }
+        - { name: source, in: query, schema: { enum: [all, media_corpus, production_document, production_lexeme], default: all } }
+        - { name: channel, in: query, schema: { enum: [all, written, spoken], default: all } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Explainable top-K hits from one exact model fingerprint; empty with typed degradation when unavailable or stale
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticSearchResult" }
+  /v1/production-gap/semantic-enrichment:
+    get:
+      operationId: semanticProductionGapEnrichment
+      description: Adds near-semantic clues to the existing read-only top-K gap review without manufacturing candidates or writing learning facts.
+      parameters:
+        - { name: language, in: query, schema: { type: string, default: en } }
+        - { name: channel, in: query, schema: { $ref: "#/components/schemas/ProductionChannel", default: written } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, minimum: 1, maximum: 20 } }
+      responses:
+        "200":
+          description: Original gap review plus model-versioned explanatory relationships
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SemanticallyEnrichedProductionGapReview" }
   /v1/vocabulary/export:
     get:
       operationId: exportVocabulary
@@ -2185,6 +3107,80 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    SpeechSynthesisLocality:
+      type: string
+      enum: [local, remote]
+    SpeechSynthesisProvider:
+      type: object
+      required: [id, display_name, version, locality]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        version: { type: string }
+        locality: { $ref: "#/components/schemas/SpeechSynthesisLocality" }
+    SpeechSynthesisVoice:
+      type: object
+      required: [id, provider_id, display_name, language]
+      properties:
+        id: { type: string }
+        provider_id: { type: string }
+        display_name: { type: string }
+        language: { type: string }
+    SpeechSynthesisCapability:
+      type: object
+      required: [status, providers, voices, cache_bytes, cache_entries, error]
+      properties:
+        status: { type: string, enum: [ready, unavailable] }
+        providers:
+          type: array
+          items: { $ref: "#/components/schemas/SpeechSynthesisProvider" }
+        voices:
+          type: array
+          items: { $ref: "#/components/schemas/SpeechSynthesisVoice" }
+        cache_bytes: { type: integer, minimum: 0 }
+        cache_entries: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+    SpeechSynthesisRequest:
+      type: object
+      required: [text, language]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 5000 }
+        language: { type: string }
+        provider_id: { type: [string, "null"] }
+        voice_id: { type: [string, "null"] }
+        rate_words_per_minute: { type: integer, minimum: 80, maximum: 450, default: 180 }
+        purpose: { type: [string, "null"] }
+    SpeechSynthesisAsset:
+      type: object
+      required: [audio_path, mime_type, provider_id, provider_version, voice_id, language, rate_words_per_minute, purpose, content_hash, cache_hit, synthetic]
+      properties:
+        audio_path: { type: string }
+        mime_type: { type: string }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        voice_id: { type: string }
+        language: { type: string }
+        rate_words_per_minute: { type: integer }
+        purpose: { type: [string, "null"] }
+        content_hash: { type: string }
+        cache_hit: { type: boolean }
+        synthetic: { type: boolean, const: true }
+    SyntaxCapabilityView:
+      type: object
+      required: [status, progress, enabled, provider_version, runtime_version, model_version, model_checksum_sha256, delivery_checksum_sha256, expected_install_bytes, installed_bytes, updated_at_ms]
+      properties:
+        status: { type: string, enum: [not_installed, downloading, ready, partial, failed, stale, disabled] }
+        progress: { type: number, minimum: 0, maximum: 1 }
+        enabled: { type: boolean }
+        provider_version: { type: string }
+        runtime_version: { type: string }
+        model_version: { type: string }
+        model_checksum_sha256: { type: string }
+        delivery_checksum_sha256: { type: string }
+        expected_install_bytes: { type: integer, minimum: 0 }
+        installed_bytes: { type: integer, minimum: 0 }
+        error: { type: [string, "null"] }
+        updated_at_ms: { type: integer, minimum: 0 }
     Health:
       type: object
       required: [status, api_version]
@@ -2612,6 +3608,26 @@ components:
         evidence_class: { $ref: "#/components/schemas/RhythmEvidenceClass" }
         claim_status: { $ref: "#/components/schemas/RhythmClaimStatus" }
         confidence: { type: number, minimum: 0, maximum: 1 }
+    RhythmAudibleGroup:
+      type: object
+      required: [symbols, display_ipa, source_token_indices]
+      properties:
+        symbols:
+          type: array
+          items: { type: string }
+        display_ipa: { type: string }
+        source_token_indices:
+          type: array
+          items: { type: integer, minimum: 0 }
+    RhythmAudibleStructure:
+      type: object
+      required: [groups, display_ipa, learner_cue]
+      properties:
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/RhythmAudibleGroup" }
+        display_ipa: { type: string }
+        learner_cue: { type: string }
     RhythmConnectedSpeechRef:
       type: object
       required: [id, connected_speech_index, token_start, token_end, phone_start, phone_end, label, divergence, signal_sources, evidence_class, confidence]
@@ -2637,6 +3653,18 @@ components:
           items: { type: string }
         expected_display_ipa: { type: string }
         default_display_ipa: { type: string }
+        citation_structure:
+          anyOf:
+            - $ref: "#/components/schemas/RhythmAudibleStructure"
+            - type: "null"
+        predicted_structure:
+          anyOf:
+            - $ref: "#/components/schemas/RhythmAudibleStructure"
+            - type: "null"
+        actual_structure:
+          anyOf:
+            - $ref: "#/components/schemas/RhythmAudibleStructure"
+            - type: "null"
         divergence: { $ref: "#/components/schemas/RhythmDivergenceKind" }
         signal_sources:
           type: array
@@ -3124,6 +4152,7 @@ components:
       required: [original_form, sentence_text, media_title, media_fingerprint, start_ms, end_ms]
       properties:
         media_id: { type: [string, "null"] }
+        media_fingerprint: { type: [string, "null"] }
         sentence_id: { type: [string, "null"] }
         original_form: { type: string }
         sentence_text: { type: string }
@@ -3222,6 +4251,269 @@ components:
       required: [indexed_tracks]
       properties:
         indexed_tracks: { type: integer, minimum: 0 }
+    ProductionChannel:
+      enum: [written, spoken]
+    ProductionAssistance:
+      enum: [content_anchored, source_reconstruction, learner_revision, explicit_target, model_suggested, direct_imitation, unknown]
+    ProductionCorpusDocument:
+      type: object
+      required: [id, language, channel, assistance, response_revision, activity_kind, start_ms, end_ms, response_text, produced_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        channel: { $ref: "#/components/schemas/ProductionChannel" }
+        assistance: { $ref: "#/components/schemas/ProductionAssistance" }
+        attempt_id: { type: [string, "null"] }
+        rubric_id: { type: [string, "null"] }
+        realtime_turn_id: { type: [string, "null"] }
+        realtime_session_id: { type: [string, "null"] }
+        response_revision: { type: integer, minimum: 1 }
+        activity_kind: { type: string }
+        media_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        response_text: { type: string }
+        produced_at_ms: { type: integer, minimum: 0 }
+    ProductionCorpusEntry:
+      type: object
+      required: [id, document_id, normalized_key, display_text, start_char, end_char]
+      properties:
+        id: { type: string }
+        document_id: { type: string }
+        normalized_key: { type: string }
+        display_text: { type: string }
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 0 }
+    ProductionCorpusHit:
+      type: object
+      required: [document]
+      properties:
+        document: { $ref: "#/components/schemas/ProductionCorpusDocument" }
+        entry: { $ref: "#/components/schemas/ProductionCorpusEntry" }
+    ProductionCorpusReindexResult:
+      type: object
+      required: [indexed_rubrics]
+      properties:
+        indexed_rubrics: { type: integer, minimum: 0 }
+    PatternSourceKind:
+      enum: [transcript, dictionary_occurrence, reading, speaking_attempt, writing_attempt, production_corpus, semantic_candidate, manual]
+    PatternSourceSnapshot:
+      type: object
+      required: [kind, text]
+      properties:
+        kind: { $ref: "#/components/schemas/PatternSourceKind" }
+        text: { type: string, minLength: 1 }
+        title: { type: [string, "null"] }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        semantic_attempt_id: { type: [string, "null"] }
+        start_ms: { type: [integer, "null"], minimum: 0 }
+        end_ms: { type: [integer, "null"], minimum: 0 }
+        candidate_ref: { type: [string, "null"] }
+    UserSentencePatternSlot:
+      type: object
+      required: [name, required]
+      properties:
+        name: { type: string, minLength: 1 }
+        prompt: { type: [string, "null"] }
+        example_value: { type: [string, "null"] }
+        required: { type: boolean }
+    SentencePatternVersionInput:
+      type: object
+      required: [name, pattern_text, slots]
+      properties:
+        name: { type: string, minLength: 1 }
+        pattern_text: { type: string, minLength: 1 }
+        slots: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternSlot" } }
+        note: { type: [string, "null"] }
+        system_construction_id: { type: [string, "null"] }
+    CreateSentencePattern:
+      allOf:
+        - type: object
+          required: [language, source]
+          properties:
+            language: { type: string }
+            source: { $ref: "#/components/schemas/PatternSourceSnapshot" }
+        - { $ref: "#/components/schemas/SentencePatternVersionInput" }
+    UserSentencePatternVersion:
+      allOf:
+        - { $ref: "#/components/schemas/SentencePatternVersionInput" }
+        - type: object
+          required: [id, pattern_id, version, created_at_ms]
+          properties:
+            id: { type: string }
+            pattern_id: { type: string }
+            version: { type: integer, minimum: 1 }
+            created_at_ms: { type: integer, minimum: 0 }
+    UserSentencePatternAsset:
+      type: object
+      required: [id, language, source, current_version, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        language: { type: string }
+        source: { $ref: "#/components/schemas/PatternSourceSnapshot" }
+        current_version: { $ref: "#/components/schemas/UserSentencePatternVersion" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    PersonalExpressionChannel:
+      enum: [speaking, writing]
+    PersonalExpressionAssistance:
+      enum: [template_visible, slot_hints, keywords, no_text]
+    PersonalExpressionSelfAssessment:
+      enum: [needs_work, partly_expressed, expressed]
+    RecordPersonalExpressionAttempt:
+      type: object
+      required: [pattern_version_id, channel, assistance, response_text, self_assessment]
+      properties:
+        pattern_version_id: { type: string }
+        channel: { $ref: "#/components/schemas/PersonalExpressionChannel" }
+        assistance: { $ref: "#/components/schemas/PersonalExpressionAssistance" }
+        response_text: { type: string, minLength: 1 }
+        raw_transcript: { type: [string, "null"] }
+        recording_asset_id: { type: [string, "null"] }
+        self_assessment: { $ref: "#/components/schemas/PersonalExpressionSelfAssessment" }
+        context_note: { type: [string, "null"] }
+    PersonalExpressionAttempt:
+      allOf:
+        - { $ref: "#/components/schemas/RecordPersonalExpressionAttempt" }
+        - type: object
+          required: [id, pattern_id, completed_at_ms]
+          properties:
+            id: { type: string }
+            pattern_id: { type: string }
+            completed_at_ms: { type: integer, minimum: 0 }
+    PersonalExpressionExportPattern:
+      type: object
+      required: [asset, versions, attempts]
+      properties:
+        asset: { $ref: "#/components/schemas/UserSentencePatternAsset" }
+        versions: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
+        attempts: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionAttempt" } }
+    PersonalExpressionExportBundle:
+      type: object
+      required: [schema, exported_at_ms, patterns]
+      properties:
+        schema: { const: llplayer.personal-expression.v1 }
+        exported_at_ms: { type: integer, minimum: 0 }
+        patterns: { type: array, items: { $ref: "#/components/schemas/PersonalExpressionExportPattern" } }
+    ProductionGapReadiness:
+      enum: [empty, starter, ready]
+    ProductionGapTarget:
+      type: object
+      required: [lexical_entry_id, normalized_key, display_form, frequency_rank, frequency_band, evidence_strength, recency_band, reading_acquired, listening_acquired, reading_successes, listening_successes, recognition_contexts, latest_receptive_at_ms, explanation]
+      properties:
+        lexical_entry_id: { type: string }
+        normalized_key: { type: string }
+        display_form: { type: string }
+        frequency_rank: { type: [integer, "null"], minimum: 1 }
+        frequency_band: { type: [integer, "null"], minimum: 1, maximum: 4 }
+        evidence_strength: { type: integer, minimum: 0 }
+        recency_band: { type: integer, minimum: 0, maximum: 3 }
+        reading_acquired: { type: boolean }
+        listening_acquired: { type: boolean }
+        reading_successes: { type: integer, minimum: 0 }
+        listening_successes: { type: integer, minimum: 0 }
+        recognition_contexts: { type: integer, minimum: 0 }
+        latest_receptive_at_ms: { type: integer, minimum: 0 }
+        explanation: { type: array, items: { type: string } }
+    ProductionGapReview:
+      type: object
+      required: [language, channel, readiness, document_count, token_count, lemma_count, candidate_count, targets, ranking_version]
+      properties:
+        language: { type: string }
+        channel: { $ref: "#/components/schemas/ProductionChannel" }
+        readiness: { $ref: "#/components/schemas/ProductionGapReadiness" }
+        document_count: { type: integer, minimum: 0 }
+        token_count: { type: integer, minimum: 0 }
+        lemma_count: { type: integer, minimum: 0 }
+        candidate_count: { type: integer, minimum: 0 }
+        targets: { type: array, items: { $ref: "#/components/schemas/ProductionGapTarget" } }
+        ranking_version: { type: string }
+    EmbeddingModelDescriptor:
+      type: object
+      required: [provider_id, model_id, model_version, runtime_version, artifact_sha256, dimension, normalization, purpose_contract, index_schema_version, model_fingerprint, local]
+      properties:
+        provider_id: { type: string }
+        model_id: { type: string }
+        model_version: { type: string }
+        runtime_version: { type: string }
+        artifact_sha256: { type: string }
+        dimension: { type: integer, minimum: 1 }
+        normalization: { type: string }
+        purpose_contract: { type: string }
+        index_schema_version: { type: integer, minimum: 1 }
+        model_fingerprint: { type: string }
+        local: { type: boolean }
+    SemanticEmbeddingCapability:
+      type: object
+      required: [status, indexed_source_count]
+      properties:
+        status: { enum: [not_installed, ready, stale, failed, disabled] }
+        descriptor:
+          anyOf:
+            - { $ref: "#/components/schemas/EmbeddingModelDescriptor" }
+            - { type: "null" }
+        indexed_source_count: { type: integer, minimum: 0 }
+        indexed_fingerprint: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+    SemanticEmbeddingSource:
+      type: object
+      required: [kind, source_id, language, text, start_ms, end_ms]
+      properties:
+        kind: { enum: [media_corpus, production_document, production_lexeme] }
+        source_id: { type: string }
+        language: { type: string }
+        channel:
+          anyOf:
+            - { $ref: "#/components/schemas/ProductionChannel" }
+            - { type: "null" }
+        text: { type: string }
+        media_id: { type: [string, "null"] }
+        track_id: { type: [string, "null"] }
+        sentence_id: { type: [string, "null"] }
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        produced_at_ms: { type: [integer, "null"], minimum: 0 }
+    SemanticSearchHit:
+      type: object
+      required: [source, similarity, model_fingerprint]
+      properties:
+        source: { $ref: "#/components/schemas/SemanticEmbeddingSource" }
+        similarity: { type: number, minimum: -1, maximum: 1 }
+        model_fingerprint: { type: string }
+    SemanticSearchResult:
+      type: object
+      required: [capability, query, hits]
+      properties:
+        capability: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+        query: { type: string }
+        hits: { type: array, items: { $ref: "#/components/schemas/SemanticSearchHit" } }
+    NearSemanticProductionMatch:
+      type: object
+      required: [normalized_key, similarity, model_fingerprint, explanation]
+      properties:
+        normalized_key: { type: string }
+        similarity: { type: number, minimum: -1, maximum: 1 }
+        model_fingerprint: { type: string }
+        explanation: { type: string }
+    ProductionGapSemanticEnrichment:
+      type: object
+      required: [lexical_entry_id, target_normalized_key, matches]
+      properties:
+        lexical_entry_id: { type: string }
+        target_normalized_key: { type: string }
+        matches: { type: array, items: { $ref: "#/components/schemas/NearSemanticProductionMatch" } }
+    SemanticallyEnrichedProductionGapReview:
+      type: object
+      required: [review, semantic_capability, enrichments, threshold]
+      properties:
+        review: { $ref: "#/components/schemas/ProductionGapReview" }
+        semantic_capability: { $ref: "#/components/schemas/SemanticEmbeddingCapability" }
+        enrichments: { type: array, items: { $ref: "#/components/schemas/ProductionGapSemanticEnrichment" } }
+        threshold:
+          type: number
+          description: Model-versioned clue threshold, not a synonym or capability truth boundary.
     LexicalStatusHistory:
       type: object
       required: [id, lexical_entry_id, previous_status, new_status, changed_at_ms, change_source]
@@ -3483,7 +4775,7 @@ components:
     PracticeTokenResult:
       enum: [correct, missing, extra, mismatch]
     ReviewSourceKind:
-      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech]
+      enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech, speaking_attempt]
     ReviewItemStatus:
       enum: [active, suspended, archived]
     ReviewRating:
@@ -3541,7 +4833,7 @@ components:
         start_ms: { type: [integer, "null"], minimum: 0 }
         end_ms: { type: [integer, "null"], minimum: 0 }
     SemanticTaskKind:
-      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, summary, pattern_production]
+      enum: [reading_comprehension, l1_retelling, l2_retelling, role_reply, dictogloss, one_sentence_summary, summary, opinion_response, pattern_production]
     RubricPointImportance:
       enum: [required, optional]
     RubricPoint:
@@ -3601,19 +4893,27 @@ components:
       enum: [reliable, suspect, unreliable]
     L1RetellingTrigger:
       enum: [user_requested, l2_failed, diagnosis]
+    SpeakingAssistanceLevel:
+      enum: [full_sentence, keywords, no_text]
+    SpeakingRecallKind:
+      enum: [immediate, delayed]
     SemanticTaskConditions:
       type: object
-      required: [source_text_visible, audio_play_count, notes_allowed, l1_trigger]
+      required: [source_text_visible, audio_play_count, notes_allowed, l1_trigger, speaking_assistance, speaking_recall, prompt_snapshot]
       properties:
         source_text_visible: { type: boolean }
         audio_play_count: { type: [integer, "null"], minimum: 0 }
         notes_allowed: { type: boolean }
         l1_trigger: { $ref: "#/components/schemas/L1RetellingTrigger" }
+        speaking_assistance: { $ref: "#/components/schemas/SpeakingAssistanceLevel" }
+        speaking_recall: { $ref: "#/components/schemas/SpeakingRecallKind" }
+        prompt_snapshot: { type: [string, "null"] }
     AttemptResponse:
       type: object
-      required: [revision, transcript, source, recording_asset_id, asr_reliability, language, recorded_at_ms]
+      required: [revision, raw_transcript, transcript, source, recording_asset_id, asr_reliability, language, recorded_at_ms]
       properties:
         revision: { type: integer, minimum: 1 }
+        raw_transcript: { type: [string, "null"] }
         transcript: { type: string }
         source: { $ref: "#/components/schemas/ResponseTranscriptSource" }
         recording_asset_id: { type: [string, "null"] }
@@ -3686,6 +4986,63 @@ components:
         user_verdict: { $ref: "#/components/schemas/PointVerdict" }
         note: { type: [string, "null"] }
         occurred_at_ms: { type: integer, minimum: 0 }
+    WritingFeedbackLayer:
+      enum: [task_completion, information_coverage, organization, cohesion, word_choice, grammar, spelling, punctuation]
+    WritingFindingSeverity:
+      enum: [notice, suggestion, important]
+    WritingFeedbackGenerator:
+      enum: [local_rule, llm, manual]
+    WritingFeedbackProvenance:
+      type: object
+      required: [generator, provider_id, provider_version, ruleset_version, evidence_class]
+      properties:
+        generator: { $ref: "#/components/schemas/WritingFeedbackGenerator" }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        ruleset_version: { type: [string, "null"] }
+        evidence_class: { type: string }
+    WritingSourceSpan:
+      type: object
+      required: [start_char, end_char]
+      properties:
+        start_char: { type: integer, minimum: 0 }
+        end_char: { type: integer, minimum: 1 }
+    WritingFeedbackFinding:
+      type: object
+      required: [id, attempt_id, response_revision, response_transcript_sha256, layer, severity, source_span, message, suggested_replacement, provenance, created_at_ms]
+      properties:
+        id: { type: string }
+        attempt_id: { type: string }
+        response_revision: { type: integer, minimum: 1 }
+        response_transcript_sha256: { type: string }
+        layer: { $ref: "#/components/schemas/WritingFeedbackLayer" }
+        severity: { $ref: "#/components/schemas/WritingFindingSeverity" }
+        source_span: { $ref: "#/components/schemas/WritingSourceSpan" }
+        message: { type: string }
+        suggested_replacement: { type: [string, "null"] }
+        provenance: { $ref: "#/components/schemas/WritingFeedbackProvenance" }
+        created_at_ms: { type: integer, minimum: 0 }
+    WritingDraft:
+      type: object
+      required: [rubric_id, prompt_snapshot, transcript, updated_at_ms]
+      properties:
+        rubric_id: { type: string }
+        prompt_snapshot: { type: string }
+        transcript: { type: string }
+        updated_at_ms: { type: integer, minimum: 0 }
+    WritingFindingDecision:
+      enum: [accepted, rejected]
+    WritingFindingDisposition:
+      type: object
+      required: [id, finding_id, decision, resulting_attempt_id, resulting_response_revision, note, occurred_at_ms]
+      properties:
+        id: { type: string }
+        finding_id: { type: string }
+        decision: { $ref: "#/components/schemas/WritingFindingDecision" }
+        resulting_attempt_id: { type: [string, "null"] }
+        resulting_response_revision: { type: [integer, "null"], minimum: 1 }
+        note: { type: [string, "null"] }
+        occurred_at_ms: { type: integer, minimum: 0 }
     LlmAdapterKind:
       type: string
       enum: [openai_chat_completions, anthropic_messages]
@@ -3719,6 +5076,29 @@ components:
         multilingual: { $ref: "#/components/schemas/CapabilityClaim" }
         audio_input: { $ref: "#/components/schemas/CapabilityClaim" }
         max_context_tokens: { type: [integer, "null"] }
+    RealtimeProviderProfileView:
+      type: object
+      required: [id, display_name, adapter_kind, base_url, model_id, voice, has_credential, timeout_ms]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime] }
+        base_url: { type: string }
+        model_id: { type: string }
+        voice: { type: string }
+        has_credential: { type: boolean }
+        timeout_ms: { type: integer, minimum: 1000 }
+    RegisterRealtimeProvider:
+      type: object
+      required: [display_name, adapter_kind, base_url, model_id, voice, secret]
+      properties:
+        display_name: { type: string }
+        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime] }
+        base_url: { type: string }
+        model_id: { type: string }
+        voice: { type: string }
+        secret: { type: string, writeOnly: true }
+        timeout_ms: { type: integer, minimum: 1000, default: 30000 }
     LlmProviderProfileView:
       type: object
       description: >
@@ -3861,6 +5241,52 @@ components:
         language: { type: string }
         audio: { $ref: "#/components/schemas/RecordingAudioMetadata" }
         recorder_version: { type: string }
+    CreateRecordingTranscription:
+      type: object
+      required: [recording_id, model_id]
+      properties:
+        recording_id: { type: string }
+        model_id: { type: string }
+        language: { type: [string, "null"] }
+    RecordingTranscriptSegment:
+      type: object
+      required: [start_ms, end_ms, text]
+      properties:
+        start_ms: { type: integer, minimum: 0 }
+        end_ms: { type: integer, minimum: 0 }
+        text: { type: string }
+    RecordingTranscriptProvenance:
+      type: object
+      required: [provider_id, provider_version, runtime_id, runtime_version, model_id, model_revision, model_checksum_sha256, recording_content_sha256, requested_language, detected_language]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        runtime_id: { type: string }
+        runtime_version: { type: string }
+        model_id: { type: string }
+        model_revision: { type: string }
+        model_checksum_sha256: { type: string }
+        recording_content_sha256: { type: string, pattern: "^[0-9a-fA-F]{64}$" }
+        requested_language: { type: [string, "null"] }
+        detected_language: { type: [string, "null"] }
+    RecordingTranscriptionJob:
+      type: object
+      required: [id, recording_asset_id, status, raw_transcript, segments, provenance, error_code, error_message, created_at_ms, started_at_ms, completed_at_ms, latency_ms]
+      properties:
+        id: { type: string }
+        recording_asset_id: { type: string }
+        status: { type: string, enum: [queued, transcribing, completed, cancelled, failed] }
+        raw_transcript: { type: [string, "null"] }
+        segments:
+          type: array
+          items: { $ref: "#/components/schemas/RecordingTranscriptSegment" }
+        provenance: { $ref: "#/components/schemas/RecordingTranscriptProvenance" }
+        error_code: { type: [string, "null"] }
+        error_message: { type: [string, "null"] }
+        created_at_ms: { type: integer, minimum: 0 }
+        started_at_ms: { type: [integer, "null"], minimum: 0 }
+        completed_at_ms: { type: [integer, "null"], minimum: 0 }
+        latency_ms: { type: [integer, "null"], minimum: 0 }
     CompleteShadowingAttempt:
       type: object
       required: [item_id, recording_id]
@@ -3887,6 +5313,14 @@ components:
         bucket_ms: { type: integer, minimum: 1 }
         peaks: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
         rms: { type: array, items: { type: number, minimum: 0, maximum: 1 } }
+    RecordingAudioFacts:
+      type: object
+      required: [recording_id, duration_ms, pauses, waveform]
+      properties:
+        recording_id: { type: string }
+        duration_ms: { type: integer, minimum: 0 }
+        pauses: { type: array, items: { $ref: "#/components/schemas/AudioPauseInterval" } }
+        waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
     ShadowingPauseAlignment:
       type: object
       required: [reference_pauses, recording_pauses, mean_absolute_offset_ms]
@@ -3956,7 +5390,61 @@ components:
         next_due_at_ms: { type: [integer, "null"], minimum: 0 }
     ReviewCardKind:
       type: string
-      enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall]
+      enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall, delayed_retelling]
+    ProjectionEvidenceRef:
+      type: object
+      required: [observation_id, source_ref, task_type, outcome, occurred_at_ms, snapshot]
+      properties:
+        observation_id: { type: string }
+        source_ref: { type: [string, "null"] }
+        task_type: { type: string }
+        outcome: { type: string, enum: [success, partial, failure] }
+        occurred_at_ms: { type: integer, minimum: 0 }
+        snapshot: { type: string }
+    ProjectionProposal:
+      type: object
+      required: [id, lexical_entry_id, capability, proposed_conclusion, algorithm_version, confidence, evidence_as_of_ms, evidence, rationale, status, created_at_ms]
+      properties:
+        id: { type: string }
+        lexical_entry_id: { type: string }
+        capability: { type: string, enum: [reading, listening, speaking, writing] }
+        proposed_conclusion: { type: string, enum: [not_acquired, acquired] }
+        algorithm_version: { type: string }
+        confidence: { type: [number, "null"], minimum: 0, maximum: 1 }
+        evidence_as_of_ms: { type: integer, minimum: 0 }
+        evidence: { type: array, items: { $ref: "#/components/schemas/ProjectionEvidenceRef" } }
+        rationale: { type: string }
+        status: { type: string, enum: [pending, confirmed, rejected, superseded] }
+        created_at_ms: { type: integer, minimum: 0 }
+    ChannelQualificationReport:
+      type: object
+      required: [capability, qualification, algorithm_version, qualifying_evidence_count, reason]
+      properties:
+        capability: { type: string, enum: [reading, listening, speaking, writing] }
+        qualification: { type: string, enum: [qualified, insufficient_evidence] }
+        algorithm_version: { type: string }
+        qualifying_evidence_count: { type: integer, minimum: 0 }
+        reason: { type: string }
+    ProjectionAudit:
+      type: object
+      required: [lexical_entry_id, reports, proposals]
+      properties:
+        lexical_entry_id: { type: string }
+        reports: { type: array, items: { $ref: "#/components/schemas/ChannelQualificationReport" } }
+        proposals: { type: array, items: { $ref: "#/components/schemas/ProjectionProposal" } }
+    CrossModalReviewCandidate:
+      type: object
+      required: [lexical_entry_id, display_form, reading, listening, speaking, writing, review_kind, reason, source]
+      properties:
+        lexical_entry_id: { type: string }
+        display_form: { type: string }
+        reading: { type: string, enum: [unassessed, not_acquired, acquired] }
+        listening: { type: string, enum: [unassessed, not_acquired, acquired] }
+        speaking: { type: string, enum: [unassessed, not_acquired, acquired] }
+        writing: { type: string, enum: [unassessed, not_acquired, acquired] }
+        review_kind: { type: string, enum: [reading_check, listening_recall, constructed_speaking, writing_reconstruction] }
+        reason: { type: string }
+        source: { $ref: "#/components/schemas/ProjectionEvidenceRef" }
     ReviewCard:
       type: object
       required: [kind, cue, answer, target]
@@ -4264,6 +5752,18 @@ components:
         skipped: { type: integer, minimum: 0 }
         overwritten: { type: integer, minimum: 0 }
         invalid: { type: integer, minimum: 0 }
+    ReadingPosition:
+      type: object
+      required:
+        [track_id, media_id, anchor_cue_id, paragraph_index, updated_at_ms]
+      properties:
+        track_id: { type: string }
+        media_id: { type: [string, "null"] }
+        anchor_cue_id:
+          type: string
+          description: Paragraph anchor — the paragraph's first cue id.
+        paragraph_index: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
     LearnerProfileView:
       type: object
       required: [l1_language, ui_language, active_l2_language, updated_at_ms]
@@ -4278,6 +5778,76 @@ components:
           type: [string, "null"]
           description: Reserved; learning language is currently derived per subtitle track.
         updated_at_ms: { type: [integer, "null"], minimum: 0 }
+    SyntacticDependencyPattern:
+      type: object
+      required: [matcher_key, nodes]
+      properties:
+        matcher_key:
+          type: string
+          description: Matcher-local diagnostic key; never a Construction canonical identity.
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [binding]
+            properties:
+              binding: { type: string }
+              lemma: { type: [string, "null"] }
+              upos: { type: [string, "null"] }
+              dependency_relation: { type: [string, "null"] }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [head_binding, dependent_binding]
+            properties:
+              head_binding: { type: string }
+              dependent_binding: { type: string }
+              dependency_relation: { type: [string, "null"] }
+    SyntacticConsumerBatch:
+      type: object
+      required: [qualification, probe_request_count, analysis_request_count, sentences]
+      properties:
+        descriptor:
+          type: [object, "null"]
+          description: Complete provider/runtime/model provenance when the optional capability ran.
+        qualification:
+          type: object
+          required: [artifact, reference_b_verified_subset, sense_group, dependency_matcher]
+          properties:
+            artifact: { type: boolean }
+            reference_b_verified_subset: { type: boolean }
+            sense_group: { type: boolean }
+            dependency_matcher: { type: boolean }
+        probe_request_count: { type: integer, minimum: 0 }
+        analysis_request_count:
+          type: integer
+          minimum: 0
+          maximum: 1
+          description: One provider batch at most; all consumers reuse its per-sentence artifacts.
+        sentences:
+          type: array
+          items:
+            type: object
+            required: [sentence_id, reference_b, sense_groups, dependency_matches]
+            properties:
+              sentence_id: { type: string }
+              analysis: { type: [object, "null"] }
+              validation: { type: [object, "null"] }
+              fallback_reason:
+                anyOf:
+                  - enum: [provider_not_configured, runtime_missing, model_missing, model_corrupt, unsupported_language, timeout, invalid_output, protocol_failure, process_failure, provider_failure, artifact_unqualified, missing_sentence, invalid_sentence]
+                  - type: "null"
+              reference_b:
+                type: array
+                items: { type: object }
+              sense_groups:
+                type: array
+                items: { type: object }
+              dependency_matches:
+                type: array
+                description: Rebuildable matcher candidates only; no canonical Construction or capability identity.
+                items: { type: object }
     SentenceDiagnosis:
       type: object
       required: [sentence_id, hints, unclassified_lemmas]

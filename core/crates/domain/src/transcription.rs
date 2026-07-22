@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{MediaId, SubtitleTrackId, TranscriptionJobId, TranscriptionModelId};
+use crate::{
+    MediaId, RecordingAssetId, RecordingTranscriptionJobId, SubtitleTrackId, TranscriptionJobId,
+    TranscriptionModelId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -99,6 +102,50 @@ pub struct TranscriptionSegment {
 pub struct TranscriptionResult {
     pub detected_language: Option<String>,
     pub segments: Vec<TranscriptionSegment>,
+}
+
+/// A short microphone recording transcription is deliberately separate from
+/// a media transcription job: it consumes an existing RecordingAsset, never
+/// imports a subtitle track, and preserves raw ASR output for later user
+/// correction rather than treating it as speaking evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordingTranscriptionStatus {
+    Queued,
+    Transcribing,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingTranscriptProvenance {
+    pub provider_id: String,
+    pub provider_version: String,
+    pub runtime_id: String,
+    pub runtime_version: String,
+    pub model_id: TranscriptionModelId,
+    pub model_revision: String,
+    pub model_checksum_sha256: String,
+    pub recording_content_sha256: String,
+    pub requested_language: Option<String>,
+    pub detected_language: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordingTranscriptionJob {
+    pub id: RecordingTranscriptionJobId,
+    pub recording_asset_id: RecordingAssetId,
+    pub status: RecordingTranscriptionStatus,
+    pub raw_transcript: Option<String>,
+    pub segments: Vec<TranscriptionSegment>,
+    pub provenance: RecordingTranscriptProvenance,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    pub created_at_ms: u64,
+    pub started_at_ms: Option<u64>,
+    pub completed_at_ms: Option<u64>,
+    pub latency_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

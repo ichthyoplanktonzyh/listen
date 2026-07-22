@@ -29,7 +29,11 @@ fn openai_content_envelope(content: &str) -> serde_json::Value {
     })
 }
 
-async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+async fn post_json(
+    app: &Router,
+    uri: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
     let response = app
         .clone()
         .oneshot(
@@ -46,8 +50,9 @@ async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> (StatusC
     let json = if bytes.is_empty() {
         serde_json::Value::Null
     } else {
-        serde_json::from_slice(&bytes)
-            .unwrap_or_else(|_| serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string()))
+        serde_json::from_slice(&bytes).unwrap_or_else(|_| {
+            serde_json::Value::String(String::from_utf8_lossy(&bytes).to_string())
+        })
     };
     (status, json)
 }
@@ -73,7 +78,12 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
     let app = test_app();
 
     // Register with a credential.
-    let (status, view) = post_json(&app, "/v1/llm/providers", register_body(&base, Some("sk-secret-777"))).await;
+    let (status, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-secret-777")),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "register failed: {view}");
     assert_eq!(view["has_credential"], true);
     // The response is a view with no auth_ref and no secret anywhere.
@@ -99,7 +109,12 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
     assert!(!list_body.to_string().contains("sk-secret-777"));
 
     // Probe actually measures structured-output support against the endpoint.
-    let (status, probe) = post_json(&app, &format!("/v1/llm/providers/{id}/probe"), serde_json::Value::Null).await;
+    let (status, probe) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{id}/probe"),
+        serde_json::Value::Null,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(probe["structured_output"]["state"], "probed");
     assert_eq!(probe["structured_output"]["supported"], true);
@@ -109,7 +124,12 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
 async fn delete_removes_provider() {
     let base = spawn_fake_openai(openai_content_envelope("{\"ok\": true}")).await;
     let app = test_app();
-    let (_, view) = post_json(&app, "/v1/llm/providers", register_body(&base, Some("sk-x"))).await;
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-x")),
+    )
+    .await;
     let id = view["id"].as_str().unwrap().to_string();
 
     let deleted = app
@@ -134,6 +154,55 @@ async fn delete_removes_provider() {
         .await
         .unwrap();
     assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn generate_rubric_returns_a_draft_without_persisting() {
+    let rubric_json = serde_json::json!({
+        "points": [
+            {
+                "importance": "required",
+                "statement": "A quake happened.",
+                "accepted_paraphrase_notes": null
+            },
+            {
+                "importance": "optional",
+                "statement": "It was near the coast.",
+                "accepted_paraphrase_notes": "coast/shore"
+            }
+        ]
+    })
+    .to_string();
+    let base = spawn_fake_openai(openai_content_envelope(&rubric_json)).await;
+    let app = test_app();
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body(&base, Some("sk-x")),
+    )
+    .await;
+    let id = view["id"].as_str().unwrap().to_string();
+
+    let (status, draft) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{id}/rubric"),
+        serde_json::json!({
+            "purpose": "reading_comprehension",
+            "source_language": "en",
+            "response_language": "zh",
+            "transcript_snapshot": "The quake struck at dawn near the coast."
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "generate failed: {draft}");
+    let points = draft["points"].as_array().unwrap();
+    assert_eq!(points.len(), 2);
+    assert_eq!(points[0]["importance"], "required");
+    assert_eq!(points[0]["statement"], "A quake happened.");
+    assert_eq!(points[1]["accepted_paraphrase_notes"], "coast/shore");
+    // Draft only: no rubric identity/version/source is minted by the provider.
+    assert!(draft.get("id").is_none());
+    assert!(draft.get("version").is_none());
 }
 
 #[tokio::test]

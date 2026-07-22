@@ -1,0 +1,6 @@
+# Phase 2.24 reviewed exceptions. New raw resource-client returns fail the
+# architecture guard.
+# Vocabulary export is intentionally an open, versioned transfer document.
+# The client writes it without interpreting or discarding additive fields;
+# api_service_transport_test.dart locks down that lossless boundary.
+lexical.dart:exportVocabulary

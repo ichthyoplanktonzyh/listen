@@ -1,5 +1,5 @@
 use application::{ApplicationError, LearnerProfileRepository};
-use domain::*;
+use domain::{LanguageCode, LearnerProfile, LearnerProfileId};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, domain_sql, repo};

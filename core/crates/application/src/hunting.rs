@@ -8,20 +8,20 @@ use domain::{
 };
 
 use crate::{
-    AppServices, ApplicationError, CreateHuntingTargetInput, CreateLexicalObservation,
-    HuntingCheckResult, LexicalSourceContext, SubmitHuntingCheckInput, normalize_phrase, now_ms,
+    ApplicationError, CreateHuntingTargetInput, CreateLexicalObservation, HuntingCheckResult,
+    LexicalSourceContext, PracticeUseCases, SubmitHuntingCheckInput, normalize_phrase, now_ms,
 };
 
 const MAX_ACTIVE_HUNTING_TARGETS: usize = 5;
 
-impl AppServices {
+impl PracticeUseCases {
     pub fn list_hunting_candidates(
         &self,
         status: Option<HuntingCandidateStatus>,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        self.review
+        self.hunting
             .list_hunting_candidates(status, limit.min(100), offset)
     }
 
@@ -30,7 +30,8 @@ impl AppServices {
         input: CreateHuntingTargetInput,
     ) -> Result<HuntingTarget, ApplicationError> {
         let details = self
-            .learning_assets
+            .lexical_learning()
+            .lexical_entries
             .lexical_details(&input.lexical_entry_id)?
             .ok_or(ApplicationError::NotFound("lexical entry"))?;
         let source_id = input
@@ -54,7 +55,7 @@ impl AppServices {
                 ))?;
                 let candidate_id = HuntingCandidateId::parse(candidate_id.clone())?;
                 let candidate = self
-                    .review
+                    .hunting
                     .get_hunting_candidate(&candidate_id)?
                     .ok_or(ApplicationError::NotFound("hunting candidate"))?;
                 if candidate.lexical_entry_id != input.lexical_entry_id {
@@ -86,14 +87,14 @@ impl AppServices {
 
         let id =
             HuntingTargetId::from_fingerprint("hunting-target", input.lexical_entry_id.as_str());
-        let existing = self.review.get_hunting_target(&id)?;
+        let existing = self.hunting.get_hunting_target(&id)?;
         if let Some(existing) = existing.as_ref()
             && existing.status == HuntingTargetStatus::Active
         {
             return Ok(existing.clone());
         }
         if self
-            .review
+            .hunting
             .list_hunting_targets(Some(HuntingTargetStatus::Active), 6, 0)?
             .len()
             >= MAX_ACTIVE_HUNTING_TARGETS
@@ -104,7 +105,7 @@ impl AppServices {
         }
 
         let now = now_ms();
-        let target = self.review.upsert_hunting_target(&HuntingTarget {
+        let target = self.hunting.upsert_hunting_target(&HuntingTarget {
             id,
             lexical_entry_id: input.lexical_entry_id,
             source_kind: input.source_kind,
@@ -118,11 +119,11 @@ impl AppServices {
         if input.source_kind == HuntingTargetSourceKind::ReviewCandidate {
             let candidate_id = HuntingCandidateId::parse(source_id.expect("validated source id"))?;
             let mut candidate = self
-                .review
+                .hunting
                 .get_hunting_candidate(&candidate_id)?
                 .ok_or(ApplicationError::NotFound("hunting candidate"))?;
             candidate.status = HuntingCandidateStatus::Consumed;
-            self.review.upsert_hunting_candidate(&candidate)?;
+            self.hunting.upsert_hunting_candidate(&candidate)?;
         }
 
         Ok(target)
@@ -134,7 +135,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError> {
-        self.review
+        self.hunting
             .list_hunting_targets(status, limit.min(100), offset)
     }
 
@@ -143,13 +144,13 @@ impl AppServices {
         id: &HuntingTargetId,
     ) -> Result<HuntingTarget, ApplicationError> {
         let mut target = self
-            .review
+            .hunting
             .get_hunting_target(id)?
             .ok_or(ApplicationError::NotFound("hunting target"))?;
         if target.status != HuntingTargetStatus::Archived {
             target.status = HuntingTargetStatus::Archived;
             target.updated_at_ms = now_ms();
-            target = self.review.upsert_hunting_target(&target)?;
+            target = self.hunting.upsert_hunting_target(&target)?;
         }
         Ok(target)
     }
@@ -159,7 +160,7 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
     ) -> Result<Option<HuntingTarget>, ApplicationError> {
         let id = HuntingTargetId::from_fingerprint("hunting-target", lexical_entry_id.as_str());
-        self.review.get_hunting_target(&id)
+        self.hunting.get_hunting_target(&id)
     }
 
     pub fn hunting_occurrences(
@@ -180,7 +181,7 @@ impl AppServices {
             });
         }
 
-        let targets = self.review.list_hunting_targets(
+        let targets = self.hunting.list_hunting_targets(
             Some(HuntingTargetStatus::Active),
             MAX_ACTIVE_HUNTING_TARGETS as u32,
             0,
@@ -189,7 +190,8 @@ impl AppServices {
         let mut occurrences = Vec::new();
         for target in targets {
             let Some(details) = self
-                .learning_assets
+                .lexical_learning()
+                .lexical_entries
                 .lexical_details(&target.lexical_entry_id)?
             else {
                 continue;
@@ -251,7 +253,7 @@ impl AppServices {
             ));
         }
         let target = self
-            .review
+            .hunting
             .get_hunting_target(&input.target_id)?
             .ok_or(ApplicationError::NotFound("hunting target"))?;
         if target.status != HuntingTargetStatus::Active {
@@ -279,7 +281,8 @@ impl AppServices {
                 "hunting occurrence has no sentence",
             ))?;
         let entry = self
-            .learning_assets
+            .lexical_learning()
+            .lexical_entries
             .lexical_details(&target.lexical_entry_id)?
             .map(|details| details.entry)
             .ok_or(ApplicationError::NotFound("lexical entry"))?;
@@ -297,29 +300,30 @@ impl AppServices {
                     .get(&media_id)?
                     .ok_or(ApplicationError::NotFound("media"))?;
                 Some(
-                    self.create_lexical_observation(CreateLexicalObservation {
-                        lexical_entry_id: target.lexical_entry_id.clone(),
-                        sentence_id: sentence_id.clone(),
-                        original_form: occurrence.display_text.clone(),
-                        result: if input.answer == HuntingCheckAnswer::Recognized {
-                            ObservationResult::RecognizedInContext
-                        } else {
-                            ObservationResult::NotRecognizedInContext
-                        },
-                        source: Some(LexicalSourceContext {
-                            media_id: Some(media_id.clone()),
-                            sentence_id: Some(sentence_id.clone()),
+                    self.lexical_learning()
+                        .create_lexical_observation(CreateLexicalObservation {
+                            lexical_entry_id: target.lexical_entry_id.clone(),
+                            sentence_id: sentence_id.clone(),
                             original_form: occurrence.display_text.clone(),
-                            sentence_text: occurrence.source_snapshot.clone(),
-                            media_title: media.title,
-                            media_fingerprint: media.fingerprint,
-                            start_ms: occurrence.start_ms,
-                            end_ms: occurrence.end_ms,
-                            token_start: None,
-                            token_end: None,
-                        }),
-                    })?
-                    .id,
+                            result: if input.answer == HuntingCheckAnswer::Recognized {
+                                ObservationResult::RecognizedInContext
+                            } else {
+                                ObservationResult::NotRecognizedInContext
+                            },
+                            source: Some(LexicalSourceContext {
+                                media_id: Some(media_id.clone()),
+                                sentence_id: Some(sentence_id.clone()),
+                                original_form: occurrence.display_text.clone(),
+                                sentence_text: occurrence.source_snapshot.clone(),
+                                media_title: media.title,
+                                media_fingerprint: media.fingerprint,
+                                start_ms: occurrence.start_ms,
+                                end_ms: occurrence.end_ms,
+                                token_start: None,
+                                token_end: None,
+                            }),
+                        })?
+                        .id,
                 )
             }
             HuntingCheckAnswer::NotNoticed => None,

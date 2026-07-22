@@ -1,8 +1,84 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::*;
+use crate::{
+    AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
+    CorpusIndexRepository, DifficultyRepository, LLTimelineResourceRepository,
+    LearnerProfileUseCases, LearningEventKind, LearningEventRepository, LearningEventSubjectKind,
+    LexicalEntryRepository, LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem,
+    MediaLibraryEntry, MediaRepository, MediaTriageIntent, PhoneTimelineRepository,
+    PlaybackProgressRepository, PronunciationProvider, PronunciationRepository,
+    PronunciationUseCases, RegisterMedia, SenseGroupRepository, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackRepository, SubtitleTrackStatus, TimeMs, WordTimelineRepository, now_ms,
+    require_text,
+};
+use std::sync::Arc;
 
-impl AppServices {
+/// Owns media registration, subtitle/timeline resources, corpus projection,
+/// and derived analysis. These operations share invalidation and provenance
+/// rules; lexical learning remains an explicit collaborating module.
+#[derive(Clone)]
+pub struct MediaAnalysisUseCases {
+    pub(crate) media: Arc<dyn MediaRepository>,
+    pub(crate) progress: Arc<dyn PlaybackProgressRepository>,
+    pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
+    pub(crate) word_timelines: Arc<dyn WordTimelineRepository>,
+    pub(crate) chunk_timelines: Arc<dyn ChunkTimelineRepository>,
+    pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
+    pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
+    pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
+    pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
+    pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
+    pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
+    lexical_learning: LexicalLearningUseCases,
+    learner_profile: LearnerProfileUseCases,
+}
+
+impl MediaAnalysisUseCases {
+    pub(crate) fn from_services(services: &AppServices) -> Self {
+        Self {
+            media: services.media.clone(),
+            progress: services.progress.clone(),
+            subtitle_tracks: services.subtitle_tracks.clone(),
+            pronunciations: services.pronunciations.clone(),
+            word_timelines: services.word_timelines.clone(),
+            chunk_timelines: services.chunk_timelines.clone(),
+            sense_groups: services.sense_groups.clone(),
+            phone_timelines: services.phone_timelines.clone(),
+            lltimeline_resources: services.lltimeline_resources.clone(),
+            corpus: services.corpus.clone(),
+            difficulty: services.difficulty.clone(),
+            lexical_entries: services.lexical_entries.clone(),
+            learning_events: services.learning_events.clone(),
+            coach_dashboard: services.coach_dashboard.clone(),
+            pronunciation_providers: services.pronunciation_providers.clone(),
+            lexical_learning: LexicalLearningUseCases::from_services(services),
+            learner_profile: LearnerProfileUseCases::new(services.learner_profiles.clone()),
+        }
+    }
+
+    pub(crate) fn lexical_learning(&self) -> &LexicalLearningUseCases {
+        &self.lexical_learning
+    }
+
+    pub(crate) fn learner_profile(&self) -> &LearnerProfileUseCases {
+        &self.learner_profile
+    }
+
+    pub(crate) fn pronunciation(&self) -> PronunciationUseCases {
+        PronunciationUseCases::new(
+            self.pronunciations.clone(),
+            self.subtitle_tracks.clone(),
+            self.word_timelines.clone(),
+            self.pronunciation_providers.clone(),
+        )
+    }
+}
+
+impl MediaAnalysisUseCases {
     pub fn register_media(&self, input: RegisterMedia) -> Result<MediaItem, ApplicationError> {
         require_text(&input.path, "path")?;
         require_text(&input.fingerprint, "fingerprint")?;

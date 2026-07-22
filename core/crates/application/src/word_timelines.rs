@@ -1,6 +1,17 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CreateWordTimeline, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact,
+    LLTimelineDocument, LLTimelineGenerator, LLTimelineMedia, LLTimelineMetadata,
+    LLTimelineRhythmFrame, MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind,
+    RhythmFrameId, SentenceWordTimingDiagnostics, SubtitleSentenceId, SubtitleTrack,
+    SubtitleTrackId, SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus,
+    WordTimeline, WordTimelineId, WordTimelineSummary, WordTimingBoundaryDiagnostic,
+    build_word_timeline, lltimeline_segments_from_track, lltimeline_segments_to_sentences,
+    lltimeline_track_extra, lltimeline_track_fingerprint, lltimeline_track_id,
+    mark_word_timeline_published, merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity,
+    require_text, validate_word_timeline_words, word_timeline_summary,
+};
 
 const RHYTHM_FRAME_PROVIDER_ID: &str = "wordtimeline-rhythm-frame";
 const RHYTHM_FRAME_PROVIDER_VERSION: &str = "phase-2.21-w2";
@@ -9,10 +20,10 @@ const RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND: &str = "rhythm_word_acoustic_cues
 fn rhythm_word_acoustic_cues_by_sentence(
     artifacts: &[LLTimelineArtifact],
     word_timeline_id: Option<&WordTimelineId>,
-) -> HashMap<SubtitleSentenceId, Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>> {
+) -> HashMap<SubtitleSentenceId, Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>> {
     let mut values: HashMap<
         SubtitleSentenceId,
-        Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>,
+        Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>,
     > = HashMap::new();
     let Some(word_timeline_id) = word_timeline_id else {
         return values;
@@ -73,7 +84,7 @@ fn rhythm_word_acoustic_cues_by_sentence(
                 continue;
             }
             values.entry(sentence_id).or_default().push(
-                speech_analysis::sound_analysis::RhythmWordAcousticCue {
+                speech_analysis::audible_structure::RhythmWordAcousticCue {
                     token_index,
                     energy_prominence,
                     pitch_prominence,
@@ -132,12 +143,12 @@ fn select_rhythm_source_word_timeline_id(
         .or_else(|| active_word_timeline_id.cloned())
 }
 
-impl AppServices {
-    pub fn store_rhythm_word_acoustic_analysis(
+impl MediaAnalysisUseCases {
+    pub(crate) fn store_rhythm_word_acoustic_analysis(
         &self,
         track_id: &SubtitleTrackId,
         timeline_id: &WordTimelineId,
-        analysis: &speech_analysis::word_acoustics::WordAcousticAnalysis,
+        analysis: &speech_analysis::timing::WordAcousticAnalysis,
     ) -> Result<usize, ApplicationError> {
         let document = self.export_lltimeline_document(track_id)?;
         if !document
@@ -158,8 +169,8 @@ impl AppServices {
         });
         artifacts.push(LLTimelineArtifact {
             kind: RHYTHM_WORD_ACOUSTIC_CUES_ARTIFACT_KIND.into(),
-            provider_id: Some(speech_analysis::word_acoustics::PROVIDER_ID.into()),
-            provider_version: Some(speech_analysis::word_acoustics::PROVIDER_VERSION.into()),
+            provider_id: Some(speech_analysis::timing::WORD_ACOUSTICS_PROVIDER_ID.into()),
+            provider_version: Some(speech_analysis::timing::WORD_ACOUSTICS_PROVIDER_VERSION.into()),
             payload: serde_json::json!({
                 "status": "scored",
                 "line": "sound",
@@ -187,14 +198,14 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTimeline>, ApplicationError> {
-        self.timelines.list_word_timelines(track_id)
+        self.word_timelines.list_word_timelines(track_id)
     }
 
     pub fn summarize_word_timelines(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTimelineSummary>, ApplicationError> {
-        let timelines = self.timelines.list_word_timelines(track_id)?;
+        let timelines = self.word_timelines.list_word_timelines(track_id)?;
         Ok(timelines
             .iter()
             .map(word_timeline_summary)
@@ -205,7 +216,7 @@ impl AppServices {
         &self,
         id: &WordTimelineId,
     ) -> Result<Option<WordTimeline>, ApplicationError> {
-        self.timelines.get_word_timeline(id)
+        self.word_timelines.get_word_timeline(id)
     }
 
     pub fn create_word_timeline(
@@ -233,9 +244,9 @@ impl AppServices {
         if requested_status == TimelineStatus::Active {
             timeline.status = TimelineStatus::Candidate;
         }
-        let timeline = self.timelines.save_word_timeline(&timeline)?;
+        let timeline = self.word_timelines.save_word_timeline(&timeline)?;
         let timeline = if requested_status == TimelineStatus::Active {
-            self.timelines.activate_word_timeline(&timeline.id)?
+            self.word_timelines.activate_word_timeline(&timeline.id)?
         } else {
             timeline
         };
@@ -247,7 +258,7 @@ impl AppServices {
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        let timeline = self.timelines.activate_word_timeline(id)?;
+        let timeline = self.word_timelines.activate_word_timeline(id)?;
         // Rhythm frames derive from word timelines, so the corpus family
         // projection (Phase 3.9) is stale after any lifecycle change here.
         self.reindex_track_corpus(&timeline.track_id)?;
@@ -258,7 +269,7 @@ impl AppServices {
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        let timeline = self.timelines.archive_word_timeline(id)?;
+        let timeline = self.word_timelines.archive_word_timeline(id)?;
         self.reindex_track_corpus(&timeline.track_id)?;
         Ok(timeline)
     }
@@ -268,7 +279,7 @@ impl AppServices {
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
         let mut timeline = self
-            .timelines
+            .word_timelines
             .get_word_timeline(id)?
             .ok_or(ApplicationError::NotFound("word timeline"))?;
         if timeline.status == TimelineStatus::Archived {
@@ -276,8 +287,8 @@ impl AppServices {
         }
         mark_word_timeline_published(&mut timeline);
         timeline.updated_at_ms = now_ms();
-        let timeline = self.timelines.save_word_timeline(&timeline)?;
-        let timeline = self.timelines.activate_word_timeline(&timeline.id)?;
+        let timeline = self.word_timelines.save_word_timeline(&timeline)?;
+        let timeline = self.word_timelines.activate_word_timeline(&timeline.id)?;
         self.reindex_track_corpus(&timeline.track_id)?;
         Ok(timeline)
     }
@@ -286,7 +297,7 @@ impl AppServices {
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        let timeline = self.timelines.delete_word_timeline(id)?;
+        let timeline = self.word_timelines.delete_word_timeline(id)?;
         self.reindex_track_corpus(&timeline.track_id)?;
         Ok(timeline)
     }
@@ -303,7 +314,7 @@ impl AppServices {
             .sentences
             .iter()
             .filter_map(|sentence| {
-                let timings = match self.word_timings(&sentence.id) {
+                let timings = match self.pronunciation().word_timings(&sentence.id) {
                     Ok(timings) => timings,
                     Err(error) => return Some(Err(error)),
                 };
@@ -345,17 +356,17 @@ impl AppServices {
             .media
             .get(&track.media_id)?
             .ok_or(ApplicationError::NotFound("media item"))?;
-        let word_timelines = self.timelines.list_word_timelines(track_id)?;
+        let word_timelines = self.word_timelines.list_word_timelines(track_id)?;
         let active_word_timeline_id = word_timelines
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        let chunk_timelines = self.timelines.list_chunk_timelines(track_id)?;
+        let chunk_timelines = self.chunk_timelines.list_chunk_timelines(track_id)?;
         let active_chunk_timeline_id = chunk_timelines
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        let phone_timelines = self.timelines.list_phone_timelines(track_id)?;
+        let phone_timelines = self.phone_timelines.list_phone_timelines(track_id)?;
         let active_phone_timeline_id = phone_timelines
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
@@ -426,7 +437,7 @@ impl AppServices {
             active_word_timeline_id.as_ref(),
             &word_acoustic_cues,
         )?;
-        let sense_group_analyses = self.timelines.list_sense_group_analyses(track_id)?;
+        let sense_group_analyses = self.sense_groups.list_sense_group_analyses(track_id)?;
         let active_sense_group_analysis_id = sense_group_analyses
             .iter()
             .find(|a| a.status == TimelineStatus::Active)
@@ -508,10 +519,10 @@ impl AppServices {
             {
                 timeline.status = TimelineStatus::Candidate;
             }
-            self.timelines.save_word_timeline(&timeline)?;
+            self.word_timelines.save_word_timeline(&timeline)?;
         }
         if let Some(active_id) = document.active_word_timeline_id {
-            self.timelines.activate_word_timeline(&active_id)?;
+            self.word_timelines.activate_word_timeline(&active_id)?;
         }
 
         for mut timeline in document.phone_timelines {
@@ -523,10 +534,10 @@ impl AppServices {
             {
                 timeline.status = TimelineStatus::Candidate;
             }
-            self.timelines.save_phone_timeline(&timeline)?;
+            self.phone_timelines.save_phone_timeline(&timeline)?;
         }
         if let Some(active_id) = document.active_phone_timeline_id {
-            self.timelines.activate_phone_timeline(&active_id)?;
+            self.phone_timelines.activate_phone_timeline(&active_id)?;
         }
 
         for frame in document.rhythm_frames {
@@ -544,10 +555,10 @@ impl AppServices {
             {
                 timeline.status = TimelineStatus::Candidate;
             }
-            self.timelines.save_chunk_timeline(&timeline)?;
+            self.chunk_timelines.save_chunk_timeline(&timeline)?;
         }
         if let Some(active_id) = document.active_chunk_timeline_id {
-            self.timelines.activate_chunk_timeline(&active_id)?;
+            self.chunk_timelines.activate_chunk_timeline(&active_id)?;
         }
 
         for mut analysis in document.sense_group_analyses {
@@ -561,10 +572,11 @@ impl AppServices {
             {
                 analysis.status = TimelineStatus::Candidate;
             }
-            self.timelines.save_sense_group_analysis(&analysis)?;
+            self.sense_groups.save_sense_group_analysis(&analysis)?;
         }
         if let Some(active_id) = document.active_sense_group_analysis_id {
-            self.timelines.activate_sense_group_analysis(&active_id)?;
+            self.sense_groups
+                .activate_sense_group_analysis(&active_id)?;
         }
 
         // One reindex after every timeline landed, so the corpus projection
@@ -663,7 +675,7 @@ impl AppServices {
         active_word_timeline_id: Option<&WordTimelineId>,
         word_acoustic_cues: &HashMap<
             SubtitleSentenceId,
-            Vec<speech_analysis::sound_analysis::RhythmWordAcousticCue>,
+            Vec<speech_analysis::audible_structure::RhythmWordAcousticCue>,
         >,
     ) -> Result<Vec<LLTimelineRhythmFrame>, ApplicationError> {
         let Some(word_timeline_id) = word_timeline_id else {
@@ -704,7 +716,7 @@ impl AppServices {
                     .into_iter()
                     .filter_map(|phone| {
                         phone.token_index.map(|token_index| {
-                            speech_analysis::phonetic_alignment::CanonicalPhone {
+                            speech_analysis::phonetics::CanonicalPhone {
                                 symbol: phone.symbol,
                                 token_index,
                                 stress: phone.stress,
@@ -716,7 +728,7 @@ impl AppServices {
                 Vec::new()
             };
             let rhythm_frame =
-                speech_analysis::sound_analysis::build_rhythm_frame_from_word_timeline(
+                speech_analysis::audible_structure::build_rhythm_frame_from_word_timeline(
                     sentence,
                     &canonical,
                     &words,

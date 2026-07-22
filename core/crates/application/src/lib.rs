@@ -2,7 +2,55 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::coach_dashboard::DisabledCoachDashboardRepository;
-use domain::*;
+use domain::{
+    CONTENT_FIT_ALGORITHM_VERSION, CapabilityAssessment, CapabilityConclusion, CapabilityFilter,
+    CapabilityOverride, CapabilityOverrideSource, CapabilityProjection, CapabilityProjectionSource,
+    CapabilitySupport, ChunkBoundarySource, ChunkId, ChunkTimeline, ChunkTimelineChunk,
+    ChunkTimelineId, ChunkTimelinePrecision, ChunkTimelineSummary, ContentDifficultyProfile,
+    CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind, DetectedPhone, DiagnosisKind,
+    DictionaryEntry, DictionaryEntryId, DictionaryLookupBundle, DictionaryProviderResult,
+    ExternalVocabularyImport, ExternalVocabularyImportSummary, FitEvidenceGrade, HuntingCandidate,
+    HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, JudgmentAdjudication, L1DiagnosisContext, L1DiagnosisHint,
+    L1DiagnosisSpan, L1DiagnosisSupport, LISTENING_CONFIDENCE_TASK, LLTIMELINE_SCHEMA_V1,
+    LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator, LLTimelineId, LLTimelineMedia,
+    LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment, LLTimelineToken, LanguageCode,
+    LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventId,
+    LearningEventKind, LearningEventSubject, LearningEventSubjectKind, LearningObservation,
+    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalObservationId,
+    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, LexicalUnit,
+    ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId,
+    MeaningFitInputs, MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent,
+    ObservationOrigin, ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId,
+    PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId,
+    PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
+    PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeItem, PracticeItemId,
+    PracticeKind, PracticeMode, PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget,
+    PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, ProductionCorpusDocument,
+    ProductionCorpusEntry, ProductionCorpusHit, PronunciationProviderInfo, ReadingPosition,
+    RealtimeConversationSession as DomainRealtimeConversationSession,
+    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
+    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecognitionEvidenceId,
+    RecognitionEvidenceSourceKind, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
+    ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId,
+    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis, SentencePronunciation,
+    SoundFitCalibration, SoundFitInputs, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
+    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis,
+    TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
+    WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
+    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    WritingFindingDispositionId, apply_sound_fit_calibration, content_fit_fingerprint,
+    learning_observation_id, meaning_fit, normalize_lemma, observation_spec_for_marking,
+    observation_spec_for_practice, observation_spec_for_reading_marking,
+    observation_spec_for_review, observation_spec_for_speaking_production,
+    observation_spec_for_upgrade_confirmation, projection_proposal_v1, sound_fit,
+    sound_fit_calibration_outcome, validate_syntactic_analysis,
+};
 use serde::Serialize;
 
 mod chunks;
@@ -16,45 +64,68 @@ mod error;
 mod hunting;
 mod learner_profile;
 mod lexical;
-mod llm_provider;
 mod listening;
+mod llm_provider;
 mod media;
+mod personal_expression;
 mod phones;
 mod phonetic_fixture;
 mod practice;
+mod production_corpus;
+mod projection_review;
 mod pronunciation;
 mod pronunciation_providers;
 mod providers;
+mod reading;
+mod realtime_conversation;
 mod recording;
 mod repositories;
 mod secret_store;
+mod semantic_embedding;
 mod semantic_task;
 mod sense_groups;
+mod speech_synthesis;
 mod subtitles;
+mod syntactic_consumers;
 mod transcription_pipeline;
 mod util;
 mod vocabulary;
 mod word_timelines;
 
 pub use coach_dashboard::{
-    CoachChannelStatus, CoachChannelSummary, CoachDashboard, CoachEvidenceItem,
-    CoachMaterialInsight, CoachMetric, CoachSuggestion,
+    CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
+    CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
+    CoachSuggestion, CoachSuggestionDestination,
 };
+pub use dictionary::DictionaryUseCases;
 pub use dto::*;
 pub use error::ApplicationError;
-pub use learner_profile::LearnerProfileView;
+pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
+pub use lexical::LexicalLearningUseCases;
+pub use llm_provider::LlmProviderUseCases;
+pub use media::MediaAnalysisUseCases;
+pub use personal_expression::PersonalExpressionUseCases;
+pub use practice::PracticeUseCases;
+pub use production_corpus::ProductionCorpusUseCases;
+pub use projection_review::ProjectionReviewUseCases;
+pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
 pub use providers::*;
+pub use reading::ReadingUseCases;
+pub use realtime_conversation::*;
+pub use recording::RecordingUseCases;
 pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
+pub use semantic_embedding::*;
+pub use semantic_task::SemanticUseCases;
+pub use speech_synthesis::*;
+pub use syntactic_consumers::*;
 pub use util::now_ms;
 pub(crate) use util::{
     clean_optional, clean_required, normalize_american_english, normalize_phrase,
     phrase_candidates, require_text,
 };
 pub(crate) use vocabulary::ObservationContext;
-
-const DICTIONARY_CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ForcedAlignRequest {
@@ -79,57 +150,173 @@ pub struct AppServices {
     pub(crate) progress: Arc<dyn PlaybackProgressRepository>,
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
-    pub(crate) timelines: Arc<dyn TimelineResourceRepository>,
+    pub(crate) word_timelines: Arc<dyn WordTimelineRepository>,
+    pub(crate) chunk_timelines: Arc<dyn ChunkTimelineRepository>,
+    pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
+    pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
-    pub(crate) learning_assets: Arc<dyn LearningAssetRepository>,
+    pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
+    pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
+    pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
+    pub(crate) lexical_content: Arc<dyn LexicalContentRepository>,
+    pub(crate) vocabulary_assets: Arc<dyn VocabularyAssetRepository>,
     pub(crate) practice: Arc<dyn PracticeRepository>,
-    pub(crate) review: Arc<dyn ReviewRepository>,
+    pub(crate) review_queue: Arc<dyn ReviewQueueRepository>,
+    pub(crate) hunting: Arc<dyn HuntingRepository>,
+    pub(crate) recognition_upgrades: Arc<dyn RecognitionUpgradeRepository>,
     pub(crate) learning_events: Arc<dyn LearningEventRepository>,
     pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
     pub(crate) recordings: Arc<dyn RecordingRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) learner_profiles: Arc<dyn LearnerProfileRepository>,
+    pub(crate) reading_positions: Arc<dyn ReadingPositionRepository>,
     pub(crate) coach_dashboard: Arc<dyn CoachDashboardRepository>,
     pub(crate) semantic_tasks: Arc<dyn SemanticTaskRepository>,
+    pub(crate) production_corpus: Arc<dyn ProductionCorpusRepository>,
+    pub(crate) personal_expression: Arc<dyn PersonalExpressionRepository>,
     pub(crate) llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
+    pub(crate) realtime_conversations: Arc<dyn RealtimeConversationRepository>,
+    pub(crate) semantic_embedding_index: Arc<dyn SemanticEmbeddingIndexRepository>,
+    pub(crate) embedding_provider: Arc<dyn EmbeddingProvider>,
     pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     pub(crate) pronunciation_providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
 }
 
 impl AppServices {
+    pub fn practice_learning(&self) -> PracticeUseCases {
+        PracticeUseCases::from_services(self)
+    }
+
+    pub fn media_analysis(&self) -> MediaAnalysisUseCases {
+        MediaAnalysisUseCases::from_services(self)
+    }
+
+    pub fn lexical_learning(&self) -> LexicalLearningUseCases {
+        LexicalLearningUseCases::from_services(self)
+    }
+
+    pub fn pronunciation(&self) -> PronunciationUseCases {
+        PronunciationUseCases::new(
+            self.pronunciations.clone(),
+            self.subtitle_tracks.clone(),
+            self.word_timelines.clone(),
+            self.pronunciation_providers.clone(),
+        )
+    }
+
+    pub fn recordings(&self) -> RecordingUseCases {
+        RecordingUseCases::new(
+            self.recordings.clone(),
+            self.practice.clone(),
+            self.learning_events.clone(),
+        )
+    }
+
+    pub fn dictionary(&self) -> DictionaryUseCases {
+        DictionaryUseCases::new(self.dictionary.clone())
+    }
+
+    pub fn learner_profile(&self) -> LearnerProfileUseCases {
+        LearnerProfileUseCases::new(self.learner_profiles.clone())
+    }
+
+    pub fn reading(&self) -> ReadingUseCases {
+        ReadingUseCases::new(self.reading_positions.clone())
+    }
+
+    pub fn llm_providers(&self) -> LlmProviderUseCases {
+        LlmProviderUseCases::new(self.llm_provider_profiles.clone())
+    }
+
+    pub fn realtime_conversations(&self) -> RealtimeConversationUseCases {
+        RealtimeConversationUseCases::new(self.realtime_conversations.clone())
+    }
+
+    pub fn semantic(&self) -> SemanticUseCases {
+        SemanticUseCases::new(self.semantic_tasks.clone())
+    }
+
+    pub fn production_corpus(&self) -> ProductionCorpusUseCases {
+        ProductionCorpusUseCases::from_services(self)
+    }
+
+    pub fn personal_expression(&self) -> PersonalExpressionUseCases {
+        PersonalExpressionUseCases::new(self.personal_expression.clone())
+    }
+
+    pub fn projection_review(&self) -> ProjectionReviewUseCases {
+        ProjectionReviewUseCases::new(
+            self.lexical_capabilities.clone(),
+            self.learning_observations.clone(),
+            self.lexical_entries.clone(),
+        )
+    }
+
+    pub fn semantic_embedding(&self) -> SemanticEmbeddingUseCases {
+        SemanticEmbeddingUseCases::from_services(self)
+    }
+
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
         progress: Arc<dyn PlaybackProgressRepository>,
         subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
         pronunciations: Arc<dyn PronunciationRepository>,
-        timelines: Arc<dyn TimelineResourceRepository>,
+        timelines: Arc<R>,
         lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
         dictionary: Arc<dyn DictionaryCacheRepository>,
-        learning_assets: Arc<dyn LearningAssetRepository>,
-    ) -> Self {
+        learning_assets: Arc<L>,
+    ) -> Self
+    where
+        R: WordTimelineRepository
+            + ChunkTimelineRepository
+            + SenseGroupRepository
+            + PhoneTimelineRepository
+            + 'static,
+        L: LexicalCapabilityRepository
+            + LexicalEntryRepository
+            + LearningObservationRepository
+            + LexicalContentRepository
+            + VocabularyAssetRepository
+            + 'static,
+    {
         Self {
             media,
             progress,
             subtitle_tracks,
             pronunciations,
-            timelines,
+            word_timelines: timelines.clone(),
+            chunk_timelines: timelines.clone(),
+            sense_groups: timelines.clone(),
+            phone_timelines: timelines,
             lltimeline_resources,
             dictionary,
-            learning_assets,
+            lexical_capabilities: learning_assets.clone(),
+            lexical_entries: learning_assets.clone(),
+            learning_observations: learning_assets.clone(),
+            lexical_content: learning_assets.clone(),
+            vocabulary_assets: learning_assets,
             practice: Arc::new(DisabledLearningLoopRepository),
-            review: Arc::new(DisabledLearningLoopRepository),
+            review_queue: Arc::new(DisabledLearningLoopRepository),
+            hunting: Arc::new(DisabledLearningLoopRepository),
+            recognition_upgrades: Arc::new(DisabledLearningLoopRepository),
             learning_events: Arc::new(DisabledLearningLoopRepository),
             listening_inbox: Arc::new(DisabledLearningLoopRepository),
             recordings: Arc::new(DisabledLearningLoopRepository),
             corpus: Arc::new(DisabledCorpusIndexRepository),
             difficulty: Arc::new(DisabledDifficultyRepository),
             learner_profiles: Arc::new(DisabledLearnerProfileRepository),
+            reading_positions: Arc::new(DisabledReadingPositionRepository),
             coach_dashboard: Arc::new(DisabledCoachDashboardRepository),
             semantic_tasks: Arc::new(DisabledSemanticTaskRepository),
+            production_corpus: Arc::new(DisabledProductionCorpusRepository),
+            personal_expression: Arc::new(DisabledPersonalExpressionRepository),
             llm_provider_profiles: Arc::new(DisabledLlmProviderProfileRepository),
+            realtime_conversations: Arc::new(DisabledRealtimeConversationRepository),
+            semantic_embedding_index: Arc::new(DisabledSemanticEmbeddingIndexRepository),
+            embedding_provider: Arc::new(UnavailableEmbeddingProvider),
             lexical_normalizers: Arc::new(Vec::new()),
             pronunciation_providers: Arc::new(Vec::new()),
         }
@@ -143,15 +330,20 @@ impl AppServices {
         self
     }
 
-    pub fn with_learning_loop_repositories(
+    pub fn with_learning_loop_repositories<R>(
         mut self,
         practice: Arc<dyn PracticeRepository>,
-        review: Arc<dyn ReviewRepository>,
+        review: Arc<R>,
         learning_events: Arc<dyn LearningEventRepository>,
         listening_inbox: Arc<dyn ListeningInboxRepository>,
-    ) -> Self {
+    ) -> Self
+    where
+        R: ReviewQueueRepository + HuntingRepository + RecognitionUpgradeRepository + 'static,
+    {
         self.practice = practice;
-        self.review = review;
+        self.review_queue = review.clone();
+        self.hunting = review.clone();
+        self.recognition_upgrades = review;
         self.learning_events = learning_events;
         self.listening_inbox = listening_inbox;
         self
@@ -180,6 +372,14 @@ impl AppServices {
         self
     }
 
+    pub fn with_reading_position_repository(
+        mut self,
+        reading_positions: Arc<dyn ReadingPositionRepository>,
+    ) -> Self {
+        self.reading_positions = reading_positions;
+        self
+    }
+
     pub fn with_semantic_task_repository(
         mut self,
         semantic_tasks: Arc<dyn SemanticTaskRepository>,
@@ -188,11 +388,45 @@ impl AppServices {
         self
     }
 
+    pub fn with_production_corpus_repository(
+        mut self,
+        production_corpus: Arc<dyn ProductionCorpusRepository>,
+    ) -> Self {
+        self.production_corpus = production_corpus;
+        self
+    }
+
+    pub fn with_personal_expression_repository(
+        mut self,
+        repository: Arc<dyn PersonalExpressionRepository>,
+    ) -> Self {
+        self.personal_expression = repository;
+        self
+    }
+
     pub fn with_llm_provider_profile_repository(
         mut self,
         llm_provider_profiles: Arc<dyn LlmProviderProfileRepository>,
     ) -> Self {
         self.llm_provider_profiles = llm_provider_profiles;
+        self
+    }
+
+    pub fn with_realtime_conversation_repository(
+        mut self,
+        repository: Arc<dyn RealtimeConversationRepository>,
+    ) -> Self {
+        self.realtime_conversations = repository;
+        self
+    }
+
+    pub fn with_semantic_embedding(
+        mut self,
+        repository: Arc<dyn SemanticEmbeddingIndexRepository>,
+        provider: Arc<dyn EmbeddingProvider>,
+    ) -> Self {
+        self.semantic_embedding_index = repository;
+        self.embedding_provider = provider;
         self
     }
 
@@ -210,6 +444,35 @@ impl AppServices {
     ) -> Self {
         self.pronunciation_providers = Arc::new(providers);
         self
+    }
+}
+
+struct DisabledSemanticEmbeddingIndexRepository;
+
+impl SemanticEmbeddingIndexRepository for DisabledSemanticEmbeddingIndexRepository {
+    fn replace_semantic_embedding_index(
+        &self,
+        _model_fingerprint: &str,
+        _records: &[domain::SemanticEmbeddingIndexRecord],
+    ) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "semantic embedding index repository is not configured".into(),
+        ))
+    }
+
+    fn list_semantic_embedding_records(
+        &self,
+        _model_fingerprint: &str,
+    ) -> Result<Vec<domain::SemanticEmbeddingIndexRecord>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn semantic_embedding_index_summary(&self) -> Result<Vec<(String, u32)>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn delete_semantic_embedding_index(&self) -> Result<(), ApplicationError> {
+        Ok(())
     }
 }
 
@@ -246,6 +509,28 @@ impl LearnerProfileRepository for DisabledLearnerProfileRepository {
     }
 }
 
+/// Reading positions degrade like learner profiles: reads answer `None`
+/// (fresh start), writes error so a missing store is never silently lossy.
+struct DisabledReadingPositionRepository;
+
+impl ReadingPositionRepository for DisabledReadingPositionRepository {
+    fn save_reading_position(
+        &self,
+        _position: &ReadingPosition,
+    ) -> Result<ReadingPosition, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "reading position repository is not configured".into(),
+        ))
+    }
+
+    fn get_reading_position(
+        &self,
+        _track_id: &SubtitleTrackId,
+    ) -> Result<Option<ReadingPosition>, ApplicationError> {
+        Ok(None)
+    }
+}
+
 /// Semantic tasks require configured persistence: silently accepting facts
 /// would lose evidence, so every method errors instead of degrading.
 struct DisabledSemanticTaskRepository;
@@ -273,6 +558,18 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
         Err(Self::disabled())
     }
 
+    fn find_semantic_rubric_by_source(
+        &self,
+        _media_id: Option<&MediaId>,
+        _start_ms: u64,
+        _end_ms: u64,
+        _purpose: SemanticTaskKind,
+        _response_language: &LanguageCode,
+        _source_sha256: &str,
+    ) -> Result<Option<SemanticRubric>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
     fn save_semantic_attempt(
         &self,
         _attempt: &SemanticTaskAttempt,
@@ -290,6 +587,13 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
     fn list_semantic_attempts_for_rubric(
         &self,
         _rubric_id: &SemanticRubricId,
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        _kinds: &[SemanticTaskKind],
     ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
         Err(Self::disabled())
     }
@@ -328,6 +632,66 @@ impl SemanticTaskRepository for DisabledSemanticTaskRepository {
     ) -> Result<Vec<JudgmentAdjudication>, ApplicationError> {
         Err(Self::disabled())
     }
+
+    fn save_writing_feedback_finding(
+        &self,
+        _finding: &WritingFeedbackFinding,
+    ) -> Result<WritingFeedbackFinding, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_writing_feedback_finding(
+        &self,
+        _id: &WritingFeedbackFindingId,
+    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_writing_feedback_findings(
+        &self,
+        _attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_writing_finding_disposition(
+        &self,
+        _disposition: &WritingFindingDisposition,
+    ) -> Result<WritingFindingDisposition, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_writing_finding_disposition(
+        &self,
+        _id: &WritingFindingDispositionId,
+    ) -> Result<Option<WritingFindingDisposition>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_writing_finding_dispositions(
+        &self,
+        _finding_id: &WritingFeedbackFindingId,
+    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn upsert_writing_draft(
+        &self,
+        _draft: &WritingDraft,
+    ) -> Result<WritingDraft, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_writing_draft(
+        &self,
+        _rubric_id: &SemanticRubricId,
+    ) -> Result<Option<WritingDraft>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn delete_writing_draft(&self, _rubric_id: &SemanticRubricId) -> Result<(), ApplicationError> {
+        Err(Self::disabled())
+    }
 }
 
 impl DisabledSemanticTaskRepository {
@@ -361,11 +725,202 @@ impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
         Ok(Vec::new())
     }
 
-    fn delete_provider_profile(
+    fn delete_provider_profile(&self, _id: &LlmProviderProfileId) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+}
+
+struct DisabledRealtimeConversationRepository;
+
+impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
+    fn upsert_realtime_profile(
         &self,
-        _id: &LlmProviderProfileId,
+        _profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_profile(
+        &self,
+        _id: &RealtimeProviderProfileId,
+    ) -> Result<Option<RealtimeProviderProfile>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_realtime_profile(
+        &self,
+        _id: &RealtimeProviderProfileId,
     ) -> Result<(), ApplicationError> {
         Ok(())
+    }
+    fn save_realtime_session(
+        &self,
+        _session: &DomainRealtimeConversationSession,
+    ) -> Result<DomainRealtimeConversationSession, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_session(
+        &self,
+        _id: &RealtimeConversationSessionId,
+    ) -> Result<Option<DomainRealtimeConversationSession>, ApplicationError> {
+        Ok(None)
+    }
+    fn save_realtime_turn(
+        &self,
+        _turn: &RealtimeConversationTurn,
+    ) -> Result<RealtimeConversationTurn, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn get_realtime_turn(
+        &self,
+        _id: &RealtimeConversationTurnId,
+    ) -> Result<Option<RealtimeConversationTurn>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_realtime_turns(
+        &self,
+        _session_id: &RealtimeConversationSessionId,
+    ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
+
+struct DisabledProductionCorpusRepository;
+
+struct DisabledPersonalExpressionRepository;
+
+impl PersonalExpressionRepository for DisabledPersonalExpressionRepository {
+    fn create_pattern(
+        &self,
+        _asset: &domain::UserSentencePatternAsset,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn append_pattern_version(
+        &self,
+        _pattern_id: &domain::UserSentencePatternId,
+        _version: &domain::UserSentencePatternVersion,
+        _updated_at_ms: u64,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn get_pattern(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError> {
+        Ok(None)
+    }
+    fn list_patterns(
+        &self,
+        _language: Option<&LanguageCode>,
+        _query: Option<&str>,
+    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn list_pattern_versions(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn delete_pattern(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<bool, ApplicationError> {
+        Ok(false)
+    }
+    fn save_personal_expression_attempt(
+        &self,
+        _attempt: &domain::PersonalExpressionAttempt,
+    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "personal expression repository is not configured".into(),
+        ))
+    }
+    fn list_personal_expression_attempts(
+        &self,
+        _id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError> {
+        Ok(Vec::new())
+    }
+}
+
+impl ProductionCorpusRepository for DisabledProductionCorpusRepository {
+    fn replace_production_entries_for_rubric(
+        &self,
+        _rubric_id: &SemanticRubricId,
+        _documents: &[ProductionCorpusDocument],
+        _entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn replace_all_production_entries(
+        &self,
+        _documents: &[ProductionCorpusDocument],
+        _entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn replace_production_entries_for_realtime_turn(
+        &self,
+        _turn_id: &RealtimeConversationTurnId,
+        _documents: &[ProductionCorpusDocument],
+        _entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+
+    fn list_production_entries_by_key(
+        &self,
+        _language: &LanguageCode,
+        _normalized_key: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn search_production_documents(
+        &self,
+        _language: &LanguageCode,
+        _query: &str,
+        _limit: u32,
+        _offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
+        Ok(Vec::new())
+    }
+
+    fn production_corpus_summary(
+        &self,
+        _language: &LanguageCode,
+        _channel: domain::ProductionChannel,
+    ) -> Result<domain::ProductionCorpusSummary, ApplicationError> {
+        Ok(domain::ProductionCorpusSummary {
+            document_count: 0,
+            token_count: 0,
+            lemma_count: 0,
+        })
+    }
+
+    fn list_production_gap_candidates(
+        &self,
+        _language: &LanguageCode,
+        _channel: domain::ProductionChannel,
+    ) -> Result<Vec<domain::ProductionGapCandidateFacts>, ApplicationError> {
+        Ok(Vec::new())
     }
 }
 
@@ -550,6 +1105,9 @@ pub(crate) fn validate_word_timeline_words(
     Ok(values.into_iter().map(|(_, timing)| timing).collect())
 }
 
+// Construction requires complete algorithm provenance and optional parent/
+// metrics together; an options bag would make incomplete snapshots possible.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_word_timeline(
     track: &SubtitleTrack,
     words: Vec<WordTiming>,
@@ -631,7 +1189,7 @@ pub(crate) fn build_word_timeline(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn save_word_timeline_snapshot_with_metrics(
-    services: &AppServices,
+    services: &MediaAnalysisUseCases,
     track_id: &SubtitleTrackId,
     timings: &[WordTiming],
     algorithm_id: &str,
@@ -1157,11 +1715,11 @@ pub(crate) fn word_timing_cache_is_usable(values: &[WordTiming]) -> bool {
 
 pub(crate) fn chunk_partition_config_for_track_source(
     source: &str,
-) -> speech_analysis::chunk_partition::ChunkPartitionConfig {
+) -> speech_analysis::chunking::ChunkPartitionConfig {
     if source.starts_with("ASR-") {
-        speech_analysis::chunk_partition::ChunkPartitionConfig::for_asr_generated_subtitle()
+        speech_analysis::chunking::ChunkPartitionConfig::for_asr_generated_subtitle()
     } else {
-        speech_analysis::chunk_partition::ChunkPartitionConfig::default()
+        speech_analysis::chunking::ChunkPartitionConfig::default()
     }
 }
 

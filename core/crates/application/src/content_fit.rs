@@ -1,8 +1,14 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CONTENT_FIT_ALGORITHM_VERSION, ColdStartWordCandidate,
+    ContentDifficultyProfile, FitEvidenceGrade, LanguageCode, LearningStatus, LexicalEntryKind,
+    MeaningFitInputs, MediaAnalysisUseCases, SoundFitInputs, SubtitleSentenceId, SubtitleTokenKind,
+    SubtitleTrack, SubtitleTrackId, WordTiming, apply_sound_fit_calibration,
+    content_fit_fingerprint, meaning_fit, now_ms, sound_fit, sound_fit_calibration_outcome,
+};
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     /// Cached read path: returns the stored profile when its fingerprint
     /// still matches the current inputs, otherwise recomputes and saves.
     /// The fingerprint check is cheap (no transcript normalization, no
@@ -44,10 +50,10 @@ impl AppServices {
         track: &SubtitleTrack,
         language: &LanguageCode,
     ) -> Result<String, ApplicationError> {
-        let word_timeline = self.timelines.active_word_timeline(track_id)?;
-        let chunk_timeline = self.timelines.active_chunk_timeline(track_id)?;
+        let word_timeline = self.word_timelines.active_word_timeline(track_id)?;
+        let chunk_timeline = self.chunk_timelines.active_chunk_timeline(track_id)?;
         let (vocab_count, vocab_watermark_ms) = self
-            .learning_assets
+            .lexical_entries
             .lexical_vocabulary_watermark(language)?;
         // The calibration watermark makes new usage feedback invalidate the
         // cached profile; the record itself is durable evidence and is never
@@ -118,6 +124,7 @@ impl AppServices {
                     Some(cached) => cached.clone(),
                     None => {
                         let normalized = self
+                            .lexical_learning()
                             .normalize_lexical_form(language.as_str(), &token.text)?
                             .normalized;
                         let value = (!normalized.is_empty()).then_some(normalized);
@@ -135,7 +142,7 @@ impl AppServices {
         }
 
         let keys: Vec<String> = token_counts_by_key.keys().cloned().collect();
-        let entries = self.learning_assets.lexical_entries_by_keys(
+        let entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Word,
             &keys,
@@ -269,6 +276,7 @@ impl AppServices {
                     Some(cached) => cached.clone(),
                     None => {
                         let normalized = self
+                            .lexical_learning()
                             .normalize_lexical_form(language.as_str(), &token.text)?
                             .normalized;
                         let value = (!normalized.is_empty()).then_some(normalized);
@@ -291,7 +299,7 @@ impl AppServices {
         }
 
         let keys: Vec<String> = token_counts_by_key.keys().cloned().collect();
-        let entries = self.learning_assets.lexical_entries_by_keys(
+        let entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Word,
             &keys,
@@ -355,6 +363,7 @@ fn speech_rate_wpm(words: &[WordTiming]) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::TimingSource;
 
     fn timing(sentence: &SubtitleSentenceId, index: u32, start_ms: u64, end_ms: u64) -> WordTiming {
         WordTiming {

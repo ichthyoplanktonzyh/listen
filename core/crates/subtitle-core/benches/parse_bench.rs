@@ -1,5 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use subtitle_core::*;
+use subtitle_core::{normalize_display, parse_srt, parse_webvtt, tokenize_english};
 
 fn small_srt() -> &'static str {
     include_str!("../../../testdata/subtitles/timeline.srt")

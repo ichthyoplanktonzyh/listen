@@ -1,6 +1,6 @@
 # LLPlayerNext — 技术栈
 
-> 最后更新：2026-07-11
+> 最后更新：2026-07-13
 
 ## 1. 总览
 
@@ -15,11 +15,12 @@
 | 序列化 | Serde + serde_json | 1 |
 | 生产管线 | Python | 3.11 |
 | ASR/对齐 | WhisperX + torchaudio MMS_FA | 研究模式 |
+| 句法研究 | Stanza 1.13.0 / spaCy 3.8.13 | 隔离 JSONL sidecar，模型不随产品分发 |
 
 ## 2. Rust Workspace
 
 ```
-workspace: Cargo.toml (9 crates, resolver 2)
+workspace: Cargo.toml (11 crates, resolver 2)
 ├── domain              (数据类型，无外部依赖)
 ├── api-events          (serde, serde_json)
 ├── subtitle-core       (domain, sha2, hex, thiserror + proptest)
@@ -27,6 +28,7 @@ workspace: Cargo.toml (9 crates, resolver 2)
 ├── speech-analysis     (domain, hound, serde, serde_json, thiserror)
 ├── application         (domain, diagnosis-core, subtitle-core, speech-analysis, async-trait, serde)
 ├── dictionary-provider (application, domain, csv, reqwest, async-trait)
+├── syntactic-provider  (application, domain, tokio, serde, async-trait)
 ├── persistence-sqlite  (application, domain, rusqlite, serde_json, sha2)
 └── api-http (bin)     (application, api-events, speech-analysis, dictionary-provider, domain,
                          persistence-sqlite, axum, tokio, reqwest, tower, rand, async-stream)
@@ -88,6 +90,8 @@ workspace: Cargo.toml (9 crates, resolver 2)
 | 生产管线 venv | `~/Library/Caches/LLPlayerNext/research/timeline-production/` |
 | 强制对齐 venv | `~/Library/Caches/LLPlayerNext/research/forced-align/` |
 | ZIPA 研究 venv | `~/Library/Caches/LLPlayerNext/research/zipa/`（实验） |
+| 句法研究 venv | `~/Library/Caches/LLPlayerNext/research/syntactic-analysis/`（实验，模型可选） |
+| 可选 spaCy 产品 capability | `~/Library/Application Support/LLPlayerNext/syntax/spacy-3.8.13-en_core_web_sm-3.8.0/`（仅显式安装） |
 
 ### 依赖
 
@@ -100,13 +104,20 @@ torch==2.9.1, torchaudio==2.9.1, soundfile==0.14.0
 
 # 评估
 datasets (可选，用于 TIMIT/Buckeye)
+
+# 句法 Provider 研究 (requirements.txt)
+stanza==1.13.0, spacy==3.8.13, psutil==7.2.2
+
+# 可选句法产品 capability (requirements-spacy-product.txt)
+fully pinned spaCy 3.8.13 dependency closure + en_core_web_sm 3.8.0 wheel hash
 ```
 
 ### 脚本清单
 
 | 脚本 | 功能 |
 |---|---|
-| `scripts/timeline-production/production_pipeline.py` | 核心生产 CLI（doctor/prepare/run-whisperx/produce） |
+| `scripts/timeline-production/production_pipeline.py` | 薄生产 CLI（parser/doctor/dispatch） |
+| `scripts/timeline-production/production_pipeline_*.py` | I/O、声学 cue、质量报告、WhisperX 转换、音频准备、对齐与生产编排 modules |
 | `scripts/timeline-production/setup-venv.sh` | 生产环境安装 |
 | `scripts/forced-align/align-cli.py` | MMS_FA 强制对齐 sidecar |
 | `scripts/forced-align/setup-venv.sh` | 对齐环境安装 |
@@ -115,13 +126,22 @@ datasets (可选，用于 TIMIT/Buckeye)
 | `scripts/phonetic-eval.py` | 音素分析评估引擎（实验） |
 | `scripts/phonetic-research-adapter.py` | 音素研究适配器（实验） |
 | `scripts/zipa-ctc-onnx-research.py` | ZIPA CTC ONNX 研究脚本（实验） |
+| `scripts/syntactic-analysis/syntax-sidecar.py` | Stanza/spaCy provider-neutral JSONL `jsonl-v2` sidecar；产品 composition 只选择 spaCy，并由 App lifecycle manager 长驻复用 |
+| `scripts/syntactic-analysis/setup-venv.sh` | 隔离 runtime；模型下载须显式 opt-in |
+| `scripts/syntactic-analysis/setup-spacy-product.sh` | 安装、复制 sidecar、probe 并校验可选 spaCy 产品 capability；不修改 base bundle |
+
+Phase 3.9.3 的普通用户产品路径不再依赖 setup 脚本或环境变量。App 将 pinned spaCy runtime/model
+按需安装到 `~/Library/Application Support/listen/syntax/`，同目录保存 capability state；track syntax
+cache 位于其可重建 cache 子树。基础 bundle 只携带小型 installer manifest/sidecar 文本，runtime/model
+仍为 +0 bytes。
 
 ## 5. 数据库
 
 - **引擎**：SQLite（rusqlite bundled）
 - **位置**：`~/Library/Application Support/LLPlayerNext/llplayer.db`
-- **迁移**：33 个版本（0001 ~ 0033），自动迁移 + 预迁移备份
-- **关键表**：media_items, subtitle_tracks, subtitle_sentences, lexical_entries, lexical_occurrences, lexical_status_history, lexical_observations, practice_sessions, practice_items, practice_attempts, review_items, review_attempts, hunting_candidates, hunting_targets, recording_assets, learning_events, listening_inbox_items, word_timeline_runs, chunk_timeline_runs, phone_timeline_runs, lltimeline_resources, dictionary_cache, transcription_jobs, phonetic_analysis_jobs
+- **迁移**：39 个版本（0001 ~ 0039），自动迁移 + 预迁移备份
+- **关键表**：media_items, subtitle_tracks, subtitle_sentences, lexical_entries, lexical_occurrences, lexical_status_history, lexical_observations, practice_sessions, practice_items, practice_attempts, review_items, review_attempts, hunting_candidates, hunting_targets, recording_assets, learning_events, listening_inbox_items, word_timeline_runs, chunk_timeline_runs, phone_timeline_runs, lltimeline_resources, dictionary_cache, transcription_jobs, phonetic_analysis_jobs, semantic_task_attempts, production_corpus_documents, production_corpus_entries
+- **Writing 本地反馈**：`harper-core = 0.40.0`（Apache-2.0，离线 grammar/spelling finding；不评分）
 
 ## 6. 构建与测试
 
@@ -147,6 +167,7 @@ cd apps/desktop && flutter test         # Flutter 测试
 ```bash
 scripts/timeline-production/setup-venv.sh  # 安装生产环境
 scripts/forced-align/setup-venv.sh         # 安装对齐环境
+scripts/syntactic-analysis/setup-venv.sh   # 安装句法研究 runtime（默认不下载模型）
 python scripts/evaluate-word-timelines.py compare baseline.json candidate.json  # 评估
 ```
 
@@ -156,3 +177,11 @@ python scripts/evaluate-word-timelines.py compare baseline.json candidate.json  
 scripts/test.sh --full                   # 综合验证
 scripts/validate-contracts.sh            # 契约验证
 ```
+# Phase 3.15.8 stack delta (2026-07-16)
+
+- `embedding-provider`: FastEmbed 5.17.3 + ONNX Runtime (`ort` rc.12), rustls-only model/runtime
+  retrieval, local all-MiniLM-L6-v2 384-d adapter, plus an explicit OpenAI-compatible HTTP seam.
+- Installed local weights live outside the base bundle under application support. Measured cache is about
+  97 MB and hot max RSS about 203 MB on Apple Silicon; install is explicit and offline reuse is supported.
+- SQLite v42 BLOB + application cosine is the v1 vector store. No vector extension/database or ANN runtime
+  is added until personal-corpus scale measurements justify it.

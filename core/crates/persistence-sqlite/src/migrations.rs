@@ -10,8 +10,11 @@ use super::PersistenceError;
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
 // v33 belongs to Phase 3.8 recording_assets; v34 adds the Phase 3.9 learner
-// profile after it. v35 adds the Phase 3.11 semantic task fact layer.
-pub const MIGRATION_VERSION: u32 = 36;
+// profile after it. v35 adds the Phase 3.11 semantic task fact layer. v38 adds
+// Phase 3.15 append-only writing feedback and user disposition facts. v39 adds
+// the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
+// 3.15.7 realtime provider config and local session/turn facts.
+pub const MIGRATION_VERSION: u32 = 44;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -250,7 +253,97 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 36)?;
         tx.commit()?;
     }
+    if current < 37 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0037_reading_positions.sql"))?;
+        tx.pragma_update(None, "user_version", 37)?;
+        tx.commit()?;
+    }
+    if current < 38 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0038_writing_feedback.sql"))?;
+        tx.pragma_update(None, "user_version", 38)?;
+        tx.commit()?;
+    }
+    if current < 39 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0039_production_corpus.sql"))?;
+        tx.pragma_update(None, "user_version", 39)?;
+        tx.commit()?;
+    }
+    if current < 40 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0040_realtime_conversations.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 40)?;
+        tx.commit()?;
+    }
+    if current < 41 {
+        let tx = connection.unchecked_transaction()?;
+        // Several migration regression fixtures deliberately lower only
+        // `user_version` after constructing the latest schema. Do not rebuild
+        // an already-generalized corpus table as though it still had v39's
+        // `task_kind` column.
+        if !table_has_column(&tx, "production_corpus_documents", "activity_kind")? {
+            // Historical minimal-schema fixtures (and equivalently damaged
+            // databases) can contain the v30/v31 sense-folder triggers without
+            // their referenced v7 `lexical_occurrences` table. SQLite reparses
+            // every trigger during ALTER TABLE, so remove those unusable guards
+            // before rebuilding this unrelated projection.
+            if !table_has_column(&tx, "lexical_occurrences", "id")? {
+                tx.execute_batch(
+                    "DROP TRIGGER IF EXISTS validate_lexical_sense_folder_occurrence_parent;
+                     DROP TRIGGER IF EXISTS validate_lexical_sense_folder_occurrence_parent_update;",
+                )?;
+            }
+            tx.execute_batch(include_str!(
+                "../migrations/0041_production_corpus_sources.sql"
+            ))?;
+        }
+        tx.pragma_update(None, "user_version", 41)?;
+        tx.commit()?;
+    }
+    if current < 42 {
+        let tx = connection.unchecked_transaction()?;
+        // Historical regression fixtures lower only user_version after
+        // constructing the latest schema; do not recreate an existing v42
+        // projection in that artificial downgrade shape.
+        if !table_has_column(&tx, "semantic_embedding_index", "source_kind")? {
+            tx.execute_batch(include_str!(
+                "../migrations/0042_semantic_embedding_index.sql"
+            ))?;
+        }
+        tx.pragma_update(None, "user_version", 42)?;
+        tx.commit()?;
+    }
+    if current < 43 {
+        let tx = connection.unchecked_transaction()?;
+        if !table_has_column(&tx, "user_sentence_patterns", "asset_json")? {
+            tx.execute_batch(include_str!("../migrations/0043_personal_expression.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 43)?;
+        tx.commit()?;
+    }
+    if current < 44 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0044_projection_review.sql"))?;
+        tx.pragma_update(None, "user_version", 44)?;
+        tx.commit()?;
+    }
     Ok(())
+}
+
+fn table_has_column(
+    connection: &Connection,
+    table: &str,
+    column: &str,
+) -> Result<bool, PersistenceError> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(columns.iter().any(|name| name == column))
 }
 
 /// ADR 0017 decision 5: one channelized observation per legacy uncleared

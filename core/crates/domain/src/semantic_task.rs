@@ -26,7 +26,9 @@ pub enum SemanticTaskKind {
     L2Retelling,
     RoleReply,
     Dictogloss,
+    OneSentenceSummary,
     Summary,
+    OpinionResponse,
     PatternProduction,
 }
 
@@ -139,6 +141,21 @@ pub enum L1RetellingTrigger {
     Diagnosis,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeakingAssistanceLevel {
+    FullSentence,
+    Keywords,
+    NoText,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeakingRecallKind {
+    Immediate,
+    Delayed,
+}
+
 /// What the learner could access besides the assessed channel's input. The
 /// per-kind legality rules live in [`validate_semantic_attempt`], sourced from
 /// the evidence matrix §1/§2.
@@ -148,14 +165,27 @@ pub struct SemanticTaskConditions {
     pub audio_play_count: Option<u32>,
     pub notes_allowed: bool,
     pub l1_trigger: Option<L1RetellingTrigger>,
+    #[serde(default)]
+    pub speaking_assistance: Option<SpeakingAssistanceLevel>,
+    #[serde(default)]
+    pub speaking_recall: Option<SpeakingRecallKind>,
+    #[serde(default)]
+    pub prompt_snapshot: Option<String>,
 }
 
-/// One versioned learner response inside an attempt. Multiple revisions exist
-/// only for dictogloss (draft 1 / draft 2 against the same rubric).
+/// One versioned learner response inside an attempt. Writing tasks may carry
+/// multiple learner-authored revisions against the same rubric. Provider
+/// suggestions are deliberately a separate finding fact and can never enter
+/// this collection as if the learner wrote them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttemptResponse {
     /// 1-based, contiguous.
     pub revision: u32,
+    /// Immutable ASR output. User correction is stored in `transcript`; the
+    /// raw value remains separately traceable and is never overwritten.
+    /// Typed responses carry `None`.
+    #[serde(default)]
+    pub raw_transcript: Option<String>,
     pub transcript: String,
     pub source: ResponseTranscriptSource,
     pub recording_asset_id: Option<RecordingAssetId>,
@@ -309,7 +339,18 @@ pub fn semantic_task_attempt_id(
     let response_fingerprint = transcript_sha256(
         &responses
             .iter()
-            .map(|response| response.transcript.as_str())
+            .map(|response| {
+                format!(
+                    "{}\u{1e}{}\u{1e}{}",
+                    response.raw_transcript.as_deref().unwrap_or(""),
+                    response.transcript,
+                    response
+                        .recording_asset_id
+                        .as_ref()
+                        .map(RecordingAssetId::as_str)
+                        .unwrap_or("")
+                )
+            })
             .collect::<Vec<_>>()
             .join("\u{1f}"),
     );
@@ -451,8 +492,49 @@ pub fn validate_semantic_attempt(
         }
         _ => {}
     }
-    if attempt.responses.len() > 1 && attempt.kind != SemanticTaskKind::Dictogloss {
-        errors.push("multiple response revisions are only defined for dictogloss".into());
+    match attempt.kind {
+        SemanticTaskKind::RoleReply | SemanticTaskKind::PatternProduction => {
+            if attempt.conditions.speaking_assistance.is_none() {
+                errors
+                    .push("constructed prompt speaking must snapshot its assistance level".into());
+            }
+            if attempt
+                .conditions
+                .prompt_snapshot
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+            {
+                errors.push("constructed prompt speaking must preserve its prompt snapshot".into());
+            }
+        }
+        _ if attempt.conditions.speaking_assistance.is_some() => {
+            errors.push(
+                "speaking assistance is only defined for role_reply or pattern_production".into(),
+            );
+        }
+        _ => {}
+    }
+    match attempt.kind {
+        SemanticTaskKind::L2Retelling
+        | SemanticTaskKind::RoleReply
+        | SemanticTaskKind::PatternProduction => {
+            if attempt.conditions.speaking_recall.is_none() {
+                errors.push("constructed speaking must record immediate or delayed recall".into());
+            }
+        }
+        _ if attempt.conditions.speaking_recall.is_some() => {
+            errors.push("speaking recall is only defined for constructed speaking".into());
+        }
+        _ => {}
+    }
+    let writing_kinds = [
+        SemanticTaskKind::Dictogloss,
+        SemanticTaskKind::OneSentenceSummary,
+        SemanticTaskKind::Summary,
+        SemanticTaskKind::OpinionResponse,
+    ];
+    if attempt.responses.len() > 1 && !writing_kinds.contains(&attempt.kind) {
+        errors.push("multiple response revisions are only defined for writing tasks".into());
     }
     if attempt.status == SemanticAttemptStatus::Completed && attempt.responses.is_empty() {
         errors.push("a completed attempt must carry at least one response".into());
@@ -464,17 +546,68 @@ pub fn validate_semantic_attempt(
         if response.language != rubric.response_language {
             errors.push("response language must match the rubric response language".into());
         }
+        if writing_kinds.contains(&attempt.kind)
+            && attempt.status == SemanticAttemptStatus::Completed
+            && response.transcript.trim().is_empty()
+        {
+            errors.push("a completed writing revision must not be empty".into());
+        }
         match response.source {
-            ResponseTranscriptSource::Asr if response.asr_reliability.is_none() => {
-                errors.push("asr responses must record reliability".into());
+            ResponseTranscriptSource::Asr => {
+                if response.asr_reliability.is_none() {
+                    errors.push("asr responses must record reliability".into());
+                }
+                if response.raw_transcript.is_none() {
+                    errors.push("asr responses must preserve the raw transcript".into());
+                }
             }
             ResponseTranscriptSource::Typed
-                if response.asr_reliability.is_some() || response.recording_asset_id.is_some() =>
+                if response.raw_transcript.is_some()
+                    || response.asr_reliability.is_some()
+                    || response.recording_asset_id.is_some() =>
             {
-                errors.push("typed responses carry no asr reliability or recording".into());
+                errors.push(
+                    "typed responses carry no raw transcript, asr reliability, or recording".into(),
+                );
             }
             _ => {}
         }
+        if matches!(
+            attempt.kind,
+            SemanticTaskKind::L2Retelling
+                | SemanticTaskKind::RoleReply
+                | SemanticTaskKind::PatternProduction
+        ) && (response.source != ResponseTranscriptSource::Asr
+            || response.recording_asset_id.is_none())
+        {
+            errors.push("constructed speaking responses require an ASR-linked recording".into());
+        }
+        if writing_kinds.contains(&attempt.kind)
+            && response.source != ResponseTranscriptSource::Typed
+        {
+            errors.push("writing revisions must be learner-typed text".into());
+        }
+    }
+    if attempt.kind == SemanticTaskKind::Dictogloss
+        && attempt
+            .conditions
+            .audio_play_count
+            .is_none_or(|count| count == 0)
+    {
+        errors.push("dictogloss must record at least one source playback".into());
+    }
+    if matches!(
+        attempt.kind,
+        SemanticTaskKind::OneSentenceSummary
+            | SemanticTaskKind::Summary
+            | SemanticTaskKind::OpinionResponse
+    ) && attempt
+        .conditions
+        .prompt_snapshot
+        .as_deref()
+        .is_none_or(|prompt| prompt.trim().is_empty())
+    {
+        errors.push("summary and opinion response must preserve the writing prompt".into());
     }
     if let Some(ended) = attempt.ended_at_ms
         && ended < attempt.started_at_ms
@@ -902,6 +1035,115 @@ mod tests {
         asr_without_reliability.responses[0].source = ResponseTranscriptSource::Asr;
         asr_without_reliability.responses[0].asr_reliability = None;
         assert!(validate_semantic_attempt(&asr_without_reliability, &fixture.rubric).is_err());
+
+        let mut corrected_asr = fixture.attempts[2].clone();
+        corrected_asr.responses[0].raw_transcript = Some("koi wire".into());
+        corrected_asr.responses[0].transcript = "Coy Wire".into();
+        corrected_asr.responses[0].asr_reliability = Some(AsrReliability::Suspect);
+        assert!(validate_semantic_attempt(&corrected_asr, &fixture.rubric).is_ok());
+
+        let mut missing_raw = corrected_asr;
+        missing_raw.responses[0].raw_transcript = None;
+        assert!(validate_semantic_attempt(&missing_raw, &fixture.rubric).is_err());
+
+        let mut role_rubric = fixture.rubric.clone();
+        role_rubric.purpose = SemanticTaskKind::RoleReply;
+        let mut role_reply = attempt;
+        role_reply.kind = SemanticTaskKind::RoleReply;
+        role_reply.conditions.l1_trigger = None;
+        role_reply.conditions.speaking_assistance = Some(SpeakingAssistanceLevel::Keywords);
+        role_reply.conditions.speaking_recall = Some(SpeakingRecallKind::Immediate);
+        role_reply.conditions.prompt_snapshot = Some("Reply to the shop clerk".into());
+        role_reply.responses[0].source = ResponseTranscriptSource::Asr;
+        role_reply.responses[0].raw_transcript = Some("I need two ticket".into());
+        role_reply.responses[0].transcript = "I need two tickets".into();
+        role_reply.responses[0].recording_asset_id =
+            Some(RecordingAssetId::parse("recording-role").unwrap());
+        role_reply.responses[0].asr_reliability = Some(AsrReliability::Suspect);
+        role_reply.responses[0].language = role_rubric.response_language.clone();
+        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_ok());
+
+        role_reply.conditions.speaking_recall = None;
+        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_err());
+        role_reply.conditions.speaking_recall = Some(SpeakingRecallKind::Immediate);
+        role_reply.conditions.speaking_assistance = None;
+        assert!(validate_semantic_attempt(&role_reply, &role_rubric).is_err());
+
+        let mut l1_with_speaking_recall = fixture.attempts[0].clone();
+        l1_with_speaking_recall.conditions.speaking_recall = Some(SpeakingRecallKind::Delayed);
+        assert!(validate_semantic_attempt(&l1_with_speaking_recall, &fixture.rubric).is_err());
+    }
+
+    #[test]
+    fn writing_revisions_are_typed_traceable_and_share_one_rubric() {
+        let fixture = fixture();
+        let mut rubric = fixture.rubric.clone();
+        rubric.purpose = SemanticTaskKind::OpinionResponse;
+        rubric.response_language = LanguageCode::parse("en").unwrap();
+
+        let first = AttemptResponse {
+            revision: 1,
+            raw_transcript: None,
+            transcript: "The speaker's proposal is useful, but it needs a smaller trial.".into(),
+            source: ResponseTranscriptSource::Typed,
+            recording_asset_id: None,
+            asr_reliability: None,
+            language: rubric.response_language.clone(),
+            recorded_at_ms: 20,
+        };
+        let mut second = first.clone();
+        second.revision = 2;
+        second.transcript =
+            "The proposal could help, but a smaller trial would reveal its hidden costs.".into();
+        second.recorded_at_ms = 30;
+        let mut attempt = SemanticTaskAttempt {
+            id: SemanticTaskAttemptId::parse("writing-opinion").unwrap(),
+            kind: SemanticTaskKind::OpinionResponse,
+            target: fixture.attempts[0].target.clone(),
+            anchors: fixture.attempts[0].anchors.clone(),
+            rubric_id: rubric.id.clone(),
+            rubric_version: rubric.version,
+            conditions: SemanticTaskConditions {
+                source_text_visible: true,
+                audio_play_count: None,
+                notes_allowed: true,
+                l1_trigger: None,
+                speaking_assistance: None,
+                speaking_recall: None,
+                prompt_snapshot: Some("Respond to the speaker's proposal.".into()),
+            },
+            responses: vec![first, second],
+            status: SemanticAttemptStatus::Completed,
+            started_at_ms: 10,
+            ended_at_ms: Some(40),
+        };
+        validate_semantic_attempt(&attempt, &rubric).unwrap();
+
+        attempt.responses[1].source = ResponseTranscriptSource::Asr;
+        attempt.responses[1].raw_transcript = Some("model supplied rewrite".into());
+        attempt.responses[1].asr_reliability = Some(AsrReliability::Reliable);
+        assert!(validate_semantic_attempt(&attempt, &rubric).is_err());
+    }
+
+    #[test]
+    fn dictogloss_requires_hidden_source_and_playback_snapshot() {
+        let fixture = fixture();
+        let mut rubric = fixture.rubric.clone();
+        rubric.purpose = SemanticTaskKind::Dictogloss;
+        rubric.response_language = LanguageCode::parse("en").unwrap();
+        let mut attempt = fixture.attempts[0].clone();
+        attempt.kind = SemanticTaskKind::Dictogloss;
+        attempt.rubric_id = rubric.id.clone();
+        attempt.conditions.l1_trigger = None;
+        attempt.conditions.audio_play_count = Some(1);
+        attempt.responses[0].language = rubric.response_language.clone();
+        validate_semantic_attempt(&attempt, &rubric).unwrap();
+
+        attempt.conditions.audio_play_count = Some(0);
+        assert!(validate_semantic_attempt(&attempt, &rubric).is_err());
+        attempt.conditions.audio_play_count = Some(1);
+        attempt.conditions.source_text_visible = true;
+        assert!(validate_semantic_attempt(&attempt, &rubric).is_err());
     }
 
     #[test]
@@ -941,6 +1183,10 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&SemanticTaskKind::PatternProduction).unwrap(),
             "\"pattern_production\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SemanticTaskKind::OpinionResponse).unwrap(),
+            "\"opinion_response\""
         );
         assert_eq!(
             serde_json::to_string(&PointVerdict::Uncertain).unwrap(),

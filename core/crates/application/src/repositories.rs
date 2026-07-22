@@ -1,4 +1,34 @@
-use domain::*;
+use domain::{
+    CapabilityFilter, CapabilityOverride, CapabilityProjection, ChunkTimeline, ChunkTimelineId,
+    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, DictionaryEntry,
+    HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, JudgmentAdjudication, LLTimelineArtifact, LLTimelineMetadata,
+    LanguageCode, LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent,
+    LearningEventKind, LearningEventSubjectKind, LearningObservation, LearningStatus,
+    LexicalCapability, LexicalCapabilityHistory, LexicalCapabilityProfile, LexicalEntry,
+    LexicalEntryDetails, LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalOccurrenceId,
+    LexicalSenseFolder, LexicalSenseId, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId, MediaAvailability, MediaId,
+    MediaItem, MediaTriageIntent, PhoneTimeline, PhoneTimelineId, PhoneticAnalysis,
+    PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
+    PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
+    PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
+    PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
+    ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ProjectionDecision,
+    ProjectionProposal, ProjectionProposalId, ReadingPosition, RealtimeConversationSession,
+    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
+    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
+    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
+    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
+    SenseGroupAnalysisId, SentencePronunciation, SoundFitCalibration, SubtitleSentence,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
+    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
+    WritingFindingDisposition, WritingFindingDispositionId,
+};
 
 use crate::{ApplicationError, LexicalSourceContext};
 
@@ -24,190 +54,6 @@ pub trait MediaRepository: Send + Sync {
         media_id: &MediaId,
     ) -> Result<Option<MediaTriageIntent>, ApplicationError>;
     fn list_triage_intents(&self) -> Result<Vec<(MediaId, MediaTriageIntent)>, ApplicationError>;
-}
-
-pub trait SubtitleRepository: Send + Sync {
-    fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError>;
-    fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError>;
-    fn list_tracks_for_media(
-        &self,
-        media_id: &MediaId,
-    ) -> Result<Vec<SubtitleTrack>, ApplicationError>;
-    fn set_track_status(
-        &self,
-        id: &SubtitleTrackId,
-        status: SubtitleTrackStatus,
-    ) -> Result<SubtitleTrack, ApplicationError>;
-    fn set_track_language(
-        &self,
-        id: &SubtitleTrackId,
-        language: &LanguageCode,
-    ) -> Result<SubtitleTrack, ApplicationError>;
-    fn delete_track(&self, id: &SubtitleTrackId)
-    -> Result<Option<SubtitleTrack>, ApplicationError>;
-    fn get_by_media_fingerprint(
-        &self,
-        media_id: &MediaId,
-        fingerprint: &str,
-    ) -> Result<Option<SubtitleTrack>, ApplicationError>;
-    fn get_sentence(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<SubtitleSentence>, ApplicationError>;
-    /// Learning language of the track a sentence belongs to, used to resolve the
-    /// language for diagnosis and phrase detection instead of assuming English.
-    /// `None` when the sentence is unknown or its track declares no language.
-    fn sentence_track_language(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<LanguageCode>, ApplicationError>;
-    /// Track a sentence belongs to; `None` when the sentence is unknown.
-    fn sentence_track_id(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<SubtitleTrackId>, ApplicationError>;
-    fn save_word_pronunciation(
-        &self,
-        language: &str,
-        accent: &str,
-        pronunciation: &WordPronunciation,
-        provider_id: &str,
-        provider_version: &str,
-    ) -> Result<(), ApplicationError>;
-    fn get_word_pronunciation(
-        &self,
-        language: &str,
-        accent: &str,
-        normalized_text: &str,
-        provider_id: &str,
-        provider_version: &str,
-    ) -> Result<Option<WordPronunciation>, ApplicationError>;
-    fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError>;
-    fn get_pronunciation(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<SentencePronunciation>, ApplicationError>;
-    fn save_word_timings(
-        &self,
-        sentence_id: &SubtitleSentenceId,
-        timings: &[WordTiming],
-    ) -> Result<(), ApplicationError>;
-    fn get_word_timings(
-        &self,
-        sentence_id: &SubtitleSentenceId,
-    ) -> Result<Vec<WordTiming>, ApplicationError>;
-    fn save_word_timeline(&self, timeline: &WordTimeline)
-    -> Result<WordTimeline, ApplicationError>;
-    fn list_word_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<WordTimeline>, ApplicationError>;
-    fn get_word_timeline(
-        &self,
-        id: &WordTimelineId,
-    ) -> Result<Option<WordTimeline>, ApplicationError>;
-    fn active_word_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<WordTimeline>, ApplicationError>;
-    fn activate_word_timeline(&self, id: &WordTimelineId)
-    -> Result<WordTimeline, ApplicationError>;
-    fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
-    fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
-    fn save_chunk_timeline(
-        &self,
-        timeline: &ChunkTimeline,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn list_chunk_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<ChunkTimeline>, ApplicationError>;
-    fn get_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
-    fn active_chunk_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
-    fn activate_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn archive_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn delete_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn save_sense_group_analysis(
-        &self,
-        analysis: &SenseGroupAnalysis,
-    ) -> Result<SenseGroupAnalysis, ApplicationError>;
-    fn list_sense_group_analyses(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError>;
-    fn get_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
-    fn active_sense_group_analysis(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
-    fn activate_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<SenseGroupAnalysis, ApplicationError>;
-    fn archive_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<SenseGroupAnalysis, ApplicationError>;
-    fn delete_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<SenseGroupAnalysis, ApplicationError>;
-    fn save_phone_timeline(
-        &self,
-        timeline: &PhoneTimeline,
-    ) -> Result<PhoneTimeline, ApplicationError>;
-    fn list_phone_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<PhoneTimeline>, ApplicationError>;
-    fn get_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<Option<PhoneTimeline>, ApplicationError>;
-    fn active_phone_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<PhoneTimeline>, ApplicationError>;
-    fn activate_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<PhoneTimeline, ApplicationError>;
-    fn archive_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<PhoneTimeline, ApplicationError>;
-    fn delete_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<PhoneTimeline, ApplicationError>;
-    fn save_lltimeline_resource(
-        &self,
-        track_id: &SubtitleTrackId,
-        metadata: &LLTimelineMetadata,
-        artifacts: &[LLTimelineArtifact],
-    ) -> Result<(), ApplicationError>;
-    fn get_lltimeline_resource(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
 }
 
 pub trait SubtitleTrackRepository: Send + Sync {
@@ -251,75 +97,6 @@ pub trait SubtitleTrackRepository: Send + Sync {
     ) -> Result<Option<SubtitleTrackId>, ApplicationError>;
 }
 
-impl<T: SubtitleRepository + ?Sized> SubtitleTrackRepository for T {
-    fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError> {
-        SubtitleRepository::save_track(self, track)
-    }
-
-    fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError> {
-        SubtitleRepository::get_track(self, id)
-    }
-
-    fn list_tracks_for_media(
-        &self,
-        media_id: &MediaId,
-    ) -> Result<Vec<SubtitleTrack>, ApplicationError> {
-        SubtitleRepository::list_tracks_for_media(self, media_id)
-    }
-
-    fn set_track_status(
-        &self,
-        id: &SubtitleTrackId,
-        status: SubtitleTrackStatus,
-    ) -> Result<SubtitleTrack, ApplicationError> {
-        SubtitleRepository::set_track_status(self, id, status)
-    }
-
-    fn set_track_language(
-        &self,
-        id: &SubtitleTrackId,
-        language: &LanguageCode,
-    ) -> Result<SubtitleTrack, ApplicationError> {
-        SubtitleRepository::set_track_language(self, id, language)
-    }
-
-    fn delete_track(
-        &self,
-        id: &SubtitleTrackId,
-    ) -> Result<Option<SubtitleTrack>, ApplicationError> {
-        SubtitleRepository::delete_track(self, id)
-    }
-
-    fn get_by_media_fingerprint(
-        &self,
-        media_id: &MediaId,
-        fingerprint: &str,
-    ) -> Result<Option<SubtitleTrack>, ApplicationError> {
-        SubtitleRepository::get_by_media_fingerprint(self, media_id, fingerprint)
-    }
-
-    fn get_sentence(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<SubtitleSentence>, ApplicationError> {
-        SubtitleRepository::get_sentence(self, id)
-    }
-
-    fn sentence_track_language(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<LanguageCode>, ApplicationError> {
-        SubtitleRepository::sentence_track_language(self, id)
-    }
-
-    fn sentence_track_id(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<SubtitleTrackId>, ApplicationError> {
-        SubtitleRepository::sentence_track_id(self, id)
-    }
-}
-
 pub trait PronunciationRepository: Send + Sync {
     fn save_word_pronunciation(
         &self,
@@ -344,56 +121,9 @@ pub trait PronunciationRepository: Send + Sync {
     ) -> Result<Option<SentencePronunciation>, ApplicationError>;
 }
 
-impl<T: SubtitleRepository + ?Sized> PronunciationRepository for T {
-    fn save_word_pronunciation(
-        &self,
-        language: &str,
-        accent: &str,
-        pronunciation: &WordPronunciation,
-        provider_id: &str,
-        provider_version: &str,
-    ) -> Result<(), ApplicationError> {
-        SubtitleRepository::save_word_pronunciation(
-            self,
-            language,
-            accent,
-            pronunciation,
-            provider_id,
-            provider_version,
-        )
-    }
-
-    fn get_word_pronunciation(
-        &self,
-        language: &str,
-        accent: &str,
-        normalized_text: &str,
-        provider_id: &str,
-        provider_version: &str,
-    ) -> Result<Option<WordPronunciation>, ApplicationError> {
-        SubtitleRepository::get_word_pronunciation(
-            self,
-            language,
-            accent,
-            normalized_text,
-            provider_id,
-            provider_version,
-        )
-    }
-
-    fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
-        SubtitleRepository::save_pronunciation(self, analysis)
-    }
-
-    fn get_pronunciation(
-        &self,
-        id: &SubtitleSentenceId,
-    ) -> Result<Option<SentencePronunciation>, ApplicationError> {
-        SubtitleRepository::get_pronunciation(self, id)
-    }
-}
-
-pub trait TimelineResourceRepository: Send + Sync {
+/// Word timing and word-timeline persistence change together because active
+/// selection and raw timing compatibility share one invariant.
+pub trait WordTimelineRepository: Send + Sync {
     fn save_word_timings(
         &self,
         sentence_id: &SubtitleSentenceId,
@@ -421,6 +151,10 @@ pub trait TimelineResourceRepository: Send + Sync {
     -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
+}
+
+/// Chunk partitions have an independent lifecycle.
+pub trait ChunkTimelineRepository: Send + Sync {
     fn save_chunk_timeline(
         &self,
         timeline: &ChunkTimeline,
@@ -449,6 +183,10 @@ pub trait TimelineResourceRepository: Send + Sync {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError>;
+}
+
+/// Sense-group analyses are versioned and activated as one resource family.
+pub trait SenseGroupRepository: Send + Sync {
     fn save_sense_group_analysis(
         &self,
         analysis: &SenseGroupAnalysis,
@@ -477,6 +215,10 @@ pub trait TimelineResourceRepository: Send + Sync {
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError>;
+}
+
+/// Phone timelines have their own activation and archival lifecycle.
+pub trait PhoneTimelineRepository: Send + Sync {
     fn save_phone_timeline(
         &self,
         timeline: &PhoneTimeline,
@@ -507,213 +249,6 @@ pub trait TimelineResourceRepository: Send + Sync {
     ) -> Result<PhoneTimeline, ApplicationError>;
 }
 
-impl<T: SubtitleRepository + ?Sized> TimelineResourceRepository for T {
-    fn save_word_timings(
-        &self,
-        sentence_id: &SubtitleSentenceId,
-        timings: &[WordTiming],
-    ) -> Result<(), ApplicationError> {
-        SubtitleRepository::save_word_timings(self, sentence_id, timings)
-    }
-
-    fn get_word_timings(
-        &self,
-        sentence_id: &SubtitleSentenceId,
-    ) -> Result<Vec<WordTiming>, ApplicationError> {
-        SubtitleRepository::get_word_timings(self, sentence_id)
-    }
-
-    fn save_word_timeline(
-        &self,
-        timeline: &WordTimeline,
-    ) -> Result<WordTimeline, ApplicationError> {
-        SubtitleRepository::save_word_timeline(self, timeline)
-    }
-
-    fn list_word_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<WordTimeline>, ApplicationError> {
-        SubtitleRepository::list_word_timelines(self, track_id)
-    }
-
-    fn get_word_timeline(
-        &self,
-        id: &WordTimelineId,
-    ) -> Result<Option<WordTimeline>, ApplicationError> {
-        SubtitleRepository::get_word_timeline(self, id)
-    }
-
-    fn active_word_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<WordTimeline>, ApplicationError> {
-        SubtitleRepository::active_word_timeline(self, track_id)
-    }
-
-    fn activate_word_timeline(
-        &self,
-        id: &WordTimelineId,
-    ) -> Result<WordTimeline, ApplicationError> {
-        SubtitleRepository::activate_word_timeline(self, id)
-    }
-
-    fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError> {
-        SubtitleRepository::archive_word_timeline(self, id)
-    }
-
-    fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError> {
-        SubtitleRepository::delete_word_timeline(self, id)
-    }
-
-    fn save_chunk_timeline(
-        &self,
-        timeline: &ChunkTimeline,
-    ) -> Result<ChunkTimeline, ApplicationError> {
-        SubtitleRepository::save_chunk_timeline(self, timeline)
-    }
-
-    fn list_chunk_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<ChunkTimeline>, ApplicationError> {
-        SubtitleRepository::list_chunk_timelines(self, track_id)
-    }
-
-    fn get_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<Option<ChunkTimeline>, ApplicationError> {
-        SubtitleRepository::get_chunk_timeline(self, id)
-    }
-
-    fn active_chunk_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<ChunkTimeline>, ApplicationError> {
-        SubtitleRepository::active_chunk_timeline(self, track_id)
-    }
-
-    fn activate_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError> {
-        SubtitleRepository::activate_chunk_timeline(self, id)
-    }
-
-    fn archive_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError> {
-        SubtitleRepository::archive_chunk_timeline(self, id)
-    }
-
-    fn delete_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError> {
-        SubtitleRepository::delete_chunk_timeline(self, id)
-    }
-
-    fn save_sense_group_analysis(
-        &self,
-        analysis: &SenseGroupAnalysis,
-    ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        SubtitleRepository::save_sense_group_analysis(self, analysis)
-    }
-
-    fn list_sense_group_analyses(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError> {
-        SubtitleRepository::list_sense_group_analyses(self, track_id)
-    }
-
-    fn get_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
-        SubtitleRepository::get_sense_group_analysis(self, id)
-    }
-
-    fn active_sense_group_analysis(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
-        SubtitleRepository::active_sense_group_analysis(self, track_id)
-    }
-
-    fn activate_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        SubtitleRepository::activate_sense_group_analysis(self, id)
-    }
-
-    fn archive_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        SubtitleRepository::archive_sense_group_analysis(self, id)
-    }
-
-    fn delete_sense_group_analysis(
-        &self,
-        id: &SenseGroupAnalysisId,
-    ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        SubtitleRepository::delete_sense_group_analysis(self, id)
-    }
-
-    fn save_phone_timeline(
-        &self,
-        timeline: &PhoneTimeline,
-    ) -> Result<PhoneTimeline, ApplicationError> {
-        SubtitleRepository::save_phone_timeline(self, timeline)
-    }
-
-    fn list_phone_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<PhoneTimeline>, ApplicationError> {
-        SubtitleRepository::list_phone_timelines(self, track_id)
-    }
-
-    fn get_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<Option<PhoneTimeline>, ApplicationError> {
-        SubtitleRepository::get_phone_timeline(self, id)
-    }
-
-    fn active_phone_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<PhoneTimeline>, ApplicationError> {
-        SubtitleRepository::active_phone_timeline(self, track_id)
-    }
-
-    fn activate_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<PhoneTimeline, ApplicationError> {
-        SubtitleRepository::activate_phone_timeline(self, id)
-    }
-
-    fn archive_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<PhoneTimeline, ApplicationError> {
-        SubtitleRepository::archive_phone_timeline(self, id)
-    }
-
-    fn delete_phone_timeline(
-        &self,
-        id: &PhoneTimelineId,
-    ) -> Result<PhoneTimeline, ApplicationError> {
-        SubtitleRepository::delete_phone_timeline(self, id)
-    }
-}
-
 pub trait LLTimelineResourceRepository: Send + Sync {
     fn save_lltimeline_resource(
         &self,
@@ -727,25 +262,8 @@ pub trait LLTimelineResourceRepository: Send + Sync {
     ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
 }
 
-impl<T: SubtitleRepository + ?Sized> LLTimelineResourceRepository for T {
-    fn save_lltimeline_resource(
-        &self,
-        track_id: &SubtitleTrackId,
-        metadata: &LLTimelineMetadata,
-        artifacts: &[LLTimelineArtifact],
-    ) -> Result<(), ApplicationError> {
-        SubtitleRepository::save_lltimeline_resource(self, track_id, metadata, artifacts)
-    }
-
-    fn get_lltimeline_resource(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError> {
-        SubtitleRepository::get_lltimeline_resource(self, track_id)
-    }
-}
-
-pub trait LearningAssetRepository: Send + Sync {
+/// Capability projections and their audit history change under one invariant.
+pub trait LexicalCapabilityRepository: Send + Sync {
     fn lexical_capability_profile(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -772,6 +290,30 @@ pub trait LearningAssetRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError>;
+    fn save_projection_proposal(
+        &self,
+        proposal: &ProjectionProposal,
+    ) -> Result<ProjectionProposal, ApplicationError>;
+    fn projection_proposal(
+        &self,
+        id: &ProjectionProposalId,
+    ) -> Result<Option<ProjectionProposal>, ApplicationError>;
+    fn list_projection_proposals(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+    ) -> Result<Vec<ProjectionProposal>, ApplicationError>;
+    fn resolve_projection_proposal(
+        &self,
+        decision: &ProjectionDecision,
+        proposal: &ProjectionProposal,
+        confirmed_projection: Option<CapabilityProjection>,
+    ) -> Result<(), ApplicationError>;
+}
+
+/// Lexical identity, lookup, normalization overrides, and vocabulary
+/// watermarks are one catalog capability.
+pub trait LexicalEntryRepository: Send + Sync {
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,
@@ -782,6 +324,9 @@ pub trait LearningAssetRepository: Send + Sync {
         &self,
         id: &LexicalEntryId,
     ) -> Result<Option<LexicalEntryDetails>, ApplicationError>;
+    // Query axes remain explicit because capability filtering is optional only
+    // as a pair; an unvalidated bag would permit invalid combinations.
+    #[allow(clippy::too_many_arguments)]
     fn list_lexical_entries(
         &self,
         language: &LanguageCode,
@@ -806,6 +351,29 @@ pub trait LearningAssetRepository: Send + Sync {
         &self,
         language: &LanguageCode,
     ) -> Result<(u64, u64), ApplicationError>;
+    fn set_lemma_override(
+        &self,
+        language: &LanguageCode,
+        original_normalized: &str,
+        corrected_normalized: &str,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError>;
+    fn lemma_override(
+        &self,
+        language: &LanguageCode,
+        original_normalized: &str,
+    ) -> Result<Option<String>, ApplicationError>;
+    fn lexical_entry_by_key(
+        &self,
+        language: &LanguageCode,
+        kind: LexicalEntryKind,
+        normalized_form: &str,
+    ) -> Result<Option<LexicalEntry>, ApplicationError>;
+}
+
+/// Occurrence and channelized learning observations are append/read/clear
+/// evidence operations.
+pub trait LearningObservationRepository: Send + Sync {
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,
@@ -832,6 +400,11 @@ pub trait LearningAssetRepository: Send + Sync {
         lexical_entry_id: &LexicalEntryId,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<(), ApplicationError>;
+}
+
+/// User-authored lexical content and sense-folder assignment share editing
+/// consistency rules.
+pub trait LexicalContentRepository: Send + Sync {
     fn update_lexical_learning_content(
         &self,
         id: &LexicalEntryId,
@@ -864,29 +437,15 @@ pub trait LearningAssetRepository: Send + Sync {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError>;
+}
+
+/// Import/export owns whole-vocabulary snapshot compatibility.
+pub trait VocabularyAssetRepository: Send + Sync {
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError>;
     fn import_assets(&self, bundle: &VocabularyAssetBundle) -> Result<(), ApplicationError>;
     fn export_all_capability_profiles(
         &self,
     ) -> Result<Vec<LexicalCapabilityProfile>, ApplicationError>;
-    fn set_lemma_override(
-        &self,
-        language: &LanguageCode,
-        original_normalized: &str,
-        corrected_normalized: &str,
-        updated_at_ms: u64,
-    ) -> Result<(), ApplicationError>;
-    fn lemma_override(
-        &self,
-        language: &LanguageCode,
-        original_normalized: &str,
-    ) -> Result<Option<String>, ApplicationError>;
-    fn lexical_entry_by_key(
-        &self,
-        language: &LanguageCode,
-        kind: LexicalEntryKind,
-        normalized_form: &str,
-    ) -> Result<Option<LexicalEntry>, ApplicationError>;
 }
 
 pub trait PracticeRepository: Send + Sync {
@@ -925,7 +484,8 @@ pub trait PracticeRepository: Send + Sync {
     ) -> Result<Vec<PracticeAttempt>, ApplicationError>;
 }
 
-pub trait ReviewRepository: Send + Sync {
+/// Review cards, attempts, and schedules form one transaction-oriented queue.
+pub trait ReviewQueueRepository: Send + Sync {
     fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError>;
     fn get_review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError>;
     fn list_review_items(
@@ -955,6 +515,10 @@ pub trait ReviewRepository: Send + Sync {
         due_at_or_before_ms: u64,
         limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError>;
+}
+
+/// Hunting candidates and targets evolve together as one discovery workflow.
+pub trait HuntingRepository: Send + Sync {
     fn upsert_hunting_candidate(
         &self,
         candidate: &HuntingCandidate,
@@ -983,6 +547,10 @@ pub trait ReviewRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError>;
+}
+
+/// Recognition evidence and upgrade suggestions share the promotion invariant.
+pub trait RecognitionUpgradeRepository: Send + Sync {
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,
@@ -1047,7 +615,31 @@ pub struct CoachDashboardFacts {
     pub active_hunting_candidates: u64,
     pub l1_difficulty_hits: u64,
     pub listening_capability_changes: u64,
+    pub channels: Vec<CoachChannelFacts>,
+    pub cross_modal_gap_count: u64,
+    pub personal_expression_asset_count: u64,
+    pub llm_provider_profile_count: u64,
     pub materials: Vec<CoachMaterialFact>,
+}
+
+/// Read-only, already-layered facts for one capability channel. Counts remain
+/// separate so the Coach cannot collapse attempts, supporting judgments,
+/// proposals, confirmed projections, overrides, and effective assessment into
+/// a second capability truth.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CoachChannelFacts {
+    pub channel: String,
+    pub completed_attempts: u64,
+    pub supporting_judgments: u64,
+    pub adjudications: u64,
+    pub observations: u64,
+    pub projection_proposals: u64,
+    pub confirmed_projections: u64,
+    pub capability_changes: u64,
+    pub personal_expression_attempts: u64,
+    pub acquired_entries: u64,
+    pub not_acquired_entries: u64,
+    pub unassessed_entries: u64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1068,6 +660,7 @@ pub struct CoachMaterialFact {
 pub trait CoachDashboardRepository: Send + Sync {
     fn coach_dashboard_facts(
         &self,
+        language: &LanguageCode,
         period_start_ms: u64,
         period_end_ms: u64,
         as_of_ms: u64,
@@ -1087,6 +680,10 @@ pub struct CoachEvidenceFact {
     pub id: String,
     pub occurred_at_ms: u64,
     pub result: String,
+    pub source_kind: String,
+    pub snapshot: String,
+    pub source_available: bool,
+    pub unavailable_reason: Option<String>,
 }
 
 pub trait ListeningInboxRepository: Send + Sync {
@@ -1143,6 +740,11 @@ pub trait CorpusIndexRepository: Send + Sync {
         &self,
         id: &CorpusOccurrenceId,
     ) -> Result<Option<CorpusOccurrence>, ApplicationError>;
+    /// Rebuild input for the semantic read model. Only phrase/chunk rows are
+    /// returned; lexical and connected-speech rows remain exact-key assets.
+    fn list_semantic_corpus_occurrences(&self) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        Ok(Vec::new())
+    }
     /// Connected-speech family aggregation (Phase 3.9): occurrences of kind
     /// `connected_speech` whose `normalized_key` is one of `families`,
     /// round-robin interleaved across media like word search. `media_id`
@@ -1155,6 +757,130 @@ pub trait CorpusIndexRepository: Send + Sync {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError>;
+}
+
+/// Phase 3.15.5 personal production corpus — a rebuildable projection over
+/// immutable semantic attempts. Rows mint no identity and are always safe to
+/// delete and regenerate; the repository therefore only offers whole-rubric
+/// replacement, never row patching.
+pub trait ProductionCorpusRepository: Send + Sync {
+    /// Atomically replaces every projection row derived from one rubric's
+    /// attempts (a rubric groups all attempts over one source/task).
+    fn replace_production_entries_for_rubric(
+        &self,
+        rubric_id: &SemanticRubricId,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    /// Atomically replaces the complete projection after all source attempts
+    /// have been derived successfully. A failed rebuild leaves the previous
+    /// readable projection intact.
+    fn replace_all_production_entries(
+        &self,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    fn replace_production_entries_for_realtime_turn(
+        &self,
+        turn_id: &RealtimeConversationTurnId,
+        documents: &[ProductionCorpusDocument],
+        entries: &[ProductionCorpusEntry],
+    ) -> Result<(), ApplicationError>;
+    /// Exact lemma lookup, newest first.
+    fn list_production_entries_by_key(
+        &self,
+        language: &LanguageCode,
+        normalized_key: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
+    /// FTS phrase lookup over one-copy-per-revision response documents.
+    fn search_production_documents(
+        &self,
+        language: &LanguageCode,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<ProductionCorpusHit>, ApplicationError>;
+    fn production_corpus_summary(
+        &self,
+        language: &LanguageCode,
+        channel: domain::ProductionChannel,
+    ) -> Result<ProductionCorpusSummary, ApplicationError>;
+    fn list_production_gap_candidates(
+        &self,
+        language: &LanguageCode,
+        channel: domain::ProductionChannel,
+    ) -> Result<Vec<ProductionGapCandidateFacts>, ApplicationError>;
+    /// Rebuild input for semantic document search. These rows are already a
+    /// projection of immutable learner attempts/local-authoritative turns.
+    fn list_production_documents(&self) -> Result<Vec<ProductionCorpusDocument>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    /// Distinct actually-produced lemmas used only to enrich the existing
+    /// read-only gap result. This never manufactures a gap candidate.
+    fn list_production_lexemes(
+        &self,
+        language: &LanguageCode,
+        channel: domain::ProductionChannel,
+    ) -> Result<Vec<String>, ApplicationError> {
+        let _ = (language, channel);
+        Ok(Vec::new())
+    }
+}
+
+/// Phase 3.16 durable user-owned patterns. Unlike production corpus and
+/// embedding indexes, these rows are authoritative assets and are never
+/// rebuildable projections.
+pub trait PersonalExpressionRepository: Send + Sync {
+    fn create_pattern(
+        &self,
+        asset: &domain::UserSentencePatternAsset,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
+    fn append_pattern_version(
+        &self,
+        pattern_id: &domain::UserSentencePatternId,
+        version: &domain::UserSentencePatternVersion,
+        updated_at_ms: u64,
+    ) -> Result<domain::UserSentencePatternAsset, ApplicationError>;
+    fn get_pattern(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Option<domain::UserSentencePatternAsset>, ApplicationError>;
+    fn list_patterns(
+        &self,
+        language: Option<&LanguageCode>,
+        query: Option<&str>,
+    ) -> Result<Vec<domain::UserSentencePatternAsset>, ApplicationError>;
+    fn list_pattern_versions(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::UserSentencePatternVersion>, ApplicationError>;
+    fn delete_pattern(&self, id: &domain::UserSentencePatternId) -> Result<bool, ApplicationError>;
+    fn save_personal_expression_attempt(
+        &self,
+        attempt: &domain::PersonalExpressionAttempt,
+    ) -> Result<domain::PersonalExpressionAttempt, ApplicationError>;
+    fn list_personal_expression_attempts(
+        &self,
+        id: &domain::UserSentencePatternId,
+    ) -> Result<Vec<domain::PersonalExpressionAttempt>, ApplicationError>;
+}
+
+pub trait SemanticEmbeddingIndexRepository: Send + Sync {
+    /// Atomically replaces the whole model-specific read model. A failed
+    /// rebuild must leave the previous index readable.
+    fn replace_semantic_embedding_index(
+        &self,
+        model_fingerprint: &str,
+        records: &[domain::SemanticEmbeddingIndexRecord],
+    ) -> Result<(), ApplicationError>;
+    fn list_semantic_embedding_records(
+        &self,
+        model_fingerprint: &str,
+    ) -> Result<Vec<domain::SemanticEmbeddingIndexRecord>, ApplicationError>;
+    fn semantic_embedding_index_summary(&self) -> Result<Vec<(String, u32)>, ApplicationError>;
+    fn delete_semantic_embedding_index(&self) -> Result<(), ApplicationError>;
 }
 
 pub trait DifficultyRepository: Send + Sync {
@@ -1191,6 +917,19 @@ pub trait LearnerProfileRepository: Send + Sync {
     ) -> Result<Option<LearnerProfile>, ApplicationError>;
 }
 
+/// Reading cursor persistence (Phase 3.13). Upsert semantics: the position
+/// is a cursor, not evidence, so overwriting is the intended behavior.
+pub trait ReadingPositionRepository: Send + Sync {
+    fn save_reading_position(
+        &self,
+        position: &ReadingPosition,
+    ) -> Result<ReadingPosition, ApplicationError>;
+    fn get_reading_position(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ReadingPosition>, ApplicationError>;
+}
+
 pub trait RecordingRepository: Send + Sync {
     fn save_recording_asset(
         &self,
@@ -1206,10 +945,10 @@ pub trait RecordingRepository: Send + Sync {
     ) -> Result<Option<RecordingAsset>, ApplicationError>;
 }
 
-/// Phase 3.11 semantic task fact layer (ADR 0021). Append-only end to end:
+/// Phase 3.11 semantic task fact layer (ADR 0021). Submitted facts are append-only end to end:
 /// there are intentionally no update or delete methods, and implementations
-/// must not add them — corrections are new rows (rubric versions, re-judging,
-/// adjudications), never rewrites.
+/// must not add them — corrections are new rows. The explicitly named draft
+/// methods are the sole mutable crash-recovery projection and are not evidence.
 pub trait SemanticTaskRepository: Send + Sync {
     fn save_semantic_rubric(
         &self,
@@ -1224,6 +963,19 @@ pub trait SemanticTaskRepository: Send + Sync {
         &self,
         id: &SemanticRubricId,
     ) -> Result<Option<SemanticRubric>, ApplicationError>;
+    /// Latest rubric version matching one source identity tuple. Read-side
+    /// lookup so clients can find an existing rubric without re-deriving the
+    /// server-minted fingerprint id (Phase 3.13).
+    #[allow(clippy::too_many_arguments)]
+    fn find_semantic_rubric_by_source(
+        &self,
+        media_id: Option<&MediaId>,
+        start_ms: u64,
+        end_ms: u64,
+        purpose: SemanticTaskKind,
+        response_language: &LanguageCode,
+        source_sha256: &str,
+    ) -> Result<Option<SemanticRubric>, ApplicationError>;
     fn save_semantic_attempt(
         &self,
         attempt: &SemanticTaskAttempt,
@@ -1235,6 +987,12 @@ pub trait SemanticTaskRepository: Send + Sync {
     fn list_semantic_attempts_for_rubric(
         &self,
         rubric_id: &SemanticRubricId,
+    ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
+    /// Every attempt of the given kinds, oldest first — the full-rebuild feed
+    /// for kind-scoped projections (Phase 3.15.5 production corpus).
+    fn list_semantic_attempts_by_kinds(
+        &self,
+        kinds: &[SemanticTaskKind],
     ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError>;
     fn save_semantic_judgment(
         &self,
@@ -1256,6 +1014,36 @@ pub trait SemanticTaskRepository: Send + Sync {
         &self,
         judgment_id: &SemanticJudgmentId,
     ) -> Result<Vec<JudgmentAdjudication>, ApplicationError>;
+    fn save_writing_feedback_finding(
+        &self,
+        finding: &WritingFeedbackFinding,
+    ) -> Result<WritingFeedbackFinding, ApplicationError>;
+    fn get_writing_feedback_finding(
+        &self,
+        id: &WritingFeedbackFindingId,
+    ) -> Result<Option<WritingFeedbackFinding>, ApplicationError>;
+    fn list_writing_feedback_findings(
+        &self,
+        attempt_id: &SemanticTaskAttemptId,
+    ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError>;
+    fn save_writing_finding_disposition(
+        &self,
+        disposition: &WritingFindingDisposition,
+    ) -> Result<WritingFindingDisposition, ApplicationError>;
+    fn get_writing_finding_disposition(
+        &self,
+        id: &WritingFindingDispositionId,
+    ) -> Result<Option<WritingFindingDisposition>, ApplicationError>;
+    fn list_writing_finding_dispositions(
+        &self,
+        finding_id: &WritingFeedbackFindingId,
+    ) -> Result<Vec<WritingFindingDisposition>, ApplicationError>;
+    fn upsert_writing_draft(&self, draft: &WritingDraft) -> Result<WritingDraft, ApplicationError>;
+    fn get_writing_draft(
+        &self,
+        rubric_id: &SemanticRubricId,
+    ) -> Result<Option<WritingDraft>, ApplicationError>;
+    fn delete_writing_draft(&self, rubric_id: &SemanticRubricId) -> Result<(), ApplicationError>;
 }
 
 /// Phase 3.12 provider profiles. Unlike append-only semantic facts, a provider
@@ -1271,10 +1059,46 @@ pub trait LlmProviderProfileRepository: Send + Sync {
         id: &LlmProviderProfileId,
     ) -> Result<Option<LlmProviderProfile>, ApplicationError>;
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError>;
-    fn delete_provider_profile(
+    fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError>;
+}
+
+/// Realtime provider config plus local session/turn facts. Provider events may
+/// update live transcript fields, but finalized local learner transcripts are
+/// immutable and repository implementations must reject divergent rewrites.
+pub trait RealtimeConversationRepository: Send + Sync {
+    fn upsert_realtime_profile(
         &self,
-        id: &LlmProviderProfileId,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError>;
+    fn get_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<Option<RealtimeProviderProfile>, ApplicationError>;
+    fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError>;
+    fn delete_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
     ) -> Result<(), ApplicationError>;
+    fn save_realtime_session(
+        &self,
+        session: &RealtimeConversationSession,
+    ) -> Result<RealtimeConversationSession, ApplicationError>;
+    fn get_realtime_session(
+        &self,
+        id: &RealtimeConversationSessionId,
+    ) -> Result<Option<RealtimeConversationSession>, ApplicationError>;
+    fn save_realtime_turn(
+        &self,
+        turn: &RealtimeConversationTurn,
+    ) -> Result<RealtimeConversationTurn, ApplicationError>;
+    fn get_realtime_turn(
+        &self,
+        id: &RealtimeConversationTurnId,
+    ) -> Result<Option<RealtimeConversationTurn>, ApplicationError>;
+    fn list_realtime_turns(
+        &self,
+        session_id: &RealtimeConversationSessionId,
+    ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError>;
 }
 
 pub trait DictionaryCacheRepository: Send + Sync {

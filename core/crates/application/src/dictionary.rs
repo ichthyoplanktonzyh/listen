@@ -1,8 +1,22 @@
 use std::sync::Arc;
 
-use crate::*;
+use crate::{
+    ApplicationError, DictionaryCacheRepository, DictionaryEntry, DictionaryEntryId,
+    DictionaryLookupBundle, DictionaryProvider, DictionaryProviderResult, LanguageCode, now_ms,
+    require_text,
+};
 
-impl AppServices {
+const CACHE_TTL_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+
+pub struct DictionaryUseCases {
+    cache: Arc<dyn DictionaryCacheRepository>,
+}
+
+impl DictionaryUseCases {
+    pub(crate) fn new(cache: Arc<dyn DictionaryCacheRepository>) -> Self {
+        Self { cache }
+    }
+
     pub async fn lookup_dictionary(
         &self,
         providers: &[Arc<dyn DictionaryProvider>],
@@ -31,11 +45,9 @@ impl AppServices {
                 continue;
             }
             if let Some(entry) = self
-                .dictionary
+                .cache
                 .get(&language, &normalized_lemma, &info.id)?
-                .filter(|entry| {
-                    now_ms().saturating_sub(entry.cached_at_ms) < DICTIONARY_CACHE_TTL_MS
-                })
+                .filter(|entry| now_ms().saturating_sub(entry.cached_at_ms) < CACHE_TTL_MS)
             {
                 let lookup = serde_json::from_str(&entry.payload_json)
                     .map_err(|error| ApplicationError::Repository(error.to_string()))?;
@@ -49,7 +61,7 @@ impl AppServices {
             match provider.lookup(&language, &normalized_lemma).await {
                 Ok(Some(mut lookup)) => {
                     lookup.cached_at_ms = now_ms();
-                    self.dictionary.put(&DictionaryEntry {
+                    self.cache.put(&DictionaryEntry {
                         id: DictionaryEntryId::from_fingerprint(
                             "dictionary",
                             &format!("{}:{normalized_lemma}:{}", language.as_str(), info.id),

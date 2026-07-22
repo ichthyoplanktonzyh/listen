@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-11. Reflects Phase 3.8 recording-asset backend foundation.
+Last updated: 2026-07-18. Reflects Phase 3.16 personal expression assets.
 
 ## Overview
 
@@ -13,6 +13,9 @@ Flutter desktop app
 api-http
   Axum transport, auth, route composition, event stream, adapter composition
         |
+        +--> local-runtime
+        |     local process/download/filesystem/network job and resource lifecycles
+        |
         +--> application
         |     use-case orchestration, repository/provider traits, DTO mapping
         |       |
@@ -22,13 +25,14 @@ api-http
         |       +--> speech-analysis     # ASR timing/chunk/phone analysis engines
         |
         +--> dictionary-provider         # application provider adapter
+        +--> syntactic-provider          # isolated Python JSONL syntax adapters
         +--> persistence-sqlite          # application repository adapter
 ```
 
 Dependency direction is intentionally boring:
 
 ```text
-domain <- core engines <- application <- api-http / persistence-sqlite / dictionary-provider
+domain <- core engines <- application <- local-runtime / api-http / persistence adapters
 ```
 
 `api-http` does not call algorithm crates directly. Algorithms enter through
@@ -49,24 +53,56 @@ application use cases and provider/repository boundaries.
 - `TimelineMetrics` and `ChunkEvidence` wrap timeline JSON extension objects
   while preserving object-shaped API/storage JSON.
 - `DomainError` is the shared validation error type.
+- Phase 3.9.1 adds a rebuildable `SyntacticAnalysis` artifact contract with
+  provider/runtime/model provenance, Unicode-scalar char spans, explicit
+  parser-token ↔ SubtitleToken many-to-many alignment, UD-compatible fields,
+  tree validation, coverage gating, and provider/model/config-isolated identity.
+- Phase 3.15 adds Writing-specific feedback facts around the semantic task core:
+  provider findings bind one exact learner revision hash, while accept/reject
+  dispositions append separately and acceptance must cite a new immutable
+  attempt that preserves the reviewed text and adds a later typed revision.
+  Provider suggestions never become authoritative learner text by mutation.
+- Phase 3.16 adds the independent `UserSentencePattern` aggregate: user-owned
+  template identity, immutable source snapshot and versions, plus channel-specific
+  completed attempts. It is not a construction, corpus projection or embedding hit.
 
 ### `application`
 
-- `AppServices` is the use-case facade.
+- `AppServices` is composition-only: focused module accessors plus construction
+  builders, with no cross-domain use-case methods. `MediaAnalysisUseCases`,
+  `LexicalLearningUseCases`, and `PracticeUseCases` own the three broad caller
+  clusters; `SemanticUseCases`, `PersonalExpressionUseCases`, `LlmProviderUseCases`, `LearnerProfileUseCases`,
+  `DictionaryUseCases`, `RecordingUseCases`, and `PronunciationUseCases` remain
+  narrow specialist modules. Each module holds only its required ports or an
+  explicit collaborating module.
 - Repository boundaries are split by aggregate/resource:
   - `MediaRepository`
   - `SubtitleTrackRepository`
   - `PronunciationRepository`
-  - `TimelineResourceRepository`
+  - `WordTimelineRepository`, `ChunkTimelineRepository`,
+    `SenseGroupRepository`, `PhoneTimelineRepository`
   - `LLTimelineResourceRepository`
-  - `LearningAssetRepository`
+  - `LexicalCapabilityRepository`, `LexicalEntryRepository`,
+    `LearningObservationRepository`, `LexicalContentRepository`,
+    `VocabularyAssetRepository`
   - `PracticeRepository`
-  - `ReviewRepository`
+  - `ReviewQueueRepository`, `HuntingRepository`,
+    `RecognitionUpgradeRepository`
   - `LearningEventRepository`
   - `RecordingRepository`
+  - `ProductionCorpusRepository`
+  - `PersonalExpressionRepository`
   - transcription, phonetic analysis, dictionary cache, playback progress
 - Application-owned DTOs sit in `application::dto`; algorithm crate structs are
   mapped at the boundary instead of re-exported.
+- `PersonalExpressionUseCases` owns explicit create/revise/delete, immutable
+  version/attempt history, and typed export. It has no observation, capability,
+  projection, proposal or confirmation repository dependency.
+- `ProjectionReviewUseCases` is the Phase 3.17 authority boundary. Channel-local
+  algorithms read immutable observations and append versioned proposals; one
+  repository transaction is the only evidence path that can append confirmation,
+  update a projection and append capability history. It never mutates overrides.
+  Cross-modal gaps are read models and keep unassessed distinct from failure.
 - Learning assets use `LexicalEntry + LexicalUnit` as the authoritative model.
 - Schema v22 persists the Phase 3.4.1 four-channel capability profile with
   evidence/projection/override separation under ADR 0015. The rollout is
@@ -79,6 +115,9 @@ application use cases and provider/repository boundaries.
 - Due-review queries derive an application-owned `ReviewCard` read model from
   durable `ReviewItem` source/anchors. Card kind and cue/answer presentation are
   not persisted, so historical review rows remain compatible as card UX evolves.
+- Cross-modal review candidates cite the exact observation/source reference plus
+  an immutable text snapshot. Missing media disables navigation but does not
+  manufacture a failure or erase the review explanation.
 - Recognition-upgrade services deduplicate successful practice/review/context
   observations by sentence (or media when no sentence exists), create a pending
   suggestion at five contexts, and keep status mutation behind explicit user
@@ -88,6 +127,24 @@ application use cases and provider/repository boundaries.
   `ListeningInboxItem`, list active/archived Inbox items, process them into
   review items / micro-intensive practice items / favorite or dismissed
   archival outcomes, and append durable listening events.
+- `SyntacticAnalysisProvider` returns content/provenance drafts only. Application
+  assigns artifact identity and validates the draft against the exact source
+  sentence/token snapshot before a consumer may activate syntax-gated behavior.
+- `SyntacticConsumerOrchestrator` probes once and analyzes a subtitle track in
+  one batch, then finalises each sentence independently. B, SenseGroup, and the
+  dependency matcher share the same per-sentence artifact; a bad sentence
+  falls back without invalidating its siblings.
+
+### `syntactic-provider`
+
+- Owns the provider-neutral process adapter for research Stanza and spaCy
+  candidates; neither Python runtime nor model is linked into the consumer app.
+- Uses a versioned one-request/one-response JSONL boundary with stdout reserved
+  for protocol data and stderr reserved for diagnostics.
+- Reports runtime/model/language capability honestly and maps closed failure
+  classes without changing the existing Reference B or SenseGroup fallback.
+- Produces application drafts only. It cannot populate Reference C, replace
+  `ChunkTimeline`, or mint Construction canonical identity.
 
 ### `api-http`
 
@@ -96,6 +153,19 @@ application use cases and provider/repository boundaries.
   service construction.
 - OpenAPI parity is tested bidirectionally: implemented `/v1` routes and
   documented OpenAPI paths must match.
+- Route modules own only HTTP extraction, response/error mapping and event
+  adaptation. Lexical entries, downloadable learning resources, and subtitle
+  search use explicitly named route modules; milestone-coded `m18.rs` no longer
+  exists.
+
+### `local-runtime`
+
+- Owns transcription, phonetic-analysis, speech-batch and sound-line job
+  lifecycles plus syntax capability, downloadable learning resources and
+  subtitle provider coordination.
+- `ProcessRunner` and `ArtifactDownloader` are real seams with production and
+  deterministic fake adapters. Runtime modules do not depend on Axum, HTTP
+  status codes or `ApiState`.
 - Lexical routes are the only learning-asset API surface:
   - `/v1/lexical-entries`
   - `/v1/lexical-entries/batch`
@@ -158,6 +228,20 @@ application use cases and provider/repository boundaries.
 - Schema v33 adds `recording_assets`. Audio stays in a local file while SQLite
   persists transcription-ready format/integrity metadata and durable prompt/source
   snapshots. Media and practice-attempt references use `ON DELETE SET NULL`.
+- Schema v38 adds append-only `writing_feedback_findings` and
+  `writing_finding_dispositions`; both retain JSON facts plus query columns and
+  have database triggers forbidding update/delete. `writing_drafts` is the
+  explicitly mutable crash-recovery projection and is never an evidence input.
+- Schema v39 adds the rebuildable personal production corpus. Writing attempts
+  remain authoritative; `ProductionCorpusUseCases` derives one response document
+  plus lemma-keyed token spans, refreshes one rubric best-effort after attempt
+  creation, and atomically replaces the full projection on reindex. Assistance
+  values are factual provenance, not autonomous/non-autonomous judgments.
+- Phase 3.15.6 adds no table or writer. `ProductionCorpusUseCases` joins the v39
+  projection with receptive capability/observation/recognition facts, asks the
+  installed lexical provider for an optional BNC rank, and returns a top-K
+  `ProductionGapReview`. Ranking and empty/starter/ready degradation stay in
+  application; SQLite returns raw aggregate facts and Flutter only presents them.
 - Learning-loop persistence stores JSON snapshots plus query columns for kind,
   status, subject, result, and timestamps. Corpus and recording persistence are
   implemented; learner-profile persistence remains future work.
@@ -186,7 +270,7 @@ Owns analysis engines, not application contracts:
 | `chunk_partition` | word timeline to learning chunk partition |
 | `phonetic_alignment` | phoneme sequence alignment |
 | `phonetic_findings` | reductions, elision, linking findings |
-| `connected_speech_rules` | text-side Reference B default connected-form prediction |
+| `connected_speech_rules` | Reference B prediction with explicit `text_heuristic` / `syntax_model` provenance; valid syntax is additionally gated by an external provider qualification decision, and missing/unqualified syntax is exact fallback |
 | `sound_analysis` | learning-phone, syllable, phrase, connected-speech and WordTimeline-first RhythmFrame generation with optional word acoustic prominence cues |
 | `learned_prosodic_provider` | rule-based prosodic analysis |
 | `rich_acoustic_evidence` | acoustic evidence aggregation |
@@ -195,7 +279,24 @@ The pronunciation provider uses CMUdict when available and a deterministic
 `fallback-v2` G2P for OOV words. Fallback stress is intentionally conservative:
 one primary fallback vowel, later fallback vowels unstressed.
 
+### Optional syntax capability (Phase 3.9.3)
+
+- `SyntaxCapabilityManager` in `local-runtime` owns a filesystem-backed seven-state lifecycle,
+  staging install, delivery validation and cache deletion. It does not enter application/domain authority.
+- spaCy runs behind one lazy resident JSONL sidecar. Probe and analyze serialize through the same process;
+  the adapter releases it after idle, stops it on disable/uninstall and restarts once after a crash.
+- `/v1/subtitles/{track}/syntax-analysis` performs one whole-track batch with per-sentence validation and
+  a single-flight, rebuildable cache. Fingerprints bind subtitle/token/language/profile and complete delivery
+  identity; stale results are observable and never promoted to learning evidence.
+- Flutter settings own the explicit install lifecycle. Ready capability plus an active uncached track triggers
+  non-blocking background analysis; absent capability produces no prompt and leaves all fallback paths intact.
+
 ### Flutter Desktop
+
+- Vocabulary details opt into the personal production read model. The client
+  queries the open lexical form, shows occurrence count and deduplicated response
+  documents, and opens the authoritative semantic attempt/revision chain.
+  Loading, honest zero-result, and projection-unavailable states stay distinct.
 
 - **UI state pattern (single track)**: `controller + Store<T>` is the only UI
   state model. Controllers (`PlayerController`, `SubtitleController`,
@@ -350,12 +451,68 @@ subtitle track -> word timeline -> rhythm frames / chunk timeline / phone timeli
   -> SpeechEnhancementWorkflowController -> Flutter timeline/pronunciation model
 ```
 
+### Shared Syntactic Analysis (Phases 3.9.1–3.9.2)
+
+```text
+SubtitleSentence + SubtitleToken snapshot
+  -> SyntacticAnalysisProvider draft
+  -> application identity + domain validator
+  -> validated rebuildable artifact + separate provider qualification gate
+       -> Reference B / syntax-aware SenseGroup / dependency matcher
+provider missing, unqualified, or artifact not activatable
+  -> existing conservative B + punctuation_length_rule_v1
+```
+
+Phase 3.9.2 exposes this composition through
+`POST /v1/subtitles/{track_id}/syntactic-consumers`. Phase 3.9.3 replaces the
+developer environment-variable activation with an App-managed optional install
+under Application Support plus `/v1/syntax/capability/*` lifecycle routes;
+absent or disabled capability never starts Python.
+Qualification is per consumer query: spaCy artifacts, B going-to/used-to/have-to,
+SenseGroup, and matcher are activated, while B want-to stays on its exact text
+fallback because basic dependencies do not resolve its wh ambiguity reliably.
+
+The syntactic artifact is not a learning asset,
+does not replace ChunkTimeline, and cannot supply audio-backed Reference C.
+Phase 3.9.3 may persist it only in a deletable fingerprint cache; it never gains
+SQLite, learning-evidence, or canonical identity authority.
+Syntax-aware SenseGroup is a distinct `syntax-aware-sense-group/v1` analysis
+run: dependency subtrees propose boundaries/head/NP-PP-clause labels, while
+punctuation, protected phrases, min/max words and target teaching granularity
+remain authoritative. Rule and syntax runs coexist under the existing lifecycle.
+The dependency matcher is likewise provider-neutral and returns only rebuildable
+subtitle-span candidates with matcher/artifact provenance and token bindings. It
+has no Construction canonical ID, occurrence ID, capability projection, or
+persistence authority; a later curated Construction layer must review and link
+any candidate.
+
 ### LLTimeline Import/Export
 
 ```text
 .lltimeline.json -> api-http -> application validation/fingerprint handling
   -> persisted LLTimeline metadata/artifacts + generated timeline resources
 ```
+
+### Local-first Speech Synthesis (Phase 3.15.9)
+
+```text
+dictionary / personal corpus / Writing surface
+  -> Flutter AuxiliaryAudioController (single auxiliary decoder + focus)
+  -> /v1/speech-synthesis
+  -> local-runtime SpeechSynthesisManager
+       -> application SpeechSynthesisProvider port
+       -> macOS system speech adapter (/usr/bin/say)
+       -> provider/version/voice/language/rate/text keyed rebuildable cache
+```
+
+The manager owns validation, voice selection, single-flight synthesis, atomic
+file publication, cache statistics, and clearing. It has no learning repository:
+synthetic audio cannot become an attempt, observation, evidence, projection,
+review item, production-corpus row, or authoritative learning asset. Dictionary
+provider audio and TTS share playback/resource lifecycle, while each product
+scene keeps its own surface. Real dictionary audio and real media slices remain
+preferred; online providers require a future explicit privacy/credential/cost
+surface before entering production composition.
 
 ## Current Guardrails
 
@@ -380,3 +537,13 @@ subtitle track -> word timeline -> rhythm frames / chunk timeline / phone timeli
 4. Phase 3.0.1 currently implements the practice/review/event foundation only.
    Corpus search, difficulty caching, learner-profile storage, recording metadata,
    Flutter practice controllers, and dashboard aggregation remain future work.
+# Phase 3.15.8 semantic embedding delta (2026-07-16)
+
+- `application::SemanticEmbeddingUseCases` is the deep module for capability, atomic rebuild, semantic
+  search, and additive gap enrichment. HTTP/Dart/UI never compute cosine or infer stale state.
+- `application::EmbeddingProvider` is the narrow provider port: descriptor/status plus batched
+  `embed(purpose, texts)`. `embedding-provider` hides FastEmbed/ONNX/HF cache and OpenAI-compatible JSON.
+- `persistence-sqlite::SemanticEmbeddingIndexRepository` stores only disposable vectors keyed by source
+  identity and exact model fingerprint. Media/production repositories remain source owners.
+- Current vocabulary-book dialog is one consumer surface, not a domain anchor; future conversation,
+  corpus, or review surfaces may reuse the same module without inheriting this layout.

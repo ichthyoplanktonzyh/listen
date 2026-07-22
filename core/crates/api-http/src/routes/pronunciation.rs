@@ -1,9 +1,12 @@
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, EventName, Json, Path, Query, State,
+    SubtitleSentenceId, SubtitleTrackId,
+};
 
 pub(crate) async fn pronunciation_providers(
     State(state): State<ApiState>,
 ) -> Json<Vec<domain::PronunciationProviderInfo>> {
-    let providers = state.services.pronunciation_providers();
+    let providers = state.services.pronunciation().pronunciation_providers();
     for provider in providers.iter().filter(|provider| !provider.available) {
         let _ = state.events.send(
             crate::event_payloads::PronunciationProviderDiagnosticPayload {
@@ -44,6 +47,7 @@ pub(crate) async fn pronunciation_lookup(
 ) -> Result<Json<domain::WordPronunciation>, ApiError> {
     state
         .services
+        .pronunciation()
         .lookup_pronunciation(&query.language, &query.word)
         .map(Json)
         .map_err(ApiError::from)
@@ -60,18 +64,26 @@ pub(crate) async fn analyze_pronunciation_sentence(
 ) -> Result<Json<domain::SentencePronunciation>, ApiError> {
     let sentence_id =
         SubtitleSentenceId::parse(request.sentence_id).map_err(ApplicationError::from)?;
-    if state.services.pronunciation_cache_state(&sentence_id)? == Some(false) {
+    if state
+        .services
+        .pronunciation()
+        .pronunciation_cache_state(&sentence_id)?
+        == Some(false)
+    {
         let _ = state.events.send(
             crate::event_payloads::SpeechCacheInvalidatedPayload {
                 job_id: None,
                 track_id: None,
-                kind: crate::speech_jobs::SpeechBatchKind::PronunciationAnalysis,
+                kind: local_runtime::SpeechBatchKind::PronunciationAnalysis,
                 sentence_id: sentence_id.as_str().to_owned(),
             }
             .envelope(),
         );
     }
-    let value = state.services.analyze_pronunciation(&sentence_id)?;
+    let value = state
+        .services
+        .pronunciation()
+        .analyze_pronunciation(&sentence_id)?;
     let _ = state.events.send(
         crate::event_payloads::PronunciationAnalysisCompletedPayload {
             job_id: None,
@@ -92,6 +104,7 @@ pub(crate) async fn track_pronunciation(
         SubtitleTrackId::parse(track_id.clone()).map_err(ApplicationError::from)?;
     let total = state
         .services
+        .media_analysis()
         .read_subtitle_track(&parsed_track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?
         .sentences
@@ -107,6 +120,7 @@ pub(crate) async fn track_pronunciation(
     );
     let values = state
         .services
+        .pronunciation()
         .analyze_pronunciation_track(&parsed_track_id)?;
     let _ = state.events.send(
         crate::event_payloads::SpeechBatchProgressPayload {

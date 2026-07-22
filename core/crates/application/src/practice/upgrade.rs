@@ -1,12 +1,20 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CapabilityAssessment, LearningEvent, LearningEventId, LearningEventKind,
+    LearningEventSubject, LearningEventSubjectKind, LearningStatus, LexicalCapability,
+    LexicalEntryId, LexicalLearningUseCases, MediaId, ObservationContext, ObservationOrigin,
+    PracticeAttempt, PracticeItem, RecognitionEvidence, RecognitionEvidenceId,
+    RecognitionEvidenceSourceKind, ReviewAttempt, ReviewItem, SubtitleSentenceId,
+    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, now_ms,
+    observation_spec_for_upgrade_confirmation,
+};
 
 const UPGRADE_EVIDENCE_THRESHOLD: u32 = 5;
 const REJECTION_COOLDOWN_MS: u64 = 30 * 24 * 60 * 60 * 1000;
 const UPGRADE_EVIDENCE_CLASS: &str = "heuristic_proxy";
 
-impl AppServices {
+impl LexicalLearningUseCases {
     pub(crate) fn record_context_recognition_evidence(
         &self,
         lexical_entry_id: LexicalEntryId,
@@ -24,7 +32,7 @@ impl AppServices {
             "recognition-evidence",
             &format!("{}:{context_key}", lexical_entry_id.as_str()),
         );
-        self.review
+        self.recognition_upgrades
             .upsert_recognition_evidence(&RecognitionEvidence {
                 id,
                 lexical_entry_id: lexical_entry_id.clone(),
@@ -139,11 +147,11 @@ impl AppServices {
         lexical_entry_id: &LexicalEntryId,
         now: u64,
     ) -> Result<Option<UpgradeSuggestion>, ApplicationError> {
-        let Some(details) = self.learning_assets.lexical_details(lexical_entry_id)? else {
+        let Some(details) = self.lexical_entries.lexical_details(lexical_entry_id)? else {
             return Ok(None);
         };
         let profile = self
-            .learning_assets
+            .lexical_capabilities
             .lexical_capability_profile(lexical_entry_id, None)?;
         let listening = profile
             .as_ref()
@@ -152,9 +160,12 @@ impl AppServices {
         if listening != CapabilityAssessment::NotAcquired {
             return Ok(None);
         }
-        let history = self
-            .review
-            .list_upgrade_suggestions(Some(lexical_entry_id), None, 1, 0)?;
+        let history = self.recognition_upgrades.list_upgrade_suggestions(
+            Some(lexical_entry_id),
+            None,
+            1,
+            0,
+        )?;
         if let Some(latest) = history.first()
             && (latest.status == UpgradeSuggestionStatus::Pending
                 || (latest.status == UpgradeSuggestionStatus::Rejected
@@ -162,9 +173,9 @@ impl AppServices {
         {
             return Ok(None);
         }
-        let evidence = self
-            .review
-            .list_recognition_evidence(lexical_entry_id, 1000, 0)?;
+        let evidence =
+            self.recognition_upgrades
+                .list_recognition_evidence(lexical_entry_id, 1000, 0)?;
         if evidence.len() < UPGRADE_EVIDENCE_THRESHOLD as usize {
             return Ok(None);
         }
@@ -189,7 +200,9 @@ impl AppServices {
             previous_assessment: Some(CapabilityAssessment::NotAcquired),
             suggested_assessment: Some(CapabilityAssessment::Acquired),
         };
-        self.review.save_upgrade_suggestion(&suggestion).map(Some)
+        self.recognition_upgrades
+            .save_upgrade_suggestion(&suggestion)
+            .map(Some)
     }
 
     pub fn upgrade_suggestions(
@@ -199,8 +212,12 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<UpgradeSuggestion>, ApplicationError> {
-        self.review
-            .list_upgrade_suggestions(lexical_entry_id, status, limit.min(500), offset)
+        self.recognition_upgrades.list_upgrade_suggestions(
+            lexical_entry_id,
+            status,
+            limit.min(500),
+            offset,
+        )
     }
 
     pub fn confirm_upgrade_suggestion(
@@ -208,7 +225,7 @@ impl AppServices {
         id: &UpgradeSuggestionId,
     ) -> Result<UpgradeSuggestion, ApplicationError> {
         let mut suggestion = self
-            .review
+            .recognition_upgrades
             .get_upgrade_suggestion(id)?
             .ok_or(ApplicationError::NotFound("upgrade suggestion"))?;
         if suggestion.status == UpgradeSuggestionStatus::Accepted {
@@ -223,30 +240,9 @@ impl AppServices {
         let capability = suggestion
             .capability
             .unwrap_or(LexicalCapability::Listening);
-        if capability != LexicalCapability::Listening {
-            // Transitional direct write, only for channels that still have no
-            // projection algorithm. Listening fulfilled ADR 0017 decision 4:
-            // its projection now derives from the observation stream via
-            // listening-projection-v1 (ADR 0019).
-            let profile = self.learning_assets.set_lexical_capability_projection(
-                &suggestion.lexical_entry_id,
-                None,
-                capability,
-                Some(CapabilityProjection {
-                    conclusion: CapabilityConclusion::Acquired,
-                    source: CapabilityProjectionSource::EvidenceProjection,
-                    algorithm_version: UPGRADE_EVIDENCE_CLASS.into(),
-                    confidence: None,
-                    evidence_as_of_ms: None,
-                    updated_at_ms: now,
-                }),
-                now,
-            )?;
-            self.sync_legacy_status_from_profile(&suggestion.lexical_entry_id, &profile)?;
-        }
-        // The confirmation lands in the observation stream as an unassisted
-        // task success; for listening the projection recompute inside the
-        // append derives the acquired conclusion from it.
+        // This confirms the old upgrade suggestion as evidence only. Phase
+        // 3.17 now owns the separate projection-proposal confirmation gate;
+        // no channel may write a projection directly from this legacy flow.
         self.append_channelized_observation(
             &suggestion.lexical_entry_id,
             observation_spec_for_upgrade_confirmation(capability),
@@ -262,7 +258,9 @@ impl AppServices {
         suggestion.status = UpgradeSuggestionStatus::Accepted;
         suggestion.resolved_at_ms = Some(now);
         suggestion.cooldown_until_ms = None;
-        let saved = self.review.save_upgrade_suggestion(&suggestion)?;
+        let saved = self
+            .recognition_upgrades
+            .save_upgrade_suggestion(&suggestion)?;
         self.append_upgrade_status_event(&saved, now)?;
         Ok(saved)
     }
@@ -272,7 +270,7 @@ impl AppServices {
         id: &UpgradeSuggestionId,
     ) -> Result<UpgradeSuggestion, ApplicationError> {
         let mut suggestion = self
-            .review
+            .recognition_upgrades
             .get_upgrade_suggestion(id)?
             .ok_or(ApplicationError::NotFound("upgrade suggestion"))?;
         if suggestion.status == UpgradeSuggestionStatus::Rejected {
@@ -287,7 +285,8 @@ impl AppServices {
         suggestion.status = UpgradeSuggestionStatus::Rejected;
         suggestion.resolved_at_ms = Some(now);
         suggestion.cooldown_until_ms = Some(now.saturating_add(REJECTION_COOLDOWN_MS));
-        self.review.save_upgrade_suggestion(&suggestion)
+        self.recognition_upgrades
+            .save_upgrade_suggestion(&suggestion)
     }
 
     fn append_upgrade_status_event(

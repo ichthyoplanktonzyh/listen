@@ -1,12 +1,37 @@
-use domain::*;
+use std::sync::Arc;
 
-use crate::{
-    AppServices, ApplicationError, CompleteShadowingAttempt, CreateRecordingAsset,
-    CreateShadowingComparison, DisabledLearningLoopRepository, RecordingRepository, clean_required,
-    now_ms,
+use domain::{
+    LearningEvent, LearningEventId, LearningEventKind, LearningEventSubject,
+    LearningEventSubjectKind, PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeKind,
+    PracticeResult, RecordingAsset, RecordingAssetId, RecordingAudioFacts, RecordingAudioMetadata,
+    ShadowingComparison,
 };
 
-impl AppServices {
+use crate::{
+    ApplicationError, CompleteShadowingAttempt, CreateRecordingAsset, CreateShadowingComparison,
+    DisabledLearningLoopRepository, LearningEventRepository, PracticeRepository,
+    RecordingRepository, clean_required, now_ms,
+};
+
+pub struct RecordingUseCases {
+    recordings: Arc<dyn RecordingRepository>,
+    practice: Arc<dyn PracticeRepository>,
+    learning_events: Arc<dyn LearningEventRepository>,
+}
+
+impl RecordingUseCases {
+    pub(crate) fn new(
+        recordings: Arc<dyn RecordingRepository>,
+        practice: Arc<dyn PracticeRepository>,
+        learning_events: Arc<dyn LearningEventRepository>,
+    ) -> Self {
+        Self {
+            recordings,
+            practice,
+            learning_events,
+        }
+    }
+
     pub fn create_recording_asset(
         &self,
         input: CreateRecordingAsset,
@@ -159,7 +184,7 @@ impl AppServices {
             .practice_attempt_id
             .clone()
             .ok_or(ApplicationError::Validation("completed shadowing attempt"))?;
-        let analysis = speech_analysis::shadowing_comparison::compare_pcm16_wav_paths(
+        let analysis = speech_analysis::phonetics::compare_pcm16_wav_paths(
             reference_wav_path,
             &recording.file_path,
         )
@@ -172,6 +197,24 @@ impl AppServices {
             pause_alignment: analysis.pause_alignment,
             reference_waveform: analysis.reference_waveform,
             recording_waveform: analysis.recording_waveform,
+        })
+    }
+
+    pub fn recording_audio_facts(
+        &self,
+        recording_id: &RecordingAssetId,
+    ) -> Result<RecordingAudioFacts, ApplicationError> {
+        let recording = self
+            .recordings
+            .get_recording_asset(recording_id)?
+            .ok_or(ApplicationError::NotFound("recording asset"))?;
+        let analysis = speech_analysis::phonetics::analyze_pcm16_wav_path(&recording.file_path)
+            .map_err(|_| ApplicationError::Validation("recording audio facts"))?;
+        Ok(RecordingAudioFacts {
+            recording_id: recording.id,
+            duration_ms: analysis.duration_ms,
+            pauses: analysis.pauses,
+            waveform: analysis.waveform,
         })
     }
 }

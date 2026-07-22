@@ -1,19 +1,25 @@
-pub mod asr_timing;
-pub mod chunk_detection;
-pub mod chunk_partition;
-pub mod connected_speech_rules;
-pub mod forced_align;
-pub mod learned_prosodic_provider;
-pub mod pause_refinement;
-pub mod phone_recognition;
-pub mod phonetic_alignment;
-pub mod phonetic_findings;
-pub mod rich_acoustic_evidence;
-pub mod sense_group_partition;
-pub mod shadowing_comparison;
-pub mod sound_analysis;
-pub mod text_chunk_detection;
-pub mod word_acoustics;
+mod asr_timing;
+mod chunk_detection;
+mod chunk_partition;
+mod connected_speech_rules;
+mod dependency_patterns;
+mod forced_align;
+mod learned_prosodic_provider;
+mod pause_refinement;
+mod phone_recognition;
+mod phonetic_alignment;
+mod phonetic_findings;
+mod rich_acoustic_evidence;
+mod sense_group_partition;
+mod shadowing_comparison;
+mod sound_analysis;
+mod text_chunk_detection;
+mod word_acoustics;
+
+pub mod audible_structure;
+pub mod chunking;
+pub mod phonetics;
+pub mod timing;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -961,9 +967,9 @@ mod tests {
             .filter_map(|phone| phone.stress)
             .collect::<Vec<_>>();
 
-        assert_eq!(codex.variants[0].is_fallback, true);
+        assert!(codex.variants[0].is_fallback);
         assert_eq!(stresses.iter().filter(|stress| **stress == 1).count(), 1);
-        assert!(stresses.iter().any(|stress| *stress == 0));
+        assert!(stresses.contains(&0));
     }
 
     #[test]

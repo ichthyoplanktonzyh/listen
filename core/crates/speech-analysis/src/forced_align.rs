@@ -503,10 +503,16 @@ mod tests {
     fn empty_or_mismatched_inputs_are_noops() {
         let s = sentence(0, "s1", 0, 1000, &["hello"]);
         let mut timings = vec![dtw_timing(&s.id, 0, "hello", 0, 1000)];
-        assert_eq!(merge_alignments(&mut timings, &[], &[s.clone()]), 0);
+        assert_eq!(
+            merge_alignments(&mut timings, &[], std::slice::from_ref(&s)),
+            0
+        );
         let empty: Vec<WordTiming> = Vec::new();
         let mut empty_timings = empty.clone();
-        assert_eq!(merge_alignments(&mut empty_timings, &[], &[s.clone()]), 0);
+        assert_eq!(
+            merge_alignments(&mut empty_timings, &[], std::slice::from_ref(&s)),
+            0
+        );
     }
 
     #[test]

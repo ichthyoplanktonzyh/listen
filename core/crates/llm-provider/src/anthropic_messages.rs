@@ -145,7 +145,10 @@ impl LlmChatAdapter for AnthropicMessagesAdapter {
         if let Some(key) = &self.api_key {
             builder = builder.header("x-api-key", key);
         }
-        let response = builder.send().await.map_err(|error| map_reqwest_error(&error))?;
+        let response = builder
+            .send()
+            .await
+            .map_err(|error| map_reqwest_error(&error))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -175,7 +178,9 @@ impl LlmChatAdapter for AnthropicMessagesAdapter {
                 ContentBlock::ToolUse { name, input } if name == request.schema_name => Some(input),
                 _ => None,
             })
-            .ok_or_else(|| sanitized_protocol("messages response had no matching tool_use block"))?;
+            .ok_or_else(|| {
+                sanitized_protocol("messages response had no matching tool_use block")
+            })?;
         let json_text = serde_json::to_string(&tool_input)
             .map_err(|_| sanitized_protocol("tool_use input was not serializable"))?;
 

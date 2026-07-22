@@ -9,11 +9,14 @@
 //! observation or projection is written, and nothing is surfaced as learning
 //! feedback until Phase 3.12.1 grants display qualification.
 
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Serialize, State, StatusCode,
+};
+use application::RubricGenerationRequest;
 use domain::{
-    CapabilityClaim, CostBudget, DataRetentionPreference, LlmAdapterKind, LlmProviderProfile,
-    LlmProviderProfileId, LlmUse, ProviderCapability, SemanticJudgment, SemanticTaskAttemptId,
-    llm_provider_profile_id,
+    CapabilityClaim, CostBudget, DataRetentionPreference, LanguageCode, LlmAdapterKind,
+    LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability, RubricPointImportance,
+    SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind, llm_provider_profile_id,
 };
 use llm_provider::BuiltSemanticProvider;
 
@@ -87,8 +90,13 @@ pub(crate) struct RegisterProviderRequest {
 pub(crate) async fn list_llm_providers(
     State(state): State<ApiState>,
 ) -> Result<Json<Vec<ProviderProfileView>>, ApiError> {
-    let profiles = state.services.list_llm_provider_profiles()?;
-    Ok(Json(profiles.iter().map(ProviderProfileView::from).collect()))
+    let profiles = state
+        .services
+        .llm_providers()
+        .list_llm_provider_profiles()?;
+    Ok(Json(
+        profiles.iter().map(ProviderProfileView::from).collect(),
+    ))
 }
 
 pub(crate) async fn register_llm_provider(
@@ -113,12 +121,14 @@ pub(crate) async fn register_llm_provider(
         created_at_ms: application::now_ms(),
     };
     let saved = match request.secret {
-        Some(secret) if !secret.is_empty() => {
-            state
-                .services
-                .register_llm_provider(profile, &secret, state.secret_store.as_ref())?
-        }
-        _ => state.services.save_llm_provider_profile(profile)?,
+        Some(secret) if !secret.is_empty() => state
+            .services
+            .llm_providers()
+            .register_llm_provider(profile, &secret, state.secret_store.as_ref())?,
+        _ => state
+            .services
+            .llm_providers()
+            .save_llm_provider_profile(profile)?,
     };
     Ok(Json(ProviderProfileView::from(&saved)))
 }
@@ -130,6 +140,7 @@ pub(crate) async fn get_llm_provider(
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .llm_providers()
         .llm_provider_profile(&id)?
         .as_ref()
         .map(ProviderProfileView::from)
@@ -144,6 +155,7 @@ pub(crate) async fn delete_llm_provider(
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     state
         .services
+        .llm_providers()
         .delete_llm_provider(&id, state.secret_store.as_ref())?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -161,7 +173,10 @@ pub(crate) async fn probe_llm_provider(
     Path(id): Path<String>,
 ) -> Result<Json<ProbeResult>, ApiError> {
     let provider = build_provider(&state, &id)?;
-    let claim = provider.probe_structured_output().await.map_err(ApplicationError::from)?;
+    let claim = provider
+        .probe_structured_output()
+        .await
+        .map_err(ApplicationError::from)?;
     Ok(Json(ProbeResult {
         structured_output: claim,
     }))
@@ -186,6 +201,7 @@ pub(crate) async fn judge_via_llm_provider(
     let provider = build_provider(&state, &id)?;
     let judgment = state
         .services
+        .semantic()
         .judge_semantic_attempt(
             &attempt_id,
             request.response_revision,
@@ -196,15 +212,120 @@ pub(crate) async fn judge_via_llm_provider(
     Ok(Json(judgment))
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderFeedbackRequest {
+    pub attempt_id: String,
+    pub response_revision: u32,
+}
+
+/// Free-text qualitative feedback view. Ephemeral by design: nothing is
+/// persisted server-side, so a refused or cut-off answer costs nothing.
+#[derive(Debug, Serialize)]
+pub(crate) struct OutputFeedbackView {
+    pub feedback: String,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+}
+
+/// Gives teacher-style free-text feedback on one stored output-task attempt
+/// (speaking/writing), with the rubric source transcript and task prompt as
+/// context. Distinct from `judge_via_llm_provider`, which Reading keeps for
+/// per-point rubric judgments.
+pub(crate) async fn feedback_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderFeedbackRequest>,
+) -> Result<Json<OutputFeedbackView>, ApiError> {
+    let attempt_id =
+        SemanticTaskAttemptId::parse(request.attempt_id).map_err(ApplicationError::from)?;
+    let provider = build_provider(&state, &id)?;
+    let draft = state
+        .services
+        .semantic()
+        .feedback_on_semantic_attempt(&attempt_id, request.response_revision, provider.as_feedback())
+        .await?;
+    Ok(Json(OutputFeedbackView {
+        feedback: draft.feedback,
+        model_id: draft.model_id,
+        prompt_version: draft.prompt_version,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderRubricRequest {
+    pub purpose: SemanticTaskKind,
+    pub source_language: LanguageCode,
+    pub response_language: LanguageCode,
+    pub transcript_snapshot: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct RubricPointDraftView {
+    pub importance: RubricPointImportance,
+    pub statement: String,
+    pub accepted_paraphrase_notes: Option<String>,
+}
+
+/// Content-only rubric proposal. Deliberately omits identity/version/source
+/// snapshot: those are minted only when the user saves an approved rubric
+/// through the manual create path, so the vendor layer never becomes a rubric
+/// identity writer (ADR 0021 four-layer separation).
+#[derive(Debug, Serialize)]
+pub(crate) struct RubricDraftView {
+    pub points: Vec<RubricPointDraftView>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+}
+
+/// Generates a rubric draft (information points only) for one source segment.
+/// The draft is not persisted; the client shows it for review/edit and saves an
+/// approved rubric through the normal create path. On any provider error nothing
+/// is returned and a standardized, secret-free error is surfaced.
+pub(crate) async fn generate_rubric_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderRubricRequest>,
+) -> Result<Json<RubricDraftView>, ApiError> {
+    let provider = build_provider(&state, &id)?;
+    let generation = RubricGenerationRequest {
+        purpose: request.purpose,
+        source_language: request.source_language,
+        response_language: request.response_language,
+        transcript_snapshot: request.transcript_snapshot,
+    };
+    let draft = provider
+        .as_rubric()
+        .generate_rubric(&generation)
+        .await
+        .map_err(ApplicationError::from)?;
+    Ok(Json(RubricDraftView {
+        points: draft
+            .points
+            .into_iter()
+            .map(|point| RubricPointDraftView {
+                importance: point.importance,
+                statement: point.statement,
+                accepted_paraphrase_notes: point.accepted_paraphrase_notes,
+            })
+            .collect(),
+        model_id: draft.model_id,
+        prompt_version: draft.prompt_version,
+        schema_version: draft.schema_version,
+    }))
+}
+
 /// Loads a profile, resolves its secret, and builds the concrete provider.
 fn build_provider(state: &ApiState, id: &str) -> Result<BuiltSemanticProvider, ApiError> {
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     let profile = state
         .services
+        .llm_providers()
         .llm_provider_profile(&id)?
         .ok_or_else(|| ApiError::not_found("llm provider profile"))?;
     let secret = state
         .services
+        .llm_providers()
         .resolve_llm_provider_secret(&profile, state.secret_store.as_ref())?;
     BuiltSemanticProvider::build(&profile, secret)
         .map_err(ApplicationError::from)

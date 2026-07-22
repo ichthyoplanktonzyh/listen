@@ -1,8 +1,16 @@
 use application::{
-    ApplicationError, LearningEventRepository, ListeningInboxRepository, PracticeRepository,
-    ReviewRepository,
+    ApplicationError, HuntingRepository, LearningEventRepository, ListeningInboxRepository,
+    PracticeRepository, RecognitionUpgradeRepository, ReviewQueueRepository,
 };
-use domain::*;
+use domain::{
+    HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, LearningEvent, LearningEventKind, LearningEventSubjectKind,
+    LexicalEntryId, ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeSession,
+    PracticeSessionId, RecognitionEvidence, ReviewAttempt, ReviewAttemptId, ReviewItem,
+    ReviewItemId, ReviewItemStatus, ReviewSchedule, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus,
+};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, from_json, json, repo};
@@ -184,7 +192,7 @@ impl PracticeRepository for SqliteRepository {
     }
 }
 
-impl ReviewRepository for SqliteRepository {
+impl ReviewQueueRepository for SqliteRepository {
     fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError> {
         let conn = self.connection.lock().expect("sqlite mutex poisoned");
         conn.execute(
@@ -373,7 +381,9 @@ impl ReviewRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
     }
+}
 
+impl HuntingRepository for SqliteRepository {
     fn upsert_hunting_candidate(
         &self,
         candidate: &HuntingCandidate,
@@ -539,7 +549,9 @@ impl ReviewRepository for SqliteRepository {
                 .map_err(repo)
         }
     }
+}
 
+impl RecognitionUpgradeRepository for SqliteRepository {
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,

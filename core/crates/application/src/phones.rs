@@ -1,18 +1,22 @@
-use crate::*;
+use crate::{
+    ApplicationError, MediaAnalysisUseCases, PhoneTimeline, PhoneTimelineId,
+    PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticFindingStatus,
+    SubtitleTrackId, TimelineCreator, TimelineStatus, now_ms,
+};
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn list_phone_timelines(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<PhoneTimeline>, ApplicationError> {
-        self.timelines.list_phone_timelines(track_id)
+        self.phone_timelines.list_phone_timelines(track_id)
     }
 
     pub fn summarize_phone_timelines(
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<PhoneTimelineSummary>, ApplicationError> {
-        let timelines = self.timelines.list_phone_timelines(track_id)?;
+        let timelines = self.phone_timelines.list_phone_timelines(track_id)?;
         Ok(timelines.iter().map(phone_timeline_summary).collect())
     }
 
@@ -20,7 +24,7 @@ impl AppServices {
         &self,
         id: &PhoneTimelineId,
     ) -> Result<Option<PhoneTimeline>, ApplicationError> {
-        self.timelines.get_phone_timeline(id)
+        self.phone_timelines.get_phone_timeline(id)
     }
 
     pub fn create_phone_timeline_from_analysis(
@@ -34,7 +38,7 @@ impl AppServices {
         }
         let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
         let parent_word_timeline_id = self
-            .timelines
+            .word_timelines
             .active_word_timeline(&analysis.track_id)?
             .map(|timeline| timeline.id);
         let now = now_ms();
@@ -80,9 +84,9 @@ impl AppServices {
         if requested_status == TimelineStatus::Active {
             timeline.status = TimelineStatus::Candidate;
         }
-        let timeline = self.timelines.save_phone_timeline(&timeline)?;
+        let timeline = self.phone_timelines.save_phone_timeline(&timeline)?;
         if requested_status == TimelineStatus::Active {
-            self.timelines.activate_phone_timeline(&timeline.id)
+            self.phone_timelines.activate_phone_timeline(&timeline.id)
         } else {
             Ok(timeline)
         }
@@ -92,21 +96,21 @@ impl AppServices {
         &self,
         id: &PhoneTimelineId,
     ) -> Result<PhoneTimeline, ApplicationError> {
-        self.timelines.activate_phone_timeline(id)
+        self.phone_timelines.activate_phone_timeline(id)
     }
 
     pub fn archive_phone_timeline(
         &self,
         id: &PhoneTimelineId,
     ) -> Result<PhoneTimeline, ApplicationError> {
-        self.timelines.archive_phone_timeline(id)
+        self.phone_timelines.archive_phone_timeline(id)
     }
 
     pub fn delete_phone_timeline(
         &self,
         id: &PhoneTimelineId,
     ) -> Result<PhoneTimeline, ApplicationError> {
-        self.timelines.delete_phone_timeline(id)
+        self.phone_timelines.delete_phone_timeline(id)
     }
 }
 

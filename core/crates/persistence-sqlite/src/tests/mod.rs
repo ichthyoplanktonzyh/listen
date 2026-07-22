@@ -1,10 +1,13 @@
 use super::*;
 use application::{
-    AppServices, ApplicationError, CoachDashboardRepository, DictionaryProvider,
-    DictionaryProviderError, ImportSubtitle, LearningAssetRepository, LearningEventRepository,
-    ListeningInboxRepository, MediaRepository, PhoneticAnalysisRepository, PracticeRepository,
-    RegisterMedia, ReviewRepository, SubtitleRepository, TranscriptionRepository,
-    UpsertLexicalEntry,
+    AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
+    DictionaryProvider, DictionaryProviderError, ImportSubtitle, LLTimelineResourceRepository,
+    LearningEventRepository, LearningObservationRepository, LexicalCapabilityRepository,
+    LexicalEntryRepository, ListeningInboxRepository, MediaRepository, PhoneTimelineRepository,
+    PhoneticAnalysisRepository, PracticeRepository, PronunciationRepository,
+    RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository, SenseGroupRepository,
+    SubtitleTrackRepository, TranscriptionRepository, UpsertLexicalEntry,
+    VocabularyAssetRepository, WordTimelineRepository,
 };
 
 #[test]
@@ -15,7 +18,9 @@ fn coach_dashboard_aggregates_period_facts_without_scanning_json_in_application(
     conn.execute("INSERT INTO practice_attempts (id,item_id,result,submitted_at_ms,attempt_json) VALUES ('attempt','item','\"correct\"',150,'{}')", []).unwrap();
     conn.execute("INSERT INTO practice_sessions (id,mode,started_at_ms,ended_at_ms,session_json) VALUES ('session','\"extensive\"',100,6100,'{}')", []).unwrap();
     drop(conn);
-    let facts = repo.coach_dashboard_facts(0, 10000, 10000).unwrap();
+    let facts = repo
+        .coach_dashboard_facts(&LanguageCode::parse("en").unwrap(), 0, 10000, 10000)
+        .unwrap();
     assert_eq!(facts.practice_attempts, 1);
     assert_eq!(facts.correct_practice_attempts, 1);
     assert_eq!(facts.extensive_sessions, 1);
@@ -38,7 +43,9 @@ fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation
     conn.execute("INSERT INTO learning_events (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json) VALUES ('event-a',150,'\"listening_completed\"','\"practice_session\"','session-a','session-a',?1)", [serde_json::json!({"payload":{"comprehension_report":"got_the_gist"}}).to_string()]).unwrap();
     conn.execute("INSERT INTO learning_events (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json) VALUES ('event-b',250,'\"listening_completed\"','\"practice_session\"','session-b','session-b',?1)", [serde_json::json!({"payload":{"comprehension_report":"understood_all"}}).to_string()]).unwrap();
     drop(conn);
-    let facts = repo.coach_dashboard_facts(0, 1000, 1000).unwrap();
+    let facts = repo
+        .coach_dashboard_facts(&LanguageCode::parse("en").unwrap(), 0, 1000, 1000)
+        .unwrap();
     assert_eq!(
         facts.materials[0].first_report.as_deref(),
         Some("got_the_gist")
@@ -60,6 +67,7 @@ fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_coach_dashboard_repository(repo.clone());
     let graduated = services
+        .media_analysis()
         .graduate_coach_material(&MediaId::parse("media-coach").unwrap())
         .unwrap();
     assert_eq!(graduated.triage_intent, Some(MediaTriageIntent::Graduated));
@@ -79,9 +87,104 @@ fn coach_dashboard_large_event_query_stays_bounded() {
     tx.commit().unwrap();
     drop(conn);
     let started = std::time::Instant::now();
-    let facts = repo.coach_dashboard_facts(0, 20_000, 20_000).unwrap();
+    let facts = repo
+        .coach_dashboard_facts(&LanguageCode::parse("en").unwrap(), 0, 20_000, 20_000)
+        .unwrap();
     assert_eq!(facts.l1_difficulty_hits, 10_000);
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+#[test]
+fn cross_modal_coach_reads_layered_channel_facts_without_becoming_a_writer() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let conn = repo.connection.lock().unwrap();
+    conn.execute("INSERT INTO lexical_entries (id,language,kind,granularity,normalization,normalized_key,canonical_form,normalized_form,display_form,normalization_provider,normalization_version,updated_at_ms,learning_updated_at_ms) VALUES ('word','en','\"word\"','word','lemma','word','word','word','word','test','1',1,1)", []).unwrap();
+    for (capability, conclusion) in [
+        ("reading", "acquired"),
+        ("listening", "acquired"),
+        ("speaking", "not_acquired"),
+    ] {
+        conn.execute(
+            "INSERT INTO lexical_capability_states (lexical_entry_id,sense_id,capability,projection_json,updated_at_ms) VALUES ('word','',?1,?2,10)",
+            params![format!("\"{capability}\""), serde_json::json!({
+                "conclusion": conclusion,
+                "source": "evidence_projection",
+                "algorithm_version": "fixture",
+                "updated_at_ms": 10
+            }).to_string()],
+        ).unwrap();
+    }
+    conn.execute("INSERT INTO learning_observations (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,surface_form,origin,occurred_at_ms) VALUES ('speaking-evidence','word','','\"speaking\"','\"constructed_speaking\"','\"failure\"','\"none\"','word','\"user_asserted\"',120)", []).unwrap();
+    let rubric =
+        serde_json::json!({"source":{"transcript_snapshot":"immutable source text"}}).to_string();
+    conn.execute("INSERT INTO semantic_rubrics (id,version,purpose,media_id,start_ms,end_ms,source_language,response_language,source_sha256,created_at_ms,rubric_json) VALUES ('rubric',1,'\"reading_comprehension\"','missing-media',0,1000,'en','en','hash',100,?1)", [&rubric]).unwrap();
+    conn.execute("INSERT INTO semantic_task_attempts (id,kind,rubric_id,rubric_version,status,started_at_ms,attempt_json) VALUES ('reading-attempt','\"reading_comprehension\"','rubric',1,'\"completed\"',150,'{}')", []).unwrap();
+    conn.execute("INSERT INTO semantic_judgments (id,attempt_id,response_revision,rubric_id,rubric_version,abstained,created_at_ms,judgment_json) VALUES ('judgment','reading-attempt',1,'rubric',1,0,160,'{}')", []).unwrap();
+    conn.execute("INSERT INTO judgment_adjudications (id,judgment_id,point_id,occurred_at_ms,adjudication_json) VALUES ('adjudication','judgment','point',170,'{}')", []).unwrap();
+    conn.execute("INSERT INTO user_sentence_patterns (id,language,current_version,current_name,current_pattern_text,created_at_ms,updated_at_ms,asset_json) VALUES ('pattern','en',1,'Pattern','I can ...',100,100,'{}')", []).unwrap();
+    conn.execute("INSERT INTO user_sentence_pattern_versions (id,pattern_id,version,created_at_ms,version_json) VALUES ('pattern-v1','pattern',1,100,'{}')", []).unwrap();
+    conn.execute("INSERT INTO personal_expression_attempts (id,pattern_id,pattern_version_id,channel,assistance,completed_at_ms,attempt_json) VALUES ('expression','pattern','pattern-v1','speaking','no_text',180,'{}')", []).unwrap();
+    drop(conn);
+
+    let before = [
+        "learning_observations",
+        "projection_proposals",
+        "projection_decisions",
+        "lexical_capability_history",
+    ]
+    .map(|table| coach_table_count(&repo, table));
+    let facts = repo
+        .coach_dashboard_facts(&LanguageCode::parse("en").unwrap(), 100, 200, 200)
+        .unwrap();
+    let after = [
+        "learning_observations",
+        "projection_proposals",
+        "projection_decisions",
+        "lexical_capability_history",
+    ]
+    .map(|table| coach_table_count(&repo, table));
+    assert_eq!(before, after, "Coach aggregation must be read-only");
+    let reading = facts
+        .channels
+        .iter()
+        .find(|value| value.channel == "reading")
+        .unwrap();
+    assert_eq!(
+        (
+            reading.completed_attempts,
+            reading.supporting_judgments,
+            reading.adjudications
+        ),
+        (1, 1, 1)
+    );
+    let speaking = facts
+        .channels
+        .iter()
+        .find(|value| value.channel == "speaking")
+        .unwrap();
+    assert_eq!(speaking.personal_expression_attempts, 1);
+    assert_eq!(facts.cross_modal_gap_count, 1);
+    assert_eq!(facts.personal_expression_asset_count, 1);
+
+    let evidence = repo
+        .coach_evidence("reading_completed_attempts", 100, 200, 10, 0)
+        .unwrap();
+    assert_eq!(evidence[0].snapshot, "immutable source text");
+    assert!(!evidence[0].source_available);
+    assert_eq!(
+        evidence[0].unavailable_reason.as_deref(),
+        Some("source_media_unavailable")
+    );
+}
+
+fn coach_table_count(repo: &SqliteRepository, table: &str) -> u64 {
+    repo.connection
+        .lock()
+        .unwrap()
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .unwrap()
 }
 use async_trait::async_trait;
 use domain::*;
@@ -172,6 +275,7 @@ fn upsert_word_asset(
     source: Option<application::LexicalSourceContext>,
 ) -> LexicalEntryDetails {
     services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: language.into(),
             kind: LexicalEntryKind::Word,
@@ -187,6 +291,7 @@ fn upsert_word_asset(
 
 fn read_word_asset(services: &AppServices, language: &str, value: &str) -> Option<LexicalEntry> {
     services
+        .lexical_learning()
         .read_lexical_entries_by_forms(language, LexicalEntryKind::Word, &[value.into()])
         .unwrap()
         .into_iter()
@@ -531,7 +636,13 @@ mod lexical;
 mod llm_provider;
 mod media_library;
 mod migrations;
+mod personal_expression;
 mod phonetic_analysis;
+mod production_corpus;
+mod projection_review;
+mod reading;
+mod realtime_conversation;
+mod semantic_embedding;
 mod semantic_task;
 mod subtitles_dictionary;
 mod timelines;

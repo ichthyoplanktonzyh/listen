@@ -1,7 +1,7 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use domain::{SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs};
-use speech_analysis::asr_timing::extract_word_timings_from_json;
 use speech_analysis::estimate_word_timings;
+use speech_analysis::timing::extract_word_timings_from_json;
 
 fn asr_fixture_bytes() -> Vec<u8> {
     include_str!("../../../testdata/asr/sample-output.json")

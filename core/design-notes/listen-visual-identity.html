@@ -1,0 +1,258 @@
+<title>listen · 整体气质</title>
+<style>
+  /* Deliberate single-world page: this shows listen's dark-first soul.
+     Light theme exists in the product as a secondary skin; this identity
+     page commits to the dimmed room on purpose. */
+  :root{
+    --ground:#1a2420;      /* 墨绿炭 · 房间底色，不是纯黑 */
+    --ground2:#151e1b;     /* 更深的凹陷（视频舞台） */
+    --raised:#222f2a;      /* 抬起 · 面板/卡片 */
+    --raised2:#2b3a34;     /* 再抬一层 · hover/选中 */
+    --ink:#e9efec;         /* 主文字 · 柔白，非纯白 */
+    --muted:#9aa9a2;       /* 次要文字 */
+    --faint:#6d7c75;       /* 更弱 · 标注 */
+    --hair:#2e3a35;        /* 分隔线 */
+    --teal:#4db8a8;        /* 信号色 · 当前词 / 进度 */
+    --teal-dim:#2f8578;
+    --amber:#e6b45c;       /* 你的声音 · 产出 */
+    --glow:0 0 22px -2px #4db8a855;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --maxw:1060px;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:56px 24px 100px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--teal);font-weight:700}
+
+  /* ---- wordmark ---- */
+  .mark{display:flex;align-items:flex-end;gap:14px;margin:22px 0 10px}
+  .eqmark{display:flex;align-items:flex-end;gap:4px;height:52px}
+  .eqmark i{width:6px;border-radius:3px;background:linear-gradient(var(--teal),var(--teal-dim));
+    display:block;animation:eq 2.6s ease-in-out infinite}
+  .eqmark i:nth-child(1){height:26px;animation-delay:0s}
+  .eqmark i:nth-child(2){height:52px;animation-delay:.3s}
+  .eqmark i:nth-child(3){height:38px;animation-delay:.6s}
+  .eqmark i:nth-child(4){height:46px;animation-delay:.15s}
+  @keyframes eq{0%,100%{transform:scaleY(.55)}50%{transform:scaleY(1)}}
+  .wordmark{font-size:clamp(46px,8vw,74px);font-weight:800;letter-spacing:-.03em;
+    line-height:.9}
+  .thesis{font-size:20px;color:var(--ink);max-width:52ch;margin:6px 0 0;font-weight:500}
+  .thesis b{color:var(--teal);font-weight:700}
+  .sub{font-size:15px;color:var(--muted);max-width:60ch;margin:14px 0 0}
+
+  /* ---- palette ---- */
+  .sec-label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--faint);font-weight:700;margin:56px 0 16px}
+  .pal{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  @media(max-width:720px){.pal{grid-template-columns:repeat(3,1fr)}}
+  .sw{border-radius:11px;border:1px solid var(--hair);overflow:hidden}
+  .sw .chip{height:64px}
+  .sw .meta{padding:9px 10px 11px;background:var(--raised)}
+  .sw .nm{font-size:12.5px;font-weight:600}
+  .sw .hx{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:2px}
+
+  /* ---- hero: the listening surface ---- */
+  .stage-frame{margin-top:18px;border:1px solid var(--hair);border-radius:16px;
+    overflow:hidden;display:grid;grid-template-columns:60px 1fr;
+    box-shadow:0 30px 60px -34px #000a}
+  /* rail */
+  .rail{background:var(--ground2);border-right:1px solid var(--hair);
+    display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:22px}
+  .rail .logo{width:26px;height:26px;display:flex;align-items:flex-end;
+    justify-content:center;gap:2.5px}
+  .rail .logo i{width:3px;border-radius:2px;background:var(--teal)}
+  .rail .logo i:nth-child(1){height:10px}.rail .logo i:nth-child(2){height:18px}
+  .rail .logo i:nth-child(3){height:13px}
+  .rail .ri{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;
+    justify-content:center;color:var(--faint);font-size:17px}
+  .rail .ri.on{background:var(--raised2);color:var(--teal);
+    box-shadow:inset 0 0 0 1px #4db8a833}
+  .rail .sp{flex:1}
+  /* stage */
+  .stage{position:relative;min-height:412px;
+    background:
+      radial-gradient(120% 90% at 50% 8%, #24312c 0%, var(--ground2) 55%, #101715 100%);
+    display:flex;flex-direction:column;justify-content:flex-end}
+  .topline{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;
+    gap:10px;padding:14px 18px;font-size:12.5px;color:var(--muted)}
+  .topline .name{color:var(--ink);font-weight:600}
+  .topline .badge{margin-left:auto;font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--teal);border:1px solid #2f6a60;
+    padding:3px 9px;border-radius:999px}
+
+  .caption{padding:0 44px 8px;text-align:center}
+  .sent{font-size:29px;line-height:1.42;font-weight:600;letter-spacing:-.01em}
+  .sent .w{color:#cfd9d4}
+  .sent .cur{color:var(--teal);text-shadow:var(--glow);position:relative}
+  .tie{color:var(--teal-dim);font-weight:400;margin:0 -1px}
+  .trans{margin-top:12px;font-size:16px;color:var(--faint)}
+
+  /* rhythm ribbon — the audible-structure organ */
+  .rhythm{display:flex;align-items:flex-end;justify-content:center;gap:9px;
+    height:44px;padding:14px 0 6px;margin:0 44px;border-top:1px solid #ffffff0f}
+  .beat{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .beat .bar{width:20px;border-radius:3px;background:#3a4a44}
+  .beat.stress .bar{background:linear-gradient(var(--teal),var(--teal-dim));
+    box-shadow:0 0 12px -2px #4db8a866}
+  .beat.cur .bar{background:linear-gradient(var(--teal),#7fe0d1)}
+  .beat .syl{font-size:10px;color:var(--faint);font-family:var(--mono)}
+  .beat.stress .syl{color:var(--muted)}
+
+  /* transport — receded */
+  .transport{display:flex;align-items:center;gap:14px;padding:16px 22px 18px;
+    background:#0f1614cc;border-top:1px solid var(--hair);backdrop-filter:blur(6px)}
+  .play{width:38px;height:38px;border-radius:50%;background:var(--teal);
+    color:#08110f;display:flex;align-items:center;justify-content:center;flex:none;
+    font-size:15px;box-shadow:var(--glow)}
+  .prog{flex:1;height:4px;background:#33413b;border-radius:3px;position:relative}
+  .prog .fill{position:absolute;left:0;top:0;bottom:0;width:38%;background:var(--teal);
+    border-radius:3px}
+  .prog .fill::after{content:"";position:absolute;right:-4px;top:-3px;width:10px;
+    height:10px;border-radius:50%;background:var(--teal);box-shadow:var(--glow)}
+  .time{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .tico{color:var(--faint);font-size:16px}
+
+  .framenote{font-size:13px;color:var(--faint);margin:16px 2px 0;font-style:italic}
+
+  /* ---- principles ---- */
+  .princ{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  @media(max-width:720px){.princ{grid-template-columns:1fr}}
+  .p{background:var(--raised);border:1px solid var(--hair);border-radius:12px;
+    padding:18px 18px 16px}
+  .p .pt{font-size:15px;font-weight:700;margin-bottom:5px;display:flex;
+    align-items:center;gap:9px}
+  .p .dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex:none;
+    box-shadow:0 0 8px -1px var(--teal)}
+  .p.amberdot .dot{background:var(--amber);box-shadow:0 0 8px -1px var(--amber)}
+  .p span{font-size:13.5px;color:var(--muted)}
+  .p.wide{grid-column:1 / -1}
+
+  .foot{margin-top:52px;border-top:1px solid var(--hair);padding-top:26px;
+    display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  @media(max-width:720px){.foot{grid-template-columns:1fr}}
+  .foot h4{font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);margin:0 0 8px}
+  .foot p{font-size:13.5px;color:var(--muted);margin:0}
+  .foot .lightbar{display:flex;gap:6px;margin-top:10px}
+  .foot .lightbar i{flex:1;height:26px;border-radius:5px;border:1px solid #0002}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">整体气质 · 不是某个功能界面</div>
+  <div class="mark">
+    <span class="eqmark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="wordmark">listen</span>
+  </div>
+  <p class="thesis">一个正在<b>专注倾听你</b>的、安静的房间。</p>
+  <p class="sub">你在听内容，产品也在听你。灯是调暗的——不是黑，是墨绿炭。
+    发光的只有声音、词、和你自己的语言；其余一切都往后退。</p>
+
+  <!-- palette -->
+  <div class="sec-label">底色 · 暗色优先（不是黑）</div>
+  <div class="pal">
+    <div class="sw"><div class="chip" style="background:#1a2420"></div>
+      <div class="meta"><div class="nm">房间底色</div><div class="hx">#1a2420</div></div></div>
+    <div class="sw"><div class="chip" style="background:#222f2a"></div>
+      <div class="meta"><div class="nm">抬起面板</div><div class="hx">#222f2a</div></div></div>
+    <div class="sw"><div class="chip" style="background:#e9efec"></div>
+      <div class="meta"><div class="nm">主文字·柔白</div><div class="hx">#e9efec</div></div></div>
+    <div class="sw"><div class="chip" style="background:#9aa9a2"></div>
+      <div class="meta"><div class="nm">次要文字</div><div class="hx">#9aa9a2</div></div></div>
+    <div class="sw"><div class="chip" style="background:#4db8a8"></div>
+      <div class="meta"><div class="nm">信号·当前词</div><div class="hx">#4db8a8</div></div></div>
+    <div class="sw"><div class="chip" style="background:#e6b45c"></div>
+      <div class="meta"><div class="nm">你的声音·产出</div><div class="hx">#e6b45c</div></div></div>
+  </div>
+
+  <!-- hero: the listening surface -->
+  <div class="sec-label">把气质用到最核心、也早已定型的面 · 听</div>
+  <div class="stage-frame">
+    <div class="rail" aria-hidden="true">
+      <div class="logo"><i></i><i></i><i></i></div>
+      <div class="ri on">▤</div>
+      <div class="ri">◎</div>
+      <div class="ri">◈</div>
+      <div class="sp"></div>
+      <div class="ri">⚙</div>
+    </div>
+    <div class="stage">
+      <div class="topline">
+        <span class="name">The Nature of Attention</span>
+        <span>· ep.3</span>
+        <span class="badge">正在听</span>
+      </div>
+
+      <div class="caption">
+        <div class="sent">
+          <span class="w">I've</span>
+          <span class="w">been</span><span class="tie">‿</span><span class="cur">meaning</span>
+          <span class="w">to</span>
+          <span class="w">ask</span><span class="tie">‿</span><span class="w">you</span>
+          <span class="w">a</span><span class="tie">‿</span><span class="w">bout</span><span class="tie">‿</span><span class="w">it.</span>
+        </div>
+        <div class="trans">我一直想问你这件事。</div>
+      </div>
+
+      <div class="rhythm" aria-hidden="true">
+        <div class="beat"><div class="bar" style="height:12px"></div><div class="syl">I've</div></div>
+        <div class="beat"><div class="bar" style="height:16px"></div><div class="syl">been</div></div>
+        <div class="beat stress cur"><div class="bar" style="height:34px"></div><div class="syl">MEAN</div></div>
+        <div class="beat"><div class="bar" style="height:11px"></div><div class="syl">ing</div></div>
+        <div class="beat"><div class="bar" style="height:12px"></div><div class="syl">to</div></div>
+        <div class="beat stress"><div class="bar" style="height:30px"></div><div class="syl">ASK</div></div>
+        <div class="beat"><div class="bar" style="height:13px"></div><div class="syl">you</div></div>
+        <div class="beat"><div class="bar" style="height:11px"></div><div class="syl">a</div></div>
+        <div class="beat stress"><div class="bar" style="height:26px"></div><div class="syl">BOUT</div></div>
+        <div class="beat"><div class="bar" style="height:12px"></div><div class="syl">it</div></div>
+      </div>
+
+      <div class="transport">
+        <div class="play" aria-hidden="true">▶</div>
+        <span class="tico" aria-hidden="true">↺</span>
+        <div class="prog"><div class="fill"></div></div>
+        <span class="time">01:12 / 03:40</span>
+      </div>
+    </div>
+  </div>
+  <p class="framenote">舞台是暗的，字幕的当前词发着青光，底下那条是语流/节奏——产品代码里已经存在、
+    别家没有的东西，被抬成了主角。连读用 ‿ 轻轻标出。外壳（rail、进度条）安静退到暗处。</p>
+
+  <!-- principles -->
+  <div class="sec-label">五条可检验的原则 · 每个界面都继承</div>
+  <div class="princ">
+    <div class="p"><div class="pt"><span class="dot"></span>暗，但不是黑</div>
+      <span>房间的底色是墨绿炭。亮色主题会有，但灵魂在暗调——贴合听、贴合看视频、贴合减疲劳。</span></div>
+    <div class="p"><div class="pt"><span class="dot"></span>退后，让内容发光</div>
+      <span>外壳安静，只有声音、词、画面在发光。词级高亮和节奏带就是光源，不是装饰。</span></div>
+    <div class="p"><div class="pt"><span class="dot"></span>在场，但不催促</div>
+      <span>它对你的了解永远等你自己去看，从不推送、不弹窗、不愧疚、不连胜。</span></div>
+    <div class="p amberdot"><div class="pt"><span class="dot"></span>诚实的仪器，不是讨好的玩具</div>
+      <span>精确、描述性、从不作假。频率低≠不会用，只叫「练习靶子」。靠诚实赢得信任。</span></div>
+    <div class="p wide"><div class="pt"><span class="dot"></span>永远做减法</div>
+      <span>listen 天生文字密集（字幕/转写/词/句）。美学的首要职责是降低疲劳：高易读、留呼吸、
+        一次只讲一件事——这也是「书房」方向出局的原因。</span></div>
+  </div>
+
+  <div class="foot">
+    <div>
+      <h4>字体 / 动效（下一步才细化）</h4>
+      <p>人文无衬线读正文与字幕，等宽体留给数字与音标（像录音设备的刻度）。动效像推子一样顺滑、
+        绝不弹跳；当前词点亮是一次淡入的通电。真正的定制字体是定方向之后最能拉开记忆点的一步——
+        现在这版用的还是系统字体。</p>
+    </div>
+    <div>
+      <h4>亮色是备选皮肤，不是灵魂</h4>
+      <p>白天书桌前也能用，亮色主题保留；但产品的「家」是这间调暗的房间。</p>
+      <div class="lightbar" aria-hidden="true">
+        <i style="background:#eef1ee"></i><i style="background:#dfe6e2"></i>
+        <i style="background:#167c72"></i><i style="background:#c8813a"></i>
+      </div>
+    </div>
+  </div>
+</div>

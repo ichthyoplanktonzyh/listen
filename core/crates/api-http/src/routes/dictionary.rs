@@ -1,4 +1,6 @@
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Query, State, SubtitleSentenceId,
+};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct DictionaryQuery {
@@ -12,6 +14,7 @@ pub(crate) async fn dictionary_lookup(
 ) -> Result<Json<domain::DictionaryLookupBundle>, ApiError> {
     state
         .services
+        .dictionary()
         .lookup_dictionary(state.dictionaries.as_ref(), &query.language, &query.lemma)
         .await
         .map(Json)
@@ -25,6 +28,7 @@ pub(crate) async fn diagnose_sentence(
     let sentence_id = SubtitleSentenceId::parse(sentence_id).map_err(ApplicationError::from)?;
     state
         .services
+        .media_analysis()
         .diagnose_sentence(&sentence_id)
         .map(Json)
         .map_err(ApiError::from)

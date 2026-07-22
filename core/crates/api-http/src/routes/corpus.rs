@@ -27,6 +27,7 @@ pub(crate) async fn reindex_corpus(
 ) -> Result<Json<CorpusReindexResult>, ApiError> {
     state
         .services
+        .media_analysis()
         .rebuild_corpus_index()
         .map(|indexed_tracks| Json(CorpusReindexResult { indexed_tracks }))
         .map_err(ApiError::from)
@@ -39,6 +40,7 @@ pub(crate) async fn search_corpus(
 ) -> Result<Json<Vec<domain::CorpusOccurrence>>, ApiError> {
     state
         .services
+        .media_analysis()
         .search_corpus(
             query.language.as_deref().unwrap_or("en"),
             &query.query,

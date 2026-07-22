@@ -1,0 +1,46 @@
+# Optional macOS product capability only. This lock is intentionally separate
+# from the Stanza/measurement research environment.
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+Pygments==2.20.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.14.2
+blis==1.3.3
+catalogue==2.0.10
+certifi==2026.6.17
+charset-normalizer==3.4.9
+click==8.4.2
+cloudpathlib==0.24.0
+confection==1.3.3
+cymem==2.0.13
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.18
+markdown-it-py==4.2.0
+mdurl==0.1.2
+murmurhash==1.0.15
+numpy==2.4.6
+packaging==26.2
+preshed==3.0.13
+pydantic==2.13.4
+pydantic_core==2.46.4
+requests==2.34.2
+rich==15.0.0
+shellingham==1.5.4
+smart_open==8.0.0
+spacy==3.8.13
+spacy-legacy==3.0.12
+spacy-loggers==1.0.5
+srsly==2.5.3
+thinc==8.3.13
+tqdm==4.68.4
+typer==0.26.8
+typing-inspection==0.4.2
+typing_extensions==4.16.0
+urllib3==2.7.0
+wasabi==1.1.3
+weasel==1.0.0
+wrapt==2.2.2

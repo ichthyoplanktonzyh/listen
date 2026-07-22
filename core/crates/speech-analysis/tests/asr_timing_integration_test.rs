@@ -1,7 +1,7 @@
 use domain::{
     SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs, TimingSource,
 };
-use speech_analysis::asr_timing::extract_word_timings_from_json;
+use speech_analysis::timing::extract_word_timings_from_json;
 
 fn word_token(index: u32, text: &str) -> SubtitleToken {
     SubtitleToken {

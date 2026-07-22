@@ -16,6 +16,24 @@ pub struct ShadowingAudioAnalysis {
     pub recording_waveform: AudioWaveformSummary,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RecordingAudioAnalysis {
+    pub duration_ms: u64,
+    pub pauses: Vec<AudioPauseInterval>,
+    pub waveform: AudioWaveformSummary,
+}
+
+pub fn analyze_pcm16_wav_path(
+    path: impl AsRef<Path>,
+) -> Result<RecordingAudioAnalysis, ShadowingComparisonError> {
+    let audio = read_pcm16_mono(path)?;
+    Ok(RecordingAudioAnalysis {
+        duration_ms: audio.duration_ms(),
+        pauses: detect_pauses(&audio),
+        waveform: waveform(&audio),
+    })
+}
+
 pub fn compare_pcm16_wav_paths(
     reference_path: impl AsRef<Path>,
     recording_path: impl AsRef<Path>,
@@ -213,6 +231,22 @@ mod tests {
         );
         let _ = std::fs::remove_file(reference);
         let _ = std::fs::remove_file(recording);
+    }
+
+    #[test]
+    fn summarizes_one_recording_without_turning_it_into_a_score() {
+        let path = tempfile_path("facts", &wav(900, &[(300, 500)]));
+        let result = analyze_pcm16_wav_path(&path).unwrap();
+        assert_eq!(result.duration_ms, 900);
+        assert_eq!(
+            result.pauses,
+            vec![AudioPauseInterval {
+                start_ms: 300,
+                end_ms: 500
+            }]
+        );
+        assert_eq!(result.waveform.duration_ms, 900);
+        let _ = std::fs::remove_file(path);
     }
 
     fn tempfile_path(label: &str, bytes: &[u8]) -> std::path::PathBuf {

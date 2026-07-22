@@ -301,6 +301,35 @@ pub struct ListeningHotspot {
     pub confidence: f32,
 }
 
+/// One perceptual sound group inside an A/B/C audible structure. A group may
+/// draw phones from more than one written token (for example the /kʌp/ group
+/// in `pick up` after a predicted linking boundary shift).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RhythmAudibleGroup {
+    #[serde(default)]
+    pub symbols: Vec<String>,
+    #[serde(default)]
+    pub display_ipa: String,
+    #[serde(default)]
+    pub source_token_indices: Vec<u32>,
+}
+
+/// Learner-facing realization of one audible-structure reference.
+///
+/// `display_ipa` preserves the linguistically meaningful boundary convention
+/// (`|` for written-word boundaries, `.` for predicted/observed audible
+/// grouping). `learner_cue` uses a compact hyphenated form suitable for the
+/// subtitle ribbon, e.g. `pɪ-kʌp`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RhythmAudibleStructure {
+    #[serde(default)]
+    pub groups: Vec<RhythmAudibleGroup>,
+    #[serde(default)]
+    pub display_ipa: String,
+    #[serde(default)]
+    pub learner_cue: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RhythmConnectedSpeechRef {
     pub id: String,
@@ -324,6 +353,16 @@ pub struct RhythmConnectedSpeechRef {
     pub expected_display_ipa: String,
     #[serde(default)]
     pub default_display_ipa: String,
+    /// Reference A: dictionary/citation phones grouped by written words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub citation_structure: Option<RhythmAudibleStructure>,
+    /// Reference B: text-rule prediction grouped as it may be heard.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub predicted_structure: Option<RhythmAudibleStructure>,
+    /// Reference C: observed phones only; absent when no audio-backed phone
+    /// evidence exists for this candidate.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_structure: Option<RhythmAudibleStructure>,
     pub divergence: RhythmDivergenceKind,
     pub signal_sources: Vec<RhythmSignalSource>,
     pub evidence_class: RhythmEvidenceClass,

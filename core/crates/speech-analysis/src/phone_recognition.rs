@@ -95,16 +95,16 @@ fn map_ipa_phone(ipa: &str, map: &HashMap<&str, (&str, &str)>) -> (String, Strin
 }
 
 fn sidecar_python() -> String {
-    if let Ok(path) = std::env::var("LLPLAYERNEXT_PYTHON") {
-        if std::path::Path::new(&path).is_file() {
-            return path;
-        }
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PYTHON")
+        && std::path::Path::new(&path).is_file()
+    {
+        return path;
     }
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            dirs.push(parent.into());
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        dirs.push(parent.into());
     }
     if let Ok(cwd) = std::env::current_dir() {
         dirs.push(cwd);
@@ -140,10 +140,10 @@ fn sidecar_path_env() -> String {
 }
 
 fn sidecar_espeak_library() -> Option<String> {
-    if let Ok(path) = std::env::var("PHONEMIZER_ESPEAK_LIBRARY") {
-        if std::path::Path::new(&path).is_file() {
-            return Some(path);
-        }
+    if let Ok(path) = std::env::var("PHONEMIZER_ESPEAK_LIBRARY")
+        && std::path::Path::new(&path).is_file()
+    {
+        return Some(path);
     }
     [
         "/opt/homebrew/lib/libespeak-ng.dylib",
@@ -157,17 +157,17 @@ fn sidecar_espeak_library() -> Option<String> {
 }
 
 fn sidecar_script_path() -> Option<String> {
-    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_SIDECAR") {
-        if std::path::Path::new(&path).is_file() {
-            return Some(path);
-        }
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_SIDECAR")
+        && std::path::Path::new(&path).is_file()
+    {
+        return Some(path);
     }
     let name = "wav2vec2-phoneme-cli.py";
     let mut dirs: Vec<std::path::PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            dirs.push(parent.into());
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(parent) = exe.parent()
+    {
+        dirs.push(parent.into());
     }
     if let Ok(cwd) = std::env::current_dir() {
         dirs.push(cwd);

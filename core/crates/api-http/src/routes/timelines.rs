@@ -1,4 +1,7 @@
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, EventName, Json, Path, State,
+    SubtitleTrackId,
+};
 
 pub(crate) async fn track_word_timings(
     State(state): State<ApiState>,
@@ -6,6 +9,7 @@ pub(crate) async fn track_word_timings(
 ) -> Result<Json<Vec<domain::WordTiming>>, ApiError> {
     state
         .services
+        .pronunciation()
         .word_timings_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -17,6 +21,7 @@ pub(crate) async fn track_word_timelines(
 ) -> Result<Json<Vec<domain::WordTimeline>>, ApiError> {
     state
         .services
+        .media_analysis()
         .list_word_timelines(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -28,6 +33,7 @@ pub(crate) async fn track_word_timeline_summaries(
 ) -> Result<Json<Vec<domain::WordTimelineSummary>>, ApiError> {
     state
         .services
+        .media_analysis()
         .summarize_word_timelines(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -41,6 +47,7 @@ pub(crate) async fn word_timeline(
 ) -> Result<Json<domain::WordTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .get_word_timeline(
             &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )?
@@ -63,6 +70,7 @@ pub(crate) async fn create_track_word_timeline(
 ) -> Result<Json<domain::WordTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .create_word_timeline(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
             application::CreateWordTimeline {
@@ -86,6 +94,7 @@ pub(crate) async fn export_track_lltimeline(
 ) -> Result<Json<domain::LLTimelineDocument>, ApiError> {
     state
         .services
+        .media_analysis()
         .export_lltimeline_document(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -99,6 +108,7 @@ pub(crate) async fn activate_word_timeline(
 ) -> Result<Json<domain::WordTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .activate_word_timeline(
             &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -112,6 +122,7 @@ pub(crate) async fn publish_word_timeline(
 ) -> Result<Json<domain::WordTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .publish_word_timeline(
             &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -125,6 +136,7 @@ pub(crate) async fn archive_word_timeline(
 ) -> Result<Json<domain::WordTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .archive_word_timeline(
             &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -138,6 +150,7 @@ pub(crate) async fn delete_word_timeline(
 ) -> Result<Json<domain::WordTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .delete_word_timeline(
             &domain::WordTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -151,6 +164,7 @@ pub(crate) async fn track_word_timing_diagnostics(
 ) -> Result<Json<Vec<application::SentenceWordTimingDiagnostics>>, ApiError> {
     state
         .services
+        .media_analysis()
         .word_timing_diagnostics_for_track(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -164,6 +178,7 @@ pub(crate) async fn track_chunk_partitions(
 ) -> Result<Json<Vec<application::SentenceChunkPartition>>, ApiError> {
     state
         .services
+        .media_analysis()
         .chunk_partitions_for_track(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -177,6 +192,7 @@ pub(crate) async fn track_chunk_diagnostics(
 ) -> Result<Json<Vec<application::SentenceChunkDiagnostics>>, ApiError> {
     state
         .services
+        .media_analysis()
         .chunk_diagnostics_for_track(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -187,7 +203,7 @@ pub(crate) async fn track_chunk_diagnostics(
 pub(crate) async fn chunk_providers(
     State(state): State<ApiState>,
 ) -> Json<Vec<application::LearnedProsodicProviderInfo>> {
-    Json(state.services.learned_prosodic_providers())
+    Json(state.services.media_analysis().learned_prosodic_providers())
 }
 
 pub(crate) async fn track_chunk_timelines(
@@ -196,6 +212,7 @@ pub(crate) async fn track_chunk_timelines(
 ) -> Result<Json<Vec<domain::ChunkTimeline>>, ApiError> {
     state
         .services
+        .media_analysis()
         .list_chunk_timelines(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -207,6 +224,7 @@ pub(crate) async fn track_chunk_timeline_summaries(
 ) -> Result<Json<Vec<domain::ChunkTimelineSummary>>, ApiError> {
     state
         .services
+        .media_analysis()
         .summarize_chunk_timelines(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -220,6 +238,7 @@ pub(crate) async fn chunk_timeline(
 ) -> Result<Json<domain::ChunkTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .get_chunk_timeline(
             &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )?
@@ -243,6 +262,7 @@ pub(crate) async fn generate_chunk_timeline(
     let status = request.and_then(|Json(request)| request.status);
     state
         .services
+        .media_analysis()
         .generate_chunk_timeline(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
             status,
@@ -257,6 +277,7 @@ pub(crate) async fn activate_chunk_timeline(
 ) -> Result<Json<domain::ChunkTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .activate_chunk_timeline(
             &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -270,6 +291,7 @@ pub(crate) async fn archive_chunk_timeline(
 ) -> Result<Json<domain::ChunkTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .archive_chunk_timeline(
             &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -283,6 +305,7 @@ pub(crate) async fn delete_chunk_timeline(
 ) -> Result<Json<domain::ChunkTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .delete_chunk_timeline(
             &domain::ChunkTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -296,6 +319,7 @@ pub(crate) async fn track_phone_timelines(
 ) -> Result<Json<Vec<domain::PhoneTimeline>>, ApiError> {
     state
         .services
+        .media_analysis()
         .list_phone_timelines(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -307,6 +331,7 @@ pub(crate) async fn track_phone_timeline_summaries(
 ) -> Result<Json<Vec<domain::PhoneTimelineSummary>>, ApiError> {
     state
         .services
+        .media_analysis()
         .summarize_phone_timelines(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -320,6 +345,7 @@ pub(crate) async fn phone_timeline(
 ) -> Result<Json<domain::PhoneTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .get_phone_timeline(
             &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )?
@@ -341,6 +367,7 @@ pub(crate) async fn activate_phone_timeline(
 ) -> Result<Json<domain::PhoneTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .activate_phone_timeline(
             &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -354,6 +381,7 @@ pub(crate) async fn archive_phone_timeline(
 ) -> Result<Json<domain::PhoneTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .archive_phone_timeline(
             &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -367,6 +395,7 @@ pub(crate) async fn delete_phone_timeline(
 ) -> Result<Json<domain::PhoneTimeline>, ApiError> {
     state
         .services
+        .media_analysis()
         .delete_phone_timeline(
             &domain::PhoneTimelineId::parse(timeline_id).map_err(ApplicationError::from)?,
         )
@@ -383,6 +412,7 @@ pub(crate) async fn generate_track_word_timings(
         SubtitleTrackId::parse(track_id.clone()).map_err(ApplicationError::from)?;
     let total = state
         .services
+        .media_analysis()
         .read_subtitle_track(&parsed_track_id)?
         .ok_or(ApplicationError::NotFound("subtitle track"))?
         .sentences
@@ -399,8 +429,12 @@ pub(crate) async fn generate_track_word_timings(
     let values = match request {
         Some(Json(request)) if !request.timings.is_empty() => state
             .services
+            .media_analysis()
             .store_word_timings(&parsed_track_id, &request.timings)?,
-        _ => state.services.word_timings_for_track(&parsed_track_id)?,
+        _ => state
+            .services
+            .pronunciation()
+            .word_timings_for_track(&parsed_track_id)?,
     };
     let _ = state.events.send(
         crate::event_payloads::SpeechBatchProgressPayload {
@@ -457,6 +491,7 @@ pub(crate) async fn track_sense_group_analyses(
 ) -> Result<Json<Vec<domain::SenseGroupAnalysis>>, ApiError> {
     state
         .services
+        .media_analysis()
         .list_sense_group_analyses(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -470,6 +505,7 @@ pub(crate) async fn track_sense_group_analysis_summaries(
 ) -> Result<Json<Vec<domain::SenseGroupAnalysisSummary>>, ApiError> {
     state
         .services
+        .media_analysis()
         .summarize_sense_group_analyses(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
         )
@@ -485,6 +521,7 @@ pub(crate) async fn generate_sense_group_analysis(
     let status = request.and_then(|Json(request)| request.status);
     state
         .services
+        .media_analysis()
         .generate_sense_group_analysis(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
             status,
@@ -499,6 +536,7 @@ pub(crate) async fn sense_group_analysis(
 ) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
     state
         .services
+        .media_analysis()
         .get_sense_group_analysis(
             &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
         )?
@@ -513,6 +551,7 @@ pub(crate) async fn activate_sense_group_analysis(
 ) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
     state
         .services
+        .media_analysis()
         .activate_sense_group_analysis(
             &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
         )
@@ -526,6 +565,7 @@ pub(crate) async fn archive_sense_group_analysis(
 ) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
     state
         .services
+        .media_analysis()
         .archive_sense_group_analysis(
             &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
         )
@@ -539,6 +579,7 @@ pub(crate) async fn delete_sense_group_analysis(
 ) -> Result<Json<domain::SenseGroupAnalysis>, ApiError> {
     state
         .services
+        .media_analysis()
         .delete_sense_group_analysis(
             &domain::SenseGroupAnalysisId::parse(analysis_id).map_err(ApplicationError::from)?,
         )

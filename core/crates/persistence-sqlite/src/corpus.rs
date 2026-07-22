@@ -1,5 +1,8 @@
 use application::{ApplicationError, CorpusIndexRepository};
-use domain::*;
+use domain::{
+    CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind, LanguageCode, MediaId,
+    SubtitleSentenceId, SubtitleTrackId,
+};
 use rusqlite::params;
 
 use super::{SqliteRepository, domain_sql, from_json, json, repo};
@@ -260,6 +263,27 @@ impl CorpusIndexRepository for SqliteRepository {
         )
         .optional()
         .map_err(repo)
+    }
+
+    fn list_semantic_corpus_occurrences(&self) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(&format!(
+                "SELECT {SELECT_COLUMNS} FROM corpus_occurrences
+                 WHERE kind IN (?1,?2) ORDER BY language,track_id,start_ms,id"
+            ))
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![
+                    json(&CorpusOccurrenceKind::Phrase)?,
+                    json(&CorpusOccurrenceKind::Chunk)?
+                ],
+                occurrence_from_row,
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
     }
 }
 

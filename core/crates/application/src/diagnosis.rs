@@ -1,6 +1,11 @@
-use crate::*;
+use crate::{
+    ApplicationError, DiagnosisKind, L1DiagnosisContext, L1DiagnosisHint, L1DiagnosisSpan,
+    L1DiagnosisSupport, LanguageCode, LearningEvent, LearningEventId, LearningEventKind,
+    LearningEventSubject, LearningEventSubjectKind, LexicalEntryKind, MediaAnalysisUseCases,
+    SentenceDiagnosis, SubtitleSentenceId, now_ms,
+};
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     pub fn diagnose_sentence(
         &self,
         sentence_id: &SubtitleSentenceId,
@@ -21,6 +26,7 @@ impl AppServices {
                 continue;
             }
             let normalized = self
+                .lexical_learning()
                 .normalize_lexical_form(language.as_str(), lemma)?
                 .normalized;
             lexical_keys.insert(lemma.clone(), normalized);
@@ -31,19 +37,20 @@ impl AppServices {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let entries = self.learning_assets.lexical_entries_by_keys(
+        let entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Word,
             &keys,
         )?;
         let phrase_keys = self
+            .lexical_learning()
             .phrase_candidates(sentence_id)?
             .into_iter()
             .map(|candidate| candidate.normalized_form)
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let phrase_entries = self.learning_assets.lexical_entries_by_keys(
+        let phrase_entries = self.lexical_entries.lexical_entries_by_keys(
             &language,
             LexicalEntryKind::Phrase,
             &phrase_keys,
@@ -51,14 +58,16 @@ impl AppServices {
         let mut profiles = std::collections::HashMap::new();
         for entry in entries.iter().chain(phrase_entries.iter()) {
             if let Some(profile) = self
-                .learning_assets
+                .lexical_learning()
+                .lexical_capabilities
                 .lexical_capability_profile(&entry.id, None)?
             {
                 profiles.insert(entry.id.clone(), profile);
             }
         }
         let observations = self
-            .learning_assets
+            .lexical_learning()
+            .learning_observations
             .list_lexical_observations_by_sentence(sentence_id)?;
         let mut diagnosis = diagnosis_core::diagnose_with_profiles(
             &sentence,
@@ -94,7 +103,7 @@ impl AppServices {
     ) -> Result<(), ApplicationError> {
         const MAX_HINTS: usize = 3;
         const MAX_SPANS_PER_HINT: usize = 8;
-        let Some(l1) = self.learner_l1()? else {
+        let Some(l1) = self.learner_profile().learner_l1()? else {
             return Ok(());
         };
         let Some(rules) = diagnosis_core::l1l2_difficulty_rules(&l1, language) else {

@@ -1,7 +1,18 @@
-use application::{ApplicationError, LearningAssetRepository, LexicalSourceContext};
-use domain::*;
+use application::{
+    ApplicationError, LearningObservationRepository, LexicalCapabilityRepository,
+    LexicalContentRepository, LexicalEntryRepository, LexicalSourceContext,
+    VocabularyAssetRepository,
+};
+use domain::{
+    CapabilityAssessment, CapabilityDimensionState, CapabilityFilter, CapabilityOverride,
+    CapabilityProjection, CapabilityStateChangeKind, LanguageCode, LearningChangeSource,
+    LearningObservation, LearningStatus, LexicalCapability, LexicalCapabilityHistory,
+    LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
+    LexicalObservation, LexicalOccurrence, LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId,
+    LexicalStatusHistory, LexicalStatusHistoryId, MediaId, ProjectionDecision, ProjectionProposal,
+    ProjectionProposalId, ProjectionProposalStatus, SubtitleSentenceId, VocabularyAssetBundle,
+};
 use rusqlite::{OptionalExtension, params, params_from_iter};
-use std::collections::HashMap;
 
 use super::{SqliteRepository, from_json, json, repo};
 
@@ -12,262 +23,20 @@ type LexicalAssets = (
     Vec<LexicalObservation>,
 );
 
-impl SqliteRepository {
-    fn import_lexical_sense_folder_assets(
-        &self,
-        folders: &[LexicalSenseFolder],
-        assignments: &[LexicalSenseFolderOccurrence],
-    ) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
-        let tx = conn.transaction().map_err(repo)?;
-        for folder in folders {
-            let entry_exists = tx
-                .query_row(
-                    "SELECT 1 FROM lexical_entries WHERE id=?1",
-                    [folder.lexical_entry_id.as_str()],
-                    |_| Ok(()),
-                )
-                .optional()
-                .map_err(repo)?
-                .is_some();
-            if !entry_exists {
-                continue;
-            }
-            tx.execute(
-                "INSERT OR IGNORE INTO lexical_sense_folders
-                 (id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-                params![
-                    folder.id.as_str(), folder.lexical_entry_id.as_str(), folder.label,
-                    folder.definition, folder.gloss, folder.external_ref, folder.created_at_ms,
-                    folder.updated_at_ms,
-                ],
-            )
-            .map_err(repo)?;
-        }
-        for assignment in assignments {
-            // Missing or cross-entry imported edges are skipped rather than
-            // fabricating data. The entry-agreement predicate must live here in
-            // the SELECT: the migration triggers RAISE(ABORT), which `OR
-            // IGNORE` does not downgrade, so relying on them would fail the
-            // whole import instead of skipping the one corrupt edge.
-            tx.execute(
-                "INSERT OR IGNORE INTO lexical_sense_folder_occurrences
-                 (lexical_sense_id,lexical_occurrence_id)
-                 SELECT ?1,?2
-                 WHERE (SELECT lexical_entry_id FROM lexical_sense_folders WHERE id=?1)
-                     = (SELECT lexical_entry_id FROM lexical_occurrences WHERE id=?2)",
-                params![
-                    assignment.lexical_sense_id.as_str(),
-                    assignment.lexical_occurrence_id.as_str(),
-                ],
-            )
-            .map_err(repo)?;
-        }
-        tx.commit().map_err(repo)
-    }
+mod capability;
+mod import_export;
+mod rows;
 
-    pub(super) fn export_lexical_assets(&self) -> Result<LexicalAssets, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
-        let entries = {
-            let mut statement = conn
-                .prepare(
-                    "SELECT id,language,kind,granularity,normalization,normalized_key,
-                            canonical_form,normalized_form,display_form,status,
-                            user_definition,personal_note,normalization_provider,normalization_version,
-                            user_corrected,updated_at_ms,learning_updated_at_ms FROM lexical_entries",
-                )
-                .map_err(repo)?;
-            statement
-                .query_map([], lexical_entry_row)
-                .map_err(repo)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(repo)?
-        };
-        let history = {
-            let mut statement = conn
-                .prepare(
-                    "SELECT id,lexical_entry_id,previous_status,new_status,changed_at_ms,change_source
-                     FROM lexical_status_history",
-                )
-                .map_err(repo)?;
-            statement
-                .query_map([], lexical_history_row)
-                .map_err(repo)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(repo)?
-        };
-        let occurrences = {
-            let mut statement = conn
-                .prepare(
-                    "SELECT id,source_key,lexical_entry_id,media_id,sentence_id,original_form,
-                            sentence_text_snapshot,media_title_snapshot,media_fingerprint_snapshot,
-                            start_ms_snapshot,end_ms_snapshot,token_start,token_end,first_seen_at_ms,
-                            last_seen_at_ms,encounter_count FROM lexical_occurrences",
-                )
-                .map_err(repo)?;
-            statement
-                .query_map([], lexical_occurrence_row)
-                .map_err(repo)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(repo)?
-        };
-        let observations = {
-            let mut statement = conn
-                .prepare(
-                    "SELECT id,lexical_entry_id,COALESCE(sentence_id,sentence_id_snapshot),
-                            original_form,result,created_at_ms
-                     FROM lexical_observations WHERE cleared_at_ms IS NULL",
-                )
-                .map_err(repo)?;
-            statement
-                .query_map([], lexical_observation_row)
-                .map_err(repo)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(repo)?
-        };
-        Ok((entries, history, occurrences, observations))
-    }
+use capability::{capability_history_row, read_capability_profile, sense_key};
+use capability::{read_capability_state, write_capability_history, write_capability_state};
+use rows::{
+    learning_observation_row, lexical_entry_row, lexical_history_row, lexical_observation_row,
+    lexical_occurrence_row, read_all_lexical_sense_folder_occurrences,
+    read_all_lexical_sense_folders, read_all_phonetic_feedback, read_lexical_sense_folder,
+    read_lexical_sense_folder_details,
+};
 
-    pub(super) fn import_lexical_assets(
-        &self,
-        entries: &[LexicalEntry],
-        history: &[LexicalStatusHistory],
-        occurrences: &[LexicalOccurrence],
-        observations: &[LexicalObservation],
-    ) -> Result<(), ApplicationError> {
-        let mut imported_ids = HashMap::new();
-        for entry in entries {
-            let local =
-                self.lexical_entry_by_key(&entry.language, entry.kind, &entry.unit.normalized_key)?;
-            let merged = merge_imported_entry(local.as_ref(), entry);
-            let details = self.upsert_lexical_entry(&merged, None, LearningChangeSource::Import)?;
-            imported_ids.insert(entry.id.clone(), details.entry.id);
-        }
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
-        let tx = conn.transaction().map_err(repo)?;
-        for value in history {
-            let lexical_entry_id = imported_ids
-                .get(&value.lexical_entry_id)
-                .unwrap_or(&value.lexical_entry_id);
-            tx.execute(
-                "INSERT OR IGNORE INTO lexical_status_history
-                 (id,lexical_entry_id,previous_status,new_status,changed_at_ms,change_source)
-                 VALUES (?1,?2,?3,?4,?5,?6)",
-                params![
-                    value.id.as_str(),
-                    lexical_entry_id.as_str(),
-                    value.previous_status.map(|item| json(&item)).transpose()?,
-                    value.new_status.map(|item| json(&item)).transpose()?,
-                    value.changed_at_ms,
-                    json(&value.change_source)?,
-                ],
-            )
-            .map_err(repo)?;
-        }
-        for value in occurrences {
-            let lexical_entry_id = imported_ids
-                .get(&value.lexical_entry_id)
-                .unwrap_or(&value.lexical_entry_id);
-            let id = LexicalOccurrenceId::from_fingerprint(
-                "lexical-occurrence",
-                &format!("{}:{}", lexical_entry_id.as_str(), value.source_key),
-            );
-            tx.execute(
-                "INSERT INTO lexical_occurrences
-                 (id,source_key,lexical_entry_id,media_id,sentence_id,original_form,
-                  sentence_text_snapshot,media_title_snapshot,media_fingerprint_snapshot,
-                  start_ms_snapshot,end_ms_snapshot,token_start,token_end,first_seen_at_ms,
-                  last_seen_at_ms,encounter_count)
-                 VALUES (?1,?2,?3,NULL,NULL,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
-                 ON CONFLICT(lexical_entry_id,source_key) DO UPDATE SET
-                   original_form=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
-                                      THEN excluded.original_form ELSE original_form END,
-                   sentence_text_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
-                                               THEN excluded.sentence_text_snapshot
-                                               ELSE sentence_text_snapshot END,
-                   media_title_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
-                                             THEN excluded.media_title_snapshot
-                                             ELSE media_title_snapshot END,
-                   media_fingerprint_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
-                                                   THEN excluded.media_fingerprint_snapshot
-                                                   ELSE media_fingerprint_snapshot END,
-                   start_ms_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
-                                          THEN excluded.start_ms_snapshot ELSE start_ms_snapshot END,
-                   end_ms_snapshot=CASE WHEN excluded.last_seen_at_ms>last_seen_at_ms
-                                        THEN excluded.end_ms_snapshot ELSE end_ms_snapshot END,
-                   token_start=COALESCE(token_start,excluded.token_start),
-                   token_end=COALESCE(token_end,excluded.token_end),
-                   first_seen_at_ms=MIN(first_seen_at_ms,excluded.first_seen_at_ms),
-                   last_seen_at_ms=MAX(last_seen_at_ms,excluded.last_seen_at_ms),
-                   encounter_count=MAX(encounter_count,excluded.encounter_count)",
-                params![
-                    id.as_str(),
-                    value.source_key,
-                    lexical_entry_id.as_str(),
-                    value.original_form,
-                    value.sentence_text_snapshot,
-                    value.media_title_snapshot,
-                    value.media_fingerprint_snapshot,
-                    value.start_ms_snapshot,
-                    value.end_ms_snapshot,
-                    value.token_start,
-                    value.token_end,
-                    value.first_seen_at_ms,
-                    value.last_seen_at_ms,
-                    value.encounter_count,
-                ],
-            )
-            .map_err(repo)?;
-        }
-        for value in observations {
-            let lexical_entry_id = imported_ids
-                .get(&value.lexical_entry_id)
-                .unwrap_or(&value.lexical_entry_id);
-            let id = lexical_observation_id(lexical_entry_id, &value.sentence_id);
-            tx.execute(
-                "INSERT OR IGNORE INTO lexical_observations
-                 (id,lexical_entry_id,sentence_id,sentence_id_snapshot,original_form,result,
-                  created_at_ms,cleared_at_ms)
-                 VALUES (?1,?2,NULL,?3,?4,?5,?6,NULL)",
-                params![
-                    id.as_str(),
-                    lexical_entry_id.as_str(),
-                    value.sentence_id.as_str(),
-                    value.original_form,
-                    json(&value.result)?,
-                    value.created_at_ms,
-                ],
-            )
-            .map_err(repo)?;
-        }
-        tx.commit().map_err(repo)
-    }
-}
-
-fn merge_imported_entry(local: Option<&LexicalEntry>, imported: &LexicalEntry) -> LexicalEntry {
-    let Some(local) = local else {
-        return imported.clone();
-    };
-    let mut merged = if imported.updated_at_ms > local.updated_at_ms {
-        imported.clone()
-    } else {
-        local.clone()
-    };
-    merged.id = local.id.clone();
-    if imported.learning_updated_at_ms > local.learning_updated_at_ms {
-        merged.user_definition = imported.user_definition.clone();
-        merged.personal_note = imported.personal_note.clone();
-        merged.learning_updated_at_ms = imported.learning_updated_at_ms;
-    } else {
-        merged.user_definition = local.user_definition.clone();
-        merged.personal_note = local.personal_note.clone();
-        merged.learning_updated_at_ms = local.learning_updated_at_ms;
-    }
-    merged
-}
-
-impl LearningAssetRepository for SqliteRepository {
+impl LexicalCapabilityRepository for SqliteRepository {
     fn lexical_capability_profile(
         &self,
         lexical_entry_id: &LexicalEntryId,
@@ -349,6 +118,146 @@ impl LearningAssetRepository for SqliteRepository {
             .map_err(repo)
     }
 
+    fn save_projection_proposal(
+        &self,
+        proposal: &ProjectionProposal,
+    ) -> Result<ProjectionProposal, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "INSERT OR IGNORE INTO projection_proposals
+             (id,lexical_entry_id,capability,algorithm_version,evidence_as_of_ms,proposal_json,created_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![proposal.id.as_str(), proposal.lexical_entry_id.as_str(), json(&proposal.capability)?,
+                proposal.algorithm_version, proposal.evidence_as_of_ms, json(proposal)?, proposal.created_at_ms],
+        ).map_err(repo)?;
+        drop(conn);
+        self.projection_proposal(&proposal.id)?.ok_or_else(|| {
+            ApplicationError::Repository("projection proposal was not persisted".into())
+        })
+    }
+
+    fn projection_proposal(
+        &self,
+        id: &ProjectionProposalId,
+    ) -> Result<Option<ProjectionProposal>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        read_projection_proposal(&conn, id)
+    }
+
+    fn list_projection_proposals(
+        &self,
+        lexical_entry_id: &LexicalEntryId,
+        capability: Option<LexicalCapability>,
+    ) -> Result<Vec<ProjectionProposal>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let capability_json = capability.map(|value| json(&value)).transpose()?;
+        let mut statement = conn.prepare(
+            "SELECT p.proposal_json,d.decision_json,
+                    EXISTS(SELECT 1 FROM projection_proposals newer
+                      WHERE newer.lexical_entry_id=p.lexical_entry_id AND newer.capability=p.capability
+                        AND (newer.evidence_as_of_ms>p.evidence_as_of_ms
+                          OR (newer.evidence_as_of_ms=p.evidence_as_of_ms AND newer.created_at_ms>p.created_at_ms)))
+             FROM projection_proposals p LEFT JOIN projection_decisions d ON d.proposal_id=p.id
+             WHERE p.lexical_entry_id=?1 AND (?2 IS NULL OR p.capability=?2)
+             ORDER BY p.created_at_ms DESC,p.id DESC"
+        ).map_err(repo)?;
+        statement
+            .query_map(params![lexical_entry_id.as_str(), capability_json], |row| {
+                let mut proposal: ProjectionProposal = from_json(&row.get::<_, String>(0)?)?;
+                let decision = row
+                    .get::<_, Option<String>>(1)?
+                    .map(|value| from_json::<ProjectionDecision>(&value))
+                    .transpose()?;
+                proposal.status = match decision.map(|value| value.decision) {
+                    Some(domain::ProjectionDecisionKind::Confirm) => {
+                        ProjectionProposalStatus::Confirmed
+                    }
+                    Some(domain::ProjectionDecisionKind::Reject) => {
+                        ProjectionProposalStatus::Rejected
+                    }
+                    None if row.get::<_, bool>(2)? => ProjectionProposalStatus::Superseded,
+                    None => ProjectionProposalStatus::Pending,
+                };
+                Ok(proposal)
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn resolve_projection_proposal(
+        &self,
+        decision: &ProjectionDecision,
+        proposal: &ProjectionProposal,
+        confirmed_projection: Option<CapabilityProjection>,
+    ) -> Result<(), ApplicationError> {
+        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let tx = conn.transaction().map_err(repo)?;
+        tx.execute(
+            "INSERT INTO projection_decisions(id,proposal_id,decision_json,decided_at_ms) VALUES (?1,?2,?3,?4)",
+            params![decision.id.as_str(), decision.proposal_id.as_str(), json(decision)?, decision.decided_at_ms],
+        ).map_err(repo)?;
+        if let Some(projection) = confirmed_projection {
+            let previous =
+                read_capability_state(&tx, &proposal.lexical_entry_id, None, proposal.capability)?
+                    .unwrap_or_default();
+            let mut next = previous.clone();
+            next.projection = Some(projection);
+            if previous != next {
+                write_capability_state(
+                    &tx,
+                    &proposal.lexical_entry_id,
+                    None,
+                    proposal.capability,
+                    &next,
+                    decision.decided_at_ms,
+                )?;
+                write_capability_history(
+                    &tx,
+                    &proposal.lexical_entry_id,
+                    None,
+                    proposal.capability,
+                    &previous,
+                    &next,
+                    CapabilityStateChangeKind::ProjectionUpdated,
+                    decision.decided_at_ms,
+                )?;
+            }
+        }
+        tx.commit().map_err(repo)?;
+        Ok(())
+    }
+}
+
+fn read_projection_proposal(
+    conn: &rusqlite::Connection,
+    id: &ProjectionProposalId,
+) -> Result<Option<ProjectionProposal>, ApplicationError> {
+    conn.query_row(
+        "SELECT p.proposal_json,d.decision_json FROM projection_proposals p
+         LEFT JOIN projection_decisions d ON d.proposal_id=p.id WHERE p.id=?1",
+        [id.as_str()],
+        |row| {
+            let mut proposal: ProjectionProposal = from_json(&row.get::<_, String>(0)?)?;
+            let decision = row
+                .get::<_, Option<String>>(1)?
+                .map(|value| from_json::<ProjectionDecision>(&value))
+                .transpose()?;
+            proposal.status = match decision.map(|value| value.decision) {
+                Some(domain::ProjectionDecisionKind::Confirm) => {
+                    ProjectionProposalStatus::Confirmed
+                }
+                Some(domain::ProjectionDecisionKind::Reject) => ProjectionProposalStatus::Rejected,
+                None => ProjectionProposalStatus::Pending,
+            };
+            Ok(proposal)
+        },
+    )
+    .optional()
+    .map_err(repo)
+}
+
+impl LexicalEntryRepository for SqliteRepository {
     fn upsert_lexical_entry(
         &self,
         entry: &LexicalEntry,
@@ -769,7 +678,9 @@ impl LearningAssetRepository for SqliteRepository {
         )
         .map_err(repo)
     }
+}
 
+impl LearningObservationRepository for SqliteRepository {
     fn create_lexical_observation(
         &self,
         observation: &LexicalObservation,
@@ -903,7 +814,9 @@ impl LearningAssetRepository for SqliteRepository {
             .map(|_| ())
             .map_err(repo)
     }
+}
 
+impl LexicalContentRepository for SqliteRepository {
     fn update_lexical_learning_content(
         &self,
         id: &LexicalEntryId,
@@ -1062,7 +975,9 @@ impl LearningAssetRepository for SqliteRepository {
         .map_err(repo)?;
         Ok(())
     }
+}
 
+impl VocabularyAssetRepository for SqliteRepository {
     fn export_assets(&self) -> Result<VocabularyAssetBundle, ApplicationError> {
         let (lexical_entries, lexical_history, lexical_occurrences, lexical_observations) =
             self.export_lexical_assets()?;
@@ -1194,608 +1109,4 @@ impl LearningAssetRepository for SqliteRepository {
         }
         Ok(profiles)
     }
-}
-
-impl SqliteRepository {
-    fn export_all_learning_observations(
-        &self,
-    ) -> Result<Vec<LearningObservation>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
-        let mut statement = conn
-            .prepare(
-                "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
-                        surface_form,sentence_id,media_id,origin,source_ref,occurred_at_ms
-                 FROM learning_observations
-                 ORDER BY occurred_at_ms, id",
-            )
-            .map_err(repo)?;
-        statement
-            .query_map([], learning_observation_row)
-            .map_err(repo)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(repo)
-    }
-
-    fn import_capability_profile(
-        &self,
-        imported: &LexicalCapabilityProfile,
-    ) -> Result<(), ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
-        let exists = conn
-            .query_row(
-                "SELECT 1 FROM lexical_entries WHERE id=?1",
-                [imported.lexical_entry_id.as_str()],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(repo)?
-            .is_some();
-        if !exists {
-            return Ok(());
-        }
-        for capability in LexicalCapability::ALL {
-            let imported_dim = imported.dimension(capability);
-            if imported_dim.projection.is_none() && imported_dim.user_override.is_none() {
-                continue;
-            }
-            let local = read_capability_state(
-                &conn,
-                &imported.lexical_entry_id,
-                imported.sense_id.as_ref(),
-                capability,
-            )?
-            .unwrap_or_default();
-            let merged = merge_capability_dimension(&local, imported_dim);
-            if merged != local {
-                let ts = merged
-                    .user_override
-                    .as_ref()
-                    .map(|value| value.updated_at_ms)
-                    .or_else(|| merged.projection.as_ref().map(|value| value.updated_at_ms))
-                    .unwrap_or(0);
-                write_capability_state(
-                    &conn,
-                    &imported.lexical_entry_id,
-                    imported.sense_id.as_ref(),
-                    capability,
-                    &merged,
-                    ts,
-                )?;
-            }
-        }
-        Ok(())
-    }
-
-    fn update_capability_state(
-        &self,
-        lexical_entry_id: &LexicalEntryId,
-        sense_id: Option<&LexicalSenseId>,
-        capability: LexicalCapability,
-        changed_at_ms: u64,
-        change_kind: CapabilityStateChangeKind,
-        update: impl FnOnce(&mut CapabilityDimensionState),
-    ) -> Result<LexicalCapabilityProfile, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
-        let tx = conn.transaction().map_err(repo)?;
-        let exists = tx
-            .query_row(
-                "SELECT 1 FROM lexical_entries WHERE id=?1",
-                [lexical_entry_id.as_str()],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(repo)?
-            .is_some();
-        if !exists {
-            return Err(ApplicationError::NotFound("lexical entry"));
-        }
-
-        let previous_state =
-            read_capability_state(&tx, lexical_entry_id, sense_id, capability)?.unwrap_or_default();
-        let mut new_state = previous_state.clone();
-        update(&mut new_state);
-        if previous_state != new_state {
-            write_capability_state(
-                &tx,
-                lexical_entry_id,
-                sense_id,
-                capability,
-                &new_state,
-                changed_at_ms,
-            )?;
-            write_capability_history(
-                &tx,
-                lexical_entry_id,
-                sense_id,
-                capability,
-                &previous_state,
-                &new_state,
-                change_kind,
-                changed_at_ms,
-            )?;
-        }
-        tx.commit().map_err(repo)?;
-        drop(conn);
-        self.lexical_capability_profile(lexical_entry_id, sense_id)?
-            .ok_or(ApplicationError::NotFound("lexical entry"))
-    }
-}
-
-fn sense_key(sense_id: Option<&LexicalSenseId>) -> &str {
-    sense_id.map_or("", LexicalSenseId::as_str)
-}
-
-fn read_capability_profile(
-    conn: &rusqlite::Connection,
-    lexical_entry_id: &LexicalEntryId,
-    sense_id: Option<&LexicalSenseId>,
-) -> Result<Option<LexicalCapabilityProfile>, ApplicationError> {
-    let exists = conn
-        .query_row(
-            "SELECT 1 FROM lexical_entries WHERE id=?1",
-            [lexical_entry_id.as_str()],
-            |_| Ok(()),
-        )
-        .optional()
-        .map_err(repo)?
-        .is_some();
-    if !exists {
-        return Ok(None);
-    }
-    let mut profile = LexicalCapabilityProfile::unassessed(lexical_entry_id.clone());
-    profile.sense_id = sense_id.cloned();
-    let mut statement = conn
-        .prepare(
-            "SELECT capability,projection_json,override_json
-             FROM lexical_capability_states
-             WHERE lexical_entry_id=?1 AND sense_id=?2",
-        )
-        .map_err(repo)?;
-    let rows = statement
-        .query_map(
-            params![lexical_entry_id.as_str(), sense_key(sense_id)],
-            |row| {
-                Ok((
-                    from_json::<LexicalCapability>(&row.get::<_, String>(0)?)?,
-                    row.get::<_, Option<String>>(1)?
-                        .map(|value| from_json(&value))
-                        .transpose()?,
-                    row.get::<_, Option<String>>(2)?
-                        .map(|value| from_json(&value))
-                        .transpose()?,
-                ))
-            },
-        )
-        .map_err(repo)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(repo)?;
-    for (capability, projection, user_override) in rows {
-        *profile.dimension_mut(capability) = CapabilityDimensionState {
-            projection,
-            user_override,
-        };
-    }
-    Ok(Some(profile))
-}
-
-fn read_capability_state(
-    conn: &rusqlite::Connection,
-    lexical_entry_id: &LexicalEntryId,
-    sense_id: Option<&LexicalSenseId>,
-    capability: LexicalCapability,
-) -> Result<Option<CapabilityDimensionState>, ApplicationError> {
-    conn.query_row(
-        "SELECT projection_json,override_json FROM lexical_capability_states
-         WHERE lexical_entry_id=?1 AND sense_id=?2 AND capability=?3",
-        params![
-            lexical_entry_id.as_str(),
-            sense_key(sense_id),
-            json(&capability)?
-        ],
-        |row| {
-            Ok(CapabilityDimensionState {
-                projection: row
-                    .get::<_, Option<String>>(0)?
-                    .map(|value| from_json(&value))
-                    .transpose()?,
-                user_override: row
-                    .get::<_, Option<String>>(1)?
-                    .map(|value| from_json(&value))
-                    .transpose()?,
-            })
-        },
-    )
-    .optional()
-    .map_err(repo)
-}
-
-fn write_capability_state(
-    conn: &rusqlite::Connection,
-    lexical_entry_id: &LexicalEntryId,
-    sense_id: Option<&LexicalSenseId>,
-    capability: LexicalCapability,
-    state: &CapabilityDimensionState,
-    changed_at_ms: u64,
-) -> Result<(), ApplicationError> {
-    if state.projection.is_none() && state.user_override.is_none() {
-        conn.execute(
-            "DELETE FROM lexical_capability_states
-             WHERE lexical_entry_id=?1 AND sense_id=?2 AND capability=?3",
-            params![
-                lexical_entry_id.as_str(),
-                sense_key(sense_id),
-                json(&capability)?
-            ],
-        )
-        .map_err(repo)?;
-        return Ok(());
-    }
-    conn.execute(
-        "INSERT INTO lexical_capability_states
-         (lexical_entry_id,sense_id,capability,projection_json,override_json,updated_at_ms)
-         VALUES (?1,?2,?3,?4,?5,?6)
-         ON CONFLICT(lexical_entry_id,sense_id,capability) DO UPDATE SET
-           projection_json=excluded.projection_json,
-           override_json=excluded.override_json,
-           updated_at_ms=excluded.updated_at_ms",
-        params![
-            lexical_entry_id.as_str(),
-            sense_key(sense_id),
-            json(&capability)?,
-            state.projection.as_ref().map(json).transpose()?,
-            state.user_override.as_ref().map(json).transpose()?,
-            changed_at_ms,
-        ],
-    )
-    .map_err(repo)?;
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn write_capability_history(
-    conn: &rusqlite::Connection,
-    lexical_entry_id: &LexicalEntryId,
-    sense_id: Option<&LexicalSenseId>,
-    capability: LexicalCapability,
-    previous_state: &CapabilityDimensionState,
-    new_state: &CapabilityDimensionState,
-    change_kind: CapabilityStateChangeKind,
-    changed_at_ms: u64,
-) -> Result<(), ApplicationError> {
-    let fingerprint = format!(
-        "{}:{}:{:?}:{:?}:{}:{}",
-        lexical_entry_id.as_str(),
-        sense_key(sense_id),
-        capability,
-        change_kind,
-        changed_at_ms,
-        json(new_state)?
-    );
-    let id =
-        LexicalCapabilityHistoryId::from_fingerprint("lexical-capability-history", &fingerprint);
-    conn.execute(
-        "INSERT OR IGNORE INTO lexical_capability_history
-         (id,lexical_entry_id,sense_id,capability,previous_state_json,new_state_json,
-          change_kind,changed_at_ms)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        params![
-            id.as_str(),
-            lexical_entry_id.as_str(),
-            sense_key(sense_id),
-            json(&capability)?,
-            json(previous_state)?,
-            json(new_state)?,
-            json(&change_kind)?,
-            changed_at_ms,
-        ],
-    )
-    .map_err(repo)?;
-    Ok(())
-}
-
-fn capability_history_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalCapabilityHistory> {
-    let sense_id = row.get::<_, String>(2)?;
-    Ok(LexicalCapabilityHistory {
-        id: LexicalCapabilityHistoryId::parse(row.get::<_, String>(0)?)
-            .map_err(super::domain_sql)?,
-        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
-            .map_err(super::domain_sql)?,
-        sense_id: if sense_id.is_empty() {
-            None
-        } else {
-            Some(LexicalSenseId::parse(sense_id).map_err(super::domain_sql)?)
-        },
-        capability: from_json(&row.get::<_, String>(3)?)?,
-        previous_state: from_json(&row.get::<_, String>(4)?)?,
-        new_state: from_json(&row.get::<_, String>(5)?)?,
-        change_kind: from_json(&row.get::<_, String>(6)?)?,
-        changed_at_ms: row.get(7)?,
-    })
-}
-
-fn lexical_entry_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalEntry> {
-    let language = LanguageCode::parse(row.get::<_, String>(1)?).map_err(super::domain_sql)?;
-    let kind = from_json(&row.get::<_, String>(2)?)?;
-    let granularity = row.get::<_, String>(3)?;
-    let normalization = row.get::<_, String>(4)?;
-    let normalized_key = row.get::<_, String>(5)?;
-    let display_form = row.get::<_, String>(8)?;
-    let entry = LexicalEntry {
-        id: LexicalEntryId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        unit: LexicalUnit::new(
-            language.clone(),
-            granularity,
-            normalization,
-            normalized_key,
-            display_form.clone(),
-        ),
-        language,
-        kind,
-        canonical_form: row.get(6)?,
-        normalized_form: row.get(7)?,
-        display_form,
-        status: row
-            .get::<_, Option<String>>(9)?
-            .map(|value| from_json(&value))
-            .transpose()?,
-        user_definition: row.get(10)?,
-        personal_note: row.get(11)?,
-        normalization_provider: row.get(12)?,
-        normalization_version: row.get(13)?,
-        user_corrected: row.get(14)?,
-        updated_at_ms: row.get(15)?,
-        learning_updated_at_ms: row.get(16)?,
-    };
-    // Reject rows whose stored kind/normalized_form projections have drifted
-    // from the authoritative unit columns instead of returning divergent data.
-    entry.validate_unit_coherence().map_err(super::domain_sql)?;
-    Ok(entry)
-}
-
-fn lexical_history_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalStatusHistory> {
-    Ok(LexicalStatusHistory {
-        id: LexicalStatusHistoryId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
-            .map_err(super::domain_sql)?,
-        previous_status: row
-            .get::<_, Option<String>>(2)?
-            .map(|value| from_json(&value))
-            .transpose()?,
-        new_status: row
-            .get::<_, Option<String>>(3)?
-            .map(|value| from_json(&value))
-            .transpose()?,
-        changed_at_ms: row.get(4)?,
-        change_source: from_json(&row.get::<_, String>(5)?)?,
-    })
-}
-
-fn lexical_occurrence_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalOccurrence> {
-    Ok(LexicalOccurrence {
-        id: LexicalOccurrenceId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        source_key: row.get(1)?,
-        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(2)?)
-            .map_err(super::domain_sql)?,
-        media_id: row
-            .get::<_, Option<String>>(3)?
-            .map(MediaId::parse)
-            .transpose()
-            .map_err(super::domain_sql)?,
-        sentence_id: row
-            .get::<_, Option<String>>(4)?
-            .map(SubtitleSentenceId::parse)
-            .transpose()
-            .map_err(super::domain_sql)?,
-        original_form: row.get(5)?,
-        sentence_text_snapshot: row.get(6)?,
-        media_title_snapshot: row.get(7)?,
-        media_fingerprint_snapshot: row.get(8)?,
-        start_ms_snapshot: row.get(9)?,
-        end_ms_snapshot: row.get(10)?,
-        token_start: row.get(11)?,
-        token_end: row.get(12)?,
-        first_seen_at_ms: row.get(13)?,
-        last_seen_at_ms: row.get(14)?,
-        encounter_count: row.get(15)?,
-    })
-}
-
-fn lexical_sense_folder_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalSenseFolder> {
-    Ok(LexicalSenseFolder {
-        id: LexicalSenseId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
-            .map_err(super::domain_sql)?,
-        label: row.get(2)?,
-        definition: row.get(3)?,
-        gloss: row.get(4)?,
-        external_ref: row.get(5)?,
-        created_at_ms: row.get(6)?,
-        updated_at_ms: row.get(7)?,
-    })
-}
-
-fn read_lexical_sense_folder(
-    conn: &rusqlite::Connection,
-    sense_id: &LexicalSenseId,
-) -> Result<Option<LexicalSenseFolder>, ApplicationError> {
-    conn.query_row(
-        "SELECT id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms
-         FROM lexical_sense_folders WHERE id=?1",
-        [sense_id.as_str()],
-        lexical_sense_folder_row,
-    )
-    .optional()
-    .map_err(repo)
-}
-
-fn read_lexical_sense_folder_details(
-    conn: &rusqlite::Connection,
-    lexical_entry_id: &LexicalEntryId,
-) -> Result<Vec<LexicalSenseFolderDetails>, ApplicationError> {
-    let folders = {
-        let mut statement = conn
-            .prepare(
-                "SELECT id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms
-                 FROM lexical_sense_folders WHERE lexical_entry_id=?1 ORDER BY created_at_ms ASC",
-            )
-            .map_err(repo)?;
-        statement
-            .query_map([lexical_entry_id.as_str()], lexical_sense_folder_row)
-            .map_err(repo)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(repo)?
-    };
-    folders
-        .into_iter()
-        .map(|folder| {
-            let mut statement = conn
-                .prepare(
-                    "SELECT o.id,o.source_key,o.lexical_entry_id,o.media_id,o.sentence_id,o.original_form,
-                            o.sentence_text_snapshot,o.media_title_snapshot,o.media_fingerprint_snapshot,
-                            o.start_ms_snapshot,o.end_ms_snapshot,o.token_start,o.token_end,o.first_seen_at_ms,
-                            o.last_seen_at_ms,o.encounter_count
-                     FROM lexical_sense_folder_occurrences a
-                     JOIN lexical_occurrences o ON o.id=a.lexical_occurrence_id
-                     WHERE a.lexical_sense_id=?1 ORDER BY o.last_seen_at_ms DESC",
-                )
-                .map_err(repo)?;
-            let occurrences = statement
-                .query_map([folder.id.as_str()], lexical_occurrence_row)
-                .map_err(repo)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(repo)?;
-            Ok(LexicalSenseFolderDetails { folder, occurrences })
-        })
-        .collect()
-}
-
-fn read_all_lexical_sense_folders(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<LexicalSenseFolder>, ApplicationError> {
-    let mut statement = conn
-        .prepare(
-            "SELECT id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms
-             FROM lexical_sense_folders ORDER BY created_at_ms ASC",
-        )
-        .map_err(repo)?;
-    statement
-        .query_map([], lexical_sense_folder_row)
-        .map_err(repo)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(repo)
-}
-
-fn read_all_lexical_sense_folder_occurrences(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<LexicalSenseFolderOccurrence>, ApplicationError> {
-    let mut statement = conn
-        .prepare(
-            "SELECT lexical_sense_id,lexical_occurrence_id
-             FROM lexical_sense_folder_occurrences",
-        )
-        .map_err(repo)?;
-    statement
-        .query_map([], |row| {
-            Ok(LexicalSenseFolderOccurrence {
-                lexical_sense_id: LexicalSenseId::parse(row.get::<_, String>(0)?)
-                    .map_err(super::domain_sql)?,
-                lexical_occurrence_id: LexicalOccurrenceId::parse(row.get::<_, String>(1)?)
-                    .map_err(super::domain_sql)?,
-            })
-        })
-        .map_err(repo)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(repo)
-}
-
-fn lexical_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LexicalObservation> {
-    Ok(LexicalObservation {
-        id: LexicalObservationId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
-            .map_err(super::domain_sql)?,
-        sentence_id: SubtitleSentenceId::parse(row.get::<_, String>(2)?)
-            .map_err(super::domain_sql)?,
-        original_form: row.get(3)?,
-        result: from_json(&row.get::<_, String>(4)?)?,
-        created_at_ms: row.get(5)?,
-    })
-}
-
-fn learning_observation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<LearningObservation> {
-    let sense_id = row.get::<_, String>(2)?;
-    Ok(LearningObservation {
-        id: LearningObservationId::parse(row.get::<_, String>(0)?).map_err(super::domain_sql)?,
-        lexical_entry_id: LexicalEntryId::parse(row.get::<_, String>(1)?)
-            .map_err(super::domain_sql)?,
-        sense_id: if sense_id.is_empty() {
-            None
-        } else {
-            Some(LexicalSenseId::parse(sense_id).map_err(super::domain_sql)?)
-        },
-        capability: from_json(&row.get::<_, String>(3)?)?,
-        task_type: from_json(&row.get::<_, String>(4)?)?,
-        outcome: from_json(&row.get::<_, String>(5)?)?,
-        assistance: from_json(&row.get::<_, String>(6)?)?,
-        surface_form: row.get(7)?,
-        sentence_id: row
-            .get::<_, Option<String>>(8)?
-            .map(SubtitleSentenceId::parse)
-            .transpose()
-            .map_err(super::domain_sql)?,
-        media_id: row
-            .get::<_, Option<String>>(9)?
-            .map(MediaId::parse)
-            .transpose()
-            .map_err(super::domain_sql)?,
-        origin: from_json(&row.get::<_, String>(10)?)?,
-        source_ref: row.get(11)?,
-        occurred_at_ms: row.get(12)?,
-    })
-}
-
-fn merge_capability_dimension(
-    local: &CapabilityDimensionState,
-    imported: &CapabilityDimensionState,
-) -> CapabilityDimensionState {
-    let projection = match (&local.projection, &imported.projection) {
-        (None, p) => p.clone(),
-        (p, None) => p.clone(),
-        (Some(l), Some(i)) => {
-            if i.updated_at_ms > l.updated_at_ms {
-                Some(i.clone())
-            } else {
-                Some(l.clone())
-            }
-        }
-    };
-    let user_override = match (&local.user_override, &imported.user_override) {
-        (None, o) => o.clone(),
-        (o @ Some(_), None) => o.clone(),
-        (Some(l), Some(i)) => {
-            if i.updated_at_ms > l.updated_at_ms {
-                Some(i.clone())
-            } else {
-                Some(l.clone())
-            }
-        }
-    };
-    CapabilityDimensionState {
-        projection,
-        user_override,
-    }
-}
-
-fn read_all_phonetic_feedback(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<PhoneticFindingFeedback>, ApplicationError> {
-    let mut statement = conn
-        .prepare(
-            "SELECT feedback_json FROM phonetic_finding_feedback ORDER BY updated_at_ms,finding_id",
-        )
-        .map_err(repo)?;
-    statement
-        .query_map([], |row| from_json(&row.get::<_, String>(0)?))
-        .map_err(repo)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(repo)
 }

@@ -31,8 +31,14 @@ pub use chunk_timeline::*;
 mod sense_group;
 pub use sense_group::*;
 
+mod syntactic_analysis;
+pub use syntactic_analysis::*;
+
 mod construction;
 pub use construction::*;
+
+mod personal_expression;
+pub use personal_expression::*;
 
 mod phone_timeline;
 pub use phone_timeline::*;
@@ -64,10 +70,28 @@ pub use learning_observation::*;
 mod listening_projection;
 pub use listening_projection::*;
 
-mod semantic_task;
+mod projection_review;
+pub use projection_review::*;
+
 mod llm_provider;
-pub use semantic_task::*;
+mod semantic_task;
 pub use llm_provider::*;
+pub use semantic_task::*;
+
+mod production_corpus;
+pub use production_corpus::*;
+
+mod semantic_embedding;
+pub use semantic_embedding::*;
+
+mod realtime_conversation;
+pub use realtime_conversation::*;
+
+mod writing_feedback;
+pub use writing_feedback::*;
+
+mod reading;
+pub use reading::*;
 
 mod dictionary;
 pub use dictionary::*;
@@ -113,6 +137,7 @@ string_id!(SubtitleTrackId);
 string_id!(SubtitleSentenceId);
 string_id!(DictionaryEntryId);
 string_id!(TranscriptionJobId);
+string_id!(RecordingTranscriptionJobId);
 string_id!(TranscriptionModelId);
 string_id!(WordTimelineId);
 string_id!(ChunkTimelineId);
@@ -125,6 +150,8 @@ string_id!(LexicalSenseId);
 string_id!(LexicalCapabilityHistoryId);
 string_id!(LexicalObservationId);
 string_id!(LearningObservationId);
+string_id!(ProjectionProposalId);
+string_id!(ProjectionDecisionId);
 string_id!(LexicalOccurrenceId);
 string_id!(LexicalStatusHistoryId);
 string_id!(LearningResourceId);
@@ -143,16 +170,26 @@ string_id!(CorpusOccurrenceId);
 string_id!(LearnerProfileId);
 string_id!(SenseGroupAnalysisId);
 string_id!(SenseGroupId);
+string_id!(SyntacticAnalysisId);
 string_id!(SentenceExemplarId);
 string_id!(ConstructionId);
 string_id!(ConstructionOccurrenceId);
 string_id!(UserSentencePatternId);
+string_id!(UserSentencePatternVersionId);
+string_id!(PersonalExpressionAttemptId);
 string_id!(RecordingAssetId);
 string_id!(SemanticRubricId);
 string_id!(SemanticTaskAttemptId);
 string_id!(SemanticJudgmentId);
 string_id!(JudgmentAdjudicationId);
+string_id!(WritingFeedbackFindingId);
+string_id!(WritingFindingDispositionId);
 string_id!(LlmProviderProfileId);
+string_id!(RealtimeProviderProfileId);
+string_id!(RealtimeConversationSessionId);
+string_id!(RealtimeConversationTurnId);
+string_id!(ProductionCorpusDocumentId);
+string_id!(ProductionCorpusEntryId);
 string_id!(PronunciationAnalysisId);
 string_id!(PhoneticAnalysisModelId);
 string_id!(PhoneticAnalysisJobId);

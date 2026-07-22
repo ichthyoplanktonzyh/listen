@@ -4,12 +4,17 @@ members = [
   "crates/api-http",
   "crates/application",
   "crates/domain",
+  "crates/embedding-provider",
   "crates/dictionary-provider",
   "crates/llm-provider",
+  "crates/local-runtime",
   "crates/diagnosis-core",
   "crates/persistence-sqlite",
+  "crates/realtime-provider",
   "crates/speech-analysis",
   "crates/subtitle-core",
+  "crates/syntactic-provider",
+  "crates/writing-feedback",
 ]
 exclude = ["spikes/tauri-libmpv/src-tauri"]
 resolver = "2"
@@ -20,13 +25,18 @@ rust-version = "1.94"
 version = "0.7.0"
 
 [workspace.dependencies]
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 async-stream = "0.3"
 async-trait = "0.1"
+base64 = "0.22"
 csv = "1"
 futures-core = "0.3"
+futures-util = "0.3"
 hex = "0.4"
+http = "1"
 hound = "3.5"
+libc = "0.2"
+harper-core = "=0.40.0"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -35,4 +45,7 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 tower = "0.5"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+url = "2"

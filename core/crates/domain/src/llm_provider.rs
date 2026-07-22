@@ -77,9 +77,9 @@ pub enum DataRetentionPreference {
 /// time by a `SecretStore` and never enters this type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct LlmAuthRef(String);
+pub struct SecretRef(String);
 
-impl LlmAuthRef {
+impl SecretRef {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -87,6 +87,9 @@ impl LlmAuthRef {
         &self.0
     }
 }
+
+/// Backward-compatible category name for the shared opaque keychain handle.
+pub type LlmAuthRef = SecretRef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CostBudget {
@@ -113,7 +116,13 @@ impl CapabilityClaim {
     /// Whether a dispatcher may rely on this capability. Only measured support
     /// counts as usable for hard requirements; declared support is advisory.
     pub fn is_usable(self) -> bool {
-        matches!(self, CapabilityClaim::Probed { supported: true, .. })
+        matches!(
+            self,
+            CapabilityClaim::Probed {
+                supported: true,
+                ..
+            }
+        )
     }
 }
 
@@ -249,18 +258,22 @@ mod tests {
 
     #[test]
     fn only_probed_support_is_usable() {
-        assert!(CapabilityClaim::Probed {
-            supported: true,
-            probed_at_ms: 1
-        }
-        .is_usable());
+        assert!(
+            CapabilityClaim::Probed {
+                supported: true,
+                probed_at_ms: 1
+            }
+            .is_usable()
+        );
         assert!(!CapabilityClaim::Declared { supported: true }.is_usable());
         assert!(!CapabilityClaim::Unknown.is_usable());
-        assert!(!CapabilityClaim::Probed {
-            supported: false,
-            probed_at_ms: 1
-        }
-        .is_usable());
+        assert!(
+            !CapabilityClaim::Probed {
+                supported: false,
+                probed_at_ms: 1
+            }
+            .is_usable()
+        );
     }
 
     #[test]

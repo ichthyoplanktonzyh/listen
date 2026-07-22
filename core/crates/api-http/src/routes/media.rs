@@ -1,4 +1,8 @@
-use crate::*;
+use crate::{
+    ApiError, ApiState, ApplicationError, Deserialize, ImportSubtitle, IntoResponse, Json,
+    LanguageCode, MediaId, MediaKind, MediaTriageIntent, Path, Query, RegisterMedia, Response,
+    State, StatusCode, SubtitleTrackId,
+};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RegisterMediaRequest {
@@ -15,6 +19,7 @@ pub(crate) async fn register_media(
 ) -> Result<Json<domain::MediaItem>, ApiError> {
     state
         .services
+        .media_analysis()
         .register_media(RegisterMedia {
             path: request.path,
             fingerprint: request.fingerprint,
@@ -34,6 +39,7 @@ pub(crate) async fn list_media_library(
 ) -> Result<Json<Vec<application::MediaLibraryEntry>>, ApiError> {
     state
         .services
+        .media_analysis()
         .list_media_library()
         .map(Json)
         .map_err(ApiError::from)
@@ -52,6 +58,7 @@ pub(crate) async fn set_media_triage_intent(
     let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
     state
         .services
+        .media_analysis()
         .set_media_triage_intent(&id, request.intent)
         .map(Json)
         .map_err(ApiError::from)
@@ -64,6 +71,7 @@ pub(crate) async fn read_media(
     let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
     state
         .services
+        .media_analysis()
         .read_media(&id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("media"))
@@ -101,6 +109,7 @@ pub(crate) async fn import_subtitle(
         .to_owned();
     state
         .services
+        .media_analysis()
         .import_subtitle(ImportSubtitle {
             media_id,
             source_name,
@@ -126,6 +135,7 @@ pub(crate) async fn update_track_language(
     let language = LanguageCode::parse(request.language).map_err(ApplicationError::from)?;
     state
         .services
+        .media_analysis()
         .update_track_language(&track_id, &language)
         .map(Json)
         .map_err(ApiError::from)
@@ -137,6 +147,7 @@ pub(crate) async fn import_lltimeline(
 ) -> Result<Json<domain::SubtitleTrack>, ApiError> {
     state
         .services
+        .media_analysis()
         .import_lltimeline_document(document)
         .map(Json)
         .map_err(ApiError::from)
@@ -150,6 +161,7 @@ pub(crate) async fn import_lltimeline_for_media(
 ) -> Result<Json<domain::SubtitleTrack>, ApiError> {
     state
         .services
+        .media_analysis()
         .import_lltimeline_document_for_media(
             &MediaId::parse(media_id).map_err(ApplicationError::from)?,
             document,
@@ -165,6 +177,7 @@ pub(crate) async fn media_subtitles(
 ) -> Result<Json<Vec<domain::SubtitleTrack>>, ApiError> {
     state
         .services
+        .media_analysis()
         .subtitle_tracks_for_media(&MediaId::parse(media_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -177,6 +190,7 @@ pub(crate) async fn read_subtitle(
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     state
         .services
+        .media_analysis()
         .read_subtitle_track(&track_id)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("subtitle track"))
@@ -191,6 +205,7 @@ pub(crate) async fn track_content_fit(
 ) -> Result<Json<domain::ContentDifficultyProfile>, ApiError> {
     state
         .services
+        .media_analysis()
         .content_fit_for_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -208,6 +223,7 @@ pub(crate) async fn cold_start_words(
 ) -> Result<Json<Vec<application::ColdStartWordCandidate>>, ApiError> {
     state
         .services
+        .media_analysis()
         .cold_start_word_candidates(
             &SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?,
             query.limit.unwrap_or(20),
@@ -222,6 +238,7 @@ pub(crate) async fn archive_subtitle(
 ) -> Result<Json<domain::SubtitleTrack>, ApiError> {
     state
         .services
+        .media_analysis()
         .archive_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -233,6 +250,7 @@ pub(crate) async fn restore_subtitle(
 ) -> Result<Json<domain::SubtitleTrack>, ApiError> {
     state
         .services
+        .media_analysis()
         .restore_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
@@ -244,6 +262,7 @@ pub(crate) async fn delete_subtitle(
 ) -> Result<Json<domain::SubtitleTrack>, ApiError> {
     state
         .services
+        .media_analysis()
         .delete_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("subtitle track"))
@@ -269,6 +288,7 @@ pub(crate) async fn export_subtitle(
     }
     let track = state
         .services
+        .media_analysis()
         .read_subtitle_track(&SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?)?
         .ok_or_else(|| ApiError::not_found("subtitle track"))?;
     let mut output = String::new();

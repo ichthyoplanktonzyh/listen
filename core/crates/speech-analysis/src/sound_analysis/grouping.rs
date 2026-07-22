@@ -62,15 +62,15 @@ pub(super) fn detect_weak_groups(
         let reduction_refs = connected_speech
             .iter()
             .enumerate()
-            .filter_map(|(index, value)| {
+            .filter(|&(_index, value)| {
                 overlaps_token_range(
                     value.token_start,
                     value.token_end.or(value.token_start),
                     Some(group.first().unwrap().index),
                     Some(group.last().unwrap().index),
                 )
-                .then(|| format!("cs{}", index + 1))
             })
+            .map(|(index, _value)| format!("cs{}", index + 1))
             .collect::<Vec<_>>();
         let claim_status = claim_status(&signal_sources);
         values.push(RhythmWeakGroup {

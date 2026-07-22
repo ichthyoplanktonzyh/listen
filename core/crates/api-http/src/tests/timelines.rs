@@ -389,6 +389,7 @@ async fn sound_line_resources_never_disturb_active_text_timeline() {
     let track_id = SubtitleTrackId::parse(track_id_str.clone()).unwrap();
     let result = state
         .services
+        .media_analysis()
         .build_transcription_sound_line_resources(
             &track_id,
             b"",

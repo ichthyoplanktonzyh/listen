@@ -1,5 +1,5 @@
 use application::{ApplicationError, PlaybackProgressRepository};
-use domain::*;
+use domain::{MediaId, TimeMs};
 use rusqlite::{OptionalExtension, params};
 
 use super::{SqliteRepository, repo};

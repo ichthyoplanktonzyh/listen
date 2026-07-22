@@ -28,6 +28,24 @@
 > audible-structure v1 contract 保持为当前权威 shape，3.x 按现状消费。同日新增
 > Phase 2.23 Architecture Debt Paydown 作为 3.x 前置工程治理：main.dart 收缩为
 > Flutter practice UI 的直接前置，sound_analysis 机械拆分落在算法线静默窗口内。
+> 2026-07-14 架构路线更新：新增 Phase 2.24 System Cohesion & Coupling Consolidation，
+> 作为 2.23 的语义级后继。它不改变产品路线，专门收窄 speech/application interface、
+> 把 runtime job/resource 编排移出 HTTP adapter、按变化原因拆 use-case/repository interface，
+> 并让 Flutter resource client 完成 typed wire mapping。P0/P1 slice 建议在 3.13 大规模扩展前完成。
+> 2026-07-13 产品语义校正：Phase 3.9 并行恢复 A/B/C audible-structure 重构。A=词典标准
+> 发音与书写词界，B=文本规则预测的可听分组，C=真实音素 + timing/prosody 支持的实际分组；
+> linking/reduction 等类别退为解释标签，B 不得冒充 C。
+> 2026-07-13 算法基础插入：新增 Phase 3.9.1 Shared Syntactic Analysis Provider。以
+> UD/CoNLL-U 语义建立共享、可重建的句法 artifact，经 Python sidecar 先验证 Stanza/spaCy
+> 候选；Reference B、SenseGroup 与 Construction 共用同一 token-aligned 分析，模型缺席时
+> 保留现有保守 B 和标点/长度 SenseGroup 降级。代码、模型、treebank 许可证分别审计。
+> 2026-07-13 资格纠偏插入：新增 Phase 3.9.2。3.9.1 的争议 `Which team do you want to win?`
+> 只能作为产品 abstain/block policy case，不能作为唯一 parser attachment gold；以清晰
+> subject/object 最小对照重新资格评估 spaCy，若通过则让 B、SenseGroup、Construction matcher
+> 共享一次句法 artifact，同时保留无模型 fallback 和轻量消费者边界。
+> 2026-07-13 Phase 3.9.2 完成：spaCy artifact 与 B going-to/used-to/have-to、SenseGroup、
+> dependency matcher 获逐项资格并进入可选产品 composition；want-to 保持 fallback-only，
+> runtime/model 不进入基础 bundle。
 > 2026-07-04 产品路线更新：Phase 3.x 执行序列确立为 Phase 3.1 ~ 3.10，并确立精听/泛听
 > 一级心智、可组合不强制流程、功能按场景分不按设备分（生产端唯一 PC-only）等原则；
 > 见 §14.12 与 `.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`。
@@ -45,6 +63,15 @@
 > 真实 QA；其后逐个验证 Reading / Speaking / Writing Studio。语义能力允许使用 LLM，
 > 但经厂商中立 provider 与主流 API protocol adapter 接入，自动判断先过独立校验再获得
 > 影响长期 capability 的资格。
+> 2026-07-16 产品开放性原则：产品形态以用户体验与实际功能为目标；阶段范围、既有 UI
+> 容器和架构模式不构成永久产品禁令，只有真实工程条件形成硬约束。共享深模块复用事实与
+> 生命周期而不强制复用界面。Realtime conversation 首个 surface 可锚定当前内容，后续
+> GPT-like 开放聊天、角色扮演等均为合法方向，并进入共同的产出语料与复盘处理。
+> 2026-07-20 owner 全局旅程 QA 后，Phase 3.19 从单纯 release closeout 转入 product correction：
+> 先建立显式有界 ContentSelection 与 goal-preserving fallback 契约，再重构 Review 驻留体验、
+> 资产入口和学习效果可见性；冷启动不会通过伪造数据解锁，0.7.0 在 P1 清零或书面例外前不发布。
+> 同日进一步冻结新功能路线：3.19 未达到“保留旅程真正可用、好用 + 假需求/假 fallback 审计完成”
+> 前，不创建、规划或实现任何新功能 phase。删除和简化与修复同等重要；已有实现不是保留理由。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标
@@ -129,6 +156,8 @@ LLTimeline JSON v1
 - Phase 2.21 consumer-closure correction 后，`AsrReported` 是低精度音频时序而非纯文本预测；
   Rust 本地服务在 Whisper WAV 生命周期内生成 RMS energy 与 F0/pitch cue。真实 QA 负责
   校准与回归，不阻塞轻量 DSP 进入消费端。
+- Phase 3.9 audible-structure rework 后，A/B/C 必须显示书写结构到可听音组的映射；例如
+  `pick up` 的 B 为 `/pɪk | ʌp/ → /pɪ.kʌp/`。真实 observed phones 缺席时 C 保持缺席。
 - Phase 2.22 后，当前所有用户功能必须被组织成用户可见的能力路径：媒体播放、下载、
   字幕获取、资源管理、Word sync、Chunk replay、Listening structure、Phone evidence、
   词汇、诊断、设置、任务中心和 practice/review readiness 都需要明确入口、可用状态、
@@ -1397,6 +1426,14 @@ Phase 3.0 的第一个架构地基阶段为：
   cloze + chunk dictation 作为第一条 backend vertical slice。参考
   `.planning/phases/3.0.1-learning-loop-architecture-foundation/`。
 
+与产品主线并行的工程治理线新增：
+
+- **Phase 2.24 System Cohesion & Coupling Consolidation** ✅（2026-07-14 收口）：承接 2.23 后仍存在的 interface
+  深度问题；处理 `api-http` runtime ownership、speech/application 类型泄漏、宽 repository
+  interface、`AppServices` 用例聚合、Flutter raw JSON 和 Python pipeline locality。该 phase
+  未改用户行为、HTTP/SQLite/LLTimeline contract 或算法语义；P0–P2 与长期守卫均已完成。
+  详见 `.planning/phases/2.24-system-cohesion-coupling-consolidation/2.24-CLOSEOUT.md`。
+
 Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 
 ```text
@@ -1413,13 +1450,16 @@ Phase 3.0 的执行序列（2026-07-04 确立，取代早期建议顺序）：
 3.7  Hunting List                         猎词单：泛听狩猎模式（显式开启 + 提示预算）
 3.8  Shadowing & Recording Comparison     chunk 跟读、录音、A/B 对比
 3.9  L1-aware Diagnosis v1                Mandarin -> English 难点 profile + 专项聚合
+3.9.1 Shared Syntactic Analysis Provider  UD 句法 artifact + B/SenseGroup/Construction 共享消费
+3.9.2 Syntax Provider Product Activation  纠偏资格评估 + 单 Provider 共享产品编排
 3.10 Coach Dashboard                      诊断型统计与下一步建议
 ```
 
 配套一级产品原则（详见 breakdown 与 discuss 文档）：精听/泛听为一级心智模型，
 复习/词典/dashboard 是资产消费层与回访动线；功能按场景分不按设备分，生产端
 （重模型）是唯一 PC-only 能力；闭环是推荐路径不是强制流程，每个功能必须可独立
-使用；泛听默认零打扰。
+使用；泛听默认零打扰。阶段范围用于安排交付顺序，不冻结长期产品形态；共享能力不强制
+不同场景复用同一种界面。
 
 - Phase 分解与依赖：`.planning/phases/3.0-english-listening-learning-loop/3.0-PHASE-BREAKDOWN.md`
 - Learning Domain Model v2 共享上下文：
@@ -1436,22 +1476,46 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
 
 1. 3.11 Semantic Task & Evidence Foundation；
 2. 3.12 Vendor-neutral LLM Provider；
-3. 3.12.1 LLM Judge Qualification（从 3.12 拆出的资格评估，可与 3.13 并行）；
+3. 3.12.2 Studio LLM Feedback（取代已取消的 3.12.1）✅；
 4. 3.13 Reading Studio v1；
-5. 3.14 Speaking Studio v1；
-6. 3.15 Writing Studio v1；
-7. 3.16 Personal Expression；
-8. 3.17 Four-channel Projection & Cross-modal Review；
-9. 3.18 Cross-modal Coach & Four-channel Closeout。
+5. 3.13.5 Studio Shell UX ✅；
+6. 3.14 Speaking Studio v1；
+7. 3.15 Writing Studio v1 ✅；
+8. 3.15.5 Personal Production Corpus ✅；
+9. 3.15.9 TTS ✅（本地优先 system speech、provider-neutral seam、共享音频焦点与可重建缓存）；
+10. 3.15.6 Cross-channel Production Gap Review（透明 top-K 参照系、empty/starter/ready、
+    零 projection writer）✅；
+11. 3.15.7 Realtime Speech Conversation ✅ CODE COMPLETE（真实 provider/device QA pending） /
+    3.15.8 Semantic Embedding ✅ CODE COMPLETE（owner 首次安装/大语料体验 QA pending）；
+12. 3.16 Personal Expression ✅ CODE COMPLETE（owner manual QA pending）；
+13. 3.17 Four-channel Projection & Cross-modal Review ✅ CODE COMPLETE（owner manual QA pending；
+    writing lexical projection 因无合格 target confirmation 保持 unassessed）；
+14. 3.18 Cross-modal Coach & Four-channel Closeout ✅ CODE COMPLETE（owner manual QA pending；
+    四通道只读聚合、分层 provenance、typed destination/return 与来源 snapshot 降级已落地，
+    零 capability/projection writer）。
+15. 3.19 Product Validation & Release Closeout 🔄 ACTIVE — PRODUCT CORRECTION（J0 packaged-app
+    smoke 全部通过；首轮 J1/J2 揭示 Review、任务输入单位、精听入口、效果可见性与资产 IA 的
+    P1 产品缺口，J3 被麦克风权限阻塞，J4 安装错误待精确证据，J5 在 UX 裁决前延期。执行顺序
+    改为：确定性 hotfix → ContentSelection / fallback 契约 → Review 驻留重构 → 效果与资产入口
+    → 全量 subtraction/degradation audit → owner 按 `3.19-OWNER-JOURNEYS-V2.md` 重测；冷启动
+    相关项目保持诚实 blocked，不制造测试数据。**本 phase 是所有新功能的硬门：未达到 retained
+    journeys 可用/好用与 P1 release gate 前，不启动后续功能建设**）。
 
-上述**顺序**已按依赖固定；但各 PLAN 写于 3.7–3.10 开工前，是方向承诺而非执行规格，
+上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
+而非永久执行规格，
 每个 phase 开工前必须按上游落地现状复核修订。每个 Studio 开工前仍允许基于上游真实 QA
 缩减范围，但不得跨 phase 把三个 Studio 合并实施。任何依赖语义理解的评价先建立版本化
-rubric / judgment contract，judge 经 3.12.1 留出集校验才进入学习 surface；LLM provider
+rubric / judgment contract，并以可纠正、可 adjudicate、`heuristic_proxy`、零自动
+observation/projection 的显示诚实边界进入 surface；LLM provider
 必须厂商中立，首批以两个异构协议（OpenAI Chat Completions-compatible + Anthropic
 Messages）证明中立性，OpenAI Responses / Gemini native 及本地或未来协议 adapter 为
 增量接入。完整产品与证据边界见
 `.planning/discuss/four-channel-product-and-vendor-neutral-llm-final.zh.md`。
+
+Realtime conversation 的内容锚定 surface 是首个交付形态，不是永久边界。后续开放聊天可采用
+类似 GPT 的连续对话界面，也可发展角色扮演、模板练习或其他场景原生 surface；共同复用会话
+事实、产出语料和复盘能力，不要求共享页面布局。复盘处理应成为 finalized session 的共同下游，
+但其呈现和进入方式保持开放。
 
 ### 14.13 Phase 2.20：Rhythm-first Listening Analysis
 

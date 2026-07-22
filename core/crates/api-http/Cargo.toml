@@ -10,24 +10,38 @@ api-events = { path = "../api-events" }
 async-stream.workspace = true
 async-trait.workspace = true
 futures-core.workspace = true
+futures-util.workspace = true
 axum.workspace = true
 dictionary-provider = { path = "../dictionary-provider" }
 domain = { path = "../domain" }
+embedding-provider = { path = "../embedding-provider" }
 hex.workspace = true
 llm-provider = { path = "../llm-provider" }
+realtime-provider = { path = "../realtime-provider" }
+local-runtime = { path = "../local-runtime" }
 persistence-sqlite = { path = "../persistence-sqlite" }
 rand.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+syntactic-provider = { path = "../syntactic-provider" }
 tokio.workspace = true
 tower.workspace = true
+tracing.workspace = true
 
 # Composition root owns the platform-specific secret store. security-framework
 # is already in the dependency tree; the macOS keychain path is cfg-gated.
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
+
+# `getppid` for the orphan watchdog in main.rs; `kill` for the test that
+# exercises it (integration tests do not inherit the crate's dependencies).
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
 
 [dev-dependencies]
 tower = { workspace = true, features = ["util"] }

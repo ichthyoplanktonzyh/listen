@@ -487,7 +487,13 @@ mod tests {
             "take care",
             LearningStatus::UnknownMeaning,
         );
-        let result = diagnose_with_phrases(&sent, &[], &[phrase.clone()], &[], &HashMap::new());
+        let result = diagnose_with_phrases(
+            &sent,
+            &[],
+            std::slice::from_ref(&phrase),
+            &[],
+            &HashMap::new(),
+        );
         let meaning_hint = result
             .hints
             .iter()
@@ -524,7 +530,13 @@ mod tests {
             "would have",
             LearningStatus::KnownNotRecognized,
         );
-        let result = diagnose_with_phrases(&sent, &[], &[phrase.clone()], &[], &HashMap::new());
+        let result = diagnose_with_phrases(
+            &sent,
+            &[],
+            std::slice::from_ref(&phrase),
+            &[],
+            &HashMap::new(),
+        );
         let recognition_hint = result
             .hints
             .iter()

@@ -29,6 +29,7 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     let occurrence = entry.occurrences[0].clone();
 
     let folder = services
+        .lexical_learning()
         .create_lexical_sense_folder(
             &entry.entry.id,
             "operate a business".into(),
@@ -38,10 +39,15 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
         )
         .unwrap();
     services
+        .lexical_learning()
         .assign_occurrence_to_lexical_sense_folder(&entry.entry.id, &folder.id, &occurrence.id)
         .unwrap();
 
-    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&entry.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(details.occurrences.len(), 1, "entry list remains complete");
     assert_eq!(details.sense_folders.len(), 1);
     assert_eq!(
@@ -57,7 +63,7 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
         "entry capability remains present"
     );
 
-    let bundle = services.export_vocabulary().unwrap();
+    let bundle = services.lexical_learning().export_vocabulary().unwrap();
     assert_eq!(bundle.version, 7);
     assert_eq!(bundle.lexical_sense_folders, vec![folder.clone()]);
     assert_eq!(bundle.lexical_sense_folder_occurrences.len(), 1);
@@ -72,9 +78,13 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
         restored_repo.clone(),
         restored_repo,
     );
-    restored.import_vocabulary(&bundle).unwrap();
+    restored
+        .lexical_learning()
+        .import_vocabulary(&bundle)
+        .unwrap();
     assert_eq!(
         restored
+            .lexical_learning()
             .lexical_details(&entry.entry.id)
             .unwrap()
             .unwrap()
@@ -84,10 +94,12 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     );
 
     services
+        .lexical_learning()
         .unassign_occurrence_from_lexical_sense_folder(&entry.entry.id, &folder.id, &occurrence.id)
         .unwrap();
     assert!(
         services
+            .lexical_learning()
             .lexical_details(&entry.entry.id)
             .unwrap()
             .unwrap()
@@ -99,6 +111,7 @@ fn sense_folders_are_optional_local_organizers_with_entry_scoped_assignments() {
     let other = upsert_word_asset(&services, "en", "walk", "walk", None, None);
     assert!(
         services
+            .lexical_learning()
             .assign_occurrence_to_lexical_sense_folder(&other.entry.id, &folder.id, &occurrence.id)
             .is_err()
     );
@@ -149,23 +162,32 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
     let walk_occurrence = walk.occurrences[0].clone();
 
     let business = services
+        .lexical_learning()
         .create_lexical_sense_folder(&run.entry.id, "operate a business".into(), None, None, None)
         .unwrap();
     let physical = services
+        .lexical_learning()
         .create_lexical_sense_folder(&run.entry.id, "move fast on foot".into(), None, None, None)
         .unwrap();
     let walk_folder = services
+        .lexical_learning()
         .create_lexical_sense_folder(&walk.entry.id, "travel on foot".into(), None, None, None)
         .unwrap();
 
     // Reassigning is a move: the occurrence lives in exactly one folder.
     services
+        .lexical_learning()
         .assign_occurrence_to_lexical_sense_folder(&run.entry.id, &business.id, &run_occurrence.id)
         .unwrap();
     services
+        .lexical_learning()
         .assign_occurrence_to_lexical_sense_folder(&run.entry.id, &physical.id, &run_occurrence.id)
         .unwrap();
-    let details = services.lexical_details(&run.entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&run.entry.id)
+        .unwrap()
+        .unwrap();
     let folder_occurrences = |label: &str| {
         details
             .sense_folders
@@ -197,7 +219,7 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
 
     // A corrupt cross-entry edge in an imported bundle is skipped, not a
     // whole-import failure.
-    let mut bundle = services.export_vocabulary().unwrap();
+    let mut bundle = services.lexical_learning().export_vocabulary().unwrap();
     bundle
         .lexical_sense_folder_occurrences
         .push(LexicalSenseFolderOccurrence {
@@ -215,8 +237,15 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
         restored_repo.clone(),
         restored_repo,
     );
-    restored.import_vocabulary(&bundle).unwrap();
-    let restored_run = restored.lexical_details(&run.entry.id).unwrap().unwrap();
+    restored
+        .lexical_learning()
+        .import_vocabulary(&bundle)
+        .unwrap();
+    let restored_run = restored
+        .lexical_learning()
+        .lexical_details(&run.entry.id)
+        .unwrap()
+        .unwrap();
     let restored_business = restored_run
         .sense_folders
         .iter()
@@ -226,7 +255,11 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
         restored_business.occurrences.is_empty(),
         "corrupt edge skipped"
     );
-    let restored_walk = restored.lexical_details(&walk.entry.id).unwrap().unwrap();
+    let restored_walk = restored
+        .lexical_learning()
+        .lexical_details(&walk.entry.id)
+        .unwrap()
+        .unwrap();
     assert!(
         restored_walk.sense_folders[0].occurrences.is_empty(),
         "walk occurrence stays unassigned"
@@ -533,12 +566,18 @@ fn services_are_idempotent_and_persist_state() {
         kind: MediaKind::Video,
         duration_ms: Some(10_000),
     };
-    let first = services.register_media(input.clone()).unwrap();
-    let second = services.register_media(input).unwrap();
+    let first = services
+        .media_analysis()
+        .register_media(input.clone())
+        .unwrap();
+    let second = services.media_analysis().register_media(input).unwrap();
     assert_eq!(first.id, second.id);
-    services.update_progress(&first.id, 1250).unwrap();
+    services
+        .media_analysis()
+        .update_progress(&first.id, 1250)
+        .unwrap();
     assert_eq!(
-        services.read_progress(&first.id).unwrap(),
+        services.media_analysis().read_progress(&first.id).unwrap(),
         Some(TimeMs::new(1250))
     );
 
@@ -559,11 +598,17 @@ fn services_are_idempotent_and_persist_state() {
         language: Some("en".into()),
         identity_salt: None,
     };
-    let first_track = services.import_subtitle(subtitle.clone()).unwrap();
-    let second_track = services.import_subtitle(subtitle).unwrap();
+    let first_track = services
+        .media_analysis()
+        .import_subtitle(subtitle.clone())
+        .unwrap();
+    let second_track = services.media_analysis().import_subtitle(subtitle).unwrap();
     assert_eq!(first_track.id, second_track.id);
     assert_eq!(
-        services.read_subtitle_track(&first_track.id).unwrap(),
+        services
+            .media_analysis()
+            .read_subtitle_track(&first_track.id)
+            .unwrap(),
         Some(first_track)
     );
 }
@@ -582,6 +627,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
         repo,
     );
     let phrase = services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Phrase,
@@ -605,6 +651,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
         })
         .unwrap();
     let word = services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
@@ -632,26 +679,33 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
         None,
     );
     let words = services
+        .lexical_learning()
         .list_lexical_entries("en", Some(LexicalEntryKind::Word), None, "give", 10, 0)
         .unwrap();
     assert_eq!(words.len(), 1);
     assert_eq!(words[0].entry.status, Some(LearningStatus::UnknownMeaning));
     assert_eq!(
         services
+            .lexical_learning()
             .normalize_lexical_form("en", "went")
             .unwrap()
             .normalized,
         "go"
     );
-    services.correct_lemma("en", "went", "walk").unwrap();
+    services
+        .lexical_learning()
+        .correct_lemma("en", "went", "walk")
+        .unwrap();
     assert_eq!(
         services
+            .lexical_learning()
             .normalize_lexical_form("en", "went")
             .unwrap()
             .normalized,
         "walk"
     );
     services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
@@ -664,6 +718,7 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
         })
         .unwrap();
     services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Word,
@@ -676,7 +731,9 @@ fn lexical_words_and_phrases_keep_independent_state_and_sources() {
         })
         .unwrap();
     assert!(matches!(
-        services.correct_lemma("en", "run", "jog"),
+        services
+            .lexical_learning()
+            .correct_lemma("en", "run", "jog"),
         Err(application::ApplicationError::Conflict(_))
     ));
 }
@@ -695,6 +752,7 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
         repo.clone(),
     );
     let local = services
+        .lexical_learning()
         .create_lexical_entry(UpsertLexicalEntry {
             language: "en".into(),
             kind: LexicalEntryKind::Phrase,
@@ -753,7 +811,11 @@ fn lexical_asset_import_merges_newest_fields_and_remaps_sources() {
         &[],
     )
     .unwrap();
-    let merged = services.lexical_details(&local.entry.id).unwrap().unwrap();
+    let merged = services
+        .lexical_learning()
+        .lexical_details(&local.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(merged.entry.status, Some(LearningStatus::KnownRecognized));
     assert_eq!(
         merged.entry.user_definition.as_deref(),
@@ -803,6 +865,7 @@ fn create_lexical_entry_with_status_syncs_capability_profile() {
     .entry;
 
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&entry.id)
         .unwrap()
         .unwrap();
@@ -854,6 +917,7 @@ fn user_override_syncs_legacy_status_and_does_not_erase_projection() {
     .entry;
 
     let profile = services
+        .lexical_learning()
         .set_lexical_capability_override(
             &entry.id,
             LexicalCapability::Listening,
@@ -868,17 +932,26 @@ fn user_override_syncs_legacy_status_and_does_not_erase_projection() {
         profile.listening.projection.as_ref().unwrap().conclusion,
         CapabilityConclusion::NotAcquired
     );
-    let details = services.lexical_details(&entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
 
     let cleared = services
+        .lexical_learning()
         .set_lexical_capability_override(&entry.id, LexicalCapability::Listening, None)
         .unwrap();
     assert_eq!(
         cleared.effective_assessment(LexicalCapability::Listening),
         CapabilityAssessment::NotAcquired
     );
-    let details = services.lexical_details(&entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         details.entry.status,
         Some(LearningStatus::KnownNotRecognized)
@@ -908,6 +981,7 @@ fn export_includes_capability_profiles_and_v6_import_merges_without_overwriting_
     )
     .entry;
     services
+        .lexical_learning()
         .set_lexical_capability_override(
             &entry.id,
             LexicalCapability::Listening,
@@ -915,7 +989,7 @@ fn export_includes_capability_profiles_and_v6_import_merges_without_overwriting_
         )
         .unwrap();
 
-    let bundle = services.export_vocabulary().unwrap();
+    let bundle = services.lexical_learning().export_vocabulary().unwrap();
     assert_eq!(bundle.version, 7);
     assert!(!bundle.capability_profiles.is_empty());
     let exported_profile = bundle
@@ -936,8 +1010,12 @@ fn export_includes_capability_profiles_and_v6_import_merges_without_overwriting_
         target_repo.clone(),
         target_repo.clone(),
     );
-    target_services.import_vocabulary(&bundle).unwrap();
+    target_services
+        .lexical_learning()
+        .import_vocabulary(&bundle)
+        .unwrap();
     let restored = target_services
+        .lexical_learning()
         .lexical_capability_profile(&entry.id)
         .unwrap()
         .unwrap();
@@ -971,7 +1049,7 @@ fn v5_bundle_import_generates_capability_profiles_from_legacy_mapping() {
         None,
     )
     .entry;
-    let mut bundle = services.export_vocabulary().unwrap();
+    let mut bundle = services.lexical_learning().export_vocabulary().unwrap();
     bundle.version = 5;
     bundle.capability_profiles.clear();
 
@@ -986,8 +1064,12 @@ fn v5_bundle_import_generates_capability_profiles_from_legacy_mapping() {
         target_repo.clone(),
         target_repo.clone(),
     );
-    target_services.import_vocabulary(&bundle).unwrap();
+    target_services
+        .lexical_learning()
+        .import_vocabulary(&bundle)
+        .unwrap();
     let profile = target_services
+        .lexical_learning()
         .lexical_capability_profile(&entry.id)
         .unwrap()
         .unwrap();
@@ -1028,6 +1110,7 @@ fn imported_projection_cannot_overwrite_local_user_override() {
     )
     .entry;
     services
+        .lexical_learning()
         .set_lexical_capability_override(
             &entry.id,
             LexicalCapability::Listening,
@@ -1035,7 +1118,7 @@ fn imported_projection_cannot_overwrite_local_user_override() {
         )
         .unwrap();
 
-    let mut bundle = services.export_vocabulary().unwrap();
+    let mut bundle = services.lexical_learning().export_vocabulary().unwrap();
     for profile in &mut bundle.capability_profiles {
         if profile.lexical_entry_id == entry.id {
             profile.listening.user_override = None;
@@ -1049,8 +1132,12 @@ fn imported_projection_cannot_overwrite_local_user_override() {
             });
         }
     }
-    services.import_vocabulary(&bundle).unwrap();
+    services
+        .lexical_learning()
+        .import_vocabulary(&bundle)
+        .unwrap();
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&entry.id)
         .unwrap()
         .unwrap();
@@ -1076,6 +1163,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
         repo.clone(),
     );
     let media = services
+        .media_analysis()
         .register_media(application::RegisterMedia {
             path: "/tmp/cap.mp4".into(),
             fingerprint: "cap-diag".into(),
@@ -1085,6 +1173,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
         })
         .unwrap();
     let track = services
+        .media_analysis()
         .import_subtitle(application::ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "cap.srt".into(),
@@ -1107,6 +1196,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
     );
     // Override listening to Acquired — despite legacy status being KnownNotRecognized
     services
+        .lexical_learning()
         .set_lexical_capability_override(
             &alpha.entry.id,
             LexicalCapability::Listening,
@@ -1124,6 +1214,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
     );
     // Override reading to NotAcquired — despite legacy status being KnownRecognized
     services
+        .lexical_learning()
         .set_lexical_capability_override(
             &beta.entry.id,
             LexicalCapability::Reading,
@@ -1131,7 +1222,10 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
         )
         .unwrap();
 
-    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let diagnosis = services
+        .media_analysis()
+        .diagnose_sentence(&sentence.id)
+        .unwrap();
     // Alpha: reading=Acquired (from legacy), listening=Acquired (from override)
     // → no barrier
     assert!(
@@ -1164,6 +1258,7 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
         repo.clone(),
     );
     let media = services
+        .media_analysis()
         .register_media(application::RegisterMedia {
             path: "/tmp/unass.mp4".into(),
             fingerprint: "unass-diag".into(),
@@ -1173,6 +1268,7 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
         })
         .unwrap();
     let track = services
+        .media_analysis()
         .import_subtitle(application::ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "un.srt".into(),
@@ -1188,7 +1284,10 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
     // Create entry without status → all capabilities unassessed
     upsert_word_asset(&services, "en", "alpha", "alpha", None, None);
 
-    let diagnosis = services.diagnose_sentence(&sentence.id).unwrap();
+    let diagnosis = services
+        .media_analysis()
+        .diagnose_sentence(&sentence.id)
+        .unwrap();
     assert!(
         !diagnosis
             .hints
@@ -1235,6 +1334,7 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         None,
     );
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&entry.entry.id)
         .unwrap()
         .unwrap();
@@ -1263,10 +1363,31 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
     };
     repo.save_upgrade_suggestion(&suggestion).unwrap();
 
-    let confirmed = services.confirm_upgrade_suggestion(&suggestion.id).unwrap();
+    let confirmed = services
+        .lexical_learning()
+        .confirm_upgrade_suggestion(&suggestion.id)
+        .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
 
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&entry.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
+
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&entry.entry.id)
         .unwrap()
         .unwrap();
@@ -1274,7 +1395,11 @@ fn upgrade_suggestion_confirm_updates_listening_projection() {
         profile.effective_assessment(LexicalCapability::Listening),
         CapabilityAssessment::Acquired,
     );
-    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&entry.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
 
     // ADR 0017 decision 4: the confirmation itself joins the observation
@@ -1336,15 +1461,39 @@ fn legacy_suggestion_without_capability_confirms_via_profile_authority() {
     };
     repo.save_upgrade_suggestion(&suggestion).unwrap();
 
-    let confirmed = services.confirm_upgrade_suggestion(&suggestion.id).unwrap();
+    let confirmed = services
+        .lexical_learning()
+        .confirm_upgrade_suggestion(&suggestion.id)
+        .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
-    let details = services.lexical_details(&entry.entry.id).unwrap().unwrap();
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&entry.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
+    let details = services
+        .lexical_learning()
+        .lexical_details(&entry.entry.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(details.entry.status, Some(LearningStatus::KnownRecognized));
     assert_eq!(
         details.history[0].change_source,
         LearningChangeSource::CapabilityOverrideSync,
     );
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&entry.entry.id)
         .unwrap()
         .unwrap();

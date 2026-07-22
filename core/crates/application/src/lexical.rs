@@ -1,6 +1,59 @@
-use crate::*;
+use crate::{
+    AppServices, ApplicationError, CapabilityProjectionSource, LanguageCode, LearningChangeSource,
+    LearningEventRepository, LearningObservationRepository, LearningStatus,
+    LexicalCapabilityRepository, LexicalContentRepository, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalEntryRepository, LexicalNormalization,
+    LexicalNormalizationProvider, LexicalUnit, MediaRepository, PhraseCandidate,
+    PracticeRepository, RecognitionUpgradeRepository, SubtitleSentenceId, SubtitleTrackRepository,
+    UpsertLexicalEntry, VocabularyAssetRepository, normalize_american_english, normalize_lemma,
+    normalize_phrase, now_ms, phrase_candidates, require_text,
+};
+use std::sync::Arc;
 
-impl AppServices {
+/// Lexical learning owns normalization, durable lexical assets, capability
+/// evidence, sense organization, and vocabulary transfer as one consistency
+/// boundary. It deliberately excludes practice scheduling and media analysis.
+#[derive(Clone)]
+pub struct LexicalLearningUseCases {
+    pub(crate) media: Arc<dyn MediaRepository>,
+    pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
+    pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
+    pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
+    pub(crate) lexical_content: Arc<dyn LexicalContentRepository>,
+    pub(crate) vocabulary_assets: Arc<dyn VocabularyAssetRepository>,
+    pub(crate) practice: Arc<dyn PracticeRepository>,
+    pub(crate) recognition_upgrades: Arc<dyn RecognitionUpgradeRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
+}
+
+impl LexicalLearningUseCases {
+    pub(crate) fn frequency_rank(
+        &self,
+        language: &domain::LanguageCode,
+        lemma: &str,
+    ) -> Option<u32> {
+        self.lexical_normalizers
+            .iter()
+            .find_map(|provider| provider.frequency_rank(language, lemma))
+    }
+    pub(crate) fn from_services(services: &AppServices) -> Self {
+        Self {
+            media: services.media.clone(),
+            subtitle_tracks: services.subtitle_tracks.clone(),
+            lexical_capabilities: services.lexical_capabilities.clone(),
+            lexical_entries: services.lexical_entries.clone(),
+            learning_observations: services.learning_observations.clone(),
+            lexical_content: services.lexical_content.clone(),
+            vocabulary_assets: services.vocabulary_assets.clone(),
+            practice: services.practice.clone(),
+            recognition_upgrades: services.recognition_upgrades.clone(),
+            learning_events: services.learning_events.clone(),
+            lexical_normalizers: services.lexical_normalizers.clone(),
+        }
+    }
+
     pub fn normalize_lexical_form(
         &self,
         language: &str,
@@ -9,7 +62,7 @@ impl AppServices {
         let language = LanguageCode::parse(language)?;
         let original = normalize_lemma(value);
         require_text(&original, "value")?;
-        if let Some(corrected) = self.learning_assets.lemma_override(&language, &original)? {
+        if let Some(corrected) = self.lexical_entries.lemma_override(&language, &original)? {
             return Ok(LexicalNormalization {
                 original,
                 normalized: corrected,
@@ -53,12 +106,12 @@ impl AppServices {
         let corrected = normalize_lemma(corrected);
         require_text(&original, "original")?;
         require_text(&corrected, "corrected")?;
-        let original_entry = self.learning_assets.lexical_entry_by_key(
+        let original_entry = self.lexical_entries.lexical_entry_by_key(
             &language,
             LexicalEntryKind::Word,
             &original,
         )?;
-        let corrected_entry = self.learning_assets.lexical_entry_by_key(
+        let corrected_entry = self.lexical_entries.lexical_entry_by_key(
             &language,
             LexicalEntryKind::Word,
             &corrected,
@@ -70,7 +123,7 @@ impl AppServices {
                 "lemma correction target already has a separate word asset",
             ));
         }
-        self.learning_assets
+        self.lexical_entries
             .set_lemma_override(&language, &original, &corrected, now_ms())?;
         Ok(LexicalNormalization {
             original,
@@ -98,7 +151,7 @@ impl AppServices {
             lexical_unit_for_entry(&language, input.kind, &normalized_form, &input.display_form);
         let id = LexicalEntryId::from_fingerprint("lexical-entry", &unit.identity());
         let now = now_ms();
-        let details = self.learning_assets.upsert_lexical_entry(
+        let details = self.lexical_entries.upsert_lexical_entry(
             &LexicalEntry {
                 id,
                 unit,
@@ -129,7 +182,7 @@ impl AppServices {
             // The writer ladder may have kept a task-grade evidence
             // conclusion; return the effective view, not the raw write.
             return self
-                .learning_assets
+                .lexical_entries
                 .lexical_details(&details.entry.id)?
                 .ok_or(ApplicationError::NotFound("lexical entry"));
         }
@@ -140,7 +193,7 @@ impl AppServices {
         &self,
         id: &LexicalEntryId,
     ) -> Result<Option<LexicalEntryDetails>, ApplicationError> {
-        self.learning_assets.lexical_details(id)
+        self.lexical_entries.lexical_details(id)
     }
 
     pub fn list_lexical_entries(
@@ -152,7 +205,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
-        self.learning_assets.list_lexical_entries(
+        self.lexical_entries.list_lexical_entries(
             &LanguageCode::parse(language)?,
             kind,
             status,
@@ -188,6 +241,16 @@ impl AppServices {
                 && left.token_end == right.token_end
         });
         Ok(candidates)
+    }
+
+    pub(crate) fn sentence_language(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<LanguageCode, ApplicationError> {
+        match self.subtitle_tracks.sentence_track_language(sentence_id)? {
+            Some(language) => Ok(language),
+            None => Ok(LanguageCode::parse("en")?),
+        }
     }
 }
 

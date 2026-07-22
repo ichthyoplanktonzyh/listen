@@ -257,6 +257,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_recording_repository(repo.clone());
     let session = services
+        .practice_learning()
         .create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Intensive,
             media_id: None,
@@ -273,6 +274,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         end_ms: Some(900),
     };
     let item = services
+        .practice_learning()
         .create_practice_item(application::CreatePracticeItem {
             session_id: Some(session.id.clone()),
             kind: PracticeKind::Shadowing,
@@ -283,6 +285,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         })
         .unwrap();
     let recording = services
+        .recordings()
         .create_recording_asset(application::CreateRecordingAsset {
             file_path: recording_path.to_string_lossy().into_owned(),
             duration_ms: 900,
@@ -309,6 +312,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         })
         .unwrap();
     let attempt = services
+        .recordings()
         .complete_shadowing_attempt(application::CompleteShadowingAttempt {
             item_id: item.id,
             recording_id: recording.id.clone(),
@@ -333,10 +337,15 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
             .unwrap();
         assert_eq!(semantic_rows, 0, "{table} must stay empty");
     }
-    let linked = services.recording_asset(&recording.id).unwrap().unwrap();
+    let linked = services
+        .recordings()
+        .recording_asset(&recording.id)
+        .unwrap()
+        .unwrap();
     assert_eq!(linked.practice_attempt_id, Some(attempt.id.clone()));
     assert_eq!(
         services
+            .recordings()
             .complete_shadowing_attempt(application::CompleteShadowingAttempt {
                 item_id: attempt.item_id.clone(),
                 recording_id: recording.id.clone(),
@@ -346,6 +355,7 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         attempt.id
     );
     let comparison = services
+        .recordings()
         .compare_shadowing(application::CreateShadowingComparison {
             recording_id: recording.id.clone(),
             reference_wav_path: reference_path.to_string_lossy().into_owned(),
@@ -358,15 +368,26 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
     let events = repo
         .list_learning_events_for_session(&session.id, 10, 0)
         .unwrap();
-    assert_eq!(
-        events.last().unwrap().payload["evaluation_kind"],
-        "not_scored"
+    assert!(
+        events
+            .iter()
+            .any(|event| event.payload["evaluation_kind"] == "not_scored"),
+        "shadowing completion must emit an explicit unscored event"
     );
     assert_eq!(
-        services.delete_recording_asset(&recording.id).unwrap(),
+        services
+            .recordings()
+            .delete_recording_asset(&recording.id)
+            .unwrap(),
         Some(linked)
     );
-    assert!(services.recording_asset(&recording.id).unwrap().is_none());
+    assert!(
+        services
+            .recordings()
+            .recording_asset(&recording.id)
+            .unwrap()
+            .is_none()
+    );
     let _ = std::fs::remove_file(recording_path);
     let _ = std::fs::remove_file(reference_path);
 }
@@ -426,6 +447,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
     let media = services
+        .media_analysis()
         .register_media(RegisterMedia {
             path: "/tmp/review-evidence.mp4".into(),
             fingerprint: "review-evidence".into(),
@@ -435,6 +457,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         })
         .unwrap();
     let track = services
+        .media_analysis()
         .import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "timeline.srt".into(),
@@ -453,6 +476,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         None,
     );
     let review = services
+        .practice_learning()
         .create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::PracticeFailure,
@@ -478,6 +502,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         .unwrap();
 
     let submission = services
+        .practice_learning()
         .submit_review_attempt(application::SubmitReviewAttempt {
             item_id: review.id.clone(),
             rating: ReviewRating::Again,
@@ -495,6 +520,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
         ObservationResult::NotRecognizedInContext
     );
     let candidates = services
+        .practice_learning()
         .hunting_candidates(Some(HuntingCandidateStatus::Active), 10, 0)
         .unwrap();
     assert_eq!(candidates.len(), 1);
@@ -502,6 +528,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     assert_eq!(candidates[0].failure_count, 1);
     assert_eq!(candidates[0].target_snapshot, "Hello");
     let target = services
+        .practice_learning()
         .create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: lexical.entry.id.clone(),
             source_kind: HuntingTargetSourceKind::ReviewCandidate,
@@ -512,27 +539,34 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
     assert_eq!(target.status, HuntingTargetStatus::Active);
     assert_eq!(
         services
+            .practice_learning()
             .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
             .unwrap(),
         vec![target.clone()]
     );
     assert_eq!(
         services
+            .practice_learning()
             .list_hunting_candidates(Some(HuntingCandidateStatus::Consumed), 10, 0)
             .unwrap()[0]
             .id,
         candidates[0].id
     );
-    let archived = services.archive_hunting_target(&target.id).unwrap();
+    let archived = services
+        .practice_learning()
+        .archive_hunting_target(&target.id)
+        .unwrap();
     assert_eq!(archived.status, HuntingTargetStatus::Archived);
     assert!(
         services
+            .practice_learning()
             .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
             .unwrap()
             .is_empty()
     );
     assert_eq!(
         services
+            .lexical_learning()
             .lexical_details(&lexical.entry.id)
             .unwrap()
             .unwrap()
@@ -590,6 +624,7 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
     for entry in entries.iter().take(5) {
         targets.push(
             services
+                .practice_learning()
                 .create_hunting_target(application::CreateHuntingTargetInput {
                     lexical_entry_id: entry.id.clone(),
                     source_kind: HuntingTargetSourceKind::Manual,
@@ -599,18 +634,24 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
         );
     }
     assert!(matches!(
-        services.create_hunting_target(application::CreateHuntingTargetInput {
-            lexical_entry_id: entries[5].id.clone(),
-            source_kind: HuntingTargetSourceKind::Manual,
-            source_id: None,
-        }),
+        services
+            .practice_learning()
+            .create_hunting_target(application::CreateHuntingTargetInput {
+                lexical_entry_id: entries[5].id.clone(),
+                source_kind: HuntingTargetSourceKind::Manual,
+                source_id: None,
+            }),
         Err(ApplicationError::Conflict(
             "hunting list already has the maximum of 5 active targets"
         ))
     ));
 
-    services.archive_hunting_target(&targets[0].id).unwrap();
+    services
+        .practice_learning()
+        .archive_hunting_target(&targets[0].id)
+        .unwrap();
     let replacement = services
+        .practice_learning()
         .create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: entries[5].id.clone(),
             source_kind: HuntingTargetSourceKind::Manual,
@@ -620,6 +661,7 @@ fn hunting_list_enforces_five_active_targets_and_allows_replacement_after_archiv
     assert_eq!(replacement.target_snapshot, "Target 5");
     assert_eq!(
         services
+            .practice_learning()
             .list_hunting_targets(Some(HuntingTargetStatus::Active), 10, 0)
             .unwrap()
             .len(),
@@ -643,6 +685,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_corpus_index_repository(repo.clone());
     let media = services
+        .media_analysis()
         .register_media(RegisterMedia {
             path: "/tmp/hunting.mp4".into(),
             fingerprint: "hunting-media".into(),
@@ -652,6 +695,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
         })
         .unwrap();
     let track = services
+        .media_analysis()
         .import_subtitle(ImportSubtitle {
             media_id: media.id.clone(),
             source_name: "timeline.srt".into(),
@@ -662,6 +706,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
         .unwrap();
     let lexical = upsert_word_asset(&services, "en", "hello", "hello", None, None);
     let target = services
+        .practice_learning()
         .create_hunting_target(application::CreateHuntingTargetInput {
             lexical_entry_id: lexical.entry.id.clone(),
             source_kind: HuntingTargetSourceKind::Manual,
@@ -670,6 +715,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
         .unwrap();
 
     let located = services
+        .practice_learning()
         .hunting_occurrences(&media.id, Some(&track.id))
         .unwrap();
     assert!(located.indexed);
@@ -679,6 +725,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
     assert_eq!(occurrence.occurrence.display_text, "Hello");
 
     let session = services
+        .practice_learning()
         .create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Extensive,
             media_id: Some(media.id.clone()),
@@ -687,6 +734,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
         })
         .unwrap();
     let recognized = services
+        .practice_learning()
         .submit_hunting_check(application::SubmitHuntingCheckInput {
             session_id: session.id.clone(),
             target_id: target.id.clone(),
@@ -705,6 +753,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
     );
 
     let not_noticed = services
+        .practice_learning()
         .submit_hunting_check(application::SubmitHuntingCheckInput {
             session_id: session.id.clone(),
             target_id: target.id,
@@ -762,6 +811,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
         end_ms: None,
     };
     let correct_item = services
+        .practice_learning()
         .create_practice_item(application::CreatePracticeItem {
             session_id: None,
             kind: PracticeKind::Dictation,
@@ -772,6 +822,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
         })
         .unwrap();
     let correct = services
+        .practice_learning()
         .submit_practice_attempt(application::SubmitPracticeAttempt {
             item_id: correct_item.id,
             text_answer: "signals".into(),
@@ -781,6 +832,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
     assert_eq!(correct.result, PracticeResult::Correct);
 
     let failed_item = services
+        .practice_learning()
         .create_practice_item(application::CreatePracticeItem {
             session_id: None,
             kind: PracticeKind::Dictation,
@@ -791,6 +843,7 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
         })
         .unwrap();
     let failed = services
+        .practice_learning()
         .submit_practice_attempt(application::SubmitPracticeAttempt {
             item_id: failed_item.id,
             text_answer: "single".into(),
@@ -906,6 +959,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     for index in 0..5 {
         let sentence_id = SubtitleSentenceId::parse(format!("upgrade-context-{index}")).unwrap();
         let review = services
+            .practice_learning()
             .create_review_item(application::CreateReviewItem {
                 source: ReviewSource {
                     kind: ReviewSourceKind::Sentence,
@@ -930,6 +984,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
             })
             .unwrap();
         generated = services
+            .practice_learning()
             .submit_review_attempt(application::SubmitReviewAttempt {
                 item_id: review.id,
                 rating: ReviewRating::Good,
@@ -946,6 +1001,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     );
     assert_eq!(
         services
+            .lexical_learning()
             .lexical_details(&lexical.entry.id)
             .unwrap()
             .unwrap()
@@ -955,10 +1011,28 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
     );
 
     let confirmed = services
+        .lexical_learning()
         .confirm_upgrade_suggestion(&generated[0].id)
         .unwrap();
     assert_eq!(confirmed.status, UpgradeSuggestionStatus::Accepted);
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&lexical.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
     let details = services
+        .lexical_learning()
         .lexical_details(&lexical.entry.id)
         .unwrap()
         .unwrap();
@@ -968,6 +1042,7 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         LearningChangeSource::CapabilityOverrideSync
     );
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&lexical.entry.id)
         .unwrap()
         .unwrap();
@@ -975,12 +1050,12 @@ fn five_distinct_review_contexts_require_confirmation_before_status_upgrade() {
         profile.effective_assessment(LexicalCapability::Listening),
         CapabilityAssessment::Acquired
     );
-    // ADR 0019: the conclusion is derived from the observation stream by
-    // listening-projection-v1, not written directly by the confirm handler.
+    // ADR 0024: the legacy suggestion is evidence; only the separately
+    // confirmed Phase 3.17 proposal writes the projection.
     let projection = profile.listening.projection.as_ref().unwrap();
     assert_eq!(
         projection.algorithm_version,
-        LISTENING_PROJECTION_ALGORITHM_VERSION
+        LISTENING_PROPOSAL_ALGORITHM_VERSION
     );
     assert_eq!(
         projection.source,
@@ -1014,9 +1089,10 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         None,
     );
 
-    // One failed audio review on a never-confirmed word flips the listening
-    // view — the "看得懂听不出" discovery (ADR 0019 accepted behavior change).
+    // Two failed audio reviews create a correctable downgrade proposal; the
+    // effective view cannot flip before separate Phase 3.17 confirmation.
     let review = services
+        .practice_learning()
         .create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::LexicalEntry,
@@ -1041,12 +1117,48 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         })
         .unwrap();
     services
+        .practice_learning()
         .submit_review_attempt(application::SubmitReviewAttempt {
-            item_id: review.id,
+            item_id: review.id.clone(),
             rating: ReviewRating::Again,
         })
         .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    services
+        .practice_learning()
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: review.id.clone(),
+            rating: ReviewRating::Again,
+        })
+        .unwrap();
+    let before_confirmation = services
+        .lexical_learning()
+        .lexical_details(&lexical.entry.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        before_confirmation.entry.status,
+        Some(LearningStatus::KnownRecognized)
+    );
+    let audit = services
+        .projection_review()
+        .audit_and_refresh(&lexical.entry.id)
+        .unwrap();
+    let proposal = audit
+        .proposals
+        .iter()
+        .find(|value| {
+            value.capability == LexicalCapability::Listening
+                && value.proposed_conclusion == CapabilityConclusion::NotAcquired
+                && value.status == ProjectionProposalStatus::Pending
+        })
+        .unwrap();
+    services
+        .projection_review()
+        .decide(&proposal.id, ProjectionDecisionKind::Confirm, None)
+        .unwrap();
     let details = services
+        .lexical_learning()
         .lexical_details(&lexical.entry.id)
         .unwrap()
         .unwrap();
@@ -1055,13 +1167,14 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         Some(LearningStatus::KnownNotRecognized)
     );
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&lexical.entry.id)
         .unwrap()
         .unwrap();
     let projection = profile.listening.projection.as_ref().unwrap();
     assert_eq!(
         projection.algorithm_version,
-        LISTENING_PROJECTION_ALGORITHM_VERSION
+        LISTENING_PROPOSAL_ALGORITHM_VERSION
     );
     assert_eq!(projection.confidence, Some(LISTENING_CONFIDENCE_TASK));
 
@@ -1076,6 +1189,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
         None,
     );
     let details = services
+        .lexical_learning()
         .lexical_details(&lexical.entry.id)
         .unwrap()
         .unwrap();
@@ -1085,6 +1199,7 @@ fn listening_projection_flips_on_task_failure_and_blocks_self_report_upgrade() {
     );
     // Reading is not evidence-owned: the self-report still lands there.
     let profile = services
+        .lexical_learning()
         .lexical_capability_profile(&lexical.entry.id)
         .unwrap()
         .unwrap();
@@ -1130,6 +1245,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         .unwrap();
     }
     let final_review = services
+        .practice_learning()
         .create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::Sentence,
@@ -1154,6 +1270,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         })
         .unwrap();
     let suggestion = services
+        .practice_learning()
         .submit_review_attempt(application::SubmitReviewAttempt {
             item_id: final_review.id,
             rating: ReviewRating::Good,
@@ -1161,11 +1278,15 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         .unwrap()
         .upgrade_suggestions
         .remove(0);
-    let rejected = services.reject_upgrade_suggestion(&suggestion.id).unwrap();
+    let rejected = services
+        .lexical_learning()
+        .reject_upgrade_suggestion(&suggestion.id)
+        .unwrap();
     assert_eq!(rejected.status, UpgradeSuggestionStatus::Rejected);
     assert!(rejected.cooldown_until_ms > rejected.resolved_at_ms);
     assert_eq!(
         services
+            .lexical_learning()
             .lexical_details(&lexical.entry.id)
             .unwrap()
             .unwrap()
@@ -1174,6 +1295,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         Some(LearningStatus::KnownNotRecognized)
     );
     let next_review = services
+        .practice_learning()
         .create_review_item(application::CreateReviewItem {
             source: ReviewSource {
                 kind: ReviewSourceKind::Sentence,
@@ -1198,6 +1320,7 @@ fn rejecting_upgrade_suggestion_sets_cooldown_without_status_change() {
         })
         .unwrap();
     let during_cooldown = services
+        .practice_learning()
         .submit_review_attempt(application::SubmitReviewAttempt {
             item_id: next_review.id,
             rating: ReviewRating::Good,
@@ -1222,6 +1345,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
 
     let session = services
+        .practice_learning()
         .create_practice_session(application::CreatePracticeSession {
             mode: PracticeMode::Extensive,
             media_id: None,
@@ -1251,6 +1375,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     }];
 
     let first = services
+        .practice_learning()
         .capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
             session_id: session.id.clone(),
             target: target.clone(),
@@ -1265,6 +1390,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     assert_eq!(first.status, ListeningInboxStatus::Active);
     assert_eq!(
         services
+            .practice_learning()
             .list_listening_inbox_items(Some(ListeningInboxStatus::Active), 10, 0)
             .unwrap()
             .len(),
@@ -1272,6 +1398,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     );
 
     let reviewed = services
+        .practice_learning()
         .process_listening_inbox_item(
             &first.id,
             application::ProcessListeningInboxItemInput {
@@ -1292,6 +1419,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     assert_eq!(review.source.kind, ReviewSourceKind::ListeningInbox);
 
     let second = services
+        .practice_learning()
         .capture_listening_inbox_item(application::CaptureListeningInboxItemInput {
             session_id: session.id.clone(),
             target: target.clone(),
@@ -1304,6 +1432,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         })
         .unwrap();
     let micro = services
+        .practice_learning()
         .process_listening_inbox_item(
             &second.id,
             application::ProcessListeningInboxItemInput {
@@ -1318,7 +1447,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     let practice_item_id = micro.practice_item_id.as_ref().unwrap();
     assert!(repo.get_practice_item(practice_item_id).unwrap().is_some());
 
-    let invalid_summary = services.complete_listening_session(
+    let invalid_summary = services.practice_learning().complete_listening_session(
         &session.id,
         application::CompleteListeningSessionInput {
             comprehension_report: None,
@@ -1336,6 +1465,7 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
     ));
 
     services
+        .practice_learning()
         .complete_listening_session(
             &session.id,
             application::CompleteListeningSessionInput {

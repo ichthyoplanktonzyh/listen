@@ -105,7 +105,7 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | 轻量消费端资源读取 | 无强制 Milestone 1 发布项 | CONSUME-001 至 CONSUME-004 |
 | Rhythm-first 真实听感分析 | 无强制 Milestone 1 发布项 | RHY-001 至 RHY-008 |
 | 用户可见工作流语义 | 无强制 Milestone 1 发布项 | UX-001 至 UX-008 |
-| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-018 |
+| 真实内容驱动的四通道扩展 | 无强制当前发布项 | LOOP-010 至 LOOP-012、LOOP-015 至 LOOP-025 |
 | 厂商中立语义能力 | 无强制当前发布项 | LOOP-013、LOOP-014 |
 
 ## 4. 平台需求
@@ -262,6 +262,21 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - Android 或 iOS 原型能够调用至少一个核心应用服务。
   - 移动端无需复制词汇状态和诊断规则。
 - 依赖：ARCH-003、MOB-001。
+
+### ARCH-011：深模块与真实接缝
+
+- 优先级：P0
+- 阶段：Phase 2.24
+- 需求：系统必须按变化原因形成高内聚模块，以小而稳定的接口隐藏运行时、算法、持久化和
+  wire-format 复杂度；只有存在真实替换轴时才建立接缝和适配器。
+- 验收标准：
+  - HTTP 适配层不拥有模型下载、子进程、任务队列或业务状态机实现。
+  - application 公共接口不暴露算法实现 crate 的类型路径。
+  - repository 接口按用例/聚合变化原因组织，不存在为实现方便而建立的 fat 聚合接口。
+  - Flutter controller/widget 不解析 HTTP JSON，typed resource client 负责 wire mapping。
+  - 每个新增 trait 至少有两个合理适配器，或有明确的 true-external 测试替代需求。
+  - 模块测试以公开接口的可观察结果为 surface，不依赖实现内部状态。
+- 依赖：ARCH-001、ARCH-003、ARCH-008、TEST-001、TEST-008。
 
 ## 6. 媒体与播放需求
 
@@ -1519,6 +1534,21 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 在线来源不改变学习资产默认本地存储和播放高频路径本地化原则。
 - 依赖：UI-002、UX-001、UX-002、NFR-009。
 
+### UI-018：内容会话与资产驱动的混合导航
+
+- 优先级：P0
+- 阶段：Phase 3.13.5
+- 需求：首页应分发“恢复当前内容会话”与“处理到期学习资产”两条旅程；同一内容内
+  listening / reading / speaking / writing 为工作台通道，听力理解/测试/跟读为听通道
+  子姿态。词典、复习、狩猎、个人表达与 Coach 保持资产层入口，不建设四个独立 Studio 首页。
+- 验收标准：
+  - 切换内容通道不丢播放位置、阅读游标、草稿或任务阶段；退出后可恢复现场。
+  - 通道按来源 capability 显示可用、disabled 或 degraded 及原因。
+  - 主媒体、切片、复习音频与录音遵守单一音频焦点；会话恢复不等于后台并行播放。
+  - 多阶段任务使用整面、阶段自适应容器；首次 manual rubric 创建、append-only attempt、
+    judgment 与 adjudication 语义不因承载迁移而改变。
+- 依赖：UI-016、UI-017、LOOP-010、LOOP-012、LOOP-015。
+
 ## 15. 非功能需求
 
 ### NFR-001：播放流畅性
@@ -2313,8 +2343,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   Rhythm reference；phone evidence 是 C 的 L4 证据，不是第四个 Rhythm reference。
 - 验收标准：
   - A 以词典独立读音和 lexical stress 作为稳定参考。
-  - B 显示规则预测、可迁移学习的语流变化，并能展示 A → B 音标差异。
-  - C 显示当前音频的重音、节奏、弱读、压缩和停顿。
+  - B 显示规则预测、可迁移学习的语流变化，并将书写词界到可听音组的 A → B 变化显式化；
+    例如 `pick up` 显示 `/pɪk | ʌp/ → /pɪ.kʌp/`，而非只显示 `linking` 类别。
+  - C 显示当前音频的实际音素分组、重音、节奏、弱读、压缩和停顿；只有真实 observed-phone
+    evidence 才能生成 segmental C，timing/prosody 不得单独发明音素变化。
   - Raw CTC phone label 不作为默认教学标签。
 - 依赖：PRON-002、LLT-004、RHY-001。
 
@@ -2351,7 +2383,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 - 需求：系统应把弱读、压缩、连读、删除、同化、flapping 等现象映射为学习者能理解的
   listening hotspot，而不是暴露底层 edit operation。
 - 验收标准：
-  - 每个 hotspot 包含 word/syllable span、解释类型、证据来源和 confidence。
+  - 每个 hotspot 包含 word/syllable span、A/B/C 可听结构（存在时）、解释类型、证据来源和
+    confidence；类别是结构变化的解释标签，不是主要学习输出。
   - 低置信 phone mismatch 只能作为 evidence，不能单独生成高置信教学解释。
   - 默认文案回答“这里为什么听起来不像文字/词典读音”。
 - 依赖：RHY-001、RHY-002、Phase 2.16 connected-speech model。
@@ -2495,6 +2528,19 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 自动化 fixture 测试与本地真实媒体 smoke checklist 分开记录。
   - 每个 P0 用户路径有明确失败时下一步行动。
 - 依赖：UX-001 至 UX-007、TEST-014。
+
+### UX-009：产品形态开放与场景原生 Surface
+
+- 优先级：P0
+- 阶段：全程
+- 需求：产品设计以更好的用户体验和实际功能为目标。共享领域能力不得强迫不同场景复用
+  同一种页面、导航或任务容器；phase 的 out-of-scope 只控制当前交付，不构成长期产品禁令。
+- 验收标准：
+  - 产品限制能追溯到真实工程条件或明确的当前阶段取舍，不以“现有框架不支持”为永久理由。
+  - 共享模块统一事实、生命周期和证据语义；surface 可按场景采用不同交互形态。
+  - 当前取舍与长期非目标在 PLAN/PROJECT/ROADMAP 中明确区分。
+  - 新 surface 不因追求视觉或流程统一而复制、扭曲或丢失共同事实。
+- 依赖：ARCH-011、UX-007。
 
 ## 18.4 Milestone 2 多语言学习基础需求
 
@@ -2821,6 +2867,8 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.16
+- 当前状态：✅ CODE COMPLETE — OWNER MANUAL QA PENDING（2026-07-18）；durable asset、不可变
+  来源/版本、分通道 attempt、内容内收藏、资产旅程与 typed export 已落地，3.17 writers 保持为零。
 - 需求：系统应允许用户从任意真实句子提炼 `UserSentencePattern`，通过 slots 在自己的
   speaking/writing 情境中复用；用户模板身份不依赖 canonical construction。
 - 验收标准：
@@ -2833,7 +2881,10 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.17
-- 需求：reading/speaking/writing 各自按真实 evidence 资格建立版本化 projection proposal，
+- 当前状态：✅ CODE COMPLETE — OWNER MANUAL QA PENDING（2026-07-18）。schema v44、四通道
+  qualification、proposal/decision/confirmation gate、rebuild、cross-modal gap、OpenAPI 与 typed
+  Flutter 资产层 surface 已落地；writing 因无 lexical-target confirmation 诚实保持 unassessed。
+- 需求：reading/listening/speaking/writing 各自按真实 evidence 资格建立版本化 projection proposal，
   并从已评估的 cross-modal gap 派生合适复习任务；证据不足时保持 unassessed。
 - 验收标准：
   - 每通道有独立算法版本、writer exclusivity、人工 QA 与确认门禁，通道之间无隐式蕴含。
@@ -2845,6 +2896,9 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 
 - 优先级：P1
 - 阶段：Phase 3.18
+- 当前状态：✅ CODE COMPLETE — OWNER MANUAL QA PENDING（2026-07-18）。四通道分层 read model、
+  effective assessment、typed provenance/snapshot、provider-independent availability、typed
+  destination/return context 与资产层 Flutter surface 已落地；Coach 零 capability writer。
 - 需求：Coach 应从 durable facts 聚合四通道与 cross-modal gap，并提供可追溯、可忽略的
   下一步建议；Dashboard 不成为 evidence/projection 写入者。
 - 验收标准：
@@ -2852,6 +2906,119 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - 缺任一 Studio、媒体或 LLM provider 时其余区块正常工作。
   - 不展示综合语言分、排名、streak 或伪造零值。
   - 同一真实内容的听→读→说→写端到端路径完成 manual_product_qa。
+
+### LOOP-019：上下文开放的对话与统一复盘
+
+- 优先级：P1
+- 阶段：Phase 3.15.7 及后续 conversation surface
+- 当前状态：3.15.7 共同事实、两 adapter、首个内容锚定 surface 与 local-authoritative spoken
+  projection 已 CODE COMPLETE；真实 provider/device QA pending。开放 surface 与统一复盘继续后续阶段。
+- 需求：Realtime conversation 应作为可被多种场景消费的深模块。当前内容段落对话是首个
+  surface，但不得把媒体锚点写成 session、turn、transcript、产出语料或复盘的永久前提；
+  后续可交付 GPT-like 开放聊天、角色扮演、个人表达等不同形态。
+- 验收标准：
+  - 不同 surface 可拥有独立导航、布局与交互，不被强制塞入同一 Studio/任务容器。
+  - session/turn/audio/transcript、provider provenance、本地权威 user transcript 与产出语料
+    摄入保持共同事实语义。
+  - finalized session 可进入统一复盘处理；复盘页、聊天内卡片、后台生成和稍后回访均为合法
+    呈现策略，不强制阻塞跳转。
+  - 即时 session 复盘与长期 corpus-level gap 复盘区分时间尺度，但共享可追溯事实。
+  - 模型建议和复盘派生不自动写 capability observation/projection，仍经过用户确认门。
+- 依赖：LOOP-011、LOOP-013、Phase 3.15.5、Phase 3.15.6。
+
+### LOOP-020：跨通道产出 gap-(c) 复盘
+
+- 优先级：P1
+- 阶段：Phase 3.15.6
+- 需求：从 immutable semantic attempts 派生的 personal production corpus 与 reading/listening
+  接收证据做只读 join，只返回按通用词频、证据强度、近期性排序的 top-K 产出练习候选。
+- 验收标准：
+  - 空 corpus 返回 `empty` 且零靶子；小 N 返回 `starter` 并明确不是能力结论。
+  - 通用频率参照缺失时标 unavailable；不输出无排序的全集。
+  - 每个候选解释频率、接收证据与近期性来源，stable tie-break 可复现。
+  - 查询零 attempt/evidence/observation/capability/projection writer；TTS/播放不进入证据。
+  - spoken、近义/embedding、durable personal template、capability confirmation 分别留给
+    3.15.7、3.15.8、3.16、3.17。
+- 依赖：Phase 3.15.5、LOOP-015、ADR 0015/0017/0019。
+
+### LOOP-021：本地优先语义索引与可解释近义增补
+
+- 优先级：P1
+- 阶段：Phase 3.15.8
+- 需求：以 provider-neutral embedding seam 对个人媒体语料与 learner-output corpus projection
+  建立可删重建的语义索引，提供按意思检索，并只对 3.15.6 已有 top-K target 增补模型版本化的
+  near-semantic clue。
+- 验收标准：
+  - 本地模型须显式 opt-in 安装，模型权重 +0B base；未安装、禁用、失败或 stale 时 exact FTS、
+    Studio、gap v1 与 TTS 可继续使用且零静默联网。
+  - descriptor/fingerprint 至少固定 provider、model/revision、runtime、artifact SHA、dimension、
+    normalization、purpose contract 与 index schema；不同 fingerprint 的向量禁止比较。
+  - 索引只引用既有 media corpus 与 production corpus source identity；source/model 变化呈 stale，
+    仅从权威 source/projection 全量原子 rebuild，不做跨向量空间 migration。
+  - semantic search 返回 top-K similarity、source snapshot/provenance 与 model fingerprint；exact search
+    不被替换。
+  - near-semantic 只 enrich 既有 gap candidate，明确不是 synonym/capability truth；查询零 attempt、
+    evidence、observation、capability、proposal、review 或 corpus writer，3.17 confirmation gate 保留。
+- 依赖：Phase 3.15.5、Phase 3.15.6、Phase 3.15.7、LOOP-020。
+
+### LOOP-022：显式内容选区与任务输入
+
+- 优先级：P1
+- 阶段：Phase 3.19 correction
+- 需求：学习任务必须接收一个有界、可见的内容选区或用户明确输入；播放现场只能帮助建立
+  选区，不能隐式充当任务输入。
+- 验收标准：
+  - Listening / Reading 明示当前使用全文还是选区；Speaking / Writing 明示一句、若干句、
+    短段或用户输入，不默认整篇内容。
+  - 任务内来源播放严格停在选区边界，提供明确的播放、暂停及按需循环控制。
+  - “精听”入口建立或请求选区并进入精听活动；“泛听”可建立全文会话，两者不得折叠成
+    同一模式。
+  - Personal Expression、Review 与 Speaking 使用用户实际选择的句段，并返回原资产或内容现场。
+  - attempt 开始时冻结选区文本、时间边界和指令；后续播放移动或来源删除不改写历史。
+- 依据：owner `manual_product_qa`；ADR 0025。
+
+### LOOP-023：仅保留目标不变的降级
+
+- 优先级：P1
+- 阶段：Phase 3.19 correction
+- 需求：降级路径只有在保持相同用户目标、事实权威和持久化语义时才可替代主路径；否则应
+  呈现明确不可用状态、原因与恢复动作。
+- 验收标准：
+  - 来源快照只用于历史与解释，不把文字快照当作音频播放、跟读或来源导航已经可用。
+  - 本地来源解析必须先使用持久 media identity / fingerprint；解析缺陷不得被“来源不可用”掩盖。
+  - 可选 provider 只在用户调用对应增强能力时出现，不为尚无明确用户价值的配置制造主流程阻塞。
+  - 每条保留的 fallback 都记录真实触发条件、恢复动作和回归测试；无明确住户或改变任务目标的
+    旧路径删除或降为独立可选动作。
+  - unassessed、append-only evidence 和 immutable source snapshot 继续作为数据完整性规则保留。
+- 依据：owner `manual_product_qa`；ADR 0026。
+
+### LOOP-024：Phase 3.x 减法审计与新功能冻结
+
+- 优先级：P0/release gate
+- 阶段：Phase 3.19
+- 需求：Phase 3.19 必须逐项审计 Phase 3.x 用户功能和 fallback，在遗留问题、假需求和假降级
+  清偿前禁止启动任何新功能建设。
+- 验收标准：
+  - 每项功能记录核心用户目标、稳定主入口、真实使用证据、不存在时的损失和 fallback 是否保持目标。
+  - 每项只能裁决为 `KEEP / SIMPLIFY / REMOVE / UNAVAILABLE / DEFER RESEARCH`，并记录依据。
+  - “代码已完成”“未来可能使用”“离线可能需要”不能单独构成 KEEP 理由。
+  - REMOVE 同时清理用户入口、状态、配置催促、死代码/契约和相应测试；不得留下假可用 UI。
+  - SIMPLIFY 删除不影响核心目标的选项、状态和中转页，并以最短 owner journey 验收。
+  - Phase 3.19 closeout、retained journeys owner ACCEPT 和 P1 release gate 前，ROADMAP 不新增功能 phase。
+- 依据：owner product decision 2026-07-20。
+
+### LOOP-025：可执行 owner journey 契约
+
+- 优先级：P0/release gate
+- 阶段：Phase 3.19
+- 需求：owner QA 不得只列功能名或抽象期望；每一步必须使非实现者无需猜测即可完成。
+- 验收标准：
+  - 每条旅程写明起点、主入口、前置数据、准确操作、页面/按钮名称和停止条件。
+  - 每一步分别写明入口结果、即时反馈、任务边界、持久结果和之后的回访位置。
+  - 主入口缺失直接 FAIL，不允许用高级菜单、开发者工具、HTTP/数据库或旧实现知识绕过。
+  - 冷启动合法无数据使用 N/A/BLOCKED，不制造 evidence/proposal；功能被正式删除才可用 N/A。
+  - 实现若改变入口或交互，必须先同步 journey 契约，再发起 owner 重测。
+- 验收脚本：`3.19-OWNER-JOURNEYS-V2.md`。
 
 ## 18.6 Phase 3.4.x Learning Domain Model v2 需求
 
@@ -2968,7 +3135,111 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
   - recognition/production evidence 记录 modality。
   - 证据不足时允许以“不建生产表”收口。
 
-## 19. MVP 发布追踪矩阵
+### CAP-011：共享句法分析 Provider
+
+- 优先级：P0
+- 阶段：Phase 3.9.1
+- 需求：以 Provider-neutral、UD-compatible 的可重建 artifact，为 Reference B、SenseGroup
+  和 Construction 提供共享 lemma、POS、morphology 与 dependency 分析；具体 parser、runtime
+  和模型不得进入消费者契约。
+- 验收标准：
+  - 输出记录 provider/model/version、source fingerprint、char span 和 SubtitleToken 显式映射。
+  - parser 重新分词时支持 1:N/N:1，不按数组位置静默映射。
+  - 模型未安装、语言不支持、超时、损坏输出时安全降级，不阻断字幕与播放。
+  - Reference B 只把句法结果作为文本预测条件，不生成 C 音频证据。
+  - SenseGroup 新 provider 与 `punctuation_length_rule_v1` 并存，不覆盖 ChunkTimeline。
+  - Construction 只消费 occurrence 候选，不由 parser 铸造 canonical identity。
+
+### CAP-012：句法模型资格与可分发性
+
+- 优先级：P0
+- 阶段：Phase 3.9.1
+- 需求：任何获得产品资格的句法 provider 必须经过预登记真实字幕验证和代码/runtime/model/
+  treebank 分层许可证审计。
+- 验收标准：
+  - 开发集与验证集分离；关键构式歧义、token alignment、延迟、内存、体积和失败率均有报告。
+  - 模型记录下载来源、版本、checksum 与许可证；非商业模型不得进入可分发产品路径。
+  - 未达门槛时允许 abstain 或保持研究 Provider，不以小型 smoke 测试授予产品资格。
+
+### CAP-013：句法 Provider 纠偏资格与共享产品激活
+
+- 优先级：P0
+- 阶段：Phase 3.9.2
+- 需求：区分 parser attachment gold 与产品保守策略；以修正版 locked holdout 选择并激活一个
+  可选本地句法 Provider，使 B、SenseGroup 和 Construction candidate matcher 共享同一 artifact。
+- 验收标准：
+  - 歧义句标记为 abstain/block-by-policy，不作为唯一 attachment gold 判错 Provider。
+  - 首个产品候选通过清晰 subject/object 最小对照、真实字幕、许可、资源和 failure gate。
+  - 同一句只分析一次，三个消费者共享 artifact identity/provenance。
+  - runtime/model 不是字幕、播放或基础学习路径的硬依赖；缺席时精确 fallback。
+  - B 不填充 C，SenseGroup 不替代 ChunkTimeline，matcher 不铸造 Construction/capability identity。
+
+## 19. Phase 3.15.9 TTS Speech Synthesis
+
+### TTS-001：Provider-neutral 合成契约
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：application 只定义 provider、voice、request、output 与错误语义，不把平台命令、
+  在线厂商协议或 UI 场景写入共享契约。
+- 验收标准：local-runtime adapter 可替换；HTTP 与 Flutter 只消费 typed contract。
+
+### TTS-002：本地优先且无下载前置
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：macOS 首发使用已安装 system speech voice，离线可用，不复制 3.9.3 模型下载生命周期。
+- 验收标准：真实 `/usr/bin/say` smoke 产生非空音频；无可用 voice 时 capability 明确 unavailable。
+
+### TTS-003：在线能力保持可选
+
+- 优先级：P1
+- 阶段：Phase 3.15.9
+- 需求：共享 seam 能表达 local/remote provider，但 v1 不在没有明确凭据、隐私和成本 surface
+  的条件下静默发送文本到网络。
+- 验收标准：v1 production composition 只有本地 adapter；未来 remote adapter 无需改场景 API。
+
+### TTS-004：确定性缓存与资源清理
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：合成音频是 provider/version/voice/language/rate/text keyed 的可重建缓存资产，使用
+  single-flight 与原子发布，并提供清缓存生命周期。
+- 验收标准：并发相同请求只合成一次；失败不留资产；clear 后统计为零。
+
+### TTS-005：单一音频焦点与播放器释放
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：dictionary provider audio 与 TTS 共用辅助音频控制器；播放前暂停 primary、recording、
+  slice，录音/真实媒体播放反向停止辅助音频；替换、停止和销毁释放 decoder。
+- 验收标准：controller 测试证明 focus-before-play 与 previous-player disposal。
+
+### TTS-006：高频 surface 与真实音频优先
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：词典词条优先 provider 真人/标准发音，仅缺失时显示 synthetic fallback；真实例句 slice
+  保持首选；个人产出与 Writing 可朗读用户自己的文本，UI 明示 synthetic。
+- 验收标准：TTS 不替换 slice playback，不朗读 provider suggestion 冒充用户产出。
+
+### TTS-007：零学习事实写入
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：合成与播放不得写 attempt、observation、evidence、projection、review item 或 production
+  corpus；3.15.5 corpus 继续是 authoritative attempts 的可重建 projection。
+- 验收标准：manager 不持有 learning repository；asset 只含渲染 provenance 与 cache identity。
+
+### TTS-008：输入、错误与契约完整性
+
+- 优先级：P0
+- 阶段：Phase 3.15.9
+- 需求：限制空文本、Unicode scalar 数、语言和 rate；provider/cache 错误映射稳定 HTTP 状态；
+  OpenAPI 与实现路径一致。
+- 验收标准：invalid request、capability、synthesize、cache clear route tests 与 contract guards 通过。
+
+## 20. MVP 发布追踪矩阵
 
 | 发布能力 | 必须满足的需求 |
 |---|---|
@@ -2988,8 +3259,9 @@ M0-M6 与 M8 共同构成已完成的 Milestone 1，M1.5 词汇学习资产强�
 | Milestone 2 生产引擎 | LLT-001 至 LLT-006、PROD-001 至 PROD-007、EVAL-001 至 EVAL-004 |
 | Milestone 2 轻量消费端 | LLT-007、CONSUME-001 至 CONSUME-004 |
 | Phase 2.20 Rhythm-first 真实听感分析 | RHY-001 至 RHY-008 |
-| Phase 2.22 用户可见工作流语义 | UX-001 至 UX-008 |
+| Phase 2.22 用户可见工作流语义 | UX-001 至 UX-009 |
 | Milestone 2 多语言学习基础 | LANG-001 至 LANG-010 |
-| Phase 3.0 英语听力学习闭环 | LOOP-000 至 LOOP-009 |
-| Phase 3.4.x Learning Domain Model v2 | CAP-001 至 CAP-010 |
+| Phase 3.0 英语听力学习闭环与四通道扩展 | LOOP-000 至 LOOP-025 |
+| Phase 3.4.x / 3.9.1–3.9.2 Learning Analysis Foundation | CAP-001 至 CAP-013 |
 | Phase 3.35 听力工作台 UI 重构 | UI-016 至 UI-017 |
+| Phase 3.15.9 本地优先 TTS | TTS-001 至 TTS-008 |

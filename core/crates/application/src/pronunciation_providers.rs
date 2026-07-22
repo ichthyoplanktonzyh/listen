@@ -1,4 +1,6 @@
-use domain::*;
+use domain::{
+    PronunciationProviderInfo, SentencePronunciation, SubtitleSentence, WordPronunciation,
+};
 
 use crate::PronunciationProvider;
 

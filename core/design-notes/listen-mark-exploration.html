@@ -1,0 +1,230 @@
+<title>listen · 符号探索</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:60ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 4px}
+  .constraints .c{font-size:12px;color:var(--muted);background:var(--raised);
+    border:1px solid var(--hair);border-radius:999px;padding:5px 12px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--raised);border:1px solid var(--hair);border-radius:16px;overflow:hidden;
+    display:flex;flex-direction:column}
+  .stage{background:radial-gradient(120% 100% at 50% 30%, #24312c 0%, var(--ground2) 70%);
+    padding:38px 20px 30px;display:flex;flex-direction:column;align-items:center;gap:22px;
+    border-bottom:1px solid var(--hair)}
+  .big{width:96px;height:96px}
+  .lockup{display:flex;align-items:center;gap:12px}
+  .lockup svg{width:30px;height:30px}
+  .wm{font-size:27px;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+  .tinyrow{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:11px;font-family:var(--mono)}
+  .tinychip{width:22px;height:22px;border-radius:6px;background:#0e1613;display:flex;
+    align-items:center;justify-content:center;border:1px solid var(--hair)}
+  .tinychip svg{width:16px;height:16px}
+  .meta{padding:18px 20px 20px}
+  .mname{font-size:16px;font-weight:700;display:flex;align-items:baseline;gap:9px;margin-bottom:6px}
+  .mname .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.05em;font-weight:500}
+  .mdesc{font-size:13.5px;color:var(--muted)}
+  .mdesc b{color:var(--teal);font-weight:600}
+
+  /* liaison wordmark (concept D) — tie drawn in normal flow under the word,
+     so it never depends on fragile absolute offsets over glyph metrics */
+  .liaison-lockup{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .liaison-word{font-weight:800;letter-spacing:.01em;color:var(--ink);line-height:1}
+  .liaison-tie{display:block;height:12px}
+  .liaison-tie.big{width:150px}
+  .liaison-mono{display:flex;align-items:center;gap:3px;font-weight:800;color:var(--ink)}
+  .liaison-mono .pd{width:4px;height:4px;border-radius:50%;background:var(--teal)}
+
+  .pulse{animation:pulse 2.8s ease-in-out infinite;transform-origin:center}
+  @keyframes pulse{0%,100%{opacity:.75}50%{opacity:1}}
+
+  .foot{margin-top:44px;border-top:1px solid var(--hair);padding-top:24px;font-size:14px;color:var(--muted);max-width:66ch}
+  .foot b{color:var(--ink)}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · 符号探索</div>
+  <h1>四个只属于 listen 的方向</h1>
+  <p class="lede">当前 logo 是 <b>Icons.graphic_eq</b>——一个任何音频 app 都能用的通用图标。
+    下面四个是从 listen 的内核长出来的 mark：双向倾听、语流签名、向内的注意、连读。
+    每个都验过缩到 22px 还立不立得住。</p>
+  <div class="constraints">
+    <span class="c">✓ 16–22px 可辨</span><span class="c">✓ 单色成立</span>
+    <span class="c">✓ 墨绿炭暗底发光</span><span class="c">✗ 不做通用示波图标</span>
+    <span class="c">✗ 不做俗套耳朵</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- A · 向内的注意 -->
+    <div class="card">
+      <div class="stage">
+        <svg class="big" viewBox="0 0 64 64" fill="none" aria-label="Inward attention mark">
+          <g stroke-linecap="round">
+            <path d="M20 21 Q30 32 20 43" stroke="#4db8a8" stroke-width="3.4"/>
+            <path d="M11 15 Q27 32 11 49" stroke="#2f8578" stroke-width="3.4"/>
+            <path d="M44 21 Q34 32 44 43" stroke="#4db8a8" stroke-width="3.4"/>
+            <path d="M53 15 Q37 32 53 49" stroke="#2f8578" stroke-width="3.4"/>
+          </g>
+          <circle cx="32" cy="32" r="4.6" fill="#4db8a8"/>
+        </svg>
+        <div class="lockup">
+          <svg viewBox="0 0 64 64" fill="none"><g stroke-linecap="round">
+            <path d="M20 21 Q30 32 20 43" stroke="#4db8a8" stroke-width="3.8"/>
+            <path d="M44 21 Q34 32 44 43" stroke="#4db8a8" stroke-width="3.8"/>
+            <path d="M11 15 Q27 32 11 49" stroke="#2f8578" stroke-width="3.8"/>
+            <path d="M53 15 Q37 32 53 49" stroke="#2f8578" stroke-width="3.8"/></g>
+            <circle cx="32" cy="32" r="5" fill="#4db8a8"/></svg>
+          <span class="wm">listen</span>
+        </div>
+        <div class="tinyrow">
+          <span class="tinychip"><svg viewBox="0 0 64 64" fill="none">
+            <path d="M22 22 Q31 32 22 42" stroke="#4db8a8" stroke-width="5" stroke-linecap="round"/>
+            <path d="M42 22 Q33 32 42 42" stroke="#4db8a8" stroke-width="5" stroke-linecap="round"/>
+            <circle cx="32" cy="32" r="6" fill="#4db8a8"/></svg></span>
+          <span>22px · 菜单栏 / favicon</span>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="mname">向内的注意 <span class="en">INWARD ATTENTION</span></div>
+        <div class="mdesc">别的音频 logo 都朝外<b>广播</b>；listen 反过来——声波从两侧<b>向内收拢</b>到一个
+          注意点。倾听是接收，不是发声。概念最纯，也最不像任何现有 app。</div>
+      </div>
+    </div>
+
+    <!-- B · 双向波形 -->
+    <div class="card">
+      <div class="stage">
+        <svg class="big" viewBox="0 0 64 64" aria-label="Two-way waveform mark">
+          <g stroke-linecap="round" stroke-width="4.4">
+            <line x1="13" y1="32" x2="13" y2="23" stroke="#4db8a8"/>
+            <line x1="23" y1="32" x2="23" y2="15" stroke="#4db8a8"/>
+            <line x1="33" y1="32" x2="33" y2="25" stroke="#4db8a8"/>
+            <line x1="43" y1="32" x2="43" y2="13" stroke="#4db8a8"/>
+            <line x1="53" y1="32" x2="53" y2="21" stroke="#4db8a8"/>
+            <line x1="13" y1="32" x2="13" y2="39" stroke="#2f8578"/>
+            <line x1="23" y1="32" x2="23" y2="45" stroke="#2f8578"/>
+            <line x1="33" y1="32" x2="33" y2="41" stroke="#2f8578"/>
+            <line x1="43" y1="32" x2="43" y2="47" stroke="#2f8578"/>
+            <line x1="53" y1="32" x2="53" y2="37" stroke="#2f8578"/>
+          </g>
+        </svg>
+        <div class="lockup">
+          <svg viewBox="0 0 64 64"><g stroke-linecap="round" stroke-width="5">
+            <line x1="16" y1="32" x2="16" y2="20" stroke="#4db8a8"/>
+            <line x1="28" y1="32" x2="28" y2="13" stroke="#4db8a8"/>
+            <line x1="40" y1="32" x2="40" y2="24" stroke="#4db8a8"/>
+            <line x1="16" y1="32" x2="16" y2="42" stroke="#2f8578"/>
+            <line x1="28" y1="32" x2="28" y2="49" stroke="#2f8578"/>
+            <line x1="40" y1="32" x2="40" y2="38" stroke="#2f8578"/></g></svg>
+          <span class="wm">listen</span>
+        </div>
+        <div class="tinyrow">
+          <span class="tinychip"><svg viewBox="0 0 64 64"><g stroke-linecap="round" stroke-width="7">
+            <line x1="20" y1="32" x2="20" y2="18" stroke="#4db8a8"/>
+            <line x1="32" y1="32" x2="32" y2="12" stroke="#4db8a8"/>
+            <line x1="44" y1="32" x2="44" y2="22" stroke="#4db8a8"/>
+            <line x1="20" y1="32" x2="20" y2="44" stroke="#2f8578"/>
+            <line x1="32" y1="32" x2="32" y2="50" stroke="#2f8578"/>
+            <line x1="44" y1="32" x2="44" y2="40" stroke="#2f8578"/></g></svg></span>
+          <span>22px</span>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="mname">双向波形 <span class="en">MUTUAL WAVE</span></div>
+        <div class="mdesc">中线之上是<b>内容</b>（亮），之下是<b>你的回声</b>（暗）——同一条波，两个方向。
+          直接画出「你在听内容、产品在听你」的双向倾听。识别度高，最接近产品的四通道内核。</div>
+      </div>
+    </div>
+
+    <!-- C · 节奏签名 -->
+    <div class="card">
+      <div class="stage">
+        <svg class="big" viewBox="0 0 64 64" aria-label="Rhythm signature mark">
+          <g>
+            <rect x="13" y="34" width="6" height="16" rx="3" fill="#2f8578"/>
+            <rect x="23" y="18" width="6" height="32" rx="3" fill="#4db8a8" class="pulse"/>
+            <rect x="33" y="37" width="6" height="13" rx="3" fill="#2f8578"/>
+            <rect x="43" y="24" width="6" height="26" rx="3" fill="#4db8a8"/>
+            <rect x="53" y="32" width="6" height="18" rx="3" fill="#2f8578"/>
+          </g>
+        </svg>
+        <div class="lockup">
+          <svg viewBox="0 0 64 64"><g>
+            <rect x="16" y="30" width="6" height="20" rx="3" fill="#2f8578"/>
+            <rect x="26" y="16" width="6" height="34" rx="3" fill="#4db8a8"/>
+            <rect x="36" y="34" width="6" height="16" rx="3" fill="#2f8578"/>
+            <rect x="46" y="24" width="6" height="26" rx="3" fill="#4db8a8"/></g></svg>
+          <span class="wm">listen</span>
+        </div>
+        <div class="tinyrow">
+          <span class="tinychip"><svg viewBox="0 0 64 64"><g>
+            <rect x="16" y="30" width="7" height="20" rx="3.5" fill="#2f8578"/>
+            <rect x="28" y="14" width="7" height="36" rx="3.5" fill="#4db8a8"/>
+            <rect x="40" y="26" width="7" height="24" rx="3.5" fill="#4db8a8"/></g></svg></span>
+          <span>22px</span>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="mname">节奏签名 <span class="en">RHYTHM</span></div>
+        <div class="mdesc">不是通用示波图，是<b>有意的节奏</b>——重音拍高而亮、当前拍会呼吸，
+          非重音压低。直接取自产品独有的语流/节奏带（那条视觉签名）。风险：柱状最容易撞脸，
+          得靠「刻意的节奏 + 发光当前拍」拉开。</div>
+      </div>
+    </div>
+
+    <!-- D · 连读字标 -->
+    <div class="card">
+      <div class="stage">
+        <div class="liaison-lockup">
+          <span class="liaison-word" style="font-size:52px">listen</span>
+          <svg class="liaison-tie big" viewBox="0 0 150 12" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M22 3 Q75 15 128 3" stroke="#4db8a8" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="liaison-lockup" style="gap:3px">
+          <span class="liaison-word" style="font-size:27px">listen</span>
+          <svg class="liaison-tie" style="width:80px" viewBox="0 0 150 12" preserveAspectRatio="none">
+            <path d="M22 3 Q75 15 128 3" stroke="#4db8a8" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
+        </div>
+        <div class="tinyrow">
+          <span class="tinychip">
+            <span class="liaison-mono" style="font-size:14px"><span>l</span><span class="pd"></span></span>
+          </span>
+          <span>22px · 退成带脉冲点的 “l” 字母标</span>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="mname">连读字标 <span class="en">LIAISON WORDMARK</span></div>
+        <div class="mdesc">符号即<b>字标</b>：小写 listen，底下一道青色<b>连读弧 ‿</b>——直接呼应产品的连读分析。
+          最省事、最像「产品名就是 logo」。缩小时退成带脉冲点的 “l” 单字母标。
+          （“i” 点变脉冲等细节留到真正选定字体后再打磨。）</div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="foot"><b>我的私心排序：A 与 B。</b>
+    A（向内的注意）概念最独特、最不撞脸，缺点是偏抽象、要靠语境教育用户；
+    B（双向波形）把产品最核心的「双向倾听」直接画出来，识别度和含义都最强，是我最推的一个。
+    C 有语流签名的血缘但柱状易撞脸；D 最稳妥但也最不冒险。
+    它们也能组合——比如 B 做主 mark、C 的节奏语言用在语流带上保持一致。
+    你先看哪个让你心动，或者告诉我你心里 listen 本来有没有一个画面（耳朵？引号？留白？声音？）。</p>
+</div>

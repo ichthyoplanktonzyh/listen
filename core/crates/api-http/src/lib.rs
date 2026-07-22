@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, DictionaryProvider, EnglishPronunciationProvider,
-    ImportSubtitle, InMemorySecretStore, RegisterMedia, SecretStore,
+    ImportSubtitle, InMemorySecretStore, RecordSpeakingProduction, RegisterMedia, SecretStore,
+    SyntacticAnalysisProvider, SyntacticConsumerOrchestrator, SyntacticProductQualification,
 };
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -31,35 +32,129 @@ use domain::{
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
-mod event_payloads;
-mod m18;
-mod phonetic_analysis;
+mod event_payloads {
+    pub use local_runtime::events::*;
+}
 mod routes;
 mod secret_store_keychain;
-mod sound_line;
-mod speech_jobs;
-mod transcription;
+use local_runtime::{
+    CreateJobRequest, CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
+    LearningResourceManager, PhoneticAnalysisCoordinator, SoundLineCoordinator,
+    SpeechBatchCoordinator, SpeechSynthesisManager, SubtitleSearchCoordinator,
+    TranscriptionCoordinator,
+};
+pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
+use routes::corpus::{reindex_corpus, search_corpus};
+use routes::dictionary::{diagnose_sentence, dictionary_lookup};
+use routes::language::{language_profile, list_languages};
+use routes::learner::{l1_specialty_occurrences, learner_profile, update_learner_profile};
+use routes::llm::{
+    delete_llm_provider, feedback_via_llm_provider, generate_rubric_via_llm_provider,
+    get_llm_provider, judge_via_llm_provider, list_llm_providers, probe_llm_provider,
+    register_llm_provider,
+};
+use routes::media::{
+    archive_subtitle, cold_start_words, delete_subtitle, export_subtitle, import_lltimeline,
+    import_lltimeline_for_media, import_subtitle, list_media_library, media_subtitles, read_media,
+    read_subtitle, register_media, restore_subtitle, set_media_triage_intent, track_content_fit,
+    update_track_language,
+};
+use routes::personal_expression::{
+    create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
+    list_pattern_versions, list_patterns, record_pattern_attempt, revise_pattern,
+};
+use routes::phonetic_analysis::{
+    cancel_phonetic_analysis_job, cancel_phonetic_analysis_model_install,
+    clear_terminal_phonetic_analysis_jobs, create_phonetic_analysis_job,
+    delete_phonetic_analysis_job, delete_phonetic_analysis_model, install_phonetic_analysis_model,
+    phonetic_analysis_findings, phonetic_analysis_job, phonetic_analysis_jobs,
+    phonetic_analysis_models, phonetic_analysis_providers, register_custom_phonetic_analysis_model,
+    retry_phonetic_analysis_job, track_phonetic_analyses, update_phonetic_finding_feedback,
+};
+use routes::practice::{
+    archive_hunting_target, capture_listening_inbox_item, coach_dashboard, coach_evidence,
+    compare_shadowing, complete_listening_session, complete_shadowing_attempt,
+    confirm_upgrade_suggestion, create_hunting_target, create_practice_item,
+    create_practice_session, create_recording_asset, create_review_item, delete_recording_asset,
+    graduate_coach_material, list_due_review_items, list_hunting_candidates,
+    list_hunting_occurrences, list_hunting_targets, list_listening_inbox_items,
+    list_upgrade_suggestions, practice_attempt, process_listening_inbox_item, recording_asset,
+    recording_audio_facts, reject_upgrade_suggestion, review_item, submit_hunting_check,
+    submit_practice_attempt, submit_review_attempt, upgrade_suggestion_history,
+};
+use routes::production_corpus::{
+    production_gap_review, reindex_production_corpus, search_production_corpus,
+};
+use routes::projection_review::{
+    audit_projection, cross_modal_gaps, decide_projection, list_projection_proposals,
+    rebuild_projections,
+};
+use routes::pronunciation::{
+    analyze_pronunciation_sentence, generate_track_pronunciation, pronunciation_lookup,
+    pronunciation_providers, track_pronunciation,
+};
+use routes::reading::{reading_position, record_reading_marking, save_reading_position};
+use routes::realtime_conversation::{
+    connect as connect_realtime_conversation, delete_profile as delete_realtime_profile,
+    list_profiles as list_realtime_profiles, register_profile as register_realtime_profile,
+    save_session as save_realtime_session, save_turn as save_realtime_turn,
+};
+use routes::semantic::{
+    confirm_speaking_target, create_judgment_adjudication, create_semantic_attempt,
+    create_semantic_judgment, create_semantic_rubric, create_writing_disposition,
+    create_writing_finding, delete_writing_draft, generate_local_writing_findings,
+    lookup_semantic_rubric, save_writing_draft, semantic_attempt, semantic_attempt_judgments,
+    semantic_judgment_adjudications, semantic_rubric, semantic_rubric_attempts,
+    writing_dispositions, writing_draft, writing_findings,
+};
+use routes::semantic_embedding::{
+    capability as semantic_embedding_capability, disable as disable_semantic_embedding,
+    enable as enable_semantic_embedding, enrich_gap_review as enrich_production_gap_semantically,
+    install as install_semantic_embedding, rebuild as rebuild_semantic_embedding,
+    search as semantic_search, uninstall as uninstall_semantic_embedding,
+};
+use routes::sound_line::{
+    cancel_sound_line_job, create_sound_line_job, retry_sound_line_job, sound_line_job,
+    sound_line_jobs,
+};
+use routes::speech::{
+    cancel_speech_job, create_speech_job, retry_speech_job, speech_job, speech_jobs,
+};
+use routes::syntax::{
+    cancel_syntax_capability, disable_syntax_capability, enable_syntax_capability,
+    install_syntax_capability, run_syntactic_consumers, run_track_syntax_analysis,
+    syntax_capability, track_syntax_analysis_status, uninstall_syntax_capability,
+    update_syntax_capability, validate_syntax_capability,
+};
+use routes::timelines::{
+    activate_chunk_timeline, activate_phone_timeline, activate_sense_group_analysis,
+    activate_word_timeline, archive_chunk_timeline, archive_phone_timeline,
+    archive_sense_group_analysis, archive_word_timeline, chunk_providers, chunk_timeline,
+    create_track_word_timeline, delete_chunk_timeline, delete_phone_timeline,
+    delete_sense_group_analysis, delete_word_timeline, export_chunk_timeline,
+    export_phone_timeline, export_track_lltimeline, export_word_timeline, generate_chunk_timeline,
+    generate_sense_group_analysis, generate_track_word_timings, phone_timeline,
+    publish_word_timeline, sense_group_analysis, track_chunk_diagnostics, track_chunk_partitions,
+    track_chunk_timeline_summaries, track_chunk_timelines, track_phone_timeline_summaries,
+    track_phone_timelines, track_sense_group_analyses, track_sense_group_analysis_summaries,
+    track_word_timeline_summaries, track_word_timelines, track_word_timing_diagnostics,
+    track_word_timings, word_timeline,
+};
+use routes::transcription::{
+    archive_transcription_job, cancel_recording_transcription, cancel_transcription_job,
+    cancel_transcription_model_install, create_recording_transcription, create_transcription_job,
+    delete_transcription_model, install_transcription_model, pronunciation_rules,
+    recording_transcription_job, register_custom_transcription_model, retry_transcription_job,
+    transcription_job, transcription_jobs, transcription_models, transcription_providers,
+};
+use routes::tts::{clear_speech_synthesis_cache, speech_synthesis_capability, synthesize_speech};
+use routes::vocabulary::{
+    assign_sense_folder_occurrence, create_sense_folder, delete_sense_folder, export_vocabulary,
+    get_capability_profile, import_external_vocabulary, import_vocabulary, list_vocabulary,
+    read_progress, set_capability_override, unassign_sense_folder_occurrence,
+    update_media_availability, update_progress, update_sense_folder,
+};
 pub use secret_store_keychain::KeychainSecretStore;
-use m18::M18Coordinator;
-use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator};
-use routes::corpus::*;
-use routes::dictionary::*;
-use routes::language::*;
-use routes::learner::*;
-use routes::llm::*;
-use routes::media::*;
-use routes::phonetic_analysis::*;
-use routes::practice::*;
-use routes::pronunciation::*;
-use routes::semantic::*;
-use routes::sound_line::*;
-use routes::speech::*;
-use routes::timelines::*;
-use routes::transcription::*;
-use routes::vocabulary::*;
-use sound_line::{CreateSoundLineJob, SoundLineCoordinator};
-use speech_jobs::{CreateSpeechBatchJob, SpeechBatchCoordinator};
-use transcription::{CreateJobRequest, TranscriptionCoordinator};
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -72,12 +167,30 @@ pub struct ApiState {
     pub transcription: Arc<TranscriptionCoordinator>,
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
+    /// Provider-neutral local-first TTS. It owns synthesis/cache lifecycle and
+    /// deliberately has no learning repository, so playback cannot become
+    /// evidence or personal-production data.
+    pub speech_synthesis: Arc<SpeechSynthesisManager>,
     pub sound_line: Arc<SoundLineCoordinator>,
-    pub m18: Arc<M18Coordinator>,
+    pub learning_resources: Arc<LearningResourceManager>,
+    pub subtitle_search: Arc<SubtitleSearchCoordinator>,
+    /// Optional Phase 3.9.2 syntax capability. The default has no runtime and
+    /// returns the exact B/rule-SenseGroup fallback without touching Python.
+    pub syntactic_consumers: Arc<SyntacticConsumerOrchestrator>,
+    /// Phase 3.9.3 optional resource lifecycle. This is separate from learning
+    /// assets and remains `not_installed` in tests/default composition.
+    pub syntax_capability: Arc<SyntaxCapabilityManager>,
+    /// Single-flight guard for rebuildable whole-track syntax batches. Cache
+    /// lookup is repeated after acquiring it, so concurrent UI/background
+    /// triggers cannot duplicate a provider batch.
+    pub syntax_analysis_lock: Arc<tokio::sync::Mutex<()>>,
     /// Phase 3.12: resolves provider credentials at dispatch time. Defaults to
     /// an in-memory store; the composition root injects the OS keychain via
     /// [`ApiState::with_secret_store`]. The secret never lives on `services`.
     pub secret_store: Arc<dyn SecretStore>,
+    /// Explicit opt-in model lifecycle. It has no learning repositories and
+    /// cannot write corpus/evidence/projection facts.
+    pub semantic_embedding: Arc<embedding_provider::ManagedFastEmbedProvider>,
 }
 
 impl ApiState {
@@ -97,6 +210,16 @@ impl ApiState {
             TranscriptionCoordinator::new(services.clone(), repository.clone(), events.clone())
                 .expect("transcription coordinator must initialize"),
         );
+        #[cfg(test)]
+        let phonetic_analysis = Arc::new(
+            PhoneticAnalysisCoordinator::new_with_test_provider(
+                services.clone(),
+                repository,
+                events.clone(),
+            )
+            .expect("phonetic analysis coordinator must initialize"),
+        );
+        #[cfg(not(test))]
         let phonetic_analysis = Arc::new(
             PhoneticAnalysisCoordinator::new(services.clone(), repository, events.clone())
                 .expect("phonetic analysis coordinator must initialize"),
@@ -121,15 +244,66 @@ impl ApiState {
             transcription,
             phonetic_analysis,
             speech_jobs,
+            speech_synthesis: SpeechSynthesisManager::new(
+                std::env::temp_dir().join(format!("llplayer-tts-unmanaged-{}", std::process::id())),
+                Vec::new(),
+            ),
             sound_line,
-            m18: Arc::new(M18Coordinator::new()),
+            learning_resources: Arc::new(LearningResourceManager::new()),
+            subtitle_search: Arc::new(SubtitleSearchCoordinator::new()),
+            syntactic_consumers: Arc::new(SyntacticConsumerOrchestrator::new(
+                None,
+                SyntacticProductQualification::corrected_v2(),
+            )),
+            syntax_capability: SyntaxCapabilityManager::unmanaged(),
+            syntax_analysis_lock: Arc::new(tokio::sync::Mutex::new(())),
             secret_store: Arc::new(InMemorySecretStore::new()),
+            semantic_embedding: Arc::new(embedding_provider::ManagedFastEmbedProvider::new(
+                std::env::temp_dir().join(format!(
+                    "llplayer-embedding-unmanaged-{}",
+                    std::process::id()
+                )),
+            )),
         }
     }
 
     /// Injects the platform secret store (OS keychain in production).
     pub fn with_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
         self.secret_store = secret_store;
+        self
+    }
+
+    pub fn with_syntactic_provider(mut self, provider: Arc<dyn SyntacticAnalysisProvider>) -> Self {
+        self.syntactic_consumers = Arc::new(SyntacticConsumerOrchestrator::new(
+            Some(provider),
+            SyntacticProductQualification::corrected_v2(),
+        ));
+        self
+    }
+
+    pub fn with_syntax_capability(
+        mut self,
+        manager: Arc<SyntaxCapabilityManager>,
+        provider: Arc<dyn SyntacticAnalysisProvider>,
+    ) -> Self {
+        self.syntax_capability = manager;
+        self.syntactic_consumers = Arc::new(SyntacticConsumerOrchestrator::new(
+            Some(provider),
+            SyntacticProductQualification::corrected_v2(),
+        ));
+        self
+    }
+
+    pub fn with_speech_synthesis(mut self, manager: Arc<SpeechSynthesisManager>) -> Self {
+        self.speech_synthesis = manager;
+        self
+    }
+
+    pub fn with_semantic_embedding_manager(
+        mut self,
+        manager: Arc<embedding_provider::ManagedFastEmbedProvider>,
+    ) -> Self {
+        self.semantic_embedding = manager;
         self
     }
 }
@@ -172,6 +346,15 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/pronunciation/providers", get(pronunciation_providers))
         .route("/v1/pronunciation/lookup", get(pronunciation_lookup))
+        .route(
+            "/v1/speech-synthesis/capability",
+            get(speech_synthesis_capability),
+        )
+        .route("/v1/speech-synthesis", post(synthesize_speech))
+        .route(
+            "/v1/speech-synthesis/cache",
+            delete(clear_speech_synthesis_cache),
+        )
         .route(
             "/v1/pronunciation/analyze-sentence",
             post(analyze_pronunciation_sentence),
@@ -263,6 +446,43 @@ pub fn router(state: ApiState) -> Router {
             get(track_sense_group_analyses).post(generate_sense_group_analysis),
         )
         .route(
+            "/v1/subtitles/{track_id}/syntactic-consumers",
+            post(run_syntactic_consumers),
+        )
+        .route(
+            "/v1/subtitles/{track_id}/syntax-analysis",
+            get(track_syntax_analysis_status).post(run_track_syntax_analysis),
+        )
+        .route("/v1/syntax/capability", get(syntax_capability))
+        .route(
+            "/v1/syntax/capability/install",
+            post(install_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/cancel",
+            post(cancel_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/validate",
+            post(validate_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/enable",
+            post(enable_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/disable",
+            post(disable_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/uninstall",
+            post(uninstall_syntax_capability),
+        )
+        .route(
+            "/v1/syntax/capability/update",
+            post(update_syntax_capability),
+        )
+        .route(
             "/v1/subtitles/{track_id}/sense-group-analyses/summary",
             get(track_sense_group_analysis_summaries),
         )
@@ -323,12 +543,19 @@ pub fn router(state: ApiState) -> Router {
             "/v1/media/{media_id}/progress",
             get(read_progress).put(update_progress),
         )
-        .route("/v1/lexical-entries/batch", post(m18::read_lexical_entries))
+        .route(
+            "/v1/lexical-entries/batch",
+            post(routes::lexical_entries::read_lexical_entries),
+        )
         .route(
             "/v1/lexical-entries",
-            get(m18::list_lexical_entries).put(m18::upsert_lexical_entry),
+            get(routes::lexical_entries::list_lexical_entries)
+                .put(routes::lexical_entries::upsert_lexical_entry),
         )
-        .route("/v1/lexical-entries/{id}", get(m18::lexical_details))
+        .route(
+            "/v1/lexical-entries/{id}",
+            get(routes::lexical_entries::lexical_details),
+        )
         .route(
             "/v1/lexical-entries/{id}/capability-profile",
             get(get_capability_profile),
@@ -339,7 +566,7 @@ pub fn router(state: ApiState) -> Router {
         )
         .route(
             "/v1/lexical-entries/{id}/learning-content",
-            put(m18::update_lexical_learning_content),
+            put(routes::lexical_entries::update_lexical_learning_content),
         )
         .route(
             "/v1/lexical-entries/{entry_id}/sense-folders",
@@ -355,16 +582,19 @@ pub fn router(state: ApiState) -> Router {
         )
         .route(
             "/v1/lexical-observations",
-            post(m18::create_lexical_observation),
+            post(routes::lexical_entries::create_lexical_observation),
         )
-        .route("/v1/lexical-normalization", post(m18::normalize_lexical))
+        .route(
+            "/v1/lexical-normalization",
+            post(routes::lexical_entries::normalize_lexical),
+        )
         .route(
             "/v1/lexical-normalization/correct",
-            post(m18::correct_lemma),
+            post(routes::lexical_entries::correct_lemma),
         )
         .route(
             "/v1/sentences/{sentence_id}/phrase-candidates",
-            get(m18::phrase_candidates),
+            get(routes::lexical_entries::phrase_candidates),
         )
         .route("/v1/practice/sessions", post(create_practice_session))
         .route("/v1/coach/dashboard", get(coach_dashboard))
@@ -391,6 +621,22 @@ pub fn router(state: ApiState) -> Router {
             get(recording_asset).delete(delete_recording_asset),
         )
         .route(
+            "/v1/recordings/{id}/audio-facts",
+            get(recording_audio_facts),
+        )
+        .route(
+            "/v1/recording-transcriptions",
+            post(create_recording_transcription),
+        )
+        .route(
+            "/v1/recording-transcriptions/{job_id}",
+            get(recording_transcription_job),
+        )
+        .route(
+            "/v1/recording-transcriptions/{job_id}/cancel",
+            post(cancel_recording_transcription),
+        )
+        .route(
             "/v1/listening-inbox/items",
             get(list_listening_inbox_items).post(capture_listening_inbox_item),
         )
@@ -412,6 +658,16 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/review/items/{id}", get(review_item))
         .route("/v1/review/attempts", post(submit_review_attempt))
+        .route("/v1/review/cross-modal", get(cross_modal_gaps))
+        .route("/v1/projections/rebuild", post(rebuild_projections))
+        .route(
+            "/v1/projections/entries/{id}",
+            get(list_projection_proposals).post(audit_projection),
+        )
+        .route(
+            "/v1/projections/proposals/{id}/decision",
+            post(decide_projection),
+        )
         .route(
             "/v1/review/upgrade-suggestions",
             get(list_upgrade_suggestions),
@@ -428,20 +684,81 @@ pub fn router(state: ApiState) -> Router {
             "/v1/review/upgrade-suggestions/{id}/reject",
             post(reject_upgrade_suggestion),
         )
-        .route("/v1/learning-resources", get(m18::resources))
+        .route(
+            "/v1/learning-resources",
+            get(routes::learning_resources::list),
+        )
         .route(
             "/v1/learning-resources/{id}/install",
-            post(m18::install_resource),
+            post(routes::learning_resources::install),
         )
         .route(
             "/v1/learning-resources/{id}",
-            axum::routing::delete(m18::remove_resource),
+            axum::routing::delete(routes::learning_resources::remove),
         )
-        .route("/v1/subtitle-search", post(m18::search_subtitles))
-        .route("/v1/subtitle-search/download", post(m18::download_subtitle))
+        .route("/v1/subtitle-search", post(routes::subtitle_search::search))
+        .route(
+            "/v1/subtitle-search/download",
+            post(routes::subtitle_search::download),
+        )
         .route("/v1/vocabulary", get(list_vocabulary))
         .route("/v1/corpus/search", get(search_corpus))
         .route("/v1/corpus/reindex", post(reindex_corpus))
+        .route(
+            "/v1/production-corpus/search",
+            get(search_production_corpus),
+        )
+        .route(
+            "/v1/production-corpus/reindex",
+            post(reindex_production_corpus),
+        )
+        .route("/v1/production-gap/review", get(production_gap_review))
+        .route(
+            "/v1/personal-expression/patterns",
+            get(list_patterns).post(create_pattern),
+        )
+        .route(
+            "/v1/personal-expression/patterns/{id}",
+            get(get_pattern).put(revise_pattern).delete(delete_pattern),
+        )
+        .route(
+            "/v1/personal-expression/patterns/{id}/versions",
+            get(list_pattern_versions),
+        )
+        .route(
+            "/v1/personal-expression/patterns/{id}/attempts",
+            get(list_pattern_attempts).post(record_pattern_attempt),
+        )
+        .route("/v1/personal-expression/export", get(export_patterns))
+        .route(
+            "/v1/semantic-embedding/capability",
+            get(semantic_embedding_capability),
+        )
+        .route(
+            "/v1/semantic-embedding/install",
+            post(install_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding/enable",
+            post(enable_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding/disable",
+            post(disable_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding",
+            delete(uninstall_semantic_embedding),
+        )
+        .route(
+            "/v1/semantic-embedding/reindex",
+            post(rebuild_semantic_embedding),
+        )
+        .route("/v1/semantic-search", get(semantic_search))
+        .route(
+            "/v1/production-gap/semantic-enrichment",
+            get(enrich_production_gap_semantically),
+        )
         .route("/v1/vocabulary/export", get(export_vocabulary))
         .route("/v1/vocabulary/import", post(import_vocabulary))
         .route(
@@ -459,14 +776,38 @@ pub fn router(state: ApiState) -> Router {
             get(learner_profile).put(update_learner_profile),
         )
         .route("/v1/learner/l1-specialty", get(l1_specialty_occurrences))
+        .route(
+            "/v1/reading/positions/{track_id}",
+            get(reading_position).put(save_reading_position),
+        )
+        .route("/v1/reading/markings", post(record_reading_marking))
         .route("/v1/semantic/rubrics", post(create_semantic_rubric))
+        .route("/v1/semantic/rubrics/lookup", get(lookup_semantic_rubric))
         .route("/v1/semantic/rubrics/{id}", get(semantic_rubric))
         .route(
             "/v1/semantic/rubrics/{id}/attempts",
             get(semantic_rubric_attempts),
         )
         .route("/v1/semantic/attempts", post(create_semantic_attempt))
+        .route(
+            "/v1/semantic/writing-drafts/{id}",
+            get(writing_draft)
+                .put(save_writing_draft)
+                .delete(delete_writing_draft),
+        )
         .route("/v1/semantic/attempts/{id}", get(semantic_attempt))
+        .route(
+            "/v1/semantic/attempts/{id}/writing-findings",
+            get(writing_findings).post(create_writing_finding),
+        )
+        .route(
+            "/v1/semantic/attempts/{id}/writing-findings/local",
+            post(generate_local_writing_findings),
+        )
+        .route(
+            "/v1/semantic/attempts/{id}/speaking-targets",
+            post(confirm_speaking_target),
+        )
         .route(
             "/v1/semantic/attempts/{id}/judgments",
             get(semantic_attempt_judgments),
@@ -481,6 +822,10 @@ pub fn router(state: ApiState) -> Router {
             post(create_judgment_adjudication),
         )
         .route(
+            "/v1/semantic/writing-findings/{id}/dispositions",
+            get(writing_dispositions).post(create_writing_disposition),
+        )
+        .route(
             "/v1/llm/providers",
             get(list_llm_providers).post(register_llm_provider),
         )
@@ -489,7 +834,29 @@ pub fn router(state: ApiState) -> Router {
             get(get_llm_provider).delete(delete_llm_provider),
         )
         .route("/v1/llm/providers/{id}/probe", post(probe_llm_provider))
+        .route(
+            "/v1/realtime/providers",
+            get(list_realtime_profiles).post(register_realtime_profile),
+        )
+        .route(
+            "/v1/realtime/providers/{id}",
+            delete(delete_realtime_profile),
+        )
+        .route(
+            "/v1/realtime/conversations/ws",
+            get(connect_realtime_conversation),
+        )
+        .route("/v1/realtime/sessions", post(save_realtime_session))
+        .route("/v1/realtime/turns", post(save_realtime_turn))
         .route("/v1/llm/providers/{id}/judge", post(judge_via_llm_provider))
+        .route(
+            "/v1/llm/providers/{id}/feedback",
+            post(feedback_via_llm_provider),
+        )
+        .route(
+            "/v1/llm/providers/{id}/rubric",
+            post(generate_rubric_via_llm_provider),
+        )
         .route("/v1/languages", get(list_languages))
         .route("/v1/languages/{code}/profile", get(language_profile))
         .route("/v1/transcription/providers", get(transcription_providers))

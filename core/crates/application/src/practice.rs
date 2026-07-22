@@ -1,12 +1,71 @@
 use std::collections::{BTreeSet, HashSet};
+use std::sync::Arc;
 
-use crate::*;
+use crate::{
+    AppServices, ApplicationError, CompleteListeningSessionInput, CorpusIndexRepository,
+    CreatePracticeItem, CreatePracticeSession, CreateReviewItem, DifficultyRepository,
+    DisabledLearningLoopRepository, HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus,
+    HuntingRepository, HuntingTarget, HuntingTargetId, HuntingTargetStatus, LearningEvent,
+    LearningEventId, LearningEventKind, LearningEventRepository, LearningEventSubject,
+    LearningEventSubjectKind, LearningObservationRepository, LexicalEntryId,
+    LexicalLearningUseCases, LexicalObservation, LexicalObservationId,
+    ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxRepository, ListeningInboxStatus, MediaRepository, ObservationContext,
+    ObservationOrigin, ObservationResult, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId,
+    PracticeEvaluation, PracticeItem, PracticeItemId, PracticeMode, PracticeRepository,
+    PracticeResult, PracticeSession, PracticeSessionId, PracticeTokenEvaluation,
+    PracticeTokenResult, RecognitionEvidence, RecognitionUpgradeRepository, ReviewAttempt,
+    ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewQueueEntry,
+    ReviewQueueRepository, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind,
+    ReviewSubmission, SoundFitCalibration, SubmitPracticeAttempt, SubmitReviewAttempt,
+    SubtitleSentenceId, SubtitleTrackRepository, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, clean_required, now_ms, observation_spec_for_practice,
+    observation_spec_for_review,
+};
 
 mod review;
 mod upgrade;
 use review::{REVIEW_ALGORITHM, next_review_schedule, review_card};
 
-impl AppServices {
+/// Owns practice sessions, review scheduling, hunting targets, and listening
+/// inbox processing. They share learning-event and queue transition invariants;
+/// lexical evidence is delegated to the lexical module.
+#[derive(Clone)]
+pub struct PracticeUseCases {
+    pub(crate) practice: Arc<dyn PracticeRepository>,
+    pub(crate) review_queue: Arc<dyn ReviewQueueRepository>,
+    pub(crate) hunting: Arc<dyn HuntingRepository>,
+    pub(crate) learning_events: Arc<dyn LearningEventRepository>,
+    pub(crate) learning_observations: Arc<dyn LearningObservationRepository>,
+    pub(crate) listening_inbox: Arc<dyn ListeningInboxRepository>,
+    pub(crate) difficulty: Arc<dyn DifficultyRepository>,
+    pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
+    pub(crate) media: Arc<dyn MediaRepository>,
+    lexical_learning: LexicalLearningUseCases,
+}
+
+impl PracticeUseCases {
+    pub(crate) fn from_services(services: &AppServices) -> Self {
+        Self {
+            practice: services.practice.clone(),
+            review_queue: services.review_queue.clone(),
+            hunting: services.hunting.clone(),
+            learning_events: services.learning_events.clone(),
+            learning_observations: services.learning_observations.clone(),
+            listening_inbox: services.listening_inbox.clone(),
+            difficulty: services.difficulty.clone(),
+            subtitle_tracks: services.subtitle_tracks.clone(),
+            corpus: services.corpus.clone(),
+            media: services.media.clone(),
+            lexical_learning: LexicalLearningUseCases::from_services(services),
+        }
+    }
+
+    pub(crate) fn lexical_learning(&self) -> &LexicalLearningUseCases {
+        &self.lexical_learning
+    }
+
     pub fn create_practice_session(
         &self,
         input: CreatePracticeSession,
@@ -136,7 +195,7 @@ impl AppServices {
                 let Some(lexical_entry_id) = &anchor.lexical_entry_id else {
                     continue;
                 };
-                self.append_channelized_observation(
+                self.lexical_learning().append_channelized_observation(
                     lexical_entry_id,
                     spec,
                     ObservationContext {
@@ -175,7 +234,7 @@ impl AppServices {
                     created_at_ms: now,
                 };
                 let saved = self
-                    .learning_assets
+                    .learning_observations
                     .create_lexical_observation(&observation)?;
                 attempt.generated_observation_ids.push(saved.id);
             }
@@ -211,7 +270,8 @@ impl AppServices {
 
         let saved = self.practice.create_practice_attempt(&attempt)?;
         if saved.result == PracticeResult::Correct {
-            self.record_practice_recognition_evidence(&item, &saved, now)?;
+            self.lexical_learning()
+                .record_practice_recognition_evidence(&item, &saved, now)?;
         }
         // Usage-feedback calibration (Phase 3.5 Slice 7, revised after 3.5.6):
         // intensive sessions are never "completed" anymore, so scored attempts
@@ -244,14 +304,19 @@ impl AppServices {
         input: CreateReviewItem,
     ) -> Result<ReviewItem, ApplicationError> {
         let prompt_snapshot = clean_required(input.prompt_snapshot, "review prompt")?;
-        if input.source.kind == ReviewSourceKind::LexicalEntry {
+        if input.source.kind == ReviewSourceKind::LexicalEntry
+            || input.source.kind == ReviewSourceKind::SpeakingAttempt
+        {
             let existing = self
-                .review
+                .review_queue
                 .list_review_items(Some(ReviewItemStatus::Active), 200, 0)?
                 .into_iter()
                 .find(|item| {
-                    item.source.lexical_entry_id == input.source.lexical_entry_id
-                        && item.prompt_snapshot == prompt_snapshot
+                    (input.source.kind == ReviewSourceKind::LexicalEntry
+                        && item.source.lexical_entry_id == input.source.lexical_entry_id
+                        && item.prompt_snapshot == prompt_snapshot)
+                        || (input.source.kind == ReviewSourceKind::SpeakingAttempt
+                            && item.source.id == input.source.id)
                 });
             if let Some(existing) = existing {
                 return Ok(existing);
@@ -273,8 +338,8 @@ impl AppServices {
             created_at_ms: now,
             updated_at_ms: now,
         };
-        let saved = self.review.create_review_item(&item)?;
-        self.review.save_review_schedule(&ReviewSchedule {
+        let saved = self.review_queue.create_review_item(&item)?;
+        self.review_queue.save_review_schedule(&ReviewSchedule {
             item_id: saved.id.clone(),
             algorithm: REVIEW_ALGORITHM.into(),
             due_at_ms: now,
@@ -287,7 +352,7 @@ impl AppServices {
     }
 
     pub fn review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError> {
-        self.review.get_review_item(id)
+        self.review_queue.get_review_item(id)
     }
 
     pub fn due_review_items(
@@ -295,7 +360,7 @@ impl AppServices {
         at_ms: Option<u64>,
         limit: u32,
     ) -> Result<Vec<ReviewQueueEntry>, ApplicationError> {
-        self.review
+        self.review_queue
             .list_due_review_items(at_ms.unwrap_or_else(now_ms), limit.min(100))
             .map(|entries| {
                 entries
@@ -317,7 +382,7 @@ impl AppServices {
         input: SubmitReviewAttempt,
     ) -> Result<ReviewSubmission, ApplicationError> {
         let item = self
-            .review
+            .review_queue
             .get_review_item(&input.item_id)?
             .ok_or(ApplicationError::NotFound("review item"))?;
         if item.status != ReviewItemStatus::Active {
@@ -325,7 +390,7 @@ impl AppServices {
         }
         let now = now_ms();
         let current = self
-            .review
+            .review_queue
             .get_review_schedule(&item.id)?
             .unwrap_or(ReviewSchedule {
                 item_id: item.id.clone(),
@@ -338,7 +403,7 @@ impl AppServices {
             });
         let schedule = next_review_schedule(&current, input.rating, now);
         let fingerprint = format!("{}:{now}:{:?}", item.id.as_str(), input.rating);
-        let attempt = self.review.create_review_attempt(&ReviewAttempt {
+        let attempt = self.review_queue.create_review_attempt(&ReviewAttempt {
             id: ReviewAttemptId::from_fingerprint("review-attempt", &fingerprint),
             item_id: item.id.clone(),
             reviewed_at_ms: now,
@@ -346,7 +411,7 @@ impl AppServices {
             practice_attempt_id: None,
             next_due_at_ms: Some(schedule.due_at_ms),
         })?;
-        let schedule = self.review.save_review_schedule(&schedule)?;
+        let schedule = self.review_queue.save_review_schedule(&schedule)?;
         {
             let spec = observation_spec_for_review(input.rating);
             let fallback_sentence = item
@@ -365,7 +430,7 @@ impl AppServices {
                 if !observed.insert(lexical_entry_id.clone()) {
                     continue;
                 }
-                self.append_channelized_observation(
+                self.lexical_learning().append_channelized_observation(
                     lexical_entry_id,
                     spec,
                     ObservationContext {
@@ -384,7 +449,7 @@ impl AppServices {
             if let Some(lexical_entry_id) = item.source.lexical_entry_id.as_ref()
                 && observed.insert(lexical_entry_id.clone())
             {
-                self.append_channelized_observation(
+                self.lexical_learning().append_channelized_observation(
                     lexical_entry_id,
                     spec,
                     ObservationContext {
@@ -405,7 +470,8 @@ impl AppServices {
             } else {
                 let suggestions = if matches!(input.rating, ReviewRating::Good | ReviewRating::Easy)
                 {
-                    self.record_review_recognition_evidence(&item, &attempt, now)?
+                    self.lexical_learning()
+                        .record_review_recognition_evidence(&item, &attempt, now)?
                 } else {
                     Vec::new()
                 };
@@ -454,7 +520,7 @@ impl AppServices {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        self.review
+        self.hunting
             .list_hunting_candidates(status, limit.min(500), offset)
     }
 
@@ -506,13 +572,14 @@ impl AppServices {
             }
             if let Some(sentence_id) = sentence_id.as_ref()
                 && self
-                    .learning_assets
+                    .lexical_learning()
+                    .lexical_entries
                     .lexical_details(&lexical_entry_id)?
                     .is_some()
                 && self.subtitle_tracks.get_sentence(sentence_id)?.is_some()
             {
                 let observation =
-                    self.learning_assets
+                    self.learning_observations
                         .create_lexical_observation(&LexicalObservation {
                             id: domain::lexical_observation_id(&lexical_entry_id, sentence_id),
                             lexical_entry_id: lexical_entry_id.clone(),
@@ -528,8 +595,8 @@ impl AppServices {
                 "hunting-candidate",
                 &format!("{}:{}", item.id.as_str(), lexical_entry_id.as_str()),
             );
-            let existing = self.review.get_hunting_candidate(&id)?;
-            let candidate = self.review.upsert_hunting_candidate(&HuntingCandidate {
+            let existing = self.hunting.get_hunting_candidate(&id)?;
+            let candidate = self.hunting.upsert_hunting_candidate(&HuntingCandidate {
                 id,
                 lexical_entry_id,
                 review_item_id: item.id.clone(),
@@ -823,7 +890,7 @@ impl PracticeRepository for DisabledLearningLoopRepository {
     }
 }
 
-impl ReviewRepository for DisabledLearningLoopRepository {
+impl ReviewQueueRepository for DisabledLearningLoopRepository {
     fn create_review_item(&self, _item: &ReviewItem) -> Result<ReviewItem, ApplicationError> {
         Err(Self::disabled())
     }
@@ -876,7 +943,9 @@ impl ReviewRepository for DisabledLearningLoopRepository {
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
         Err(Self::disabled())
     }
+}
 
+impl HuntingRepository for DisabledLearningLoopRepository {
     fn upsert_hunting_candidate(
         &self,
         _candidate: &HuntingCandidate,
@@ -922,7 +991,9 @@ impl ReviewRepository for DisabledLearningLoopRepository {
     ) -> Result<Vec<HuntingTarget>, ApplicationError> {
         Err(Self::disabled())
     }
+}
 
+impl RecognitionUpgradeRepository for DisabledLearningLoopRepository {
     fn upsert_recognition_evidence(
         &self,
         evidence: &RecognitionEvidence,

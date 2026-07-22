@@ -165,3 +165,11 @@
 
 *清单更新：2026-06-30*
 *问题解决后删除对应条目，新发现问题随时追加*
+# Phase 3.15.8 concerns delta (2026-07-16)
+
+- **Embedding resource envelope:** first install measured ~73 s on the spike network, ~97 MB model cache,
+  ~203 MB hot max RSS. UI must keep installation explicit and failure non-blocking; no query-triggered download.
+- **Linear top-K ceiling:** v1 scans filtered personal vectors in application memory. Measure real large
+  libraries before choosing ANN; the repository seam permits a later storage adapter without API drift.
+- **Model quality boundary:** 384 dimensions/model name do not establish vector compatibility, and cosine
+  does not establish synonymy. Exact fingerprint plus explanation text are mandatory.

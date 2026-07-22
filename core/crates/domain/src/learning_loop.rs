@@ -79,6 +79,7 @@ pub enum ReviewSourceKind {
     Chunk,
     Sentence,
     ConnectedSpeech,
+    SpeakingAttempt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -555,6 +556,16 @@ pub struct AudioWaveformSummary {
     pub bucket_ms: u64,
     pub peaks: Vec<f32>,
     pub rms: Vec<f32>,
+}
+
+/// Objective facts extracted from one learner recording. These are acoustic
+/// measurements only and never imply speaking quality or correctness.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RecordingAudioFacts {
+    pub recording_id: RecordingAssetId,
+    pub duration_ms: u64,
+    pub pauses: Vec<AudioPauseInterval>,
+    pub waveform: AudioWaveformSummary,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

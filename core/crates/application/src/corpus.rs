@@ -1,8 +1,12 @@
 use std::collections::HashMap;
 
-use crate::*;
+use crate::{
+    ApplicationError, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
+    L1SpecialtyOccurrences, LanguageCode, MediaAnalysisUseCases, SubtitleTokenKind, SubtitleTrack,
+    SubtitleTrackId, clean_required, normalize_phrase,
+};
 
-impl AppServices {
+impl MediaAnalysisUseCases {
     /// Rebuild the local corpus projection for one subtitle track. The Slice 3
     /// shape indexes lemma-keyed word forms, sentence-level text for confirmed
     /// phrase lookup, and — when an active chunk timeline exists — precise
@@ -52,6 +56,7 @@ impl AppServices {
                     Some(hit) => hit.clone(),
                     None => {
                         let key = self
+                            .lexical_learning()
                             .normalize_lexical_form(language.as_str(), &surface_key)
                             .map(|normalization| normalization.normalized)
                             .unwrap_or_else(|_| surface_key.clone());
@@ -77,7 +82,7 @@ impl AppServices {
                 });
             }
         }
-        if let Some(timeline) = self.timelines.active_chunk_timeline(&track.id)? {
+        if let Some(timeline) = self.chunk_timelines.active_chunk_timeline(&track.id)? {
             for chunk in &timeline.chunks {
                 occurrences.push(CorpusOccurrence {
                     id: CorpusOccurrenceId::from_fingerprint(
@@ -204,7 +209,7 @@ impl AppServices {
     ) -> Result<L1SpecialtyOccurrences, ApplicationError> {
         let l2 = LanguageCode::parse(language)?;
         let difficulty_kind = clean_required(difficulty_kind.to_owned(), "difficulty_kind")?;
-        let Some(l1) = self.learner_l1()? else {
+        let Some(l1) = self.learner_profile().learner_l1()? else {
             return Err(ApplicationError::Validation("learner L1 setting"));
         };
         let Some(rules) = diagnosis_core::l1l2_difficulty_rules(&l1, &l2) else {
@@ -290,7 +295,8 @@ impl AppServices {
         let query = if query.contains(char::is_whitespace) {
             query
         } else {
-            self.normalize_lexical_form(language.as_str(), &query)
+            self.lexical_learning()
+                .normalize_lexical_form(language.as_str(), &query)
                 .map(|normalization| normalization.normalized)
                 .unwrap_or(query)
         };

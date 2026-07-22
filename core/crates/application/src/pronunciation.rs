@@ -1,16 +1,40 @@
-use crate::*;
+use crate::{
+    ApplicationError, Arc, CapabilitySupport, LanguageCode, PronunciationProvider,
+    PronunciationProviderInfo, PronunciationRepository, SentencePronunciation, SubtitleSentenceId,
+    SubtitleTrackId, SubtitleTrackRepository, WordPronunciation, WordTimelineRepository,
+    WordTiming, normalize_lemma, require_text, word_timing_cache_is_usable,
+};
 
-impl AppServices {
+#[derive(Clone)]
+pub struct PronunciationUseCases {
+    pronunciations: Arc<dyn PronunciationRepository>,
+    subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    word_timelines: Arc<dyn WordTimelineRepository>,
+    providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
+}
+
+impl PronunciationUseCases {
+    pub(crate) fn new(
+        pronunciations: Arc<dyn PronunciationRepository>,
+        subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+        word_timelines: Arc<dyn WordTimelineRepository>,
+        providers: Arc<Vec<Arc<dyn PronunciationProvider>>>,
+    ) -> Self {
+        Self {
+            pronunciations,
+            subtitle_tracks,
+            word_timelines,
+            providers,
+        }
+    }
+
     pub fn pronunciation_providers(&self) -> Vec<PronunciationProviderInfo> {
-        self.pronunciation_providers
-            .iter()
-            .map(|p| p.info())
-            .collect()
+        self.providers.iter().map(|p| p.info()).collect()
     }
 
     pub fn pronunciation_rules(&self, language: &str) -> serde_json::Value {
         let primary = language.split('-').next().unwrap_or(language);
-        for provider in self.pronunciation_providers.iter() {
+        for provider in self.providers.iter() {
             let info = provider.info();
             if info.languages.iter().any(|l| l == primary || l == language) {
                 let catalog = provider.rule_catalog();
@@ -36,7 +60,7 @@ impl AppServices {
         require_text(word, "word")?;
         let primary = language.split('-').next().unwrap_or(language);
         let normalized = normalize_lemma(word);
-        for provider in self.pronunciation_providers.iter() {
+        for provider in self.providers.iter() {
             let info = provider.info();
             if !info.languages.iter().any(|l| l == primary || l == language) {
                 continue;
@@ -76,7 +100,7 @@ impl AppServices {
             return Err(ApplicationError::NotFound("pronunciation for language"));
         }
         if let Some(value) = self.pronunciations.get_pronunciation(sentence_id)? {
-            let still_valid = self.pronunciation_providers.iter().any(|p| {
+            let still_valid = self.providers.iter().any(|p| {
                 let info = p.info();
                 info.id == value.provider_id && info.version == value.provider_version
             });
@@ -93,7 +117,7 @@ impl AppServices {
             .split('-')
             .next()
             .unwrap_or(language.as_str());
-        for provider in self.pronunciation_providers.iter() {
+        for provider in self.providers.iter() {
             let info = provider.info();
             if !info
                 .languages
@@ -120,7 +144,7 @@ impl AppServices {
             .pronunciations
             .get_pronunciation(sentence_id)?
             .map(|value| {
-                self.pronunciation_providers.iter().any(|p| {
+                self.providers.iter().any(|p| {
                     let info = p.info();
                     info.id == value.provider_id && info.version == value.provider_version
                 })
@@ -131,7 +155,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
-        let existing = self.timelines.get_word_timings(sentence_id)?;
+        let existing = self.word_timelines.get_word_timings(sentence_id)?;
         if word_timing_cache_is_usable(&existing) {
             return Ok(existing);
         }
@@ -148,7 +172,8 @@ impl AppServices {
             &sentence,
             Some(profile.rhythm_prosody.as_str()),
         );
-        self.timelines.save_word_timings(sentence_id, &values)?;
+        self.word_timelines
+            .save_word_timings(sentence_id, &values)?;
         Ok(values)
     }
 
@@ -156,7 +181,7 @@ impl AppServices {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Option<bool>, ApplicationError> {
-        let values = self.timelines.get_word_timings(sentence_id)?;
+        let values = self.word_timelines.get_word_timings(sentence_id)?;
         Ok(values.first().map(|_| word_timing_cache_is_usable(&values)))
     }
 
@@ -179,7 +204,7 @@ impl AppServices {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTiming>, ApplicationError> {
-        if let Some(timeline) = self.timelines.active_word_timeline(track_id)?
+        if let Some(timeline) = self.word_timelines.active_word_timeline(track_id)?
             && !timeline.words.is_empty()
         {
             return Ok(timeline.words);
@@ -193,5 +218,15 @@ impl AppServices {
             values.extend(self.word_timings(&sentence.id)?);
         }
         Ok(values)
+    }
+
+    fn sentence_language(
+        &self,
+        sentence_id: &SubtitleSentenceId,
+    ) -> Result<LanguageCode, ApplicationError> {
+        match self.subtitle_tracks.sentence_track_language(sentence_id)? {
+            Some(language) => Ok(language),
+            None => Ok(LanguageCode::parse("en")?),
+        }
     }
 }
