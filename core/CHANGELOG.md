@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-22: 设计宪章落库 + 暗色为家（refs #28, closes #29 · design Slice 1）。
+  ① 新增 `design-notes/listen-design-charter.md`——把 #28 的一句话气质（「一个正在专注倾听
+  你的、安静的房间」）、五条可检验原则、墨绿炭底色定义与定调期关键裁决固化为仓库内唯一
+  事实来源，后续 slice 与 agent 引用它而不是散落的 issue。② 暗色为默认：`AppSettings`
+  构造默认与 `fromJson` 回退 `'system'` → `'dark'`，`appThemeMode` 初值
+  `ThemeMode.system` → `ThemeMode.dark`（首帧即暗房间，避免亮闪）。persistence 边界：
+  `toJson` 恒写 `theme_mode`，已显式保存过设置的用户不被翻转，只有全新安装/从未持久化者
+  进暗色——不强制迁移用户的显式选择。信号青校准（`#5cc6b8` vs 设计稿 `#4db8a8`）按 issue
+  预案留给 Slice 2。测试：`settings_test` 新增默认暗色与显式选择保留 2 项断言。
+
 - 2026-07-22: Phase 3.19 彻底收口（owner closeout）。纯文档刀，不含代码：
   ① `3.19-RELEASE-ACCEPTANCE.md` 新增 §O 收口权威记录——纠偏 issue #1–#7 全部关闭的
   处置映射（#4 记为前提不成立而非修复）、Run 2 未整轮重跑的显式豁免口径（3.19.1 真机 QA +
