@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/listen_theme.dart';
+import 'app_bar_capabilities.dart';
 
 class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
   const PlayerAppBar({
     super.key,
+    required this.capabilities,
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
@@ -30,6 +33,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onOpenLearningResources,
   });
 
+  final AppBarCapabilities capabilities;
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
@@ -64,6 +68,28 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   Widget _bar(BuildContext context, bool showLabels) {
     final l = AppLocalizations.of(context);
+
+    // Items that act on the loaded media are disabled the moment the menu
+    // opens, with the reason in the subtitle slot — mirroring how
+    // ContentChannelAvailability carries a reason instead of offering a
+    // clickable promise (#24).
+    PopupMenuItem<String> mediaGatedItem({
+      required String value,
+      required IconData icon,
+      required String title,
+    }) => PopupMenuItem(
+      value: value,
+      enabled: capabilities.canActOnMedia,
+      child: _MenuRow(
+        icon: icon,
+        title: title,
+        enabled: capabilities.canActOnMedia,
+        subtitle: capabilities.canActOnMedia
+            ? null
+            : l.text('statusOpenMediaAndCoreFirst'),
+      ),
+    );
+
     return AppBar(
       titleSpacing: 20,
       title: Row(
@@ -106,12 +132,10 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const PopupMenuDivider(),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'archive-media',
-              child: _MenuRow(
-                icon: Icons.archive_outlined,
-                title: l.text('archiveMedia'),
-              ),
+              icon: Icons.archive_outlined,
+              title: l.text('archiveMedia'),
             ),
           ],
         ),
@@ -131,57 +155,43 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           },
           itemBuilder: (_) => [
             _MenuHeader(label: l.text('primarySubtitle')),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'primary-import',
-              child: _MenuRow(
-                icon: Icons.upload_file_outlined,
-                title: l.text('importSubtitleHint'),
-              ),
+              icon: Icons.upload_file_outlined,
+              title: l.text('importSubtitleHint'),
             ),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'primary-generate',
-              child: _MenuRow(
-                icon: Icons.auto_fix_high_outlined,
-                title: l.text('generateSubtitles'),
-              ),
+              icon: Icons.auto_fix_high_outlined,
+              title: l.text('generateSubtitles'),
             ),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'primary-search',
-              child: _MenuRow(
-                icon: Icons.search_outlined,
-                title: l.text('openSubtitles'),
-              ),
+              icon: Icons.search_outlined,
+              title: l.text('openSubtitles'),
             ),
             const PopupMenuDivider(),
             _MenuHeader(label: l.text('secondarySubtitle')),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'secondary-import',
-              child: _MenuRow(
-                icon: Icons.upload_file_outlined,
-                title: l.text('importSubtitleHint'),
-              ),
+              icon: Icons.upload_file_outlined,
+              title: l.text('importSubtitleHint'),
             ),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'secondary-generate',
-              child: _MenuRow(
-                icon: Icons.auto_fix_high_outlined,
-                title: l.text('generateSubtitles'),
-              ),
+              icon: Icons.auto_fix_high_outlined,
+              title: l.text('generateSubtitles'),
             ),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'secondary-search',
-              child: _MenuRow(
-                icon: Icons.search_outlined,
-                title: l.text('openSubtitles'),
-              ),
+              icon: Icons.search_outlined,
+              title: l.text('openSubtitles'),
             ),
             const PopupMenuDivider(),
-            PopupMenuItem(
+            mediaGatedItem(
               value: 'embedded',
-              child: _MenuRow(
-                icon: Icons.closed_caption_outlined,
-                title: l.text('importEmbeddedText'),
-              ),
+              icon: Icons.closed_caption_outlined,
+              title: l.text('importEmbeddedText'),
             ),
           ],
         ),
@@ -367,20 +377,32 @@ class _MenuHeader extends PopupMenuItem<String> {
 }
 
 class _MenuRow extends StatelessWidget {
-  const _MenuRow({required this.icon, required this.title, this.subtitle});
+  const _MenuRow({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.enabled = true,
+  });
 
   final IconData icon;
   final String title;
   final String? subtitle;
 
+  /// The title greys out for free via [PopupMenuItem]'s inherited text style;
+  /// the icon and subtitle carry explicit colors, so they follow this flag.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final secondary = enabled
+        ? colors.onSurfaceVariant
+        : colors.disabledForeground;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 260),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: colors.onSurfaceVariant),
+          Icon(icon, size: 20, color: secondary),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -393,9 +415,9 @@ class _MenuRow extends StatelessWidget {
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: secondary),
                   ),
               ],
             ),
