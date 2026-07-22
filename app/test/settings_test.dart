@@ -20,6 +20,28 @@ void main() {
     },
   );
 
+  test('defaults theme mode to dark (design charter: 暗色为家)', () {
+    // Fresh installs open into the dimmed room — see
+    // design-notes/listen-design-charter.md and #29.
+    expect(const AppSettings().themeMode, 'dark');
+    // A saved file without theme_mode (never persisted one) also gets dark.
+    final settings = AppSettings.fromJson({'version': 8});
+    expect(settings.themeMode, 'dark');
+  });
+
+  test('preserves an explicitly persisted theme mode choice', () {
+    // Users who explicitly chose system/light must never be flipped by the
+    // dark-by-default change (#29 persistence boundary).
+    expect(
+      AppSettings.fromJson({'version': 8, 'theme_mode': 'system'}).themeMode,
+      'system',
+    );
+    expect(
+      AppSettings.fromJson({'version': 8, 'theme_mode': 'light'}).themeMode,
+      'light',
+    );
+  });
+
   test('loads versioned settings values', () {
     final settings = AppSettings.fromJson({
       'version': 2,
