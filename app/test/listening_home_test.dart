@@ -11,6 +11,7 @@ void main() {
     VoidCallback? onOpenOnline,
     VoidCallback? onContinue,
     VoidCallback? onOpenPersonalExpressions,
+    VoidCallback? onOpenConversation,
     String? recentMediaTitle,
     Duration recentPosition = Duration.zero,
     Duration recentDuration = Duration.zero,
@@ -33,6 +34,7 @@ void main() {
         onOpenSubtitleResources: () {},
         onOpenVocabulary: () {},
         onOpenPersonalExpressions: onOpenPersonalExpressions ?? () {},
+        onOpenConversation: onOpenConversation ?? () {},
         onOpenReview: () {},
         onOpenCoach: () {},
         onOpenSettings: () {},
@@ -106,6 +108,7 @@ void main() {
         '字幕资源',
         '词汇本',
         '我的表达',
+        '对话',
         '复习',
         '学习教练',
       ]) {
@@ -141,6 +144,7 @@ void main() {
       '字幕资源',
       '词汇本',
       '我的表达',
+      '对话',
       '复习',
       '学习教练',
     ]) {

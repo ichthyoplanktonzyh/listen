@@ -56,4 +56,28 @@ extension RealtimeConversationApi on LocalApi {
 
   Future<void> saveRealtimeTurn(Map<String, dynamic> turn) async =>
       _request('POST', '/v1/realtime/turns', turn);
+
+  Future<List<RealtimeConversationSessionView>> realtimeSessions() async =>
+      ((await _request('GET', '/v1/realtime/sessions')) as List<dynamic>)
+          .map(
+            (value) => RealtimeConversationSessionView.fromJson(
+              value as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
+
+  Future<List<RealtimeConversationItem>> realtimeTurns(
+    String sessionId,
+  ) async =>
+      ((await _request(
+                'GET',
+                '/v1/realtime/sessions/${Uri.encodeComponent(sessionId)}/turns',
+              ))
+              as List<dynamic>)
+          .map(
+            (value) => RealtimeConversationItem.fromJson(
+              value as Map<String, dynamic>,
+            ),
+          )
+          .toList(growable: false);
 }

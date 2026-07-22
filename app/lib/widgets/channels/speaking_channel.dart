@@ -50,8 +50,10 @@ class SpeakingChannelHost extends StatelessWidget {
       return RealtimeConversationPanel(
         controller: realtimeConversationController,
         api: api,
-        source: speakingTaskController.state.source!,
-        modelId: speakingTaskController.state.asrModelId!,
+        launch: RealtimeConversationLaunch.topic(
+          source: speakingTaskController.state.source!,
+          modelId: speakingTaskController.state.asrModelId!,
+        ),
         acquireAudioFocus: speakingActions.acquireRecordingFocus,
         onClose: () => unawaited(speakingChannel.closeRealtimeConversation()),
       );

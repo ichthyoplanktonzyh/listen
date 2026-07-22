@@ -15,6 +15,7 @@ class ListeningHome extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenPersonalExpressions,
+    required this.onOpenConversation,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.onOpenSettings,
@@ -43,6 +44,7 @@ class ListeningHome extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenPersonalExpressions;
+  final VoidCallback onOpenConversation;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
@@ -80,6 +82,7 @@ class ListeningHome extends StatelessWidget {
                   onOpenSubtitleResources: onOpenSubtitleResources,
                   onOpenVocabulary: onOpenVocabulary,
                   onOpenPersonalExpressions: onOpenPersonalExpressions,
+                  onOpenConversation: onOpenConversation,
                   onOpenReview: onOpenReview,
                   onOpenCoach: onOpenCoach,
                   onOpenSettings: onOpenSettings,
@@ -94,6 +97,7 @@ class ListeningHome extends StatelessWidget {
                 onOpenSubtitleResources: onOpenSubtitleResources,
                 onOpenVocabulary: onOpenVocabulary,
                 onOpenPersonalExpressions: onOpenPersonalExpressions,
+                onOpenConversation: onOpenConversation,
                 onOpenReview: onOpenReview,
                 onOpenCoach: onOpenCoach,
                 mediaLibrary: mediaLibrary,
@@ -131,6 +135,7 @@ class _HomeSidebar extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenPersonalExpressions,
+    required this.onOpenConversation,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.onOpenSettings,
@@ -139,6 +144,7 @@ class _HomeSidebar extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenPersonalExpressions;
+  final VoidCallback onOpenConversation;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final VoidCallback onOpenSettings;
@@ -184,6 +190,11 @@ class _HomeSidebar extends StatelessWidget {
               onTap: onOpenPersonalExpressions,
             ),
             _SidebarItem(
+              icon: Icons.forum_outlined,
+              label: l.text('conversation'),
+              onTap: onOpenConversation,
+            ),
+            _SidebarItem(
               icon: Icons.headphones_outlined,
               label: l.text('review'),
               onTap: onOpenReview,
@@ -215,6 +226,7 @@ class _HomeContent extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenPersonalExpressions,
+    required this.onOpenConversation,
     required this.onOpenReview,
     required this.onOpenCoach,
     required this.mediaLibrary,
@@ -243,6 +255,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenPersonalExpressions;
+  final VoidCallback onOpenConversation;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
   final List<MediaLibraryEntry>? mediaLibrary;
@@ -391,6 +404,12 @@ class _HomeContent extends StatelessWidget {
                       label: l.text('personalExpressions'),
                       sourceLabel: l.text('personalExpressionSummary'),
                       onTap: onOpenPersonalExpressions,
+                    ),
+                    _SourceAction(
+                      icon: Icons.forum_outlined,
+                      label: l.text('conversation'),
+                      sourceLabel: l.text('conversationSummary'),
+                      onTap: onOpenConversation,
                     ),
                     _SourceAction(
                       icon: Icons.headphones_outlined,
