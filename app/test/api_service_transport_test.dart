@@ -493,7 +493,7 @@ void main() {
         );
 
         final attempt = await api.createSpokenSemanticAttempt(
-          kind: 'role_reply',
+          kind: 'pattern_production',
           target: {
             'kind': 'segment',
             'id': 'segment-1',
@@ -502,7 +502,7 @@ void main() {
             'start_ms': 0,
             'end_ms': 8000,
           },
-          rubricId: 'rubric-role-1',
+          rubricId: 'rubric-pattern-1',
           rubricVersion: 1,
           audioPlayCount: 1,
           speakingAssistance: 'keywords',

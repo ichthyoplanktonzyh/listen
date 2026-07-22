@@ -7,10 +7,7 @@ import '../../controllers/realtime_conversation_controller.dart';
 import '../../controllers/speaking_actions_coordinator.dart';
 import '../../controllers/speaking_channel_coordinator.dart';
 import '../../controllers/speaking_task_controller.dart';
-import '../../localization.dart';
 import '../../services/api_service.dart';
-import '../flows/reading_flows.dart';
-import '../flows/speaking_flows.dart';
 import '../panels/listening_check_panel.dart';
 import '../panels/realtime_conversation_panel.dart';
 import '../panels/speaking_task_studio.dart';
@@ -45,7 +42,6 @@ class SpeakingChannelHost extends StatelessWidget {
   );
 
   Widget _surface(BuildContext context) {
-    final l = AppLocalizations.of(context);
     if (speakingChannel.realtimeConversationOpen) {
       return RealtimeConversationPanel(
         controller: realtimeConversationController,
@@ -73,15 +69,6 @@ class SpeakingChannelHost extends StatelessWidget {
       onPlaySource: speakingActions.playSource,
       onPlayRecording: speakingActions.playRecording,
       onAcquireRecordingFocus: speakingActions.acquireRecordingFocus,
-      onShowRetelling: () => speakingActions.showRetelling(
-        api,
-        fixedRubricPoints: listeningRetellTemplate(l),
-      ),
-      onShowRoleReply: (assistance) => speakingActions.showRoleReply(
-        api,
-        assistance: assistance,
-        fixedRubricPoints: roleReplyTemplate(l),
-      ),
       onOpenL1Check: speakingChannel.openL1Check,
       onOpenRealtimeConversation: speakingChannel.openRealtimeConversation,
       targetCandidates: speakingChannel.targetCandidates(),

@@ -43,7 +43,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   final Future<void> Function()? stopAuxiliaryAudio;
 
   SpeakingTaskSource? _source;
-  SpeakingTaskSource? _retellingSource;
   Duration? _returnPosition;
   int _audioGeneration = 0;
 
@@ -94,7 +93,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     await acquireRecordingFocus();
     _returnPosition = player.position;
     _source = source;
-    _retellingSource = source;
     notifyListeners();
     unawaited(
       task.openTask(api, source: source, fixedRubricPoints: fixedRubricPoints),
@@ -112,7 +110,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       await adapter.seek(returnPosition);
     }
     _source = null;
-    _retellingSource = null;
     _returnPosition = null;
     notifyListeners();
   }
@@ -170,30 +167,10 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     await acquireRecordingFocus();
     _returnPosition = player.position;
     _source = source;
-    _retellingSource = source;
     notifyListeners();
     await task.openTask(
       api,
       source: source,
-      fixedRubricPoints: fixedRubricPoints,
-    );
-  }
-
-  Future<void> showRetelling(
-    LocalApi api, {
-    required List<RubricPointView> fixedRubricPoints,
-  }) async {
-    final retelling = _retellingSource;
-    if (retelling == null ||
-        task.state.kind == SpeakingTaskController.retellingKind) {
-      return;
-    }
-    await task.closeTask(api);
-    _source = retelling;
-    notifyListeners();
-    await task.openTask(
-      api,
-      source: retelling,
       fixedRubricPoints: fixedRubricPoints,
     );
   }
@@ -228,7 +205,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     await acquireRecordingFocus();
     _returnPosition = player.position;
     _source = source;
-    _retellingSource = null;
     notifyListeners();
     await task.openTask(
       api,
@@ -236,69 +212,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       fixedRubricPoints: fixedRubricPoints,
       kind: SpeakingTaskController.patternProductionKind,
       assistance: 'no_text',
-    );
-  }
-
-  Future<void> showRoleReply(
-    LocalApi api, {
-    required String assistance,
-    required List<RubricPointView> fixedRubricPoints,
-  }) async {
-    final track = subtitle.primaryTrack;
-    final retelling = _retellingSource;
-    if (track == null || retelling == null) return;
-    var replyIndex = track.cues.indexWhere(
-      (cue) => cue.id == subtitle.currentPrimaryCue?.id,
-    );
-    if (replyIndex <= 0) {
-      replyIndex = track.cues.indexWhere(
-        (cue) => cue.id == retelling.anchorCueId,
-      );
-    }
-    if (replyIndex <= 0) {
-      player.setStatus(_t('statusRoleReplyNeedsDialogue'));
-      return;
-    }
-    final expectedReply = track.cues[replyIndex];
-    var promptStart = replyIndex - 1;
-    while (promptStart > 0 &&
-        expectedReply.start.inMilliseconds -
-                track.cues[promptStart].start.inMilliseconds <
-            10000) {
-      promptStart--;
-    }
-    final promptCues = track.cues.sublist(promptStart, replyIndex);
-    final visiblePrompt = switch (assistance) {
-      'full_sentence' => expectedReply.text.trim(),
-      'keywords' => _keywordCue(expectedReply),
-      'no_text' => '(no text shown; reply after the audio prompt)',
-      _ => throw ArgumentError.value(assistance, 'assistance'),
-    };
-    final roleSource = SpeakingTaskSource(
-      anchorCueId: promptCues.first.id,
-      semanticSentenceId: expectedReply.id,
-      mediaId: track.mediaId ?? player.mediaId,
-      trackId: track.id,
-      startMs: subtitle.primaryCursor
-          .mediaStart(promptCues.first)
-          .inMilliseconds,
-      endMs: subtitle.primaryCursor.mediaEnd(promptCues.last).inMilliseconds,
-      language: settings.resolveLearningLanguage(track.language),
-      transcriptSnapshot: expectedReply.text.trim(),
-      audioTranscriptSnapshot: promptCues
-          .map((cue) => cue.text.trim())
-          .join(' '),
-      promptSnapshot: visiblePrompt,
-    );
-    await task.closeTask(api);
-    _source = roleSource;
-    notifyListeners();
-    await task.openTask(
-      api,
-      source: roleSource,
-      fixedRubricPoints: fixedRubricPoints,
-      kind: SpeakingTaskController.roleReplyKind,
-      assistance: assistance,
     );
   }
 
@@ -374,19 +287,5 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
       end++;
     }
     return trackCues.sublist(start, end + 1);
-  }
-
-  String _keywordCue(Cue cue) {
-    final words = <String>[];
-    for (final token in cue.tokens.where((token) => token.kind == 'word')) {
-      final word = token.text.trim();
-      if (word.length < 3 || words.contains(word)) continue;
-      words.add(word);
-      if (words.length == 4) break;
-    }
-    if (words.isEmpty) {
-      return cue.text.trim().split(RegExp(r'\s+')).take(4).join(' ');
-    }
-    return words.join(' · ');
   }
 }

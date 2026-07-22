@@ -320,128 +320,106 @@ void main() {
     expect(controller.state.phase, 'listening');
   });
 
-  test(
-    'record, transcribe, correct, confirm targets, then finish without '
-    'self-assessment',
-    () async {
-      final backend = _FakeBackend();
-      final recorder = _FakeRecorder(MicrophonePermissionStatus.granted);
-      final controller = SpeakingTaskController(
-        recorder: recorder,
-        delay: (_) async {},
-      );
-      await controller.openTask(
-        backend.api,
-        source: _source,
-        fixedRubricPoints: _points,
-      );
-      controller.noteSourcePlayback();
-      var focusAcquired = false;
-      expect(
-        await controller.beginRecording(
-          acquireAudioFocus: () async => focusAcquired = true,
-        ),
-        isTrue,
-      );
-      expect(focusAcquired, isTrue);
-      expect(controller.state.phase, 'recording');
+  test('record, transcribe, correct, confirm targets, then finish without '
+      'self-assessment', () async {
+    final backend = _FakeBackend();
+    final recorder = _FakeRecorder(MicrophonePermissionStatus.granted);
+    final controller = SpeakingTaskController(
+      recorder: recorder,
+      delay: (_) async {},
+    );
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      fixedRubricPoints: _points,
+    );
+    controller.noteSourcePlayback();
+    var focusAcquired = false;
+    expect(
+      await controller.beginRecording(
+        acquireAudioFocus: () async => focusAcquired = true,
+      ),
+      isTrue,
+    );
+    expect(focusAcquired, isTrue);
+    expect(controller.state.phase, 'recording');
 
-      await controller.stopRecording(backend.api);
-      expect(controller.state.phase, 'reviewing');
-      expect(controller.state.audioFacts?.pauses, hasLength(1));
-      expect(controller.state.audioFacts?.totalPauseMs, 400);
-      expect(
-        controller.state.rawTranscript,
-        'The storm delayed the fairy to Tuesday.',
-      );
-      final requestCountBeforeClose = backend.requests.length;
-      await controller.closeTask();
-      expect(controller.state.phase, 'idle');
-      await controller.openTask(
-        backend.api,
-        source: _source,
-        fixedRubricPoints: _points,
-      );
-      expect(controller.state.phase, 'reviewing');
-      expect(backend.requests, hasLength(requestCountBeforeClose));
-      controller.updateCorrectedTranscript(
-        'The storm delayed the ferry until Tuesday.',
-      );
-      controller.setAsrReliability('suspect');
-      await controller.acceptTranscript(backend.api);
+    await controller.stopRecording(backend.api);
+    expect(controller.state.phase, 'reviewing');
+    expect(controller.state.audioFacts?.pauses, hasLength(1));
+    expect(controller.state.audioFacts?.totalPauseMs, 400);
+    expect(
+      controller.state.rawTranscript,
+      'The storm delayed the fairy to Tuesday.',
+    );
+    final requestCountBeforeClose = backend.requests.length;
+    await controller.closeTask();
+    expect(controller.state.phase, 'idle');
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      fixedRubricPoints: _points,
+    );
+    expect(controller.state.phase, 'reviewing');
+    expect(backend.requests, hasLength(requestCountBeforeClose));
+    controller.updateCorrectedTranscript(
+      'The storm delayed the ferry until Tuesday.',
+    );
+    controller.setAsrReliability('suspect');
+    await controller.acceptTranscript(backend.api);
 
-      expect(controller.state.phase, 'ready_feedback');
-      final attemptBody = backend.requests
-          .firstWhere((request) => request.$2 == '/v1/semantic/attempts')
-          .$3!;
-      final response = attemptBody['responses'][0] as Map<String, dynamic>;
-      expect(
-        response['raw_transcript'],
-        'The storm delayed the fairy to Tuesday.',
-      );
-      expect(
-        response['transcript'],
-        'The storm delayed the ferry until Tuesday.',
-      );
-      expect(response['asr_reliability'], 'suspect');
+    expect(controller.state.phase, 'ready_feedback');
+    final attemptBody = backend.requests
+        .firstWhere((request) => request.$2 == '/v1/semantic/attempts')
+        .$3!;
+    final response = attemptBody['responses'][0] as Map<String, dynamic>;
+    expect(
+      response['raw_transcript'],
+      'The storm delayed the fairy to Tuesday.',
+    );
+    expect(
+      response['transcript'],
+      'The storm delayed the ferry until Tuesday.',
+    );
+    expect(response['asr_reliability'], 'suspect');
 
-      // No rubric self-assessment (issue #9): confirming a target and
-      // finishing are all that remains after the attempt is saved.
-      await controller.confirmSpeakingTarget(
-        backend.api,
-        lexicalEntryId: 'lexical-until-tuesday',
-        surfaceForm: 'until Tuesday',
-      );
-      expect(
-        controller.state.confirmedTargetIds,
-        contains('lexical-until-tuesday'),
-      );
-      expect(
-        backend.requests.where(
-          (request) => request.$2 == '/v1/semantic/judgments',
-        ),
-        isEmpty,
-      );
+    // No rubric self-assessment (issue #9): confirming a target and
+    // finishing are all that remains after the attempt is saved.
+    await controller.confirmSpeakingTarget(
+      backend.api,
+      lexicalEntryId: 'lexical-until-tuesday',
+      surfaceForm: 'until Tuesday',
+    );
+    expect(
+      controller.state.confirmedTargetIds,
+      contains('lexical-until-tuesday'),
+    );
+    expect(
+      backend.requests.where(
+        (request) => request.$2 == '/v1/semantic/judgments',
+      ),
+      isEmpty,
+    );
 
-      controller.finishTask();
-      expect(controller.state.phase, 'done');
-      expect(controller.state.canRetry, isTrue);
+    controller.finishTask();
+    expect(controller.state.phase, 'done');
+    expect(controller.state.canRetry, isTrue);
 
-      await controller.scheduleDelayedRetelling(backend.api);
-      expect(controller.state.delayedReviewItemId, 'review-speaking-1');
-      final reviewBody = backend.requests
-          .firstWhere((request) => request.$2 == '/v1/review/items')
-          .$3!;
-      expect(reviewBody['source']['kind'], 'speaking_attempt');
-      expect(reviewBody['source']['id'], 'attempt-1');
-      expect(reviewBody['prompt_snapshot'], _source.transcriptSnapshot);
+    await controller.scheduleDelayedRetelling(backend.api);
+    expect(controller.state.delayedReviewItemId, 'review-speaking-1');
+    final reviewBody = backend.requests
+        .firstWhere((request) => request.$2 == '/v1/review/items')
+        .$3!;
+    expect(reviewBody['source']['kind'], 'speaking_attempt');
+    expect(reviewBody['source']['id'], 'attempt-1');
+    expect(reviewBody['prompt_snapshot'], _source.transcriptSnapshot);
 
-      controller.retryOnce();
-      expect(controller.state.phase, 'listening');
-      expect(controller.state.retryCount, 1);
-      expect(controller.state.rawTranscript, isEmpty);
-      expect(controller.state.canRetry, isFalse);
-    },
-  );
-
-  test(
-    'role reply requires an honest prompt and assistance snapshot',
-    () async {
-      final controller = SpeakingTaskController(
-        recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
-      );
-      expect(
-        () => controller.openTask(
-          _FakeBackend().api,
-          source: _source,
-          fixedRubricPoints: _points,
-          kind: SpeakingTaskController.roleReplyKind,
-          assistance: 'keywords',
-        ),
-        throwsArgumentError,
-      );
-    },
-  );
+    controller.retryOnce();
+    expect(controller.state.phase, 'listening');
+    expect(controller.state.retryCount, 1);
+    expect(controller.state.rawTranscript, isEmpty);
+    expect(controller.state.canRetry, isFalse);
+  });
 
   test(
     'personal pattern uses the speaking resident with explicit assistance',
