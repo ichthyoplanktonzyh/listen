@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-22: 完成 Phase 3.19.1 方案 B5 的恢复与关闭语义。Realtime route 在 active/connecting 时返回会
+  先确认丢弃，显式 Cancel 会先 fence pending learner ASR 再关闭 route；draining/post-processing 期间
+  不允许半途退出。provider drain timeout 可注入测试，超时时保留 partial assistant 为 interrupted，
+  session 仍按正常 finish 完成。新增麦克风启动失败、provider 连接失败无脏状态重试、pending-ASR
+  cancel、drain timeout 与 route close widget 回归。同步调研 Discute、AI Spanish Tutor、conversAI、
+  Study Buddy、SuVi Player、Shadowing 与 upstream LLPlayer：提取 timeline、grounding、review 和跟读模式，
+  明确不采用 provider item ID 领域身份，也不把固定目标复读重新包装为对话；详见
+  `3.19.1-GITHUB-ANALOGS.md`。
+
 - 2026-07-22: 完成 Phase 3.19.1 方案 B4。内容通道的「说」现在先明确选择复述、跟读或围绕内容
   对话；话题对话直接进入 Realtime route，不再先创建 Speaking task，也从 Speaking Studio、host 与
   coordinator 删除 Realtime 页面状态。Pattern Production 的两类事实改为显式关联：semantic attempt
