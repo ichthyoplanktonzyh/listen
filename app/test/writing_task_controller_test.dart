@@ -245,43 +245,45 @@ void main() {
     },
   );
 
-  test('LLM feedback cites the latest revision and resets across attempts',
-      () async {
-    final backend = _Backend()..providers = [_providerJson()];
-    final controller = WritingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      kind: WritingTaskController.summaryKind,
-      promptSnapshot: 'Summarize this passage.',
-      fixedRubricPoints: _points,
-    );
-    controller.updateDraft('First version.');
-    await controller.submitDraft(backend.api);
-    // A capable provider was discovered, but no feedback yet.
-    expect(controller.state.feedbackProviderId, 'prov-1');
-    expect(controller.state.llmFeedback, isNull);
+  test(
+    'LLM feedback cites the latest revision and resets across attempts',
+    () async {
+      final backend = _Backend()..providers = [_providerJson()];
+      final controller = WritingTaskController();
+      await controller.openTask(
+        backend.api,
+        source: _source,
+        kind: WritingTaskController.summaryKind,
+        promptSnapshot: 'Summarize this passage.',
+        fixedRubricPoints: _points,
+      );
+      controller.updateDraft('First version.');
+      await controller.submitDraft(backend.api);
+      // A capable provider was discovered, but no feedback yet.
+      expect(controller.state.feedbackProviderId, 'prov-1');
+      expect(controller.state.llmFeedback, isNull);
 
-    await controller.requestLlmFeedback(backend.api);
-    expect(
-      controller.state.llmFeedback,
-      'Good summary of attempt-original rev 1.',
-    );
+      await controller.requestLlmFeedback(backend.api);
+      expect(
+        controller.state.llmFeedback,
+        'Good summary of attempt-original rev 1.',
+      );
 
-    // The revised attempt gets a fresh request; the old feedback (which cited
-    // revision 1 of the initial attempt) never carries over.
-    controller.startRevisionWithoutFeedback();
-    controller.updateRevision('Second version.');
-    await controller.submitRevision(backend.api);
-    expect(controller.state.phase, 'done');
-    expect(controller.state.llmFeedback, isNull);
+      // The revised attempt gets a fresh request; the old feedback (which cited
+      // revision 1 of the initial attempt) never carries over.
+      controller.startRevisionWithoutFeedback();
+      controller.updateRevision('Second version.');
+      await controller.submitRevision(backend.api);
+      expect(controller.state.phase, 'done');
+      expect(controller.state.llmFeedback, isNull);
 
-    await controller.requestLlmFeedback(backend.api);
-    expect(
-      controller.state.llmFeedback,
-      'Good summary of attempt-revised rev 2.',
-    );
-  });
+      await controller.requestLlmFeedback(backend.api);
+      expect(
+        controller.state.llmFeedback,
+        'Good summary of attempt-revised rev 2.',
+      );
+    },
+  );
 
   test('LLM feedback stays hidden without a capable provider', () async {
     final backend = _Backend()

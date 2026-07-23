@@ -4,22 +4,22 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
-import '../../controllers/hunting_controller.dart';
 import '../../controllers/auxiliary_audio_controller.dart';
+import '../../controllers/hunting_controller.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/practice_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
-import '../../localization.dart';
 import '../../learning_assets_ui.dart';
-import '../../models/practice.dart';
+import '../../localization.dart';
 import '../../models/personal_expression.dart';
+import '../../models/practice.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
-import '../../screens/review_queue_screen.dart';
 import '../../screens/personal_expression_screen.dart';
+import '../../screens/review_queue_screen.dart';
 import '../../screens/vocabulary_screen.dart';
 import '../../services/api_service.dart';
 import '../../utils/word_list_parser.dart';
@@ -123,7 +123,9 @@ Future<void> openPhraseFlow({
   );
   if (details != null && context.mounted) {
     learningController.updateSinglePhraseEntry(canonical, details);
-    playerController.setStatus(l.text('statusPhraseSaved').replaceAll('{phrase}', candidate.displayForm));
+    playerController.setStatus(
+      l.text('statusPhraseSaved').replaceAll('{phrase}', candidate.displayForm),
+    );
   }
 }
 
@@ -386,5 +388,7 @@ Future<void> importWordListFlow({
     overwriteExisting: overwrite,
   );
   await reloadWordEntries();
-  playerController.setStatus(l.text('statusWordListImported').replaceAll('{result}', '$result'));
+  playerController.setStatus(
+    l.text('statusWordListImported').replaceAll('{result}', '$result'),
+  );
 }

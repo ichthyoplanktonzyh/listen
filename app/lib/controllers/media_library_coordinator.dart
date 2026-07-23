@@ -173,7 +173,10 @@ class MediaLibraryCoordinator {
       return;
     }
     try {
-      final updated = await service.setMediaTriageIntent(entry.media.id, intent);
+      final updated = await service.setMediaTriageIntent(
+        entry.media.id,
+        intent,
+      );
       if (!isMounted()) return;
       final library = mediaLibrary;
       if (library != null) {
@@ -184,7 +187,10 @@ class MediaLibraryCoordinator {
       }
       requestRebuild();
     } catch (error) {
-      player.setStatus('${text('statusTriageIntentFailed')}: $error', error: true);
+      player.setStatus(
+        '${text('statusTriageIntentFailed')}: $error',
+        error: true,
+      );
     }
   }
 

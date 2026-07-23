@@ -4,6 +4,8 @@ import '../../localization.dart';
 import '../../models/capability_readiness.dart';
 import '../../models/timeline.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 
 class TimelineResourceSummaryPanel extends StatelessWidget {
@@ -94,7 +96,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.timeline, size: 18),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     l.text('timelineResource'),
@@ -118,7 +120,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -142,7 +144,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
               ],
             ),
             if (error != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               Text(
                 error!,
                 maxLines: 2,
@@ -150,9 +152,9 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             _CapabilityReadinessGrid(snapshot: readiness),
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -214,16 +216,16 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                           ),
                         ],
                       ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     _ActiveTimelineLine(
                       active: active,
                       fallbackWordTimingCount: activeWordTimingCount,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: ListenSpacing.gap6),
                     _ActivePhoneLine(active: activePhone),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: ListenSpacing.gap6),
                     _ActiveChunkLine(active: activeChunk),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     SizedBox(
                       height: phoneSummaries.isEmpty ? 34 : 74,
                       child: phoneSummaries.isEmpty
@@ -238,7 +240,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                               scrollDirection: Axis.horizontal,
                               itemCount: phoneSummaries.length,
                               separatorBuilder: (_, _) =>
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: ListenSpacing.gap8),
                               itemBuilder: (context, index) =>
                                   _PhoneCandidateTile(
                                     summary: phoneSummaries[index],
@@ -248,7 +250,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                                   ),
                             ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     SizedBox(
                       height: chunkSummaries.isEmpty ? 34 : 74,
                       child: chunkSummaries.isEmpty
@@ -263,7 +265,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                               scrollDirection: Axis.horizontal,
                               itemCount: chunkSummaries.length,
                               separatorBuilder: (_, _) =>
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: ListenSpacing.gap8),
                               itemBuilder: (context, index) =>
                                   _ChunkCandidateTile(
                                     summary: chunkSummaries[index],
@@ -273,7 +275,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                                   ),
                             ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     SizedBox(
                       height: summaries.isEmpty ? 34 : 74,
                       child: summaries.isEmpty
@@ -288,7 +290,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                               scrollDirection: Axis.horizontal,
                               itemCount: summaries.length,
                               separatorBuilder: (_, _) =>
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: ListenSpacing.gap8),
                               itemBuilder: (context, index) => _CandidateTile(
                                 summary: summaries[index],
                                 onActivate: onActivate,
@@ -296,7 +298,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                             ),
                     ),
                     if (artifacts.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: ListenSpacing.gap8),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: Wrap(
@@ -349,13 +351,14 @@ class _CapabilityReadinessGrid extends StatelessWidget {
           l.text('capabilityReadiness'),
           style: Theme.of(context).textTheme.labelLarge,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         SizedBox(
           height: 86,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: snapshot.items.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
+            separatorBuilder: (_, _) =>
+                const SizedBox(width: ListenSpacing.gap8),
             itemBuilder: (context, index) =>
                 _CapabilityReadinessTile(readiness: snapshot.items[index]),
           ),
@@ -380,7 +383,7 @@ class _CapabilityReadinessTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainer,
           border: Border.all(color: color.withValues(alpha: 0.55)),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
@@ -391,7 +394,7 @@ class _CapabilityReadinessTile extends StatelessWidget {
               Row(
                 children: [
                   Icon(_stateIcon(readiness.state), size: 15, color: color),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: ListenSpacing.gap6),
                   Expanded(
                     child: Text(
                       l.text(readiness.titleKey),
@@ -400,11 +403,11 @@ class _CapabilityReadinessTile extends StatelessWidget {
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: ListenSpacing.gap6),
                   _StateBadge(readiness: readiness, color: color),
                 ],
               ),
-              const SizedBox(height: 5),
+              const SizedBox(height: ListenSpacing.gap4),
               Text(
                 _detailText(l, readiness),
                 maxLines: 2,
@@ -460,7 +463,7 @@ class _StateBadge extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       color: color.withValues(alpha: 0.16),
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: ListenRadii.pillBorder,
     ),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -511,7 +514,7 @@ class _ActiveTimelineLine extends StatelessWidget {
               ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: ListenSpacing.gap6),
         Expanded(
           child: Text(
             text,
@@ -545,7 +548,7 @@ class _ActiveChunkLine extends StatelessWidget {
               ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: ListenSpacing.gap6),
         Expanded(
           child: Text(
             text,
@@ -579,7 +582,7 @@ class _ActivePhoneLine extends StatelessWidget {
               ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: ListenSpacing.gap6),
         Expanded(
           child: Text(
             text,
@@ -620,7 +623,7 @@ class _CandidateTile extends StatelessWidget {
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -635,7 +638,7 @@ class _CandidateTile extends StatelessWidget {
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -647,7 +650,7 @@ class _CandidateTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: ListenSpacing.gap2),
                     Text(
                       [
                         '${summary.wordCount} ${l.text('words')}',
@@ -716,7 +719,7 @@ class _PhoneCandidateTile extends StatelessWidget {
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -729,7 +732,7 @@ class _PhoneCandidateTile extends StatelessWidget {
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -741,7 +744,7 @@ class _PhoneCandidateTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: ListenSpacing.gap2),
                     Text(
                       [
                         '${summary.phoneCount} ${l.text('phones')}',
@@ -819,7 +822,7 @@ class _ChunkCandidateTile extends StatelessWidget {
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -832,7 +835,7 @@ class _ChunkCandidateTile extends StatelessWidget {
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -844,7 +847,7 @@ class _ChunkCandidateTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: ListenSpacing.gap2),
                     Text(
                       [
                         '${summary.chunkCount} ${l.text('chunks')}',
@@ -910,7 +913,7 @@ class _Chip extends StatelessWidget {
     decoration: BoxDecoration(
       color: color.withValues(alpha: 0.14),
       border: Border.all(color: color.withValues(alpha: 0.55)),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: ListenRadii.controlBorder,
     ),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -918,7 +921,7 @@ class _Chip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: color),
-          const SizedBox(width: 5),
+          const SizedBox(width: ListenSpacing.gap4),
           Flexible(
             child: Text(
               label,

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../controllers/extensive_listening_controller.dart';
 import '../../localization.dart';
 import '../../models/listening.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 
 class ListeningInboxPanel extends StatelessWidget {
@@ -39,7 +41,7 @@ class ListeningInboxPanel extends StatelessWidget {
                   controller.active ? Icons.hearing : Icons.hearing_disabled,
                   size: 18,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     controller.active
@@ -73,7 +75,8 @@ class ListeningInboxPanel extends StatelessWidget {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
                     itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: ListenSpacing.gap8),
                     itemBuilder: (context, index) => _InboxTile(
                       item: items[index],
                       onReplay: () => unawaited(onReplay(items[index])),
@@ -111,7 +114,7 @@ class _InboxTile extends StatelessWidget {
     final subtitle = start == null || end == null ? null : '$start-$end';
     return Card(
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: ListenRadii.controlBorder),
       child: Padding(
         padding: const EdgeInsets.all(10),
         child: Column(
@@ -121,7 +124,7 @@ class _InboxTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.bookmark_added_outlined, size: 18),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     item.label ?? item.subtitleSnapshot,
@@ -134,14 +137,14 @@ class _InboxTile extends StatelessWidget {
                   Text(subtitle, style: Theme.of(context).textTheme.labelSmall),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             Text(
               item.subtitleSnapshot,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
             if (item.contextBefore != null || item.contextAfter != null) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: ListenSpacing.gap6),
               Text(
                 [
                   if (item.contextBefore != null) item.contextBefore!,
@@ -154,7 +157,7 @@ class _InboxTile extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             Wrap(
               spacing: 4,
               runSpacing: 4,

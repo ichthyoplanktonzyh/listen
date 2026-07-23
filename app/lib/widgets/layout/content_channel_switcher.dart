@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/content_channel.dart';
+import '../../theme/radii.dart';
 
 class ContentChannelAvailability {
   const ContentChannelAvailability.available() : reason = null;
@@ -76,7 +77,7 @@ class ContentChannelSwitcher extends StatelessWidget {
             ? colors.onPrimary
             : colors.onSurfaceVariant.withValues(alpha: 0.45),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: ListenRadii.controlBorder),
       ),
       icon: Icon(icon, size: 18),
       label: Text(label),

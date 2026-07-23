@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../localization.dart';
-
 import '../../controllers/manual_review_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../player_adapter.dart';
 import '../../services/api_service.dart';
@@ -109,7 +108,10 @@ Future<void> openManualReviewFlow({
     }
   } catch (error) {
     if (context.mounted) {
-      playerController.setStatus('${l.text('statusManualReviewFailed')}: $error', error: true);
+      playerController.setStatus(
+        '${l.text('statusManualReviewFailed')}: $error',
+        error: true,
+      );
     }
   }
 }

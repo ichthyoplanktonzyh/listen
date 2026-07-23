@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
+import '../../theme/spacing.dart';
 
 class ColdStartMarkingSheet extends StatefulWidget {
   const ColdStartMarkingSheet({
@@ -115,7 +116,7 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: ListenSpacing.gap16),
               Expanded(child: _body(context, l, colors)),
             ],
           ),
@@ -154,32 +155,32 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
             context,
           ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(
           candidate.displayForm,
           style: Theme.of(
             context,
           ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: ListenSpacing.gap24),
         _ActionButton(
           label: l.text('coldStartKnownRecognized'),
           color: colors.primary,
           onPressed: _submitting ? null : () => _mark('known_recognized'),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         _ActionButton(
           label: l.text('coldStartKnownNotRecognized'),
           color: colors.tertiary,
           onPressed: _submitting ? null : () => _mark('known_not_recognized'),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         _ActionButton(
           label: l.text('coldStartUnknownMeaning'),
           color: colors.error,
           onPressed: _submitting ? null : () => _mark('unknown_meaning'),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         TextButton(
           onPressed: _submitting ? null : _skip,
           child: Text(l.text('coldStartSkip')),

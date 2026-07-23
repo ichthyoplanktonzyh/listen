@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/spacing.dart';
 import 'llm_provider_settings.dart';
 import 'syntax_capability_settings.dart';
 
@@ -362,7 +363,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 ),
               ),
               const VerticalDivider(width: 1),
-              const SizedBox(width: 18),
+              const SizedBox(width: ListenSpacing.gap16),
               Expanded(
                 child: ListView(
                   controller: _settingsScrollController,
@@ -373,7 +374,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       l.text('learning'),
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: ListenSpacing.gap8),
                     DropdownButtonFormField<String>(
                       initialValue: learningLanguage,
                       decoration: InputDecoration(
@@ -713,7 +714,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       l.text('general'),
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: ListenSpacing.gap8),
                     DropdownButtonFormField<String>(
                       initialValue: language,
                       decoration: InputDecoration(
@@ -740,7 +741,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                         refresh(() {});
                       },
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: ListenSpacing.gap8),
                     DropdownButtonFormField<String>(
                       initialValue: themeMode,
                       decoration: InputDecoration(
@@ -773,7 +774,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       l.text('subtitles'),
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: ListenSpacing.gap8),
                     DropdownButtonFormField<String>(
                       initialValue: subtitlePreset,
                       decoration: InputDecoration(
@@ -898,7 +899,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       },
                       refresh,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     Text(l.text('primaryColor')),
                     _colorChoices(primaryColor, (v) {
                       primaryColor = v;
@@ -990,7 +991,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       l.text('syntaxCapabilityTitle'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     if (widget.api != null)
                       SyntaxCapabilitySettings(
                         api: widget.api!,
@@ -1035,7 +1036,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       l.text('llmProviders'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: ListenSpacing.gap8),
                     if (widget.api != null)
                       LlmProviderSettings(api: widget.api!)
                     else

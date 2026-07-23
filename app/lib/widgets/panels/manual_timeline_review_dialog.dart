@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/manual_review_controller.dart';
 import '../../models/timeline.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 class ManualTimelineReviewDialog extends StatefulWidget {
   const ManualTimelineReviewDialog({
@@ -56,7 +58,7 @@ class _ManualTimelineReviewDialogState
               onPrevious: () => _selectCue(_previousCue()),
               onNext: () => _selectCue(_nextCue()),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             Row(
               children: [
                 FilledButton.tonalIcon(
@@ -67,7 +69,7 @@ class _ManualTimelineReviewDialogState
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Play sentence'),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 FilledButton.tonalIcon(
                   onPressed: selectedWord == null
                       ? null
@@ -85,7 +87,7 @@ class _ManualTimelineReviewDialogState
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             if (errors.isNotEmpty)
               _MessageBox(
                 icon: Icons.error_outline,
@@ -99,18 +101,19 @@ class _ManualTimelineReviewDialogState
                 messages: ['Current sentence boundaries are valid.'],
               ),
             if (_saveError != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               _MessageBox(
                 icon: Icons.warning_amber_outlined,
                 color: Theme.of(context).colorScheme.error,
                 messages: [_saveError!],
               ),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             Expanded(
               child: ListView.separated(
                 itemCount: draft.currentSentenceWords.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: ListenSpacing.gap8),
                 itemBuilder: (context, index) =>
                     _wordRow(draft.currentSentenceWords[index]),
               ),
@@ -158,7 +161,7 @@ class _ManualTimelineReviewDialogState
     final label = wordLabel(word, draft.currentCue);
     return InkWell(
       onTap: () => setState(() => _selected = key),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: ListenRadii.controlBorder,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: selected
@@ -169,7 +172,7 @@ class _ManualTimelineReviewDialogState
                 ? Theme.of(context).colorScheme.primary
                 : Theme.of(context).colorScheme.outlineVariant,
           ),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -186,7 +189,7 @@ class _ManualTimelineReviewDialogState
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: ListenSpacing.gap2),
                     Text(
                       dirty ? 'user adjusted' : word.source,
                       maxLines: 1,
@@ -196,7 +199,7 @@ class _ManualTimelineReviewDialogState
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               _BoundaryEditor(
                 label: 'Start',
                 value: word.start,
@@ -204,7 +207,7 @@ class _ManualTimelineReviewDialogState
                     _step(word, adjustStart: true, deltaMs: delta),
                 onSet: (value) => _setBoundary(word, start: value),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               _BoundaryEditor(
                 label: 'End',
                 value: word.end,
@@ -212,7 +215,7 @@ class _ManualTimelineReviewDialogState
                     _step(word, adjustStart: false, deltaMs: delta),
                 onSet: (value) => _setBoundary(word, end: value),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               SizedBox(
                 width: 88,
                 child: Text(
@@ -221,7 +224,7 @@ class _ManualTimelineReviewDialogState
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Text(
                   [
@@ -357,9 +360,9 @@ class _Header extends StatelessWidget {
               'Sentence ${cue.index + 1}',
               style: Theme.of(context).textTheme.labelLarge,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: ListenSpacing.gap4),
             Text(cue.text, maxLines: 3, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
+            const SizedBox(height: ListenSpacing.gap4),
             Text(
               '${_formatMs(cue.start)} - ${_formatMs(cue.end)}',
               style: Theme.of(context).textTheme.bodySmall,
@@ -401,7 +404,7 @@ class _BoundaryEditor extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 3),
+        const SizedBox(height: ListenSpacing.gap2),
         Row(
           children: [
             _StepButton(label: '-50', onPressed: () => onStep(-50)),
@@ -410,7 +413,7 @@ class _BoundaryEditor extends StatelessWidget {
             _StepButton(label: '+50', onPressed: () => onStep(50)),
           ],
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: ListenSpacing.gap4),
         TextFormField(
           key: ValueKey('$label-${value.inMilliseconds}'),
           initialValue: value.inMilliseconds.toString(),
@@ -467,7 +470,7 @@ class _MessageBox extends StatelessWidget {
     decoration: BoxDecoration(
       color: color.withValues(alpha: 0.08),
       border: Border.all(color: color.withValues(alpha: 0.42)),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: ListenRadii.controlBorder,
     ),
     child: Padding(
       padding: const EdgeInsets.all(8),
@@ -475,7 +478,7 @@ class _MessageBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
+          const SizedBox(width: ListenSpacing.gap8),
           Expanded(
             child: Text(
               messages.take(3).join('\n'),

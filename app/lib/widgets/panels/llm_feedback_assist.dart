@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// Free-text LLM feedback block for the output-task studios (Speaking and
 /// Writing). Unlike the Reading judgment assist there are no per-point
@@ -38,7 +41,7 @@ class LlmFeedbackAssist extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Divider(height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
           if (feedback == null)
             OutlinedButton.icon(
               key: ValueKey('$keyPrefix-request-ai'),
@@ -50,27 +53,28 @@ class LlmFeedbackAssist extends StatelessWidget {
             Row(
               children: [
                 Icon(Icons.auto_awesome, size: 16, color: colors.tertiary),
-                const SizedBox(width: 6),
+                const SizedBox(width: ListenSpacing.gap6),
                 Text(
                   l.text('llmFeedbackTitle'),
-                  style: TextStyle(
-                    fontSize: 12,
+                  style: ListenType.body.copyWith(
                     fontWeight: FontWeight.w800,
                     color: colors.tertiary,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: ListenSpacing.gap2),
             Text(
               l.text('llmFeedbackNote'),
-              style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+              style: ListenType.caption.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             DecoratedBox(
               decoration: BoxDecoration(
                 color: colors.surfaceContainerHigh,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: ListenRadii.controlBorder,
               ),
               child: Padding(
                 padding: const EdgeInsets.all(12),

@@ -190,7 +190,10 @@ class LearningController extends ChangeNotifier {
     _store.update((st) => st.copyWith(wordEntries: entries));
   }
 
-  void updateCapabilityProfile(String normalizedForm, LexicalCapabilityProfile profile) {
+  void updateCapabilityProfile(
+    String normalizedForm,
+    LexicalCapabilityProfile profile,
+  ) {
     final profiles = Map<String, LexicalCapabilityProfile>.from(
       _store.state.capabilityProfiles,
     );

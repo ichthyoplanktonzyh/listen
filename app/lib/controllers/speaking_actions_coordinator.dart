@@ -2,17 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../models/reading.dart';
 import '../models/content_activity.dart';
 import '../models/practice.dart';
+import '../models/reading.dart';
 import '../models/semantic_task.dart';
 import '../models/timeline.dart';
 import '../player_adapter.dart';
 import '../services/api_service.dart';
 import 'player_controller.dart';
+import 'settings_controller.dart';
 import 'slice_player_controller.dart';
 import 'speaking_task_controller.dart';
-import 'settings_controller.dart';
 import 'subtitle_controller.dart';
 
 /// Content-session and audio-focus orchestration around the Speaking tenant.

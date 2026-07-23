@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// Shared color for a capability channel's effective assessment, used by both
 /// the list snapshot icons and the filter chips so the two read as one system.
@@ -50,7 +53,7 @@ class VocabularyBookView extends StatelessWidget {
                 child: Text(entry.displayForm, overflow: TextOverflow.ellipsis),
               ),
               if (isPhrase) ...[
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 _KindBadge(label: l.text('phrase')),
               ],
             ],
@@ -58,15 +61,14 @@ class VocabularyBookView extends StatelessWidget {
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 4),
+              const SizedBox(height: ListenSpacing.gap4),
               _CapabilitySummary(profile: profile),
-              const SizedBox(height: 3),
+              const SizedBox(height: ListenSpacing.gap2),
               Text(
                 snapshot,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
+                style: ListenType.body.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -146,14 +148,13 @@ class _KindBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.secondaryContainer.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: ListenRadii.tightBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         child: Text(
           label,
-          style: TextStyle(
-            fontSize: 10,
+          style: ListenType.caption.copyWith(
             fontWeight: FontWeight.w600,
             color: colors.onSecondaryContainer,
           ),

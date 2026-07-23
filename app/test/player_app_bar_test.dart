@@ -99,54 +99,55 @@ void main() {
     expect(fired, ['archive-media']);
   });
 
-  testWidgets('media-bound items disable with a reason when nothing is loaded', (
-    tester,
-  ) async {
-    // #24: availability must be visible the moment the menu opens — a menu
-    // item is never a clickable promise that answers "no" after the click.
-    await useDesktopSurface(tester);
-    await tester.pumpWidget(
-      app(
-        capabilities: const AppBarCapabilities(
-          hasMedia: false,
-          coreReady: true,
+  testWidgets(
+    'media-bound items disable with a reason when nothing is loaded',
+    (tester) async {
+      // #24: availability must be visible the moment the menu opens — a menu
+      // item is never a clickable promise that answers "no" after the click.
+      await useDesktopSurface(tester);
+      await tester.pumpWidget(
+        app(
+          capabilities: const AppBarCapabilities(
+            hasMedia: false,
+            coreReady: true,
+          ),
         ),
-      ),
-    );
+      );
 
-    bool enabledOf(String value) =>
-        tester.widget<PopupMenuItem<String>>(itemOf(value)).enabled;
+      bool enabledOf(String value) =>
+          tester.widget<PopupMenuItem<String>>(itemOf(value)).enabled;
 
-    await openMenu(tester, 'Content');
-    // Opening media stays available — it is the recovery action itself.
-    expect(enabledOf('open-media'), isTrue);
-    expect(enabledOf('open-online'), isTrue);
-    expect(enabledOf('archive-media'), isFalse);
-    expect(
-      find.text('Open media and connect the local core first'),
-      findsOneWidget,
-    );
+      await openMenu(tester, 'Content');
+      // Opening media stays available — it is the recovery action itself.
+      expect(enabledOf('open-media'), isTrue);
+      expect(enabledOf('open-online'), isTrue);
+      expect(enabledOf('archive-media'), isFalse);
+      expect(
+        find.text('Open media and connect the local core first'),
+        findsOneWidget,
+      );
 
-    // A disabled item swallows the click instead of dispatching.
-    await tapItem(tester, 'archive-media');
-    expect(fired, isEmpty);
-    // Dismiss the still-open menu via the barrier.
-    await tester.tapAt(const Offset(40, 560));
-    await tester.pumpAndSettle();
+      // A disabled item swallows the click instead of dispatching.
+      await tapItem(tester, 'archive-media');
+      expect(fired, isEmpty);
+      // Dismiss the still-open menu via the barrier.
+      await tester.tapAt(const Offset(40, 560));
+      await tester.pumpAndSettle();
 
-    await openMenu(tester, 'Subtitles');
-    for (final value in const [
-      'primary-import',
-      'primary-generate',
-      'primary-search',
-      'secondary-import',
-      'secondary-generate',
-      'secondary-search',
-      'embedded',
-    ]) {
-      expect(enabledOf(value), isFalse, reason: '$value without media');
-    }
-  });
+      await openMenu(tester, 'Subtitles');
+      for (final value in const [
+        'primary-import',
+        'primary-generate',
+        'primary-search',
+        'secondary-import',
+        'secondary-generate',
+        'secondary-search',
+        'embedded',
+      ]) {
+        expect(enabledOf(value), isFalse, reason: '$value without media');
+      }
+    },
+  );
 
   testWidgets('subtitle menu covers both tracks plus embedded import', (
     tester,

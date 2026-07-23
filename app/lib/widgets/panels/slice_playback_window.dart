@@ -6,6 +6,9 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// A transient, independent playback surface for one vocabulary source clip.
 /// It is mounted in the workbench stack just like the practice window, but it
@@ -55,7 +58,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
       height: height,
       child: Material(
         elevation: 18,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ListenRadii.panelBorder,
         clipBehavior: Clip.antiAlias,
         color: Theme.of(context).colorScheme.surface,
         child: Column(
@@ -91,7 +94,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
         child: Row(
           children: [
             const Icon(Icons.headphones_outlined, size: 20),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(
                 widget.controller.state.wordForm?.isNotEmpty == true
@@ -133,15 +136,14 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
           state.sentence ?? l.text('slicePlaybackNoSentence'),
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Text(
           '${state.mediaTitle ?? l.text('slicePlaybackSourceMedia')} · ${_time(state.start)}–${_time(state.end)}',
-          style: TextStyle(
+          style: ListenType.body.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: ListenSpacing.gap16),
         if (wantsVideo)
           _videoSurface(widget.controller.videoController!)
         else
@@ -153,7 +155,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
   Widget _audioSurface() => DecoratedBox(
     decoration: BoxDecoration(
       color: Theme.of(context).colorScheme.surfaceContainer,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: ListenRadii.surfaceBorder,
     ),
     child: SizedBox(
       height: 110,
@@ -166,7 +168,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
               size: 34,
               color: Theme.of(context).colorScheme.secondary,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             Text(l.text('slicePlaybackAudioFirst')),
           ],
         ),
@@ -177,7 +179,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
   Widget _videoSurface(VideoPlayerController controller) => AspectRatio(
     aspectRatio: controller.value.aspectRatio,
     child: ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: ListenRadii.surfaceBorder,
       child: ColoredBox(color: Colors.black, child: VideoPlayer(controller)),
     ),
   );
@@ -207,7 +209,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
             ),
           ),
           if (widget.onShadowing != null) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             OutlinedButton.icon(
               onPressed: state.loading || state.error != null
                   ? null

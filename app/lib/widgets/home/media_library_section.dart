@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 
 /// Home media library grouped by triage queue (Phase 3.5 Slice 5).
@@ -74,7 +76,7 @@ class MediaLibrarySection extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: ListenSpacing.gap8),
         if (loaded.isEmpty)
           Text(
             l.text('mediaLibraryEmpty'),
@@ -85,7 +87,7 @@ class MediaLibrarySection extends StatelessWidget {
         else
           for (final group in groups) ...[
             _QueueHeader(queue: group.queue, count: group.entries.length),
-            const SizedBox(height: 6),
+            const SizedBox(height: ListenSpacing.gap6),
             for (final entry in group.entries) ...[
               _MediaRow(
                 entry: entry,
@@ -95,9 +97,9 @@ class MediaLibrarySection extends StatelessWidget {
                 onStartIntensive: () => onStartIntensive(entry),
                 onSetIntent: (intent) => onSetIntent(entry, intent),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: ListenSpacing.gap6),
             ],
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
           ],
       ],
     );
@@ -153,16 +155,25 @@ class _QueueHeader extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final (label, icon) = switch (queue) {
-      TriageQueue.intensive => (l.text('queueIntensive'), Icons.headphones_outlined),
-      TriageQueue.extensive => (l.text('queueExtensive'), Icons.play_circle_outline),
+      TriageQueue.intensive => (
+        l.text('queueIntensive'),
+        Icons.headphones_outlined,
+      ),
+      TriageQueue.extensive => (
+        l.text('queueExtensive'),
+        Icons.play_circle_outline,
+      ),
       TriageQueue.deferred => (l.text('queueDeferred'), Icons.snooze_outlined),
-      TriageQueue.graduated => (l.text('queueGraduated'), Icons.check_circle_outline),
+      TriageQueue.graduated => (
+        l.text('queueGraduated'),
+        Icons.check_circle_outline,
+      ),
       _ => (l.text('queueUnsorted'), Icons.help_outline),
     };
     return Row(
       children: [
         Icon(icon, size: 15, color: colors.onSurfaceVariant),
-        const SizedBox(width: 6),
+        const SizedBox(width: ListenSpacing.gap6),
         Text(
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -170,7 +181,7 @@ class _QueueHeader extends StatelessWidget {
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: ListenSpacing.gap6),
         Text(
           '$count',
           style: Theme.of(
@@ -208,7 +219,7 @@ class _MediaRow extends StatelessWidget {
     return Material(
       color: colors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: ListenRadii.controlBorder,
         side: BorderSide(color: colors.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
@@ -225,7 +236,7 @@ class _MediaRow extends StatelessWidget {
                 size: 20,
                 color: colors.onSurfaceVariant,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,7 +249,7 @@ class _MediaRow extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: ListenSpacing.gap2),
                     Wrap(
                       spacing: 6,
                       runSpacing: 3,
@@ -277,7 +288,7 @@ class _MediaRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: ListenSpacing.gap6),
               TextButton(
                 onPressed: onStartExtensive,
                 child: Text(l.text('startExtensiveAction')),
@@ -342,7 +353,7 @@ class _MiniFitChip extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.secondaryContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ListenRadii.pillBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -351,11 +362,11 @@ class _MiniFitChip extends StatelessWidget {
           children: [
             Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: ListenSpacing.gap4),
             Text(
               l.text('fit_$fit'),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -382,7 +393,7 @@ class _Badge extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Icon(icon, size: 13, color: color),
-      const SizedBox(width: 3),
+      const SizedBox(width: ListenSpacing.gap2),
       Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(

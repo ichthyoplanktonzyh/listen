@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/spacing.dart';
+import '../listen_wordmark.dart';
 import 'app_bar_capabilities.dart';
 
 class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -92,14 +94,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
 
     return AppBar(
       titleSpacing: 20,
-      title: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.graphic_eq, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 9),
-          const Text('listen', style: TextStyle(fontWeight: FontWeight.w700)),
-        ],
-      ),
+      title: const ListenWordmark(),
       shape: Border(
         bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
@@ -313,7 +308,7 @@ class PlayerAppBar extends StatelessWidget implements PreferredSizeWidget {
           color: Theme.of(context).colorScheme.onSurfaceVariant,
           icon: const Icon(Icons.settings_outlined),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: ListenSpacing.gap8),
       ],
     );
   }
@@ -355,7 +350,7 @@ class _ToolbarMenuButton extends StatelessWidget {
           children: [
             Icon(icon, size: 21, color: quiet),
             if (showLabel) ...[
-              const SizedBox(width: 6),
+              const SizedBox(width: ListenSpacing.gap6),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -364,7 +359,7 @@ class _ToolbarMenuButton extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(width: 2),
+            const SizedBox(width: ListenSpacing.gap2),
             // Kept in the narrow form too: without it an icon-only button
             // reads as a plain action rather than something opening a menu.
             Icon(Icons.arrow_drop_down, size: 18, color: quiet),
@@ -410,7 +405,7 @@ class _MenuRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, size: 20, color: secondary),
-          const SizedBox(width: 12),
+          const SizedBox(width: ListenSpacing.gap12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

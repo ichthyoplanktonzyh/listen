@@ -233,14 +233,16 @@ void main() {
       },
     );
 
-    test('read side reduces to yes, absent listen side stays unassessed',
-        () async {
-      final controller = ReadingDiffController();
-      await controller.loadDiff(fakeApi(), source);
-      expect(controller.state.read.outcome, SideOutcome.yes);
-      expect(controller.state.listen.outcome, SideOutcome.unassessed);
-      expect(controller.state.explanationKey, 'diffUnknown');
-    });
+    test(
+      'read side reduces to yes, absent listen side stays unassessed',
+      () async {
+        final controller = ReadingDiffController();
+        await controller.loadDiff(fakeApi(), source);
+        expect(controller.state.read.outcome, SideOutcome.yes);
+        expect(controller.state.listen.outcome, SideOutcome.unassessed);
+        expect(controller.state.explanationKey, 'diffUnknown');
+      },
+    );
 
     test('listen rubric without judgments is still unassessed', () async {
       final controller = ReadingDiffController();

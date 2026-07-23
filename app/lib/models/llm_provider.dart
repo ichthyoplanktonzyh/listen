@@ -45,7 +45,8 @@ class LlmProviderCapability {
   final LlmCapabilityClaim audioInput;
   final int? maxContextTokens;
 
-  static LlmCapabilityClaim _claim(dynamic value) => value is Map<String, dynamic>
+  static LlmCapabilityClaim _claim(dynamic value) =>
+      value is Map<String, dynamic>
       ? LlmCapabilityClaim.fromJson(value)
       : const LlmCapabilityClaim(state: 'unknown');
 
@@ -109,10 +110,9 @@ class LlmProviderProfileView {
         timeoutMs: (json['timeout_ms'] as num?)?.toInt() ?? 0,
         maxRetries: (json['max_retries'] as num?)?.toInt() ?? 0,
         retention: json['retention'] as String? ?? 'unknown',
-        allowedUses:
-            (json['allowed_uses'] as List<dynamic>? ?? const [])
-                .map((e) => e as String)
-                .toList(),
+        allowedUses: (json['allowed_uses'] as List<dynamic>? ?? const [])
+            .map((e) => e as String)
+            .toList(),
         capability: LlmProviderCapability.fromJson(
           (json['capability'] as Map<String, dynamic>?) ?? const {},
         ),
@@ -127,8 +127,8 @@ class LlmProbeResult {
   final LlmCapabilityClaim structuredOutput;
 
   factory LlmProbeResult.fromJson(Map<String, dynamic> json) => LlmProbeResult(
-        structuredOutput: LlmCapabilityClaim.fromJson(
-          (json['structured_output'] as Map<String, dynamic>?) ?? const {},
-        ),
-      );
+    structuredOutput: LlmCapabilityClaim.fromJson(
+      (json['structured_output'] as Map<String, dynamic>?) ?? const {},
+    ),
+  );
 }

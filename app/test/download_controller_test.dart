@@ -69,34 +69,36 @@ void main() {
       await progress.close();
     });
 
-    test('cancel hides the bar, cancels the handle, and drops late completion',
-        () async {
-      final controller = DownloadController();
-      addTearDown(controller.dispose);
-      final progress = StreamController<double>();
-      final completed = Completer<String?>();
-      var cancelled = false;
-      var completedCalled = false;
+    test(
+      'cancel hides the bar, cancels the handle, and drops late completion',
+      () async {
+        final controller = DownloadController();
+        addTearDown(controller.dispose);
+        final progress = StreamController<double>();
+        final completed = Completer<String?>();
+        var cancelled = false;
+        var completedCalled = false;
 
-      controller.attach(
-        progress: progress.stream,
-        completed: completed.future,
-        cancel: () => cancelled = true,
-        onCompleted: (_) => completedCalled = true,
-      );
+        controller.attach(
+          progress: progress.stream,
+          completed: completed.future,
+          cancel: () => cancelled = true,
+          onCompleted: (_) => completedCalled = true,
+        );
 
-      controller.cancel();
-      expect(cancelled, isTrue);
-      expect(controller.snapshot, isNull);
+        controller.cancel();
+        expect(cancelled, isTrue);
+        expect(controller.snapshot, isNull);
 
-      // A late completion from the cancelled download must not resurrect the bar.
-      completed.complete('/tmp/late.mp4');
-      await Future<void>.delayed(Duration.zero);
-      expect(controller.snapshot, isNull);
-      expect(completedCalled, isFalse);
+        // A late completion from the cancelled download must not resurrect the bar.
+        completed.complete('/tmp/late.mp4');
+        await Future<void>.delayed(Duration.zero);
+        expect(controller.snapshot, isNull);
+        expect(completedCalled, isFalse);
 
-      await progress.close();
-    });
+        await progress.close();
+      },
+    );
 
     test('dispose drops late completion without notifying', () async {
       final controller = DownloadController();

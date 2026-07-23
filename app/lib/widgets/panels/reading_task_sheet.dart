@@ -6,7 +6,10 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import 'llm_judgment_assist.dart';
+import '../../theme/typography.dart';
 
 const _verdicts = ['covered', 'partial', 'missing', 'uncertain'];
 
@@ -87,7 +90,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                 Row(
                   children: [
                     Icon(Icons.checklist_outlined, color: colors.primary),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: ListenSpacing.gap8),
                     Text(
                       l.text('readingTaskTitle'),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -108,10 +111,10 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       _state.error!,
-                      style: TextStyle(color: colors.error, fontSize: 12),
+                      style: ListenType.body.copyWith(color: colors.error),
                     ),
                   ),
-                const SizedBox(height: 10),
+                const SizedBox(height: ListenSpacing.gap8),
                 Flexible(
                   child: SingleChildScrollView(
                     child: switch (_state.phase) {
@@ -145,7 +148,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               ? 'readingTaskListenEditHint'
               : 'readingTaskEditHint',
         ),
-        style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+        style: ListenType.reading.copyWith(color: colors.onSurfaceVariant),
       ),
       if (_state.rubricProviderId != null)
         Padding(
@@ -159,10 +162,10 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             label: Text(l.text('readingTaskAiGenerate')),
           ),
         ),
-      const SizedBox(height: 8),
+      const SizedBox(height: ListenSpacing.gap8),
       for (var i = 0; i < _state.draftPoints.length; i++)
         _draftPointRow(l, colors, i),
-      const SizedBox(height: 12),
+      const SizedBox(height: ListenSpacing.gap12),
       FilledButton.icon(
         onPressed: _state.busy
             ? null
@@ -212,7 +215,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               key: ValueKey('draft-point-${point.pointId}'),
               initialValue: point.statement,
               maxLines: null,
-              style: const TextStyle(fontSize: 13),
+              style: ListenType.reading,
               decoration: const InputDecoration(isDense: true),
               onChanged: (value) => widget.controller.updateDraftPoint(
                 index,
@@ -253,15 +256,15 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               l
                   .text('readingTaskPastAttempts')
                   .replaceFirst('{n}', '${_state.pastAttemptCount}'),
-              style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
+              style: ListenType.body.copyWith(color: colors.onSurfaceVariant),
             ),
           ),
         if (listening) ...[
           Text(
             l.text('readingTaskListenAnswerHint'),
-            style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+            style: ListenType.reading.copyWith(color: colors.onSurfaceVariant),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Row(
             children: [
               ActionChip(
@@ -275,9 +278,8 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                   padding: const EdgeInsets.only(left: 8),
                   child: Text(
                     '×$plays',
-                    style: TextStyle(
+                    style: ListenType.body.copyWith(
                       color: colors.onSurfaceVariant,
-                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -297,17 +299,14 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                     size: 14,
                     color: colors.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: ListenSpacing.gap6),
                   Expanded(
-                    child: Text(
-                      point.statement,
-                      style: const TextStyle(fontSize: 13),
-                    ),
+                    child: Text(point.statement, style: ListenType.reading),
                   ),
                 ],
               ),
             ),
-        const SizedBox(height: 10),
+        const SizedBox(height: ListenSpacing.gap8),
         TextField(
           key: const ValueKey('reading-task-answer'),
           controller: _answer,
@@ -321,7 +320,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             border: const OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: ListenSpacing.gap8),
         FilledButton.icon(
           // A listening retell without a single play would fake its
           // conditions; require one honest listen first.
@@ -354,18 +353,18 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: ListenRadii.controlBorder,
           ),
-          child: Text(answer, style: const TextStyle(fontSize: 13)),
+          child: Text(answer, style: ListenType.reading),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         Text(
           l.text('readingTaskAssessHint'),
-          style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
+          style: ListenType.body.copyWith(color: colors.onSurfaceVariant),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         for (final point in rubric.points) _assessRow(l, point),
-        const SizedBox(height: 10),
+        const SizedBox(height: ListenSpacing.gap8),
         FilledButton.icon(
           onPressed: _state.busy || !_state.allPointsJudged
               ? null
@@ -385,8 +384,8 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(point.statement, style: const TextStyle(fontSize: 13)),
-        const SizedBox(height: 3),
+        Text(point.statement, style: ListenType.reading),
+        const SizedBox(height: ListenSpacing.gap2),
         Wrap(
           spacing: 6,
           children: [
@@ -394,7 +393,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               ChoiceChip(
                 key: ValueKey('verdict-${point.pointId}-$verdict'),
                 label: Text(_verdictLabel(l, verdict)),
-                labelStyle: const TextStyle(fontSize: 12),
+                labelStyle: ListenType.body,
                 selected: _state.draftVerdicts[point.pointId] == verdict,
                 onSelected: (_) =>
                     widget.controller.setVerdict(point.pointId, verdict),
@@ -422,9 +421,9 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
       children: [
         Text(
           l.text('readingTaskDone'),
-          style: TextStyle(color: colors.onSurfaceVariant, fontSize: 13),
+          style: ListenType.reading.copyWith(color: colors.onSurfaceVariant),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         for (final point in rubric.points)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
@@ -432,16 +431,12 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    point.statement,
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  child: Text(point.statement, style: ListenType.reading),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Text(
                   _verdictLabel(l, effectiveVerdict(point.pointId)),
-                  style: TextStyle(
-                    fontSize: 12,
+                  style: ListenType.body.copyWith(
                     fontWeight: FontWeight.w700,
                     color: switch (effectiveVerdict(point.pointId)) {
                       'covered' => Colors.green.shade700,
@@ -475,7 +470,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             ),
           ),
         _llmFeedback(),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(

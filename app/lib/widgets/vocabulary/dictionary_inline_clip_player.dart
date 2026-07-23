@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../models/types.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 
 /// Dictionary-detail renderer for the shared second-decoder slice player.
@@ -42,7 +43,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
               Row(
                 children: [
                   const Icon(Icons.headphones_outlined),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: ListenSpacing.gap8),
                   Expanded(
                     child: Text(
                       '$target · 当前来源切片',
@@ -52,12 +53,12 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                   IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: ListenSpacing.gap8),
               Text(
                 occurrence.sentenceTextSnapshot,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: ListenSpacing.gap6),
               Text(
                 '${occurrence.mediaTitleSnapshot} · '
                 '${formatDuration(Duration(milliseconds: occurrence.startMsSnapshot))}–'
@@ -66,7 +67,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               if (state.error != null)
                 Text(
                   state.error!,
@@ -102,7 +103,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                     ),
                   ),
                 ),
-              const SizedBox(height: 6),
+              const SizedBox(height: ListenSpacing.gap6),
               Row(
                 children: [
                   IconButton(
@@ -119,7 +120,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                     label: Text(state.playing ? '暂停' : '播放'),
                   ),
                   if (onShadowing != null) ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: ListenSpacing.gap8),
                     OutlinedButton.icon(
                       onPressed: state.loading
                           ? null

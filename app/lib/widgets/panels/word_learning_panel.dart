@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../vocabulary/pronunciation_button.dart';
+import '../../theme/typography.dart';
 
 class WordLearningPanel extends StatefulWidget {
   const WordLearningPanel({
@@ -176,7 +179,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 border: Border.all(
                   color: Theme.of(context).colorScheme.primary,
                 ),
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: ListenRadii.pillBorder,
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -191,7 +194,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             ),
           ],
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: ListenSpacing.gap12),
         if (widget.onOpenListeningDictionary != null)
           Align(
             alignment: Alignment.centerLeft,
@@ -202,13 +205,13 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             ),
           ),
         if (widget.onOpenListeningDictionary != null)
-          const SizedBox(height: 14),
+          const SizedBox(height: ListenSpacing.gap12),
         _sectionHeader(
           context,
           l.text('capabilityProfile'),
           Icons.school_outlined,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         if (profile != null)
           _capabilityGrid(context, l, profile)
         else
@@ -229,7 +232,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 ),
             ],
           ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         Wrap(
           spacing: 8,
           runSpacing: 6,
@@ -274,7 +277,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           Icons.record_voice_over_outlined,
         ),
         if (characterBreakdown.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
           Text(
             l.text('characters'),
             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -289,16 +292,12 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        entry.character,
-                        style: const TextStyle(fontSize: 22),
-                      ),
-                      Text(entry.pinyin, style: const TextStyle(fontSize: 13)),
+                      Text(entry.character, style: ListenType.hero),
+                      Text(entry.pinyin, style: ListenType.reading),
                       if (entry.meaning.isNotEmpty)
                         Text(
                           entry.meaning,
-                          style: TextStyle(
-                            fontSize: 11,
+                          style: ListenType.caption.copyWith(
                             color: Theme.of(context).textTheme.bodySmall?.color
                                 ?.withValues(alpha: 0.7),
                           ),
@@ -313,7 +312,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           ),
         ],
         if (pronunciationVariants.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
           Text(
             l.text('pronunciation'),
             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -328,7 +327,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               ),
             ),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: ListenSpacing.gap8),
         if (results.isEmpty)
           Text(
             l.text('noDictionary'),
@@ -413,7 +412,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 label: Text(l.text('recordCurrentSentence')),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
-                  textStyle: const TextStyle(fontSize: 12),
+                  textStyle: ListenType.body,
                 ),
               ),
           ],
@@ -484,7 +483,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
       Row(
         children: [
           Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
+          const SizedBox(width: ListenSpacing.gap8),
           Text(title, style: Theme.of(context).textTheme.titleSmall),
         ],
       );
@@ -529,20 +528,14 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
       child: Row(
         children: [
           Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 6),
-          SizedBox(
-            width: 48,
-            child: Text(label, style: const TextStyle(fontSize: 13)),
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(width: ListenSpacing.gap6),
+          SizedBox(width: 48, child: Text(label, style: ListenType.reading)),
+          const SizedBox(width: ListenSpacing.gap8),
           for (final value in const ['acquired', 'not_acquired'])
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: ChoiceChip(
-                label: Text(
-                  l.text(value),
-                  style: const TextStyle(fontSize: 12),
-                ),
+                label: Text(l.text(value), style: ListenType.body),
                 selected: assessment == value,
                 visualDensity: VisualDensity.compact,
                 onSelected: widget.onCapabilityOverride == null
@@ -556,8 +549,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           if (assessment == 'unassessed')
             Text(
               l.text('unassessed'),
-              style: TextStyle(
-                fontSize: 12,
+              style: ListenType.body.copyWith(
                 color: Theme.of(context).colorScheme.outline,
                 fontStyle: FontStyle.italic,
               ),

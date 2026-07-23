@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../controllers/coach_dashboard_controller.dart';
 import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
 import '../../services/api_service.dart';
+import '../../theme/spacing.dart';
 
 class CoachDashboardScreen extends StatefulWidget {
   const CoachDashboardScreen({
@@ -71,17 +73,17 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
                   ),
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: ListenSpacing.gap16),
             ...dashboard.channels.map(
               (channel) =>
                   _ChannelCard(channel: channel, onMetric: _showEvidence),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: ListenSpacing.gap24),
             Text(
               AppLocalizations.of(context).text('coachNextSteps'),
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             if (dashboard.suggestions.isEmpty)
               Text(AppLocalizations.of(context).text('coachNoSuggestions')),
             ...dashboard.suggestions.map(
@@ -97,7 +99,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
               ),
             ),
             if (dashboard.starterChecklist.isNotEmpty) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: ListenSpacing.gap24),
               Text(
                 AppLocalizations.of(context).text('coachStarter'),
                 style: Theme.of(context).textTheme.titleLarge,
@@ -112,12 +114,12 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
               ),
             ],
             if (dashboard.materials.isNotEmpty) ...[
-              const SizedBox(height: 28),
+              const SizedBox(height: ListenSpacing.gap24),
               Text(
                 AppLocalizations.of(context).text('coachMaterials'),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: ListenSpacing.gap8),
               ...dashboard.materials.map(
                 (material) => Card(
                   child: ListTile(
@@ -153,7 +155,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
               ),
             ],
             if (dashboard.features.isNotEmpty) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: ListenSpacing.gap24),
               ...dashboard.features.map(
                 (feature) => ListTile(
                   leading: const Icon(Icons.hub_outlined),
@@ -338,14 +340,14 @@ class _ChannelCard extends StatelessWidget {
                       ? Icons.hourglass_empty
                       : Icons.insights_outlined,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Text(
                   l.text('coachChannel_${channel.channel}'),
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             if (assessments.acquired + assessments.notAcquired == 0)
               Text(l.text('coachUnassessed'))
             else
@@ -371,7 +373,7 @@ class _ChannelCard extends StatelessWidget {
                 ],
               ),
             if (visibleMetrics.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -417,7 +419,7 @@ class _MetricCard extends StatelessWidget {
                     context,
                   ).text('coachMetric_${metric.key}'),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: ListenSpacing.gap8),
                 Text(value, style: Theme.of(context).textTheme.headlineSmall),
                 Text(
                   metric.source,

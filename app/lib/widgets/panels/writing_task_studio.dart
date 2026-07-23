@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/spacing.dart';
 import 'llm_feedback_assist.dart';
 
 class WritingTaskStudio extends StatefulWidget {
@@ -74,7 +75,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                   onKindChanged: widget.onKindChanged,
                   onClose: widget.onClose,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 _SourceCard(
                   expanded: _sourceExpanded,
                   prompt: state.promptSnapshot,
@@ -91,7 +92,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                   onToggle: () =>
                       setState(() => _sourceExpanded = !_sourceExpanded),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 if (state.error != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -136,7 +137,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
               l.text(revising ? 'writingYourRevision' : 'writingYourDraft'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             Expanded(
               child: TextField(
                 key: const Key('writing-editor'),
@@ -154,7 +155,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                     : widget.controller.updateDraft,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: ListenSpacing.gap12),
             Wrap(
               alignment: WrapAlignment.end,
               spacing: 8,
@@ -204,7 +205,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
         ),
       ),
       if (revising) ...[
-        const SizedBox(width: 16),
+        const SizedBox(width: ListenSpacing.gap16),
         Expanded(
           flex: 2,
           child: _FeedbackList(controller: widget.controller, api: widget.api),
@@ -220,14 +221,14 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.check_circle_outline, size: 46),
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           Text(
             l.text('writingDraftSaved'),
             style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Text(l.text('writingFeedbackOnRequest'), textAlign: TextAlign.center),
-          const SizedBox(height: 20),
+          const SizedBox(height: ListenSpacing.gap16),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -269,7 +270,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
         l.text('writingRevisionSaved'),
         style: Theme.of(context).textTheme.headlineSmall,
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: ListenSpacing.gap16),
       _VersionCard(
         label: l.text('writingOriginal'),
         text: state.draft,
@@ -277,7 +278,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
             ? null
             : () => widget.onSpeakText!(state.draft),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: ListenSpacing.gap12),
       _VersionCard(
         label: l.text('writingRevised'),
         text: state.revisionDraft,
@@ -285,9 +286,9 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
             ? null
             : () => widget.onSpeakText!(state.revisionDraft),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: ListenSpacing.gap12),
       _RevisionDiff(original: state.draft, revised: state.revisionDraft),
-      const SizedBox(height: 12),
+      const SizedBox(height: ListenSpacing.gap12),
       Text(l.text('writingEvidenceNotice')),
       _WritingLlmAssist(controller: widget.controller, api: widget.api),
     ],
@@ -419,7 +420,7 @@ class _SourceCard extends StatelessWidget {
                 ],
               ),
               if (expanded) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: ListenSpacing.gap8),
                 if (source != null)
                   Text(source!)
                 else
@@ -439,7 +440,7 @@ class _SourceCard extends StatelessWidget {
                     l.text('writingPreviousVersion'),
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: ListenSpacing.gap4),
                   Text(previousText!),
                 ],
               ],
@@ -467,12 +468,12 @@ class _FeedbackList extends StatelessWidget {
           l.text('writingFeedback'),
           style: Theme.of(context).textTheme.titleMedium,
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: ListenSpacing.gap4),
         Text(
           l.text('writingSuggestionNotice'),
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         if (state.findings.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
@@ -490,10 +491,10 @@ class _FeedbackList extends StatelessWidget {
                     children: [
                       Text(finding.message),
                       if (finding.suggestedReplacement != null) ...[
-                        const SizedBox(height: 6),
+                        const SizedBox(height: ListenSpacing.gap6),
                         SelectableText('→ ${finding.suggestedReplacement}'),
                       ],
-                      const SizedBox(height: 8),
+                      const SizedBox(height: ListenSpacing.gap8),
                       SegmentedButton<String>(
                         segments: [
                           ButtonSegment(
@@ -557,7 +558,7 @@ class _VersionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           SelectableText(text),
         ],
       ),
@@ -595,7 +596,7 @@ class _RevisionDiff extends StatelessWidget {
               l.text('writingChanges'),
               style: Theme.of(context).textTheme.titleSmall,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             SelectableText.rich(
               TextSpan(
                 style: DefaultTextStyle.of(context).style,

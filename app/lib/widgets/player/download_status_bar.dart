@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/spacing.dart';
 
 enum DownloadStatusKind { downloading, completed, failed }
 
@@ -52,7 +53,7 @@ class DownloadStatusBar extends StatelessWidget {
         child: Row(
           children: [
             const Icon(Icons.download, size: 18),
-            const SizedBox(width: 10),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: LinearProgressIndicator(
                 value: downloading
@@ -60,7 +61,7 @@ class DownloadStatusBar extends StatelessWidget {
                     : 1.0,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: ListenSpacing.gap12),
             Flexible(
               fit: FlexFit.loose,
               child: Text(
@@ -75,7 +76,7 @@ class DownloadStatusBar extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: ListenSpacing.gap12),
             if (downloading)
               TextButton(onPressed: onCancel, child: Text(l.text('cancel'))),
             if (completed)

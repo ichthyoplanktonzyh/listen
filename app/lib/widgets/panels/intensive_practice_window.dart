@@ -7,6 +7,9 @@ import '../../controllers/practice_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../services/shadowing_recorder.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// A transient practice surface for one intensive-listening prompt.
 ///
@@ -125,7 +128,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
       height: height,
       child: Material(
         elevation: 18,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: ListenRadii.panelBorder,
         clipBehavior: Clip.antiAlias,
         color: Theme.of(context).colorScheme.surface,
         child: Column(
@@ -164,7 +167,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             child: Row(
               children: [
                 const Icon(Icons.fact_check_outlined, size: 20),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     l.text('practiceWindow'),
@@ -206,7 +209,11 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
     if (width < 620) {
       return ListView(
         padding: const EdgeInsets.all(18),
-        children: [content, const SizedBox(height: 16), _miniPlayer()],
+        children: [
+          content,
+          const SizedBox(height: ListenSpacing.gap16),
+          _miniPlayer(),
+        ],
       );
     }
     return Padding(
@@ -215,7 +222,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(flex: 6, child: content),
-          const SizedBox(width: 18),
+          const SizedBox(width: ListenSpacing.gap16),
           SizedBox(width: 238, child: _miniPlayer()),
         ],
       ),
@@ -262,16 +269,15 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               draft.degradedMessage!,
-              style: TextStyle(
-                fontSize: 12,
+              style: ListenType.body.copyWith(
                 color: Theme.of(context).colorScheme.secondary,
               ),
             ),
           ),
-        const SizedBox(height: 14),
+        const SizedBox(height: ListenSpacing.gap12),
         Text(draft.promptText, style: Theme.of(context).textTheme.titleMedium),
         if (draft.shadowingSteps.length > 1) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           SegmentedButton<int>(
             segments: [
               for (final entry in draft.shadowingSteps.indexed)
@@ -285,12 +291,12 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
                       unawaited(widget.onShadowingStepChanged(values.single)),
           ),
         ],
-        const SizedBox(height: 14),
+        const SizedBox(height: ListenSpacing.gap12),
         Text(
           l.text('shadowingSpeed'),
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         SegmentedButton<double>(
           segments: const [
             ButtonSegment(value: 0.75, label: Text('0.75×')),
@@ -303,7 +309,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
               : (values) =>
                     unawaited(widget.onShadowingRateChanged(values.single)),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: ListenSpacing.gap12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -360,7 +366,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
                   size: 14,
                   color: Theme.of(context).colorScheme.error,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: ListenSpacing.gap6),
                 Text(l.text('shadowingRecordingActive')),
               ],
             ),
@@ -384,7 +390,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             l.text('shadowingComparison'),
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -413,15 +419,15 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             ],
           ),
           if (comparison != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: ListenSpacing.gap12),
             _comparisonMetrics(comparison),
-            const SizedBox(height: 12),
+            const SizedBox(height: ListenSpacing.gap12),
             _waveformRow(
               l.text('shadowingOriginal'),
               comparison.referenceWaveform,
               Theme.of(context).colorScheme.tertiary,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             _waveformRow(
               l.text('shadowingMine'),
               comparison.recordingWaveform,
@@ -433,9 +439,8 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
               padding: const EdgeInsets.only(top: 10),
               child: Text(
                 state.comparisonWarning!,
-                style: TextStyle(
+                style: ListenType.body.copyWith(
                   color: Theme.of(context).colorScheme.secondary,
-                  fontSize: 12,
                 ),
               ),
             ),
@@ -485,18 +490,15 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
     Color color,
   ) => Row(
     children: [
-      SizedBox(
-        width: 54,
-        child: Text(label, style: const TextStyle(fontSize: 12)),
-      ),
+      SizedBox(width: 54, child: Text(label, style: ListenType.body)),
       Expanded(
         child: SizedBox(
           height: 42,
           child: CustomPaint(painter: _WaveformPainter(waveform.peaks, color)),
         ),
       ),
-      const SizedBox(width: 8),
-      Text('${waveform.durationMs} ms', style: const TextStyle(fontSize: 11)),
+      const SizedBox(width: ListenSpacing.gap8),
+      Text('${waveform.durationMs} ms', style: ListenType.caption),
     ],
   );
 
@@ -511,8 +513,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               draft.degradedMessage!,
-              style: TextStyle(
-                fontSize: 12,
+              style: ListenType.body.copyWith(
                 color: Theme.of(context).colorScheme.secondary,
               ),
             ),
@@ -531,8 +532,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               l.text('practiceHiddenText'),
-              style: TextStyle(
-                fontSize: 12,
+              style: ListenType.body.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
@@ -619,7 +619,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
           ),
         ),
         if (attempt.evaluation.tokenResults.isNotEmpty) _diff(attempt),
-        const SizedBox(height: 12),
+        const SizedBox(height: ListenSpacing.gap12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -659,7 +659,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
   Widget _miniPlayer() => DecoratedBox(
     decoration: BoxDecoration(
       color: const Color(0xFF1D2430),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: ListenRadii.surfaceBorder,
     ),
     child: Padding(
       padding: const EdgeInsets.all(16),
@@ -671,7 +671,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             color: Colors.white,
             size: 52,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           Text(
             l.text('practicePlayer'),
             textAlign: TextAlign.center,
@@ -680,13 +680,13 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: ListenSpacing.gap4),
           Text(
             l.text('practicePlayerHint'),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFFD0D8E8), fontSize: 12),
+            style: ListenType.body.copyWith(color: Color(0xFFD0D8E8)),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: ListenSpacing.gap16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -730,7 +730,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
     child: Row(
       children: [
         const Icon(Icons.format_list_numbered, size: 18),
-        const SizedBox(width: 8),
+        const SizedBox(width: ListenSpacing.gap8),
         Text(
           l
               .text('practiceProgress')
@@ -751,7 +751,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             ? Icons.text_fields
             : Icons.keyboard,
       ),
-      const SizedBox(width: 8),
+      const SizedBox(width: ListenSpacing.gap8),
       Expanded(
         child: Text(
           draft.kind == 'shadowing'

@@ -7,6 +7,7 @@ import '../localization.dart';
 import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../state/builder.dart';
+import '../theme/spacing.dart';
 
 class ReviewQueueScreen extends StatefulWidget {
   const ReviewQueueScreen({
@@ -201,7 +202,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                   Row(
                     children: [
                       Icon(_kindIcon(card.kind), color: colors.primary),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: ListenSpacing.gap8),
                       Expanded(
                         child: Text(
                           _kindLabel(l, card.kind),
@@ -220,12 +221,12 @@ class _ReviewCardState extends State<_ReviewCard> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: ListenSpacing.gap12),
                   Text(
                     _instruction(l, card.kind),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: ListenSpacing.gap32),
                   FilledButton.icon(
                     onPressed: playable ? _togglePlayback : null,
                     icon: Icon(
@@ -243,7 +244,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                           : l.text('reviewClipUnavailable'),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: ListenSpacing.gap8),
                   OutlinedButton.icon(
                     onPressed: widget.shadowAvailable && !widget.busy
                         ? () => unawaited(widget.onShadowing())
@@ -259,7 +260,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                           : l.text('reviewShadowClip'),
                     ),
                   ),
-                  const SizedBox(height: 26),
+                  const SizedBox(height: ListenSpacing.gap24),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
                     child: widget.revealed
@@ -267,7 +268,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                         : _promptContent(context),
                   ),
                   if (widget.error != null) ...[
-                    const SizedBox(height: 18),
+                    const SizedBox(height: ListenSpacing.gap16),
                     Text(widget.error!, style: TextStyle(color: colors.error)),
                   ],
                 ],
@@ -301,7 +302,7 @@ class _ReviewCardState extends State<_ReviewCard> {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: ListenSpacing.gap16),
           TextField(
             controller: _clozeController,
             enabled: !widget.busy,
@@ -312,7 +313,7 @@ class _ReviewCardState extends State<_ReviewCard> {
             ),
             onSubmitted: (_) => widget.busy ? null : widget.onReveal(),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           OutlinedButton(
             onPressed: widget.busy ? null : widget.onReveal,
             child: Text(l.text('reviewCheckAnswer')),
@@ -326,13 +327,13 @@ class _ReviewCardState extends State<_ReviewCard> {
             l.text('reviewTargetPhrase'),
             style: Theme.of(context).textTheme.labelLarge,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Text(
             card.cue ?? card.target ?? '',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: ListenSpacing.gap16),
           Row(
             children: [
               Expanded(
@@ -343,7 +344,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                   child: Text(l.text('reviewPresencePresent')),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: ListenSpacing.gap12),
               Expanded(
                 child: OutlinedButton(
                   onPressed: widget.busy
@@ -382,7 +383,7 @@ class _ReviewCardState extends State<_ReviewCard> {
             l.text('reviewYourTyped').replaceAll('{typed}', typed),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
         ],
         if (card.kind == 'phrase_presence' && _presenceChoice != null) ...[
           Text(
@@ -399,7 +400,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                 .replaceAll('{answer}', l.text('reviewPresencePresent')),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
         ],
         if (card.target != null && card.kind == 'chunk_cloze') ...[
           Text(
@@ -409,14 +410,14 @@ class _ReviewCardState extends State<_ReviewCard> {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
         ],
         Text(
           card.answer,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: ListenSpacing.gap24),
         Row(
           children: [
             Expanded(
@@ -425,14 +426,14 @@ class _ReviewCardState extends State<_ReviewCard> {
                 child: Text(l.text('reviewGradeMissed')),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: OutlinedButton(
                 onPressed: widget.busy ? null : () => widget.onRate('hard'),
                 child: Text(l.text('reviewGradeFuzzy')),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: FilledButton(
                 onPressed: widget.busy ? null : () => widget.onRate('good'),
@@ -506,7 +507,7 @@ class _Finished extends StatelessWidget {
                   : Icons.error_outline,
               size: 52,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: ListenSpacing.gap12),
             Text(
               state.error ??
                   (state.completedCount == 0
@@ -516,18 +517,18 @@ class _Finished extends StatelessWidget {
                             .replaceAll('{count}', '${state.completedCount}')),
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             if (state.error == null)
               Text(l.text('reviewDueInfoNote'))
             else
               TextButton(onPressed: onRetry, child: Text(l.text('retry'))),
             if (state.upgradeSuggestions.isNotEmpty) ...[
-              const SizedBox(height: 28),
+              const SizedBox(height: ListenSpacing.gap24),
               Text(
                 l.text('reviewStatusSuggestions'),
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: ListenSpacing.gap8),
               for (final suggestion in state.upgradeSuggestions)
                 Card(
                   child: ConstrainedBox(
@@ -549,7 +550,7 @@ class _Finished extends StatelessWidget {
                                   suggestion.lexicalDisplayForm,
                                 ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: ListenSpacing.gap12),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
@@ -563,7 +564,7 @@ class _Finished extends StatelessWidget {
                                   ).text('deferUpgrade'),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: ListenSpacing.gap8),
                               FilledButton(
                                 onPressed: state.busy
                                     ? null

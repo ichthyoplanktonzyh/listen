@@ -7,11 +7,13 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
-import '../../models/timeline.dart';
 import '../../models/capability_readiness.dart'
     show canDisplayActualRhythmFrame;
+import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../player_adapter.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/subtitle_style.dart';
 import '../subtitle/connected_speech_reference_ribbon.dart';
 import '../subtitle/expected_pronunciation_reference.dart';
@@ -176,7 +178,7 @@ class _PlayerStageState extends State<PlayerStage> {
                               subtitleController.backgroundOpacity *
                               backgroundFactor,
                         ),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: ListenRadii.controlBorder,
                       ),
                       child: Padding(
                         padding: EdgeInsets.symmetric(
@@ -384,7 +386,9 @@ class _PlayerStageState extends State<PlayerStage> {
                                           child: child,
                                         ),
                                         if (offerPhoneEvidence) ...[
-                                          const SizedBox(width: 4),
+                                          const SizedBox(
+                                            width: ListenSpacing.gap4,
+                                          ),
                                           Tooltip(
                                             message: hasPhoneEvidence
                                                 ? l.text(
@@ -421,7 +425,9 @@ class _PlayerStageState extends State<PlayerStage> {
                                             ),
                                           ),
                                         ],
-                                        const SizedBox(width: 4),
+                                        const SizedBox(
+                                          width: ListenSpacing.gap4,
+                                        ),
                                         RhythmReferenceToggle(
                                           mode: settingsController
                                               .soundPatternDisplayMode,
@@ -601,7 +607,9 @@ class _PlayerStageState extends State<PlayerStage> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               actualView,
-                                              const SizedBox(height: 4),
+                                              const SizedBox(
+                                                height: ListenSpacing.gap4,
+                                              ),
                                               PhonemeRibbon(
                                                 phones: phones,
                                                 position: livePosition,
@@ -727,7 +735,7 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -743,7 +751,7 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
                   size: fontSize * 1.1,
                   color: Colors.white70,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: ListenSpacing.gap6),
                 Flexible(
                   child: Text(
                     l.text('soundReferenceNoData'),
@@ -752,7 +760,7 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: ListenSpacing.gap6),
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -777,7 +785,7 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: ListenSpacing.gap4),
             Text(
               l.text('soundReferenceLoadHint'),
               style: TextStyle(

@@ -9,11 +9,12 @@ import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
-import '../../localization.dart';
 import '../../learning_assets_ui.dart';
+import '../../localization.dart';
 import '../../player_adapter.dart';
 import '../../services/api_service.dart';
 import '../../services/external_tools.dart';
+import '../../theme/spacing.dart';
 
 /// Dialog-driven media/subtitle import flows extracted from the composition
 /// root: online URL open/download, embedded subtitle extraction, and
@@ -90,14 +91,14 @@ class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
               onChanged: (_) => setState(() => _submitted = false),
               onSubmitted: (_) => _submit(),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: ListenSpacing.gap12),
             Row(
               children: [
                 Icon(
                   _isYouTube ? Icons.play_circle_outline : Icons.language,
                   size: 20,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Text('${l.text('recognizedSource')}: '),
                 Expanded(
                   child: Text(
@@ -113,7 +114,7 @@ class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: ListenSpacing.gap12),
             SegmentedButton<OnlineSourceAction>(
               segments: [
                 ButtonSegment(
@@ -131,12 +132,12 @@ class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
               onSelectionChanged: (value) =>
                   setState(() => _action = value.first),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: ListenSpacing.gap12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.gavel_outlined, size: 18),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     l.text('sourceAuthorizationNotice'),
@@ -217,10 +218,16 @@ Future<void> openOnlineMediaFlow({
     subtitleController.clearSpeechEnhancements();
     subtitleController.setCurrentPrimaryCue(null);
     subtitleController.setCurrentSecondaryCue(null);
-    playerController.setStatus(l.text('statusPlayingOnlineMedia'), playback: true);
+    playerController.setStatus(
+      l.text('statusPlayingOnlineMedia'),
+      playback: true,
+    );
     onMediaSwitched();
   } catch (error) {
-    playerController.setStatus('${l.text('statusOnlineMediaFailed')}: $error', error: true);
+    playerController.setStatus(
+      '${l.text('statusOnlineMediaFailed')}: $error',
+      error: true,
+    );
   }
 }
 
@@ -250,14 +257,19 @@ Future<void> _downloadOnline({
       cancel: download.cancel,
       onCompleted: (path) =>
           playerController.setStatus('${l.text('downloadComplete')}: $path'),
-      onFailed: (error) =>
-          playerController.setStatus('${l.text('downloadFailed')}: $error', error: true),
+      onFailed: (error) => playerController.setStatus(
+        '${l.text('downloadFailed')}: $error',
+        error: true,
+      ),
     );
     playerController.setStatus(l.text('downloadingInBackground'));
   } catch (error) {
     if (context.mounted) {
       downloadController.fail(error.toString());
-      playerController.setStatus('${l.text('downloadFailed')}: $error', error: true);
+      playerController.setStatus(
+        '${l.text('downloadFailed')}: $error',
+        error: true,
+      );
     }
   }
 }
@@ -329,7 +341,10 @@ Future<void> importEmbeddedSubtitleFlow({
     final extracted = await tools.extractTextSubtitle(path, choice.$1);
     await mediaSession.openSubtitlePath(extracted, secondary: choice.$2);
   } catch (error) {
-    playerController.setStatus('${l.text('statusEmbeddedImportFailed')}: $error', error: true);
+    playerController.setStatus(
+      '${l.text('statusEmbeddedImportFailed')}: $error',
+      error: true,
+    );
   }
 }
 

@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../models/production_corpus.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
-import '../../controllers/slice_player_controller.dart';
 import 'dictionary_inline_clip_player.dart';
 import 'pronunciation_button.dart';
+import '../../theme/typography.dart';
 
 /// Estimated words-per-minute of one clip from its sentence snapshot and time
 /// window. A rough, whitespace-tokenized decoration — never a scored metric —
@@ -370,7 +373,7 @@ class _ListeningDictionaryEntryViewState
           entry.displayForm,
           style: Theme.of(context).textTheme.headlineMedium,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         Text(
           entry.kind == 'phrase'
               ? l.text('dictionaryPhrase')
@@ -379,7 +382,7 @@ class _ListeningDictionaryEntryViewState
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: ListenSpacing.gap16),
         for (final suggestion in widget.suggestions)
           _SuggestionBanner(
             suggestion: suggestion,
@@ -394,27 +397,27 @@ class _ListeningDictionaryEntryViewState
         // status it explains, but is its own layer: suggestions above say
         // "what to do next", this says "what actually happened".
         if (widget.onLoadEvidenceHistory != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           _EvidenceHistorySection(
             key: ValueKey('evidence-${widget.details.entry.id}'),
             loader: widget.onLoadEvidenceHistory!,
           ),
         ],
         if (widget.onSaveContent != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           _contentEditor(l),
         ],
         if (widget.onCreateSenseFolder != null) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: ListenSpacing.gap16),
           _senseFolderSection(l),
         ],
         if (widget.showProductionCorpus) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: ListenSpacing.gap16),
           Text(
             l.text('myOutput'),
             style: Theme.of(context).textTheme.titleMedium,
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: ListenSpacing.gap4),
           if (widget.productionHits == null && !widget.productionLoadFailed)
             const LinearProgressIndicator()
           else if (widget.productionLoadFailed)
@@ -480,7 +483,7 @@ class _ListeningDictionaryEntryViewState
               ),
           ],
         ],
-        const SizedBox(height: 20),
+        const SizedBox(height: ListenSpacing.gap16),
         Row(
           children: [
             Expanded(
@@ -509,7 +512,7 @@ class _ListeningDictionaryEntryViewState
               ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: ListenSpacing.gap4),
         Text(
           l
               .text('dictionaryCoverage')
@@ -518,7 +521,7 @@ class _ListeningDictionaryEntryViewState
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: ListenSpacing.gap8),
         if (unassignedOccurrences.isNotEmpty)
           Text(
             l.text('dictionaryUnassignedClips'),
@@ -631,7 +634,9 @@ class _ListeningDictionaryEntryViewState
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                          const SizedBox(height: 4),
+                                          const SizedBox(
+                                            height: ListenSpacing.gap4,
+                                          ),
                                           Text(
                                             '${wpm == null ? '' : l.text('dictionaryWpm').replaceAll('{wpm}', '$wpm')} · ${index + 1}/${occurrences.length}',
                                             style: TextStyle(
@@ -692,7 +697,7 @@ class _ListeningDictionaryEntryViewState
               ),
             ),
           ),
-        if (occurrences.isNotEmpty) const SizedBox(height: 10),
+        if (occurrences.isNotEmpty) const SizedBox(height: ListenSpacing.gap8),
         if (occurrences.isEmpty)
           _EmptyClips(entry: entry, external: _externalRow(l))
         else if (unassignedOccurrences.isEmpty)
@@ -743,7 +748,7 @@ class _ListeningDictionaryEntryViewState
           color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: ListenSpacing.gap8),
       if (widget.details.senseFolders.isEmpty)
         Text(
           l.text('dictionaryNoSenseFolders'),
@@ -890,7 +895,7 @@ class _ListeningDictionaryEntryViewState
           labelText: l.text('userDefinition'),
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: ListenSpacing.gap8),
       TextField(
         key: const Key('dictionary-personal-note'),
         controller: _note,
@@ -899,7 +904,7 @@ class _ListeningDictionaryEntryViewState
           labelText: l.text('personalNote'),
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: ListenSpacing.gap8),
       Align(
         alignment: Alignment.centerRight,
         child: FilledButton.tonal(
@@ -907,7 +912,7 @@ class _ListeningDictionaryEntryViewState
           child: Text(l.text('save')),
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: ListenSpacing.gap8),
     ],
   );
 
@@ -929,9 +934,8 @@ class _ListeningDictionaryEntryViewState
       children: [
         Text(
           l.text('dictionaryExternalHint'),
-          style: TextStyle(
+          style: ListenType.body.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 12,
           ),
         ),
         if (canPlayAudio)
@@ -964,12 +968,12 @@ class _ListeningDictionaryEntryViewState
     final results = _libraryResults;
     final external = _externalRow(l);
     return [
-      const SizedBox(height: 18),
+      const SizedBox(height: ListenSpacing.gap16),
       Text(
         l.text('dictionaryLibrarySection'),
         style: Theme.of(context).textTheme.titleMedium,
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: ListenSpacing.gap8),
       if (results == null)
         Align(
           alignment: Alignment.centerLeft,
@@ -994,19 +998,21 @@ class _ListeningDictionaryEntryViewState
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        if (external != null) ...[const SizedBox(height: 10), external],
+        if (external != null) ...[
+          const SizedBox(height: ListenSpacing.gap8),
+          external,
+        ],
       ] else ...[
         if (results.length >= widget.libraryResultLimit) ...[
           Text(
             l
                 .text('dictionarySampledHint')
                 .replaceAll('{count}', '${widget.libraryResultLimit}'),
-            style: TextStyle(
+            style: ListenType.body.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 12,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
         ],
         for (final result in results)
           CorpusResultTile(
@@ -1122,7 +1128,7 @@ class _EvidenceHistorySectionState extends State<_EvidenceHistorySection> {
                   size: 18,
                   color: colors.onSurfaceVariant,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Text(
                   l.text('evidenceHistoryTitle'),
                   style: Theme.of(context).textTheme.titleMedium,
@@ -1137,7 +1143,7 @@ class _EvidenceHistorySectionState extends State<_EvidenceHistorySection> {
           ),
         ),
         if (expanded) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -1156,7 +1162,7 @@ class _EvidenceHistorySectionState extends State<_EvidenceHistorySection> {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           if (loading && rows == null) const LinearProgressIndicator(),
           if (loadFailed)
             Row(
@@ -1241,7 +1247,7 @@ class _EvidenceRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(channelIcon, size: 16, color: colors.onSurfaceVariant),
-          const SizedBox(width: 8),
+          const SizedBox(width: ListenSpacing.gap8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1255,9 +1261,9 @@ class _EvidenceRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: ListenSpacing.gap6),
                     Icon(outcomeIcon, size: 15, color: outcomeColor),
-                    const SizedBox(width: 3),
+                    const SizedBox(width: ListenSpacing.gap2),
                     Text(
                       _label(l, 'obsOutcome', observation.outcome),
                       style: Theme.of(
@@ -1308,7 +1314,7 @@ class _SuggestionBanner extends StatelessWidget {
                   .text('dictionaryUpgradeSuggestion')
                   .replaceAll('{count}', '${suggestion.evidenceContextCount}'),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: ListenSpacing.gap6),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -1428,7 +1434,7 @@ class _EmptyClips extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: ListenRadii.surfaceBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1439,13 +1445,16 @@ class _EmptyClips extends StatelessWidget {
               l.text('dictionaryNoClips'),
               style: Theme.of(context).textTheme.titleSmall,
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: ListenSpacing.gap6),
             Text(
               l
                   .text('dictionaryNoClipsHint')
                   .replaceAll('{word}', entry.displayForm),
             ),
-            if (external != null) ...[const SizedBox(height: 12), external!],
+            if (external != null) ...[
+              const SizedBox(height: ListenSpacing.gap12),
+              external!,
+            ],
           ],
         ),
       ),
@@ -1635,7 +1644,7 @@ class _ClipTile extends StatelessWidget {
                 ].join(' · '),
               ),
               if (revealed) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: ListenSpacing.gap8),
                 if (mark != null)
                   Text(
                     l.text(
@@ -1798,22 +1807,16 @@ class _CapabilityEditor extends StatelessWidget {
                     _dimension(channel)?.effectiveAssessment ?? 'unassessed',
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 SizedBox(
                   width: 72,
-                  child: Text(
-                    l.text(label),
-                    style: const TextStyle(fontSize: 13),
-                  ),
+                  child: Text(l.text(label), style: ListenType.reading),
                 ),
                 for (final value in const ['acquired', 'not_acquired'])
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
                     child: ChoiceChip(
-                      label: Text(
-                        l.text(value),
-                        style: const TextStyle(fontSize: 12),
-                      ),
+                      label: Text(l.text(value), style: ListenType.body),
                       selected:
                           _dimension(channel)?.effectiveAssessment == value,
                       visualDensity: VisualDensity.compact,
@@ -1835,8 +1838,7 @@ class _CapabilityEditor extends StatelessWidget {
                     'unassessed')
                   Text(
                     l.text('unassessed'),
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: ListenType.body.copyWith(
                       color: Theme.of(context).colorScheme.outline,
                       fontStyle: FontStyle.italic,
                     ),

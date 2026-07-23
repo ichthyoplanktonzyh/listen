@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/spacing.dart';
 import 'reading_task_sheet.dart';
 
 /// Hosts the listening-retell flow as a full-pane surface (Phase 3.13
@@ -42,7 +43,7 @@ class ListeningCheckPanel extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(Icons.hearing_outlined, color: colors.primary),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: ListenSpacing.gap8),
                   Text(
                     l.text('readingTaskListenTitle'),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(

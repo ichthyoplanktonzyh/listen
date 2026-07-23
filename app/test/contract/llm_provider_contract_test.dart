@@ -19,7 +19,11 @@ void main() {
         'retention': 'unknown',
         'allowed_uses': ['semantic_judgment'],
         'capability': {
-          'structured_output': {'state': 'probed', 'supported': true, 'probed_at_ms': 100},
+          'structured_output': {
+            'state': 'probed',
+            'supported': true,
+            'probed_at_ms': 100,
+          },
           'streaming': {'state': 'unknown'},
           'multilingual': {'state': 'declared', 'supported': true},
           'audio_input': {'state': 'unknown'},
@@ -48,17 +52,23 @@ void main() {
   group('LlmCapabilityClaim', () {
     test('only probed+supported is usable', () {
       expect(
-        LlmCapabilityClaim.fromJson(const {'state': 'probed', 'supported': true})
-            .isProbedSupported,
+        LlmCapabilityClaim.fromJson(const {
+          'state': 'probed',
+          'supported': true,
+        }).isProbedSupported,
         isTrue,
       );
       expect(
-        LlmCapabilityClaim.fromJson(const {'state': 'declared', 'supported': true})
-            .isProbedSupported,
+        LlmCapabilityClaim.fromJson(const {
+          'state': 'declared',
+          'supported': true,
+        }).isProbedSupported,
         isFalse,
       );
       expect(
-        LlmCapabilityClaim.fromJson(const {'state': 'unknown'}).isProbedSupported,
+        LlmCapabilityClaim.fromJson(const {
+          'state': 'unknown',
+        }).isProbedSupported,
         isFalse,
       );
     });
@@ -67,7 +77,11 @@ void main() {
   group('LlmProbeResult', () {
     test('parses the probe response', () {
       final result = LlmProbeResult.fromJson(const {
-        'structured_output': {'state': 'probed', 'supported': false, 'probed_at_ms': 5},
+        'structured_output': {
+          'state': 'probed',
+          'supported': false,
+          'probed_at_ms': 5,
+        },
       });
       expect(result.structuredOutput.state, 'probed');
       expect(result.structuredOutput.supported, isFalse);

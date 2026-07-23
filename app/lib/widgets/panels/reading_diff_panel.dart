@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_diff_controller.dart';
 import '../../localization.dart';
 import '../../models/reading_diff.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// In-scene read/listen comparison. It is an outcome card, not a blocking
 /// decision, so it stays in the task scene and never opens a dialog.
@@ -50,7 +53,7 @@ class ReadingDiffPanel extends StatelessWidget {
                       icon: const Icon(Icons.arrow_back),
                     ),
                     Icon(Icons.compare_arrows, color: colors.primary),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: ListenSpacing.gap8),
                     Text(
                       l.text('readingDiffTitle'),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -84,7 +87,7 @@ class ReadingDiffPanel extends StatelessWidget {
                               onOpen: onOpenReadingTask,
                               openLabel: l.text('readingDiffOpenReading'),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: ListenSpacing.gap12),
                             _sideCard(
                               context,
                               icon: Icons.hearing_outlined,
@@ -93,18 +96,17 @@ class ReadingDiffPanel extends StatelessWidget {
                               onOpen: onOpenListeningCheck,
                               openLabel: l.text('readingDiffOpenListening'),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: ListenSpacing.gap16),
                             Container(
                               padding: const EdgeInsets.all(18),
                               decoration: BoxDecoration(
                                 color: colors.surfaceContainerHighest
                                     .withValues(alpha: 0.5),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: ListenRadii.surfaceBorder,
                               ),
                               child: Text(
                                 l.text(state.explanationKey),
-                                style: const TextStyle(
-                                  fontSize: 14,
+                                style: ListenType.emphasis.copyWith(
                                   height: 1.6,
                                 ),
                               ),
@@ -143,7 +145,7 @@ class ReadingDiffPanel extends StatelessWidget {
         child: Row(
           children: [
             Icon(icon, color: colors.primary),
-            const SizedBox(width: 12),
+            const SizedBox(width: ListenSpacing.gap12),
             Expanded(
               child: Text(label, style: Theme.of(context).textTheme.titleSmall),
             ),
@@ -151,7 +153,7 @@ class ReadingDiffPanel extends StatelessWidget {
               l.text(outcomeKey),
               style: TextStyle(fontWeight: FontWeight.w700, color: color),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: ListenSpacing.gap12),
             OutlinedButton(onPressed: onOpen, child: Text(openLabel)),
           ],
         ),

@@ -63,20 +63,21 @@ _wire(LocalApi? Function() getApi) {
   final openedPaths = <String>[];
   final openMediaCalls = <int>[];
   final rebuilds = <int>[];
-  final coordinator = MediaLibraryCoordinator(
-    player: player,
-    subtitle: subtitle,
-    learning: learning,
-    settings: settings,
-    extensiveListening: extensive,
-  )..bind(
-    getApi: getApi,
-    isMounted: () => true,
-    text: (key) => key,
-    requestRebuild: () => rebuilds.add(1),
-    openMediaPath: (path) async => openedPaths.add(path),
-    openMedia: () async => openMediaCalls.add(1),
-  );
+  final coordinator =
+      MediaLibraryCoordinator(
+        player: player,
+        subtitle: subtitle,
+        learning: learning,
+        settings: settings,
+        extensiveListening: extensive,
+      )..bind(
+        getApi: getApi,
+        isMounted: () => true,
+        text: (key) => key,
+        requestRebuild: () => rebuilds.add(1),
+        openMediaPath: (path) async => openedPaths.add(path),
+        openMedia: () async => openMediaCalls.add(1),
+      );
   addTearDown(extensive.dispose);
   return (
     coordinator: coordinator,

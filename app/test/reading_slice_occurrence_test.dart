@@ -10,29 +10,28 @@ import 'package:llplayer_next/models/types.dart';
 /// missing `media_fingerprint_snapshot`, which the shared resolver rejects
 /// before even trying the linked-media route.
 void main() {
-  OccurrenceMediaResolver resolver({
-    required void Function() onPicker,
-  }) => OccurrenceMediaResolver(
-    readMedia: (_) async => MediaItem(
-      id: 'media-1',
-      path: '/library/cnn10.mp4',
-      fingerprint: 'fp-current',
-      title: 'CNN10',
-      kind: 'video',
-      durationMs: 1000,
-      availability: 'available',
-      createdAtMs: 1,
-      updatedAtMs: 1,
-    ),
-    fingerprintFile: (_) async => 'fp-current',
-    registerMedia: (_) async {},
-    pickFile: (_) async {
-      onPicker();
-      return null;
-    },
-    fileExists: (path) async =>
-        path == '/library/cnn10.mp4' || path == '/current/cnn10.mp4',
-  );
+  OccurrenceMediaResolver resolver({required void Function() onPicker}) =>
+      OccurrenceMediaResolver(
+        readMedia: (_) async => MediaItem(
+          id: 'media-1',
+          path: '/library/cnn10.mp4',
+          fingerprint: 'fp-current',
+          title: 'CNN10',
+          kind: 'video',
+          durationMs: 1000,
+          availability: 'available',
+          createdAtMs: 1,
+          updatedAtMs: 1,
+        ),
+        fingerprintFile: (_) async => 'fp-current',
+        registerMedia: (_) async {},
+        pickFile: (_) async {
+          onPicker();
+          return null;
+        },
+        fileExists: (path) async =>
+            path == '/library/cnn10.mp4' || path == '/current/cnn10.mp4',
+      );
 
   Map<String, dynamic> readingOccurrence({required String? fingerprint}) =>
       currentMediaSliceOccurrence(

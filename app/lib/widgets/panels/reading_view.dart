@@ -8,8 +8,11 @@ import '../../models/reading.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
+import '../../theme/typography.dart';
 
 enum ReadingLens { clean, reading, listening }
 
@@ -157,7 +160,7 @@ class _ReadingViewState extends State<ReadingView> {
           child: Row(
             children: [
               Icon(Icons.chrome_reader_mode_outlined, color: colors.primary),
-              const SizedBox(width: 10),
+              const SizedBox(width: ListenSpacing.gap8),
               Text(
                 l.text('readingViewTitle'),
                 style: Theme.of(
@@ -203,7 +206,7 @@ class _ReadingViewState extends State<ReadingView> {
                     children: [
                       const Icon(Icons.filter_alt_outlined, size: 18),
                       if (!compact) ...[
-                        const SizedBox(width: 6),
+                        const SizedBox(width: ListenSpacing.gap6),
                         Text(_lensLabel(l, _lens)),
                       ],
                     ],
@@ -306,9 +309,9 @@ class _ReadingViewState extends State<ReadingView> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: ListenSpacing.gap4),
                   DefaultTextStyle.merge(
-                    style: const TextStyle(fontSize: 16, height: 1.65),
+                    style: ListenType.title.copyWith(height: 1.65),
                     child: TokenLine(
                       cue: composite.cue,
                       profiles: widget.wordEntries,
@@ -330,7 +333,7 @@ class _ReadingViewState extends State<ReadingView> {
                     ),
                   ),
                   if (translation != null && _state.translationVisible) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: ListenSpacing.gap6),
                     Text(
                       translation,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -422,7 +425,7 @@ class _ReadingViewState extends State<ReadingView> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -508,7 +511,7 @@ class _OverviewMetric extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Text('$value', style: Theme.of(context).textTheme.titleMedium),
-      const SizedBox(width: 7),
+      const SizedBox(width: ListenSpacing.gap6),
       Text(label, style: Theme.of(context).textTheme.bodySmall),
     ],
   );

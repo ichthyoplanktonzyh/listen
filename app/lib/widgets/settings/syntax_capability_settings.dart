@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/syntax_capability.dart';
 import '../../services/api_service.dart';
+import '../../theme/spacing.dart';
 
 class SyntaxCapabilitySettings extends StatefulWidget {
   const SyntaxCapabilitySettings({
@@ -126,7 +127,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l.text('syntaxCapabilityDescription')),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Row(
           children: [
             Icon(
@@ -138,7 +139,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
                   : Icons.extension_outlined,
               size: 20,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(
                 '${_statusLabel(l, capability.status)} · spaCy '
@@ -149,24 +150,24 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
           ],
         ),
         if (capability.isDownloading) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           LinearProgressIndicator(value: capability.progress),
         ],
         if (capability.error != null) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: ListenSpacing.gap6),
           Text(
             capability.error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
         if (_error != null) ...[
-          const SizedBox(height: 6),
+          const SizedBox(height: ListenSpacing.gap6),
           Text(
             _error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Wrap(
           spacing: 8,
           runSpacing: 6,

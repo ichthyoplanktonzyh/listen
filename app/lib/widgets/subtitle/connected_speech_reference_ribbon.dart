@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/spacing.dart';
 import 'following_structure_viewport.dart';
 
 /// Presents Reference B as annotations on the sentence rather than as a list of
@@ -61,7 +62,7 @@ class ConnectedSpeechReferenceRibbon extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _ConnectedBadge(title: title, fontSize: fontSize, height: height),
-          const SizedBox(width: 9),
+          const SizedBox(width: ListenSpacing.gap8),
           Expanded(
             child: FollowingStructureViewport(
               activeIndex: activeIndex,
@@ -208,7 +209,7 @@ class _ConnectedBadge extends StatelessWidget {
         size: math.max(13, height * 0.48),
         color: ListenColors.soundConnected,
       ),
-      const SizedBox(width: 5),
+      const SizedBox(width: ListenSpacing.gap4),
       Text(
         title,
         maxLines: 1,

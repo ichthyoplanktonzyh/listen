@@ -2,16 +2,17 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../controllers/extensive_listening_controller.dart';
+import '../../controllers/hunting_session_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
-import '../../controllers/extensive_listening_controller.dart';
-import '../../controllers/hunting_session_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
-import '../../models/timeline.dart';
 import '../../models/task_status.dart';
+import '../../models/timeline.dart';
 import '../../player_adapter.dart';
+import '../../theme/spacing.dart';
 import '../player/playback_controls.dart';
 
 /// The bottom playback bar: transport controls with chunk navigation when
@@ -211,7 +212,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
                   size: 20,
                   color: colors.onSurfaceVariant,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: ListenSpacing.gap12),
                 Expanded(
                   child: Text(
                     l.text('noMediaSelected'),
@@ -220,7 +221,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: ListenSpacing.gap12),
                 FilledButton.icon(
                   onPressed: mediaSession.openMedia,
                   icon: const Icon(Icons.folder_open_outlined),

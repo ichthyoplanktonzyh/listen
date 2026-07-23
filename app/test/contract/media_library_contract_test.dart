@@ -68,10 +68,7 @@ void main() {
     test('tolerates absent fit, track, and duration', () {
       final entry = MediaLibraryEntry.fromJson({
         ...fixture,
-        'media': {
-          ...(fixture['media']! as Map),
-          'duration': null,
-        },
+        'media': {...(fixture['media']! as Map), 'duration': null},
         'primary_track_id': null,
         'fit': null,
       });
@@ -137,10 +134,7 @@ void main() {
     });
 
     test('explicit user intent always wins', () {
-      expect(
-        entry(intent: 'defer').triageQueue(),
-        TriageQueue.deferred,
-      );
+      expect(entry(intent: 'defer').triageQueue(), TriageQueue.deferred);
       expect(
         entry(meaning: 'too_hard', intent: 'pin_extensive').triageQueue(),
         TriageQueue.extensive,
