@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-23: 修复 `_saveSettings` 静默重置未枚举设置字段的 bug。原实现从默认值全新构造
+  `AppSettings(...)`，凡未逐一列出的字段——`themeMode`、续播状态（`lastMediaPath/Title/
+  PositionMs/DurationMs/SubtitleCount`）、`pronunciationVisible`、`phonemeDisplay`、
+  `precomputePronunciation`、`showExperimentalPhoneticResults`、`phonemeHighlightVisible`、
+  `phoneticCachePolicy`、`familiarMaterialSuggestions`——每次保存都被写回默认（例：亮色
+  主题下调个音量 → theme_mode 被写回 dark）。改为提炼顶层纯函数 `mergeLiveSettings`：
+  只把活数据源在 player/subtitle 控制器的字段写入 `settings.copyWith(...)`，其余字段
+  一律原样保留（与 `_setWorkbenchMediaFraction`、`recordRecentMedia` 的既有增量写法
+  一致）；原先经 settingsController getter 读回的自镜像字段（language、颜色、转录配置
+  等）随 copyWith 直接保留，不再重复枚举。新增 `save_settings_merge_test`（活字段取自
+  控制器 + 非默认 themeMode/续播/发音等字段全数保留 2 例）。585 项测试绿；
+  `flutter analyze` 零告警。
 - 2026-07-23: 判定状态色达标 WCAG AA + palette discipline 补第二道门（closes #22 · 轨A）。
   ① `ColorScheme` 扩语义判定色：`ListenSchemeShades.verdictCovered/verdictPartial`
   （light `#27702b`/`#a04d00`，dark `#5cc389`/`#efa05c`，脚本计算非肉眼选色——对各自
