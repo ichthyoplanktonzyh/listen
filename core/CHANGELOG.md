@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-23: 错误态容器定形（refs #46 · design Slice 5 之三）。新增
+  `widgets/common/listen_error_state.dart` 两种形态：**`ListenErrorState`**（面板主体
+  加载失败——与空态同几何：error 角色图标 + 一句话 + 可选重试，空与败读作同胞）、
+  **`ListenErrorNotice`**（流程内一步失败——`errorContainer` 安静内联面，小图标+消息，
+  待在面板正常流里不劫持）。收敛 10 处：面板级 3（转录中心/音频分析中心带 retry、
+  coach dashboard 带 reload）+ 行内裸红字 7（听力收件箱/阅读任务/个人表达/语义检索/
+  句法能力设置×2/复习队列）。边界：破坏性按钮红字（删除任务等）是动作色不是错误消息、
+  diff/chip 的语义判定色一概不动；错误色值本身服从 #22 判定色工作，本刀只定容器形态。
+  新增 `listen_error_state_test`。573 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: 统一空态语言（refs #46 · design Slice 5 之二）。新增
   `widgets/common/listen_empty_state.dart`：`ListenEmptyState` = 安静图标（28px ·
   onSurfaceVariant 55%）+ 一句话 + 可选恢复动作——空是状态不是道歉，空面板不许喊
