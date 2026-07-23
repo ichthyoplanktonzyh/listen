@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
@@ -115,8 +116,8 @@ class LlmJudgmentAssist extends StatelessWidget {
             style: ListenType.body.copyWith(
               fontWeight: FontWeight.w700,
               color: switch (verdict) {
-                'covered' => Colors.green.shade700,
-                'partial' => Colors.orange.shade800,
+                'covered' => colors.verdictCovered,
+                'partial' => colors.verdictPartial,
                 'missing' => colors.error,
                 _ => colors.onSurfaceVariant,
               },

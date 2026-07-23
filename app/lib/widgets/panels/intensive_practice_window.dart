@@ -7,6 +7,7 @@ import '../../controllers/practice_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../services/shadowing_recorder.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -658,7 +659,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   Widget _miniPlayer() => DecoratedBox(
     decoration: BoxDecoration(
-      color: const Color(0xFF1D2430),
+      // The practice mini player mimics the video stage, so it speaks the
+      // stage's brightness-independent overlay vocabulary (#22) instead of
+      // an off-palette blue-dark.
+      color: ListenColors.player,
       borderRadius: ListenRadii.surfaceBorder,
     ),
     child: Padding(
@@ -668,7 +672,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         children: [
           Icon(
             widget.isPlaying ? Icons.graphic_eq : Icons.play_circle_outline,
-            color: Colors.white,
+            color: ListenColors.overlayText,
             size: 52,
           ),
           const SizedBox(height: ListenSpacing.gap12),
@@ -676,7 +680,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             l.text('practicePlayer'),
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: Colors.white,
+              color: ListenColors.overlayText,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -684,7 +688,9 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
           Text(
             l.text('practicePlayerHint'),
             textAlign: TextAlign.center,
-            style: ListenType.body.copyWith(color: Color(0xFFD0D8E8)),
+            style: ListenType.body.copyWith(
+              color: ListenColors.overlayTextMuted,
+            ),
           ),
           const SizedBox(height: ListenSpacing.gap16),
           Row(
@@ -696,12 +702,15 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
                   onPressed: controller.busy || !widget.canGoPrevious
                       ? null
                       : () => unawaited(widget.onNavigate(-1)),
-                  icon: const Icon(Icons.skip_previous, color: Colors.white),
+                  icon: const Icon(
+                    Icons.skip_previous,
+                    color: ListenColors.overlayText,
+                  ),
                 ),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF1D2430),
+                  backgroundColor: ListenColors.overlayText,
+                  foregroundColor: ListenColors.player,
                   shape: const CircleBorder(),
                   padding: const EdgeInsets.all(12),
                 ),
@@ -716,7 +725,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
                   onPressed: controller.busy || !widget.canGoNext
                       ? null
                       : () => unawaited(widget.onNavigate(1)),
-                  icon: const Icon(Icons.skip_next, color: Colors.white),
+                  icon: const Icon(
+                    Icons.skip_next,
+                    color: ListenColors.overlayText,
+                  ),
                 ),
             ],
           ),

@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../models/types.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 
@@ -81,7 +82,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                     child: AspectRatio(
                       aspectRatio: video.value.aspectRatio,
                       child: ColoredBox(
-                        color: Colors.black,
+                        color: ListenColors.videoBackdrop,
                         child: VideoPlayer(video),
                       ),
                     ),

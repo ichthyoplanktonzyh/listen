@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_diff_controller.dart';
 import '../../localization.dart';
 import '../../models/reading_diff.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -134,8 +135,8 @@ class ReadingDiffPanel extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final (outcomeKey, color) = switch (side.outcome) {
-      SideOutcome.yes => ('outcomeYes', Colors.green.shade700),
-      SideOutcome.partial => ('outcomePartial', Colors.orange.shade800),
+      SideOutcome.yes => ('outcomeYes', colors.verdictCovered),
+      SideOutcome.partial => ('outcomePartial', colors.verdictPartial),
       SideOutcome.no => ('outcomeNo', colors.error),
       SideOutcome.unassessed => ('outcomeUnassessed', colors.onSurfaceVariant),
     };

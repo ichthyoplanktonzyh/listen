@@ -70,6 +70,20 @@ abstract final class ListenColors {
   static const learningNeedsReview = Color(0xffffbf47);
   static const learningRecognized = Color(0xff68d391);
 
+  // Judgment verdict shades (#22). Covered/partial labels render as 12px w700
+  // text — below the WCAG large-text exemption — so each tone must clear
+  // 4.5:1 against every chrome surface of its brightness (surface, fog,
+  // sidebar; asserted pairwise in listen_theme_test.dart). Read them through
+  // [ListenSchemeShades], never directly.
+  static const verdictCovered = Color(0xff27702b);
+  static const verdictPartial = Color(0xffa04d00);
+  static const darkVerdictCovered = Color(0xff5cc389);
+  static const darkVerdictPartial = Color(0xffefa05c);
+
+  /// True black behind video frames: letterbox bars are part of the picture,
+  /// not chrome, so they stay black under both themes.
+  static const videoBackdrop = Color(0xff000000);
+
   // ── Dark theme surfaces ──
   // Anchored on [player] so chrome recedes toward the same near-black the video
   // stage already uses, keeping the brand teal readable at AA on every surface.
@@ -93,7 +107,7 @@ abstract final class ListenColors {
   static const darkError = Color(0xffef8a8a);
 }
 
-/// The two product shades [ColorScheme] has no slot for. Exposing them here
+/// The product shades [ColorScheme] has no slot for. Exposing them here
 /// keeps call sites brightness-agnostic: read them off `Theme.of(context)
 /// .colorScheme` exactly like the standard roles instead of reaching for a
 /// light-only constant.
@@ -108,6 +122,17 @@ extension ListenSchemeShades on ColorScheme {
   Color get pressedPrimary => brightness == Brightness.light
       ? ListenColors.primaryPressed
       : ListenColors.darkPrimaryPressed;
+
+  /// Label color for a "covered / fully met" judgment verdict (#22).
+  /// The third verdict, missing, reads [error] — it already has a slot.
+  Color get verdictCovered => brightness == Brightness.light
+      ? ListenColors.verdictCovered
+      : ListenColors.darkVerdictCovered;
+
+  /// Label color for a "partially met" judgment verdict (#22).
+  Color get verdictPartial => brightness == Brightness.light
+      ? ListenColors.verdictPartial
+      : ListenColors.darkVerdictPartial;
 }
 
 abstract final class ListenTheme {
@@ -271,30 +296,25 @@ abstract final class ListenTheme {
             ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style:
-            OutlinedButton.styleFrom(
-              foregroundColor: scheme.pressedPrimary,
-              shape: rounded,
-            ).copyWith(
-              side: focusRing(BorderSide(color: scheme.outline)),
-            ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.pressedPrimary,
+          shape: rounded,
+        ).copyWith(side: focusRing(BorderSide(color: scheme.outline))),
       ),
       textButtonTheme: TextButtonThemeData(
-        style:
-            TextButton.styleFrom(
-              foregroundColor: scheme.pressedPrimary,
-              shape: rounded,
-            ).copyWith(side: focusRing()),
+        style: TextButton.styleFrom(
+          foregroundColor: scheme.pressedPrimary,
+          shape: rounded,
+        ).copyWith(side: focusRing()),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style:
-            IconButton.styleFrom(
-              foregroundColor: scheme.onSurface,
-              disabledForegroundColor: scheme.disabledForeground,
-              shape: RoundedRectangleBorder(
-                borderRadius: ListenRadii.controlBorder,
-              ),
-            ).copyWith(side: focusRing()),
+        style: IconButton.styleFrom(
+          foregroundColor: scheme.onSurface,
+          disabledForegroundColor: scheme.disabledForeground,
+          shape: RoundedRectangleBorder(
+            borderRadius: ListenRadii.controlBorder,
+          ),
+        ).copyWith(side: focusRing()),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

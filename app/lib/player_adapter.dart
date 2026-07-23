@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:fvp/fvp.dart';
 import 'package:video_player/video_player.dart';
 
+import 'theme/listen_theme.dart';
+
 class PlayerTrack {
   const PlayerTrack({
     required this.index,
@@ -243,10 +245,10 @@ class PlayerSurface extends StatelessWidget {
         valueListenable: adapter.controller,
         builder: (context, controller, _) {
           if (controller == null || !controller.value.isInitialized) {
-            return const ColoredBox(color: Colors.black);
+            return const ColoredBox(color: ListenColors.videoBackdrop);
           }
           return ColoredBox(
-            color: Colors.black,
+            color: ListenColors.videoBackdrop,
             child: Center(
               child: AspectRatio(
                 aspectRatio: controller.value.aspectRatio,
