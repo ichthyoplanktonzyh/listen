@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-23: provider 对话框重构为 StatefulWidget,controller 归 State 所有(refs #27 收尾)。
+  #58 的「await showDialog 后逐个 dispose」与退场动画存在竞态:保存成功时 registerProfile
+  触发面板刷新,pop 后 future 立即 resolve、dispose 先于退场动画结束执行,退场中的
+  TextField 重建即触发「used after being disposed」(与 #61 的诚实反馈测试组合时暴露)。
+  改为 issue #27 点名的第二种合法模式(settings_dialog 同款):六个 controller 由
+  `_ProviderDialog` State 持有、`State.dispose` 释放(secret 先 clear)——路由完全移除后
+  才触发,竞态从构造上消失;leak 回归测试维持零泄漏。585 项测试绿;analyze 零告警。
+- 2026-07-23: 实时会话「Add provider」对话框补诚实反馈（refs #24/#45 静默清查遗漏，
+  源自 e30d6ba0/#7）。Qwen 未填 Workspace ID 时点「Save securely」原是静默 return——
+  用户零反馈；现按 #45 判据（说明原因 + 给出恢复动作）在 Workspace ID 字段内联
+  errorText「Enter the Workspace ID to complete the endpoint.」，对话框保持打开，输入
+  即清除；Workspace 字段不可见时（如手动把占位符粘进 endpoint）错误落到 endpoint 字段，
+  保证守卫永不静默。新增 `realtime_conversation_panel_provider_dialog_test`（未填报错
+  不关框不发请求 / 补填清错误、保存成功发注册请求）。584 项测试绿；`flutter analyze`
+  零告警。文案暂用英文与该文件现状一致，i18n 归 #21。
 - 2026-07-23: 修复 provider 对话框泄漏 6 个 TextEditingController（closes #27 · 轨A）。
   `realtime_conversation_panel.dart` `_showProviderDialog` 每次打开建 6 个 controller
   但全文件 0 处 dispose——含绑 API key 输入框的 `secret`，密钥明文随 controller 滞留堆里。
