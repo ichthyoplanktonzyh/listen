@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+- 2026-07-23: 静默 return 清查补完——`lib/widgets/flows/` 用户流程入口一律诚实反馈
+  （refs #24/#45 后续）。#45 扫完 `lib/controllers/` 后，本刀按同一判据（CONTEXT.md
+  Unavailable State：说明原因 + 给出恢复动作）补扫 flows 层的 `== null) return;`——这层是
+  「词汇本」「复习」等按钮的直接路径，核心断连时会无声吞掉点击（此前一次无法复现的
+  「词汇本按钮无反应」报告与此症状完全吻合）。**改反馈的 17 处**（缺核心报
+  `statusConnectLocalCoreFirst`、媒体+核心缺失报 `statusOpenMediaAndCoreFirst`，一律经
+  `playerController.setStatus`，缺通道的 flow 补 `playerController` 参数并同步 main.dart
+  九个调用点）：learning_flows 九处用户入口（学习资产/我的表达/学习资源/词组保存/词形修正
+  api 缺失/词汇本/复习队列/教练面板/词表导入）；subtitle_resource_flows 五处（导出格式/
+  转写中心/音素分析中心/冷启动标注/字幕资源屏），其中冷启动标注按前提逐项报因——新增文案键
+  `statusActivateSubtitleFirst`（无主字幕）与 `statusSetSubtitleLanguageFirst`（字幕无语言，
+  zh/en 双写）；manual_review_flow 两处——入口守卫按核心/主字幕分别报因，评审对话框内
+  `saveDraft` 遇主字幕被切换从静默 return（会让对话框正常 pop、假装保存成功）改为 throw
+  新键 `statusManualReviewTrackChanged` 走对话框错误行，且保存成功的确认不再因切轨被吞
+  （enhancements 重载仍只在轨未变时执行）；media_import_flows 一处（OpenSubtitles 搜索
+  入口）。**判为合法静默并注释的**：文件/目录选择器取消、对话框主动关闭（导出格式/词表
+  预览/API key/在线来源）、词形修正无选中 token（按钮只在选中 token 的 inspector 内渲染，
+  vocabulary_book_test 已有断言钉住）。reading/speaking/writing_flows 为纯模板构造器，
+  无守卫可查。**测试**：listening_home_test 首次真实点击「词汇本」——宽布局 1200x800 走
+  侧栏项、窄布局 640x900 走资产卡，均断言 onOpenVocabulary 触发；learning_flows_test 的
+  null-api 用例从「断言无导航」升级为「断言诚实反馈」，并新增 vocabulary/review-queue 两条
+  null-core 反馈断言（对齐 #45 的测试改法）；subtitle_resource_flows_test 导出用例同步
+  升级。`flutter analyze` 零告警，Flutter 全量 568 项绿。
+
 - 2026-07-23: 快捷键绑定表单一来源 + 速查面板 + 桌面播放器基本键位（refs #25 · 轨A B 部分）。
   ① 新增 `lib/player_shortcuts.dart`：19 条绑定的唯一事实来源（id/键位/分类/l10n 标签/
   mark-key 标记），`main.dart` 不再硬编码任何 `SingleActivator`（有源码级测试钉死）；
