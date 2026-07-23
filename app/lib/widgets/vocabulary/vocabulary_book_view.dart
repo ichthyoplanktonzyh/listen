@@ -2,20 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
-import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../common/capability_viz.dart';
 import '../common/listen_empty_state.dart';
-
-/// Shared color for a capability channel's effective assessment, used by both
-/// the list snapshot icons and the filter chips so the two read as one system.
-Color capabilityAssessmentColor(ColorScheme colors, String assessment) =>
-    switch (assessment) {
-      'acquired' => ListenColors.learningRecognized,
-      'not_acquired' => colors.secondary,
-      _ => colors.onSurfaceVariant.withValues(alpha: 0.45),
-    };
 
 class VocabularyBookView extends StatelessWidget {
   const VocabularyBookView({
@@ -66,7 +57,10 @@ class VocabularyBookView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: ListenSpacing.gap4),
-              _CapabilitySummary(profile: profile),
+              CapabilityRing(
+                assessments: capabilityProfileAssessments(profile),
+                withTooltip: true,
+              ),
               const SizedBox(height: ListenSpacing.gap2),
               Text(
                 snapshot,
@@ -86,57 +80,6 @@ class VocabularyBookView extends StatelessWidget {
           onTap: () => onWord(value),
         );
       },
-    );
-  }
-}
-
-/// Compact four-channel capability snapshot: one icon per channel, colored by
-/// the channel's effective assessment (acquired / not_acquired / unassessed).
-class _CapabilitySummary extends StatelessWidget {
-  const _CapabilitySummary({required this.profile});
-
-  final LexicalCapabilityProfile? profile;
-
-  static const _channels = [
-    ('reading', 'capabilityReading', Icons.menu_book_outlined),
-    ('listening', 'capabilityListening', Icons.hearing_outlined),
-    ('speaking', 'capabilitySpeaking', Icons.record_voice_over_outlined),
-    ('writing', 'capabilityWriting', Icons.edit_outlined),
-  ];
-
-  String _assessment(String channel) {
-    final p = profile;
-    if (p == null) return 'unassessed';
-    return switch (channel) {
-      'reading' => p.reading.effectiveAssessment,
-      'listening' => p.listening.effectiveAssessment,
-      'speaking' => p.speaking.effectiveAssessment,
-      _ => p.writing.effectiveAssessment,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final (channel, labelKey, icon) in _channels)
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: Tooltip(
-              message: '${l.text(labelKey)}: ${l.text(_assessment(channel))}',
-              child: Icon(
-                icon,
-                size: 15,
-                color: capabilityAssessmentColor(
-                  Theme.of(context).colorScheme,
-                  _assessment(channel),
-                ),
-              ),
-            ),
-          ),
-      ],
     );
   }
 }

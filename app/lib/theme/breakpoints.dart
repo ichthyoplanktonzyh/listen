@@ -60,6 +60,11 @@ abstract final class ListenBreakpoints {
   /// translation does not immediately reintroduce the overflow this fixed.
   static const appBarLabels = 860.0;
 
+  /// The coach dashboard's capability portrait keeps the compass ring beside
+  /// the echo bars; below it the two stack vertically. The compass is a fixed
+  /// 200px, so this leaves the bars at least ~380px of column width.
+  static const capabilityPortraitSideBySide = 640.0;
+
   /// Reading surfaces (view header, task studio) drop to their compact
   /// arrangement below this width.
   static const readingCompact = 900.0;
