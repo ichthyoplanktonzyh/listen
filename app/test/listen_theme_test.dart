@@ -154,6 +154,29 @@ void main() {
     );
   });
 
+  test('verdict shades clear WCAG AA as small bold text in both themes', () {
+    // #22: covered/partial verdict labels are 12px w700 — below the WCAG
+    // large-text exemption — so 4.5:1 applies on every chrome surface they
+    // can sit on. (The third verdict, missing, reads `error`, whose dark
+    // value is asserted above; recalibrating the light error tone is the
+    // deferred light-theme pass, not this slice.)
+    for (final theme in [ListenTheme.light(), ListenTheme.dark()]) {
+      final colors = theme.colorScheme;
+      for (final verdict in [colors.verdictCovered, colors.verdictPartial]) {
+        expect(_contrast(verdict, colors.surface), greaterThan(4.5));
+        expect(_contrast(verdict, colors.surfaceContainer), greaterThan(4.5));
+        expect(
+          _contrast(verdict, colors.surfaceContainerHigh),
+          greaterThan(4.5),
+        );
+      }
+      // The two verdicts stay distinguishable from each other and from the
+      // error slot used by "missing" — three verdicts, three colors.
+      expect(colors.verdictCovered, isNot(colors.verdictPartial));
+      expect(colors.verdictPartial, isNot(colors.error));
+    }
+  });
+
   test('themeModeFromSetting maps persisted values and degrades unknowns', () {
     expect(themeModeFromSetting('system'), ThemeMode.system);
     expect(themeModeFromSetting('light'), ThemeMode.light);

@@ -6,6 +6,7 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_error_state.dart';
@@ -100,8 +101,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                       ),
                     ),
                     const Spacer(),
-                    if (_state.busy)
-                      const ListenLoading.inline(size: 16),
+                    if (_state.busy) const ListenLoading.inline(size: 16),
                   ],
                 ),
                 if (_state.error != null)
@@ -434,8 +434,8 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                   style: ListenType.body.copyWith(
                     fontWeight: FontWeight.w700,
                     color: switch (effectiveVerdict(point.pointId)) {
-                      'covered' => Colors.green.shade700,
-                      'partial' => Colors.orange.shade800,
+                      'covered' => colors.verdictCovered,
+                      'partial' => colors.verdictPartial,
                       'missing' => colors.error,
                       _ => colors.onSurfaceVariant,
                     },

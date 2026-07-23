@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -180,7 +181,10 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
     aspectRatio: controller.value.aspectRatio,
     child: ClipRRect(
       borderRadius: ListenRadii.surfaceBorder,
-      child: ColoredBox(color: Colors.black, child: VideoPlayer(controller)),
+      child: ColoredBox(
+        color: ListenColors.videoBackdrop,
+        child: VideoPlayer(controller),
+      ),
     ),
   );
 
