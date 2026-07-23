@@ -5,6 +5,7 @@ import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/capability_viz.dart';
 import '../common/listen_error_state.dart';
 import '../common/listen_loading.dart';
 
@@ -70,7 +71,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
           padding: const EdgeInsets.all(24),
           children: [
             Text(
-              AppLocalizations.of(context).text('coachFourChannels'),
+              AppLocalizations.of(context).text('capabilityPortraitTitle'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             Text(
@@ -85,10 +86,25 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: ListenSpacing.gap16),
-            ...dashboard.channels.map(
-              (channel) =>
-                  _ChannelCard(channel: channel, onMetric: _showEvidence),
+            // The portrait (#47): compass overview + echo-bar channel detail
+            // carry the three-state story; the cards below are pure metric
+            // drill-down and only render when a channel has evidence to show.
+            Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: CapabilityPortrait(
+                  channels: dashboard.channels,
+                  gapCount: crossModalGapCount(dashboard),
+                ),
+              ),
             ),
+            ...dashboard.channels
+                .where((channel) => channel.metrics.any((m) => m.value > 0))
+                .map(
+                  (channel) =>
+                      _ChannelCard(channel: channel, onMetric: _showEvidence),
+                ),
             const SizedBox(height: ListenSpacing.gap24),
             Text(
               AppLocalizations.of(context).text('coachNextSteps'),
@@ -333,7 +349,8 @@ class _ChannelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final assessments = channel.effectiveAssessments;
+    // Three-state counts moved into the portrait above (#47); this card is
+    // the channel's metric drill-down only.
     final visibleMetrics = channel.metrics
         .where((metric) => metric.value > 0)
         .toList(growable: false);
@@ -358,46 +375,19 @@ class _ChannelCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: ListenSpacing.gap8),
-            if (assessments.acquired + assessments.notAcquired == 0)
-              Text(l.text('coachUnassessed'))
-            else
-              Wrap(
-                spacing: 8,
-                children: [
-                  Chip(
-                    label: Text(
-                      '${l.text('coachAssessmentAcquired')} ${assessments.acquired}',
+            const SizedBox(height: ListenSpacing.gap12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: visibleMetrics
+                  .map(
+                    (metric) => _MetricCard(
+                      metric: metric,
+                      onTap: () => onMetric(metric),
                     ),
-                  ),
-                  Chip(
-                    label: Text(
-                      '${l.text('coachAssessmentNotAcquired')} ${assessments.notAcquired}',
-                    ),
-                  ),
-                  if (assessments.unassessed > 0)
-                    Chip(
-                      label: Text(
-                        '${l.text('coachAssessmentUnassessed')} ${assessments.unassessed}',
-                      ),
-                    ),
-                ],
-              ),
-            if (visibleMetrics.isNotEmpty) ...[
-              const SizedBox(height: ListenSpacing.gap12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: visibleMetrics
-                    .map(
-                      (metric) => _MetricCard(
-                        metric: metric,
-                        onTap: () => onMetric(metric),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
+                  )
+                  .toList(),
+            ),
           ],
         ),
       ),

@@ -21,6 +21,7 @@ import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
+import '../widgets/common/capability_viz.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
 import '../widgets/vocabulary/vocabulary_transfer_actions.dart';
 

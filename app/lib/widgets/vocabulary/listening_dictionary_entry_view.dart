@@ -12,6 +12,7 @@ import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
+import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
 import 'dictionary_inline_clip_player.dart';
 import 'pronunciation_button.dart';
@@ -1780,7 +1781,18 @@ class _CapabilityEditor extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // The entry-scale portrait ring (#47): same graphic language as the
+        // coach dashboard and the book list, ahead of the editable rows.
+        Padding(
+          padding: const EdgeInsets.only(bottom: ListenSpacing.gap8),
+          child: CapabilityRing(
+            assessments: capabilityProfileAssessments(profile),
+            size: 44,
+            withTooltip: true,
+          ),
+        ),
         for (final (channel, label, icon) in _channels)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
@@ -1789,7 +1801,7 @@ class _CapabilityEditor extends StatelessWidget {
                 Icon(
                   icon,
                   size: 17,
-                  color: _color(
+                  color: capabilityAssessmentColor(
                     Theme.of(context).colorScheme,
                     _dimension(channel)?.effectiveAssessment ?? 'unassessed',
                   ),
@@ -1848,10 +1860,4 @@ class _CapabilityEditor extends StatelessWidget {
       ],
     );
   }
-
-  Color _color(ColorScheme colors, String assessment) => switch (assessment) {
-    'acquired' => ListenColors.learningRecognized,
-    'not_acquired' => colors.secondary,
-    _ => colors.onSurfaceVariant,
-  };
 }
