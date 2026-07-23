@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
+import 'package:llplayer_next/controllers/hunting_controller.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
+import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
+import 'package:llplayer_next/controllers/practice_actions_coordinator.dart';
+import 'package:llplayer_next/controllers/practice_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
+import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/flows/learning_flows.dart';
 
@@ -115,13 +122,128 @@ void main() {
     expect(calls.single, contains('"corrected":"run"'));
   });
 
-  testWidgets('learning-resources flow with a null api never navigates', (
+  testWidgets(
+    'learning-resources flow with a null api reports the missing core',
+    (tester) async {
+      final player = PlayerController();
+      await tester.pumpWidget(
+        _Harness(
+          onPressed: (context) => openLearningResourcesFlow(
+            context: context,
+            api: null,
+            playerController: player,
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      // Honest refusal (CONTEXT.md Unavailable State): no navigation, but the
+      // click reports why instead of dying silently.
+      expect(find.text('go'), findsOneWidget);
+      expect(player.status, 'Connect the local core first');
+    },
+  );
+
+  testWidgets('vocabulary flow with a null api reports the missing core', (
     tester,
   ) async {
+    final player = PlayerController();
+    final subtitle = SubtitleController();
+    final adapter = DesktopPlayerAdapter();
+    final recordingAdapter = DesktopPlayerAdapter();
+    addTearDown(adapter.dispose);
+    addTearDown(recordingAdapter.dispose);
+    final playback =
+        PlaybackActionsCoordinator(
+          adapter: adapter,
+          player: player,
+          subtitle: subtitle,
+        )..bind(
+          getApi: () => null,
+          isMounted: () => true,
+          reloadLearningEntries: () async {},
+        );
+    final practice = PracticeController();
+    final slicePlayer = SlicePlayerController();
+    addTearDown(practice.dispose);
+    addTearDown(slicePlayer.dispose);
+    final practiceActions =
+        PracticeActionsCoordinator(
+          practice: practice,
+          player: player,
+          subtitle: subtitle,
+          learning: LearningController(),
+          slicePlayer: slicePlayer,
+          playbackActions: playback,
+          settings: SettingsController(),
+          adapter: adapter,
+          recordingAdapter: recordingAdapter,
+        )..bind(
+          getApi: () => null,
+          isMounted: () => true,
+          refreshDiagnosis: () async {},
+          seekCue: (_) async {},
+        );
+    final hunting = HuntingController();
+    final auxiliaryAudio = AuxiliaryAudioController();
+    addTearDown(hunting.dispose);
+    addTearDown(auxiliaryAudio.dispose);
+
     await tester.pumpWidget(
       _Harness(
-        onPressed: (context) =>
-            openLearningResourcesFlow(context: context, api: null),
+        onPressed: (context) => showVocabularyFlow(
+          context: context,
+          api: null,
+          playerController: player,
+          settingsController: SettingsController(),
+          subtitleController: subtitle,
+          playbackActions: playback,
+          practiceActions: practiceActions,
+          huntingController: hunting,
+          auxiliaryAudio: auxiliaryAudio,
+          pauseBackgroundPlayback: () async {},
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+
+    // The dead "vocabulary button" report: with the core disconnected the
+    // click must surface the cause, not swallow the tap (refs #24/#45).
+    expect(find.text('go'), findsOneWidget);
+    expect(player.status, 'Connect the local core first');
+  });
+
+  testWidgets('review-queue flow with a null api reports the missing core', (
+    tester,
+  ) async {
+    final player = PlayerController();
+    final adapter = DesktopPlayerAdapter();
+    addTearDown(adapter.dispose);
+    final playback =
+        PlaybackActionsCoordinator(
+          adapter: adapter,
+          player: player,
+          subtitle: SubtitleController(),
+        )..bind(
+          getApi: () => null,
+          isMounted: () => true,
+          reloadLearningEntries: () async {},
+        );
+
+    await tester.pumpWidget(
+      _Harness(
+        onPressed: (context) => openReviewQueueFlow(
+          context: context,
+          api: null,
+          playerController: player,
+          playbackActions: playback,
+          startReviewShadowing: (_) async {},
+          startDelayedRetelling: (_) async {},
+        ),
       ),
     );
 
@@ -129,5 +251,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('go'), findsOneWidget);
+    expect(player.status, 'Connect the local core first');
   });
 }

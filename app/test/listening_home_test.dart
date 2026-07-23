@@ -10,6 +10,7 @@ void main() {
     required VoidCallback onOpenMedia,
     VoidCallback? onOpenOnline,
     VoidCallback? onContinue,
+    VoidCallback? onOpenVocabulary,
     VoidCallback? onOpenPersonalExpressions,
     VoidCallback? onOpenConversation,
     String? recentMediaTitle,
@@ -32,7 +33,7 @@ void main() {
         onOpenOnline: onOpenOnline ?? () {},
         onContinue: onContinue ?? () {},
         onOpenSubtitleResources: () {},
-        onOpenVocabulary: () {},
+        onOpenVocabulary: onOpenVocabulary ?? () {},
         onOpenPersonalExpressions: onOpenPersonalExpressions ?? () {},
         onOpenConversation: onOpenConversation ?? () {},
         onOpenReview: () {},
@@ -198,6 +199,52 @@ void main() {
     await tester.ensureVisible(entry);
     await tester.tap(entry, warnIfMissed: false);
     expect(openCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('wide home vocabulary rail item fires its callback', (
+    tester,
+  ) async {
+    // The "vocabulary button does nothing" report: this pins the wide-layout
+    // half of the path — the sidebar item must actually reach the callback
+    // (the flow-level half lives in learning_flows_test.dart).
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var openVocabularyCalls = 0;
+
+    await tester.pumpWidget(
+      app(
+        onOpenMedia: () {},
+        onOpenVocabulary: () => openVocabularyCalls += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('词汇本'));
+    expect(openVocabularyCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow home vocabulary asset card fires its callback', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(640, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var openVocabularyCalls = 0;
+
+    await tester.pumpWidget(
+      app(
+        onOpenMedia: () {},
+        onOpenVocabulary: () => openVocabularyCalls += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final entry = find.text('词汇本');
+    expect(entry, findsOneWidget);
+    await tester.ensureVisible(entry);
+    await tester.tap(entry, warnIfMissed: false);
+    expect(openVocabularyCalls, 1);
     expect(tester.takeException(), isNull);
   });
 

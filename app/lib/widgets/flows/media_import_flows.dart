@@ -242,6 +242,7 @@ Future<void> _downloadOnline({
   final directory = await getDirectoryPath(
     confirmButtonText: l.text('downloadHere'),
   );
+  // Legitimate silence: the user dismissed the directory picker themselves.
   if (directory == null) return;
   downloadController.starting();
   playerController.setStatus(l.text('startingDownload'));
@@ -357,7 +358,12 @@ Future<void> searchOpenSubtitlesFlow({
   required bool secondary,
 }) async {
   final l = AppLocalizations.of(context);
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): the OpenSubtitles search is a user menu
+    // entry; report the missing core instead of swallowing the click.
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   if (playerController.mediaId == null) {
     await showDialog<void>(
       context: context,
@@ -408,6 +414,7 @@ Future<void> searchOpenSubtitlesFlow({
       ),
     );
     controller.dispose();
+    // Legitimate silence: the user cancelled the API-key dialog themselves.
     if (configured == null || configured.isEmpty) return;
     await settingsController.update(
       settingsController.settings.copyWith(openSubtitlesApiKey: configured),

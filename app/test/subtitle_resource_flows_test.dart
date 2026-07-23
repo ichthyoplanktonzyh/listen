@@ -109,14 +109,16 @@ void main() {
     expect(calls, contains('DELETE /v1/subtitles/track-1'));
   });
 
-  testWidgets('export flow with a null api never opens a dialog', (
+  testWidgets('export flow with a null api reports the missing core', (
     tester,
   ) async {
+    final player = PlayerController();
     await tester.pumpWidget(
       _Harness(
         onPressed: (context) => exportSubtitleResourceFlow(
           context: context,
           api: null,
+          playerController: player,
           resourceActions: _resourceActions(() => null),
           track: _track,
         ),
@@ -126,7 +128,10 @@ void main() {
     await tester.tap(find.text('go'));
     await tester.pumpAndSettle();
 
+    // Honest refusal (CONTEXT.md Unavailable State): no dialog, but the row
+    // action reports why instead of dying silently.
     expect(find.byType(SimpleDialog), findsNothing);
+    expect(player.status, 'Connect the local core first');
   });
 
   testWidgets('export flow offers both formats and honors dismissal', (
@@ -142,6 +147,7 @@ void main() {
         onPressed: (context) => exportSubtitleResourceFlow(
           context: context,
           api: api,
+          playerController: PlayerController(),
           resourceActions: _resourceActions(() => api),
           track: _track,
         ),

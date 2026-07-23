@@ -33,6 +33,7 @@ import '../coach/coach_dashboard_screen.dart';
 Future<void> openLearningAssetsFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required SettingsController settingsController,
   required SubtitleController subtitleController,
   required Future<void> Function(Map<String, dynamic> occurrence)
@@ -42,7 +43,14 @@ Future<void> openLearningAssetsFlow({
   Future<void> Function(SentencePatternAssetView pattern)?
   onStartExpressionSpeaking,
 }) async {
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): opening the assets screen is
+    // user-triggered, so name the cause and recovery instead of swallowing
+    // the click.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
     MaterialPageRoute(
       builder: (_) => LearningAssetsScreen(
@@ -61,12 +69,19 @@ Future<void> openLearningAssetsFlow({
 Future<void> openPersonalExpressionFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required String language,
   PersonalExpressionSourceView? initialSource,
   Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
   Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
 }) async {
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): the expressions screen is a standing
+    // user destination; a dead click would hide why it will not open.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
       builder: (_) => PersonalExpressionScreen(
@@ -83,8 +98,15 @@ Future<void> openPersonalExpressionFlow({
 Future<void> openLearningResourcesFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
 }) async {
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): user-triggered menu entry — report the
+    // missing core instead of doing nothing.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(builder: (_) => LearningResourceScreen(api: api)),
   );
@@ -101,7 +123,12 @@ Future<void> openPhraseFlow({
   required Cue cue,
 }) async {
   final l = AppLocalizations.of(context);
-  if (api == null || playerController.mediaFingerprint == null) return;
+  if (api == null || playerController.mediaFingerprint == null) {
+    // Unavailable State (CONTEXT.md): the phrase chip is a user tap; saving a
+    // phrase needs both the core and an open, fingerprinted media source.
+    playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
+    return;
+  }
   final canonical = candidate.canonicalForm;
   final details = await showPhraseCandidate(
     context: context,
@@ -182,12 +209,22 @@ Future<void> correctCurrentLemmaFlow({
 }) async {
   final l = AppLocalizations.of(context);
   final token = learningController.selectedToken;
-  if (api == null || token?.normalized == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): the correct-lemma button is a user
+    // action; report the missing core instead of swallowing the click.
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
+  // Legitimate silence: the correct-lemma affordance only renders inside the
+  // inspector of a selected token, so no selection here means a stale
+  // callback race rather than a user-visible refusal.
+  if (token?.normalized == null) return;
   final corrected = await showDialog<String>(
     context: context,
     builder: (context) =>
         _LemmaCorrectionDialog(initialText: token!.normalized!),
   );
+  // Legitimate silence: the user cancelled the dialog or cleared the field.
   if (corrected == null || corrected.isEmpty) return;
   await api.correctLemma(
     token!.normalized!,
@@ -204,6 +241,7 @@ Future<void> correctCurrentLemmaFlow({
 Future<void> showVocabularyFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required SettingsController settingsController,
   required SubtitleController subtitleController,
   required PlaybackActionsCoordinator playbackActions,
@@ -215,7 +253,14 @@ Future<void> showVocabularyFlow({
   bool openCrossModalReview = false,
 }) async {
   final service = api;
-  if (service == null) return;
+  if (service == null) {
+    // Unavailable State (CONTEXT.md): the vocabulary entry points (rail item,
+    // asset card, app-bar menu) are user clicks — a silent return here reads
+    // as a dead button when the core is disconnected.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   // The dictionary hosts its own slice playback; it only needs a way to
   // silence the primary player so a slice owns audio focus alone.
   await Navigator.push<void>(
@@ -248,7 +293,13 @@ Future<void> openReviewQueueFlow({
   required Future<void> Function(ReviewQueueEntry entry) startDelayedRetelling,
 }) async {
   final service = api;
-  if (service == null) return;
+  if (service == null) {
+    // Unavailable State (CONTEXT.md): the review queue is a user destination;
+    // report the missing core instead of swallowing the click.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await Navigator.push<void>(
     context,
     MaterialPageRoute(
@@ -272,13 +323,20 @@ Future<void> openReviewQueueFlow({
 Future<void> openCoachDashboardFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required String language,
   required Future<void> Function() openReviewQueue,
   required Future<void> Function({bool openCrossModalReview}) openVocabulary,
   required Future<void> Function() openPersonalExpression,
 }) async {
   final service = api;
-  if (service == null) return;
+  if (service == null) {
+    // Unavailable State (CONTEXT.md): the coach dashboard is a user
+    // destination; report the missing core instead of swallowing the click.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await Navigator.push<void>(
     context,
     MaterialPageRoute(
@@ -307,9 +365,15 @@ Future<void> importWordListFlow({
 }) async {
   final l = AppLocalizations.of(context);
   final service = api;
-  if (service == null) return;
+  if (service == null) {
+    // Unavailable State (CONTEXT.md): importing a word list is user-triggered
+    // and cannot proceed without the core — say so before opening a picker.
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   const group = XTypeGroup(label: 'word list', extensions: ['txt', 'csv']);
   final file = await openFile(acceptedTypeGroups: [group]);
+  // Legitimate silence: the user dismissed the file picker themselves.
   if (file == null) return;
   final content = await File(file.path).readAsString();
   final entries = <Map<String, dynamic>>[];

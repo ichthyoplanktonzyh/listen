@@ -28,7 +28,16 @@ Future<void> openManualReviewFlow({
   final l = AppLocalizations.of(context);
   final service = api;
   final track = subtitleController.primaryTrack;
-  if (service == null || track == null) return;
+  // Unavailable State (CONTEXT.md): manual review is a user row action; each
+  // missing prerequisite names its own recovery action.
+  if (service == null) {
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
+  if (track == null) {
+    playerController.setStatus(l.text('statusActivateSubtitleFirst'));
+    return;
+  }
   var statusPristine = false;
 
   Future<void> playRange(Duration start, Duration end) async {
@@ -41,7 +50,12 @@ Future<void> openManualReviewFlow({
 
   Future<void> saveDraft(ManualReviewDraft draft) async {
     final trackId = subtitleController.primaryTrack?.id;
-    if (trackId == null) return;
+    if (trackId == null) {
+      // A silent return here would let the dialog pop as if the save
+      // succeeded; throwing surfaces the refusal in the dialog's error line
+      // (the same path validation errors take).
+      throw StateError(l.text('statusManualReviewTrackChanged'));
+    }
     final errors = draft.validateAll();
     if (errors.isNotEmpty) {
       throw StateError(errors.join('; '));
@@ -49,10 +63,12 @@ Future<void> openManualReviewFlow({
     playerController.setStatus(l.text('statusManualReviewSaving'));
     statusPristine = false;
     await service.createTrackWordTimeline(trackId, draft.createPayload());
-    if (!context.mounted || subtitleController.primaryTrack?.id != trackId) {
-      return;
+    if (!context.mounted) return;
+    // Reload enhancements only while the reviewed track is still current;
+    // the save itself succeeded either way, so the confirmation still shows.
+    if (subtitleController.primaryTrack?.id == trackId) {
+      await mediaSession.loadSpeechEnhancements(trackId);
     }
-    await mediaSession.loadSpeechEnhancements(trackId);
     if (context.mounted) {
       playerController.setStatus(l.text('statusManualReviewSaved'));
     }
