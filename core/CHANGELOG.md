@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-23: 统一加载语言——裸转圈清零（refs #46 · design Slice 5 之一）。宪章禁装饰
+  转圈但一直没给替代，本次定案：**等待 = 双向波形 mark 的 ambient 呼吸**（motion spec
+  已有的「wordmark 呼吸」词汇，透明度 0.72→1 走一个 2600ms 周期 ease-in-out，reduce
+  motion 下呼吸停止、mark 常显）。新增 `widgets/common/listen_loading.dart`：
+  `ListenLoading`（面板级，居中 mark + 可选一行说明）与 `ListenLoading.inline`（控件级
+  16–22px，替按钮/状态格里的 strokeWidth:2 小转圈）；语义层带本地化 `loading` 标签
+  （en/zh 新 key）。全 lib 25 处裸 `CircularProgressIndicator` 清零（14 处面板级 +
+  11 处行内），新增 `loading_discipline_test` 源码级禁裸转圈（豁免表内置、今日为空）+
+  `listen_loading_test`（呼吸活着、下限 0.72、reduce motion 静止）。568 项测试绿；
+  `flutter analyze` 零告警。
 - 2026-07-23: wordmark + 排版/间距/圆角/动效 token（refs #28, closes #32, closes #26 ·
   design Slice 4）。#28 气质的「语法层」，三个前置设计决定（logo B 双向波形 / Plex+Charis
   字体 / motion spec）已全部定案后整体落地。① **字体内嵌**：IBM Plex Sans（Reg/Med/SemiBold）
