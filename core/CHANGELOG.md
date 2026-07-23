@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- 2026-07-22: 静默 return 全面清查——用户触发动作一律诚实反馈（refs #24 后续）。#24 修复了
+  playback_actions_coordinator 的 4 处静默空点击后，本刀按同一判据（CONTEXT.md Unavailable
+  State：说明原因 + 给出恢复动作）扫完 `lib/controllers/` 其余 coordinator/controller 的
+  `== null) return;`，逐处裁决"用户触发必须反馈 / 后台被动合法静默"。改反馈的（核心未连时
+  `statusConnectLocalCoreFirst`，媒体+核心缺失时 `statusOpenMediaAndCoreFirst`）：hunting 三动作
+  （狩猎开关/重建索引/勾选回答）、词汇动作 coordinator 七个用户包装（openWord/标注/状态/能力/
+  释义笔记/听辨观察/记录来源，经统一 `_requireApi()` 收口——反馈归 coordinator，
+  LearningWorkflowController 保持纯 workflow 并注释归属）、字幕资源面板六个行动作
+  （归档/恢复/删除/导出 SRT/导出 LLTimeline/改语言）+ 刷新路径两处假成功修正（资源刷新在
+  core/media 缺失时不再静默清列表，timeline 刷新不再谎报 "refreshed"）、媒体库 triage 意图、
+  说话页 L1 核对入口；`selectCurrentSegment` 无字幕/纯非语音时报 `channelNeedsTranscript`
+  （复述与实时会话两条启动路径受益）。判为合法静默并注释的：home 摘要预取/媒体库后台刷新、
+  词表后台加载、通道切换器已用 tooltip 禁用兜底的 reading/writing/speaking 打开守卫、
+  语法能力轮询、文件选择器取消、练习 draft/录音 UI 门控守卫、task controller 状态机守卫。
+  文案键 `statusConnectLocalCoreFirst`（zh/en）与 #24（已合并）逐字一致，rebase 后收敛为同一键。
+  测试：hunting/vocabulary/speaking-channel 三处原"null API 静默无操作"断言改为断言诚实
+  反馈；补 idle-api 假核心用例钉住"无选择静默"与"任务未加载静默"的边界仍然成立；
+  media_library triage 与 resource-actions 行动作/刷新各新增 null-core 报告断言。
+  `flutter analyze` 零告警，Flutter 全量绿。
+
 - 2026-07-22: 语流/节奏带重设计——发光的节奏骨架（refs #28, closes #31 · design Slice 3）。
   产品独有的语流呈现按宪章气质重画，**只动呈现、不动分析与 evidence 门控**。
   ① **节奏骨架**（rhythm_frame_ribbon）：`_AudibleNode` 从胶囊 chip 改为节拍柱骨架——柱高
