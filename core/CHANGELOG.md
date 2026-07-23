@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- 2026-07-23: 能力画像换装——拍板方向落地（refs #47 · 设计轨）。新增
+  `widgets/common/capability_viz.dart` 作为画像图形语言的唯一家，dashboard 与词条
+  快照从此同一套语言：**罗盘总览**（`CapabilityCompass`：四象限=2×2，左声右文、
+  上收下产；每象限亮弧=已证实、琥珀=练习靶子、细暗弧=未评估存量在场；接收的光聚
+  12 点、产出聚 6 点——上亮下暗即 gap-(c)，环心只在后端 cross-modal suggestion
+  在场时直书其 evidence_count，绝不前端造数）＋**回声条**（`CapabilityEchoBars`：
+  听/说、读/写两列镜像条共享一把尺=四通道最大总量，接收 acquired 高度镜像到产出侧
+  成琥珀虚框「回声缺口」；缺口标注只并置既有计数「听得懂 46 · 说得出 12」不做减法）＋
+  **词条三态环**（`CapabilityRing`：词条列表 16px 行内与词条详情 44px 同构，比例在
+  词条尺度诚实归零只留三态；tooltip/Semantics 四通道全裸露）。coach dashboard 标题
+  换「你的语言画像」，三态 Chip 堆叠退役，通道卡降为纯 metric 下钻（无证据即不渲染，
+  evidence 弹窗行为不变）；词条快照的四个 Material 图标退役；`capabilityAssessmentColor`
+  移入 capability_viz 并按拍板把 acquired 从 learningRecognized 绿改为
+  colorScheme.primary 信号青（词汇本筛选 chips 同步）。截图自检后两处视觉校正：
+  聚合尺度的未评估大面积段/弧压暗到 outlineVariant（hairline 级「在场不抢光」，
+  词条环细弧保留 0.45 灰维持行内可辨），回声条限宽 200 不随面板拉伸。新增断点
+  `ListenBreakpoints.capabilityPortraitSideBySide=640`（breakpoint 纪律测试逮到
+  硬编码后补正）。l10n +4（画像标题/环心/两条缺口并置，en/zh），清死键
+  coachFourChannels/coachUnassessed。**测试 +9（共 635 绿）**：罗盘分段纯函数 4 条
+  （锚点聚光方向、零计数诚实 unassessed、零段跳过）、gap 数只认后端 join、三态色
+  （青/琥珀/压暗 alpha<0.5）、词条环 tooltip 全通道、回声条 ghost 高度=接收比例+
+  并置文案+悬停三态数、环心有无 gap 双态；词条书测试改断言 CapabilityRing。
+  `flutter analyze` 零告警；`dart format` 已跑。呈现≠语义：分析数据与 evidence
+  门控零改动（controller/api 层零 diff）。
+
 - 2026-07-23: 能力画像设计探索 + owner 拍板（refs #47 · 设计轨）。落库
   `design-notes/listen-capability-viz.html`：给四通道闭环 + gap-(c)（产品命脉）出三个
   图形语言方向，每个方向都验 dashboard 聚合 → 词条详情 → 列表行内 16px 三个尺度。
