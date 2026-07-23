@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-23: 判定状态色达标 WCAG AA + palette discipline 补第二道门（closes #22 · 轨A）。
+  ① `ColorScheme` 扩语义判定色：`ListenSchemeShades.verdictCovered/verdictPartial`
+  （light `#27702b`/`#a04d00`，dark `#5cc389`/`#efa05c`，脚本计算非肉眼选色——对各自
+  brightness 的 surface/fog/sidebar 全部 ≥4.5:1，新增逐对断言进 `listen_theme_test`；
+  missing 继续读 `error` 槽位）。三处调用点（reading_task_sheet / llm_judgment_assist /
+  reading_diff_panel）改读扩展，替换双主题都不达标的 `Colors.green.shade700` /
+  `Colors.orange.shade800`。② discipline 第二道门：`theme_palette_discipline_test` 新增
+  `Colors.<具名>`（transparent 豁免）与 `Color(0x…)` 拦截，豁免文件逐条写理由并**钉行数
+  配额**（wordmark 品牌常量 2、player_stage 视频舞台家具 8、settings_dialog 字幕取色板 5）
+  ——豁免文件里新增硬编码色也会红。③ 顺手收敛：练习迷你播放器离谱蓝 `#1D2430` →
+  章程舞台词汇（`ListenColors.player`/`overlayText*`）；新增 `ListenColors.videoBackdrop`
+  （视频 letterbox 纯黑，亮度无关），player_adapter/slice_playback/词典行内片段 4 处改读。
+  边界：light `error` `#c95454` 白底实测 4.30:1 未达标（issue 以为达标），但改 error 牵动
+  整个亮色主题，归 owner 已裁决暂缓的「亮色主题重校」，本刀保持读 scheme 的正确模式。
+  两道门 + 配额门均红→绿证伪过。585 项测试绿；`flutter analyze` 零告警。
+
 - 2026-07-23: 修复 Realtime provider 下拉选中项横向溢出。
   `RealtimeConversationPanel` 的 provider 选择器（`DropdownButtonFormField`）未设
   `isExpanded`，真实 profile（如 'Realtime provider · qwen3.5-omni-plus-realtime'）
