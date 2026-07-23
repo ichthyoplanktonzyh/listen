@@ -349,24 +349,36 @@ class _SpeechMarkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 2 || size.height <= 2) return;
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = emphasized ? 2.2 : 1.5
-      ..strokeCap = StrokeCap.round;
-    final arc = Path()
-      ..moveTo(2, size.height * 0.28)
+    // One undertie (‿) below the junction instead of the old arc-above plus
+    // underline — two marks per link made the band noisy (#31, charter
+    // principle 5). The tie is the design language for "these sounds join".
+    final tie = Path()
+      ..moveTo(2, size.height * 0.78)
       ..quadraticBezierTo(
         size.width * 0.5,
-        -size.height * 0.12,
+        size.height + 3,
         size.width - 2,
-        size.height * 0.28,
+        size.height * 0.78,
       );
-    canvas.drawPath(arc, paint);
-    canvas.drawLine(
-      Offset(2, size.height - 1),
-      Offset(size.width - 2, size.height - 1),
-      paint,
+    if (emphasized) {
+      // A soft static halo under the selected tie; decoration only.
+      canvas.drawPath(
+        tie,
+        Paint()
+          ..color = color.withAlpha(110)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+    canvas.drawPath(
+      tie,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = emphasized ? 2.2 : 1.5
+        ..strokeCap = StrokeCap.round,
     );
   }
 

@@ -605,7 +605,9 @@ class _AudibleNode extends StatelessWidget {
     final labelSize = weak
         ? math.max(9.0, fontSize * 0.78)
         : math.max(12.0, fontSize * (nucleus ? 1.18 : 1.02));
-    final meaningLabel = connected
+    // Weak groups keep showing their audible sound shape (item.label), never
+    // the written caption — what recedes is still what you hear.
+    final meaningLabel = connected || weak
         ? item.label
         : item.caption.isEmpty
         ? item.label
@@ -616,92 +618,116 @@ class _AudibleNode extends StatelessWidget {
         ? ''
         : '/${item.label}/';
     final foreground = !weak;
-    final foregroundNode = Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: math.max(7, fontSize * 0.68),
-        vertical: math.max(4, height * 0.1),
-      ),
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    // The glowing rhythm skeleton (#31): a beat bar above each label carries
+    // the stress level as height — nucleus tallest, anchors mid, connected
+    // low, weak groups nearly flat — and only stressed bars glow, the current
+    // beat brightest. Hues keep the existing sound vocabulary untouched; this
+    // redesign reorders light, not meaning. The old capsule wash/border is
+    // gone — boxes made every beat equally loud (charter principle 5).
+    final barFraction = nucleus
+        ? 0.56
+        : connected
+        ? 0.3
+        : weak
+        ? 0.14
+        : 0.42;
+    final barHeight = height * barFraction * (active ? 1.12 : 1.0);
+    final barWidth = weak
+        ? math.max(10.0, labelSize * 1.1)
+        : math.max(18.0, labelSize * 1.5);
+    final glowing = foreground && (active || nucleus);
+    final bar = AnimatedContainer(
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 120),
+      width: barWidth,
+      height: barHeight,
       decoration: BoxDecoration(
-        color: color.withAlpha(active ? 48 : 30),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(
-          color: color.withAlpha(nucleus ? 175 : 115),
-          width: nucleus ? 1.2 : 0.9,
+        color: color.withAlpha(
+          weak
+              ? (active ? 120 : 70)
+              : active
+              ? 255
+              : nucleus
+              ? 230
+              : 200,
         ),
-        boxShadow: active
-            ? [BoxShadow(color: color.withAlpha(90), blurRadius: 9)]
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: glowing
+            ? [
+                BoxShadow(
+                  color: color.withAlpha(active ? 140 : 90),
+                  blurRadius: active ? 12 : 8,
+                ),
+              ]
             : null,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (nucleus)
-            Container(
-              width: math.max(20, labelSize * 1.7),
-              height: 2,
-              margin: const EdgeInsets.only(bottom: 3),
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: [
-                  BoxShadow(color: color.withAlpha(130), blurRadius: 5),
-                ],
-              ),
-            ),
-          Text(
-            meaningLabel,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: ListenColors.overlayText.withAlpha(nucleus ? 242 : 228),
-              fontSize: labelSize,
-              height: 1.02,
-              fontWeight: nucleus ? FontWeight.w900 : FontWeight.w800,
-              letterSpacing: 0.2,
-              shadows: active
-                  ? [Shadow(color: color.withAlpha(120), blurRadius: 6)]
-                  : null,
-            ),
-          ),
-          if (soundLabel.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                soundLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: color.withAlpha(nucleus ? 235 : 205),
-                  fontSize: math.max(8.0, fontSize * 0.68),
-                  height: 1.0,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.35,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
-    final node = AnimatedOpacity(
-      duration: const Duration(milliseconds: 120),
-      opacity: opacity,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 120),
-        scale: active && !weak ? 1.08 : 1,
-        child: foreground
-            ? foregroundNode
-            : Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
+    // Bars share one baseline (align at their feet) so the skeleton reads as
+    // a rhythm silhouette, not floating blocks.
+    final skeleton = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: height * 0.64,
+          child: Align(alignment: Alignment.bottomCenter, child: bar),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          meaningLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: weak
+              ? TextStyle(
                   color: color,
                   fontSize: labelSize,
                   height: 1,
                   fontWeight: FontWeight.w400,
                   letterSpacing: 0.2,
+                )
+              : TextStyle(
+                  color: ListenColors.overlayText.withAlpha(
+                    nucleus ? 242 : 228,
+                  ),
+                  fontSize: labelSize,
+                  height: 1.02,
+                  fontWeight: nucleus ? FontWeight.w900 : FontWeight.w800,
+                  letterSpacing: 0.2,
+                  shadows: active
+                      ? [Shadow(color: color.withAlpha(120), blurRadius: 6)]
+                      : null,
                 ),
+        ),
+        if (foreground && soundLabel.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              soundLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color.withAlpha(nucleus ? 235 : 205),
+                fontSize: math.max(8.0, fontSize * 0.68),
+                height: 1.0,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.35,
               ),
+            ),
+          ),
+      ],
+    );
+    final node = AnimatedOpacity(
+      duration: reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 120),
+      opacity: opacity,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: weak ? 2 : math.max(4, fontSize * 0.3),
+        ),
+        child: skeleton,
       ),
     );
     final interactive = onLoopCue == null
