@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-23: 统一空态语言（refs #46 · design Slice 5 之二）。新增
+  `widgets/common/listen_empty_state.dart`：`ListenEmptyState` = 安静图标（28px ·
+  onSurfaceVariant 55%）+ 一句话 + 可选恢复动作——空是状态不是道歉，空面板不许喊
+  （宪章原则 5）。12 处裸 `Center(child: Text(...))` 空态收敛：转录任务/音频分析任务/
+  个人表达/语义检索/听力收件箱/L1 难点/写作无发现/字幕资源（未开媒体+无资源）/词汇本
+  两处/冷启动标注，词典 fallback 的「搜语料库」按钮接入 `action` 槽。边界：小节内的行内
+  提示（`noDictionary`、`llmNoProviders`、timeline 候选三处）是节内文案不是面板空态，
+  不在本刀；`Center(Text(error!))` 三处留给错误态容器一刀。新增
+  `listen_empty_state_test`（图标+文案+muted 色、动作可点、无动作不渲染按钮）。571 项
+  测试绿；`flutter analyze` 零告警。
 - 2026-07-23: 统一加载语言——裸转圈清零（refs #46 · design Slice 5 之一）。宪章禁装饰
   转圈但一直没给替代，本次定案：**等待 = 双向波形 mark 的 ambient 呼吸**（motion spec
   已有的「wordmark 呼吸」词汇，透明度 0.72→1 走一个 2600ms 周期 ease-in-out，reduce
