@@ -102,6 +102,35 @@ void main() {
   runApp(const ListenApp());
 }
 
+/// Folds the live playback/subtitle state into [current] for persistence.
+///
+/// Only fields whose source of truth lives in [player] or [subtitles] are
+/// written; everything else rides along via `copyWith`. `_saveSettings` must
+/// stay on this path: it once rebuilt a fresh `AppSettings(...)` here, which
+/// silently reset every non-enumerated field (theme mode, resume state,
+/// pronunciation prefs, …) to its default on every save.
+AppSettings mergeLiveSettings({
+  required AppSettings current,
+  required PlayerController player,
+  required SubtitleController subtitles,
+}) => current.copyWith(
+  rate: player.rate,
+  volume: player.volume,
+  primarySubtitleOffsetMs: subtitles.primarySubtitleOffset.inMilliseconds,
+  secondarySubtitleOffsetMs: subtitles.secondarySubtitleOffset.inMilliseconds,
+  subtitlesVisible: subtitles.visible,
+  secondarySubtitlesVisible: subtitles.secondaryVisible,
+  statusStylesVisible: subtitles.statusStylesVisible,
+  primaryFontSize: subtitles.primaryFontSize,
+  secondaryFontSize: subtitles.secondaryFontSize,
+  primaryFontFamily: subtitles.primaryFontFamily,
+  secondaryFontFamily: subtitles.secondaryFontFamily,
+  subtitlePreset: subtitles.preset,
+  subtitlePositionX: subtitles.positionX,
+  subtitlePositionY: subtitles.positionY,
+  subtitleBackgroundOpacity: subtitles.backgroundOpacity,
+);
+
 class ListenApp extends StatelessWidget {
   const ListenApp({super.key});
 
@@ -528,52 +557,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _saveSettings() => settingsController.update(
-    AppSettings(
-      rate: playerController.rate,
-      volume: playerController.volume,
-      primarySubtitleOffsetMs:
-          subtitleController.primarySubtitleOffset.inMilliseconds,
-      secondarySubtitleOffsetMs:
-          subtitleController.secondarySubtitleOffset.inMilliseconds,
-      subtitlesVisible: subtitleController.visible,
-      secondarySubtitlesVisible: subtitleController.secondaryVisible,
-      statusStylesVisible: subtitleController.statusStylesVisible,
-      primaryFontSize: subtitleController.primaryFontSize,
-      secondaryFontSize: subtitleController.secondaryFontSize,
-      primaryFontFamily: subtitleController.primaryFontFamily,
-      secondaryFontFamily: subtitleController.secondaryFontFamily,
-      subtitlePreset: subtitleController.preset,
-      language: settingsController.language,
-      subtitlePositionX: subtitleController.positionX,
-      subtitlePositionY: subtitleController.positionY,
-      subtitleBackgroundOpacity: subtitleController.backgroundOpacity,
-      primaryColor: settingsController.primaryColor.toARGB32(),
-      secondaryColor: settingsController.secondaryColor.toARGB32(),
-      transcriptWidth: settingsController.transcriptWidth,
-      workbenchMediaFraction: settingsController.workbenchMediaFraction,
-      ffmpegPath: settingsController.ffmpegPath,
-      ffprobePath: settingsController.ffprobePath,
-      ytDlpPath: settingsController.ytDlpPath,
-      transcriptionQuality: settingsController.transcriptionQuality,
-      transcriptionLanguage: settingsController.transcriptionLanguage,
-      transcriptionDestination: settingsController.transcriptionDestination,
-      openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
-      wordSyncVisible: settingsController.wordSyncVisible,
-      groupingMode: settingsController.groupingMode,
-      chunkDisplayStyle: settingsController.chunkDisplayStyle,
-      highlightCurrentChunk: settingsController.highlightCurrentChunk,
-      chunkHighlightStyle: settingsController.chunkHighlightStyle,
-      wordHighlightStyle: settingsController.wordHighlightStyle,
-      wordAnimationIntensity: settingsController.wordAnimationIntensity,
-      ruleHintsLevel: settingsController.ruleHintsLevel,
-      phoneticProviderId: settingsController.settings.phoneticProviderId,
-      phoneticModelId: settingsController.settings.phoneticModelId,
-      phoneticAnalysisPreference: settingsController.phoneticAnalysisPreference,
-      phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
-      soundPatternRibbonVisible: settingsController.soundPatternRibbonVisible,
-      soundPatternDisplayMode: settingsController.soundPatternDisplayMode,
-      phonemeRibbonStyle: settingsController.phonemeRibbonStyle,
-      learningLanguage: settingsController.learningLanguage,
+    mergeLiveSettings(
+      current: settingsController.settings,
+      player: playerController,
+      subtitles: subtitleController,
     ),
   );
 
