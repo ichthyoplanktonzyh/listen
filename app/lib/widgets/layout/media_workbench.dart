@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../models/content_channel.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
+import '../common/content_settle.dart';
 import 'content_channel_switcher.dart';
 
 class MediaWorkbench extends StatefulWidget {
@@ -79,9 +80,14 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
         onCollapse: widget.onCollapse,
       ),
       Expanded(
-        child:
-            widget.immersiveStage ??
-            LayoutBuilder(
+        // Channel surfaces settle in (#46): switching channels fades the new
+        // surface in with an 8px rise instead of hard-cutting.
+        child: widget.immersiveStage != null
+            ? ContentSettle(
+                settleKey: widget.selectedChannel,
+                child: widget.immersiveStage!,
+              )
+            : LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth < ListenBreakpoints.workbenchStacked) {
                   final availableHeight = constraints.maxHeight - splitterWidth;
@@ -121,7 +127,12 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
                           );
                         },
                       ),
-                      Expanded(child: widget.learningPanel),
+                      Expanded(
+                        child: ContentSettle(
+                          settleKey: widget.selectedChannel,
+                          child: widget.learningPanel,
+                        ),
+                      ),
                     ],
                   );
                 }

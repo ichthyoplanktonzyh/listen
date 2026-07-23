@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/widgets/common/ambient_breath.dart';
 import 'package:llplayer_next/widgets/subtitle/connected_speech_reference_ribbon.dart';
 import 'package:llplayer_next/widgets/subtitle/expected_pronunciation_reference.dart';
 import 'package:llplayer_next/widgets/subtitle/phoneme_ribbon.dart';
@@ -356,6 +357,11 @@ void main() {
       ),
       findsOneWidget,
     );
+
+    // #46 signature action: the current beat (position 130ms sits inside the
+    // market anchor) breathes at the ambient tempo — exactly one beat at a
+    // time carries the breath.
+    expect(find.byType(AmbientBreath), findsOneWidget);
   });
 
   testWidgets('rhythm frame ribbon shows audible consonant vowel shape', (
@@ -571,7 +577,12 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    // Bounded pumps, not pumpAndSettle: the current beat's ambient breath
+    // (#46) loops forever by design and would never settle. Several frames so
+    // the following viewport's scroll (180ms, started post-layout) completes.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(find.text('weak group'));
 
     expect(loopStart, const Duration(milliseconds: 20));

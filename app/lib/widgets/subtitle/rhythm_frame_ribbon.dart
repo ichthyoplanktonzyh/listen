@@ -8,6 +8,7 @@ import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/motion.dart';
+import '../common/ambient_breath.dart';
 import 'following_structure_viewport.dart';
 
 typedef RhythmCueLoopCallback =
@@ -641,7 +642,7 @@ class _AudibleNode extends StatelessWidget {
         ? math.max(10.0, labelSize * 1.1)
         : math.max(18.0, labelSize * 1.5);
     final glowing = foreground && (active || nucleus);
-    final bar = AnimatedContainer(
+    final barBox = AnimatedContainer(
       // Beat-synced emphasis: the fastest step, so it lands within the beat.
       duration: reduceMotion ? Duration.zero : ListenMotion.tap,
       width: barWidth,
@@ -667,6 +668,10 @@ class _AudibleNode extends StatelessWidget {
             : null,
       ),
     );
+    // The current beat breathes at the ambient tempo (#46 signature action):
+    // opacity and glow swell together — alive but quiet, never a jump.
+    // AmbientBreath itself goes still under reduce motion.
+    final bar = active ? AmbientBreath(child: barBox) : barBox;
     // Bars share one baseline (align at their feet) so the skeleton reads as
     // a rhythm silhouette, not floating blocks.
     final skeleton = Column(
