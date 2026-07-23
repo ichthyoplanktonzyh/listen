@@ -97,6 +97,18 @@ const playerShortcuts = <PlayerShortcut>[
     labelKey: 'shortcutSpeedUp',
     category: PlayerShortcutCategory.playback,
   ),
+  PlayerShortcut(
+    id: 'toggleFullscreen',
+    activator: SingleActivator(LogicalKeyboardKey.keyF),
+    labelKey: 'shortcutToggleFullscreen',
+    category: PlayerShortcutCategory.playback,
+  ),
+  PlayerShortcut(
+    id: 'exitFullscreen',
+    activator: SingleActivator(LogicalKeyboardKey.escape),
+    labelKey: 'shortcutExitFullscreen',
+    category: PlayerShortcutCategory.playback,
+  ),
   // ── Sentences & subtitles ──
   PlayerShortcut(
     id: 'previousSentence',
