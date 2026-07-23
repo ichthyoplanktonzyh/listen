@@ -62,6 +62,7 @@ Future<void> showAppSettings({
       ytDlpPath: settingsController.ytDlpPath,
       openSubtitlesApiKey: settingsController.openSubtitlesApiKey,
       wordSyncVisible: settingsController.wordSyncVisible,
+      markKeysEnabled: settingsController.markKeysEnabled,
       groupingMode: settingsController.groupingMode,
       senseGroupsAvailable: subtitleController.senseGroupsBySentence.isNotEmpty,
       chunkDisplayStyle: settingsController.chunkDisplayStyle,
@@ -171,6 +172,11 @@ Future<void> showAppSettings({
       onTranscriptionDestinationChanged: (v) {
         settingsController.update(
           settingsController.settings.copyWith(transcriptionDestination: v),
+        );
+      },
+      onMarkKeysEnabledChanged: (v) {
+        settingsController.update(
+          settingsController.settings.copyWith(markKeysEnabled: v),
         );
       },
       onWordSyncVisibleChanged: (v) {

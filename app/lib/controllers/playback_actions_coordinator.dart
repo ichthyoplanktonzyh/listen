@@ -125,6 +125,44 @@ class PlaybackActionsCoordinator {
     await seekChunk(target.chunk);
   }
 
+  // ── Transport basics (#25: keyboard seek / volume / mute / rate) ──
+
+  /// One keyboard seek step; ←/→ move by this much.
+  static const seekStep = Duration(seconds: 5);
+
+  /// Rate bounds match the presets the transport menu offers.
+  static const minRate = 0.5;
+  static const maxRate = 2.0;
+
+  Future<void> seekBy(Duration delta) async {
+    final duration = player.duration;
+    var target = player.position + delta;
+    if (target < Duration.zero) target = Duration.zero;
+    if (duration > Duration.zero && target > duration) target = duration;
+    await adapter.seek(target);
+    player.setPosition(target);
+  }
+
+  /// Adjusts volume by [delta] percentage points. While muted only the stored
+  /// level moves — matching the transport slider's behavior.
+  Future<void> volumeBy(double delta) async {
+    final volume = (player.volume + delta).clamp(0.0, 100.0);
+    player.setVolume(volume);
+    if (!player.muted) await adapter.setVolume(volume);
+  }
+
+  Future<void> toggleMute() async {
+    final muted = !player.muted;
+    player.setMuted(muted);
+    await adapter.setVolume(muted ? 0 : player.volume);
+  }
+
+  Future<void> rateBy(double delta) async {
+    final rate = (player.rate + delta).clamp(minRate, maxRate);
+    player.setRate(rate);
+    await adapter.setRate(rate);
+  }
+
   Future<void> loopCurrentChunk() async {
     final current = currentChunkRef();
     if (current == null) return;

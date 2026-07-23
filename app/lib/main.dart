@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
 
@@ -54,6 +53,7 @@ import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
 import 'player_adapter.dart';
+import 'player_shortcuts.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
 import 'settings.dart';
@@ -86,6 +86,7 @@ import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
+import 'widgets/player/shortcut_cheat_sheet.dart';
 import 'widgets/settings/settings_flow.dart';
 
 void main() {
@@ -563,6 +564,17 @@ class _PlayerScreenState extends State<PlayerScreen>
       subtitles: subtitleController,
     ),
   );
+
+  /// Keyboard volume/rate (#25) persist exactly like the transport slider.
+  Future<void> _keyboardVolumeBy(double delta) async {
+    await playbackActions.volumeBy(delta);
+    await _saveSettings();
+  }
+
+  Future<void> _keyboardRateBy(double delta) async {
+    await playbackActions.rateBy(delta);
+    await _saveSettings();
+  }
 
   void _setWorkbenchMediaFraction(double value) {
     settingsController.setSettings(
@@ -1577,6 +1589,8 @@ class _PlayerScreenState extends State<PlayerScreen>
         extensiveListeningController,
         huntingController,
         huntingSessionController,
+        // The transport's Space indicator follows the practice draft (#25).
+        practiceController,
         // One handle for "which content channel is on the stage"; each
         // channel's own page state stays inside its host.
         contentChannels.selection,
@@ -1592,30 +1606,46 @@ class _PlayerScreenState extends State<PlayerScreen>
         settings: settingsController,
         api: api!,
         child: PlayerGlobalShortcuts(
-          bindings: {
-            const SingleActivator(LogicalKeyboardKey.space):
-                practiceActions.togglePracticePlayback,
-            const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-                unawaited(practiceActions.navigatePracticeSentence(-1)),
-            const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
-                unawaited(practiceActions.navigatePracticeSentence(1)),
-            const SingleActivator(LogicalKeyboardKey.keyL): () =>
-                subtitleController.setLoopCue(!subtitleController.loopCue),
-            const SingleActivator(LogicalKeyboardKey.keyH): () =>
-                subtitleController.setVisible(!subtitleController.visible),
-            const SingleActivator(LogicalKeyboardKey.keyI): () =>
-                unawaited(inboxActions.captureListeningInbox()),
-            const SingleActivator(LogicalKeyboardKey.keyI, shift: true): () =>
-                unawaited(_toggleExtensiveListening()),
-            const SingleActivator(LogicalKeyboardKey.keyP, shift: true): () =>
-                unawaited(_hardInterruptListening()),
-            const SingleActivator(LogicalKeyboardKey.digit1): () =>
-                vocabularyActions.markFirstWord('unknown_meaning'),
-            const SingleActivator(LogicalKeyboardKey.digit2): () =>
-                vocabularyActions.markFirstWord('known_not_recognized'),
-            const SingleActivator(LogicalKeyboardKey.digit3): () =>
-                vocabularyActions.markFirstWord('known_recognized'),
-          },
+          // #25: keys live in the shortcut table (player_shortcuts.dart);
+          // this map only supplies what each action *does*.
+          bindings: buildPlayerShortcutBindings(
+            markKeysEnabled: settingsController.markKeysEnabled,
+            actions: {
+              'playPause': practiceActions.togglePracticePlayback,
+              'seekBack': () => unawaited(
+                playbackActions.seekBy(-PlaybackActionsCoordinator.seekStep),
+              ),
+              'seekForward': () => unawaited(
+                playbackActions.seekBy(PlaybackActionsCoordinator.seekStep),
+              ),
+              'volumeUp': () => unawaited(_keyboardVolumeBy(5)),
+              'volumeDown': () => unawaited(_keyboardVolumeBy(-5)),
+              'toggleMute': () => unawaited(playbackActions.toggleMute()),
+              'speedDown': () => unawaited(_keyboardRateBy(-0.25)),
+              'speedUp': () => unawaited(_keyboardRateBy(0.25)),
+              'previousSentence': () =>
+                  unawaited(practiceActions.navigatePracticeSentence(-1)),
+              'nextSentence': () =>
+                  unawaited(practiceActions.navigatePracticeSentence(1)),
+              'loopSentence': () =>
+                  subtitleController.setLoopCue(!subtitleController.loopCue),
+              'toggleSubtitles': () =>
+                  subtitleController.setVisible(!subtitleController.visible),
+              'captureInbox': () =>
+                  unawaited(inboxActions.captureListeningInbox()),
+              'toggleExtensiveListening': () =>
+                  unawaited(_toggleExtensiveListening()),
+              'hardInterrupt': () => unawaited(_hardInterruptListening()),
+              'markUnknown': () =>
+                  vocabularyActions.markFirstWord('unknown_meaning'),
+              'markKnownNotRecognized': () =>
+                  vocabularyActions.markFirstWord('known_not_recognized'),
+              'markKnownRecognized': () =>
+                  vocabularyActions.markFirstWord('known_recognized'),
+              'showCheatSheet': () =>
+                  unawaited(showShortcutCheatSheet(context)),
+            },
+          ),
           child: Focus(
             autofocus: true,
             // The shell recedes (#46 signature action): while media plays on
@@ -2013,6 +2043,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onCaptureListeningInbox: inboxActions.captureListeningInbox,
     onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
+    spaceTargetsPractice: practiceController.draft?.referenceMediaPath != null,
     isCompact: playerController.mediaPath != null && !_workbenchExpanded,
     mediaTitle: playerController.mediaPath?.split(Platform.pathSeparator).last,
     onExpand: _expandWorkbench,

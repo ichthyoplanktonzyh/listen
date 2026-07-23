@@ -68,6 +68,7 @@ class SettingsController extends ChangeNotifier {
   }
 
   bool get familiarMaterialSuggestions => _settings.familiarMaterialSuggestions;
+  bool get markKeysEnabled => _settings.markKeysEnabled;
   Color get primaryColor => Color(_settings.primaryColor);
   Color get secondaryColor => Color(_settings.secondaryColor);
 

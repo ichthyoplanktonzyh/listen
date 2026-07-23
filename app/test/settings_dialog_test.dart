@@ -117,6 +117,8 @@ Future<void> _pumpSettingsDialog(
         subtitlePositionX: 0.5,
         subtitlePositionY: 0.8,
         subtitleBackgroundOpacity: 0.5,
+        markKeysEnabled: true,
+        onMarkKeysEnabledChanged: (_) {},
         transcriptWidth: 360,
         primaryColor: Colors.white,
         secondaryColor: Colors.grey,

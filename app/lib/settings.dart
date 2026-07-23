@@ -63,6 +63,7 @@ class AppSettings {
     this.phoneticCachePolicy = 'keep_completed',
     this.learningLanguage = 'auto',
     this.familiarMaterialSuggestions = true,
+    this.markKeysEnabled = true,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -192,6 +193,7 @@ class AppSettings {
       learningLanguage: json['learning_language'] as String? ?? 'auto',
       familiarMaterialSuggestions:
           json['familiar_material_suggestions'] as bool? ?? true,
+      markKeysEnabled: json['mark_keys_enabled'] as bool? ?? true,
     );
   }
 
@@ -270,6 +272,11 @@ class AppSettings {
   /// Whether familiar-material marks (3.2) feed the extensive-listening
   /// queue suggestion on the home media library (restrained, off-switchable).
   final bool familiarMaterialSuggestions;
+
+  /// Whether the bare digit keys 1/2/3 mark first-word status (#25). Easy to
+  /// hit by accident, so they are the one part of the shortcut table users
+  /// can switch off.
+  final bool markKeysEnabled;
 
   static String get _home => Platform.environment['HOME'] ?? '';
 
@@ -363,6 +370,7 @@ class AppSettings {
         'phonetic_cache_policy': phoneticCachePolicy,
         'learning_language': learningLanguage,
         'familiar_material_suggestions': familiarMaterialSuggestions,
+        'mark_keys_enabled': markKeysEnabled,
       }),
       flush: true,
     );
@@ -425,6 +433,7 @@ class AppSettings {
     String? phoneticCachePolicy,
     String? learningLanguage,
     bool? familiarMaterialSuggestions,
+    bool? markKeysEnabled,
   }) => AppSettings(
     version: version,
     rate: rate ?? this.rate,
@@ -498,6 +507,7 @@ class AppSettings {
     learningLanguage: learningLanguage ?? this.learningLanguage,
     familiarMaterialSuggestions:
         familiarMaterialSuggestions ?? this.familiarMaterialSuggestions,
+    markKeysEnabled: markKeysEnabled ?? this.markKeysEnabled,
   );
 
   static double _number(

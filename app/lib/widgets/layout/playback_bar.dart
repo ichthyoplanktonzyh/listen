@@ -35,6 +35,7 @@ class PlaybackBar extends StatefulWidget {
     required this.onCaptureListeningInbox,
     required this.onHardInterruptListening,
     required this.onSaveSettings,
+    this.spaceTargetsPractice = false,
     this.isCompact = false,
     this.mediaTitle,
     this.onExpand,
@@ -48,6 +49,10 @@ class PlaybackBar extends StatefulWidget {
   final MediaSessionCoordinator mediaSession;
   final PlaybackActionsCoordinator playbackActions;
   final List<UserTaskStatus> taskStatuses;
+
+  /// Whether Space currently drives the practice clip instead of the main
+  /// player (#25: the transport shows a quiet hint so the drift is visible).
+  final bool spaceTargetsPractice;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function() onToggleExtensiveListening;
   final Future<void> Function() onToggleHunting;
@@ -113,6 +118,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
       huntingActive: widget.huntingSessionController.state.enabled,
       listeningMarkEnabled: subtitleController.currentPrimaryCue != null,
       listeningInboxCount: extensiveListeningController.activeItemCount,
+      spaceTargetsPractice: widget.spaceTargetsPractice,
       onSeek: (value) => adapter.seek(value),
       onSeekToPreviousCue: () => _seekCue(
         subtitleController.primaryCursor.previous(
