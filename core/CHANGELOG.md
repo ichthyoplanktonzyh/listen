@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-23: 全屏沉浸态（refs #25 · 轨A A 部分，收官）。播放器终于有全屏：
+  **F / 双击视频面 / 播放栏新按钮进入，Esc 退出**（F/Esc 走绑定表，速查自动收录，
+  en/zh 双语）。全屏 = 显式 UI 状态而非仅系统窗口全屏——`ImmersiveModeController`
+  持有沉浸态，进入时同步请求 NSWindow 真全屏（新增 `FullscreenBridge`，风格同现有
+  两个 bridge：`setFullScreen` + 窗口进/出全屏通知回推），**窗口是事实源**：绿灯
+  按钮/系统手势进出全屏时 Dart 侧镜像跟随（无媒体时全屏窗口只是大窗口，不进沉浸态；
+  媒体关闭/归档时自动退出沉浸态防止困在无 chrome 屏）。沉浸布局：舞台满铺、AppBar/
+  会话头/侧栏/分栏全部让位（天然绕开 `ListenBreakpoints` 窄屏降级路径），transport
+  作为底部覆盖层由 ShellRecede/ShellFade 驱动——**暂停时鼠标静止也收 chrome**（播放器
+  惯例），chrome 隐藏时光标同步隐藏。双击手势只挂在裸视频面（`player-stage-surface`），
+  字幕浮层从 translucent 改 opaque 吞掉自己的命中，避免双击识别器进词点按的手势竞技场
+  造成 ~300ms 延迟。播放栏全屏按钮仅在有全屏宿主时渲染（切片播放器等不显示）。
+  **测试 +13（共 618 绿）**：沉浸态状态机 10 条（进/出/toggle/媒体门/幂等/绿灯双向
+  镜像/确认通知去重/dispose 解绑）、播放栏按钮双面+隐藏 2 条、裸视频面双击 1 条；
+  绑定表不变量测试补 F/Esc 键位与键帽断言。`flutter analyze` 零告警；macOS debug
+  构建通过。
+
 - 2026-07-23: 格式收口——补跑 `dart format`（refs #45 遗留）。PR #45 的三个 coordinator
   （media_session/resource_actions/vocabulary_actions）未经 format 提交，另有 8 个文件
   少量格式漂移（listen_empty_state/listen_error_state/media_workbench/shell_recede/
