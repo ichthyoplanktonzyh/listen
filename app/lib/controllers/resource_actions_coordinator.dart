@@ -147,10 +147,15 @@ class ResourceActionsCoordinator {
       if (!isMounted() || player.mediaId != mediaId) return;
       subtitle.setSubtitleResources(tracks);
       subtitle.setSubtitleResourceCapabilities(capabilities);
-      if (updateStatus) player.setStatus(_t('statusSubtitleResourcesRefreshed'));
+      if (updateStatus) {
+        player.setStatus(_t('statusSubtitleResourcesRefreshed'));
+      }
     } catch (error) {
       if (isMounted() && updateStatus) {
-        player.setStatus('${_t('statusSubtitleResourcesUnavailable')}: $error', error: true);
+        player.setStatus(
+          '${_t('statusSubtitleResourcesUnavailable')}: $error',
+          error: true,
+        );
       }
     }
   }
@@ -228,7 +233,10 @@ class ResourceActionsCoordinator {
       await loadSubtitleResources(updateStatus: false);
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('${_t('statusSubtitleActivationFailed')}: $error', error: true);
+        player.setStatus(
+          '${_t('statusSubtitleActivationFailed')}: $error',
+          error: true,
+        );
       }
     }
   }
@@ -247,7 +255,12 @@ class ResourceActionsCoordinator {
       await loadSubtitleResources(updateStatus: false);
       if (isMounted()) player.setStatus(_t('statusSubtitleArchived'));
     } catch (error) {
-      if (isMounted()) player.setStatus('${_t('statusSubtitleArchiveFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${_t('statusSubtitleArchiveFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -262,7 +275,12 @@ class ResourceActionsCoordinator {
       await loadSubtitleResources(updateStatus: false);
       if (isMounted()) player.setStatus(_t('statusSubtitleRestored'));
     } catch (error) {
-      if (isMounted()) player.setStatus('${_t('statusSubtitleRestoreFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${_t('statusSubtitleRestoreFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -280,7 +298,12 @@ class ResourceActionsCoordinator {
       await loadSubtitleResources(updateStatus: false);
       if (isMounted()) player.setStatus(_t('statusSubtitleDeleted'));
     } catch (error) {
-      if (isMounted()) player.setStatus('${_t('statusSubtitleDeleteFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${_t('statusSubtitleDeleteFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -306,7 +329,12 @@ class ResourceActionsCoordinator {
       await File(location.path).writeAsString(srt);
       if (isMounted()) player.setStatus(_t('statusSubtitleExportedSrt'));
     } catch (error) {
-      if (isMounted()) player.setStatus('${_t('statusSubtitleExportFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${_t('statusSubtitleExportFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -327,7 +355,12 @@ class ResourceActionsCoordinator {
       );
       if (isMounted()) player.setStatus(_t('statusLLTimelineExported'));
     } catch (error) {
-      if (isMounted()) player.setStatus('${_t('statusLLTimelineExportFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${_t('statusLLTimelineExportFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -349,10 +382,17 @@ class ResourceActionsCoordinator {
         }
         await reloadLearningEntries();
       }
-      if (isMounted()) player.setStatus(_t('statusLanguageSet').replaceAll('{language}', language));
+      if (isMounted()) {
+        player.setStatus(
+          _t('statusLanguageSet').replaceAll('{language}', language),
+        );
+      }
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('${_t('statusLanguageUpdateFailed')}: $error', error: true);
+        player.setStatus(
+          '${_t('statusLanguageUpdateFailed')}: $error',
+          error: true,
+        );
       }
     }
   }

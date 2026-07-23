@@ -213,10 +213,7 @@ void main() {
     var openVocabularyCalls = 0;
 
     await tester.pumpWidget(
-      app(
-        onOpenMedia: () {},
-        onOpenVocabulary: () => openVocabularyCalls += 1,
-      ),
+      app(onOpenMedia: () {}, onOpenVocabulary: () => openVocabularyCalls += 1),
     );
     await tester.pumpAndSettle();
 
@@ -233,10 +230,7 @@ void main() {
     var openVocabularyCalls = 0;
 
     await tester.pumpWidget(
-      app(
-        onOpenMedia: () {},
-        onOpenVocabulary: () => openVocabularyCalls += 1,
-      ),
+      app(onOpenMedia: () {}, onOpenVocabulary: () => openVocabularyCalls += 1),
     );
     await tester.pumpAndSettle();
 

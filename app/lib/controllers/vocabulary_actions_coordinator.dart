@@ -125,7 +125,12 @@ class VocabularyActionsCoordinator {
         sourceFor: _sourceFor,
       );
     } catch (error) {
-      if (isMounted()) player.setStatus('${text('statusDictionaryUnavailable')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${text('statusDictionaryUnavailable')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -144,11 +149,20 @@ class VocabularyActionsCoordinator {
         sourceFor: _sourceFor,
       );
       if (isMounted() && update != null) {
-        player.setStatus(text('statusGlobalWordStatusUpdated').replaceAll('{word}', update.tokenText));
+        player.setStatus(
+          text(
+            'statusGlobalWordStatusUpdated',
+          ).replaceAll('{word}', update.tokenText),
+        );
       }
       await refreshDiagnosis();
     } catch (error) {
-      if (isMounted()) player.setStatus('${text('statusWordUpdateFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${text('statusWordUpdateFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -169,7 +183,10 @@ class VocabularyActionsCoordinator {
       );
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('${text('statusCapabilityUpdateFailed')}: $error', error: true);
+        player.setStatus(
+          '${text('statusCapabilityUpdateFailed')}: $error',
+          error: true,
+        );
       }
     }
   }
@@ -204,7 +221,10 @@ class VocabularyActionsCoordinator {
       );
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('${text('statusRecordSourceFailed')}: $error', error: true);
+        player.setStatus(
+          '${text('statusRecordSourceFailed')}: $error',
+          error: true,
+        );
       }
     }
   }

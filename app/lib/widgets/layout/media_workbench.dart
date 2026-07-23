@@ -88,26 +88,75 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
                 child: widget.immersiveStage!,
               )
             : LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < ListenBreakpoints.workbenchStacked) {
-                  final availableHeight = constraints.maxHeight - splitterWidth;
-                  final minimumFraction = (240 / availableHeight).clamp(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth <
+                      ListenBreakpoints.workbenchStacked) {
+                    final availableHeight =
+                        constraints.maxHeight - splitterWidth;
+                    final minimumFraction = (240 / availableHeight).clamp(
+                      0.28,
+                      0.7,
+                    );
+                    final maximumFraction =
+                        ((availableHeight - 260) / availableHeight).clamp(
+                          minimumFraction,
+                          0.72,
+                        );
+                    final effectiveFraction = _mediaFraction.clamp(
+                      minimumFraction,
+                      maximumFraction,
+                    );
+                    return Column(
+                      children: [
+                        SizedBox(
+                          height: availableHeight * effectiveFraction,
+                          child: _MediaPane(
+                            playerStage: widget.playerStage,
+                            onCompactMedia: () =>
+                                _setMediaFraction(compactMediaFraction),
+                            onResetLayout: () =>
+                                _setMediaFraction(defaultMediaFraction),
+                            onCollapse: widget.onCollapse,
+                          ),
+                        ),
+                        _WorkbenchSplitter.horizontal(
+                          onDrag: (delta) {
+                            _setMediaFraction(
+                              (_mediaFraction + delta / availableHeight).clamp(
+                                minimumFraction,
+                                maximumFraction,
+                              ),
+                            );
+                          },
+                        ),
+                        Expanded(
+                          child: ContentSettle(
+                            settleKey: widget.selectedChannel,
+                            child: widget.learningPanel,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  final availableWidth = constraints.maxWidth - splitterWidth;
+                  final minimumFraction = (320 / availableWidth).clamp(
                     0.28,
                     0.7,
                   );
                   final maximumFraction =
-                      ((availableHeight - 260) / availableHeight).clamp(
+                      ((availableWidth - 420) / availableWidth).clamp(
                         minimumFraction,
-                        0.72,
+                        0.7,
                       );
                   final effectiveFraction = _mediaFraction.clamp(
                     minimumFraction,
                     maximumFraction,
                   );
-                  return Column(
+                  return Row(
                     children: [
                       SizedBox(
-                        height: availableHeight * effectiveFraction,
+                        width: availableWidth * effectiveFraction,
                         child: _MediaPane(
                           playerStage: widget.playerStage,
                           onCompactMedia: () =>
@@ -117,65 +166,21 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
                           onCollapse: widget.onCollapse,
                         ),
                       ),
-                      _WorkbenchSplitter.horizontal(
+                      _WorkbenchSplitter(
                         onDrag: (delta) {
                           _setMediaFraction(
-                            (_mediaFraction + delta / availableHeight).clamp(
+                            (_mediaFraction + delta / availableWidth).clamp(
                               minimumFraction,
                               maximumFraction,
                             ),
                           );
                         },
                       ),
-                      Expanded(
-                        child: ContentSettle(
-                          settleKey: widget.selectedChannel,
-                          child: widget.learningPanel,
-                        ),
-                      ),
+                      Expanded(child: widget.learningPanel),
                     ],
                   );
-                }
-
-                final availableWidth = constraints.maxWidth - splitterWidth;
-                final minimumFraction = (320 / availableWidth).clamp(0.28, 0.7);
-                final maximumFraction =
-                    ((availableWidth - 420) / availableWidth).clamp(
-                      minimumFraction,
-                      0.7,
-                    );
-                final effectiveFraction = _mediaFraction.clamp(
-                  minimumFraction,
-                  maximumFraction,
-                );
-                return Row(
-                  children: [
-                    SizedBox(
-                      width: availableWidth * effectiveFraction,
-                      child: _MediaPane(
-                        playerStage: widget.playerStage,
-                        onCompactMedia: () =>
-                            _setMediaFraction(compactMediaFraction),
-                        onResetLayout: () =>
-                            _setMediaFraction(defaultMediaFraction),
-                        onCollapse: widget.onCollapse,
-                      ),
-                    ),
-                    _WorkbenchSplitter(
-                      onDrag: (delta) {
-                        _setMediaFraction(
-                          (_mediaFraction + delta / availableWidth).clamp(
-                            minimumFraction,
-                            maximumFraction,
-                          ),
-                        );
-                      },
-                    ),
-                    Expanded(child: widget.learningPanel),
-                  ],
-                );
-              },
-            ),
+                },
+              ),
       ),
     ],
   );

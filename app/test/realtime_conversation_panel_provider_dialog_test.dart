@@ -12,88 +12,85 @@ import 'package:llplayer_next/widgets/panels/realtime_conversation_panel.dart';
 const _workspaceErrorText = 'Enter the Workspace ID to complete the endpoint.';
 
 void main() {
-  testWidgets(
-    'saving without a Qwen workspace ID reports the missing field '
-    'instead of silently doing nothing',
-    (tester) async {
-      // The provider dialog stacks eight fields; give it room so the test
-      // exercises feedback, not viewport overflow.
-      tester.view.physicalSize = const Size(1400, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+  testWidgets('saving without a Qwen workspace ID reports the missing field '
+      'instead of silently doing nothing', (tester) async {
+    // The provider dialog stacks eight fields; give it room so the test
+    // exercises feedback, not viewport overflow.
+    tester.view.physicalSize = const Size(1400, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
 
-      final registerBodies = <Map<String, dynamic>>[];
-      final controller = RealtimeConversationController(audio: _FakeAudio());
-      final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
-        token: 'token',
-        transport: (method, path, body) async {
-          if (method == 'GET' && path == '/v1/realtime/providers') {
-            return (
-              statusCode: 200,
-              body: registerBodies.isEmpty ? '[]' : '[${_profileJson()}]',
-            );
-          }
-          if (method == 'POST' && path == '/v1/realtime/providers') {
-            registerBodies.add(jsonDecode(body!) as Map<String, dynamic>);
-            return (statusCode: 200, body: _profileJson());
-          }
-          if (method == 'GET' && path == '/v1/realtime/sessions') {
-            return (statusCode: 200, body: '[]');
-          }
-          throw StateError('Unexpected request: $method $path ${body ?? ''}');
-        },
-      );
+    final registerBodies = <Map<String, dynamic>>[];
+    final controller = RealtimeConversationController(audio: _FakeAudio());
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'token',
+      transport: (method, path, body) async {
+        if (method == 'GET' && path == '/v1/realtime/providers') {
+          return (
+            statusCode: 200,
+            body: registerBodies.isEmpty ? '[]' : '[${_profileJson()}]',
+          );
+        }
+        if (method == 'POST' && path == '/v1/realtime/providers') {
+          registerBodies.add(jsonDecode(body!) as Map<String, dynamic>);
+          return (statusCode: 200, body: _profileJson());
+        }
+        if (method == 'GET' && path == '/v1/realtime/sessions') {
+          return (statusCode: 200, body: '[]');
+        }
+        throw StateError('Unexpected request: $method $path ${body ?? ''}');
+      },
+    );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: RealtimeConversationPanel(
-            controller: controller,
-            api: api,
-            launch: RealtimeConversationLaunch.free(
-              language: 'en',
-              modelId: 'asr-model',
-            ),
-            acquireAudioFocus: () async {},
-            onClose: () {},
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RealtimeConversationPanel(
+          controller: controller,
+          api: api,
+          launch: RealtimeConversationLaunch.free(
+            language: 'en',
+            modelId: 'asr-model',
           ),
+          acquireAudioFocus: () async {},
+          onClose: () {},
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add provider'));
-      await tester.pumpAndSettle();
-      expect(find.text('Add realtime provider'), findsOneWidget);
+    await tester.tap(find.text('Add provider'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add realtime provider'), findsOneWidget);
 
-      // The default Qwen endpoint still carries the <workspace-id>
-      // placeholder: saving must surface the missing field and keep the
-      // dialog open rather than no-op silently.
-      await tester.tap(find.text('Save securely'));
-      await tester.pumpAndSettle();
-      expect(find.text(_workspaceErrorText), findsOneWidget);
-      expect(find.text('Add realtime provider'), findsOneWidget);
-      expect(registerBodies, isEmpty);
+    // The default Qwen endpoint still carries the <workspace-id>
+    // placeholder: saving must surface the missing field and keep the
+    // dialog open rather than no-op silently.
+    await tester.tap(find.text('Save securely'));
+    await tester.pumpAndSettle();
+    expect(find.text(_workspaceErrorText), findsOneWidget);
+    expect(find.text('Add realtime provider'), findsOneWidget);
+    expect(registerBodies, isEmpty);
 
-      // Typing a workspace ID clears the error and unblocks saving.
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Workspace ID'),
-        'ws-123',
-      );
-      await tester.pumpAndSettle();
-      expect(find.text(_workspaceErrorText), findsNothing);
+    // Typing a workspace ID clears the error and unblocks saving.
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Workspace ID'),
+      'ws-123',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(_workspaceErrorText), findsNothing);
 
-      await tester.tap(find.text('Save securely'));
-      await tester.pumpAndSettle();
-      expect(find.text('Add realtime provider'), findsNothing);
-      expect(registerBodies, hasLength(1));
-      expect(
-        registerBodies.single['base_url'],
-        'wss://ws-123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime',
-      );
+    await tester.tap(find.text('Save securely'));
+    await tester.pumpAndSettle();
+    expect(find.text('Add realtime provider'), findsNothing);
+    expect(registerBodies, hasLength(1));
+    expect(
+      registerBodies.single['base_url'],
+      'wss://ws-123.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime',
+    );
 
-      controller.dispose();
-    },
-  );
+    controller.dispose();
+  });
 }
 
 // Short display/model strings: the panel's provider dropdown lacks

@@ -154,7 +154,11 @@ class ShellFade extends StatelessWidget {
 /// [PreferredSizeWidget]. Keeps the bar's layout box (the stage must not
 /// jump when the chrome leaves) and only fades the paint.
 class ShellFadeAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const ShellFadeAppBar({super.key, required this.visible, required this.child});
+  const ShellFadeAppBar({
+    super.key,
+    required this.visible,
+    required this.child,
+  });
 
   final bool visible;
   final PreferredSizeWidget child;

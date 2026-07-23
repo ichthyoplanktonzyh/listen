@@ -96,7 +96,11 @@ class MediaSessionCoordinator {
         ? Future<void>.value()
         : api?.saveProgress(previousMediaId, previousPosition) ??
               Future<void>.value();
-    player.setStatus(text('statusOpeningFile').replaceAll('{name}', path.split(Platform.pathSeparator).last));
+    player.setStatus(
+      text(
+        'statusOpeningFile',
+      ).replaceAll('{name}', path.split(Platform.pathSeparator).last),
+    );
     onMediaSwitched();
     player.clearMedia();
     player.setMediaPath(path);
@@ -113,7 +117,12 @@ class MediaSessionCoordinator {
     try {
       await adapter.open(path, play: false);
     } catch (error) {
-      if (isMounted()) player.setStatus('${text('statusPlaybackFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${text('statusPlaybackFailed')}: $error',
+          error: true,
+        );
+      }
       return;
     }
     Object? coreError;
@@ -145,7 +154,9 @@ class MediaSessionCoordinator {
         // reports on the core, so health indicators must keep showing it.
         player.setStatus(
           coreError == null
-              ? text('statusPlayingFile').replaceAll('{name}', path.split(Platform.pathSeparator).last)
+              ? text(
+                  'statusPlayingFile',
+                ).replaceAll('{name}', path.split(Platform.pathSeparator).last)
               : text(
                   'statusPlayingCoreUnavailable',
                 ).replaceAll('{error}', '$coreError'),
@@ -153,7 +164,12 @@ class MediaSessionCoordinator {
         );
       }
     } catch (error) {
-      if (isMounted()) player.setStatus('${text('statusPlaybackFailed')}: $error', error: true);
+      if (isMounted()) {
+        player.setStatus(
+          '${text('statusPlaybackFailed')}: $error',
+          error: true,
+        );
+      }
     }
   }
 
@@ -194,7 +210,10 @@ class MediaSessionCoordinator {
       }
       await resourceActions.loadSubtitleResources(updateStatus: false);
     } catch (error) {
-      player.setStatus('${text('statusSubtitleImportFailed')}: $error', error: true);
+      player.setStatus(
+        '${text('statusSubtitleImportFailed')}: $error',
+        error: true,
+      );
     }
   }
 
@@ -227,7 +246,9 @@ class MediaSessionCoordinator {
           currentFingerprint: currentFingerprint,
         );
         if (!allowMismatch) {
-          if (isMounted()) player.setStatus(text('statusLLTimelineImportCancelled'));
+          if (isMounted()) {
+            player.setStatus(text('statusLLTimelineImportCancelled'));
+          }
           return;
         }
       }
@@ -252,7 +273,10 @@ class MediaSessionCoordinator {
       await resourceActions.loadSubtitleResources(updateStatus: false);
       learning.selectSidePanel(1);
     } catch (error) {
-      player.setStatus('${text('statusLLTimelineImportFailed')}: $error', error: true);
+      player.setStatus(
+        '${text('statusLLTimelineImportFailed')}: $error',
+        error: true,
+      );
     }
   }
 

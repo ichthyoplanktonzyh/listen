@@ -220,20 +220,23 @@ void main() {
     },
   );
 
-  test('a null API reports the unavailable state on all three actions', () async {
-    final w = _wire(getApi: () => null);
-    addTearDown(w.hunting.dispose);
-    addTearDown(w.extensive.dispose);
+  test(
+    'a null API reports the unavailable state on all three actions',
+    () async {
+      final w = _wire(getApi: () => null);
+      addTearDown(w.hunting.dispose);
+      addTearDown(w.extensive.dispose);
 
-    await w.coordinator.toggleHuntingMode();
-    expect(w.player.status, 'statusOpenMediaAndCoreFirst');
-    expect(w.hunting.state.enabled, isFalse);
+      await w.coordinator.toggleHuntingMode();
+      expect(w.player.status, 'statusOpenMediaAndCoreFirst');
+      expect(w.hunting.state.enabled, isFalse);
 
-    await w.coordinator.reindexHuntingCorpus();
-    expect(w.player.status, 'statusConnectLocalCoreFirst');
+      await w.coordinator.reindexHuntingCorpus();
+      expect(w.player.status, 'statusConnectLocalCoreFirst');
 
-    w.player.setStatus('');
-    await w.coordinator.answerHuntingCheck('recognized');
-    expect(w.player.status, 'statusConnectLocalCoreFirst');
-  });
+      w.player.setStatus('');
+      await w.coordinator.answerHuntingCheck('recognized');
+      expect(w.player.status, 'statusConnectLocalCoreFirst');
+    },
+  );
 }
