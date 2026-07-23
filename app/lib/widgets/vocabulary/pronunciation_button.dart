@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../common/listen_loading.dart';
+
 class PronunciationButton extends StatelessWidget {
   const PronunciationButton({
     super.key,
@@ -19,10 +21,7 @@ class PronunciationButton extends StatelessWidget {
     tooltip: tooltip,
     onPressed: busy ? null : onPressed,
     icon: busy
-        ? const SizedBox.square(
-            dimension: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
+        ? const ListenLoading.inline()
         : Icon(
             synthetic
                 ? Icons.record_voice_over_outlined

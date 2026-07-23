@@ -16,6 +16,7 @@ import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
 import '../theme/spacing.dart';
+import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
@@ -1607,7 +1608,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         Divider(height: 1, color: colors.outlineVariant),
         Expanded(
           child: loading
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: ListenLoading())
               : words.isEmpty && search.trim().isNotEmpty
               ? _homeCorpusFallback(l)
               : VocabularyBookView(words: words, onWord: _openDetails),
@@ -1633,11 +1634,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                   ? null
                   : () => unawaited(_searchHomeCorpus()),
               icon: homeSearching
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const ListenLoading.inline(size: 16)
                   : const Icon(Icons.travel_explore_outlined, size: 18),
               label: Text(l.text('dictionaryFindMore')),
             ),

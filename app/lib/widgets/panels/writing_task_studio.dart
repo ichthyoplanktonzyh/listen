@@ -6,6 +6,7 @@ import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 import 'llm_feedback_assist.dart';
 
 class WritingTaskStudio extends StatefulWidget {
@@ -105,7 +106,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                   ),
                 Expanded(
                   child: switch (state.phase) {
-                    'idle' => const Center(child: CircularProgressIndicator()),
+                    'idle' => const Center(child: ListenLoading()),
                     'drafting' => _editorBody(l, state, revising: false),
                     'submitted' => _submittedBody(l, state),
                     'revising' => _editorBody(l, state, revising: true),
@@ -188,10 +189,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                                 audioPlayCount: widget.audioPlayCount(),
                               ),
                   icon: state.busy
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const ListenLoading.inline(size: 16)
                       : const Icon(Icons.arrow_forward),
                   label: Text(
                     l.text(

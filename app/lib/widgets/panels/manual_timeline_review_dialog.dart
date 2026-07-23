@@ -4,6 +4,7 @@ import '../../controllers/manual_review_controller.dart';
 import '../../models/timeline.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 
 class ManualTimelineReviewDialog extends StatefulWidget {
   const ManualTimelineReviewDialog({
@@ -144,10 +145,7 @@ class _ManualTimelineReviewDialogState
               ? null
               : _save,
           child: _saving
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const ListenLoading.inline(size: 16)
               : const Text('Save revision'),
         ),
       ],

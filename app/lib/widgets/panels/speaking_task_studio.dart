@@ -7,6 +7,7 @@ import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 import 'llm_feedback_assist.dart';
 import '../../theme/typography.dart';
 
@@ -129,7 +130,7 @@ class SpeakingTaskStudio extends StatelessWidget {
   Widget _phase(BuildContext context, SpeakingTaskState state) {
     final l = AppLocalizations.of(context);
     if (state.busy && state.phase == 'idle') {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: ListenLoading());
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -253,7 +254,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Column(
       children: [
-        const CircularProgressIndicator(),
+        const ListenLoading(),
         const SizedBox(height: ListenSpacing.gap16),
         Text(l.text('speakingTranscribing')),
         const SizedBox(height: ListenSpacing.gap8),

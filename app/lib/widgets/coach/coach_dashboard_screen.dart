@@ -5,6 +5,7 @@ import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 
 class CoachDashboardScreen extends StatefulWidget {
   const CoachDashboardScreen({
@@ -50,7 +51,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       builder: (context, _) {
         final state = controller.state;
         if (state.loading) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: ListenLoading());
         }
         if (state.error != null) return Center(child: Text(state.error!));
         final dashboard = state.dashboard!;

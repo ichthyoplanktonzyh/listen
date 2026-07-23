@@ -5,6 +5,7 @@ import '../../models/llm_provider.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 
 /// Phase 3.12 provider settings: configure vendor-neutral LLM providers for
 /// semantic feedback. Keys are write-only (stored in the OS keychain by the
@@ -196,7 +197,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         if (_loading)
           const Padding(
             padding: EdgeInsets.all(8),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: ListenLoading()),
           )
         else if (_providers.isEmpty)
           Text(l.text('llmNoProviders'), style: theme.textTheme.bodyMedium)

@@ -8,6 +8,7 @@ import 'services/api_service.dart';
 import 'theme/radii.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
+import 'widgets/common/listen_loading.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
   const PhoneticAnalysisCenter({
@@ -227,11 +228,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       );
     }
     if (state == 'installing') {
-      return const SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
+      return const ListenLoading.inline();
     }
     if (state == 'custom' || state == 'installed') {
       return Icon(
@@ -372,14 +369,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
           size: 22,
         );
       default:
-        return SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Theme.of(context).colorScheme.tertiary,
-          ),
-        );
+        return const ListenLoading.inline(size: 22);
     }
   }
 

@@ -5,6 +5,7 @@ import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 
 const openAiRealtimeBaselineModel = 'gpt-realtime-2.1';
 const qwenRealtimeBaselineModel = 'qwen3.5-omni-plus-realtime';
@@ -239,7 +240,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                             if (state.isWorking)
                               const Padding(
                                 padding: EdgeInsets.all(8),
-                                child: CircularProgressIndicator(),
+                                child: ListenLoading(),
                               ),
                           ],
                         ),

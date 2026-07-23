@@ -12,6 +12,7 @@ import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
+import '../common/listen_loading.dart';
 import 'dictionary_inline_clip_player.dart';
 import 'pronunciation_button.dart';
 import '../../theme/typography.dart';
@@ -982,11 +983,7 @@ class _ListeningDictionaryEntryViewState
                 ? null
                 : () => unawaited(_searchLibrary()),
             icon: _searchingLibrary
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
+                ? const ListenLoading.inline(size: 16)
                 : const Icon(Icons.travel_explore_outlined, size: 18),
             label: Text(l.text('dictionaryFindMore')),
           ),
@@ -1403,11 +1400,7 @@ class CorpusResultTile extends StatelessWidget {
                 tooltip: l.text('dictionaryCollect'),
                 onPressed: collecting ? null : onCollect,
                 icon: collecting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const ListenLoading.inline(size: 16)
                     : const Icon(Icons.bookmark_add_outlined),
               ),
             IconButton.filledTonal(
@@ -1682,13 +1675,7 @@ class _ClipTile extends StatelessWidget {
                       FilledButton.icon(
                         onPressed: submitting ? null : onHeard,
                         icon: submitting
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
+                            ? const ListenLoading.inline(size: 16)
                             : const Icon(Icons.hearing_outlined, size: 17),
                         label: Text(l.text('dictionaryHeard')),
                       ),

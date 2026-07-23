@@ -65,6 +65,7 @@ import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/channels/reading_channel.dart';
 import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
+import 'widgets/common/listen_loading.dart';
 import 'widgets/flows/content_speaking_activity_dialog.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
@@ -1565,7 +1566,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (connectingApi) const CircularProgressIndicator(),
+              if (connectingApi) const ListenLoading(),
               const SizedBox(height: ListenSpacing.gap16),
               Text(status, textAlign: TextAlign.center),
               if (!connectingApi) ...[

@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 
 class ColdStartMarkingSheet extends StatefulWidget {
   const ColdStartMarkingSheet({
@@ -127,7 +128,7 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
 
   Widget _body(BuildContext context, AppLocalizations l, ColorScheme colors) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: ListenLoading());
     }
     final candidates = _candidates!;
     if (candidates.isEmpty) {
