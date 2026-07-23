@@ -8,6 +8,7 @@ import 'services/api_service.dart';
 import 'theme/radii.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
+import 'widgets/common/listen_empty_state.dart';
 import 'widgets/common/listen_loading.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
@@ -243,7 +244,10 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Widget _jobs(AppLocalizations l) {
     if (jobs.isEmpty) {
-      return Center(child: Text(l.text('noPhoneticAnalysisJobs')));
+      return ListenEmptyState(
+        icon: Icons.graphic_eq,
+        message: l.text('noPhoneticAnalysisJobs'),
+      );
     }
     return Column(
       children: [

@@ -5,6 +5,7 @@ import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_empty_state.dart';
 import 'content_fit_card.dart';
 import 'timeline_resource_summary_panel.dart';
 
@@ -140,9 +141,15 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
             ),
           Expanded(
             child: mediaId == null
-                ? Center(child: Text(l.text('openMediaForSubtitles')))
+                ? ListenEmptyState(
+                    icon: Icons.folder_open_outlined,
+                    message: l.text('openMediaForSubtitles'),
+                  )
                 : resources.isEmpty
-                ? Center(child: Text(l.text('noSubtitleResources')))
+                ? ListenEmptyState(
+                    icon: Icons.subtitles_off_outlined,
+                    message: l.text('noSubtitleResources'),
+                  )
                 : _ResizableResourceBody(
                     subtitleList: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),

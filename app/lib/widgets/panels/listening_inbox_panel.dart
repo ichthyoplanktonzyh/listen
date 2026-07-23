@@ -8,6 +8,7 @@ import '../../models/listening.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
+import '../common/listen_empty_state.dart';
 
 class ListeningInboxPanel extends StatelessWidget {
   const ListeningInboxPanel({
@@ -71,7 +72,10 @@ class ListeningInboxPanel extends StatelessWidget {
             ),
           Expanded(
             child: items.isEmpty
-                ? Center(child: Text(l.text('listeningInboxEmpty')))
+                ? ListenEmptyState(
+                    icon: Icons.inbox_outlined,
+                    message: l.text('listeningInboxEmpty'),
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
                     itemCount: items.length,

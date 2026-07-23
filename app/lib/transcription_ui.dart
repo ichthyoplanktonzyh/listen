@@ -8,6 +8,7 @@ import 'localization.dart';
 import 'models/runtime_resources.dart';
 import 'models/timeline.dart';
 import 'services/api_service.dart';
+import 'widgets/common/listen_empty_state.dart';
 
 typedef LoadGeneratedTrack =
     Future<void> Function(SubtitleTrack track, bool secondary);
@@ -302,7 +303,10 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
   );
 
   Widget _jobs(AppLocalizations l) => jobs.isEmpty
-      ? Center(child: Text(l.text('noTranscriptionJobs')))
+      ? ListenEmptyState(
+          icon: Icons.subtitles_outlined,
+          message: l.text('noTranscriptionJobs'),
+        )
       : ListView.builder(
           itemCount: jobs.length,
           itemBuilder: (context, index) {

@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_empty_state.dart';
 import '../common/listen_loading.dart';
 
 class ColdStartMarkingSheet extends StatefulWidget {
@@ -132,14 +133,9 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
     }
     final candidates = _candidates!;
     if (candidates.isEmpty) {
-      return Center(
-        child: Text(
-          l.text('coldStartEmpty'),
-          textAlign: TextAlign.center,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
-        ),
+      return ListenEmptyState(
+        icon: Icons.checklist,
+        message: l.text('coldStartEmpty'),
       );
     }
     final candidate = candidates[_currentIndex];

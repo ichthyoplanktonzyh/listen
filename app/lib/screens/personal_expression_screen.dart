@@ -9,6 +9,7 @@ import '../localization.dart';
 import '../models/personal_expression.dart';
 import '../services/api_service.dart';
 import '../theme/spacing.dart';
+import '../widgets/common/listen_empty_state.dart';
 import '../widgets/common/listen_loading.dart';
 
 class PersonalExpressionScreen extends StatefulWidget {
@@ -284,7 +285,10 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
             child: _busy
                 ? const Center(child: ListenLoading())
                 : _patterns.isEmpty
-                ? const Center(child: Text('还没有个人表达。可从阅读句子收藏，或在这里手动创建。'))
+                ? const ListenEmptyState(
+                    icon: Icons.edit_note,
+                    message: '还没有个人表达。可从阅读句子收藏，或在这里手动创建。',
+                  )
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _patterns.length,

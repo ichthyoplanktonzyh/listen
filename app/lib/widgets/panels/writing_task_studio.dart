@@ -6,6 +6,7 @@ import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_empty_state.dart';
 import '../common/listen_loading.dart';
 import 'llm_feedback_assist.dart';
 
@@ -473,9 +474,9 @@ class _FeedbackList extends StatelessWidget {
         ),
         const SizedBox(height: ListenSpacing.gap8),
         if (state.findings.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: Text(l.text('writingNoLocalFindings'))),
+          ListenEmptyState(
+            icon: Icons.check_circle_outline,
+            message: l.text('writingNoLocalFindings'),
           )
         else
           for (final finding in state.findings)

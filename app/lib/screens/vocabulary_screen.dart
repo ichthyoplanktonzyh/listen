@@ -16,6 +16,7 @@ import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
 import '../theme/spacing.dart';
+import '../widgets/common/listen_empty_state.dart';
 import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
@@ -343,7 +344,10 @@ class _SemanticSearchDialogState extends State<_SemanticSearchDialog> {
             const SizedBox(height: ListenSpacing.gap8),
             Expanded(
               child: hits.isEmpty
-                  ? Center(child: Text(l.text('semanticSearchNoHits')))
+                  ? ListenEmptyState(
+                      icon: Icons.search_off,
+                      message: l.text('semanticSearchNoHits'),
+                    )
                   : ListView.separated(
                       itemCount: hits.length,
                       separatorBuilder: (_, _) => const Divider(height: 1),
@@ -1623,22 +1627,17 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   Widget _homeCorpusFallback(AppLocalizations l) {
     final results = homeResults;
     if (results == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(l.text('noWords')),
-            const SizedBox(height: ListenSpacing.gap12),
-            OutlinedButton.icon(
-              onPressed: homeSearching
-                  ? null
-                  : () => unawaited(_searchHomeCorpus()),
-              icon: homeSearching
-                  ? const ListenLoading.inline(size: 16)
-                  : const Icon(Icons.travel_explore_outlined, size: 18),
-              label: Text(l.text('dictionaryFindMore')),
-            ),
-          ],
+      return ListenEmptyState(
+        icon: Icons.menu_book_outlined,
+        message: l.text('noWords'),
+        action: OutlinedButton.icon(
+          onPressed: homeSearching
+              ? null
+              : () => unawaited(_searchHomeCorpus()),
+          icon: homeSearching
+              ? const ListenLoading.inline(size: 16)
+              : const Icon(Icons.travel_explore_outlined, size: 18),
+          label: Text(l.text('dictionaryFindMore')),
         ),
       );
     }
