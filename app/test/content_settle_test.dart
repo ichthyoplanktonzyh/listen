@@ -53,9 +53,7 @@ void main() {
     expect(settleOpacity(tester), 1);
   });
 
-  testWidgets('reduce motion: content appears already settled', (
-    tester,
-  ) async {
+  testWidgets('reduce motion: content appears already settled', (tester) async {
     await tester.pumpWidget(app('a', disableAnimations: true));
     expect(settleOpacity(tester), 1);
 

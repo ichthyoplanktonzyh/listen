@@ -40,9 +40,9 @@ class ListenErrorState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colors.onSurface,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.onSurface),
             ),
             if (action != null) ...[
               const SizedBox(height: ListenSpacing.gap12),
@@ -83,9 +83,9 @@ class ListenErrorNotice extends StatelessWidget {
             Expanded(
               child: Text(
                 message,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colors.onErrorContainer,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onErrorContainer),
               ),
             ),
           ],
