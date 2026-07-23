@@ -1,0 +1,377 @@
+<title>listen · 词汇本重设计探索</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --moon:#c7d4cf;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:66ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 4px}
+  .constraints .c{font-size:12px;color:var(--muted);background:var(--raised);
+    border:1px solid var(--hair);border-radius:999px;padding:5px 12px}
+  h2{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:46px 0 10px}
+  h2 .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;
+    font-weight:500;margin-left:9px}
+  h3{font-size:14px;font-weight:700;margin:0 0 10px}
+  h3 .en{font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:500;margin-left:7px}
+  .note{font-size:14px;color:var(--muted);max-width:70ch;margin:0 0 18px}
+  .note b{color:var(--ink)}
+  .sembox{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:18px 20px;margin-top:16px}
+  .legend{display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--muted)}
+  .legend .row{display:flex;align-items:flex-start;gap:10px}
+  .sw{width:26px;height:12px;border-radius:3px;flex:none;margin-top:5px}
+  .legend b{color:var(--ink)}
+  table.map{width:100%;border-collapse:collapse;font-size:13px;color:var(--muted);margin-top:6px}
+  table.map th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);
+    text-align:left;font-weight:500;padding:6px 10px;border-bottom:1px solid var(--hair)}
+  table.map td{padding:8px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+  table.map b{color:var(--ink)}
+  .dir{background:var(--raised);border:1px solid var(--hair);border-radius:18px;overflow:hidden;margin-top:26px}
+  .dir-body{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:0}
+  @media(max-width:880px){.dir-body{grid-template-columns:1fr}}
+  .stage{background:radial-gradient(120% 100% at 50% 30%, #22302a 0%, var(--ground2) 80%);
+    padding:22px 18px;display:flex;flex-direction:column;gap:14px;align-items:center;justify-content:flex-start}
+  .stage .cap,.side .cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);font-family:var(--mono);align-self:flex-start;margin-bottom:2px}
+  .side{padding:20px 20px 22px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--hair)}
+  @media(max-width:880px){.side{border-left:none;border-top:1px solid var(--hair)}}
+  .qa{font-size:13px;color:var(--muted)}
+  .qa dt{color:var(--ink);font-weight:700;font-size:12.5px;margin-top:10px}
+  .qa dt .qn{font-family:var(--mono);color:var(--teal);font-size:10.5px;margin-right:6px}
+  .qa dd{margin:2px 0 0}
+  .qa b{color:var(--ink)}
+  .qa .amber{color:var(--amber)}
+  .verdict{margin:14px 22px 20px;padding:12px 16px;border-radius:12px;font-size:13.5px;
+    background:var(--ground2);border:1px solid var(--hair);color:var(--muted)}
+  .verdict b{color:var(--ink)}
+  .decisions{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px}
+  .decisions ol{margin:8px 0 0;padding-left:22px;font-size:14px;color:var(--muted)}
+  .decisions li{margin-bottom:12px}
+  .decisions b{color:var(--ink)}
+  .pending{border:1px dashed var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px;
+    color:var(--faint);font-size:14px}
+
+  /* ── wireframe mock primitives ── */
+  .mock{width:100%;max-width:560px;background:var(--ground);border:1px solid var(--hair);
+    border-radius:12px;overflow:hidden;font-size:10.5px;color:var(--muted)}
+  .mock .bar{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--hair);
+    background:#1d2823;font-size:10.5px}
+  .mock .bar .sp{flex:1}
+  .mock .chipR{border:1px solid var(--hair);border-radius:999px;padding:1.5px 9px;font-size:9.5px}
+  .mock .chipR.on{border-color:var(--teal-dim);color:var(--teal)}
+  .mock .cols{display:grid;grid-template-columns:196px 1fr;min-height:238px}
+  .mock .list{border-right:1px solid var(--hair);padding:8px 0}
+  .mock .rowi{display:flex;align-items:center;gap:8px;padding:4.5px 12px}
+  .mock .rowi.sel{background:#22302a}
+  .mock .ring{width:11px;height:11px;border-radius:50%;flex:none;
+    border:2.5px solid var(--teal)}
+  .mock .ring.half{border-color:var(--teal) var(--amber) var(--amber) var(--teal)}
+  .mock .ring.dim{border-color:#3a4a44}
+  .mock .ring.amb{border-color:var(--amber) var(--amber) #3a4a44 #3a4a44}
+  .mock .w{color:var(--ink);font-size:10.5px}
+  .mock .pane{padding:10px 14px}
+  .mock .sec{margin-bottom:9px}
+  .mock .sec .t{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;color:var(--faint);
+    text-transform:uppercase;margin-bottom:3px}
+  .mock .boxx{background:var(--raised);border:1px solid var(--hair);border-radius:7px;padding:6px 9px}
+  .mock .ebars{display:flex;align-items:flex-end;gap:5px;height:34px}
+  .mock .eb{width:13px;border-radius:2.5px 2.5px 0 0;background:var(--teal)}
+  .mock .eb.ghost{background:transparent;border:1.5px dashed var(--amber);border-bottom:none}
+  .mock .eb.moonc{background:var(--moon);opacity:.6}
+  .mock .gapline{display:flex;gap:7px;align-items:center;margin-top:5px}
+  .mock .gapnum{color:var(--amber);font-weight:700}
+  .mock .btnr{border:1px solid var(--hair);border-radius:6px;padding:2px 8px;font-size:9px;color:var(--muted)}
+  .mock .btnr.hot{border-color:var(--teal-dim);color:var(--teal)}
+  .mock .navseg{display:flex;gap:4px;flex-wrap:wrap}
+  .mock .navseg span{border-bottom:2px solid transparent;padding:2px 2px;font-size:9.5px}
+  .mock .navseg span.on{color:var(--teal);border-color:var(--teal)}
+  .mock .cand{display:flex;align-items:center;gap:7px;padding:3.5px 0;border-bottom:1px solid #223029}
+  .mock .microbar{display:inline-flex;align-items:center;gap:2px;height:10px}
+  .mock .microbar i{display:block;width:4px;background:var(--teal);border-radius:1px}
+  .mock .microbar i.g{background:transparent;border:1px dashed var(--amber)}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · #70 · phase 1 / 2</div>
+  <h1>词汇本:给 gap-(c) 一个家</h1>
+  <p class="lede">
+    审计判词:1705+1863 行的功能堆叠,产品核心论点(gap-(c))的两个仪表藏在无名图标
+    背后的弹窗里,呈现规格全场最低(V2/C1/C3);筛选器半数时间静默失效(V1);
+    详情页一根 ListView 串 8 段(V4);AppBar 随态变身(V5)。本稿 2 方向,
+    共同任务只有一个:<b>把「书」和「仪表」都放进一个诚实的工作台</b>。
+  </p>
+  <div class="constraints">
+    <span class="c">呈现≠语义:筛选/评估/建议的后端逻辑零改动</span>
+    <span class="c">资产继承:第二解码器切片、键盘导航、语速排序、#47 词条环</span>
+    <span class="c">狩猎清单动线不动(#3.7)</span>
+    <span class="c">弹窗死刑:核心动线一律页内面</span>
+    <span class="c">i18n 归 #21,本稿不动文案制度</span>
+  </div>
+
+  <h2>共享语义 <span class="en">SHARED SEMANTICS — 两方向共用,先钉死</span></h2>
+
+  <div class="sembox">
+    <h3>gap-(c) 的家:双层架构 <span class="en">WHERE THE GAP LIVES</span></h3>
+    <div class="legend">
+      <div class="row"><span class="sw" style="background:var(--teal)"></span>
+        <span><b>总览的家=教练画像</b>(已有,#47 罗盘/回声条):看「我整体的差距」。
+        教练页的画像可下钻(K4 的修复归教练页设计稿)。</span></div>
+      <div class="row"><span class="sw" style="background:var(--amber)"></span>
+        <span><b>清单的家=词汇本「差距」面</b>(本稿新增,页内常驻,替死两个弹窗):
+        看「具体是哪些词」。跨通道候选 + 产出差距靶子合并为一张清单——它们本就是
+        同一个问题(「哪些词的输出跟不上输入」)的两个来源,后端语义不动,
+        只是并排呈现。</span></div>
+      <div class="row"><span class="sw" style="background:var(--moon)"></span>
+        <span><b>词条的家=词条环+详情</b>(已有):看「这个词的四通道处境」。
+        三层互通:画像数字 → 差距清单 → 词条详情,层层可点。</span></div>
+    </div>
+  </div>
+
+  <div class="sembox">
+    <h3>筛选语义修正(V1)<span class="en">THE LENS, HONEST</span></h3>
+    <table class="map">
+      <tr><th>现状</th><th>修正</th></tr>
+      <tr><td>通道 chip 在「全部」档下点击只换高亮不换列表(控件撒谎)</td>
+        <td><b>通道永远生效</b>:选listening=列表词条环以听通道为主环着色/排序;
+        选「全部」评估档时列表仍全量,但环的视角跟着通道走——点了就有回应,
+        永不静默(呈现层变化,查询语义不动:评估档未选时仍不加 capability 过滤)</td></tr>
+      <tr><td>评估三档 chip(acquired/not/unassessed)+「全部」独立一行</td>
+        <td>评估档合并进<b>三态语言</b>:三个档位直接用 #47 三态色点(青/琥珀/压暗)
+        做 chip 前缀——筛选器与词条环说同一种话</td></tr>
+    </table>
+  </div>
+
+  <div class="sembox">
+    <h3>外壳收纳(C3/V5)<span class="en">QUIET SHELL</span></h3>
+    <div class="legend">
+      <div class="row"><span class="sw" style="background:var(--raised)"></span>
+        <span><b>AppBar 只留三件事</b>:搜索、狩猎(带徽标)、「工具」溢出菜单
+        (导入/导出/重建索引/语义索引管理——维护域全部入此,与核心动线永久分层)。
+        语义搜索的「用」(搜索框)与「装」(索引管理)分离:搜索能力并入主搜索框
+        (可用时出现「语义」开关),管理归工具菜单。</span></div>
+      <div class="row"><span class="sw" style="background:var(--raised)"></span>
+        <span><b>AppBar 永不变身</b>:详情的动作(加入复习/狩猎/投影审计)跟着详情面走,
+        不再劫持顶栏(V5 死刑)。</span></div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────── Direction A ───────────────────────── -->
+  <h2>方向 A · 工作台 <span class="en">THE WORKBENCH — 双栏常驻,推荐</span></h2>
+  <p class="note">
+    桌面 app 的答案:左=书(列表+透镜),右=活动面。<b>右面默认显示「差距」仪表间</b>——
+    进词汇本第一眼就是 gap-(c),不点任何图标;点词条右面变详情,列表不消失,
+    AppBar 纹丝不动。
+  </p>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">MOCK · 进入态(右面=差距仪表间)</span>
+        <div class="mock">
+          <div class="bar">
+            <span>🔍 搜索(含语义)</span><span class="sp"></span>
+            <span class="chipR on">听</span><span class="chipR">说</span>
+            <span class="chipR">读</span><span class="chipR">写</span>
+            <span style="width:10px"></span>
+            <span class="chipR">◉ 靶</span><span class="chipR">⋯ 工具</span>
+          </div>
+          <div class="cols">
+            <div class="list">
+              <div class="rowi"><span class="ring"></span><span class="w">ended up</span></div>
+              <div class="rowi"><span class="ring amb"></span><span class="w">gist</span></div>
+              <div class="rowi"><span class="ring half"></span><span class="w">interview</span></div>
+              <div class="rowi"><span class="ring dim"></span><span class="w">assume</span></div>
+              <div class="rowi"><span class="ring"></span><span class="w">figure out</span></div>
+              <div class="rowi"><span class="ring amb"></span><span class="w">rather</span></div>
+              <div class="rowi"><span class="ring dim"></span><span class="w">deliberately</span></div>
+            </div>
+            <div class="pane">
+              <div class="sec">
+                <div class="t">差距 · 这门语言的回声</div>
+                <div class="boxx">
+                  <div class="ebars">
+                    <span class="eb" style="height:30px"></span>
+                    <span class="eb ghost" style="height:30px;width:13px"></span>
+                    <span class="eb" style="height:12px"></span>
+                    <span style="width:14px"></span>
+                    <span class="eb moonc" style="height:22px"></span>
+                    <span class="eb ghost" style="height:22px"></span>
+                    <span class="eb moonc" style="height:8px"></span>
+                  </div>
+                  <div class="gapline">听得懂 46 · 说得出 12 ·
+                    <span class="gapnum">回声缺口 7</span></div>
+                </div>
+              </div>
+              <div class="sec">
+                <div class="t">跨通道候选 · 输出跟不上输入的词</div>
+                <div class="cand"><span class="microbar"><i style="height:9px"></i><i class="g" style="height:9px"></i><i style="height:4px"></i></span>
+                  <span class="w">gist</span><span style="flex:1"></span><span class="btnr hot">看词条</span></div>
+                <div class="cand"><span class="microbar"><i style="height:8px"></i><i class="g" style="height:8px"></i><i style="height:3px"></i></span>
+                  <span class="w">rather</span><span style="flex:1"></span><span class="btnr hot">看词条</span></div>
+                <div class="cand"><span class="microbar"><i style="height:7px"></i><i class="g" style="height:7px"></i><i style="height:2px"></i></span>
+                  <span class="w">deliberately</span><span style="flex:1"></span><span class="btnr hot">看词条</span></div>
+              </div>
+              <div class="sec">
+                <div class="t">产出差距 · 高频却没说过</div>
+                <div class="cand"><span class="w">assume</span>
+                  <span style="font-size:8.5px;color:var(--faint)">BNC #812 · 证据 5</span>
+                  <span style="flex:1"></span><span class="btnr">练习</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <span class="cap">MOCK · 词条态(右面=详情,列表仍在,AppBar 不变)</span>
+        <div class="mock">
+          <div class="bar">
+            <span>🔍</span><span class="sp"></span>
+            <span class="chipR on">听</span><span class="chipR">说</span>
+            <span class="chipR">读</span><span class="chipR">写</span>
+            <span style="width:10px"></span>
+            <span class="chipR">◉ 靶</span><span class="chipR">⋯ 工具</span>
+          </div>
+          <div class="cols">
+            <div class="list">
+              <div class="rowi"><span class="ring"></span><span class="w">ended up</span></div>
+              <div class="rowi sel"><span class="ring amb"></span><span class="w">gist</span></div>
+              <div class="rowi"><span class="ring half"></span><span class="w">interview</span></div>
+              <div class="rowi"><span class="ring dim"></span><span class="w">assume</span></div>
+            </div>
+            <div class="pane">
+              <div class="sec" style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:15px;color:var(--ink);font-weight:700">gist</span>
+                <span class="ring amb" style="width:14px;height:14px"></span>
+                <span style="flex:1"></span>
+                <span class="btnr">复习</span><span class="btnr">狩猎</span><span class="btnr">审计</span>
+              </div>
+              <div class="navseg"><span class="on">证据</span><span>切片 4</span>
+                <span>我的输出</span><span>义项</span><span>笔记</span></div>
+              <div class="sec" style="margin-top:7px">
+                <div class="boxx" style="min-height:96px">
+                  证据历史(听 ×3 · 读 ×5)……<br>
+                  <span style="color:var(--faint)">切片播放器/键盘导航原样继承</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">要点</span>
+        <dl class="qa">
+          <dt><span class="qn">IA</span>三面一台</dt>
+          <dd>左列表 + 右活动面(差距仪表间 ⇄ 词条详情),差距面是<b>默认页</b>——
+          gap-(c) 从「第 6 个图标里的弹窗」升为「进门第一眼」。</dd>
+          <dt><span class="qn">V4</span>详情分段</dt>
+          <dd>词条详情按「身份卡+分段导航」重排:证据/切片/我的输出/义项/笔记
+          五段可跳,一次只看一段(P5);建议横幅仍置顶。</dd>
+          <dt><span class="qn">V6</span>加载诚实</dt>
+          <dd>身份卡先渲染(details 一到就画),装饰性数据(建议/词典音频/产出)
+          分段各自 loading——串行等待死刑。</dd>
+          <dt><span class="qn">C6</span>图形语言下沉</dt>
+          <dd>跨通道候选行=词条名+<b>微型回声条</b>(输入高度 vs 输出 ghost),
+          raw 四通道字符串死刑;与对话页结束页、教练画像同一语言。</dd>
+          <dt><span class="qn">窄窗</span></dt>
+          <dd>低于断点(新增 vocabularyTwoPane,进 ListenBreakpoints)退化为
+          方向 B 的单列形——两方向不是二选一,是宽窄两态。</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="verdict">
+      <b>自我证伪:</b>双栏的代价——①右面两用(仪表间/详情)需要清晰的返回动线,
+      否则用户「回不到差距清单」;缓解:列表上方常驻「差距」入口行,选中态可视。
+      ②1705 行屏的双栏化是五页里最大的实现刀,若拍板 A,建议拆两刀
+      (先差距面替弹窗、后详情分段)。
+    </div>
+  </div>
+
+  <!-- ───────────────────────── Direction B ───────────────────────── -->
+  <h2>方向 B · 书页优先 <span class="en">BOOK-FIRST — 单列保守案</span></h2>
+  <p class="note">
+    最小改动案:保单列结构,但在书页顶部加一条<b>常驻仪表条</b>(紧凑回声条+缺口数,
+    可点进页内「差距」页),弹窗全部转为 push 页。详情仍是独立页,但按 A 的分段方案重排。
+  </p>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">MOCK · 书页(顶部=仪表条)</span>
+        <div class="mock">
+          <div class="bar">
+            <span>🔍 搜索</span><span class="sp"></span>
+            <span class="chipR">◉ 靶</span><span class="chipR">⋯ 工具</span>
+          </div>
+          <div class="pane" style="border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:10px">
+            <div class="ebars" style="height:22px">
+              <span class="eb" style="height:20px;width:9px"></span>
+              <span class="eb ghost" style="height:20px;width:9px"></span>
+              <span class="eb moonc" style="height:13px;width:9px"></span>
+              <span class="eb ghost" style="height:13px;width:9px"></span>
+            </div>
+            <span style="font-size:9.5px">回声缺口 <span class="gapnum">7</span></span>
+            <span style="flex:1"></span><span class="btnr hot">看差距 →</span>
+          </div>
+          <div class="bar" style="background:transparent">
+            <span class="chipR on">听</span><span class="chipR">说</span>
+            <span class="chipR">读</span><span class="chipR">写</span>
+            <span style="width:8px"></span>
+            <span class="chipR" style="border-color:var(--teal-dim)">●青</span>
+            <span class="chipR" style="border-color:#8a6b35">●琥</span>
+            <span class="chipR">●暗</span>
+          </div>
+          <div style="padding:6px 0">
+            <div class="rowi"><span class="ring"></span><span class="w">ended up</span></div>
+            <div class="rowi"><span class="ring amb"></span><span class="w">gist</span></div>
+            <div class="rowi"><span class="ring half"></span><span class="w">interview</span></div>
+            <div class="rowi"><span class="ring dim"></span><span class="w">assume</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">要点 + 证伪</span>
+        <dl class="qa">
+          <dt><span class="qn">改动</span>范围</dt>
+          <dd>仪表条 + 「差距」push 页 + 弹窗转页 + 详情分段。列表/路由骨架不动,
+          实现刀最小。</dd>
+          <dt><span class="qn">价值</span></dt>
+          <dd>gap-(c) 从不可见变为「常驻一条 + 一跳直达」;三层家架构与 A 完全一致,
+          只是仪表间从「半屏常驻」降为「一条+一页」。</dd>
+          <dt><span class="qn">证伪</span>不足处:</dt>
+          <dd>①详情仍是 push 页,V5 的 AppBar 变身只能靠详情页自带顶栏缓解;
+          ②差距清单与词条列表不能并视(对照式浏览弱于 A);③桌面宽屏下右侧留白
+          浪费——这本是双栏的地盘。<b>它更适合作为 A 的窄窗形态,而非独立方向</b>。</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <h2>拍板点 <span class="en">DECISIONS NEEDED · OWNER</span></h2>
+  <div class="decisions">
+    <ol>
+      <li><b>方向:A 工作台 / B 书页优先</b>。我的推荐:<b>A 为主、B 为 A 的窄窗退化形</b>
+        (同一套语义,两个断点形态;断点常量进 ListenBreakpoints)。</li>
+      <li><b>差距仪表间做右面默认页</b>(进词汇本第一眼=gap-(c))——确认?
+        更保守的替代:默认空态+一条入口。</li>
+      <li><b>跨通道候选与产出差距合并为一张「差距」清单</b>(两个后端来源并排呈现,
+        语义不动)——确认?</li>
+      <li><b>语义搜索并入主搜索框</b>(能力可用时出现「语义」开关;索引管理归工具菜单)
+        ——确认?</li>
+      <li><b>详情分段导航用锚点段落还是 tab</b>?(本稿画的是段落导航条;tab 更省高度
+        但一次只见一段,证据/切片常要对照看。)</li>
+      <li><b>实现拆刀</b>:若拍板 A,建议两刀(刀1=差距面+外壳收纳+筛选修正;
+        刀2=详情分段+加载诚实)——认可这个切法吗?</li>
+    </ol>
+  </div>
+
+  <div class="pending">
+    拍板记录 <span style="font-family:var(--mono);font-size:10.5px">DECISION · OWNER · 待填</span><br>
+    owner 拍板后在此记录:选定方向、各拍板点结论、修改要求。
+  </div>
+</div>
