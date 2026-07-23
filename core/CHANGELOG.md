@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-23: 词汇本 owner 拍板落库（refs #70 · Phase 1 · 设计轨）。拍板记录写入
+  `listen-vocabulary-redesign.html`：**方向=A 工作台为主、B 为窄窗退化形**（断点常量
+  `vocabularyTwoPane` 进 ListenBreakpoints）；差距仪表间=右面默认页（进门第一眼=
+  gap-(c)）；跨通道候选+产出差距合并为一张「差距」清单（呈现并排，语义零改动）；
+  语义搜索并入主搜索框、索引管理归工具菜单；详情分段=锚点段落导航（非 tab）；
+  实现拆两刀（刀1=差距面+外壳收纳+筛选修正，刀2=详情分段+加载诚实）。
+  纯文档，无代码改动。
+
 - 2026-07-23: 词汇本重设计探索稿（refs #70 · Phase 1 · 设计轨）。落库
   `design-notes/listen-vocabulary-redesign.html`：2 方向对准审计 V1–V6/C1/C3/C6。
   **共享语义先钉死**：gap-(c) 三层家架构（总览=教练画像、清单=词汇本页内常驻
