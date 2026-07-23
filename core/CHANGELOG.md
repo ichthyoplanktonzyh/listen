@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-23: 修复 Realtime provider 下拉选中项横向溢出。
+  `RealtimeConversationPanel` 的 provider 选择器（`DropdownButtonFormField`）未设
+  `isExpanded`，真实 profile（如 'Realtime provider · qwen3.5-omni-plus-realtime'）
+  会让选中项 Row 溢出约 290px。改为 `isExpanded: true` + item 文本单行 ellipsis。
+  补 widget 测试：注册长 displayName/modelId profile 后渲染面板，断言无溢出异常
+  （去修复复现 `RenderFlex overflowed by 294 pixels`）。584 项测试绿；
+  `flutter analyze` 零告警。
 - 2026-07-23: provider 对话框重构为 StatefulWidget,controller 归 State 所有(refs #27 收尾)。
   #58 的「await showDialog 后逐个 dispose」与退场动画存在竞态:保存成功时 registerProfile
   触发面板刷新,pop 后 future 立即 resolve、dispose 先于退场动画结束执行,退场中的
