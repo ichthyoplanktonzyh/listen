@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-23: macOS 原生菜单栏（refs #23）。`PlatformMenuBar` 接管菜单栏（AppKit 原生
+  渲染，零新增 Swift），模板脚手架的死项整体消失。**⌘, 复活**：App 菜单 Preferences…
+  直通应用设置；About/Services/Hide/Quit 走 `PlatformProvidedMenuItem` 系统项。
+  **File**：打开媒体 ⌘O、打开 URL ⇧⌘O、导入主/副/内嵌字幕、归档媒体。**Edit** 重建
+  标准 6 项（撤销/重做/剪切/拷贝/粘贴/全选），经 text-editing intents 派发到当前焦点
+  文本框，无焦点时安静无操作。**Playback/Help**：菜单项直接取自 #25 绑定表的
+  labelKey + 同一份 actions map——一个 id 一个标签一个回调，菜单只是第二张脸；缺 id
+  fail-fast。**Learning**：字幕资源/词汇本/复习/学习教练/转写中心/音素分析中心。
+  **禁用判定单一来源**：全部走 `AppBarCapabilities`（与 AppBar #24 同一实例）——无媒体
+  禁导入/归档/播放项，核心断连禁 Learning。**owner 拍板的键位策略：菜单键位仅 ⌘ 系列**
+  （⌘, ⌘O ⇧⌘O + Edit 六键）——AppKit 在事件到达 Flutter 前截获菜单 key equivalent，
+  裸键（Space/F/[ ]）挂菜单会吞文本框打字、⌥←/→ 会吞按词移光标；裸键继续由 ? 速查
+  展示，且有不变量测试钉死「菜单键位必含 ⌘」。l10n 新增 15 键（en/zh）。
+  **测试 +8（共 626 绿）**：双语标签无泄漏、⌘-only 不变量、⌘,/⌘O/⇧⌘O、播放项=表行
+  （标签一致 + 无菜单键位 + 回调同源）、可用性镜像 AppBarCapabilities 两态、缺 id
+  fail-fast、Edit intents 真选全文、无焦点静默。`flutter analyze` 零告警；macOS debug
+  构建通过。菜单在真机的原生渲染建议 owner 顺手过目（widget 测试覆盖不了 AppKit 层）。
+
 - 2026-07-23: 全屏沉浸态（refs #25 · 轨A A 部分，收官）。播放器终于有全屏：
   **F / 双击视频面 / 播放栏新按钮进入，Esc 退出**（F/Esc 走绑定表，速查自动收录，
   en/zh 双语）。全屏 = 显式 UI 状态而非仅系统窗口全屏——`ImmersiveModeController`
