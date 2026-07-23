@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- 2026-07-23: wordmark + 排版/间距/圆角/动效 token（refs #28, closes #32, closes #26 ·
+  design Slice 4）。#28 气质的「语法层」，三个前置设计决定（logo B 双向波形 / Plex+Charis
+  字体 / motion spec）已全部定案后整体落地。① **字体内嵌**：IBM Plex Sans（Reg/Med/SemiBold）
+  + Plex Mono（Reg）+ Plex Sans SC（Reg/Med，woff2 官方 npm 包转 TTF）+ Charis SIL（Reg），
+  共 ~18MB 入 `fonts/`，OFL 许可证随资产入库，`pubspec.yaml` 声明四族——跨机器渲染一致，
+  不再依赖系统栈。② **排版 token**（`theme/typography.dart`）：`ListenFonts` 四族常量 +
+  `ListenType` 语义阶梯（11 caption · 12 body · 13 reading · 14 emphasis · 16 title ·
+  22 hero，行高按宪章表：UI 标签 1.2–1.4 / 正文 1.5–1.7 / 标题 1.1–1.3）；`_build()` 把
+  阶梯镜像到 `textTheme` 槽位并 pin Plex + SC fallback；69 处 `fontSize` 字面量全部迁移
+  （10→caption 归档）；进度条时间标签改 `timecode`（Plex Mono，HH:MM:SS 等宽不抖动）；
+  音素带/发音参照的 IPA 文本改走 Charis SIL（`ListenType.ipa`）。③ **间距 token**
+  （`theme/spacing.dart`）：25 个 spacer 散值收敛为一条阶梯 2·4·6·8·12·16·24·32（离档值
+  就近向下归并，防溢出），443 处童子 `SizedBox` 全量迁移；几何尺寸（带 child）不属间距、
+  天然豁免。④ **圆角 token**（`theme/radii.dart`）：13 个散值收敛为四档+胶囊（tight 4 ·
+  control 8 · surface 12 · panel 16 · pill），按元素角色而非就近数值归并；主题内 7 vs 8
+  分裂终结——控件/菜单 control，卡片/对话框提到 surface。⑤ **动效 token**
+  （`theme/motion.dart`）：owner spec 直译（tap 90 / hover 160 / base 240 / slow 360 /
+  ambient 2600 + enter/exit/move 三曲线），Slice 2/3 的字幕胶囊落定、节拍/音素同步强调
+  改引 token；禁止清单（弹跳/庆祝/装饰转圈）写入文档。⑥ **wordmark**
+  （`widgets/listen_wordmark.dart`）：B 双向波形 mark（上亮青=内容、下暗青=回声，品牌常量
+  不随主题翻转）+ 小写 `listen` 字标（Plex SemiBold，-0.02em），替换 AppBar 的
+  `graphic_eq` 占位，首页/启动后续复用同一 widget。⑦ **不变量**：新增
+  `spacing_discipline_test` / `radius_discipline_test`（源码级禁裸字面量，童子 spacer 判据
+  写入测试注释）、`typography_test`（textTheme 槽位=阶梯、族=Plex/SC/Mono/IPA）、
+  `listen_wordmark_test`（品牌色不得接 colorScheme）。全量 557 项绿；`flutter analyze`
+  零告警。#26 据此收口。
+
 - 2026-07-22: 静默 return 全面清查——用户触发动作一律诚实反馈（refs #24 后续）。#24 修复了
   playback_actions_coordinator 的 4 处静默空点击后，本刀按同一判据（CONTEXT.md Unavailable
   State：说明原因 + 给出恢复动作）扫完 `lib/controllers/` 其余 coordinator/controller 的
