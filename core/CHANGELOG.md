@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-23: 签名动作「外壳退后」落地（refs #46 · design Slice 5 之四）。媒体在工作台
+  播放且鼠标静止 3s → AppBar 与 transport 淡出（`base`·`exit`，房间随内容变暗）；指针
+  任何活动 → 淡入（`base`·`enter`）；键盘焦点落在外壳内 → 常显不消失（对齐 motion spec
+  demo 3 的 `:hover, :focus-within`）。新增 `widgets/layout/shell_recede.dart`：
+  `ShellRecede`（顶层半透明 Listener 侦测指针活动 + 静止计时，暂停/回首页强制常显）+
+  `ShellFade`/`ShellFadeAppBar`（呈现层：布局占位不塌缩、隐藏时 IgnorePointer——静止后
+  第一次点击是唤醒不是盲按隐形按钮；appBar 槽位保 PreferredSizeWidget 接口）。reduce
+  motion 下即时切换。新增 `shell_recede_test`（不活跃永不退/静止退+移动回/焦点持有/
+  暂停复原 4 例）。577 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: 错误态容器定形（refs #46 · design Slice 5 之三）。新增
   `widgets/common/listen_error_state.dart` 两种形态：**`ListenErrorState`**（面板主体
   加载失败——与空态同几何：error 角色图标 + 一句话 + 可选重试，空与败读作同胞）、
