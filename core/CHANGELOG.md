@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-23: 对话页 owner 拍板落库 + 宪章「舞台态」修订（refs #70 · Phase 1 · 设计轨）。
+  拍板记录写入 `listen-live-conversation.html`：**方向=B 回声水面**（纯 B，结束页用
+  水面收窄成静态回声条收尾）；月白 `#c7d4cf` 成为正式语义色（对方的声音，实现时进
+  listen_theme + palette 纪律测试）；字幕默认关（门厅开关保留、记住选择）；你的话
+  live 中完全不上屏（本地 Whisper 只在结束页出场）；舞台态不联动系统全屏（#25 边界
+  不动）；provider 管理迁设置域（单独拆刀）。**宪章修订**（owner 拍板升格）：
+  `listen-design-charter.md` 新增「舞台态 · stage mode」节（全暗场/唯一光源/色的角色/
+  文字最小化/门厅两段进场五条，P2 的极限形）＋色表加月白行。审计提出的另两条宪章
+  修订（CustomPaint 光源清单、列宽 token 归属）仍待 owner 裁决。纯文档，无代码改动。
+
 - 2026-07-23: 对话页 GPT Live 化设计探索稿（refs #70 · Phase 1 · 设计轨）。落库
   `design-notes/listen-live-conversation.html`：三方向，每方向强制回答六道必答题
   （核心形血缘/四态可视化/打断/字幕/进出动线/结束页）。**共享语义先钉死**：舞台态
