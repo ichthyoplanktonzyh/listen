@@ -366,154 +366,47 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     child: Text(text),
   );
 
-  Future<void> _showProviderDialog(BuildContext context) async {
-    final name = TextEditingController();
-    final endpoint = TextEditingController(
-      text:
-          'wss://<workspace-id>.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime',
-    );
-    final model = TextEditingController(text: qwenRealtimeBaselineModel);
-    final voice = TextEditingController(text: 'Tina');
-    final secret = TextEditingController();
-    final qwenWorkspace = TextEditingController();
-    var adapter = 'qwen_omni_realtime';
-    var qwenRegion = 'cn';
-    void applyQwenEndpoint() {
-      final workspace = qwenWorkspace.text.trim();
-      final workspaceLabel = workspace.isEmpty ? '<workspace-id>' : workspace;
-      final regionHost = qwenRegion == 'cn'
-          ? 'cn-beijing.maas.aliyuncs.com'
-          : 'ap-southeast-1.maas.aliyuncs.com';
-      endpoint.text = 'wss://$workspaceLabel.$regionHost/api-ws/v1/realtime';
-    }
+  Future<void> _showProviderDialog(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (context) =>
+        _ProviderDialog(controller: widget.controller, api: widget.api),
+  );
+}
 
-    await showDialog<void>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add realtime provider'),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  initialValue: adapter,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'open_ai_realtime',
-                      child: Text('OpenAI Realtime'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'qwen_omni_realtime',
-                      child: Text('Qwen Omni Realtime'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setDialogState(() {
-                        adapter = value;
-                        if (value == 'qwen_omni_realtime') {
-                          model.text = qwenRealtimeBaselineModel;
-                          voice.text = 'Tina';
-                          applyQwenEndpoint();
-                        } else {
-                          model.text = openAiRealtimeBaselineModel;
-                          endpoint.text = 'wss://api.openai.com/v1/realtime';
-                          voice.text = 'marin';
-                        }
-                      });
-                    }
-                  },
-                ),
-                if (adapter == 'qwen_omni_realtime') ...[
-                  DropdownButtonFormField<String>(
-                    initialValue: qwenRegion,
-                    decoration: const InputDecoration(labelText: 'Region'),
-                    items: const [
-                      DropdownMenuItem(value: 'sg', child: Text('Singapore')),
-                      DropdownMenuItem(
-                        value: 'cn',
-                        child: Text('China (Model Studio / 百炼)'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() {
-                          qwenRegion = value;
-                          applyQwenEndpoint();
-                        });
-                      }
-                    },
-                  ),
-                  TextField(
-                    controller: qwenWorkspace,
-                    decoration: const InputDecoration(
-                      labelText: 'Workspace ID',
-                      helperText:
-                          'Use the workspace and API key from the same region.',
-                    ),
-                    onChanged: (_) => setDialogState(applyQwenEndpoint),
-                  ),
-                ],
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'Display name'),
-                ),
-                TextField(
-                  controller: endpoint,
-                  decoration: const InputDecoration(
-                    labelText: 'WebSocket endpoint',
-                  ),
-                ),
-                TextField(
-                  controller: model,
-                  decoration: const InputDecoration(labelText: 'Model'),
-                ),
-                TextField(
-                  controller: voice,
-                  decoration: const InputDecoration(labelText: 'Voice'),
-                ),
-                TextField(
-                  controller: secret,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'API key (stored in macOS Keychain)',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (endpoint.text.contains('<workspace-id>')) return;
-                await widget.controller.registerProfile(
-                  widget.api,
-                  displayName: name.text.trim().isEmpty
-                      ? 'Realtime provider'
-                      : name.text.trim(),
-                  adapterKind: adapter,
-                  baseUrl: endpoint.text.trim(),
-                  modelId: model.text.trim(),
-                  voice: voice.text.trim(),
-                  secret: secret.text,
-                );
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: const Text('Save securely'),
-            ),
-          ],
-        ),
-      ),
-    );
-    // #27: release every controller once the dialog closes. The secret is
-    // cleared first so the API key does not linger in the controller's value
-    // after it has been handed to the Keychain.
+/// The "Add realtime provider" dialog. A real StatefulWidget so its six
+/// TextEditingControllers are owned by [State] and released in
+/// [State.dispose] (#27) — that runs only after the route's exit animation
+/// has finished, so a rebuild during dismissal can never touch a disposed
+/// controller (disposing right after `await showDialog` returned raced the
+/// exit transition whenever the save flow refreshed the panel).
+class _ProviderDialog extends StatefulWidget {
+  const _ProviderDialog({required this.controller, required this.api});
+
+  final RealtimeConversationController controller;
+  final LocalApi api;
+
+  @override
+  State<_ProviderDialog> createState() => _ProviderDialogState();
+}
+
+class _ProviderDialogState extends State<_ProviderDialog> {
+  final name = TextEditingController();
+  final endpoint = TextEditingController(
+    text:
+        'wss://<workspace-id>.cn-beijing.maas.aliyuncs.com/api-ws/v1/realtime',
+  );
+  final model = TextEditingController(text: qwenRealtimeBaselineModel);
+  final voice = TextEditingController(text: 'Tina');
+  final secret = TextEditingController();
+  final qwenWorkspace = TextEditingController();
+  var adapter = 'qwen_omni_realtime';
+  var qwenRegion = 'cn';
+  String? workspaceError;
+
+  @override
+  void dispose() {
+    // The secret is cleared first so the API key does not linger in the
+    // controller's value after it has been handed to the Keychain (#27).
     secret.clear();
     name.dispose();
     endpoint.dispose();
@@ -521,7 +414,158 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     voice.dispose();
     secret.dispose();
     qwenWorkspace.dispose();
+    super.dispose();
   }
+
+  void applyQwenEndpoint() {
+    final workspace = qwenWorkspace.text.trim();
+    final workspaceLabel = workspace.isEmpty ? '<workspace-id>' : workspace;
+    final regionHost = qwenRegion == 'cn'
+        ? 'cn-beijing.maas.aliyuncs.com'
+        : 'ap-southeast-1.maas.aliyuncs.com';
+    endpoint.text = 'wss://$workspaceLabel.$regionHost/api-ws/v1/realtime';
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Add realtime provider'),
+    content: SizedBox(
+      width: 520,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: adapter,
+            items: const [
+              DropdownMenuItem(
+                value: 'open_ai_realtime',
+                child: Text('OpenAI Realtime'),
+              ),
+              DropdownMenuItem(
+                value: 'qwen_omni_realtime',
+                child: Text('Qwen Omni Realtime'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() {
+                  adapter = value;
+                  workspaceError = null;
+                  if (value == 'qwen_omni_realtime') {
+                    model.text = qwenRealtimeBaselineModel;
+                    voice.text = 'Tina';
+                    applyQwenEndpoint();
+                  } else {
+                    model.text = openAiRealtimeBaselineModel;
+                    endpoint.text = 'wss://api.openai.com/v1/realtime';
+                    voice.text = 'marin';
+                  }
+                });
+              }
+            },
+          ),
+          if (adapter == 'qwen_omni_realtime') ...[
+            DropdownButtonFormField<String>(
+              initialValue: qwenRegion,
+              decoration: const InputDecoration(labelText: 'Region'),
+              items: const [
+                DropdownMenuItem(value: 'sg', child: Text('Singapore')),
+                DropdownMenuItem(
+                  value: 'cn',
+                  child: Text('China (Model Studio / 百炼)'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    qwenRegion = value;
+                    applyQwenEndpoint();
+                  });
+                }
+              },
+            ),
+            TextField(
+              controller: qwenWorkspace,
+              decoration: InputDecoration(
+                labelText: 'Workspace ID',
+                helperText:
+                    'Use the workspace and API key from the same region.',
+                errorText: workspaceError,
+              ),
+              onChanged: (_) => setState(() {
+                workspaceError = null;
+                applyQwenEndpoint();
+              }),
+            ),
+          ],
+          TextField(
+            controller: name,
+            decoration: const InputDecoration(labelText: 'Display name'),
+          ),
+          TextField(
+            controller: endpoint,
+            decoration: InputDecoration(
+              labelText: 'WebSocket endpoint',
+              // The Workspace ID field carries the error while it is
+              // visible; otherwise the endpoint field itself does, so
+              // the save guard is never silent.
+              errorText: adapter == 'qwen_omni_realtime'
+                  ? null
+                  : workspaceError,
+            ),
+            onChanged: (_) => setState(() => workspaceError = null),
+          ),
+          TextField(
+            controller: model,
+            decoration: const InputDecoration(labelText: 'Model'),
+          ),
+          TextField(
+            controller: voice,
+            decoration: const InputDecoration(labelText: 'Voice'),
+          ),
+          TextField(
+            controller: secret,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'API key (stored in macOS Keychain)',
+            ),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () async {
+          if (endpoint.text.contains('<workspace-id>')) {
+            // Honest feedback (#24/#45 discipline): a user-triggered
+            // action never no-ops silently — name what is missing.
+            setState(
+              () => workspaceError =
+                  'Enter the Workspace ID to complete the endpoint.',
+            );
+            return;
+          }
+          await widget.controller.registerProfile(
+            widget.api,
+            displayName: name.text.trim().isEmpty
+                ? 'Realtime provider'
+                : name.text.trim(),
+            adapterKind: adapter,
+            baseUrl: endpoint.text.trim(),
+            modelId: model.text.trim(),
+            voice: voice.text.trim(),
+            secret: secret.text,
+          );
+          if (context.mounted) Navigator.pop(context);
+        },
+        child: const Text('Save securely'),
+      ),
+    ],
+  );
 }
 
 class _HistorySessionTile extends StatelessWidget {
