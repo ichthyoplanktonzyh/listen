@@ -57,6 +57,8 @@ class LearningWorkflowController {
         .map((token) => token.normalized!)
         .toSet()
         .toList();
+    // Background sync after a track or language change; a missing core or
+    // track is not a user action, so silence is correct here.
     if (lemmas == null || api == null) return;
     final values = await api.readLexicalEntriesBatch(
       lemmas,
@@ -75,6 +77,7 @@ class LearningWorkflowController {
     required LearningController learning,
     required bool Function() isMounted,
   }) async {
+    // Background sync path, mirroring [loadWordEntries]: silence is correct.
     if (api == null) return;
     final values = await api.lexicalEntries(kind: 'phrase', language: language);
     if (!isMounted()) return;
@@ -102,6 +105,8 @@ class LearningWorkflowController {
       learning.selectWord(null);
       learning.selectSidePanel(2);
     }
+    // User feedback for a missing core is owned by VocabularyActionsCoordinator,
+    // which guards before delegating; this stays a pure workflow.
     if (api == null) return;
     final source = sourceFor?.call(token, cue);
     var entry = learning.wordEntries[lemma];
@@ -254,6 +259,8 @@ class LearningWorkflowController {
     required bool Function() isMounted,
   }) async {
     final entry = learning.selectedLexicalDetails?.entry;
+    // Missing-core feedback is owned by VocabularyActionsCoordinator; a null
+    // entry means no word is selected, which the editor UI already gates.
     if (entry == null || api == null) return;
     final details = await api.updateLexicalLearningContent(
       entry.id,
@@ -295,6 +302,8 @@ class LearningWorkflowController {
     Map<String, dynamic>? Function(SubtitleToken token, Cue cue)? sourceFor,
   }) async {
     final entry = learning.selectedLexicalDetails?.entry;
+    // Same ownership split as [saveSelectedLearningContent]: silence here,
+    // feedback in the coordinator.
     if (entry == null || api == null) return;
     await api.setCapabilityOverride(
       entry.id,
@@ -365,6 +374,8 @@ class LearningWorkflowController {
   }) async {
     final token = learning.selectedToken;
     final cue = learning.selectedCue;
+    // Same ownership split as [saveSelectedLearningContent]: silence here,
+    // feedback in the coordinator.
     if (token?.normalized == null || cue == null || api == null) return;
     final source = sourceFor(token!, cue);
     if (source == null) return;

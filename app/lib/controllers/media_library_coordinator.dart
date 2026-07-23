@@ -75,6 +75,8 @@ class MediaLibraryCoordinator {
   /// readiness strip reflects real state instead of cold-start zeros.
   Future<void> prefetchHomeSummary() async {
     final service = getApi();
+    // Passive prefetch (runs on connect, not on a user action): before the
+    // core is up the home simply keeps its neutral placeholders.
     if (service == null) return;
     unawaited(extensiveListening.refreshInbox(service));
     unawaited(loadMediaLibrary());
@@ -99,6 +101,8 @@ class MediaLibraryCoordinator {
   /// never a gate on playback or learning.
   Future<void> loadMediaLibrary() async {
     final service = getApi();
+    // Background summary refresh; a missing core keeps the previous list,
+    // matching the failure policy documented above.
     if (service == null) return;
     try {
       final entries = (await service.listMediaLibrary())
@@ -162,7 +166,12 @@ class MediaLibraryCoordinator {
     String? intent,
   ) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      // Unavailable State (CONTEXT.md): triage is a direct click on a library
+      // row, so report the missing core instead of silently doing nothing.
+      player.setStatus(text('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       final updated = await service.setMediaTriageIntent(entry.media.id, intent);
       if (!isMounted()) return;

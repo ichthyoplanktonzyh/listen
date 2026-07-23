@@ -44,7 +44,12 @@ class HuntingActionsCoordinator {
     }
     final service = getApi();
     final mediaId = player.mediaId;
-    if (service == null || mediaId == null) return;
+    if (service == null || mediaId == null) {
+      // Unavailable State (CONTEXT.md): the toggle is user-triggered, so name
+      // the cause and the recovery action instead of silently doing nothing.
+      player.setStatus(text('statusOpenMediaAndCoreFirst'));
+      return;
+    }
     if (!extensiveListening.active) {
       final started = await extensiveListening.startSession(
         api: service,
@@ -74,7 +79,10 @@ class HuntingActionsCoordinator {
 
   Future<void> reindexHuntingCorpus() async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(text('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       final count = await service.reindexCorpus();
       await huntingSession.reload(service);
@@ -94,7 +102,10 @@ class HuntingActionsCoordinator {
 
   Future<void> answerHuntingCheck(String answer) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(text('statusConnectLocalCoreFirst'));
+      return;
+    }
     final saved = await huntingSession.answer(service, answer);
     if (saved && isMounted()) {
       player.setStatus(text('huntingAnswerSaved'));

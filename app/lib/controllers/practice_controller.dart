@@ -797,6 +797,8 @@ class PracticeController extends ChangeNotifier {
 
   Future<void> deleteCurrentRecording(LocalApi? api) async {
     final asset = recordingAsset;
+    // The delete affordance only renders with a recording present, behind the
+    // root api gate; a null here is a stale click, so silence is correct.
     if (api == null || asset == null) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {

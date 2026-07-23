@@ -56,6 +56,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     required Future<void> Function() closeReading,
   }) async {
     final selection = selectCurrentSegment();
+    // selectCurrentSegment already reported why no segment is available.
     if (selection == null) return;
     final source = SpeakingTaskSource(
       anchorCueId: selection.anchorCueId,
@@ -80,11 +81,20 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   /// activity. Realtime and Speaking each adapt this neutral selection.
   ContentSegmentSelection? selectCurrentSegment() {
     final track = subtitle.primaryTrack;
-    if (track == null) return null;
+    // Every caller is a user-triggered launch (retelling, conversation), so
+    // each null is reported like the segment-length case below (#24 pattern).
+    if (track == null) {
+      player.setStatus(_t('channelNeedsTranscript'));
+      return null;
+    }
     final paragraphs = deriveReadingParagraphs(
       track.cues,
     ).where((paragraph) => !paragraph.nonSpeech).toList(growable: false);
-    if (paragraphs.isEmpty) return null;
+    if (paragraphs.isEmpty) {
+      // A transcript with only non-speech cues has no content to speak about.
+      player.setStatus(_t('channelNeedsTranscript'));
+      return null;
+    }
     final currentCueId = subtitle.currentPrimaryCue?.id;
     var paragraph = paragraphs.first;
     for (final candidate in paragraphs) {

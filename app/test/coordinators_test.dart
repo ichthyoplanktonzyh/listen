@@ -98,8 +98,9 @@ void main() {
   group('ResourceActionsCoordinator', () {
     test('loadSubtitleResources without an api clears resources', () async {
       final subtitle = SubtitleController();
+      final player = PlayerController();
       final coordinator = ResourceActionsCoordinator(
-        player: PlayerController(),
+        player: player,
         subtitle: subtitle,
         speechEnhancement: SpeechEnhancementWorkflowController(),
       );
@@ -113,6 +114,38 @@ void main() {
       await coordinator.loadSubtitleResources();
       expect(subtitle.subtitleResources, isEmpty);
       expect(subtitle.subtitleResourceCapabilities, isEmpty);
+      // The user-triggered refresh path (updateStatus: true) reports the
+      // unavailable state instead of silently clearing the panel.
+      expect(player.status, 'statusOpenMediaAndCoreFirst');
+
+      player.setStatus('');
+      await coordinator.loadSubtitleResources(updateStatus: false);
+      // Internal reloads stay silent by design.
+      expect(player.status, '');
+    });
+
+    test('row actions without an api report the missing core', () async {
+      final player = PlayerController();
+      final coordinator = ResourceActionsCoordinator(
+        player: player,
+        subtitle: SubtitleController(),
+        speechEnhancement: SpeechEnhancementWorkflowController(),
+      );
+      coordinator.bind(
+        getApi: () => null,
+        isMounted: () => true,
+        reloadSpeechEnhancements: (_) async {},
+        activatePrimaryTrack: (_, {required nextStatus}) async {},
+        reloadLearningEntries: () async {},
+      );
+      final track = SubtitleTrack(
+        id: 'track-1',
+        mediaId: 'media-1',
+        source: 'import',
+        cues: const [],
+      );
+      await coordinator.archiveSubtitleResource(track);
+      expect(player.status, 'statusConnectLocalCoreFirst');
     });
 
     test(
