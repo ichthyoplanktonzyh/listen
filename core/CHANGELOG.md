@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-23: 修复 provider 对话框泄漏 6 个 TextEditingController（closes #27 · 轨A）。
+  `realtime_conversation_panel.dart` `_showProviderDialog` 每次打开建 6 个 controller
+  但全文件 0 处 dispose——含绑 API key 输入框的 `secret`，密钥明文随 controller 滞留堆里。
+  修复对齐全仓既有写法（`personal_expression_screen.dart`）：`await showDialog` 返回后
+  逐个 `dispose()`，`secret` 先 `clear()` 再释放——密钥交给 Keychain 后不再持有。
+  新增 `realtime_conversation_panel_leak_test`：leak_tracker 全类跟踪下反复开关对话框
+  3 轮 + 卸载整树，修复前精确抓到 18 个（6×3）未释放 controller、修复后零泄漏
+  （红→绿双向验证过）；`leak_tracker_flutter_testing` 入 dev_dependencies（`any`，
+  版本随 flutter_test 钉住）。584 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: focus ring——键盘焦点的可见语言（refs #46 · design Slice 5 之六，收口）。
   信号青细描边（1.5，与输入框 focusedBorder 同宽同色=同一语言）落进主题层：一个共享
   resolver 挂上四个按钮族（Outlined/Text/Icon 描信号青；Filled 底就是青色、环会沉底，
