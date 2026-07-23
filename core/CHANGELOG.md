@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-23: 快捷键绑定表单一来源 + 速查面板 + 桌面播放器基本键位（refs #25 · 轨A B 部分）。
+  ① 新增 `lib/player_shortcuts.dart`：19 条绑定的唯一事实来源（id/键位/分类/l10n 标签/
+  mark-key 标记），`main.dart` 不再硬编码任何 `SingleActivator`（有源码级测试钉死）；
+  该表同时是 #23 原生菜单栏的数据源。② owner 拍板的键位重分配落地：←/→ 归还 seek
+  （±5s），句间导航改 ⌥←/⌥→；新增 M 静音、↑/↓ 音量、[ ] 倍速（0.5–2.0 与 transport
+  预设同界）；F/Esc 全屏留给 #25-A。③ `?` 打开快捷键速查（`shortcut_cheat_sheet.dart`，
+  纯表视图，en/zh 全本地化，macOS 风格键帽 ⌥ ← / ⇧ I）；设置对话框新增「快捷键」分区
+  （第 8 个 rail 项）：裸数字 1/2/3 标记键开关（`markKeysEnabled`，默认开，持久化
+  `mark_keys_enabled`）+ 查看全部入口。④ Space 语义漂移可视：practice draft 激活时
+  transport 播放键旁出现安静键帽提示「空格控制练习切片」（`spaceTargetsPractice`
+  经 PlaybackBar 传入，practiceController 进 rebuild 合并列表）。⑤ 键盘音量/倍速与
+  transport 滑杆同一持久化路径；seek 经 `PlaybackActionsCoordinator.seekBy`（钳制
+  [0, duration]）。测试 +11：表不变量（id/键位唯一、双语标签齐全、owner 键位断言、
+  builder 全覆盖 + mark-key 裁剪 + 缺失动作 fail-fast、main.dart 无硬编码扫描、
+  开关在 widget 层真拦截）、速查双语渲染全条目、设置往返。596 项测试绿；
+  `flutter analyze` 零告警；macOS debug 构建通过。
+
 - 2026-07-23: 修复 `_saveSettings` 静默重置未枚举设置字段的 bug。原实现从默认值全新构造
   `AppSettings(...)`，凡未逐一列出的字段——`themeMode`、续播状态（`lastMediaPath/Title/
   PositionMs/DurationMs/SubtitleCount`）、`pronunciationVisible`、`phonemeDisplay`、
