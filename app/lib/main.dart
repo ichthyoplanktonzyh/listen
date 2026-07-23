@@ -65,6 +65,7 @@ import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/channels/reading_channel.dart';
 import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
+import 'widgets/common/listen_loading.dart';
 import 'widgets/flows/content_speaking_activity_dialog.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
@@ -79,6 +80,7 @@ import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/player_overlays.dart';
 import 'widgets/layout/player_stage.dart';
+import 'widgets/layout/shell_recede.dart';
 import 'widgets/layout/side_panel.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
@@ -1565,7 +1567,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (connectingApi) const CircularProgressIndicator(),
+              if (connectingApi) const ListenLoading(),
               const SizedBox(height: ListenSpacing.gap16),
               Text(status, textAlign: TextAlign.center),
               if (!connectingApi) ...[
@@ -1629,274 +1631,303 @@ class _PlayerScreenState extends State<PlayerScreen>
           },
           child: Focus(
             autofocus: true,
-            child: Scaffold(
-              appBar: PlayerAppBar(
-                // One definition of availability for every menu (#24); the
-                // native macOS menu (#23) must reuse it. `api` is non-null on
-                // this branch, but the capability object states it explicitly
-                // rather than baking the screen-level invariant into the bar.
-                capabilities: AppBarCapabilities(
-                  hasMedia: playerController.mediaId != null,
-                  coreReady: api != null,
-                ),
-                onOpenSubtitleResources: () =>
-                    unawaited(_openSubtitleResources()),
-                onOpenVocabulary: _openVocabulary,
-                onOpenReview: () => unawaited(_openReviewQueue()),
-                onOpenMedia: mediaSession.openMedia,
-                onOpenOnline: _openOnline,
-                onImportPrimarySubtitle: () =>
-                    unawaited(mediaSession.openSubtitle(secondary: false)),
-                onGeneratePrimarySubtitles: () =>
-                    unawaited(_generateSubtitles(secondary: false)),
-                onSearchPrimarySubtitles: () =>
-                    unawaited(_searchOpenSubtitles(secondary: false)),
-                onImportSecondarySubtitle: () =>
-                    unawaited(mediaSession.openSubtitle(secondary: true)),
-                onGenerateSecondarySubtitles: () =>
-                    unawaited(_generateSubtitles(secondary: true)),
-                onSearchSecondarySubtitles: () =>
-                    unawaited(_searchOpenSubtitles(secondary: true)),
-                onImportEmbeddedSubtitle: () =>
-                    unawaited(_importEmbeddedSubtitle()),
-                onOpenSettings: () => unawaited(_openSettings()),
-                onExportLogs: () => unawaited(_exportLogs()),
-                onExportVocabulary: () =>
-                    unawaited(playbackActions.exportVocabulary()),
-                onImportVocabulary: () =>
-                    unawaited(playbackActions.importVocabulary()),
-                onImportWordList: () => unawaited(_importWordList()),
-                onArchiveMedia: () =>
-                    unawaited(playbackActions.archiveCurrentMedia()),
-                onOpenTranscriptionCenter: () =>
-                    unawaited(_openTranscriptionCenter()),
-                onOpenPhoneticAnalysisCenter: () =>
-                    unawaited(_openPhoneticAnalysisCenter()),
-                onOpenLearningAssets: () => unawaited(_openLearningAssets()),
-                onOpenLearningResources: () =>
-                    unawaited(_openLearningResources()),
-              ),
-              body: DropTarget(
-                onDragEntered: (_) => setState(() => dragging = true),
-                onDragExited: (_) => setState(() => dragging = false),
-                onDragDone: (details) {
-                  setState(() => dragging = false);
-                  unawaited(
-                    subtitleSources.handleDrop(
-                      details.files.map((file) => file.path).toList(),
+            // The shell recedes (#46 signature action): while media plays on
+            // the workbench and the pointer rests, app bar and transport fade
+            // so only the content glows; movement or chrome focus brings
+            // them back.
+            child: ShellRecede(
+              active: _workbenchExpanded && playerController.playing,
+              builder: (context, shellVisible) => Scaffold(
+                appBar: ShellFadeAppBar(
+                  visible: shellVisible,
+                  child: PlayerAppBar(
+                    // One definition of availability for every menu (#24); the
+                    // native macOS menu (#23) must reuse it. `api` is non-null on
+                    // this branch, but the capability object states it explicitly
+                    // rather than baking the screen-level invariant into the bar.
+                    capabilities: AppBarCapabilities(
+                      hasMedia: playerController.mediaId != null,
+                      coreReady: api != null,
                     ),
-                  );
-                },
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    border: dragging
-                        ? Border.all(
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 4,
-                          )
-                        : null,
+                    onOpenSubtitleResources: () =>
+                        unawaited(_openSubtitleResources()),
+                    onOpenVocabulary: _openVocabulary,
+                    onOpenReview: () => unawaited(_openReviewQueue()),
+                    onOpenMedia: mediaSession.openMedia,
+                    onOpenOnline: _openOnline,
+                    onImportPrimarySubtitle: () =>
+                        unawaited(mediaSession.openSubtitle(secondary: false)),
+                    onGeneratePrimarySubtitles: () =>
+                        unawaited(_generateSubtitles(secondary: false)),
+                    onSearchPrimarySubtitles: () =>
+                        unawaited(_searchOpenSubtitles(secondary: false)),
+                    onImportSecondarySubtitle: () =>
+                        unawaited(mediaSession.openSubtitle(secondary: true)),
+                    onGenerateSecondarySubtitles: () =>
+                        unawaited(_generateSubtitles(secondary: true)),
+                    onSearchSecondarySubtitles: () =>
+                        unawaited(_searchOpenSubtitles(secondary: true)),
+                    onImportEmbeddedSubtitle: () =>
+                        unawaited(_importEmbeddedSubtitle()),
+                    onOpenSettings: () => unawaited(_openSettings()),
+                    onExportLogs: () => unawaited(_exportLogs()),
+                    onExportVocabulary: () =>
+                        unawaited(playbackActions.exportVocabulary()),
+                    onImportVocabulary: () =>
+                        unawaited(playbackActions.importVocabulary()),
+                    onImportWordList: () => unawaited(_importWordList()),
+                    onArchiveMedia: () =>
+                        unawaited(playbackActions.archiveCurrentMedia()),
+                    onOpenTranscriptionCenter: () =>
+                        unawaited(_openTranscriptionCenter()),
+                    onOpenPhoneticAnalysisCenter: () =>
+                        unawaited(_openPhoneticAnalysisCenter()),
+                    onOpenLearningAssets: () =>
+                        unawaited(_openLearningAssets()),
+                    onOpenLearningResources: () =>
+                        unawaited(_openLearningResources()),
                   ),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            ListeningHome(
-                              onOpenMedia: mediaSession.openMedia,
-                              onOpenOnline: _openOnline,
-                              onContinue: () {
-                                if (_workbenchExpanded ||
-                                    playerController.mediaPath != null) {
-                                  _expandWorkbench();
-                                } else {
-                                  unawaited(
-                                    mediaLibraryActions.continueRecentMedia(),
-                                  );
-                                }
-                              },
-                              onOpenSubtitleResources: () =>
-                                  unawaited(_openSubtitleResources()),
-                              onOpenVocabulary: _openVocabulary,
-                              onOpenPersonalExpressions: () =>
-                                  unawaited(_openPersonalExpression()),
-                              onOpenConversation: () =>
-                                  unawaited(_openFreeConversation()),
-                              onOpenReview: () => unawaited(_openReviewQueue()),
-                              onOpenCoach: () =>
-                                  unawaited(_openCoachDashboard()),
-                              onOpenSettings: () => unawaited(_openSettings()),
-                              mediaLibrary: mediaLibraryActions.mediaLibrary,
-                              familiarSupplyEnabled: settingsController
-                                  .familiarMaterialSuggestions,
-                              onOpenLibraryEntry: (entry) => unawaited(
-                                mediaLibraryActions.openLibraryEntry(entry),
-                              ),
-                              onStartExtensiveEntry: (entry) => unawaited(
-                                mediaLibraryActions.startExtensiveFromLibrary(
-                                  entry,
-                                ),
-                              ),
-                              onStartIntensiveEntry: (entry) => unawaited(
-                                mediaLibraryActions.startIntensiveFromLibrary(
-                                  entry,
-                                ),
-                              ),
-                              onSetLibraryIntent: (entry, intent) => unawaited(
-                                mediaLibraryActions.setLibraryTriageIntent(
-                                  entry,
-                                  intent,
-                                ),
-                              ),
-                              onToggleFamiliarSupply: (enabled) => unawaited(
-                                mediaLibraryActions.toggleFamiliarSupply(
-                                  enabled,
-                                ),
-                              ),
-                              recentMediaTitle:
-                                  settingsController.lastMediaTitle.isEmpty
-                                  ? null
-                                  : settingsController.lastMediaTitle,
-                              recentMediaPath:
-                                  settingsController.lastMediaPath.isEmpty
-                                  ? null
-                                  : settingsController.lastMediaPath,
-                              recentPosition: Duration(
-                                milliseconds:
-                                    settingsController.lastMediaPositionMs,
-                              ),
-                              recentDuration: Duration(
-                                milliseconds:
-                                    settingsController.lastMediaDurationMs,
-                              ),
-                              recentSubtitleCount:
-                                  settingsController.lastMediaSubtitleCount,
-                              vocabularyCount:
-                                  mediaLibraryActions.savedVocabulary?.total ??
-                                  0,
-                              vocabularyCapped:
-                                  mediaLibraryActions.savedVocabulary?.capped ??
-                                  false,
-                              vocabularyKnown:
-                                  mediaLibraryActions.savedVocabulary != null,
-                              listeningInboxCount:
-                                  extensiveListeningController.activeItemCount,
-                              coreStatusText: playerController.statusIsPlayback
-                                  ? ''
-                                  : playerController.status,
-                            ),
-                            if (playerController.mediaPath != null)
-                              SlideTransition(
-                                position: _workbenchSlideAnimation,
-                                child: MediaWorkbench(
-                                  mediaTitle: playerController.mediaPath!
-                                      .split(Platform.pathSeparator)
-                                      .last,
-                                  playerStage: _playerStage(),
-                                  learningPanel: _sidePanel(),
-                                  selectedChannel: contentChannels.selected,
-                                  channelAvailability: {
-                                    ContentChannel.listening:
-                                        const ContentChannelAvailability.available(),
-                                    ContentChannel.reading:
-                                        subtitleController.primaryTrack == null
-                                        ? ContentChannelAvailability.unavailable(
-                                            l.text('channelNeedsTranscript'),
-                                          )
-                                        : const ContentChannelAvailability.available(),
-                                    ContentChannel.speaking:
-                                        subtitleController.primaryTrack == null
-                                        ? ContentChannelAvailability.unavailable(
-                                            l.text('channelNeedsTranscript'),
-                                          )
-                                        : !Platform.isMacOS
-                                        ? ContentChannelAvailability.unavailable(
-                                            l.text('channelUnavailable'),
-                                          )
-                                        : const ContentChannelAvailability.available(),
-                                    ContentChannel.writing:
-                                        subtitleController.primaryTrack == null
-                                        ? ContentChannelAvailability.unavailable(
-                                            l.text('channelNeedsTranscript'),
-                                          )
-                                        : const ContentChannelAvailability.available(),
-                                  },
-                                  onChannelSelected: (channel) => unawaited(
-                                    contentChannels.select(channel),
-                                  ),
-                                  immersiveStage: switch (contentChannels
-                                      .selected) {
-                                    ContentChannel.writing =>
-                                      WritingChannelHost(
-                                        api: api!,
-                                        writingChannel: writingChannel,
-                                        writingTaskController:
-                                            writingTaskController,
-                                      ),
-                                    ContentChannel.speaking =>
-                                      SpeakingChannelHost(
-                                        api: api!,
-                                        speakingChannel: speakingChannel,
-                                        speakingActions: speakingActions,
-                                        speakingTaskController:
-                                            speakingTaskController,
-                                        readingTaskController:
-                                            readingTaskController,
-                                      ),
-                                    ContentChannel.reading =>
-                                      ReadingChannelHost(
-                                        api: api!,
-                                        readingChannel: readingChannel,
-                                        readingController: readingController,
-                                        readingTaskController:
-                                            readingTaskController,
-                                        readingDiffController:
-                                            readingDiffController,
-                                        learningController: learningController,
-                                        settingsController: settingsController,
-                                        subtitleController: subtitleController,
-                                        playerController: playerController,
-                                        vocabularyActions: vocabularyActions,
-                                        onSaveSentencePattern: (source) =>
-                                            _openPersonalExpression(
-                                              source: source,
-                                            ),
-                                        onOpenSlicePlayback: _openSlicePlayback,
-                                        onRecordReadingMark: _recordReadingMark,
-                                        onOpenListeningDictionary:
-                                            _openListeningDictionaryEntry,
-                                        onPlayPronunciationAudio:
-                                            _playPronunciationAudio,
-                                        onCorrectLemma: () =>
-                                            unawaited(_correctCurrentLemma()),
-                                      ),
-                                    ContentChannel.listening => null,
-                                  },
-                                  mediaFraction:
-                                      settingsController.workbenchMediaFraction,
-                                  onMediaFractionChanged:
-                                      _setWorkbenchMediaFraction,
-                                  onCollapse: _collapseWorkbench,
-                                ),
-                              ),
-                            PlayerOverlays(
-                              api: api,
-                              practiceController: practiceController,
-                              slicePlayerController: slicePlayerController,
-                              huntingSessionController:
-                                  huntingSessionController,
-                              subtitleController: subtitleController,
-                              playerController: playerController,
-                              practiceActions: practiceActions,
-                              huntingActions: huntingActions,
-                              onCloseSlicePlayback: _closeSlicePlayback,
-                            ),
-                          ],
-                        ),
+                ),
+                body: DropTarget(
+                  onDragEntered: (_) => setState(() => dragging = true),
+                  onDragExited: (_) => setState(() => dragging = false),
+                  onDragDone: (details) {
+                    setState(() => dragging = false);
+                    unawaited(
+                      subtitleSources.handleDrop(
+                        details.files.map((file) => file.path).toList(),
                       ),
-                      if (downloadController.snapshot != null)
-                        _downloadStatusBar(downloadController.snapshot!),
-                      _controls(),
-                    ],
+                    );
+                  },
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: dragging
+                          ? Border.all(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 4,
+                            )
+                          : null,
+                    ),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: Stack(
+                            children: [
+                              ListeningHome(
+                                onOpenMedia: mediaSession.openMedia,
+                                onOpenOnline: _openOnline,
+                                onContinue: () {
+                                  if (_workbenchExpanded ||
+                                      playerController.mediaPath != null) {
+                                    _expandWorkbench();
+                                  } else {
+                                    unawaited(
+                                      mediaLibraryActions.continueRecentMedia(),
+                                    );
+                                  }
+                                },
+                                onOpenSubtitleResources: () =>
+                                    unawaited(_openSubtitleResources()),
+                                onOpenVocabulary: _openVocabulary,
+                                onOpenPersonalExpressions: () =>
+                                    unawaited(_openPersonalExpression()),
+                                onOpenConversation: () =>
+                                    unawaited(_openFreeConversation()),
+                                onOpenReview: () =>
+                                    unawaited(_openReviewQueue()),
+                                onOpenCoach: () =>
+                                    unawaited(_openCoachDashboard()),
+                                onOpenSettings: () =>
+                                    unawaited(_openSettings()),
+                                mediaLibrary: mediaLibraryActions.mediaLibrary,
+                                familiarSupplyEnabled: settingsController
+                                    .familiarMaterialSuggestions,
+                                onOpenLibraryEntry: (entry) => unawaited(
+                                  mediaLibraryActions.openLibraryEntry(entry),
+                                ),
+                                onStartExtensiveEntry: (entry) => unawaited(
+                                  mediaLibraryActions.startExtensiveFromLibrary(
+                                    entry,
+                                  ),
+                                ),
+                                onStartIntensiveEntry: (entry) => unawaited(
+                                  mediaLibraryActions.startIntensiveFromLibrary(
+                                    entry,
+                                  ),
+                                ),
+                                onSetLibraryIntent: (entry, intent) =>
+                                    unawaited(
+                                      mediaLibraryActions
+                                          .setLibraryTriageIntent(
+                                            entry,
+                                            intent,
+                                          ),
+                                    ),
+                                onToggleFamiliarSupply: (enabled) => unawaited(
+                                  mediaLibraryActions.toggleFamiliarSupply(
+                                    enabled,
+                                  ),
+                                ),
+                                recentMediaTitle:
+                                    settingsController.lastMediaTitle.isEmpty
+                                    ? null
+                                    : settingsController.lastMediaTitle,
+                                recentMediaPath:
+                                    settingsController.lastMediaPath.isEmpty
+                                    ? null
+                                    : settingsController.lastMediaPath,
+                                recentPosition: Duration(
+                                  milliseconds:
+                                      settingsController.lastMediaPositionMs,
+                                ),
+                                recentDuration: Duration(
+                                  milliseconds:
+                                      settingsController.lastMediaDurationMs,
+                                ),
+                                recentSubtitleCount:
+                                    settingsController.lastMediaSubtitleCount,
+                                vocabularyCount:
+                                    mediaLibraryActions
+                                        .savedVocabulary
+                                        ?.total ??
+                                    0,
+                                vocabularyCapped:
+                                    mediaLibraryActions
+                                        .savedVocabulary
+                                        ?.capped ??
+                                    false,
+                                vocabularyKnown:
+                                    mediaLibraryActions.savedVocabulary != null,
+                                listeningInboxCount:
+                                    extensiveListeningController
+                                        .activeItemCount,
+                                coreStatusText:
+                                    playerController.statusIsPlayback
+                                    ? ''
+                                    : playerController.status,
+                              ),
+                              if (playerController.mediaPath != null)
+                                SlideTransition(
+                                  position: _workbenchSlideAnimation,
+                                  child: MediaWorkbench(
+                                    mediaTitle: playerController.mediaPath!
+                                        .split(Platform.pathSeparator)
+                                        .last,
+                                    playerStage: _playerStage(),
+                                    learningPanel: _sidePanel(),
+                                    selectedChannel: contentChannels.selected,
+                                    channelAvailability: {
+                                      ContentChannel.listening:
+                                          const ContentChannelAvailability.available(),
+                                      ContentChannel.reading:
+                                          subtitleController.primaryTrack ==
+                                              null
+                                          ? ContentChannelAvailability.unavailable(
+                                              l.text('channelNeedsTranscript'),
+                                            )
+                                          : const ContentChannelAvailability.available(),
+                                      ContentChannel.speaking:
+                                          subtitleController.primaryTrack ==
+                                              null
+                                          ? ContentChannelAvailability.unavailable(
+                                              l.text('channelNeedsTranscript'),
+                                            )
+                                          : !Platform.isMacOS
+                                          ? ContentChannelAvailability.unavailable(
+                                              l.text('channelUnavailable'),
+                                            )
+                                          : const ContentChannelAvailability.available(),
+                                      ContentChannel.writing:
+                                          subtitleController.primaryTrack ==
+                                              null
+                                          ? ContentChannelAvailability.unavailable(
+                                              l.text('channelNeedsTranscript'),
+                                            )
+                                          : const ContentChannelAvailability.available(),
+                                    },
+                                    onChannelSelected: (channel) => unawaited(
+                                      contentChannels.select(channel),
+                                    ),
+                                    immersiveStage: switch (contentChannels
+                                        .selected) {
+                                      ContentChannel.writing =>
+                                        WritingChannelHost(
+                                          api: api!,
+                                          writingChannel: writingChannel,
+                                          writingTaskController:
+                                              writingTaskController,
+                                        ),
+                                      ContentChannel.speaking =>
+                                        SpeakingChannelHost(
+                                          api: api!,
+                                          speakingChannel: speakingChannel,
+                                          speakingActions: speakingActions,
+                                          speakingTaskController:
+                                              speakingTaskController,
+                                          readingTaskController:
+                                              readingTaskController,
+                                        ),
+                                      ContentChannel.reading =>
+                                        ReadingChannelHost(
+                                          api: api!,
+                                          readingChannel: readingChannel,
+                                          readingController: readingController,
+                                          readingTaskController:
+                                              readingTaskController,
+                                          readingDiffController:
+                                              readingDiffController,
+                                          learningController:
+                                              learningController,
+                                          settingsController:
+                                              settingsController,
+                                          subtitleController:
+                                              subtitleController,
+                                          playerController: playerController,
+                                          vocabularyActions: vocabularyActions,
+                                          onSaveSentencePattern: (source) =>
+                                              _openPersonalExpression(
+                                                source: source,
+                                              ),
+                                          onOpenSlicePlayback:
+                                              _openSlicePlayback,
+                                          onRecordReadingMark:
+                                              _recordReadingMark,
+                                          onOpenListeningDictionary:
+                                              _openListeningDictionaryEntry,
+                                          onPlayPronunciationAudio:
+                                              _playPronunciationAudio,
+                                          onCorrectLemma: () =>
+                                              unawaited(_correctCurrentLemma()),
+                                        ),
+                                      ContentChannel.listening => null,
+                                    },
+                                    mediaFraction: settingsController
+                                        .workbenchMediaFraction,
+                                    onMediaFractionChanged:
+                                        _setWorkbenchMediaFraction,
+                                    onCollapse: _collapseWorkbench,
+                                  ),
+                                ),
+                              PlayerOverlays(
+                                api: api,
+                                practiceController: practiceController,
+                                slicePlayerController: slicePlayerController,
+                                huntingSessionController:
+                                    huntingSessionController,
+                                subtitleController: subtitleController,
+                                playerController: playerController,
+                                practiceActions: practiceActions,
+                                huntingActions: huntingActions,
+                                onCloseSlicePlayback: _closeSlicePlayback,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (downloadController.snapshot != null)
+                          _downloadStatusBar(downloadController.snapshot!),
+                        ShellFade(visible: shellVisible, child: _controls()),
+                      ],
+                    ),
                   ),
                 ),
               ),

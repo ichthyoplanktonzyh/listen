@@ -8,6 +8,8 @@ import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../state/builder.dart';
 import '../theme/spacing.dart';
+import '../widgets/common/listen_error_state.dart';
+import '../widgets/common/listen_loading.dart';
 
 class ReviewQueueScreen extends StatefulWidget {
   const ReviewQueueScreen({
@@ -72,7 +74,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
       select: (state) => state,
       builder: (context, state) {
         if (state.busy && state.queue.isEmpty) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: ListenLoading());
         }
         if (state.current == null) {
           return _Finished(
@@ -269,7 +271,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                   ),
                   if (widget.error != null) ...[
                     const SizedBox(height: ListenSpacing.gap16),
-                    Text(widget.error!, style: TextStyle(color: colors.error)),
+                    ListenErrorNotice(message: widget.error!),
                   ],
                 ],
               ),

@@ -6,6 +6,7 @@ import '../../localization.dart';
 import '../../models/syntax_capability.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_error_state.dart';
 
 class SyntaxCapabilitySettings extends StatefulWidget {
   const SyntaxCapabilitySettings({
@@ -155,17 +156,11 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
         ],
         if (capability.error != null) ...[
           const SizedBox(height: ListenSpacing.gap6),
-          Text(
-            capability.error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
+          ListenErrorNotice(message: capability.error!),
         ],
         if (_error != null) ...[
           const SizedBox(height: ListenSpacing.gap6),
-          Text(
-            _error!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
+          ListenErrorNotice(message: _error!),
         ],
         const SizedBox(height: ListenSpacing.gap8),
         Wrap(

@@ -6,6 +6,7 @@ import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../common/listen_empty_state.dart';
 
 /// Shared color for a capability channel's effective assessment, used by both
 /// the list snapshot icons and the filter chips so the two read as one system.
@@ -30,7 +31,10 @@ class VocabularyBookView extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     if (words.isEmpty) {
-      return Center(child: Text(l.text('noWords')));
+      return ListenEmptyState(
+        icon: Icons.menu_book_outlined,
+        message: l.text('noWords'),
+      );
     }
     return ListView.separated(
       itemCount: words.length,

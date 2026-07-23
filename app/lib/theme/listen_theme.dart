@@ -196,6 +196,17 @@ abstract final class ListenTheme {
     final rounded = RoundedRectangleBorder(
       borderRadius: ListenRadii.controlBorder,
     );
+    // The keyboard focus language (#46): a thin signal-teal outline — the one
+    // color that means "this is where you are" — drawn on whichever control
+    // holds focus. One resolver shared by the button families so Tab reads
+    // identically everywhere; text fields already speak it via
+    // `focusedBorder`. Width pairs with the input focus border (1.5).
+    WidgetStateProperty<BorderSide?> focusRing([BorderSide? restingSide]) =>
+        WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused)
+              ? BorderSide(color: scheme.primary, width: 1.5)
+              : restingSide,
+        );
     return base.copyWith(
       textTheme: _textTheme(base.textTheme),
       scaffoldBackgroundColor: scheme.surfaceContainer,
@@ -242,35 +253,48 @@ abstract final class ListenTheme {
         shape: rounded,
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: scheme.primary,
-          foregroundColor: scheme.onPrimary,
-          disabledBackgroundColor: scheme.outlineVariant,
-          disabledForegroundColor: scheme.disabledForeground,
-          shape: rounded,
-        ),
+        style:
+            FilledButton.styleFrom(
+              backgroundColor: scheme.primary,
+              foregroundColor: scheme.onPrimary,
+              disabledBackgroundColor: scheme.outlineVariant,
+              disabledForegroundColor: scheme.disabledForeground,
+              shape: rounded,
+            ).copyWith(
+              // On the primary fill the teal ring would vanish into its own
+              // color, so this one family rings in the on-color instead.
+              side: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.focused)
+                    ? BorderSide(color: scheme.onPrimary, width: 1.5)
+                    : null,
+              ),
+            ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: scheme.pressedPrimary,
-          side: BorderSide(color: scheme.outline),
-          shape: rounded,
-        ),
+        style:
+            OutlinedButton.styleFrom(
+              foregroundColor: scheme.pressedPrimary,
+              shape: rounded,
+            ).copyWith(
+              side: focusRing(BorderSide(color: scheme.outline)),
+            ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: scheme.pressedPrimary,
-          shape: rounded,
-        ),
+        style:
+            TextButton.styleFrom(
+              foregroundColor: scheme.pressedPrimary,
+              shape: rounded,
+            ).copyWith(side: focusRing()),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: scheme.onSurface,
-          disabledForegroundColor: scheme.disabledForeground,
-          shape: RoundedRectangleBorder(
-            borderRadius: ListenRadii.controlBorder,
-          ),
-        ),
+        style:
+            IconButton.styleFrom(
+              foregroundColor: scheme.onSurface,
+              disabledForegroundColor: scheme.disabledForeground,
+              shape: RoundedRectangleBorder(
+                borderRadius: ListenRadii.controlBorder,
+              ),
+            ).copyWith(side: focusRing()),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

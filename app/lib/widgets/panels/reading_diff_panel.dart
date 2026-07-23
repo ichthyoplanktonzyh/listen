@@ -6,6 +6,7 @@ import '../../models/reading_diff.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../common/listen_loading.dart';
 
 /// In-scene read/listen comparison. It is an outcome card, not a blocking
 /// decision, so it stays in the task scene and never opens a dialog.
@@ -69,7 +70,7 @@ class ReadingDiffPanel extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 760),
                   child: state.loading
-                      ? const CircularProgressIndicator()
+                      ? const ListenLoading()
                       : ListView(
                           padding: const EdgeInsets.all(32),
                           shrinkWrap: true,

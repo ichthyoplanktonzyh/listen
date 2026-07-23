@@ -4,6 +4,7 @@ import '../../controllers/learning_controller.dart';
 import '../../localization.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_loading.dart';
 import 'word_learning_panel.dart';
 
 /// Keeps reading as the primary scene while giving an explicitly requested
@@ -143,7 +144,7 @@ class ReadingWordInspector extends StatelessWidget {
             ),
             Expanded(
               child: details == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: ListenLoading())
                   : WordLearningPanel(
                       details: details,
                       dictionary: learningController.selectedDictionary,

@@ -8,6 +8,9 @@ import 'services/api_service.dart';
 import 'theme/radii.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
+import 'widgets/common/listen_empty_state.dart';
+import 'widgets/common/listen_error_state.dart';
+import 'widgets/common/listen_loading.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
   const PhoneticAnalysisCenter({
@@ -116,7 +119,13 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
           ],
         ),
         body: error != null
-            ? Center(child: Text(error!))
+            ? ListenErrorState(
+                message: error!,
+                action: OutlinedButton(
+                  onPressed: _refresh,
+                  child: Text(l.text('retry')),
+                ),
+              )
             : TabBarView(children: [_models(l), _jobs(l)]),
       ),
     );
@@ -227,11 +236,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       );
     }
     if (state == 'installing') {
-      return const SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
+      return const ListenLoading.inline();
     }
     if (state == 'custom' || state == 'installed') {
       return Icon(
@@ -246,7 +251,10 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Widget _jobs(AppLocalizations l) {
     if (jobs.isEmpty) {
-      return Center(child: Text(l.text('noPhoneticAnalysisJobs')));
+      return ListenEmptyState(
+        icon: Icons.graphic_eq,
+        message: l.text('noPhoneticAnalysisJobs'),
+      );
     }
     return Column(
       children: [
@@ -372,14 +380,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
           size: 22,
         );
       default:
-        return SizedBox(
-          width: 22,
-          height: 22,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: Theme.of(context).colorScheme.tertiary,
-          ),
-        );
+        return const ListenLoading.inline(size: 22);
     }
   }
 

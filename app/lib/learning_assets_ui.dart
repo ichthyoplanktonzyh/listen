@@ -9,6 +9,7 @@ import 'models/types.dart';
 import 'screens/personal_expression_screen.dart';
 import 'services/api_service.dart';
 import 'theme/spacing.dart';
+import 'widgets/common/listen_loading.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
@@ -329,7 +330,7 @@ class LearningResourceTile extends StatelessWidget {
     ),
     isThreeLine: true,
     trailing: busy
-        ? const CircularProgressIndicator()
+        ? const ListenLoading.inline()
         : IconButton(
             icon: Icon(
               value.state == 'installed'

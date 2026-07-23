@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/typography.dart';
+import '../common/listen_empty_state.dart';
 
 /// One selected action from the specialty clip list: `play` opens the slice
 /// playback window (3.5.7), `practice` seeds the practice window (3.5.6) for
@@ -48,7 +49,12 @@ Future<L1SpecialtyAction?> showL1SpecialtyDialog({
                   ),
                 ),
               if (occurrences.isEmpty)
-                Expanded(child: Center(child: Text(l.text('l1SpecialtyEmpty'))))
+                Expanded(
+                  child: ListenEmptyState(
+                    icon: Icons.translate,
+                    message: l.text('l1SpecialtyEmpty'),
+                  ),
+                )
               else
                 Expanded(
                   child: ListView.separated(

@@ -8,6 +8,8 @@ import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_error_state.dart';
+import '../common/listen_loading.dart';
 import 'llm_judgment_assist.dart';
 import '../../theme/typography.dart';
 
@@ -99,20 +101,13 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                     ),
                     const Spacer(),
                     if (_state.busy)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      const ListenLoading.inline(size: 16),
                   ],
                 ),
                 if (_state.error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      _state.error!,
-                      style: ListenType.body.copyWith(color: colors.error),
-                    ),
+                    child: ListenErrorNotice(message: _state.error!),
                   ),
                 const SizedBox(height: ListenSpacing.gap8),
                 Flexible(
@@ -124,7 +119,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                       'done' => _done(l, colors),
                       _ => const Padding(
                         padding: EdgeInsets.all(24),
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Center(child: ListenLoading()),
                       ),
                     },
                   ),
