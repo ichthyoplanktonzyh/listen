@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-23: 格式收口——补跑 `dart format`（refs #45 遗留）。PR #45 的三个 coordinator
+  （media_session/resource_actions/vocabulary_actions）未经 format 提交，另有 8 个文件
+  少量格式漂移（listen_empty_state/listen_error_state/media_workbench/shell_recede/
+  content_settle_test/hunting_actions_coordinator_test/listening_home_test/
+  realtime_conversation_panel_provider_dialog_test），共 11 个文件统一格式化，
+  `lib/`+`test/` 全仓 format check 归零。format 把超长单行 `if (...) do();` 拉成多行后
+  触发 curly_braces_in_flow_control_structures，12 处 if 补花括号（`dart fix` 自动修复）。
+  纯格式/花括号改动，零语义变化。605 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: 静默 return 清查补完——`lib/widgets/flows/` 用户流程入口一律诚实反馈
   （refs #24/#45 后续）。#45 扫完 `lib/controllers/` 后，本刀按同一判据（CONTEXT.md
   Unavailable State：说明原因 + 给出恢复动作）补扫 flows 层的 `== null) return;`——这层是
