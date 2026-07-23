@@ -82,6 +82,15 @@ void main() {
       byId('speedUp').activator,
       const SingleActivator(LogicalKeyboardKey.bracketRight),
     );
+    // F/Esc fullscreen (#25-A: 全屏沉浸态随本表落地).
+    expect(
+      byId('toggleFullscreen').activator,
+      const SingleActivator(LogicalKeyboardKey.keyF),
+    );
+    expect(
+      byId('exitFullscreen').activator,
+      const SingleActivator(LogicalKeyboardKey.escape),
+    );
     // Only the three bare digits sit behind the settings toggle.
     expect(playerShortcuts.where((s) => s.isMarkKey).map((s) => s.id).toSet(), {
       'markUnknown',
@@ -98,6 +107,8 @@ void main() {
     expect(shortcutCaption(byId('previousSentence').activator), '⌥ ←');
     expect(shortcutCaption(byId('toggleExtensiveListening').activator), '⇧ I');
     expect(shortcutCaption(byId('speedDown').activator), '[');
+    expect(shortcutCaption(byId('toggleFullscreen').activator), 'F');
+    expect(shortcutCaption(byId('exitFullscreen').activator), 'Esc');
     expect(shortcutCaption(byId('showCheatSheet').activator), '?');
   });
 

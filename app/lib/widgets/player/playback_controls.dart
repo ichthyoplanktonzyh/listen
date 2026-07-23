@@ -140,6 +140,8 @@ class PlaybackControls extends StatelessWidget {
     this.isCompact = false,
     this.mediaTitle,
     this.onExpand,
+    this.isFullscreen = false,
+    this.onToggleFullscreen,
   });
 
   final DesktopPlayerAdapter adapter;
@@ -209,6 +211,12 @@ class PlaybackControls extends StatelessWidget {
   final bool isCompact;
   final String? mediaTitle;
   final VoidCallback? onExpand;
+
+  /// #25-A: fullscreen entry on the transport. A null [onToggleFullscreen]
+  /// hides the button (hosts with no fullscreen surface); [isFullscreen]
+  /// flips the icon and tooltip.
+  final bool isFullscreen;
+  final VoidCallback? onToggleFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -992,6 +1000,19 @@ class PlaybackControls extends StatelessWidget {
           onPressed: () => _showPlaybackSettings(context),
           icon: const Icon(Icons.tune),
         ),
+        if (onToggleFullscreen != null)
+          IconButton(
+            key: const Key('playback-fullscreen-toggle'),
+            tooltip: isFullscreen
+                ? l.text('exitFullscreen')
+                : l.text('enterFullscreen'),
+            onPressed: onToggleFullscreen,
+            icon: Icon(
+              isFullscreen
+                  ? Icons.fullscreen_exit_outlined
+                  : Icons.fullscreen_outlined,
+            ),
+          ),
       ],
     );
   }

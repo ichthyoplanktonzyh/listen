@@ -39,6 +39,8 @@ class PlaybackBar extends StatefulWidget {
     this.isCompact = false,
     this.mediaTitle,
     this.onExpand,
+    this.isFullscreen = false,
+    this.onToggleFullscreen,
   });
 
   final DesktopPlayerAdapter adapter;
@@ -62,6 +64,10 @@ class PlaybackBar extends StatefulWidget {
   final bool isCompact;
   final String? mediaTitle;
   final VoidCallback? onExpand;
+
+  /// #25-A: fullscreen immersive state, mirrored onto the transport button.
+  final bool isFullscreen;
+  final VoidCallback? onToggleFullscreen;
 
   @override
   State<PlaybackBar> createState() => _PlaybackBarState();
@@ -196,6 +202,8 @@ class _PlaybackBarState extends State<PlaybackBar> {
       isCompact: widget.isCompact,
       mediaTitle: widget.mediaTitle,
       onExpand: widget.onExpand,
+      isFullscreen: widget.isFullscreen,
+      onToggleFullscreen: widget.onToggleFullscreen,
     );
   }
 

@@ -46,6 +46,7 @@ class PlayerStage extends StatefulWidget {
     required this.onSaveSettings,
     required this.onOpenMedia,
     this.onLoadSoundReference,
+    this.onToggleFullscreen,
   });
 
   final DesktopPlayerAdapter adapter;
@@ -72,6 +73,12 @@ class PlayerStage extends StatefulWidget {
   /// runs forced alignment across the whole subtitle track; false only the
   /// current sentence. Null when phonetic analysis is unavailable.
   final Future<void> Function({required bool wholeTrack})? onLoadSoundReference;
+
+  /// #25-A: double-clicking the bare video surface toggles the fullscreen
+  /// immersive state. The gesture lives on the surface only — never as an
+  /// ancestor of the subtitle overlays, whose word taps must not wait out a
+  /// double-tap timeout in the gesture arena.
+  final VoidCallback? onToggleFullscreen;
 
   @override
   State<PlayerStage> createState() => _PlayerStageState();
@@ -140,9 +147,14 @@ class _PlayerStageState extends State<PlayerStage> {
         alignment: Alignment.bottomCenter,
         children: [
           Positioned.fill(
-            child: ColoredBox(
-              color: Colors.black,
-              child: PlayerSurface(adapter: adapter),
+            child: GestureDetector(
+              key: const Key('player-stage-surface'),
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: widget.onToggleFullscreen,
+              child: ColoredBox(
+                color: Colors.black,
+                child: PlayerSurface(adapter: adapter),
+              ),
             ),
           ),
           if (subtitleController.visible &&
@@ -157,7 +169,12 @@ class _PlayerStageState extends State<PlayerStage> {
               child: MouseRegion(
                 cursor: SystemMouseCursors.move,
                 child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
+                  // Opaque, not translucent: the subtitle box must swallow its
+                  // hits so they never fall through to the video surface's
+                  // double-tap recognizer — a competing double-tap in the
+                  // arena would delay every word tap by the double-tap
+                  // timeout (#25-A).
+                  behavior: HitTestBehavior.opaque,
                   onPanUpdate: (details) {
                     subtitleController.movePosition(
                       details.delta.dx,
