@@ -63,6 +63,7 @@ import 'theme/listen_theme.dart';
 import 'theme/spacing.dart';
 import 'utils/format_duration.dart';
 import 'widgets/app_bar/app_bar_capabilities.dart';
+import 'widgets/app_bar/macos_menu_bar.dart';
 import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/channels/reading_channel.dart';
 import 'widgets/channels/speaking_channel.dart';
@@ -1630,20 +1631,17 @@ class _PlayerScreenState extends State<PlayerScreen>
         downloadController,
         immersiveMode,
       ]),
-      builder: (context, _) => AppControllers(
-        player: playerController,
-        subtitle: subtitleController,
-        learning: learningController,
-        extensiveListening: extensiveListeningController,
-        practice: practiceController,
-        settings: settingsController,
-        api: api!,
-        child: PlayerGlobalShortcuts(
-          // #25: keys live in the shortcut table (player_shortcuts.dart);
-          // this map only supplies what each action *does*.
-          bindings: buildPlayerShortcutBindings(
-            markKeysEnabled: settingsController.markKeysEnabled,
-            actions: {
+      builder: (context, _) {
+        // One definition of availability for every menu (#24): the AppBar
+        // menus and the native macOS menu bar (#23) read this same object.
+        final capabilities = AppBarCapabilities(
+          hasMedia: playerController.mediaId != null,
+          coreReady: api != null,
+        );
+        // #25: keys live in the shortcut table (player_shortcuts.dart); this
+        // map only supplies what each action *does*. The macOS Playback/Help
+        // menus (#23) reuse it, so a table row has exactly one callback.
+        final shortcutActions = <String, VoidCallback>{
               'playPause': practiceActions.togglePracticePlayback,
               'seekBack': () => unawaited(
                 playbackActions.seekBy(-PlaybackActionsCoordinator.seekStep),
@@ -1679,15 +1677,30 @@ class _PlayerScreenState extends State<PlayerScreen>
                   vocabularyActions.markFirstWord('known_recognized'),
               'showCheatSheet': () =>
                   unawaited(showShortcutCheatSheet(context)),
-            },
-          ),
-          child: Focus(
-            autofocus: true,
-            // The shell recedes (#46 signature action): while media plays on
-            // the workbench and the pointer rests, app bar and transport fade
-            // so only the content glows; movement or chrome focus brings
-            // them back.
-            child: ShellRecede(
+        };
+        return AppControllers(
+          player: playerController,
+          subtitle: subtitleController,
+          learning: learningController,
+          extensiveListening: extensiveListeningController,
+          practice: practiceController,
+          settings: settingsController,
+          api: api!,
+          child: PlayerGlobalShortcuts(
+            bindings: buildPlayerShortcutBindings(
+              markKeysEnabled: settingsController.markKeysEnabled,
+              actions: shortcutActions,
+            ),
+            child: Focus(
+              autofocus: true,
+              // The shell recedes (#46 signature action): while media plays
+              // on the workbench and the pointer rests, app bar and
+              // transport fade so only the content glows; movement or
+              // chrome focus brings them back.
+              child: _macosMenuHost(
+                capabilities: capabilities,
+                shortcutActions: shortcutActions,
+                child: ShellRecede(
               // Recede while media plays on the workbench — and always in the
               // immersive state, where an idle pointer hides the controls
               // even when playback is paused (#25-A player convention).
@@ -1702,14 +1715,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                     : ShellFadeAppBar(
                         visible: shellVisible,
                         child: PlayerAppBar(
-                          // One definition of availability for every menu (#24); the
-                          // native macOS menu (#23) must reuse it. `api` is non-null on
-                          // this branch, but the capability object states it explicitly
-                          // rather than baking the screen-level invariant into the bar.
-                          capabilities: AppBarCapabilities(
-                            hasMedia: playerController.mediaId != null,
-                            coreReady: api != null,
-                          ),
+                          // The shared availability object built above (#24);
+                          // the macOS menu bar reads the same instance (#23).
+                          capabilities: capabilities,
                           onOpenSubtitleResources: () =>
                               unawaited(_openSubtitleResources()),
                           onOpenVocabulary: _openVocabulary,
@@ -2038,11 +2046,45 @@ class _PlayerScreenState extends State<PlayerScreen>
                           ),
                         ),
                       ),
+                ),
               ),
             ),
           ),
         ),
-      ),
+      );
+      },
+    );
+  }
+
+  /// #23: mounts the native macOS menu bar around the shell; other platforms
+  /// pass through. Availability and actions are the same objects the AppBar
+  /// and `CallbackShortcuts` consume — the menu is a surface, not a source.
+  Widget _macosMenuHost({
+    required AppBarCapabilities capabilities,
+    required Map<String, VoidCallback> shortcutActions,
+    required Widget child,
+  }) {
+    if (!Platform.isMacOS) return child;
+    return MacosMenuBar(
+      capabilities: capabilities,
+      shortcutActions: shortcutActions,
+      onOpenSettings: () => unawaited(_openSettings()),
+      onOpenMedia: mediaSession.openMedia,
+      onOpenOnline: _openOnline,
+      onImportPrimarySubtitle: () =>
+          unawaited(mediaSession.openSubtitle(secondary: false)),
+      onImportSecondarySubtitle: () =>
+          unawaited(mediaSession.openSubtitle(secondary: true)),
+      onImportEmbeddedSubtitle: () => unawaited(_importEmbeddedSubtitle()),
+      onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
+      onOpenSubtitleResources: () => unawaited(_openSubtitleResources()),
+      onOpenVocabulary: _openVocabulary,
+      onOpenReview: () => unawaited(_openReviewQueue()),
+      onOpenCoach: () => unawaited(_openCoachDashboard()),
+      onOpenTranscriptionCenter: () => unawaited(_openTranscriptionCenter()),
+      onOpenPhoneticAnalysisCenter: () =>
+          unawaited(_openPhoneticAnalysisCenter()),
+      child: child,
     );
   }
 
