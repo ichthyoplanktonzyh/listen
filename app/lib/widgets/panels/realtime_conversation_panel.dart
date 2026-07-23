@@ -378,6 +378,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     final qwenWorkspace = TextEditingController();
     var adapter = 'qwen_omni_realtime';
     var qwenRegion = 'cn';
+    String? workspaceError;
     void applyQwenEndpoint() {
       final workspace = qwenWorkspace.text.trim();
       final workspaceLabel = workspace.isEmpty ? '<workspace-id>' : workspace;
@@ -413,6 +414,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                     if (value != null) {
                       setDialogState(() {
                         adapter = value;
+                        workspaceError = null;
                         if (value == 'qwen_omni_realtime') {
                           model.text = qwenRealtimeBaselineModel;
                           voice.text = 'Tina';
@@ -448,12 +450,16 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                   ),
                   TextField(
                     controller: qwenWorkspace,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Workspace ID',
                       helperText:
                           'Use the workspace and API key from the same region.',
+                      errorText: workspaceError,
                     ),
-                    onChanged: (_) => setDialogState(applyQwenEndpoint),
+                    onChanged: (_) => setDialogState(() {
+                      workspaceError = null;
+                      applyQwenEndpoint();
+                    }),
                   ),
                 ],
                 TextField(
@@ -462,9 +468,17 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                 ),
                 TextField(
                   controller: endpoint,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'WebSocket endpoint',
+                    // The Workspace ID field carries the error while it is
+                    // visible; otherwise the endpoint field itself does, so
+                    // the save guard is never silent.
+                    errorText: adapter == 'qwen_omni_realtime'
+                        ? null
+                        : workspaceError,
                   ),
+                  onChanged: (_) =>
+                      setDialogState(() => workspaceError = null),
                 ),
                 TextField(
                   controller: model,
@@ -491,7 +505,15 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
             ),
             FilledButton(
               onPressed: () async {
-                if (endpoint.text.contains('<workspace-id>')) return;
+                if (endpoint.text.contains('<workspace-id>')) {
+                  // Honest feedback (#24/#45 discipline): a user-triggered
+                  // action never no-ops silently — name what is missing.
+                  setDialogState(
+                    () => workspaceError =
+                        'Enter the Workspace ID to complete the endpoint.',
+                  );
+                  return;
+                }
                 await widget.controller.registerProfile(
                   widget.api,
                   displayName: name.text.trim().isEmpty
