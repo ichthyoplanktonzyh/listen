@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-23: 签名动作「内容落定」+「节奏拍呼吸」落地（refs #46 · design Slice 5 之五）。
+  ① 抽出共享 `widgets/common/ambient_breath.dart`：全 app 唯一的呼吸手势（0.72→1 ·
+  2600ms 周期 · ease-in-out，reduce motion 停），`ListenLoading` 重构改用（顺带降为
+  StatelessWidget）。② **内容落定**：新增 `widgets/common/content_settle.dart`
+  （淡入 + 上移 8px 落定，`base`·`enter` 无过冲；`settleKey` 变化重跑进场），挂上
+  MediaWorkbench 的频道面板（immersiveStage + learningPanel，key=selectedChannel）——
+  切频道不再硬切。③ **节奏拍呼吸**：节奏带当前拍（active）包 `AmbientBreath`，透明度
+  与柔光一同起伏——活着但不抢戏，不是跳高。测试：新增 `content_settle_test`（进场/
+  换 key 重跑/reduce motion 即时）、rhythm 测试钉「恰好一拍在呼吸」；循环播放测试改
+  有界 pump（环境呼吸按设计永不 settle）。580 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: 签名动作「外壳退后」落地（refs #46 · design Slice 5 之四）。媒体在工作台
   播放且鼠标静止 3s → AppBar 与 transport 淡出（`base`·`exit`，房间随内容变暗）；指针
   任何活动 → 淡入（`base`·`enter`）；键盘焦点落在外壳内 → 常显不消失（对齐 motion spec
