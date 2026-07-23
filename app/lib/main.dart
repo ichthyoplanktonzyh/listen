@@ -798,6 +798,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       exportSubtitleResourceFlow(
         context: context,
         api: api,
+        playerController: playerController,
         resourceActions: resourceActions,
         track: track,
       );
@@ -835,11 +836,15 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openTranscriptionCenter() => openTranscriptionCenterFlow(
     context: context,
     api: api,
+    playerController: playerController,
     loadTrack: mediaSession.loadGeneratedTrack,
   );
 
-  Future<void> _openPhoneticAnalysisCenter() =>
-      openPhoneticAnalysisCenterFlow(context: context, api: api);
+  Future<void> _openPhoneticAnalysisCenter() => openPhoneticAnalysisCenterFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+  );
 
   Future<void> _openOnline() => openOnlineMediaFlow(
     context: context,
@@ -961,6 +966,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openLearningAssets() => openLearningAssetsFlow(
     context: context,
     api: api,
+    playerController: playerController,
     settingsController: settingsController,
     subtitleController: subtitleController,
     openSlicePlayback: _openSlicePlayback,
@@ -1016,6 +1022,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }) => openPersonalExpressionFlow(
     context: context,
     api: api,
+    playerController: playerController,
     language: settingsController.resolveLearningLanguage(
       subtitleController.primaryTrack?.language,
     ),
@@ -1024,8 +1031,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     onStartSpeaking: _startPersonalExpressionSpeaking,
   );
 
-  Future<void> _openLearningResources() =>
-      openLearningResourcesFlow(context: context, api: api);
+  Future<void> _openLearningResources() => openLearningResourcesFlow(
+    context: context,
+    api: api,
+    playerController: playerController,
+  );
 
   Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) =>
       openPhraseFlow(
@@ -1297,6 +1307,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }) => showVocabularyFlow(
     context: context,
     api: api,
+    playerController: playerController,
     settingsController: settingsController,
     subtitleController: subtitleController,
     playbackActions: playbackActions,
@@ -1320,6 +1331,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openCoachDashboard() => openCoachDashboardFlow(
     context: context,
     api: api,
+    playerController: playerController,
     language: settingsController.resolveLearningLanguage(
       subtitleController.primaryTrack?.language,
     ),
@@ -1422,6 +1434,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _openColdStartMarking() => openColdStartMarkingFlow(
     context: context,
     api: api,
+    playerController: playerController,
     subtitleController: subtitleController,
     resourceActions: resourceActions,
   );

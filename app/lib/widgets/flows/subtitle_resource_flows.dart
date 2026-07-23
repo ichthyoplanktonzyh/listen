@@ -50,11 +50,17 @@ Future<void> deleteSubtitleResourceFlow({
 Future<void> exportSubtitleResourceFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required ResourceActionsCoordinator resourceActions,
   required SubtitleTrack track,
 }) async {
-  if (api == null) return;
   final l = AppLocalizations.of(context);
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): exporting is a user row action; report
+    // the missing core instead of swallowing the click.
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   final format = await showDialog<String>(
     context: context,
     builder: (context) => SimpleDialog(
@@ -79,6 +85,7 @@ Future<void> exportSubtitleResourceFlow({
       ],
     ),
   );
+  // Legitimate silence: the user dismissed the format chooser themselves.
   if (format == null) return;
   if (format == 'lltimeline') {
     await resourceActions.exportLLTimelineResource(track);
@@ -129,9 +136,16 @@ Future<void> generateSubtitlesFlow({
 Future<void> openTranscriptionCenterFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required LoadGeneratedTrack loadTrack,
 }) async {
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): the transcription center is a user menu
+    // entry; report the missing core instead of swallowing the click.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
       builder: (_) => TranscriptionCenter(api: api, loadTrack: loadTrack),
@@ -142,8 +156,15 @@ Future<void> openTranscriptionCenterFlow({
 Future<void> openPhoneticAnalysisCenterFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
 }) async {
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): the analysis center is a user menu
+    // entry; report the missing core instead of swallowing the click.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(builder: (_) => PhoneticAnalysisCenter(api: api)),
   );
@@ -152,13 +173,29 @@ Future<void> openPhoneticAnalysisCenterFlow({
 void openColdStartMarkingFlow({
   required BuildContext context,
   required LocalApi? api,
+  required PlayerController playerController,
   required SubtitleController subtitleController,
   required ResourceActionsCoordinator resourceActions,
 }) {
+  final l = AppLocalizations.of(context);
   final service = api;
   final trackId = subtitleController.primaryTrack?.id;
   final language = subtitleController.primaryTrack?.language;
-  if (service == null || trackId == null || language == null) return;
+  // Unavailable State (CONTEXT.md): the cold-start button renders whenever
+  // the content-fit card does, so each missing prerequisite names its own
+  // recovery action instead of leaving a dead button.
+  if (service == null) {
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
+  if (trackId == null) {
+    playerController.setStatus(l.text('statusActivateSubtitleFirst'));
+    return;
+  }
+  if (language == null) {
+    playerController.setStatus(l.text('statusSetSubtitleLanguageFirst'));
+    return;
+  }
   showDialog<void>(
     context: context,
     builder: (_) => ColdStartMarkingSheet(
@@ -180,7 +217,13 @@ Future<void> openSubtitleResourcesFlow({
   required MediaSessionCoordinator mediaSession,
   required Future<void> Function() onManualReviewTimeline,
 }) async {
-  if (api == null) return;
+  if (api == null) {
+    // Unavailable State (CONTEXT.md): the resources screen is a user
+    // destination; report the missing core instead of swallowing the click.
+    final l = AppLocalizations.of(context);
+    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    return;
+  }
   await resourceActions.loadSubtitleResources(updateStatus: false);
   if (!context.mounted) return;
   await Navigator.push<void>(
@@ -203,6 +246,7 @@ Future<void> openSubtitleResourcesFlow({
         onExportSubtitle: (track) => exportSubtitleResourceFlow(
           context: context,
           api: api,
+          playerController: playerController,
           resourceActions: resourceActions,
           track: track,
         ),
@@ -221,6 +265,7 @@ Future<void> openSubtitleResourcesFlow({
         onStartColdStart: () => openColdStartMarkingFlow(
           context: context,
           api: api,
+          playerController: playerController,
           subtitleController: subtitleController,
           resourceActions: resourceActions,
         ),
