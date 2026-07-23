@@ -85,10 +85,14 @@ class WritingChannelCoordinator extends ChangeNotifier {
   }) async {
     final service = _getApi?.call();
     final track = subtitle.primaryTrack;
+    // Defensive backstop: the channel switcher already disables Writing (with
+    // a tooltip) without a transcript, and the workbench requires a core.
     if (service == null || track == null) return;
     final paragraphs = deriveReadingParagraphs(
       track.cues,
     ).where((paragraph) => !paragraph.nonSpeech).toList(growable: false);
+    // A transcript with only non-speech cues cannot anchor a writing task;
+    // the switcher's transcript gate is the honest surface for that state.
     if (paragraphs.isEmpty) return;
     final currentCueId = subtitle.currentPrimaryCue?.id;
     final paragraph = paragraphs.firstWhere(

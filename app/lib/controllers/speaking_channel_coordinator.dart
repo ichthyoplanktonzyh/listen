@@ -84,9 +84,17 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
   /// interrogate the same content.
   Future<void> openL1Check() async {
     final service = _getApi?.call();
+    if (service == null) {
+      // Unavailable State (CONTEXT.md): the L1-check button is a direct
+      // click, so a missing core is reported, never swallowed.
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     final speakingSource = actions.source;
     final rubric = task.state.rubric;
-    if (service == null || speakingSource == null || rubric == null) return;
+    // The button only renders inside an open speaking task; a missing source
+    // or rubric means the task is still loading, so the click stays silent.
+    if (speakingSource == null || rubric == null) return;
     final profile = await service.learnerProfile();
     final l1 = profile.l1Language;
     if (l1 == null || l1.trim().isEmpty) {

@@ -178,6 +178,15 @@ void main() {
     expect(w.rebuilds, isNotEmpty);
   });
 
+  test('setLibraryTriageIntent without a core reports it', () async {
+    final w = _wire(() => null);
+
+    await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
+
+    expect(w.player.status, 'statusConnectLocalCoreFirst');
+    expect(w.rebuilds, isEmpty);
+  });
+
   test('setLibraryTriageIntent failure reports on the player status', () async {
     final api = _fakeApi(
       (method, path, body) => (statusCode: 500, body: 'boom'),

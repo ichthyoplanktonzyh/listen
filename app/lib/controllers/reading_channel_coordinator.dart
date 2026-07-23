@@ -97,6 +97,8 @@ class ReadingChannelCoordinator extends ChangeNotifier {
   /// closing returns to the exact playback context.
   Future<void> open() async {
     final track = subtitle.primaryTrack;
+    // Defensive backstop: the channel switcher already disables Reading
+    // (with a tooltip) when no transcript is loaded.
     if (track == null) return;
     await adapter.pause();
     // Restore the saved reading cursor; a fetch failure just starts from the
@@ -267,6 +269,8 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     required List<RubricPointView> fallbackTemplatePoints,
   }) {
     final service = _getApi?.call();
+    // Defensive backstop: the reading surface only exists once the core is
+    // connected (the workbench renders behind the root api gate).
     if (service == null) return;
     final readingPoints = readingDiff.state.read.rubric?.points;
     final template = readingPoints == null || readingPoints.isEmpty

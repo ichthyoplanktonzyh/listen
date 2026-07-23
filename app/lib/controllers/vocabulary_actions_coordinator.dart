@@ -47,6 +47,18 @@ class VocabularyActionsCoordinator {
     this.refreshDiagnosis = refreshDiagnosis;
   }
 
+  /// Unavailable State (CONTEXT.md): user-triggered vocabulary actions report
+  /// the missing core instead of silently doing nothing. Background loads
+  /// (word/phrase entries, phrase candidates) keep passing [getApi] straight
+  /// through and stay silent.
+  LocalApi? _requireApi() {
+    final api = getApi();
+    if (api == null && isMounted()) {
+      player.setStatus(text('statusConnectLocalCoreFirst'));
+    }
+    return api;
+  }
+
   Future<void> loadPhraseCandidates(Cue? cue) async {
     await workflow.loadPhraseCandidates(
       api: getApi(),
@@ -58,8 +70,10 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> markFirstWord(String? wordStatus) async {
+    final api = _requireApi();
+    if (api == null) return;
     await workflow.markFirstWord(
-      api: getApi(),
+      api: api,
       cue: subtitle.currentPrimaryCue,
       wordStatus: wordStatus,
       language: settings.resolveLearningLanguage(
@@ -96,9 +110,11 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> openWord(SubtitleToken token, Cue cue) async {
+    final api = _requireApi();
+    if (api == null) return;
     try {
       await workflow.openWord(
-        api: getApi(),
+        api: api,
         token: token,
         cue: cue,
         language: settings.resolveLearningLanguage(
@@ -114,9 +130,11 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> setSelectedWordStatus(String? selected) async {
+    final api = _requireApi();
+    if (api == null) return;
     try {
       final update = await workflow.setSelectedWordStatus(
-        api: getApi(),
+        api: api,
         selected: selected,
         language: settings.resolveLearningLanguage(
           subtitle.primaryTrack?.language,
@@ -138,9 +156,11 @@ class VocabularyActionsCoordinator {
     String capability,
     String? conclusion,
   ) async {
+    final api = _requireApi();
+    if (api == null) return;
     try {
       await workflow.setCapabilityOverride(
-        api: getApi(),
+        api: api,
         capability: capability,
         conclusion: conclusion,
         learning: learning,
@@ -158,8 +178,10 @@ class VocabularyActionsCoordinator {
     String? definition,
     String? note,
   ) async {
+    final api = _requireApi();
+    if (api == null) return;
     await workflow.saveSelectedLearningContent(
-      api: getApi(),
+      api: api,
       definition: definition,
       note: note,
       learning: learning,
@@ -168,9 +190,11 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> recordCurrentSource() async {
+    final api = _requireApi();
+    if (api == null) return;
     try {
       await workflow.recordCurrentSource(
-        api: getApi(),
+        api: api,
         language: settings.resolveLearningLanguage(
           subtitle.primaryTrack?.language,
         ),
@@ -186,12 +210,16 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> observeSelected(bool heard) async {
+    final api = _requireApi();
+    if (api == null) return;
     final observed = await workflow.observeSelected(
-      api: getApi(),
+      api: api,
       heard: heard,
       learning: learning,
       sourceFor: _sourceFor,
     );
+    // A false here means no word is selected; the heard/not-heard buttons
+    // only render with a selection, so the click stays silent.
     if (!observed) return;
     if (isMounted()) {
       player.setStatus(heard ? text('heard') : text('notHeard'));

@@ -84,6 +84,8 @@ class ContentChannelCoordinator {
         await reading.open();
       case ContentChannel.speaking:
         final service = _getApi?.call();
+        // Defensive backstop: the channel switcher already disables Speaking
+        // (with a tooltip) when the core or the platform is missing.
         if (service == null || !(_speakingAvailable?.call() ?? false)) return;
         await speakingActions.acquireRecordingFocus();
         await _openSpeaking?.call(service);

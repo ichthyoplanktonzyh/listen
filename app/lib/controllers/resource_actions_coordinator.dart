@@ -113,7 +113,13 @@ class ResourceActionsCoordinator {
   }
 
   Future<void> refreshTimelineResource() async {
+    // The user-facing refresh arrives via [refreshSubtitleResources], whose
+    // loadSubtitleResources step already reported a missing core/media; this
+    // guard only keeps the "refreshed" claim below honest, so it stays silent.
+    if (getApi() == null) return;
     final trackId = subtitle.primaryTrack?.id;
+    // Without a primary track there is no timeline section to refresh; the
+    // panel renders no timeline rows in that state, so the click stays silent.
     if (trackId == null) return;
     await loadTimelineResource(trackId);
     if (isMounted()) player.setStatus(_t('statusTimelineResourceRefreshed'));
@@ -127,6 +133,9 @@ class ResourceActionsCoordinator {
     if (service == null || mediaId == null) {
       subtitle.setSubtitleResources(const []);
       subtitle.setSubtitleResourceCapabilities(const {});
+      // [updateStatus] marks the user-triggered refresh path; internal
+      // reloads pass false and stay silent by design.
+      if (updateStatus) player.setStatus(_t('statusOpenMediaAndCoreFirst'));
       return;
     }
     try {
@@ -226,7 +235,12 @@ class ResourceActionsCoordinator {
 
   Future<void> archiveSubtitleResource(SubtitleTrack track) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      // Unavailable State (CONTEXT.md): all the panel row actions below are
+      // direct clicks, so a missing core is reported, never swallowed.
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       await service.archiveSubtitle(track.id);
       _clearPrimaryTrackIfMatches(track);
@@ -239,7 +253,10 @@ class ResourceActionsCoordinator {
 
   Future<void> restoreSubtitleResource(SubtitleTrack track) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       await service.restoreSubtitle(track.id);
       await loadSubtitleResources(updateStatus: false);
@@ -253,7 +270,10 @@ class ResourceActionsCoordinator {
   /// calling this.
   Future<void> deleteSubtitleResource(SubtitleTrack track) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       await service.deleteSubtitle(track.id);
       _clearPrimaryTrackIfMatches(track);
@@ -273,7 +293,10 @@ class ResourceActionsCoordinator {
 
   Future<void> exportSubtitleSrt(SubtitleTrack track) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       final location = await getSaveLocation(
         suggestedName: '${track.source}-${track.id}.srt',
@@ -289,7 +312,10 @@ class ResourceActionsCoordinator {
 
   Future<void> exportLLTimelineResource(SubtitleTrack track) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       final location = await getSaveLocation(
         suggestedName: '${track.source}-${track.id}.lltimeline.json',
@@ -307,7 +333,10 @@ class ResourceActionsCoordinator {
 
   Future<void> changeTrackLanguage(SubtitleTrack track, String language) async {
     final service = getApi();
-    if (service == null) return;
+    if (service == null) {
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     try {
       await service.updateTrackLanguage(track.id, language);
       await loadSubtitleResources(updateStatus: false);
@@ -412,8 +441,15 @@ class ResourceActionsCoordinator {
     required Future<void> Function(LocalApi service, String trackId) action,
   }) async {
     final service = getApi();
+    if (service == null) {
+      // Timeline lifecycle buttons are direct clicks; report the missing core.
+      player.setStatus(_t('statusConnectLocalCoreFirst'));
+      return;
+    }
     final trackId = subtitle.primaryTrack?.id;
-    if (service == null || trackId == null) return;
+    // The lifecycle buttons only render on the active primary track's
+    // timeline rows, so a missing track here is a stale click; stay silent.
+    if (trackId == null) return;
     try {
       if (workingStatus != null) player.setStatus(workingStatus);
       await action(service, trackId);

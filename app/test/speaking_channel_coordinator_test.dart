@@ -10,6 +10,15 @@ import 'package:llplayer_next/controllers/speaking_task_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/player_adapter.dart';
+import 'package:llplayer_next/services/api_service.dart';
+
+/// A core that answers nothing: guards that fire before any request keep it
+/// untouched, which is exactly what these tests assert.
+LocalApi _idleApi() => LocalApi.withTransport(
+  baseUrl: 'http://test',
+  token: 'tok',
+  transport: (method, path, body) async => (statusCode: 200, body: '{}'),
+);
 
 LexicalEntry _entry(String id, String displayForm) => LexicalEntry(
   id: id,
@@ -20,9 +29,9 @@ LexicalEntry _entry(String id, String displayForm) => LexicalEntry(
 );
 
 class _Harness {
-  _Harness() {
+  _Harness({LocalApi? Function()? getApi}) {
     coordinator.bind(
-      getApi: () => null,
+      getApi: getApi ?? () => null,
       isMounted: () => true,
       askPersonalExpressionAssessment: () async {
         assessmentsAsked++;
@@ -138,10 +147,21 @@ void main() {
       harness.dispose();
     });
 
-    test('the L1 check needs a speaking source and a rubric', () async {
+    test('the L1 check without a core reports it', () async {
       final harness = _Harness();
       await harness.coordinator.openL1Check();
       expect(harness.coordinator.l1CheckSource, isNull);
+      expect(harness.player.status, 'statusConnectLocalCoreFirst');
+      harness.dispose();
+    });
+
+    test('the L1 check needs a speaking source and a rubric', () async {
+      final harness = _Harness(getApi: _idleApi);
+      final before = harness.player.status;
+      await harness.coordinator.openL1Check();
+      // The button only renders inside an open task, so this stays silent.
+      expect(harness.coordinator.l1CheckSource, isNull);
+      expect(harness.player.status, before);
       harness.dispose();
     });
   });
