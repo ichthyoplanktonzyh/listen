@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import 'content_fit_card.dart';
 import 'timeline_resource_summary_panel.dart';
 
@@ -96,7 +98,7 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.subtitles_outlined, size: 18),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     l.text('subtitleResources'),
@@ -145,7 +147,8 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                     subtitleList: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                       itemCount: resources.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(height: ListenSpacing.gap8),
                       itemBuilder: (context, index) {
                         final resource = resources[index];
                         final active = resource.id == activeTrack?.id;
@@ -296,7 +299,7 @@ class _ResourceSplitter extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.outlineVariant,
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: ListenRadii.pillBorder,
               ),
               child: const SizedBox(width: 42, height: 2),
             ),
@@ -345,7 +348,7 @@ class _SubtitleResourceTile extends StatelessWidget {
               ? Theme.of(context).colorScheme.primary
               : Theme.of(context).colorScheme.outlineVariant,
         ),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -358,7 +361,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -369,7 +372,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: ListenSpacing.gap2),
                   Text(
                     [
                       active
@@ -383,7 +386,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: ListenSpacing.gap6),
                   Text(
                     l.text('resourceLearningCapabilities'),
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -391,7 +394,7 @@ class _SubtitleResourceTile extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: ListenSpacing.gap4),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -588,7 +591,7 @@ class _CapabilityChip extends StatelessWidget {
               ? Theme.of(context).colorScheme.primary
               : Theme.of(context).colorScheme.outlineVariant,
         ),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ListenRadii.pillBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -653,7 +656,7 @@ class _LanguageChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.tertiaryContainer,
           border: Border.all(color: Theme.of(context).colorScheme.tertiary),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: ListenRadii.pillBorder,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -665,7 +668,7 @@ class _LanguageChip extends StatelessWidget {
                 size: 12,
                 color: Theme.of(context).colorScheme.tertiary,
               ),
-              const SizedBox(width: 3),
+              const SizedBox(width: ListenSpacing.gap2),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(

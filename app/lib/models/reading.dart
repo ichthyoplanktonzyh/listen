@@ -79,8 +79,7 @@ class ReadingSentence {
 
   Duration get start => cues.first.start;
   Duration get end => cues.last.end;
-  String get text =>
-      cues.map((cue) => cue.text.trim()).join(' ').trim();
+  String get text => cues.map((cue) => cue.text.trim()).join(' ').trim();
   int get wordCount => cues.fold(
     0,
     (sum, cue) =>
@@ -170,8 +169,7 @@ List<ReadingSentence> _deriveSentences(
       continue;
     }
     if (current.isNotEmpty) {
-      final gapMs =
-          cue.start.inMilliseconds - current.last.end.inMilliseconds;
+      final gapMs = cue.start.inMilliseconds - current.last.end.inMilliseconds;
       if (gapMs >= config.sentenceGapBreakMs || _startsSpeakerTurn(cue.text)) {
         flush();
       }
@@ -280,8 +278,8 @@ List<ReadingParagraph> deriveReadingParagraphs(
       continue;
     }
     if (current.isNotEmpty) {
-      final gapMs = sentence.start.inMilliseconds -
-          current.last.end.inMilliseconds;
+      final gapMs =
+          sentence.start.inMilliseconds - current.last.end.inMilliseconds;
       if (sentence.speakerTurn ||
           gapMs >= config.paragraphGapBreakMs ||
           currentWords >= config.targetParagraphWords) {

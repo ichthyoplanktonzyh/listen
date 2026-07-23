@@ -1,3 +1,5 @@
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/motion.dart';
 import 'following_structure_viewport.dart';
 
 typedef RhythmCueLoopCallback =
@@ -83,7 +86,7 @@ class RhythmFrameRibbon extends StatelessWidget {
             predicted: predicted,
             predictedLabel: predictedLabel,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: ListenSpacing.gap8),
           Expanded(
             child: FollowingStructureViewport(
               activeIndex: sequence.indexWhere((entry) => entry.active),
@@ -494,7 +497,7 @@ class _RhythmBadge extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
     decoration: BoxDecoration(
       color: ListenColors.overlaySurface,
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: ListenRadii.controlBorder,
       border: Border.all(color: ListenColors.overlayBorder),
     ),
     child: Row(
@@ -507,7 +510,7 @@ class _RhythmBadge extends StatelessWidget {
               ? ListenColors.soundPredicted
               : ListenColors.soundActual,
         ),
-        const SizedBox(width: 5),
+        const SizedBox(width: ListenSpacing.gap4),
         Flexible(
           child: Text(
             title,
@@ -521,7 +524,7 @@ class _RhythmBadge extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 5),
+        const SizedBox(width: ListenSpacing.gap4),
         if (predicted && predictedLabel != null)
           Flexible(
             child: _PredictedPill(label: predictedLabel!, fontSize: fontSize),
@@ -553,7 +556,7 @@ class _PredictedPill extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
     decoration: BoxDecoration(
       color: ListenColors.soundPredicted.withAlpha(58),
-      borderRadius: BorderRadius.circular(5),
+      borderRadius: ListenRadii.tightBorder,
       border: Border.all(color: ListenColors.soundPredicted.withAlpha(160)),
     ),
     child: Text(
@@ -639,9 +642,8 @@ class _AudibleNode extends StatelessWidget {
         : math.max(18.0, labelSize * 1.5);
     final glowing = foreground && (active || nucleus);
     final bar = AnimatedContainer(
-      duration: reduceMotion
-          ? Duration.zero
-          : const Duration(milliseconds: 120),
+      // Beat-synced emphasis: the fastest step, so it lands within the beat.
+      duration: reduceMotion ? Duration.zero : ListenMotion.tap,
       width: barWidth,
       height: barHeight,
       decoration: BoxDecoration(
@@ -654,7 +656,7 @@ class _AudibleNode extends StatelessWidget {
               ? 230
               : 200,
         ),
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: ListenRadii.tightBorder,
         boxShadow: glowing
             ? [
                 BoxShadow(
@@ -674,7 +676,7 @@ class _AudibleNode extends StatelessWidget {
           height: height * 0.64,
           child: Align(alignment: Alignment.bottomCenter, child: bar),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: ListenSpacing.gap4),
         Text(
           meaningLabel,
           maxLines: 1,
@@ -719,9 +721,8 @@ class _AudibleNode extends StatelessWidget {
       ],
     );
     final node = AnimatedOpacity(
-      duration: reduceMotion
-          ? Duration.zero
-          : const Duration(milliseconds: 120),
+      // Beat-synced emphasis: the fastest step, so it lands within the beat.
+      duration: reduceMotion ? Duration.zero : ListenMotion.tap,
       opacity: opacity,
       child: Padding(
         padding: EdgeInsets.symmetric(

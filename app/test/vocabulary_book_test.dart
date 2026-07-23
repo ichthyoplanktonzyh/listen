@@ -898,48 +898,47 @@ void main() {
     expect(imported, isTrue);
   });
 
-  testWidgets(
-    'lemma correction is offered only where a token is selected',
-    (tester) async {
-      // #16 moved this out of the global AppBar menu, where it silently did
-      // nothing without a selected token. The panel only shows it when the
-      // host actually wires it up.
-      await tester.pumpWidget(
-        localized(
-          WordLearningPanel(
-            details: _helloDetails,
-            dictionary: _helloDictionary,
-            onStatus: (_) {},
-            onSave: (_, _) async {},
-            onSource: (_) {},
-            onHeard: () {},
-            onNotHeard: () {},
-          ),
+  testWidgets('lemma correction is offered only where a token is selected', (
+    tester,
+  ) async {
+    // #16 moved this out of the global AppBar menu, where it silently did
+    // nothing without a selected token. The panel only shows it when the
+    // host actually wires it up.
+    await tester.pumpWidget(
+      localized(
+        WordLearningPanel(
+          details: _helloDetails,
+          dictionary: _helloDictionary,
+          onStatus: (_) {},
+          onSave: (_, _) async {},
+          onSource: (_) {},
+          onHeard: () {},
+          onNotHeard: () {},
         ),
-      );
-      expect(find.byKey(const ValueKey('correct-lemma')), findsNothing);
+      ),
+    );
+    expect(find.byKey(const ValueKey('correct-lemma')), findsNothing);
 
-      var corrections = 0;
-      await tester.pumpWidget(
-        localized(
-          WordLearningPanel(
-            details: _helloDetails,
-            dictionary: _helloDictionary,
-            onStatus: (_) {},
-            onSave: (_, _) async {},
-            onSource: (_) {},
-            onHeard: () {},
-            onNotHeard: () {},
-            onCorrectLemma: () => corrections += 1,
-          ),
+    var corrections = 0;
+    await tester.pumpWidget(
+      localized(
+        WordLearningPanel(
+          details: _helloDetails,
+          dictionary: _helloDictionary,
+          onStatus: (_) {},
+          onSave: (_, _) async {},
+          onSource: (_) {},
+          onHeard: () {},
+          onNotHeard: () {},
+          onCorrectLemma: () => corrections += 1,
         ),
-      );
-      expect(find.text('Correct lemma'), findsOneWidget);
+      ),
+    );
+    expect(find.text('Correct lemma'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('correct-lemma')));
-      expect(corrections, 1);
-    },
-  );
+    await tester.tap(find.byKey(const ValueKey('correct-lemma')));
+    expect(corrections, 1);
+  });
 
   testWidgets(
     'word learning panel groups providers and edits durable content',

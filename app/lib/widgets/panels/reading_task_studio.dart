@@ -4,7 +4,9 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/spacing.dart';
 import 'reading_task_sheet.dart';
+import '../../theme/typography.dart';
 
 /// Stage-adaptive whole-scene host for semantic tasks. The controller owns
 /// the durable task lifecycle; this widget only chooses an honest layout for
@@ -110,7 +112,7 @@ class ReadingTaskStudio extends StatelessWidget {
               onPressed: onClose,
               icon: const Icon(Icons.arrow_back),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: ListenSpacing.gap4),
             Expanded(
               child: Wrap(
                 spacing: 8,
@@ -177,9 +179,9 @@ class _StageBadge extends StatelessWidget {
                 : colors.onSurfaceVariant,
             child: complete
                 ? const Icon(Icons.check, size: 15)
-                : Text('$index', style: const TextStyle(fontSize: 12)),
+                : Text('$index', style: ListenType.body),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: ListenSpacing.gap6),
           Text(
             label,
             style: TextStyle(
@@ -221,7 +223,7 @@ class _SourceSnapshot extends StatelessWidget {
                 context,
               ).textTheme.labelLarge?.copyWith(color: colors.onSurfaceVariant),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: ListenSpacing.gap12),
             Text(
               hideText
                   ? l.text('taskSourceHiddenForListening')

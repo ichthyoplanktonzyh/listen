@@ -37,8 +37,7 @@ class ReadingDiffState {
   final DiffSide listen;
   final String? error;
 
-  String get explanationKey =>
-      diffExplanationKey(read.outcome, listen.outcome);
+  String get explanationKey => diffExplanationKey(read.outcome, listen.outcome);
 
   ReadingDiffState copyWith({
     bool? loading,

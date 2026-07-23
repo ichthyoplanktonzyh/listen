@@ -7,14 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
-import 'localization.dart';
-import 'player_adapter.dart';
-import 'settings.dart';
-import 'theme/listen_theme.dart';
 
 import 'controllers/app_controllers.dart';
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
+import 'controllers/content_channel_coordinator.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/extensive_listening_controller.dart';
 import 'controllers/hunting_actions_coordinator.dart';
@@ -30,58 +27,62 @@ import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
-import 'controllers/content_channel_coordinator.dart';
 import 'controllers/reading_channel_coordinator.dart';
 import 'controllers/reading_controller.dart';
 import 'controllers/reading_diff_controller.dart';
 import 'controllers/reading_task_controller.dart';
 import 'controllers/realtime_conversation_controller.dart';
 import 'controllers/resource_actions_coordinator.dart';
-import 'controllers/speech_enhancement_workflow_controller.dart';
+import 'controllers/settings_controller.dart';
+import 'controllers/slice_player_controller.dart';
 import 'controllers/speaking_actions_coordinator.dart';
 import 'controllers/speaking_channel_coordinator.dart';
 import 'controllers/speaking_task_controller.dart';
-import 'controllers/writing_channel_coordinator.dart';
-import 'controllers/writing_task_controller.dart';
+import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
-import 'controllers/settings_controller.dart';
-import 'controllers/slice_player_controller.dart';
+import 'controllers/writing_channel_coordinator.dart';
+import 'controllers/writing_task_controller.dart';
+import 'localization.dart';
 import 'models/capability_readiness.dart';
-import 'models/content_channel.dart';
 import 'models/content_activity.dart';
-import 'models/practice.dart';
+import 'models/content_channel.dart';
 import 'models/personal_expression.dart';
+import 'models/practice.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
+import 'player_adapter.dart';
 import 'services/api_service.dart';
 import 'services/external_tools.dart';
+import 'settings.dart';
+import 'theme/listen_theme.dart';
+import 'theme/spacing.dart';
 import 'utils/format_duration.dart';
-import 'widgets/panels/l1_specialty_dialog.dart';
-import 'widgets/panels/realtime_conversation_panel.dart';
-import 'widgets/player/download_status_bar.dart';
 import 'widgets/app_bar/app_bar_capabilities.dart';
 import 'widgets/app_bar/player_app_bar.dart';
-import 'widgets/flows/learning_flows.dart';
-import 'widgets/flows/content_speaking_activity_dialog.dart';
-import 'widgets/flows/reading_flows.dart';
-import 'widgets/flows/speaking_flows.dart';
-import 'widgets/flows/writing_flows.dart';
-import 'widgets/flows/manual_review_flow.dart';
-import 'widgets/flows/media_import_flows.dart';
-import 'widgets/flows/subtitle_resource_flows.dart';
 import 'widgets/channels/reading_channel.dart';
 import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
+import 'widgets/flows/content_speaking_activity_dialog.dart';
+import 'widgets/flows/learning_flows.dart';
+import 'widgets/flows/manual_review_flow.dart';
+import 'widgets/flows/media_import_flows.dart';
+import 'widgets/flows/reading_flows.dart';
+import 'widgets/flows/speaking_flows.dart';
+import 'widgets/flows/subtitle_resource_flows.dart';
+import 'widgets/flows/writing_flows.dart';
+import 'widgets/home/listening_home.dart';
+import 'widgets/layout/content_channel_switcher.dart';
+import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/player_overlays.dart';
-import 'widgets/layout/media_workbench.dart';
-import 'widgets/layout/content_channel_switcher.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/side_panel.dart';
-import 'widgets/home/listening_home.dart';
+import 'widgets/panels/l1_specialty_dialog.dart';
+import 'widgets/panels/realtime_conversation_panel.dart';
+import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/settings/settings_flow.dart';
 
@@ -1213,10 +1214,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                   .text('extensiveSessionPlayedDuration')
                   .replaceAll('{duration}', formatDuration(playedDuration)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: ListenSpacing.gap12),
             Text(l.text('comprehensionReportPrompt')),
             if (huntingSummary != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               Text(
                 l
                     .text('huntingCompletionSummary')
@@ -1565,10 +1566,10 @@ class _PlayerScreenState extends State<PlayerScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (connectingApi) const CircularProgressIndicator(),
-              const SizedBox(height: 16),
+              const SizedBox(height: ListenSpacing.gap16),
               Text(status, textAlign: TextAlign.center),
               if (!connectingApi) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 FilledButton(
                   onPressed: () => unawaited(_connectApi()),
                   child: const Text('Retry'),

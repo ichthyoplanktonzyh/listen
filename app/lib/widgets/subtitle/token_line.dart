@@ -6,6 +6,8 @@ import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/motion.dart';
+import '../../theme/radii.dart';
 
 /// Renders a subtitle [Cue] as a line of style-aware tokens,
 /// with clickable words and phrase underlines.
@@ -347,7 +349,8 @@ class _TokenLineState extends State<TokenLine> {
     );
     final container = AnimatedContainer(
       key: ValueKey('$keyPrefix-container-$keyIndex'),
-      duration: const Duration(milliseconds: 280),
+      // Content settling: the charter base tempo (#32).
+      duration: ListenMotion.base,
       padding: EdgeInsets.symmetric(
         horizontal: capsule ? 10 : 2,
         vertical: capsule ? 4 : 1,
@@ -365,7 +368,7 @@ class _TokenLineState extends State<TokenLine> {
                     : ListenColors.overlayText.withValues(alpha: 0.18),
               )
             : null,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ListenRadii.pillBorder,
         boxShadow: active && chunkHighlightStyle == 'glow'
             ? [
                 BoxShadow(
@@ -388,8 +391,8 @@ class _TokenLineState extends State<TokenLine> {
           key: ValueKey('$keyPrefix-scale-$keyIndex'),
           scale: active && chunkHighlightStyle == 'bounce' ? 1.045 : 1,
           alignment: Alignment.bottomCenter,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
+          duration: ListenMotion.base,
+          curve: ListenMotion.enter,
           child: capsuleWidget,
         ),
       ),
@@ -548,9 +551,9 @@ class _TokenLineState extends State<TokenLine> {
               ? 1 + currentWordIntensity * 0.22
               : 1,
           alignment: Alignment.bottomCenter,
-          duration: reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 120),
+          // Word-sync is beat-critical: the fastest step, so the accent
+          // lands inside the word being spoken.
+          duration: reduceMotion ? Duration.zero : ListenMotion.tap,
           curve: Curves.easeOutBack,
           child: Text(token.text, style: style),
         ),

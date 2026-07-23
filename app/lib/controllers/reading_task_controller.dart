@@ -265,7 +265,11 @@ class ReadingTaskController extends ChangeNotifier {
       );
       _cachePointDraft(draft.points);
       _store.update(
-        (s) => s.copyWith(phase: 'editing', draftPoints: draft.points, busy: false),
+        (s) => s.copyWith(
+          phase: 'editing',
+          draftPoints: draft.points,
+          busy: false,
+        ),
       );
     } catch (error) {
       _store.update((s) => s.copyWith(busy: false, error: '$error'));

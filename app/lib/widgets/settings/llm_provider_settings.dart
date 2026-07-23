@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/llm_provider.dart';
 import '../../services/api_service.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 /// Phase 3.12 provider settings: configure vendor-neutral LLM providers for
 /// semantic feedback. Keys are write-only (stored in the OS keychain by the
@@ -60,7 +62,9 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     try {
       final raw = await widget.api.listLlmProviders();
       final providers = raw
-          .map((e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>),
+          )
           .toList();
       if (!mounted) return;
       setState(() {
@@ -154,31 +158,40 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(l.text('llmProvidersDescription'), style: theme.textTheme.bodySmall),
-        const SizedBox(height: 8),
+        Text(
+          l.text('llmProvidersDescription'),
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: ListenSpacing.gap8),
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: theme.colorScheme.errorContainer.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: ListenRadii.controlBorder,
           ),
           child: Row(
             children: [
               const Icon(Icons.privacy_tip_outlined, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: ListenSpacing.gap8),
               Expanded(
-                child: Text(l.text('llmDataWarning'), style: theme.textTheme.bodySmall),
+                child: Text(
+                  l.text('llmDataWarning'),
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmNotQualified'), style: theme.textTheme.bodySmall),
-        const SizedBox(height: 12),
+        const SizedBox(height: ListenSpacing.gap12),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+            child: Text(
+              _error!,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
           ),
         if (_loading)
           const Padding(
@@ -240,7 +253,10 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
             if (probe != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(probe, style: Theme.of(context).textTheme.bodySmall),
+                child: Text(
+                  probe,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
           ],
         ),
@@ -256,11 +272,11 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
           l.text('llmAddProvider'),
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Row(
           children: [
             Text('${l.text('llmAdapterKind')}: '),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             DropdownButton<String>(
               value: _adapterKind,
               items: const [
@@ -273,7 +289,8 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
                   child: Text('Anthropic Messages'),
                 ),
               ],
-              onChanged: (v) => setState(() => _adapterKind = v ?? _adapterKind),
+              onChanged: (v) =>
+                  setState(() => _adapterKind = v ?? _adapterKind),
             ),
           ],
         ),
@@ -300,7 +317,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
             helperText: l.text('llmApiKeyHint'),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmAllowedUses')),
         Row(
           children: [
@@ -326,7 +343,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton(

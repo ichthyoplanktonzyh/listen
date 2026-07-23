@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/hunting_session_controller.dart';
 import '../../localization.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 class HuntingPromptCard extends StatelessWidget {
   const HuntingPromptCard({
@@ -28,9 +30,9 @@ class HuntingPromptCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.manage_search_outlined),
-              const SizedBox(width: 10),
+              const SizedBox(width: ListenSpacing.gap8),
               Flexible(child: Text(l.text('huntingIndexNeeded'))),
-              const SizedBox(width: 10),
+              const SizedBox(width: ListenSpacing.gap8),
               OutlinedButton(
                 onPressed: state.busy ? null : onReindex,
                 child: Text(l.text('dictionaryReindex')),
@@ -47,7 +49,7 @@ class HuntingPromptCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.hearing_outlined),
-              const SizedBox(width: 10),
+              const SizedBox(width: ListenSpacing.gap8),
               Text(
                 l
                     .text('huntingListenFor')
@@ -68,7 +70,7 @@ class HuntingPromptCard extends StatelessWidget {
                   .replaceAll('{target}', current.targetSnapshot),
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: ListenSpacing.gap8),
             Wrap(
               spacing: 8,
               children: [
@@ -103,7 +105,7 @@ class _PromptShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     elevation: 8,
-    borderRadius: BorderRadius.circular(16),
+    borderRadius: ListenRadii.panelBorder,
     color: Theme.of(context).colorScheme.surfaceContainerHigh,
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 560),

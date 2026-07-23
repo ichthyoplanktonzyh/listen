@@ -1,6 +1,6 @@
+import '../models/runtime_resources.dart';
 import '../models/task_status.dart';
 import '../models/timeline.dart';
-import '../models/runtime_resources.dart';
 import '../services/api_service.dart';
 import 'player_controller.dart';
 import 'settings_controller.dart';

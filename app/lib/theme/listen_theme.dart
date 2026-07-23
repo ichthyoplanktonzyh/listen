@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../theme/radii.dart';
+import '../theme/typography.dart';
+
 /// App-wide appearance preference, mirrored from the persisted `themeMode`
 /// setting. Mirrors the `appLanguage` notifier so `ListenApp` can rebuild the
 /// single `MaterialApp` without threading the value through the widget tree.
@@ -191,9 +194,10 @@ abstract final class ListenTheme {
   static ThemeData _build(ColorScheme scheme) {
     final base = ThemeData(colorScheme: scheme, useMaterial3: true);
     final rounded = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(7),
+      borderRadius: ListenRadii.controlBorder,
     );
     return base.copyWith(
+      textTheme: _textTheme(base.textTheme),
       scaffoldBackgroundColor: scheme.surfaceContainer,
       canvasColor: scheme.surfaceContainer,
       splashColor: scheme.primary.withValues(alpha: 0.08),
@@ -216,14 +220,14 @@ abstract final class ListenTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: ListenRadii.surfaceBorder,
           side: BorderSide(color: scheme.outlineVariant),
         ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: ListenRadii.surfaceBorder),
       ),
       menuTheme: MenuThemeData(
         style: MenuStyle(
@@ -263,22 +267,24 @@ abstract final class ListenTheme {
         style: IconButton.styleFrom(
           foregroundColor: scheme.onSurface,
           disabledForegroundColor: scheme.disabledForeground,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          shape: RoundedRectangleBorder(
+            borderRadius: ListenRadii.controlBorder,
+          ),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: scheme.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: ListenRadii.controlBorder,
           borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: ListenRadii.controlBorder,
           borderSide: BorderSide(color: scheme.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: ListenRadii.controlBorder,
           borderSide: BorderSide(color: scheme.primary, width: 1.5),
         ),
       ),
@@ -311,20 +317,20 @@ abstract final class ListenTheme {
               : Colors.transparent,
         ),
         side: BorderSide(color: scheme.outline),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+        shape: RoundedRectangleBorder(borderRadius: ListenRadii.tightBorder),
       ),
       chipTheme: base.chipTheme.copyWith(
         backgroundColor: scheme.surfaceContainer,
         selectedColor: scheme.primaryContainer,
         side: BorderSide(color: scheme.outlineVariant),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        shape: RoundedRectangleBorder(borderRadius: ListenRadii.controlBorder),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: scheme.inverseSurface,
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: ListenRadii.tightBorder,
         ),
-        textStyle: TextStyle(color: scheme.onInverseSurface, fontSize: 12),
+        textStyle: ListenType.body.copyWith(color: scheme.onInverseSurface),
       ),
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: scheme.primary,
@@ -333,4 +339,26 @@ abstract final class ListenTheme {
       ),
     );
   }
+
+  /// Projects the [ListenType] ladder onto Material's `textTheme` slots and
+  /// pins the bundled families ([ListenFonts.sans], SC fallback for mixed
+  /// 中英 runs), so `Theme.of(context).textTheme` sites and the constants
+  /// agree. Slots beyond the ladder (display/headline) keep Material's
+  /// geometry — nothing in the app uses them yet, so they earn no bespoke
+  /// values.
+  static TextTheme _textTheme(TextTheme base) => base
+      .copyWith(
+        labelSmall: base.labelSmall?.merge(ListenType.caption),
+        labelMedium: base.labelMedium?.merge(ListenType.body),
+        bodySmall: base.bodySmall?.merge(ListenType.body),
+        bodyMedium: base.bodyMedium?.merge(ListenType.reading),
+        bodyLarge: base.bodyLarge?.merge(ListenType.emphasis),
+        titleSmall: base.titleSmall?.merge(ListenType.emphasis),
+        titleMedium: base.titleMedium?.merge(ListenType.title),
+        titleLarge: base.titleLarge?.merge(ListenType.hero),
+      )
+      .apply(
+        fontFamily: ListenFonts.sans,
+        fontFamilyFallback: const [ListenFonts.sansSC],
+      );
 }

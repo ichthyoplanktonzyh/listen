@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/typography.dart';
 
 /// One selected action from the specialty clip list: `play` opens the slice
 /// playback window (3.5.7), `practice` seeds the practice window (3.5.6) for
@@ -41,8 +42,7 @@ Future<L1SpecialtyAction?> showL1SpecialtyDialog({
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     l.text('l1SpecialtyUnindexed'),
-                    style: TextStyle(
-                      fontSize: 12,
+                    style: ListenType.body.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -70,8 +70,7 @@ Future<L1SpecialtyAction?> showL1SpecialtyDialog({
                           occurrence.sourceSnapshot,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
+                          style: ListenType.body.copyWith(
                             color: Theme.of(
                               context,
                             ).colorScheme.onSurfaceVariant,

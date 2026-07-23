@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 class DiagnosisCard extends StatelessWidget {
   const DiagnosisCard({
@@ -60,7 +62,7 @@ class DiagnosisCard extends StatelessWidget {
             l.text('currentSentenceDiagnosis'),
             style: Theme.of(context).textTheme.titleSmall,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
           Text(
             l.text('diagnosisSummary'),
             style: Theme.of(context).textTheme.labelLarge,
@@ -84,8 +86,7 @@ class DiagnosisCard extends StatelessWidget {
                         child: Text(
                           '${l.text('possibleListeningFactors')} '
                           '${hint.reasons.map(l.diagnosisReason).join(' · ')}',
-                          style: TextStyle(
-                            fontSize: 12,
+                          style: ListenType.body.copyWith(
                             color: Theme.of(
                               context,
                             ).colorScheme.onSurfaceVariant,
@@ -121,14 +122,13 @@ class DiagnosisCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               child: Text(
                 l.text('l1UnsupportedPair'),
-                style: TextStyle(
-                  fontSize: 12,
+                style: ListenType.body.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
             ),
           if (diagnosis.l1Hints.isNotEmpty) _l1Section(context),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
@@ -262,7 +262,7 @@ class DiagnosisCard extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 12, top: 2),
                     child: Text(
                       l.l1Difficulty(hint.difficultyKind, hint.message),
-                      style: const TextStyle(fontSize: 12),
+                      style: ListenType.body,
                     ),
                   ),
                   Padding(
@@ -293,7 +293,7 @@ class DiagnosisCard extends StatelessWidget {
                                 span.surfaceText.isEmpty
                                     ? span.label
                                     : span.surfaceText,
-                                style: const TextStyle(fontSize: 12),
+                                style: ListenType.body,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               onPressed: onLoopL1Span == null
@@ -310,7 +310,7 @@ class DiagnosisCard extends StatelessWidget {
                             ),
                             label: Text(
                               l.text('l1SimilarClips'),
-                              style: const TextStyle(fontSize: 12),
+                              style: ListenType.body,
                             ),
                           ),
                       ],
@@ -404,8 +404,7 @@ class DiagnosisCard extends StatelessWidget {
               '${frame.quality.timingSource.replaceAll('_', ' ')} · '
               'prominence ${_sourceLabel(frame.quality.prominenceSources)} · '
               'boundary ${_sourceLabel(frame.quality.boundarySources)}',
-              style: TextStyle(
-                fontSize: 12,
+              style: ListenType.body.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
@@ -426,7 +425,7 @@ class DiagnosisCard extends StatelessWidget {
             side: BorderSide(color: color.withAlpha(115)),
             label: Text(
               value,
-              style: const TextStyle(fontSize: 12),
+              style: ListenType.body,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -440,7 +439,7 @@ class DiagnosisCard extends StatelessWidget {
         runSpacing: 5,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text('$label:', style: const TextStyle(fontSize: 12)),
+          Text('$label:', style: ListenType.body),
           ...chips,
         ],
       ),
@@ -459,10 +458,7 @@ class DiagnosisCard extends StatelessWidget {
         runSpacing: 5,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text(
-            '${l.text('listeningHotspots')}:',
-            style: const TextStyle(fontSize: 12),
-          ),
+          Text('${l.text('listeningHotspots')}:', style: ListenType.body),
           for (final hotspot in hotspots)
             Tooltip(
               message: [
@@ -481,7 +477,7 @@ class DiagnosisCard extends StatelessWidget {
                     hotspot.confidence,
                     hotspot.claimStatus,
                   ),
-                  style: const TextStyle(fontSize: 12),
+                  style: ListenType.body,
                   overflow: TextOverflow.ellipsis,
                 ),
                 onPressed: onLoopHotspot == null

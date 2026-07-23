@@ -23,39 +23,40 @@ class _S {
 
 void main() {
   group('StoreBuilder', () {
-    testWidgets('renders the selected slice and rebuilds only when it changes', (
-      tester,
-    ) async {
-      final store = Store(const _S(count: 0, label: 'a'));
-      var builds = 0;
+    testWidgets(
+      'renders the selected slice and rebuilds only when it changes',
+      (tester) async {
+        final store = Store(const _S(count: 0, label: 'a'));
+        var builds = 0;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: StoreBuilder<_S, int>(
-            store: store,
-            select: (s) => s.count,
-            builder: (_, count) {
-              builds++;
-              return Text('count=$count');
-            },
+        await tester.pumpWidget(
+          MaterialApp(
+            home: StoreBuilder<_S, int>(
+              store: store,
+              select: (s) => s.count,
+              builder: (_, count) {
+                builds++;
+                return Text('count=$count');
+              },
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(builds, 1);
-      expect(find.text('count=0'), findsOneWidget);
+        expect(builds, 1);
+        expect(find.text('count=0'), findsOneWidget);
 
-      // A change to an unrelated field must NOT rebuild this selector.
-      store.update((s) => s.copyWith(label: 'b'));
-      await tester.pump();
-      expect(builds, 1, reason: 'unrelated field change should not rebuild');
+        // A change to an unrelated field must NOT rebuild this selector.
+        store.update((s) => s.copyWith(label: 'b'));
+        await tester.pump();
+        expect(builds, 1, reason: 'unrelated field change should not rebuild');
 
-      // A change to the selected field rebuilds with the new value.
-      store.update((s) => s.copyWith(count: 5));
-      await tester.pump();
-      expect(builds, 2);
-      expect(find.text('count=5'), findsOneWidget);
-    });
+        // A change to the selected field rebuilds with the new value.
+        store.update((s) => s.copyWith(count: 5));
+        await tester.pump();
+        expect(builds, 2);
+        expect(find.text('count=5'), findsOneWidget);
+      },
+    );
 
     testWidgets('an equal-state update triggers no rebuild', (tester) async {
       final store = Store(const _S(count: 3, label: 'a'));

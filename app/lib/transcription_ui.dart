@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
-import 'models/timeline.dart';
-import 'models/runtime_resources.dart';
-import 'services/api_service.dart';
 import 'localization.dart';
+import 'models/runtime_resources.dart';
+import 'models/timeline.dart';
+import 'services/api_service.dart';
 
 typedef LoadGeneratedTrack =
     Future<void> Function(SubtitleTrack track, bool secondary);

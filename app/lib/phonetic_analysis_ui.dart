@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'localization.dart';
 import 'models/runtime_resources.dart';
 import 'services/api_service.dart';
+import 'theme/radii.dart';
+import 'theme/spacing.dart';
+import 'theme/typography.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
   const PhoneticAnalysisCenter({
@@ -100,7 +103,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
                   children: [
                     Text(l.text('jobs')),
                     if (jobs.isNotEmpty) ...[
-                      const SizedBox(width: 6),
+                      const SizedBox(width: ListenSpacing.gap6),
                       _jobCountBadge(),
                     ],
                   ],
@@ -131,12 +134,12 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
         color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: ListenRadii.controlBorder,
         border: Border.all(color: color.withAlpha(80)),
       ),
       child: Text(
         '${jobs.length}',
-        style: TextStyle(fontSize: 11, color: color),
+        style: ListenType.caption.copyWith(color: color),
       ),
     );
   }
@@ -292,29 +295,28 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 4),
+          const SizedBox(height: ListenSpacing.gap4),
           if (active)
             ClipRRect(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: ListenRadii.tightBorder,
               child: LinearProgressIndicator(
                 value: progress,
                 minHeight: 3,
                 backgroundColor: Theme.of(context).colorScheme.outlineVariant,
               ),
             ),
-          if (active) const SizedBox(height: 4),
+          if (active) const SizedBox(height: ListenSpacing.gap4),
           if (status == 'completed')
             Text(
               '${job.providerId} · ${job.modelRevision}',
-              style: const TextStyle(fontSize: 12),
+              style: ListenType.body,
             ),
           if (errorMsg != null && errorMsg.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 errorMsg,
-                style: TextStyle(
-                  fontSize: 12,
+                style: ListenType.body.copyWith(
                   color: Theme.of(context).colorScheme.error,
                 ),
                 maxLines: 3,
@@ -325,8 +327,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               _formatTimestamp(createdAt),
-              style: TextStyle(
-                fontSize: 11,
+              style: ListenType.caption.copyWith(
                 color: Theme.of(context).colorScheme.onSurface.withAlpha(120),
               ),
             ),
@@ -420,10 +421,10 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: ListenRadii.tightBorder,
         border: Border.all(color: color.withAlpha(80)),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+      child: Text(label, style: ListenType.caption.copyWith(color: color)),
     );
   }
 

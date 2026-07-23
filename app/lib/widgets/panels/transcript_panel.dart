@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
 
@@ -240,7 +242,7 @@ class _BackToCurrentButton extends StatelessWidget {
     return Material(
       color: colors.primary,
       elevation: 3,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: ListenRadii.panelBorder,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onPressed,
@@ -249,8 +251,12 @@ class _BackToCurrentButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.vertical_align_center, size: 18, color: colors.onPrimary),
-              const SizedBox(width: 7),
+              Icon(
+                Icons.vertical_align_center,
+                size: 18,
+                color: colors.onPrimary,
+              ),
+              const SizedBox(width: ListenSpacing.gap6),
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -284,7 +290,7 @@ class _TranscriptEmptyState extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.subtitles_outlined, size: 34, color: colors.primary),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               Text(
                 l.text('noTranscriptTitle'),
                 textAlign: TextAlign.center,
@@ -292,7 +298,7 @@ class _TranscriptEmptyState extends StatelessWidget {
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               Text(
                 l.text('importSubtitleHint'),
                 textAlign: TextAlign.center,
@@ -301,7 +307,7 @@ class _TranscriptEmptyState extends StatelessWidget {
                 ),
               ),
               if (onImportSubtitle != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: ListenSpacing.gap16),
                 FilledButton.icon(
                   onPressed: () => onImportSubtitle!(),
                   icon: const Icon(Icons.add),

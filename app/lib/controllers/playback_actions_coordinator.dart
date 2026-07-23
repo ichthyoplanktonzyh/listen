@@ -265,11 +265,16 @@ class PlaybackActionsCoordinator {
         value: value,
       );
       if (isMounted()) {
-        player.setStatus(_t('statusAudioFindingFeedbackSaved').replaceAll('{value}', value));
+        player.setStatus(
+          _t('statusAudioFindingFeedbackSaved').replaceAll('{value}', value),
+        );
       }
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('${_t('statusAudioFindingFeedbackFailed')}: $error', error: true);
+        player.setStatus(
+          '${_t('statusAudioFindingFeedbackFailed')}: $error',
+          error: true,
+        );
       }
     }
   }

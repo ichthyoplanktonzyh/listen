@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../controllers/realtime_conversation_controller.dart';
 import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 const openAiRealtimeBaselineModel = 'gpt-realtime-2.1';
 const qwenRealtimeBaselineModel = 'qwen3.5-omni-plus-realtime';
@@ -122,12 +124,12 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                               : 'Selected topic',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: ListenSpacing.gap6),
                         Text(
                           widget.launch.anchor?.text ??
                               'Start without sending media or subtitle context.',
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: ListenSpacing.gap16),
                         Row(
                           children: [
                             Expanded(
@@ -158,7 +160,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                                     : null,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: ListenSpacing.gap12),
                             OutlinedButton.icon(
                               onPressed: () => _showProviderDialog(context),
                               icon: const Icon(Icons.key),
@@ -166,7 +168,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 22),
+                        const SizedBox(height: ListenSpacing.gap24),
                         if (state.phase == RealtimeConversationPhase.live) ...[
                           Align(
                             alignment: Alignment.centerLeft,
@@ -179,7 +181,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                               label: Text(_activityLabel(state.activity)),
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: ListenSpacing.gap12),
                         ],
                         if (state.error != null)
                           _notice(context, state.error!, true),
@@ -193,7 +195,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                           ),
                         for (final item in state.items) ...[
                           _ConversationTurnCard(item: item),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: ListenSpacing.gap12),
                         ],
                         if (state.postProcessingCount > 0)
                           Text(
@@ -201,7 +203,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         if (state.postProcessingCount > 0)
-                          const SizedBox(height: 16),
+                          const SizedBox(height: ListenSpacing.gap16),
                         Wrap(
                           spacing: 12,
                           children: [
@@ -242,14 +244,14 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                           ],
                         ),
                         if (state.canConfigure) ...[
-                          const SizedBox(height: 32),
+                          const SizedBox(height: ListenSpacing.gap32),
                           const Divider(),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: ListenSpacing.gap12),
                           Text(
                             'Conversation history',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: ListenSpacing.gap8),
                           if (state.historyError != null)
                             _notice(context, state.historyError!, true),
                           if (state.historyLoading)
@@ -271,7 +273,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                             ),
                             for (final item in state.historyItems) ...[
                               _ConversationTurnCard(item: item),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: ListenSpacing.gap12),
                             ],
                           ] else
                             for (final session in state.historySessions)
@@ -358,7 +360,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
       color: error
           ? Theme.of(context).colorScheme.errorContainer
           : Theme.of(context).colorScheme.secondaryContainer,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: ListenRadii.controlBorder,
     ),
     child: Text(text),
   );
@@ -565,7 +567,7 @@ class _ConversationTurnCard extends StatelessWidget {
             color: learner
                 ? colorScheme.primaryContainer
                 : colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: ListenRadii.panelBorder,
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -576,9 +578,9 @@ class _ConversationTurnCard extends StatelessWidget {
                   learner ? 'You' : 'Assistant',
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: ListenSpacing.gap4),
                 SelectableText(text),
-                const SizedBox(height: 6),
+                const SizedBox(height: ListenSpacing.gap6),
                 Text(
                   learner
                       ? switch (item.status) {
@@ -599,7 +601,7 @@ class _ConversationTurnCard extends StatelessWidget {
                   ),
                 ),
                 if (item.error != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: ListenSpacing.gap4),
                   Text(item.error!, style: TextStyle(color: colorScheme.error)),
                 ],
               ],

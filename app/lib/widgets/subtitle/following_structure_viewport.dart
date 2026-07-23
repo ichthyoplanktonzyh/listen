@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/listen_theme.dart';
+import '../../theme/spacing.dart';
 
 /// A compact horizontal sentence lane that follows the active item and can
 /// expand into a wrapped, full-sentence view. The children remain the source of
@@ -134,7 +135,7 @@ class _FollowingStructureViewportState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(child: _expanded ? _expandedLane() : _compactLane()),
-        const SizedBox(width: 3),
+        const SizedBox(width: ListenSpacing.gap2),
         toggle,
       ],
     );

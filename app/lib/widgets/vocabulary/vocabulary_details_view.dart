@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/spacing.dart';
 
 class VocabularyDetailsView extends StatelessWidget {
   const VocabularyDetailsView({
@@ -25,7 +26,7 @@ class VocabularyDetailsView extends StatelessWidget {
         Text(
           '${AppLocalizations.of(context).text('currentStatus')}: ${AppLocalizations.of(context).status(entry['status'] as String?)}',
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(
           AppLocalizations.of(context).text('sources'),
           style: const TextStyle(fontWeight: FontWeight.bold),

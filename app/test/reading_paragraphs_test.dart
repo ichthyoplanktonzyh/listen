@@ -19,7 +19,8 @@ Cue _cue(
     text: text,
     tokens: List.generate(
       wordCount,
-      (i) => SubtitleToken(index: i, kind: 'word', text: 'w$i', normalized: 'w$i'),
+      (i) =>
+          SubtitleToken(index: i, kind: 'word', text: 'w$i', normalized: 'w$i'),
     ),
   );
 }
@@ -82,9 +83,9 @@ void main() {
         30,
         (i) => _cue(i, 'la la la', startMs: i * 1000, endMs: (i + 1) * 1000),
       );
-      final sentences = deriveReadingParagraphs(cues)
-          .expand((paragraph) => paragraph.sentences)
-          .toList();
+      final sentences = deriveReadingParagraphs(
+        cues,
+      ).expand((paragraph) => paragraph.sentences).toList();
       expect(sentences.length, greaterThan(1));
       for (final sentence in sentences) {
         expect(sentence.cues.length, lessThanOrEqualTo(12));

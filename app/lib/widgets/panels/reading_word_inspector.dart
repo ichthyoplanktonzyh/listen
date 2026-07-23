@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/learning_controller.dart';
 import '../../localization.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/spacing.dart';
 import 'word_learning_panel.dart';
 
 /// Keeps reading as the primary scene while giving an explicitly requested
@@ -118,7 +119,7 @@ class ReadingWordInspector extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(Icons.menu_book_outlined, color: colors.primary),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: ListenSpacing.gap8),
                     Expanded(
                       child: Text(
                         details?.entry.displayForm ??

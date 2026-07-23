@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../models/timeline.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/motion.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 enum PhonemeRibbonLane { text, sound }
 
@@ -179,7 +183,7 @@ class SoundPatternUnavailableRibbon extends StatelessWidget {
               size: math.max(12, height * 0.52),
               color: ListenColors.overlayTextFaint,
             ),
-            const SizedBox(width: 5),
+            const SizedBox(width: ListenSpacing.gap4),
             Flexible(
               child: Text(
                 message,
@@ -479,14 +483,17 @@ class _PhoneCell extends StatelessWidget {
 
     final marker = _FindingMarker.from(findings);
     final cell = AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOutCubic,
+      // Beat-synced emphasis: the fastest step, so it lands within the phone.
+      duration: ListenMotion.tap,
+      curve: ListenMotion.enter,
       width: width,
       height: targetHeight,
       decoration: BoxDecoration(
         color: color.withAlpha((alpha * 255).round()),
-        borderRadius: BorderRadius.circular(
-          lane == PhonemeRibbonLane.sound ? 7 : 3,
+        borderRadius: BorderRadius.all(
+          lane == PhonemeRibbonLane.sound
+              ? ListenRadii.control
+              : ListenRadii.tight,
         ),
         border: isCurrent
             ? Border.all(
@@ -516,7 +523,8 @@ class _PhoneCell extends StatelessWidget {
             Center(
               child: Text(
                 phone.displayIpa,
-                style: TextStyle(
+                // IPA glyphs render in the dedicated phonetics face (#32).
+                style: ListenType.ipa.copyWith(
                   fontSize: textFontSize,
                   color: isCurrent
                       ? ListenColors.overlayText
@@ -536,7 +544,7 @@ class _PhoneCell extends StatelessWidget {
                 margin: const EdgeInsets.only(left: 3, right: 3, bottom: 2),
                 decoration: BoxDecoration(
                   color: marker.color,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: ListenRadii.tightBorder,
                 ),
               ),
             ),
@@ -646,7 +654,7 @@ class _SoundRibbonShell extends StatelessWidget {
         size: math.max(12, height * 0.46),
         color: ListenColors.overlayTextMuted,
       ),
-      const SizedBox(width: 5),
+      const SizedBox(width: ListenSpacing.gap4),
       Flexible(child: child),
     ],
   );

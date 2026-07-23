@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 
 /// LLM assist block shared by the Reading/Speaking/Writing Studios
 /// (Phase 3.12.2): correctable heuristic feedback shown next to the manual
@@ -45,7 +47,7 @@ class LlmJudgmentAssist extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Divider(height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
           if (judgment == null)
             OutlinedButton.icon(
               key: ValueKey('$keyPrefix-request-ai'),
@@ -57,27 +59,28 @@ class LlmJudgmentAssist extends StatelessWidget {
             Row(
               children: [
                 Icon(Icons.auto_awesome, size: 16, color: colors.tertiary),
-                const SizedBox(width: 6),
+                const SizedBox(width: ListenSpacing.gap6),
                 Text(
                   l.text('llmAssistTitle'),
-                  style: TextStyle(
-                    fontSize: 12,
+                  style: ListenType.body.copyWith(
                     fontWeight: FontWeight.w800,
                     color: colors.tertiary,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: ListenSpacing.gap2),
             Text(
               l.text('llmAssistNote'),
-              style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+              style: ListenType.caption.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: ListenSpacing.gap6),
             if (judgment.isAbstain)
               Text(
                 l.text('llmAssistAbstain'),
-                style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                style: ListenType.body.copyWith(color: colors.onSurfaceVariant),
               )
             else
               for (final point in points) _verdictRow(l, colors, point),
@@ -105,14 +108,11 @@ class LlmJudgmentAssist extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(point.statement, style: const TextStyle(fontSize: 13)),
-          ),
-          const SizedBox(width: 8),
+          Expanded(child: Text(point.statement, style: ListenType.reading)),
+          const SizedBox(width: ListenSpacing.gap8),
           Text(
             _verdictLabel(l, verdict),
-            style: TextStyle(
-              fontSize: 12,
+            style: ListenType.body.copyWith(
               fontWeight: FontWeight.w700,
               color: switch (verdict) {
                 'covered' => Colors.green.shade700,

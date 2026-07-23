@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../theme/listen_theme.dart';
+import '../../theme/motion.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 class RhythmReferenceToggle extends StatelessWidget {
   const RhythmReferenceToggle({
@@ -36,7 +39,7 @@ class RhythmReferenceToggle extends StatelessWidget {
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: ListenColors.overlaySurface,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: ListenRadii.controlBorder,
         border: Border.all(color: ListenColors.overlayBorder),
       ),
       child: Row(
@@ -51,7 +54,7 @@ class RhythmReferenceToggle extends StatelessWidget {
             itemSize: itemSize,
             onChanged: onChanged,
           ),
-          const SizedBox(width: 2),
+          const SizedBox(width: ListenSpacing.gap2),
           _ModeButton(
             value: 'connected',
             selected: current == 'connected',
@@ -61,7 +64,7 @@ class RhythmReferenceToggle extends StatelessWidget {
             itemSize: itemSize,
             onChanged: onChanged,
           ),
-          const SizedBox(width: 2),
+          const SizedBox(width: ListenSpacing.gap2),
           _ModeButton(
             value: 'actual',
             selected: current == 'actual',
@@ -109,8 +112,9 @@ class _ModeButton extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? () => onChanged!(value) : null,
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOutCubic,
+            // Tap confirmation: the fastest step (#32 motion spec).
+            duration: ListenMotion.tap,
+            curve: ListenMotion.enter,
             width: itemSize,
             height: itemSize,
             alignment: Alignment.center,
@@ -118,7 +122,7 @@ class _ModeButton extends StatelessWidget {
               color: selected
                   ? selectedColor.withAlpha(230)
                   : ListenColors.overlayText.withAlpha(20),
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: ListenRadii.tightBorder,
               border: Border.all(
                 color: selected
                     ? ListenColors.overlayText.withAlpha(155)

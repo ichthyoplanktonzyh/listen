@@ -4,6 +4,8 @@ import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import 'media_library_section.dart';
 
@@ -167,16 +169,16 @@ class _HomeSidebar extends StatelessWidget {
             sliver: SliverList.list(
               children: [
                 _SectionLabel(label: l.text('listenNow')),
-                const SizedBox(height: 8),
+                const SizedBox(height: ListenSpacing.gap8),
                 _SidebarItem(
                   icon: Icons.home_outlined,
                   label: l.text('home'),
                   selected: true,
                   onTap: () {},
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: ListenSpacing.gap24),
                 _SectionLabel(label: l.text('myLearning')),
-                const SizedBox(height: 8),
+                const SizedBox(height: ListenSpacing.gap8),
                 _SidebarItem(
                   icon: Icons.inventory_2_outlined,
                   label: l.text('subtitleResources'),
@@ -317,14 +319,14 @@ class _HomeContent extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: ListenSpacing.gap16),
               Text(
                 l.text('currentContentJourney'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               _ContinueLearningCard(
                 mediaTitle: recentMediaTitle,
                 mediaPath: recentMediaPath,
@@ -333,7 +335,7 @@ class _HomeContent extends StatelessWidget {
                 onContinue: onContinue,
                 onOpenMedia: onOpenMedia,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               _ResourceStatusStrip(
                 recentSubtitleCount: recentSubtitleCount,
                 hasRecentMedia: (recentMediaPath ?? '').isNotEmpty,
@@ -343,14 +345,14 @@ class _HomeContent extends StatelessWidget {
                 listeningInboxCount: listeningInboxCount,
                 coreStatusText: coreStatusText,
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: ListenSpacing.gap32),
               Text(
                 l.text('addContentSource'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               _ResponsiveActionGrid(
                 compact: compact,
                 children: [
@@ -375,7 +377,7 @@ class _HomeContent extends StatelessWidget {
                   onStartIntensiveEntry != null &&
                   onSetLibraryIntent != null &&
                   onToggleFamiliarSupply != null) ...[
-                const SizedBox(height: 36),
+                const SizedBox(height: ListenSpacing.gap32),
                 MediaLibrarySection(
                   entries: mediaLibrary,
                   familiarSupplyEnabled: familiarSupplyEnabled,
@@ -391,14 +393,14 @@ class _HomeContent extends StatelessWidget {
               // the narrow-window path rather than vanishing — exactly one
               // surface owns them at any width.
               if (compact) ...[
-                const SizedBox(height: 36),
+                const SizedBox(height: ListenSpacing.gap32),
                 Text(
                   l.text('assetJourney'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: ListenSpacing.gap12),
                 _ResponsiveActionGrid(
                   compact: compact,
                   maxPerRow: 3,
@@ -471,7 +473,8 @@ class _ResponsiveActionGrid extends StatelessWidget {
         children: [
           for (var index = 0; index < children.length; index++) ...[
             children[index],
-            if (index != children.length - 1) const SizedBox(height: 10),
+            if (index != children.length - 1)
+              const SizedBox(height: ListenSpacing.gap8),
           ],
         ],
       );
@@ -501,11 +504,12 @@ class _ResponsiveActionGrid extends StatelessWidget {
               for (var index = 0; index < rows[rowIndex].length; index++) ...[
                 Expanded(child: rows[rowIndex][index] ?? const SizedBox()),
                 if (index != rows[rowIndex].length - 1)
-                  const SizedBox(width: 12),
+                  const SizedBox(width: ListenSpacing.gap12),
               ],
             ],
           ),
-          if (rowIndex != rows.length - 1) const SizedBox(height: 12),
+          if (rowIndex != rows.length - 1)
+            const SizedBox(height: ListenSpacing.gap12),
         ],
       ],
     );
@@ -544,7 +548,7 @@ class _ContinueLearningCard extends StatelessWidget {
     return Material(
       color: colors.primaryContainer.withValues(alpha: 0.42),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: ListenRadii.controlBorder,
         side: BorderSide(color: colors.primary.withValues(alpha: 0.22)),
       ),
       clipBehavior: Clip.antiAlias,
@@ -559,7 +563,7 @@ class _ContinueLearningCard extends StatelessWidget {
                 height: 48,
                 decoration: BoxDecoration(
                   color: colors.primary,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: ListenRadii.controlBorder,
                 ),
                 child: Icon(
                   _hasMedia
@@ -568,7 +572,7 @@ class _ContinueLearningCard extends StatelessWidget {
                   color: colors.onPrimary,
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: ListenSpacing.gap16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,7 +584,7 @@ class _ContinueLearningCard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: ListenSpacing.gap4),
                     Text(
                       title,
                       maxLines: 1,
@@ -589,7 +593,7 @@ class _ContinueLearningCard extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 5),
+                    const SizedBox(height: ListenSpacing.gap4),
                     Text(
                       progress,
                       maxLines: 1,
@@ -601,7 +605,7 @@ class _ContinueLearningCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: ListenSpacing.gap12),
               FilledButton.icon(
                 onPressed: _hasMedia ? onContinue : onOpenMedia,
                 icon: Icon(_hasMedia ? Icons.play_arrow : Icons.add),
@@ -685,7 +689,8 @@ class _ResourceStatusStrip extends StatelessWidget {
             children: [
               for (var index = 0; index < items.length; index++) ...[
                 _StatusTile(item: items[index]),
-                if (index != items.length - 1) const SizedBox(height: 8),
+                if (index != items.length - 1)
+                  const SizedBox(height: ListenSpacing.gap8),
               ],
             ],
           );
@@ -694,7 +699,8 @@ class _ResourceStatusStrip extends StatelessWidget {
           children: [
             for (var index = 0; index < items.length; index++) ...[
               Expanded(child: _StatusTile(item: items[index])),
-              if (index != items.length - 1) const SizedBox(width: 8),
+              if (index != items.length - 1)
+                const SizedBox(width: ListenSpacing.gap8),
             ],
           ],
         );
@@ -726,7 +732,7 @@ class _StatusTile extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: ListenRadii.controlBorder,
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Padding(
@@ -734,7 +740,7 @@ class _StatusTile extends StatelessWidget {
         child: Row(
           children: [
             Icon(item.icon, size: 18, color: colors.primary),
-            const SizedBox(width: 9),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(
                 item.label,
@@ -745,7 +751,7 @@ class _StatusTile extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             Flexible(
               child: Text(
                 item.value,
@@ -786,7 +792,7 @@ class _SourceAction extends StatelessWidget {
           ? colors.primaryContainer.withValues(alpha: 0.42)
           : colors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: ListenRadii.controlBorder,
         side: BorderSide(
           color: primary
               ? colors.primary.withValues(alpha: 0.42)
@@ -807,7 +813,7 @@ class _SourceAction extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: primary ? colors.primary : colors.secondaryContainer,
-                    borderRadius: BorderRadius.circular(7),
+                    borderRadius: ListenRadii.controlBorder,
                   ),
                   child: Icon(
                     icon,
@@ -816,7 +822,7 @@ class _SourceAction extends StatelessWidget {
                         : colors.onSecondaryContainer,
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: ListenSpacing.gap16),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -830,7 +836,7 @@ class _SourceAction extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 5),
+                      const SizedBox(height: ListenSpacing.gap4),
                       Text(
                         sourceLabel,
                         maxLines: 2,
@@ -842,7 +848,7 @@ class _SourceAction extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
               ],
             ),
@@ -896,13 +902,13 @@ class _SidebarItem extends StatelessWidget {
       child: Material(
         color: selected ? colors.surfaceContainerHigh : Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: ListenRadii.controlBorder,
           side: selected
               ? BorderSide(color: colors.primary.withValues(alpha: 0.33))
               : BorderSide.none,
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: ListenRadii.controlBorder,
           onTap: onTap,
           child: SizedBox(
             height: 42,
@@ -920,7 +926,7 @@ class _SidebarItem extends StatelessWidget {
                         ? colors.pressedPrimary
                         : colors.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: ListenSpacing.gap12),
                   Expanded(
                     child: Text(
                       label,

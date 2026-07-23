@@ -103,20 +103,14 @@ void main() {
 
   testWidgets('user intent overrides fit-derived grouping', (tester) async {
     await tester.pumpWidget(
-      _host([
-        _entry(id: 'golden', title: 'Pinned away', intent: 'defer'),
-      ]),
+      _host([_entry(id: 'golden', title: 'Pinned away', intent: 'defer')]),
     );
     expect(find.text('Set aside for now'), findsOneWidget);
     expect(find.text('Intensive picks'), findsNothing);
   });
 
-  testWidgets('familiar supply toggle moves familiar material', (
-    tester,
-  ) async {
-    final entries = [
-      _entry(id: 'fam', title: 'Familiar', familiar: true),
-    ];
+  testWidgets('familiar supply toggle moves familiar material', (tester) async {
+    final entries = [_entry(id: 'fam', title: 'Familiar', familiar: true)];
     await tester.pumpWidget(_host(entries));
     // Supply on: familiar golden-target relists as extensive with the badge.
     expect(find.text('Extensive listening'), findsOneWidget);

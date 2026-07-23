@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/hunting_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
+import '../../theme/spacing.dart';
 
 class HuntingListPanel extends StatelessWidget {
   const HuntingListPanel({
@@ -40,7 +41,7 @@ class HuntingListPanel extends StatelessWidget {
                         l.text('huntingList'),
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: ListenSpacing.gap2),
                       Text(
                         l
                             .text('huntingTargetCount')
@@ -106,7 +107,7 @@ class HuntingListPanel extends StatelessWidget {
                         ),
                       ),
                     ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 _SectionLabel(l.text('huntingReviewCandidates')),
                 if (state.candidates.isEmpty)
                   _EmptyCard(text: l.text('huntingNoCandidates'))

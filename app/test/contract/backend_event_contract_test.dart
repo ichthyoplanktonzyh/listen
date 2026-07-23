@@ -67,27 +67,33 @@ void main() {
     expect(event.trackId, isNotNull);
   });
 
-  test('lexical-entry-changed parses full entry details with capability profile', () {
-    final event = parsed['lexical-entry-changed'] as LexicalEntryChangedEvent;
-    expect(event.entry.normalizedForm, isNotEmpty);
-    expect(event.normalizedForm, event.entry.normalizedForm);
-    final profile = event.details.capabilityProfile;
-    expect(profile, isNotNull);
-    expect(
-      profile!.reading.effectiveAssessment,
-      anyOf('unassessed', 'not_acquired', 'acquired'),
-    );
-    expect(
-      profile.listening.effectiveAssessment,
-      anyOf('unassessed', 'not_acquired', 'acquired'),
-    );
-  });
+  test(
+    'lexical-entry-changed parses full entry details with capability profile',
+    () {
+      final event = parsed['lexical-entry-changed'] as LexicalEntryChangedEvent;
+      expect(event.entry.normalizedForm, isNotEmpty);
+      expect(event.normalizedForm, event.entry.normalizedForm);
+      final profile = event.details.capabilityProfile;
+      expect(profile, isNotNull);
+      expect(
+        profile!.reading.effectiveAssessment,
+        anyOf('unassessed', 'not_acquired', 'acquired'),
+      );
+      expect(
+        profile.listening.effectiveAssessment,
+        anyOf('unassessed', 'not_acquired', 'acquired'),
+      );
+    },
+  );
 
   test('lexical-capability-changed fields survive the wire shape', () {
     final event =
         parsed['lexical-capability-changed'] as LexicalCapabilityChangedEvent;
     expect(event.lexicalEntryId, isNotEmpty);
-    expect(event.capability, anyOf('reading', 'listening', 'speaking', 'writing'));
+    expect(
+      event.capability,
+      anyOf('reading', 'listening', 'speaking', 'writing'),
+    );
     expect(
       event.effectiveAssessment,
       anyOf('unassessed', 'not_acquired', 'acquired'),

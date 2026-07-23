@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 import 'following_structure_viewport.dart';
 
 class ExpectedPronunciationReference extends StatelessWidget {
@@ -39,7 +42,7 @@ class ExpectedPronunciationReference extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: ListenColors.overlaySurfaceSoft,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: ListenRadii.controlBorder,
         border: Border.all(color: ListenColors.overlayBorder),
       ),
       child: Row(
@@ -50,7 +53,7 @@ class ExpectedPronunciationReference extends StatelessWidget {
             size: math.max(12.0, height * 0.45),
             color: ListenColors.soundCitation,
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: ListenSpacing.gap4),
           Text(
             title,
             maxLines: 1,
@@ -62,7 +65,7 @@ class ExpectedPronunciationReference extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: ListenSpacing.gap6),
           Expanded(
             child: items.isEmpty
                 ? _FallbackText(text: fallback, fontSize: fontSize)
@@ -159,7 +162,7 @@ class _PronunciationChip extends StatelessWidget {
         color: active
             ? ListenColors.soundCitation.withAlpha(225)
             : ListenColors.overlayText.withAlpha(28),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: ListenRadii.controlBorder,
         border: Border.all(
           color: active
               ? ListenColors.overlayText.withAlpha(150)
@@ -170,7 +173,8 @@ class _PronunciationChip extends StatelessWidget {
         item.ipa,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
+        // IPA glyphs render in the dedicated phonetics face (#32).
+        style: ListenType.ipa.copyWith(
           color: active
               ? ListenColors.overlayInk
               : ListenColors.overlayTextMuted,

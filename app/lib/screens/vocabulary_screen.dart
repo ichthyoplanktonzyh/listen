@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
-import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/auxiliary_audio_controller.dart';
 import '../controllers/hunting_controller.dart';
+import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
 import '../models/practice.dart';
@@ -15,9 +15,10 @@ import '../models/projection_review.dart';
 import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
-import '../widgets/vocabulary/vocabulary_book_view.dart';
-import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
+import '../theme/spacing.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
+import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
+import '../widgets/vocabulary/vocabulary_book_view.dart';
 import '../widgets/vocabulary/vocabulary_transfer_actions.dart';
 
 class VocabularyScreen extends StatefulWidget {
@@ -283,7 +284,7 @@ class _SemanticSearchDialogState extends State<_SemanticSearchDialog> {
                 '${value.descriptor == null ? '' : ' · ${value.descriptor!.dimension}d · ${value.descriptor!.modelFingerprint.substring(0, 8)}'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               if (value.status == 'not_installed')
                 FilledButton.tonalIcon(
                   onPressed: busy ? null : _install,
@@ -323,7 +324,7 @@ class _SemanticSearchDialogState extends State<_SemanticSearchDialog> {
                 ),
             ] else if (!busy)
               Text(l.text('semanticSearchUnavailable')),
-            const SizedBox(height: 12),
+            const SizedBox(height: ListenSpacing.gap12),
             TextField(
               controller: query,
               enabled: !busy && (value?.canSearch ?? false),
@@ -338,7 +339,7 @@ class _SemanticSearchDialogState extends State<_SemanticSearchDialog> {
               ),
               onSubmitted: (_) => _search(),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: ListenSpacing.gap8),
             Expanded(
               child: hits.isEmpty
                   ? Center(child: Text(l.text('semanticSearchNoHits')))
@@ -574,7 +575,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                 '${hit.document.activityKind} · ${l.text('revision')} ${hit.document.responseRevision}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               if (attempt == null) ...[
                 SelectableText(hit.document.responseText),
               ],
@@ -583,9 +584,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                   '${l.text('revision')} ${response.revision}',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: ListenSpacing.gap4),
                 SelectableText(response.transcript),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
               ],
             ],
           ),
@@ -645,11 +646,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                     .replaceAll('{lemmas}', '${review.lemmaCount}'),
               ),
               if (review.readiness == 'empty') ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 Text(l.text('productionGapEmpty')),
               ] else ...[
                 if (review.readiness == 'starter') ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: ListenSpacing.gap12),
                   Text(
                     l.text('productionGapStarter'),
                     style: TextStyle(
@@ -657,7 +658,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 for (final target in review.targets) ...[
                   ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -1602,7 +1603,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: ListenSpacing.gap4),
         Divider(height: 1, color: colors.outlineVariant),
         Expanded(
           child: loading
@@ -1626,7 +1627,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(l.text('noWords')),
-            const SizedBox(height: 12),
+            const SizedBox(height: ListenSpacing.gap12),
             OutlinedButton.icon(
               onPressed: homeSearching
                   ? null
@@ -1652,7 +1653,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           children: [
             Text(l.text('dictionaryNoLibraryResults')),
             if (externalUrl != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               OutlinedButton.icon(
                 onPressed: () => _openExternal(externalUrl),
                 icon: const Icon(Icons.open_in_new, size: 16),
@@ -1685,7 +1686,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       itemCount: children.length,
-      separatorBuilder: (_, _) => const SizedBox(width: 8),
+      separatorBuilder: (_, _) => const SizedBox(width: ListenSpacing.gap8),
       itemBuilder: (_, index) => Center(child: children[index]),
     ),
   );

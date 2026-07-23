@@ -155,7 +155,10 @@ void main() {
         },
       });
       expect(details.capabilityProfile, isNotNull);
-      expect(details.capabilityProfile!.reading.effectiveAssessment, 'acquired');
+      expect(
+        details.capabilityProfile!.reading.effectiveAssessment,
+        'acquired',
+      );
       expect(
         details.capabilityProfile!.listening.effectiveAssessment,
         'unassessed',
@@ -179,35 +182,38 @@ void main() {
   });
 
   group('LearningObservationView', () {
-    test('parses the observation-history wire shape (ADR 0017 evidence row)', () {
-      final view = LearningObservationView.fromJson(const {
-        'id': 'obs-1',
-        'lexical_entry_id': 'entry-1',
-        'sense_id': null,
-        'capability': 'reading',
-        'task_type': 'reading_context_marking',
-        'outcome': 'success',
-        'assistance': 'none',
-        'surface_form': 'quakes',
-        'sentence_id': 'cue-1',
-        'media_id': null,
-        'origin': 'user_marking',
-        'source_ref': 'reading-marking:cue-1',
-        'occurred_at_ms': 1753142400000,
-      });
-      expect(view.id, 'obs-1');
-      expect(view.lexicalEntryId, 'entry-1');
-      expect(view.senseId, isNull);
-      expect(view.capability, 'reading');
-      expect(view.taskType, 'reading_context_marking');
-      expect(view.outcome, 'success');
-      expect(view.assistance, 'none');
-      expect(view.surfaceForm, 'quakes');
-      expect(view.sentenceId, 'cue-1');
-      expect(view.mediaId, isNull);
-      expect(view.origin, 'user_marking');
-      expect(view.sourceRef, 'reading-marking:cue-1');
-      expect(view.occurredAtMs, 1753142400000);
-    });
+    test(
+      'parses the observation-history wire shape (ADR 0017 evidence row)',
+      () {
+        final view = LearningObservationView.fromJson(const {
+          'id': 'obs-1',
+          'lexical_entry_id': 'entry-1',
+          'sense_id': null,
+          'capability': 'reading',
+          'task_type': 'reading_context_marking',
+          'outcome': 'success',
+          'assistance': 'none',
+          'surface_form': 'quakes',
+          'sentence_id': 'cue-1',
+          'media_id': null,
+          'origin': 'user_marking',
+          'source_ref': 'reading-marking:cue-1',
+          'occurred_at_ms': 1753142400000,
+        });
+        expect(view.id, 'obs-1');
+        expect(view.lexicalEntryId, 'entry-1');
+        expect(view.senseId, isNull);
+        expect(view.capability, 'reading');
+        expect(view.taskType, 'reading_context_marking');
+        expect(view.outcome, 'success');
+        expect(view.assistance, 'none');
+        expect(view.surfaceForm, 'quakes');
+        expect(view.sentenceId, 'cue-1');
+        expect(view.mediaId, isNull);
+        expect(view.origin, 'user_marking');
+        expect(view.sourceRef, 'reading-marking:cue-1');
+        expect(view.occurredAtMs, 1753142400000);
+      },
+    );
   });
 }

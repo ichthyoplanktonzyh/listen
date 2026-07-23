@@ -23,11 +23,7 @@ ContentDifficultyProfile _profile({
   'sound': {
     'fit': soundFit,
     'signals': [
-      {
-        'kind': 'known_not_recognized_density',
-        'value': 0.06,
-        'decisive': true,
-      },
+      {'kind': 'known_not_recognized_density', 'value': 0.06, 'decisive': true},
       {'kind': 'speech_rate_wpm', 'value': 152.0, 'decisive': false},
     ],
   },
@@ -38,11 +34,16 @@ ContentDifficultyProfile _profile({
   'input_fingerprint': 'fp',
 });
 
-Widget _host(ContentDifficultyProfile profile, {VoidCallback? onStartColdStart}) => MaterialApp(
+Widget _host(
+  ContentDifficultyProfile profile, {
+  VoidCallback? onStartColdStart,
+}) => MaterialApp(
   locale: const Locale('en'),
   localizationsDelegates: const [AppLocalizations.delegate],
   supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: ContentFitCard(profile: profile, onStartColdStart: onStartColdStart)),
+  home: Scaffold(
+    body: ContentFitCard(profile: profile, onStartColdStart: onStartColdStart),
+  ),
 );
 
 void main() {
@@ -93,38 +94,37 @@ void main() {
     expect(find.text('Drove the rating'), findsNWidgets(3));
   });
 
-  testWidgets('quick marking button appears only on degraded profile with callback', (
-    tester,
-  ) async {
-    // No callback: button absent even on degraded profile.
-    await tester.pumpWidget(_host(_profile(assessedTokenRatio: 0.2)));
-    expect(find.text('Quick marking'), findsNothing);
+  testWidgets(
+    'quick marking button appears only on degraded profile with callback',
+    (tester) async {
+      // No callback: button absent even on degraded profile.
+      await tester.pumpWidget(_host(_profile(assessedTokenRatio: 0.2)));
+      expect(find.text('Quick marking'), findsNothing);
 
-    // With callback on sufficient profile: button absent.
-    await tester.pumpWidget(
-      _host(_profile(assessedTokenRatio: 0.95), onStartColdStart: () {}),
-    );
-    expect(find.text('Quick marking'), findsNothing);
+      // With callback on sufficient profile: button absent.
+      await tester.pumpWidget(
+        _host(_profile(assessedTokenRatio: 0.95), onStartColdStart: () {}),
+      );
+      expect(find.text('Quick marking'), findsNothing);
 
-    // With callback on degraded profile: button present.
-    var tapped = false;
-    await tester.pumpWidget(
-      _host(
-        _profile(assessedTokenRatio: 0.2),
-        onStartColdStart: () => tapped = true,
-      ),
-    );
-    expect(find.text('Quick marking'), findsOneWidget);
-    await tester.tap(find.text('Quick marking'));
-    expect(tapped, isTrue);
-  });
+      // With callback on degraded profile: button present.
+      var tapped = false;
+      await tester.pumpWidget(
+        _host(
+          _profile(assessedTokenRatio: 0.2),
+          onStartColdStart: () => tapped = true,
+        ),
+      );
+      expect(find.text('Quick marking'), findsOneWidget);
+      await tester.tap(find.text('Quick marking'));
+      expect(tapped, isTrue);
+    },
+  );
 
   testWidgets('calibrated grade replaces the initial-estimate label', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      _host(_profile(evidenceGrade: 'usage_calibrated')),
-    );
+    await tester.pumpWidget(_host(_profile(evidenceGrade: 'usage_calibrated')));
     expect(find.text('Calibrated by your usage'), findsOneWidget);
     expect(find.text('Initial estimate'), findsNothing);
   });

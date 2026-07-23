@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'services/api_service.dart';
 import 'localization.dart';
+import 'models/personal_expression.dart';
 import 'models/runtime_resources.dart';
 import 'models/types.dart';
-import 'models/personal_expression.dart';
 import 'screens/personal_expression_screen.dart';
+import 'services/api_service.dart';
+import 'theme/spacing.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
@@ -195,7 +196,7 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
                     unawaited(_refresh());
                   },
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: ListenSpacing.gap12),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
@@ -361,9 +362,9 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(AppLocalizations.of(context).text('phraseCandidatesHint')),
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               Text(candidate.reason ?? ''),
-              const SizedBox(height: 12),
+              const SizedBox(height: ListenSpacing.gap12),
               DropdownButtonFormField<String>(
                 initialValue: status,
                 items: [

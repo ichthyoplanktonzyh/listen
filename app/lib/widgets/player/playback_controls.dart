@@ -3,26 +3,31 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/task_status.dart';
-import '../../theme/breakpoints.dart';
 import '../../player_adapter.dart';
+import '../../theme/breakpoints.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
+import '../../theme/typography.dart';
 
 /// One receded look for both transport progress bars (#30): a thin track that
 /// nearly sinks into the bar, where only the played portion and the handle
 /// carry the signal teal. Shared so the compact and full forms cannot drift.
-SliderThemeData _progressSliderTheme(BuildContext context, ColorScheme colors) =>
-    SliderThemeData(
-      trackHeight: 3,
-      trackShape: const RectangularSliderTrackShape(),
-      thumbShape: _GlowThumbShape(
-        glowColor: colors.primary.withValues(alpha: 0.33),
-        glow: !MediaQuery.highContrastOf(context),
-      ),
-      overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-      activeTrackColor: colors.primary,
-      inactiveTrackColor: colors.outlineVariant.withValues(alpha: 0.4),
-      thumbColor: colors.primary,
-    );
+SliderThemeData _progressSliderTheme(
+  BuildContext context,
+  ColorScheme colors,
+) => SliderThemeData(
+  trackHeight: 3,
+  trackShape: const RectangularSliderTrackShape(),
+  thumbShape: _GlowThumbShape(
+    glowColor: colors.primary.withValues(alpha: 0.33),
+    glow: !MediaQuery.highContrastOf(context),
+  ),
+  overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+  activeTrackColor: colors.primary,
+  inactiveTrackColor: colors.outlineVariant.withValues(alpha: 0.4),
+  thumbColor: colors.primary,
+);
 
 /// The transport handle from the charter's dimmed room: a small solid dot
 /// with a soft static halo, so progress reads as the one lit thing on an
@@ -274,7 +279,7 @@ class PlaybackControls extends StatelessWidget {
                                     color: colors.onPrimaryContainer,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: ListenSpacing.gap12),
                                 Flexible(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -292,7 +297,9 @@ class PlaybackControls extends StatelessWidget {
                                               fontWeight: FontWeight.w600,
                                             ),
                                       ),
-                                      const SizedBox(height: 3),
+                                      const SizedBox(
+                                        height: ListenSpacing.gap2,
+                                      ),
                                       ValueListenableBuilder<Duration>(
                                         valueListenable: position,
                                         builder: (context, positionValue, _) =>
@@ -430,11 +437,13 @@ class PlaybackControls extends StatelessWidget {
                       builder: (context, positionValue, _) => Row(
                         children: [
                           SizedBox(
-                            width: 54,
+                            // Fits HH:MM:SS in the mono timecode face.
+                            width: 62,
                             child: Text(
                               formatDuration(positionValue),
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(color: colors.onSurfaceVariant),
+                              style: ListenType.timecode.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
                             ),
                           ),
                           Expanded(
@@ -457,12 +466,14 @@ class PlaybackControls extends StatelessWidget {
                             ),
                           ),
                           SizedBox(
-                            width: 54,
+                            // Fits HH:MM:SS in the mono timecode face.
+                            width: 62,
                             child: Text(
                               formatDuration(duration),
                               textAlign: TextAlign.end,
-                              style: Theme.of(context).textTheme.labelMedium
-                                  ?.copyWith(color: colors.onSurfaceVariant),
+                              style: ListenType.timecode.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ],
@@ -505,7 +516,7 @@ class PlaybackControls extends StatelessWidget {
                               ),
                             ),
                           if (taskStatuses.isNotEmpty && status.isNotEmpty)
-                            const SizedBox(width: 8),
+                            const SizedBox(width: ListenSpacing.gap8),
                           if (status.isNotEmpty)
                             Flexible(
                               child: Row(
@@ -518,7 +529,7 @@ class PlaybackControls extends StatelessWidget {
                                       size: 13,
                                       color: colors.error,
                                     ),
-                                    const SizedBox(width: 4),
+                                    const SizedBox(width: ListenSpacing.gap4),
                                   ],
                                   Flexible(
                                     child: Text(
@@ -581,7 +592,7 @@ class PlaybackControls extends StatelessWidget {
           color: colors.onSurfaceVariant,
           icon: const Icon(Icons.skip_next),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: ListenSpacing.gap8),
         _ToggleIcon(
           tooltip: l.text('loopSentence'),
           selected: loopCue,
@@ -589,7 +600,7 @@ class PlaybackControls extends StatelessWidget {
           icon: Icons.repeat_one,
         ),
         if (roomy) ...[
-          const SizedBox(width: 10),
+          const SizedBox(width: ListenSpacing.gap8),
           _PlaybackMenuButton(
             tooltip: l.text('listeningMode'),
             label: l.text('listeningMode'),
@@ -790,10 +801,9 @@ class PlaybackControls extends StatelessWidget {
                 enabled: false,
                 child: Text(
                   l.text('listeningMode'),
-                  style: TextStyle(
+                  style: ListenType.body.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
                   ),
                 ),
               ),
@@ -842,10 +852,9 @@ class PlaybackControls extends StatelessWidget {
                 enabled: false,
                 child: Text(
                   l.text('chunkMode'),
-                  style: TextStyle(
+                  style: ListenType.body.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
                   ),
                 ),
               ),
@@ -896,10 +905,9 @@ class PlaybackControls extends StatelessWidget {
                 enabled: false,
                 child: Text(
                   l.text('subtitleMode'),
-                  style: TextStyle(
+                  style: ListenType.body.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
-                    fontSize: 12,
                   ),
                 ),
               ),
@@ -937,7 +945,7 @@ class PlaybackControls extends StatelessWidget {
         DropdownButtonHideUnderline(
           child: DropdownButton<double>(
             value: rate,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: ListenRadii.controlBorder,
             items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
                 .map(
                   (value) =>
@@ -1144,7 +1152,7 @@ class _PlaybackMenuButton extends StatelessWidget {
             color: selected
                 ? colors.primaryContainer
                 : colors.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: ListenRadii.controlBorder,
             border: Border.all(color: colors.outlineVariant),
           ),
           child: Padding(
@@ -1157,7 +1165,7 @@ class _PlaybackMenuButton extends StatelessWidget {
                   isLabelVisible: badgeCount > 0,
                   child: iconWidget,
                 ),
-                const SizedBox(width: 7),
+                const SizedBox(width: ListenSpacing.gap6),
                 Text(
                   label,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -1165,7 +1173,7 @@ class _PlaybackMenuButton extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(width: 2),
+                const SizedBox(width: ListenSpacing.gap2),
                 Icon(Icons.arrow_drop_down, size: 18, color: foreground),
               ],
             ),
@@ -1197,7 +1205,7 @@ class _PlaybackMenuRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, size: 20, color: colors.onSurfaceVariant),
-          const SizedBox(width: 12),
+          const SizedBox(width: ListenSpacing.gap12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1217,7 +1225,7 @@ class _PlaybackMenuRow extends StatelessWidget {
             ),
           ),
           if (trailing != null) ...[
-            const SizedBox(width: 12),
+            const SizedBox(width: ListenSpacing.gap12),
             Text(
               trailing!,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -1344,7 +1352,7 @@ class _SourceLoopChip extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.only(left: 7),
@@ -1356,7 +1364,7 @@ class _SourceLoopChip extends StatelessWidget {
               size: 13,
               color: Theme.of(context).colorScheme.secondary,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: ListenSpacing.gap4),
             Text(
               label,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -1396,7 +1404,7 @@ class _TaskStatusChip extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

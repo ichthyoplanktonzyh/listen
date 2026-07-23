@@ -213,11 +213,7 @@ void main() {
     await controller.saveRubric(backend.api);
     expect(controller.state.phase, 'answering');
 
-    await controller.submitAnswer(
-      backend.api,
-      '地震发生在棉兰老岛。',
-      audioPlayCount: 2,
-    );
+    await controller.submitAnswer(backend.api, '地震发生在棉兰老岛。', audioPlayCount: 2);
     expect(controller.state.phase, 'assessing');
 
     controller.setVerdict('main-idea', 'covered');
@@ -342,123 +338,127 @@ void main() {
     expect(body['conditions']['l1_trigger'], 'user_requested');
   });
 
-  test('LLM assist: request judgment, correct it, stays honest heuristic',
-      () async {
-    final backend = _FakeBackend()
-      ..on('GET', '/v1/semantic/rubrics/lookup', _rubricJson())
-      ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', <dynamic>[])
-      ..on('POST', '/v1/semantic/attempts', _attemptJson('地震发生在棉兰老岛。'))
-      ..on('GET', '/v1/llm/providers', [_providerJson()])
-      ..on('POST', '/v1/llm/providers/prov-1/judge', _llmJudgmentJson())
-      ..on('POST', '/v1/semantic/adjudications', {
-        'id': 'adj-ai',
-        'judgment_id': 'llm-judgment-1',
-        'point_id': 'detail',
-        'prior_verdict': 'partial',
-        'user_verdict': 'covered',
-        'note': null,
-        'occurred_at_ms': 40,
-      });
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
-    await controller.submitAnswer(
-      backend.api,
-      '地震发生在棉兰老岛。',
-      audioPlayCount: 2,
-    );
-    // A judgment-capable provider was discovered, but nothing is judged yet.
-    expect(controller.state.judgeProviderId, 'prov-1');
-    expect(controller.state.llmJudgment, isNull);
+  test(
+    'LLM assist: request judgment, correct it, stays honest heuristic',
+    () async {
+      final backend = _FakeBackend()
+        ..on('GET', '/v1/semantic/rubrics/lookup', _rubricJson())
+        ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', <dynamic>[])
+        ..on('POST', '/v1/semantic/attempts', _attemptJson('地震发生在棉兰老岛。'))
+        ..on('GET', '/v1/llm/providers', [_providerJson()])
+        ..on('POST', '/v1/llm/providers/prov-1/judge', _llmJudgmentJson())
+        ..on('POST', '/v1/semantic/adjudications', {
+          'id': 'adj-ai',
+          'judgment_id': 'llm-judgment-1',
+          'point_id': 'detail',
+          'prior_verdict': 'partial',
+          'user_verdict': 'covered',
+          'note': null,
+          'occurred_at_ms': 40,
+        });
+      final controller = ReadingTaskController();
+      await controller.openTask(
+        backend.api,
+        source: _source,
+        templatePoints: _template,
+      );
+      await controller.submitAnswer(
+        backend.api,
+        '地震发生在棉兰老岛。',
+        audioPlayCount: 2,
+      );
+      // A judgment-capable provider was discovered, but nothing is judged yet.
+      expect(controller.state.judgeProviderId, 'prov-1');
+      expect(controller.state.llmJudgment, isNull);
 
-    await controller.requestLlmJudgment(backend.api);
-    final judgment = controller.state.llmJudgment!;
-    expect(judgment.id, 'llm-judgment-1');
-    // Never gold: an unqualified provider verdict stays a heuristic proxy.
-    expect(judgment.evidenceClass, 'heuristic_proxy');
-    expect(judgment.provenance.kind, 'llm');
-    expect(judgment.verdictFor('main-idea'), 'covered');
+      await controller.requestLlmJudgment(backend.api);
+      final judgment = controller.state.llmJudgment!;
+      expect(judgment.id, 'llm-judgment-1');
+      // Never gold: an unqualified provider verdict stays a heuristic proxy.
+      expect(judgment.evidenceClass, 'heuristic_proxy');
+      expect(judgment.provenance.kind, 'llm');
+      expect(judgment.verdictFor('main-idea'), 'covered');
 
-    // The judge request cites the stored attempt + revision, not client id.
-    final judgeBody = backend.requests
-        .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
-        .$3!;
-    expect(judgeBody['attempt_id'], 'attempt-x');
-    expect(judgeBody['response_revision'], 1);
+      // The judge request cites the stored attempt + revision, not client id.
+      final judgeBody = backend.requests
+          .firstWhere((r) => r.$2 == '/v1/llm/providers/prov-1/judge')
+          .$3!;
+      expect(judgeBody['attempt_id'], 'attempt-x');
+      expect(judgeBody['response_revision'], 1);
 
-    // Correcting the LLM verdict appends an adjudication citing the LLM row.
-    await controller.adjudicateLlm(
-      backend.api,
-      pointId: 'detail',
-      userVerdict: 'covered',
-    );
-    expect(controller.state.llmAdjudications, hasLength(1));
-    final adjBody = backend.requests
-        .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
-        .$3!;
-    expect(adjBody['judgment_id'], 'llm-judgment-1');
-    expect(adjBody['prior_verdict'], 'partial');
-    expect(adjBody['user_verdict'], 'covered');
-  });
+      // Correcting the LLM verdict appends an adjudication citing the LLM row.
+      await controller.adjudicateLlm(
+        backend.api,
+        pointId: 'detail',
+        userVerdict: 'covered',
+      );
+      expect(controller.state.llmAdjudications, hasLength(1));
+      final adjBody = backend.requests
+          .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
+          .$3!;
+      expect(adjBody['judgment_id'], 'llm-judgment-1');
+      expect(adjBody['prior_verdict'], 'partial');
+      expect(adjBody['user_verdict'], 'covered');
+    },
+  );
 
-  test('AI rubric generation loads an editable draft saved as llm provenance',
-      () async {
-    final backend = _FakeBackend()
-      ..on('GET', '/v1/semantic/rubrics/lookup', null)
-      ..on('GET', '/v1/llm/providers', [
-        {
-          ..._providerJson(),
-          'allowed_uses': ['rubric_generation'],
-        },
-      ])
-      ..on('POST', '/v1/llm/providers/prov-1/rubric', {
-        'points': [
+  test(
+    'AI rubric generation loads an editable draft saved as llm provenance',
+    () async {
+      final backend = _FakeBackend()
+        ..on('GET', '/v1/semantic/rubrics/lookup', null)
+        ..on('GET', '/v1/llm/providers', [
           {
-            'importance': 'required',
-            'statement': 'AI 主旨',
-            'accepted_paraphrase_notes': null,
+            ..._providerJson(),
+            'allowed_uses': ['rubric_generation'],
           },
-          {
-            'importance': 'optional',
-            'statement': 'AI 细节',
-            'accepted_paraphrase_notes': null,
-          },
-        ],
-        'model_id': 'deepseek-x',
-        'prompt_version': 'rubric-gen/v1',
-        'schema_version': 'semantic/v1',
-      })
-      ..on('POST', '/v1/semantic/rubrics', _rubricJson());
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
-    expect(controller.state.phase, 'editing');
-    expect(controller.state.rubricProviderId, 'prov-1');
+        ])
+        ..on('POST', '/v1/llm/providers/prov-1/rubric', {
+          'points': [
+            {
+              'importance': 'required',
+              'statement': 'AI 主旨',
+              'accepted_paraphrase_notes': null,
+            },
+            {
+              'importance': 'optional',
+              'statement': 'AI 细节',
+              'accepted_paraphrase_notes': null,
+            },
+          ],
+          'model_id': 'deepseek-x',
+          'prompt_version': 'rubric-gen/v1',
+          'schema_version': 'semantic/v1',
+        })
+        ..on('POST', '/v1/semantic/rubrics', _rubricJson());
+      final controller = ReadingTaskController();
+      await controller.openTask(
+        backend.api,
+        source: _source,
+        templatePoints: _template,
+      );
+      expect(controller.state.phase, 'editing');
+      expect(controller.state.rubricProviderId, 'prov-1');
 
-    await controller.generateRubric(backend.api);
-    // The draft is loaded into the editable template (client-assigned ids),
-    // not auto-saved.
-    expect(controller.state.phase, 'editing');
-    expect(
-      controller.state.draftPoints.map((p) => p.statement).toList(),
-      ['AI 主旨', 'AI 细节'],
-    );
-    expect(controller.state.draftPoints.first.pointId, 'p1');
+      await controller.generateRubric(backend.api);
+      // The draft is loaded into the editable template (client-assigned ids),
+      // not auto-saved.
+      expect(controller.state.phase, 'editing');
+      expect(controller.state.draftPoints.map((p) => p.statement).toList(), [
+        'AI 主旨',
+        'AI 细节',
+      ]);
+      expect(controller.state.draftPoints.first.pointId, 'p1');
 
-    // Saving the reviewed draft records honest llm provenance with the model.
-    await controller.saveRubric(backend.api);
-    final body = backend.requests
-        .firstWhere((r) => r.$2 == '/v1/semantic/rubrics')
-        .$3!;
-    expect(body['provenance']['kind'], 'llm');
-    expect(body['provenance']['model_id'], 'deepseek-x');
-  });
+      // Saving the reviewed draft records honest llm provenance with the model.
+      await controller.saveRubric(backend.api);
+      final body = backend.requests
+          .firstWhere((r) => r.$2 == '/v1/semantic/rubrics')
+          .$3!;
+      expect(body['provenance']['kind'], 'llm');
+      expect(body['provenance']['model_id'], 'deepseek-x');
+    },
+  );
 
   test('LLM assist stays hidden without a judgment-capable provider', () async {
     final backend = _FakeBackend()

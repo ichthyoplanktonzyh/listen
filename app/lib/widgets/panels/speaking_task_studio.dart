@@ -5,7 +5,10 @@ import 'package:flutter/material.dart';
 import '../../controllers/speaking_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import 'llm_feedback_assist.dart';
+import '../../theme/typography.dart';
 
 class SpeakingTargetCandidate {
   const SpeakingTargetCandidate({
@@ -96,7 +99,7 @@ class SpeakingTaskStudio extends StatelessWidget {
               onPressed: state.busy ? null : () => onClose(),
               icon: const Icon(Icons.arrow_back),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Wrap(
                 spacing: 12,
@@ -133,7 +136,7 @@ class SpeakingTaskStudio extends StatelessWidget {
       children: [
         if (state.error != null) ...[
           _Notice(text: state.error!, error: true),
-          const SizedBox(height: 16),
+          const SizedBox(height: ListenSpacing.gap16),
         ],
         switch (state.phase) {
           'listening' => _listening(context, state),
@@ -152,25 +155,25 @@ class SpeakingTaskStudio extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Column(
       children: [
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Icon(
           Icons.headphones_rounded,
           size: 72,
           color: Theme.of(context).colorScheme.primary,
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(
           l.text('speakingListenTitle'),
           style: Theme.of(context).textTheme.headlineSmall,
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Text(
           l.text('speakingListenBody'),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyLarge,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: ListenSpacing.gap24),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -205,7 +208,7 @@ class SpeakingTaskStudio extends StatelessWidget {
           ],
         ),
         if (state.microphonePermission != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           TextButton(
             onPressed: controller.openMicrophoneSettings,
             child: Text(l.text('speakingOpenMicSettings')),
@@ -226,12 +229,12 @@ class SpeakingTaskStudio extends StatelessWidget {
           foregroundColor: colors.onErrorContainer,
           child: const Icon(Icons.mic, size: 64),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: ListenSpacing.gap24),
         Text(
           l.text('speakingRecordingNow'),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: ListenSpacing.gap24),
         FilledButton.icon(
           key: const ValueKey('speaking-stop-recording'),
           onPressed: state.busy ? null : () => controller.stopRecording(api),
@@ -251,9 +254,9 @@ class SpeakingTaskStudio extends StatelessWidget {
     return Column(
       children: [
         const CircularProgressIndicator(),
-        const SizedBox(height: 20),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(l.text('speakingTranscribing')),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         TextButton(
           onPressed: () => controller.cancelTranscription(api),
           child: Text(l.text('speakingCancelTranscription')),
@@ -271,13 +274,13 @@ class SpeakingTaskStudio extends StatelessWidget {
           l.text('speakingReviewTitle'),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         Text(l.text('speakingReviewBody')),
-        const SizedBox(height: 18),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(l.text('speakingRawTranscript')),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         SelectableText(state.rawTranscript),
-        const SizedBox(height: 18),
+        const SizedBox(height: ListenSpacing.gap16),
         TextFormField(
           key: ValueKey('corrected-${state.transcription?.id}'),
           initialValue: state.correctedTranscript,
@@ -289,7 +292,7 @@ class SpeakingTaskStudio extends StatelessWidget {
           ),
           onChanged: controller.updateCorrectedTranscript,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: ListenSpacing.gap12),
         DropdownButtonFormField<String>(
           initialValue: state.asrReliability,
           decoration: InputDecoration(
@@ -307,7 +310,7 @@ class SpeakingTaskStudio extends StatelessWidget {
             if (value != null) controller.setAsrReliability(value);
           },
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: ListenSpacing.gap16),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -316,7 +319,7 @@ class SpeakingTaskStudio extends StatelessWidget {
               icon: const Icon(Icons.play_arrow),
               label: Text(l.text('speakingPlayRecording')),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: ListenSpacing.gap12),
             FilledButton(
               onPressed: state.correctedTranscript.trim().isEmpty || state.busy
                   ? null
@@ -338,12 +341,12 @@ class SpeakingTaskStudio extends StatelessWidget {
     return Column(
       children: [
         const Icon(Icons.check_circle_outline, size: 68),
-        const SizedBox(height: 16),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(
           l.text('speakingSavedTitle'),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: ListenSpacing.gap12),
         _Notice(
           text:
               '${l.text('speakingDuration')}: ${(duration / 1000).toStringAsFixed(1)}s'
@@ -353,12 +356,12 @@ class SpeakingTaskStudio extends StatelessWidget {
         ),
         if (state.asrReliability != 'unreliable' &&
             targetCandidates.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: ListenSpacing.gap16),
           Align(
             alignment: Alignment.centerLeft,
             child: Text(l.text('speakingTargetPrompt')),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: ListenSpacing.gap8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -385,14 +388,14 @@ class SpeakingTaskStudio extends StatelessWidget {
             ],
           ),
         ],
-        const SizedBox(height: 22),
+        const SizedBox(height: ListenSpacing.gap24),
         FilledButton.icon(
           key: const ValueKey('speaking-finish-task'),
           onPressed: state.busy ? null : controller.finishTask,
           icon: const Icon(Icons.task_alt),
           label: Text(l.text('speakingFinishTask')),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         TextButton.icon(
           onPressed: onOpenL1Check,
           icon: const Icon(Icons.translate_outlined),
@@ -419,7 +422,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     return Column(
       children: [
         const Icon(Icons.task_alt, size: 72),
-        const SizedBox(height: 16),
+        const SizedBox(height: ListenSpacing.gap16),
         Text(
           l.text('speakingDoneTitle'),
           style: Theme.of(context).textTheme.headlineSmall,
@@ -427,9 +430,9 @@ class SpeakingTaskStudio extends StatelessWidget {
         _llmFeedback(state),
         if (state.source?.recall == 'delayed' &&
             !state.delayedReviewCompleted) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: ListenSpacing.gap16),
           Text(l.text('speakingDelayedRatePrompt')),
-          const SizedBox(height: 10),
+          const SizedBox(height: ListenSpacing.gap8),
           Wrap(
             spacing: 8,
             children: [
@@ -444,10 +447,10 @@ class SpeakingTaskStudio extends StatelessWidget {
           ),
         ],
         if (state.delayedReviewCompleted) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: ListenSpacing.gap12),
           _Notice(text: l.text('speakingDelayedReviewSaved')),
         ],
-        const SizedBox(height: 20),
+        const SizedBox(height: ListenSpacing.gap16),
         Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -516,9 +519,9 @@ class _StageLabel extends StatelessWidget {
               : colors.onSurfaceVariant,
           child: complete
               ? const Icon(Icons.check, size: 14)
-              : Text('$index', style: const TextStyle(fontSize: 11)),
+              : Text('$index', style: ListenType.caption),
         ),
-        const SizedBox(width: 5),
+        const SizedBox(width: ListenSpacing.gap4),
         Text(
           label,
           style: TextStyle(fontWeight: active ? FontWeight.w700 : null),
@@ -540,7 +543,7 @@ class _Notice extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: error ? colors.errorContainer : colors.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),

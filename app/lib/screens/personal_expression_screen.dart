@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../localization.dart';
 import '../models/personal_expression.dart';
 import '../services/api_service.dart';
+import '../theme/spacing.dart';
 
 class PersonalExpressionScreen extends StatefulWidget {
   const PersonalExpressionScreen({
@@ -120,7 +121,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                   controller: name,
                   decoration: const InputDecoration(labelText: '名称'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: sourceText,
                   enabled: pattern == null && source == null,
@@ -128,7 +129,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                   maxLines: 4,
                   decoration: const InputDecoration(labelText: '不可变来源快照'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: patternText,
                   minLines: 2,
@@ -138,7 +139,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                     hintText: 'I ended up {result}.',
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: slotNames,
                   decoration: const InputDecoration(
@@ -146,7 +147,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                     hintText: 'result, reason',
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: note,
                   decoration: const InputDecoration(labelText: '我的说明'),
@@ -286,7 +287,8 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                 : ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: _patterns.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: ListenSpacing.gap8),
                     itemBuilder: (context, index) {
                       final pattern = _patterns[index];
                       return Card(
@@ -425,14 +427,14 @@ class _PatternDetailState extends State<_PatternDetail> {
                   )
                 else
                   const Text('模板与槽位提示已隐藏，请直接写出自己的表达。'),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: response,
                   minLines: 3,
                   maxLines: 7,
                   decoration: const InputDecoration(labelText: '我的真实内容'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ListenSpacing.gap12),
                 DropdownButtonFormField<String>(
                   initialValue: assistance,
                   decoration: const InputDecoration(labelText: '使用的帮助'),
@@ -515,7 +517,7 @@ class _PatternDetailState extends State<_PatternDetail> {
           widget.pattern.currentVersion.patternText,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: ListenSpacing.gap8),
         Text('来源快照：${widget.pattern.source.text}'),
         if (widget.pattern.currentVersion.note != null)
           Text('说明：${widget.pattern.currentVersion.note}'),
@@ -526,7 +528,7 @@ class _PatternDetailState extends State<_PatternDetail> {
               Chip(label: Text(slot.name)),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: ListenSpacing.gap16),
         Wrap(
           spacing: 8,
           children: [
@@ -585,7 +587,7 @@ class _PatternDetailState extends State<_PatternDetail> {
               ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: ListenSpacing.gap24),
         TextButton.icon(
           style: TextButton.styleFrom(
             foregroundColor: Theme.of(context).colorScheme.error,

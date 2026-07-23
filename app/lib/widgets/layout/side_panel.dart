@@ -15,6 +15,8 @@ import '../../models/listening.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
@@ -567,7 +569,7 @@ class _MenuTriggerButton extends StatelessWidget {
       height: 40,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: ListenRadii.panelBorder,
         border: Border.all(
           color: enabled ? colors.outline : colors.outlineVariant,
         ),
@@ -576,7 +578,7 @@ class _MenuTriggerButton extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 18, color: foreground),
-          const SizedBox(width: 8),
+          const SizedBox(width: ListenSpacing.gap8),
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
@@ -637,7 +639,7 @@ class _PanelTab extends StatelessWidget {
                             ? colors.primary
                             : colors.onSurfaceVariant,
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: ListenSpacing.gap2),
                       Text(
                         label,
                         maxLines: 1,
@@ -692,7 +694,7 @@ class _PanelEmptyState extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 34, color: colors.primary),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               Text(
                 title,
                 textAlign: TextAlign.center,
@@ -700,7 +702,7 @@ class _PanelEmptyState extends StatelessWidget {
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               Text(
                 message,
                 textAlign: TextAlign.center,
@@ -709,7 +711,7 @@ class _PanelEmptyState extends StatelessWidget {
                 ),
               ),
               if (actionLabel != null) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: ListenSpacing.gap16),
                 FilledButton(onPressed: onAction, child: Text(actionLabel!)),
               ],
             ],

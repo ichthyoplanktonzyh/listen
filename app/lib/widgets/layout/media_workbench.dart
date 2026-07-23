@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/content_channel.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/spacing.dart';
 import 'content_channel_switcher.dart';
 
 class MediaWorkbench extends StatefulWidget {
@@ -213,7 +214,7 @@ class _SessionHeader extends StatelessWidget {
                 ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
-            const SizedBox(width: 20),
+            const SizedBox(width: ListenSpacing.gap16),
             ContentChannelSwitcher(
               selected: selectedChannel,
               availability: availability,

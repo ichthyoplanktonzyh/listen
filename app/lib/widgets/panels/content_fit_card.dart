@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 /// Media-level dual-dimension content fit (ADR 0018).
 ///
@@ -12,7 +14,11 @@ import '../../models/types.dart';
 /// little of the transcript the honest-degradation notice replaces confident
 /// framing.
 class ContentFitCard extends StatelessWidget {
-  const ContentFitCard({super.key, required this.profile, this.onStartColdStart});
+  const ContentFitCard({
+    super.key,
+    required this.profile,
+    this.onStartColdStart,
+  });
 
   final ContentDifficultyProfile profile;
   final VoidCallback? onStartColdStart;
@@ -24,7 +30,7 @@ class ContentFitCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: ListenRadii.controlBorder,
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Padding(
@@ -35,7 +41,7 @@ class ContentFitCard extends StatelessWidget {
             Row(
               children: [
                 Icon(Icons.tune_outlined, size: 16, color: colors.primary),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     l.text('contentFit'),
@@ -60,14 +66,14 @@ class ContentFitCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: ListenSpacing.gap6),
             Row(
               children: [
                 FitChip(
                   label: l.text('contentFitMeaning'),
                   fit: profile.meaning.fit,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 FitChip(
                   label: l.text('contentFitSound'),
                   fit: profile.sound.fit,
@@ -75,7 +81,7 @@ class ContentFitCard extends StatelessWidget {
               ],
             ),
             if (profile.isIntensiveListeningTarget) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               _NoteLine(
                 icon: Icons.headphones_outlined,
                 text: l.text('contentFitIntensiveTarget'),
@@ -83,14 +89,14 @@ class ContentFitCard extends StatelessWidget {
               ),
             ],
             if (!profile.hasSufficientVocabularyProfile) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: ListenSpacing.gap8),
               _NoteLine(
                 icon: Icons.info_outline,
                 text: l.text('contentFitLowProfile'),
                 color: colors.onSurfaceVariant,
               ),
               if (onStartColdStart != null) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: ListenSpacing.gap6),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
@@ -130,7 +136,7 @@ class FitChip extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.secondaryContainer.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: ListenRadii.pillBorder,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -139,11 +145,11 @@ class FitChip extends StatelessWidget {
           children: [
             Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: ListenSpacing.gap6),
             Text(
               l.text('fit_$fit'),
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -159,7 +165,11 @@ class FitChip extends StatelessWidget {
 }
 
 class _NoteLine extends StatelessWidget {
-  const _NoteLine({required this.icon, required this.text, required this.color});
+  const _NoteLine({
+    required this.icon,
+    required this.text,
+    required this.color,
+  });
 
   final IconData icon;
   final String text;
@@ -170,13 +180,11 @@ class _NoteLine extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Icon(icon, size: 14, color: color),
-      const SizedBox(width: 6),
+      const SizedBox(width: ListenSpacing.gap6),
       Expanded(
         child: Text(
           text,
-          style: Theme.of(
-            context,
-          ).textTheme.bodySmall?.copyWith(color: color),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
         ),
       ),
     ],
@@ -204,12 +212,12 @@ class ContentFitDetailDialog extends StatelessWidget {
                 title: l.text('contentFitMeaning'),
                 dimension: profile.meaning,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               _DimensionDetail(
                 title: l.text('contentFitSound'),
                 dimension: profile.sound,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: ListenSpacing.gap12),
               Text(
                 profile.usageCalibrated
                     ? l.text('contentFitCalibrated')
@@ -219,7 +227,7 @@ class ContentFitDetailDialog extends StatelessWidget {
                 ),
               ),
               if (!profile.hasSufficientVocabularyProfile) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: ListenSpacing.gap6),
                 Text(
                   l.text('contentFitLowProfile'),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -258,11 +266,11 @@ class _DimensionDetail extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: ListenSpacing.gap8),
             Text(
               l.text('fit_${dimension.fit}'),
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -272,7 +280,7 @@ class _DimensionDetail extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: ListenSpacing.gap6),
         for (final signal in dimension.signals)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
@@ -287,7 +295,7 @@ class _DimensionDetail extends StatelessWidget {
                       ? colors.primary
                       : colors.onSurfaceVariant,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
                     l.text('fit_signal_${signal.kind}'),
@@ -296,17 +304,17 @@ class _DimensionDetail extends StatelessWidget {
                 ),
                 Text(
                   _formatValue(signal),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 if (signal.decisive) ...[
-                  const SizedBox(width: 6),
+                  const SizedBox(width: ListenSpacing.gap6),
                   Text(
                     l.text('contentFitDecisive'),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.primary,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: colors.primary),
                   ),
                 ],
               ],

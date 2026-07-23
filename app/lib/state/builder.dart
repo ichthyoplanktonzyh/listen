@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'store.dart';
 
 /// A widget that rebuilds only when the selected slice of state changes.
