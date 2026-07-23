@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../player/shortcut_cheat_sheet.dart';
 import 'llm_provider_settings.dart';
 import 'syntax_capability_settings.dart';
 
@@ -36,6 +37,7 @@ class SettingsDialog extends StatefulWidget {
     required this.ytDlpPath,
     required this.openSubtitlesApiKey,
     required this.wordSyncVisible,
+    required this.markKeysEnabled,
     required this.groupingMode,
     required this.senseGroupsAvailable,
     required this.chunkDisplayStyle,
@@ -72,6 +74,7 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptionLanguageChanged,
     required this.onTranscriptionDestinationChanged,
     required this.onWordSyncVisibleChanged,
+    required this.onMarkKeysEnabledChanged,
     required this.onGroupingModeChanged,
     required this.onChunkDisplayStyleChanged,
     required this.onHighlightCurrentChunkChanged,
@@ -113,6 +116,7 @@ class SettingsDialog extends StatefulWidget {
   final String ytDlpPath;
   final String openSubtitlesApiKey;
   final bool wordSyncVisible;
+  final bool markKeysEnabled;
   final String groupingMode;
   final bool senseGroupsAvailable;
   final String chunkDisplayStyle;
@@ -154,6 +158,7 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onTranscriptionLanguageChanged;
   final ValueChanged<String> onTranscriptionDestinationChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
+  final ValueChanged<bool> onMarkKeysEnabledChanged;
   final ValueChanged<String> onGroupingModeChanged;
   final ValueChanged<String> onChunkDisplayStyleChanged;
   final ValueChanged<bool> onHighlightCurrentChunkChanged;
@@ -180,7 +185,7 @@ class SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<SettingsDialog> {
   final ScrollController _settingsScrollController = ScrollController();
-  final List<GlobalKey> _categoryKeys = List.generate(7, (_) => GlobalKey());
+  final List<GlobalKey> _categoryKeys = List.generate(8, (_) => GlobalKey());
   int _selectedCategory = 2;
   late String language;
   late String themeMode;
@@ -199,6 +204,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionLanguage;
   late String transcriptionDestination;
   late bool wordSyncVisible;
+  late bool markKeysEnabled;
   late String groupingMode;
   late String chunkDisplayStyle;
   late bool highlightCurrentChunk;
@@ -271,6 +277,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionLanguage = widget.transcriptionLanguage;
     transcriptionDestination = widget.transcriptionDestination;
     wordSyncVisible = widget.wordSyncVisible;
+    markKeysEnabled = widget.markKeysEnabled;
     groupingMode = widget.groupingMode;
     chunkDisplayStyle = widget.chunkDisplayStyle;
     highlightCurrentChunk = widget.highlightCurrentChunk;
@@ -358,6 +365,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     NavigationRailDestination(
                       icon: const Icon(Icons.smart_toy_outlined),
                       label: Text(l.text('llmProviders')),
+                    ),
+                    NavigationRailDestination(
+                      icon: const Icon(Icons.keyboard_outlined),
+                      label: Text(l.text('shortcutsTitle')),
                     ),
                   ],
                 ),
@@ -1041,6 +1052,33 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       LlmProviderSettings(api: widget.api!)
                     else
                       Text(l.text('llmSidecarUnavailable')),
+                    const Divider(),
+                    Text(
+                      key: _categoryKeys[7],
+                      l.text('shortcutsTitle'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    SwitchListTile(
+                      value: markKeysEnabled,
+                      title: Text(l.text('shortcutsMarkKeysToggle')),
+                      subtitle: Text(l.text('shortcutsMarkKeysHint')),
+                      onChanged: (value) {
+                        markKeysEnabled = value;
+                        widget.onMarkKeysEnabledChanged(value);
+                        refresh(() {});
+                      },
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            unawaited(showShortcutCheatSheet(context)),
+                        icon: const Icon(Icons.keyboard_outlined, size: 16),
+                        label: Text(l.text('shortcutsViewAll')),
+                      ),
+                    ),
                   ],
                 ),
               ),

@@ -343,4 +343,21 @@ void main() {
     expect(defaults.soundPatternDisplayMode, 'actual');
     expect(connected.soundPatternDisplayMode, 'connected');
   });
+
+  test(
+    'mark-keys toggle (#25) defaults on, persists, and survives copyWith',
+    () {
+      expect(const AppSettings().markKeysEnabled, isTrue);
+      expect(
+        AppSettings.fromJson({
+          'version': 8,
+          'mark_keys_enabled': false,
+        }).markKeysEnabled,
+        isFalse,
+      );
+      // Unrelated copyWith writes must not reset the toggle.
+      final off = const AppSettings().copyWith(markKeysEnabled: false);
+      expect(off.copyWith(rate: 1.5).markKeysEnabled, isFalse);
+    },
+  );
 }

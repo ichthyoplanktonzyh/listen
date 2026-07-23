@@ -108,6 +108,7 @@ class PlaybackControls extends StatelessWidget {
     this.huntingActive = false,
     required this.listeningMarkEnabled,
     required this.listeningInboxCount,
+    this.spaceTargetsPractice = false,
     required this.onSeek,
     required this.onSeekToPreviousCue,
     required this.onSeekToZero,
@@ -173,6 +174,9 @@ class PlaybackControls extends StatelessWidget {
   final bool huntingActive;
   final bool listeningMarkEnabled;
   final int listeningInboxCount;
+
+  /// Space drives the practice clip right now, not the main player (#25).
+  final bool spaceTargetsPractice;
   final bool chunkControlsEnabled;
   final bool chunkLoopActive;
 
@@ -586,6 +590,25 @@ class PlaybackControls extends StatelessWidget {
           onPressed: onPlayPause,
           icon: Icon(playing ? Icons.pause : Icons.play_arrow),
         ),
+        if (spaceTargetsPractice)
+          Padding(
+            padding: const EdgeInsets.only(left: ListenSpacing.gap8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.outlineVariant),
+                borderRadius: ListenRadii.tightBorder,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text(
+                  l.text('shortcutSpacePracticeHint'),
+                  style: ListenType.caption.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
         IconButton(
           tooltip: l.text('nextSentence'),
           onPressed: onSeekToNextCue,
