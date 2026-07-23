@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-23: focus ring——键盘焦点的可见语言（refs #46 · design Slice 5 之六，收口）。
+  信号青细描边（1.5，与输入框 focusedBorder 同宽同色=同一语言）落进主题层：一个共享
+  resolver 挂上四个按钮族（Outlined/Text/Icon 描信号青；Filled 底就是青色、环会沉底，
+  改描 onPrimary），焦点在环在、焦点走环走，light/dark 两主题一致；按钮之外的控件维持
+  Material 自身焦点呈现。与「外壳退后」的焦点持有联动：Tab 进 transport 外壳不消失。
+  新增 `focus_ring_test`（两主题四族环样式 + resting 无环 + 输入框同语言 + Tab 走查
+  焦点落位）。583 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: 签名动作「内容落定」+「节奏拍呼吸」落地（refs #46 · design Slice 5 之五）。
   ① 抽出共享 `widgets/common/ambient_breath.dart`：全 app 唯一的呼吸手势（0.72→1 ·
   2600ms 周期 · ease-in-out，reduce motion 停），`ListenLoading` 重构改用（顺带降为
