@@ -2,6 +2,61 @@
 
 ## Unreleased
 
+- 2026-07-23: focus ring——键盘焦点的可见语言（refs #46 · design Slice 5 之六，收口）。
+  信号青细描边（1.5，与输入框 focusedBorder 同宽同色=同一语言）落进主题层：一个共享
+  resolver 挂上四个按钮族（Outlined/Text/Icon 描信号青；Filled 底就是青色、环会沉底，
+  改描 onPrimary），焦点在环在、焦点走环走，light/dark 两主题一致；按钮之外的控件维持
+  Material 自身焦点呈现。与「外壳退后」的焦点持有联动：Tab 进 transport 外壳不消失。
+  新增 `focus_ring_test`（两主题四族环样式 + resting 无环 + 输入框同语言 + Tab 走查
+  焦点落位）。583 项测试绿；`flutter analyze` 零告警。
+- 2026-07-23: 签名动作「内容落定」+「节奏拍呼吸」落地（refs #46 · design Slice 5 之五）。
+  ① 抽出共享 `widgets/common/ambient_breath.dart`：全 app 唯一的呼吸手势（0.72→1 ·
+  2600ms 周期 · ease-in-out，reduce motion 停），`ListenLoading` 重构改用（顺带降为
+  StatelessWidget）。② **内容落定**：新增 `widgets/common/content_settle.dart`
+  （淡入 + 上移 8px 落定，`base`·`enter` 无过冲；`settleKey` 变化重跑进场），挂上
+  MediaWorkbench 的频道面板（immersiveStage + learningPanel，key=selectedChannel）——
+  切频道不再硬切。③ **节奏拍呼吸**：节奏带当前拍（active）包 `AmbientBreath`，透明度
+  与柔光一同起伏——活着但不抢戏，不是跳高。测试：新增 `content_settle_test`（进场/
+  换 key 重跑/reduce motion 即时）、rhythm 测试钉「恰好一拍在呼吸」；循环播放测试改
+  有界 pump（环境呼吸按设计永不 settle）。580 项测试绿；`flutter analyze` 零告警。
+- 2026-07-23: 签名动作「外壳退后」落地（refs #46 · design Slice 5 之四）。媒体在工作台
+  播放且鼠标静止 3s → AppBar 与 transport 淡出（`base`·`exit`，房间随内容变暗）；指针
+  任何活动 → 淡入（`base`·`enter`）；键盘焦点落在外壳内 → 常显不消失（对齐 motion spec
+  demo 3 的 `:hover, :focus-within`）。新增 `widgets/layout/shell_recede.dart`：
+  `ShellRecede`（顶层半透明 Listener 侦测指针活动 + 静止计时，暂停/回首页强制常显）+
+  `ShellFade`/`ShellFadeAppBar`（呈现层：布局占位不塌缩、隐藏时 IgnorePointer——静止后
+  第一次点击是唤醒不是盲按隐形按钮；appBar 槽位保 PreferredSizeWidget 接口）。reduce
+  motion 下即时切换。新增 `shell_recede_test`（不活跃永不退/静止退+移动回/焦点持有/
+  暂停复原 4 例）。577 项测试绿；`flutter analyze` 零告警。
+- 2026-07-23: 错误态容器定形（refs #46 · design Slice 5 之三）。新增
+  `widgets/common/listen_error_state.dart` 两种形态：**`ListenErrorState`**（面板主体
+  加载失败——与空态同几何：error 角色图标 + 一句话 + 可选重试，空与败读作同胞）、
+  **`ListenErrorNotice`**（流程内一步失败——`errorContainer` 安静内联面，小图标+消息，
+  待在面板正常流里不劫持）。收敛 10 处：面板级 3（转录中心/音频分析中心带 retry、
+  coach dashboard 带 reload）+ 行内裸红字 7（听力收件箱/阅读任务/个人表达/语义检索/
+  句法能力设置×2/复习队列）。边界：破坏性按钮红字（删除任务等）是动作色不是错误消息、
+  diff/chip 的语义判定色一概不动；错误色值本身服从 #22 判定色工作，本刀只定容器形态。
+  新增 `listen_error_state_test`。573 项测试绿；`flutter analyze` 零告警。
+- 2026-07-23: 统一空态语言（refs #46 · design Slice 5 之二）。新增
+  `widgets/common/listen_empty_state.dart`：`ListenEmptyState` = 安静图标（28px ·
+  onSurfaceVariant 55%）+ 一句话 + 可选恢复动作——空是状态不是道歉，空面板不许喊
+  （宪章原则 5）。12 处裸 `Center(child: Text(...))` 空态收敛：转录任务/音频分析任务/
+  个人表达/语义检索/听力收件箱/L1 难点/写作无发现/字幕资源（未开媒体+无资源）/词汇本
+  两处/冷启动标注，词典 fallback 的「搜语料库」按钮接入 `action` 槽。边界：小节内的行内
+  提示（`noDictionary`、`llmNoProviders`、timeline 候选三处）是节内文案不是面板空态，
+  不在本刀；`Center(Text(error!))` 三处留给错误态容器一刀。新增
+  `listen_empty_state_test`（图标+文案+muted 色、动作可点、无动作不渲染按钮）。571 项
+  测试绿；`flutter analyze` 零告警。
+- 2026-07-23: 统一加载语言——裸转圈清零（refs #46 · design Slice 5 之一）。宪章禁装饰
+  转圈但一直没给替代，本次定案：**等待 = 双向波形 mark 的 ambient 呼吸**（motion spec
+  已有的「wordmark 呼吸」词汇，透明度 0.72→1 走一个 2600ms 周期 ease-in-out，reduce
+  motion 下呼吸停止、mark 常显）。新增 `widgets/common/listen_loading.dart`：
+  `ListenLoading`（面板级，居中 mark + 可选一行说明）与 `ListenLoading.inline`（控件级
+  16–22px，替按钮/状态格里的 strokeWidth:2 小转圈）；语义层带本地化 `loading` 标签
+  （en/zh 新 key）。全 lib 25 处裸 `CircularProgressIndicator` 清零（14 处面板级 +
+  11 处行内），新增 `loading_discipline_test` 源码级禁裸转圈（豁免表内置、今日为空）+
+  `listen_loading_test`（呼吸活着、下限 0.72、reduce motion 静止）。568 项测试绿；
+  `flutter analyze` 零告警。
 - 2026-07-23: wordmark + 排版/间距/圆角/动效 token（refs #28, closes #32, closes #26 ·
   design Slice 4）。#28 气质的「语法层」，三个前置设计决定（logo B 双向波形 / Plex+Charis
   字体 / motion spec）已全部定案后整体落地。① **字体内嵌**：IBM Plex Sans（Reg/Med/SemiBold）
