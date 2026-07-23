@@ -136,6 +136,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                             Expanded(
                               child: DropdownButtonFormField<String>(
                                 initialValue: state.selectedProfileId,
+                                isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText: 'Realtime provider',
                                   border: OutlineInputBorder(),
@@ -146,6 +147,8 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                                         value: profile.id,
                                         child: Text(
                                           '${profile.displayName} · ${profile.modelId}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
                                     )
