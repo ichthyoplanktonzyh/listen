@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+- 2026-07-23: 判定状态色达标 WCAG AA + palette discipline 补第二道门（closes #22 · 轨A）。
+  ① `ColorScheme` 扩语义判定色：`ListenSchemeShades.verdictCovered/verdictPartial`
+  （light `#27702b`/`#a04d00`，dark `#5cc389`/`#efa05c`，脚本计算非肉眼选色——对各自
+  brightness 的 surface/fog/sidebar 全部 ≥4.5:1，新增逐对断言进 `listen_theme_test`；
+  missing 继续读 `error` 槽位）。三处调用点（reading_task_sheet / llm_judgment_assist /
+  reading_diff_panel）改读扩展，替换双主题都不达标的 `Colors.green.shade700` /
+  `Colors.orange.shade800`。② discipline 第二道门：`theme_palette_discipline_test` 新增
+  `Colors.<具名>`（transparent 豁免）与 `Color(0x…)` 拦截，豁免文件逐条写理由并**钉行数
+  配额**（wordmark 品牌常量 2、player_stage 视频舞台家具 8、settings_dialog 字幕取色板 5）
+  ——豁免文件里新增硬编码色也会红。③ 顺手收敛：练习迷你播放器离谱蓝 `#1D2430` →
+  章程舞台词汇（`ListenColors.player`/`overlayText*`）；新增 `ListenColors.videoBackdrop`
+  （视频 letterbox 纯黑，亮度无关），player_adapter/slice_playback/词典行内片段 4 处改读。
+  边界：light `error` `#c95454` 白底实测 4.30:1 未达标（issue 以为达标），但改 error 牵动
+  整个亮色主题，归 owner 已裁决暂缓的「亮色主题重校」，本刀保持读 scheme 的正确模式。
+  两道门 + 配额门均红→绿证伪过。585 项测试绿；`flutter analyze` 零告警。
+
+- 2026-07-23: 修复 Realtime provider 下拉选中项横向溢出。
+  `RealtimeConversationPanel` 的 provider 选择器（`DropdownButtonFormField`）未设
+  `isExpanded`，真实 profile（如 'Realtime provider · qwen3.5-omni-plus-realtime'）
+  会让选中项 Row 溢出约 290px。改为 `isExpanded: true` + item 文本单行 ellipsis。
+  补 widget 测试：注册长 displayName/modelId profile 后渲染面板，断言无溢出异常
+  （去修复复现 `RenderFlex overflowed by 294 pixels`）。584 项测试绿；
+  `flutter analyze` 零告警。
+- 2026-07-23: provider 对话框重构为 StatefulWidget,controller 归 State 所有(refs #27 收尾)。
+  #58 的「await showDialog 后逐个 dispose」与退场动画存在竞态:保存成功时 registerProfile
+  触发面板刷新,pop 后 future 立即 resolve、dispose 先于退场动画结束执行,退场中的
+  TextField 重建即触发「used after being disposed」(与 #61 的诚实反馈测试组合时暴露)。
+  改为 issue #27 点名的第二种合法模式(settings_dialog 同款):六个 controller 由
+  `_ProviderDialog` State 持有、`State.dispose` 释放(secret 先 clear)——路由完全移除后
+  才触发,竞态从构造上消失;leak 回归测试维持零泄漏。585 项测试绿;analyze 零告警。
+- 2026-07-23: 实时会话「Add provider」对话框补诚实反馈（refs #24/#45 静默清查遗漏，
+  源自 e30d6ba0/#7）。Qwen 未填 Workspace ID 时点「Save securely」原是静默 return——
+  用户零反馈；现按 #45 判据（说明原因 + 给出恢复动作）在 Workspace ID 字段内联
+  errorText「Enter the Workspace ID to complete the endpoint.」，对话框保持打开，输入
+  即清除；Workspace 字段不可见时（如手动把占位符粘进 endpoint）错误落到 endpoint 字段，
+  保证守卫永不静默。新增 `realtime_conversation_panel_provider_dialog_test`（未填报错
+  不关框不发请求 / 补填清错误、保存成功发注册请求）。584 项测试绿；`flutter analyze`
+  零告警。文案暂用英文与该文件现状一致，i18n 归 #21。
+- 2026-07-23: 修复 provider 对话框泄漏 6 个 TextEditingController（closes #27 · 轨A）。
+  `realtime_conversation_panel.dart` `_showProviderDialog` 每次打开建 6 个 controller
+  但全文件 0 处 dispose——含绑 API key 输入框的 `secret`，密钥明文随 controller 滞留堆里。
+  修复对齐全仓既有写法（`personal_expression_screen.dart`）：`await showDialog` 返回后
+  逐个 `dispose()`，`secret` 先 `clear()` 再释放——密钥交给 Keychain 后不再持有。
+  新增 `realtime_conversation_panel_leak_test`：leak_tracker 全类跟踪下反复开关对话框
+  3 轮 + 卸载整树，修复前精确抓到 18 个（6×3）未释放 controller、修复后零泄漏
+  （红→绿双向验证过）；`leak_tracker_flutter_testing` 入 dev_dependencies（`any`，
+  版本随 flutter_test 钉住）。584 项测试绿；`flutter analyze` 零告警。
 - 2026-07-23: focus ring——键盘焦点的可见语言（refs #46 · design Slice 5 之六，收口）。
   信号青细描边（1.5，与输入框 focusedBorder 同宽同色=同一语言）落进主题层：一个共享
   resolver 挂上四个按钮族（Outlined/Text/Icon 描信号青；Filled 底就是青色、环会沉底，
