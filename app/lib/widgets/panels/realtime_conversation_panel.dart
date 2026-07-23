@@ -511,6 +511,16 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
         ),
       ),
     );
+    // #27: release every controller once the dialog closes. The secret is
+    // cleared first so the API key does not linger in the controller's value
+    // after it has been handed to the Keychain.
+    secret.clear();
+    name.dispose();
+    endpoint.dispose();
+    model.dispose();
+    voice.dispose();
+    secret.dispose();
+    qwenWorkspace.dispose();
   }
 }
 
