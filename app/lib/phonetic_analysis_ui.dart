@@ -9,6 +9,7 @@ import 'theme/radii.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
 import 'widgets/common/listen_empty_state.dart';
+import 'widgets/common/listen_error_state.dart';
 import 'widgets/common/listen_loading.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
@@ -118,7 +119,13 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
           ],
         ),
         body: error != null
-            ? Center(child: Text(error!))
+            ? ListenErrorState(
+                message: error!,
+                action: OutlinedButton(
+                  onPressed: _refresh,
+                  child: Text(l.text('retry')),
+                ),
+              )
             : TabBarView(children: [_models(l), _jobs(l)]),
       ),
     );

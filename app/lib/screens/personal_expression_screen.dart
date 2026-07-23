@@ -10,6 +10,7 @@ import '../models/personal_expression.dart';
 import '../services/api_service.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_empty_state.dart';
+import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 
 class PersonalExpressionScreen extends StatefulWidget {
@@ -276,10 +277,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+              child: ListenErrorNotice(message: _error!),
             ),
           Expanded(
             child: _busy

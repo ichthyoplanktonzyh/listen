@@ -17,6 +17,7 @@ import '../models/types.dart';
 import '../services/api_service.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_empty_state.dart';
+import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
@@ -275,9 +276,10 @@ class _SemanticSearchDialogState extends State<_SemanticSearchDialog> {
             if (error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  l.text('semanticSearchFailure').replaceAll('{error}', error!),
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                child: ListenErrorNotice(
+                  message: l
+                      .text('semanticSearchFailure')
+                      .replaceAll('{error}', error!),
                 ),
               ),
             if (value != null) ...[

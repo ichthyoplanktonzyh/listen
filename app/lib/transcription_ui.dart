@@ -9,6 +9,7 @@ import 'models/runtime_resources.dart';
 import 'models/timeline.dart';
 import 'services/api_service.dart';
 import 'widgets/common/listen_empty_state.dart';
+import 'widgets/common/listen_error_state.dart';
 
 typedef LoadGeneratedTrack =
     Future<void> Function(SubtitleTrack track, bool secondary);
@@ -203,7 +204,13 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
           ],
         ),
         body: error != null
-            ? Center(child: Text(error!))
+            ? ListenErrorState(
+                message: error!,
+                action: OutlinedButton(
+                  onPressed: _refresh,
+                  child: Text(l.text('retry')),
+                ),
+              )
             : TabBarView(children: [_models(l), _jobs(l)]),
       ),
     );

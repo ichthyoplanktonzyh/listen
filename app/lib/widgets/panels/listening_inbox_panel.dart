@@ -9,6 +9,7 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../common/listen_empty_state.dart';
+import '../common/listen_error_state.dart';
 
 class ListeningInboxPanel extends StatelessWidget {
   const ListeningInboxPanel({
@@ -65,10 +66,7 @@ class ListeningInboxPanel extends StatelessWidget {
           if (controller.error != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                controller.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
+              child: ListenErrorNotice(message: controller.error!),
             ),
           Expanded(
             child: items.isEmpty

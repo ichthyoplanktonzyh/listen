@@ -8,6 +8,7 @@ import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../state/builder.dart';
 import '../theme/spacing.dart';
+import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 
 class ReviewQueueScreen extends StatefulWidget {
@@ -270,7 +271,7 @@ class _ReviewCardState extends State<_ReviewCard> {
                   ),
                   if (widget.error != null) ...[
                     const SizedBox(height: ListenSpacing.gap16),
-                    Text(widget.error!, style: TextStyle(color: colors.error)),
+                    ListenErrorNotice(message: widget.error!),
                   ],
                 ],
               ),

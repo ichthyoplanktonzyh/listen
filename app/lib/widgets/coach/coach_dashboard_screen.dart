@@ -5,6 +5,7 @@ import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/listen_error_state.dart';
 import '../common/listen_loading.dart';
 
 class CoachDashboardScreen extends StatefulWidget {
@@ -53,7 +54,16 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
         if (state.loading) {
           return const Center(child: ListenLoading());
         }
-        if (state.error != null) return Center(child: Text(state.error!));
+        if (state.error != null) {
+          return ListenErrorState(
+            message: state.error!,
+            action: OutlinedButton(
+              onPressed: () =>
+                  controller.load(widget.api, language: widget.language),
+              child: Text(AppLocalizations.of(context).text('retry')),
+            ),
+          );
+        }
         final dashboard = state.dashboard!;
         return ListView(
           controller: scrollController,
