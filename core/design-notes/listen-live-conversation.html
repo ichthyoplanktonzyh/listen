@@ -1,0 +1,459 @@
+<title>listen · 对话 Live 态探索</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --moon:#c7d4cf;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:66ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 4px}
+  .constraints .c{font-size:12px;color:var(--muted);background:var(--raised);
+    border:1px solid var(--hair);border-radius:999px;padding:5px 12px}
+
+  h2{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:46px 0 10px}
+  h2 .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;
+    font-weight:500;margin-left:9px}
+  h3{font-size:14px;font-weight:700;margin:0 0 10px}
+  h3 .en{font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:500;margin-left:7px}
+  .note{font-size:14px;color:var(--muted);max-width:70ch;margin:0 0 18px}
+  .note b{color:var(--ink)}
+
+  .sem{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px}
+  @media(max-width:820px){.sem{grid-template-columns:1fr}}
+  .sembox{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:18px 20px}
+  .legend{display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--muted)}
+  .legend .row{display:flex;align-items:flex-start;gap:10px}
+  .sw{width:26px;height:12px;border-radius:3px;flex:none;margin-top:5px}
+  .legend b{color:var(--ink);font-weight:600}
+
+  table.map{width:100%;border-collapse:collapse;font-size:13px;color:var(--muted);margin-top:6px}
+  table.map th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);
+    text-align:left;font-weight:500;padding:6px 10px;border-bottom:1px solid var(--hair)}
+  table.map td{padding:8px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+  table.map td:first-child{font-family:var(--mono);color:var(--ink);white-space:nowrap}
+  table.map b{color:var(--ink)}
+
+  .dir{background:var(--raised);border:1px solid var(--hair);border-radius:18px;
+    overflow:hidden;margin-top:26px}
+  .dir-head{padding:18px 22px 4px}
+  .dir-head .mname{font-size:17px;font-weight:800;display:flex;align-items:baseline;gap:10px}
+  .dir-head .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;font-weight:500}
+  .dir-body{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:0}
+  @media(max-width:860px){.dir-body{grid-template-columns:1fr}}
+  .stage{background:radial-gradient(120% 100% at 50% 34%, #22302a 0%, var(--ground2) 78%);
+    padding:22px 18px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center}
+  .stage .cap,.side .cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);font-family:var(--mono);align-self:flex-start;margin-bottom:2px}
+  .stage svg{max-width:100%;height:auto}
+  .side{padding:20px 20px 22px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--hair)}
+  @media(max-width:860px){.side{border-left:none;border-top:1px solid var(--hair)}}
+  .qa{font-size:13px;color:var(--muted)}
+  .qa dt{color:var(--ink);font-weight:700;font-size:12.5px;margin-top:10px}
+  .qa dt .qn{font-family:var(--mono);color:var(--teal);font-size:10.5px;margin-right:6px}
+  .qa dd{margin:2px 0 0}
+  .qa b{color:var(--ink)}
+  .qa .amber{color:var(--amber)}
+
+  .strip{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .strip figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+  .strip figcaption{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.08em}
+
+  .verdict{margin:14px 22px 20px;padding:12px 16px;border-radius:12px;font-size:13.5px;
+    background:var(--ground2);border:1px solid var(--hair);color:var(--muted)}
+  .verdict b{color:var(--ink)}
+
+  .decisions{background:var(--raised);border:1px solid var(--hair);border-radius:16px;
+    padding:20px 22px;margin-top:16px}
+  .decisions ol{margin:8px 0 0;padding-left:22px;font-size:14px;color:var(--muted)}
+  .decisions li{margin-bottom:12px}
+  .decisions b{color:var(--ink)}
+  .decisions .amber{color:var(--amber)}
+
+  .pending{border:1px dashed var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px;
+    color:var(--faint);font-size:14px}
+
+  /* ambient breathing — mirrors ListenMotion.ambient (2600ms), no bounce */
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.022);opacity:1}}
+  @keyframes ripple{0%{transform:scale(.9);opacity:.5}100%{transform:scale(1.24);opacity:0}}
+  @keyframes drift{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+  .breathe{animation:breathe 2.6s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+  .ripple{animation:ripple 2.6s cubic-bezier(.2,.8,.2,1) infinite;transform-origin:center;transform-box:fill-box}
+  .drift{animation:drift 26s linear infinite;transform-origin:center;transform-box:fill-box}
+  @media (prefers-reduced-motion: reduce){.breathe,.ripple,.drift{animation:none}}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · #70 · phase 1 / 1</div>
+  <h1>对话页:全屏 Live 的三个方向</h1>
+  <p class="lede">
+    owner 定位:对话是产品<b>非常主要的输出端</b>,目标体验=完全复刻 GPT Live 那种
+    全屏沉浸实时语音。审计(<span style="font-family:var(--mono)">listen-common-pages-audit.md</span>
+    D1–D7)判定现状与目标是质变距离:一屏三职、状态可视化只是一枚 Chip、live 中全文气泡
+    堆积、闭环的「回」不可见。本稿给三个方向,每个方向<b>强制回答六道必答题</b>;
+    C 是对照组,用来证伪 A/B 是否过度设计。
+  </p>
+  <div class="constraints">
+    <span class="c">宪章 P1–P5 全继承</span>
+    <span class="c">controller 状态机不动(idle→connecting→live→draining→postProcessing)</span>
+    <span class="c">诚实分层保留:provider caption=guidance,本地 Whisper=learner output</span>
+    <span class="c">动效走 ListenMotion(ambient 2600ms,禁 bounce)</span>
+    <span class="c">reduce-motion 全降级</span>
+    <span class="c">realtime 协议/分析语义零改动</span>
+  </div>
+
+  <h2>共享语义 <span class="en">SHARED SEMANTICS — 先钉死,三方向共用</span></h2>
+  <p class="note">
+    像 #47 一样,先把不随方向变的语义钉死,方向之间只比「形」。
+  </p>
+  <div class="sem">
+    <div class="sembox">
+      <h3>舞台态 <span class="en">STAGE MODE(提案,升不升宪章由 owner 裁决)</span></h3>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--ground2)"></span>
+          <span><b>全暗场</b>:AppBar/rail/播放栏全退,底色压到 ground2(比安静房间再暗半档)——
+          房间熄灯,只留一个发光的形。</span></div>
+        <div class="row"><span class="sw" style="background:var(--teal)"></span>
+          <span><b>唯一光源</b>:舞台上只有对话大形在发光;它是内容(你和对方的声音),
+          所以配得上光(P2)。</span></div>
+        <div class="row"><span class="sw" style="background:var(--raised)"></span>
+          <span><b>面板→舞台两段进场</b>:话题/自由对话的选择留在进场前的「门厅」
+          (轻面板);按下开始,门厅以 ListenMotion.exit 退场,舞台以 slow(360ms)亮起。
+          配置(provider 管理)整体迁出到设置域,门厅只剩「用哪个声音说话」一个选择。</span></div>
+        <div class="row"><span class="sw" style="background:var(--ground)"></span>
+          <span><b>退出</b>:Esc=丢弃确认(现 PopScope 动线保留);「结束」=舞台熄灯,
+          结束页以 enter 曲线接管。不联动 macOS 系统全屏(#25 的 F 仍归播放器),
+          窗口内舞台即可——对话常伴随查词,抢系统全屏反而重。</span></div>
+      </div>
+    </div>
+    <div class="sembox">
+      <h3>色的角色分配 <span class="en">WHO GLOWS</span></h3>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--teal)"></span>
+          <span><b>你的声音=信号青</b>。宪章说发光的是「声音、词、和用户自己的语言」——
+          对话里最该亮的是你开口的那一刻。与 #47「已证实=你的语言=光」同源。</span></div>
+        <div class="row"><span class="sw" style="background:var(--moon)"></span>
+          <span><b>对方的声音=月白</b>(新角色,#c7d4cf,低亮度)。照进来的光,
+          不与你争色相;它存在的意义是引出你的回声。</span></div>
+        <div class="row"><span class="sw" style="background:var(--amber)"></span>
+          <span><b>琥珀只留给靶子时刻</b>:结束页的练习靶子、以及(可选)live 中你求助
+          「怎么说」的瞬间。对话过程中不出现琥珀——正在说话的人不该被标注。</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sembox" style="margin-top:18px">
+    <h3>四态 → 形变映射 <span class="en">STATE MAP — controller 的 activity 原样复用</span></h3>
+    <table class="map">
+      <tr><th>activity</th><th>语义</th><th>形的行为(三方向各自实现,语义一致)</th></tr>
+      <tr><td>listening</td><td>系统在听,你可以说</td>
+        <td><b>向内收拢</b>(wordmark C 的血缘:listen 的声波朝内)+ ambient 呼吸——形在「等你」,不催(P3)</td></tr>
+      <tr><td>learnerSpeaking</td><td>你在说</td>
+        <td><b>信号青点亮</b>,随音量起伏——你的语言是光(P2);这是全流程最亮的时刻</td></tr>
+      <tr><td>thinking</td><td>对方在想</td>
+        <td>光收敛、缓慢相位漂移——仪器在工作,不装忙(禁装饰性 spinner)</td></tr>
+      <tr><td>assistantSpeaking</td><td>对方在说</td>
+        <td><b>月白从对侧进入</b>,波纹向你传递;你开口即触发退让(见打断)</td></tr>
+    </table>
+  </div>
+
+  <div class="sembox" style="margin-top:18px">
+    <h3>字幕的克制 <span class="en">CAPTION DISCIPLINE — 三方向共用</span></h3>
+    <div class="legend">
+      <div class="row"><span class="sw" style="background:var(--moon);opacity:.55"></span>
+        <span><b>live 中只有一行「余音字幕」</b>:对方当前句的 provider caption,低亮度、
+        说完 2.6s 后淡出。不留历史、不滚动——边说边读是审计 D3 判定的疲劳源,
+        全文对读留给结束页。</span></div>
+      <div class="row"><span class="sw" style="background:var(--teal-dim)"></span>
+        <span><b>你自己的话 live 中不上屏</b>:provider 对你的实时转写只是 guidance
+        (诚实分层),显示它反而诱导你「照着自己的字幕说」。你的最终文本=本地
+        Whisper,在结束页以 learner output 身份出场。</span></div>
+      <div class="row"><span class="sw" style="background:var(--raised)"></span>
+        <span><b>字幕可关</b>:门厅里一个开关,记住选择。默认开(先听为主的用户自己关,
+        比默认关再找开关的路径诚实)。</span></div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────── Direction A ───────────────────────── -->
+  <h2>方向 A · 罗盘在呼吸 <span class="en">THE COMPASS BREATHES</span></h2>
+  <p class="note">
+    #47 罗盘从画像里走出来,放大成舞台中央的大形。画像里它是「你的语言的地图」;
+    对话时它活过来——<b>说通道的那个象限正在被点亮</b>。血缘最正:用户在教练页认识的形,
+    在对话里看见它因自己开口而发光。
+  </p>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">STAGE · learnerSpeaking(你在说,下半环亮)</span>
+        <svg viewBox="0 0 460 330" width="460">
+          <!-- ground vignette -->
+          <ellipse cx="230" cy="165" rx="200" ry="140" fill="#202d27" opacity=".5"/>
+          <!-- ripple echo -->
+          <circle class="ripple" cx="230" cy="165" r="96" fill="none" stroke="#4db8a8" stroke-width="1" opacity=".5"/>
+          <!-- main ring -->
+          <g class="breathe">
+            <!-- upper half: reception (dim while you speak) -->
+            <path d="M 138 165 A 92 92 0 0 1 322 165" fill="none" stroke="#3a4a44" stroke-width="10" stroke-linecap="round"/>
+            <!-- assistant's moon light receded to a sliver at 12 o'clock -->
+            <path d="M 200 76.5 A 92 92 0 0 1 260 76.5" fill="none" stroke="#c7d4cf" stroke-width="10" stroke-linecap="round" opacity=".35"/>
+            <!-- lower half: production, lit teal, amplitude wobble -->
+            <path d="M 322 165 A 92 92 0 0 1 138 165" fill="none" stroke="#4db8a8" stroke-width="13" stroke-linecap="round"/>
+            <path d="M 308 208 A 92 92 0 0 1 152 208" fill="none" stroke="#4db8a8" stroke-width="5" stroke-linecap="round" opacity=".45"/>
+          </g>
+          <!-- center: your live loudness as a soft core -->
+          <circle cx="230" cy="165" r="30" fill="#4db8a8" opacity=".14"/>
+          <circle cx="230" cy="165" r="17" fill="#4db8a8" opacity=".28"/>
+          <!-- annotations -->
+          <text x="230" y="52" fill="#6d7c75" font-size="10" font-family="ui-monospace,Menlo" text-anchor="middle">12点=接收 · 对方的月白退成一线(你在打断/接话)</text>
+          <text x="230" y="313" fill="#4db8a8" font-size="10" font-family="ui-monospace,Menlo" text-anchor="middle">6点=产出 · 你的信号青随音量呼吸</text>
+          <!-- ghost caption line (below the ring, never inside it) -->
+          <text x="230" y="286" fill="#c7d4cf" font-size="11" text-anchor="middle" opacity=".5">“…so how did the interview go?”</text>
+        </svg>
+        <div class="strip">
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><g class="breathe"><circle cx="42" cy="32" r="20" fill="none" stroke="#3a4a44" stroke-width="5"/><path d="M 28 18 Q 42 30 56 18" fill="none" stroke="#4db8a8" stroke-width="2" opacity=".6"/></g></svg>
+            <figcaption>listening · 向内收拢</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><circle cx="42" cy="32" r="20" fill="none" stroke="#3a4a44" stroke-width="5"/><path d="M 62 32 A 20 20 0 0 1 22 32" fill="none" stroke="#4db8a8" stroke-width="7" stroke-linecap="round"/></svg>
+            <figcaption>speaking · 下半亮</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><g class="drift"><circle cx="42" cy="32" r="20" fill="none" stroke="#3a4a44" stroke-width="5" stroke-dasharray="8 10"/></g></svg>
+            <figcaption>thinking · 相位漂移</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><circle cx="42" cy="32" r="20" fill="none" stroke="#3a4a44" stroke-width="5"/><path d="M 22 32 A 20 20 0 0 1 62 32" fill="none" stroke="#c7d4cf" stroke-width="7" stroke-linecap="round" opacity=".8"/></svg>
+            <figcaption>assistant · 上半月白</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">六道必答题</span>
+        <dl class="qa">
+          <dt><span class="qn">Q1 形</span>核心形与血缘</dt>
+          <dd>#47 罗盘的 2×2 语义原样继承:上=接收(对方进来的声音),下=产出(你说出去的)。
+          画像→对话是同一个形的静→动。</dd>
+          <dt><span class="qn">Q2 四态</span>状态可视化</dt>
+          <dd>见共享映射;罗盘的实现=上/下半环的亮度与厚度互补,环心核随你音量呼吸。</dd>
+          <dt><span class="qn">Q3 打断</span></dt>
+          <dd>你随时开口,上半月白<b>立即退成一线</b>(90ms tap 级响应)——退让本身就是
+          「可以打断」的可供性;首次进舞台时门厅一句话说明,不在舞台上贴说明文字。</dd>
+          <dt><span class="qn">Q4 字幕</span></dt>
+          <dd>余音字幕悬在环下方(共享纪律);环内永不放文字——形是形,字是字。</dd>
+          <dt><span class="qn">Q5 进出</span></dt>
+          <dd>门厅→舞台两段进场(共享);罗盘从门厅右上角的小画像位<b>移动放大</b>到舞台
+          中央(move 曲线)——「你的画像开始听你说话」。</dd>
+          <dt><span class="qn">Q6 结束页</span></dt>
+          <dd>罗盘缩回小尺寸落在页首,下方三段:本地转写(learner output 主体)→
+          <b class="amber">这场对话的靶子</b>(说不出/卡壳处,琥珀)→ 回流说明
+          (哪些词进了画像)。罗盘在结束页微微更新——「这场对话改变了地图」。</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="verdict">
+      <b>自我证伪:</b>罗盘承载对话有一个真风险——画像语义(四通道存量)与对话语义
+      (此刻谁在说)共用一个形,用户可能误读「上半环亮=我的听力评估在变」。
+      缓解:舞台上的环<b>不带画像刻度</b>(无三态弧、无 gap 数),只保留 2×2 方位语义;
+      是否足够,owner 裁决。
+    </div>
+  </div>
+
+  <!-- ───────────────────────── Direction B ───────────────────────── -->
+  <h2>方向 B · 回声水面 <span class="en">THE ECHO SURFACE</span></h2>
+  <p class="note">
+    #47 回声条的血缘:基线上=照进来的光,基线下=你的回声。对话就是这个隐喻的实时版——
+    屏幕中线是一面「水面」,对方的月白光从上方落下,你的信号青波从下方升起。
+    <b>上下的不对称就是 gap-(c) 的形</b>,和回声条同宗同构。
+  </p>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">STAGE · assistantSpeaking(对方在说,月白落向水面)</span>
+        <svg viewBox="0 0 460 330" width="460">
+          <!-- waterline -->
+          <line x1="60" y1="185" x2="400" y2="185" stroke="#2e3a35" stroke-width="1"/>
+          <!-- assistant light column falling from above -->
+          <g class="breathe">
+            <path d="M 130 95 Q 160 80 190 95 T 250 95 T 310 95 T 340 92" fill="none" stroke="#c7d4cf" stroke-width="3" opacity=".9"/>
+            <path d="M 140 125 Q 170 112 200 125 T 260 125 T 320 122" fill="none" stroke="#c7d4cf" stroke-width="2.2" opacity=".55"/>
+            <path d="M 150 155 Q 180 146 210 155 T 270 155 T 310 152" fill="none" stroke="#c7d4cf" stroke-width="1.6" opacity=".3"/>
+          </g>
+          <!-- your side: calm, faint teal swell waiting -->
+          <path d="M 100 215 Q 150 208 200 215 T 300 215 T 380 213" fill="none" stroke="#4db8a8" stroke-width="2" opacity=".35"/>
+          <path d="M 120 245 Q 170 240 220 245 T 320 245" fill="none" stroke="#4db8a8" stroke-width="1.4" opacity=".18"/>
+          <!-- annotations -->
+          <text x="230" y="52" fill="#6d7c75" font-size="10" font-family="ui-monospace,Menlo" text-anchor="middle">上方=照进来的光(月白,对方)</text>
+          <text x="230" y="290" fill="#3f8579" font-size="10" font-family="ui-monospace,Menlo" text-anchor="middle">下方=你的回声(信号青;你开口时升起盖过水面)</text>
+          <!-- ghost caption on the waterline -->
+          <text x="230" y="178" fill="#c7d4cf" font-size="11" text-anchor="middle" opacity=".5">“…so how did the interview go?”</text>
+        </svg>
+        <div class="strip">
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><line x1="10" y1="32" x2="74" y2="32" stroke="#2e3a35"/><g class="breathe"><path d="M 16 32 Q 30 28 44 32 T 70 32" fill="none" stroke="#4db8a8" stroke-width="1.6" opacity=".5"/></g></svg>
+            <figcaption>listening · 微澜</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><line x1="10" y1="32" x2="74" y2="32" stroke="#2e3a35"/><path d="M 14 40 Q 26 18 40 34 T 70 30" fill="none" stroke="#4db8a8" stroke-width="3.4"/></svg>
+            <figcaption>speaking · 青波升起</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><line x1="10" y1="32" x2="74" y2="32" stroke="#2e3a35"/><circle cx="42" cy="32" r="9" fill="none" stroke="#9aa9a2" stroke-width="1.4" class="ripple"/></svg>
+            <figcaption>thinking · 涟漪</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><line x1="10" y1="32" x2="74" y2="32" stroke="#2e3a35"/><path d="M 14 26 Q 28 12 44 24 T 70 22" fill="none" stroke="#c7d4cf" stroke-width="2.6" opacity=".85"/></svg>
+            <figcaption>assistant · 月白落下</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">六道必答题</span>
+        <dl class="qa">
+          <dt><span class="qn">Q1 形</span>核心形与血缘</dt>
+          <dd>回声条(#47 A)的实时化:同一条基线、同一对「光/回声」语义。
+          水面隐喻额外给了「字幕沉底」的自然动线。</dd>
+          <dt><span class="qn">Q2 四态</span></dt>
+          <dd>listening=水面微澜;speaking=你的青波升起;thinking=涟漪扩散;
+          assistant=月白从上落下。全部是同一面水的状态,无形切换成本。</dd>
+          <dt><span class="qn">Q3 打断</span></dt>
+          <dd>你的青波升起时,月白波<b>被水面吸走</b>(360ms slow 退场)——
+          物理隐喻自解释:你的声音把水面占住了。</dd>
+          <dt><span class="qn">Q4 字幕</span></dt>
+          <dd>余音字幕贴在水面线上,说完<b>沉入水下淡出</b>——「沉底」即归档,
+          结束页把沉下去的都捞上来。字幕位置与形融为一体,是三方向里最自然的。</dd>
+          <dt><span class="qn">Q5 进出</span></dt>
+          <dd>门厅退场后,水面从屏幕中线「亮起一条线」开始(240ms base),
+          波纹随连接建立渐次出现;结束=水面定格、整体下沉让位给结束页。</dd>
+          <dt><span class="qn">Q6 结束页</span></dt>
+          <dd>水面收窄成页首一条静态回声条(直接复用 CapabilityEchoBars 的说通道列)——
+          <b>这场对话在你的回声条上留下了什么</b>;下方同 A 的三段式。
+          结束页与画像的衔接是三方向里最顺的。</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="verdict">
+      <b>自我证伪:</b>水面横贯全屏,形的重心是一条线而非一个点——注视锚点弱于 A/C
+      (眼睛不知道看哪);且波形动画若做实了音量映射,视觉噪声可能超过 P5 的疲劳预算。
+      缓解:波形只取 2–3 条低频包络线,禁高频抖动;是否仍嫌闹,看动效原型。
+    </div>
+  </div>
+
+  <!-- ───────────────────────── Direction C ───────────────────────── -->
+  <h2>方向 C · 光斑(对照组)<span class="en">THE PLAIN GLOW — CONTROL GROUP</span></h2>
+  <p class="note">
+    最克制的答案:一枚信号青光斑在暗场里呼吸,四态只用亮度/大小/色温表达。
+    它存在的目的是<b>证伪 A/B</b>——如果光斑已经够用,前两个方向就是过度设计。
+  </p>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">STAGE · listening(等你开口)</span>
+        <svg viewBox="0 0 460 300" width="460">
+          <circle class="ripple" cx="230" cy="140" r="70" fill="none" stroke="#4db8a8" stroke-width="1" opacity=".4"/>
+          <g class="breathe">
+            <circle cx="230" cy="140" r="58" fill="#4db8a8" opacity=".1"/>
+            <circle cx="230" cy="140" r="40" fill="#4db8a8" opacity=".2"/>
+            <circle cx="230" cy="140" r="24" fill="#4db8a8" opacity=".5"/>
+          </g>
+          <text x="230" y="262" fill="#c7d4cf" font-size="11" text-anchor="middle" opacity=".5">“…so how did the interview go?”</text>
+        </svg>
+        <div class="strip">
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><circle cx="42" cy="32" r="13" fill="#4db8a8" opacity=".4" class="breathe"/></svg>
+            <figcaption>listening · 呼吸</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><circle cx="42" cy="32" r="18" fill="#4db8a8" opacity=".8"/></svg>
+            <figcaption>speaking · 涨亮</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><circle cx="42" cy="32" r="10" fill="#4db8a8" opacity=".25"/></svg>
+            <figcaption>thinking · 收暗</figcaption>
+          </figure>
+          <figure>
+            <svg viewBox="0 0 84 64" width="84"><circle cx="42" cy="32" r="15" fill="#c7d4cf" opacity=".7"/></svg>
+            <figcaption>assistant · 转月白</figcaption>
+          </figure>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">六道必答题(+证伪清单)</span>
+        <dl class="qa">
+          <dt><span class="qn">Q1 形</span></dt>
+          <dd>无血缘的纯光斑。这既是它的干净,也是它的问题(见下)。</dd>
+          <dt><span class="qn">Q2 四态</span></dt>
+          <dd>亮度+半径+色相(青↔月白)三个自由度,够表达四态,但
+          「谁在说」只靠颜色区分,弱于 A/B 的空间区分(上/下)。</dd>
+          <dt><span class="qn">Q3 打断</span></dt>
+          <dd>月白→青的颜色让位。可行,但没有空间退让直观。</dd>
+          <dt><span class="qn">Q4 字幕</span></dt><dd>余音字幕悬在光斑下方(共享纪律)。</dd>
+          <dt><span class="qn">Q5 进出</span></dt><dd>门厅→光斑亮起。最简单。</dd>
+          <dt><span class="qn">Q6 结束页</span></dt>
+          <dd>光斑熄灭→通用结束页三段式。<b>与画像零衔接</b>——回流呈现只能靠文字。</dd>
+          <dt><span class="qn">证伪</span>不推荐,理由:</dt>
+          <dd>① 与 GPT Live 无差异化,「像」但不「是我们的」——审计 C6(图形语言未下沉)
+          原样复发;② 说/听双方只有色差,空间语义(listen 的「向内/向外」)丢失;
+          ③ 结束页断链:gap-(c) 回流没有形可落。<b>但它是疲劳成本最低的方案</b>——
+          若 A/B 动效原型验证下来都嫌闹,C 是诚实的退路。</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────── shared finish page ───────────────────────── -->
+  <h2>结束页(三方向共用骨架)<span class="en">THE DEBRIEF — 闭环的「回」</span></h2>
+  <p class="note">
+    审计 D6:对话→画像的回流现状只有一行小字。结束页把它变成正式仪式——但按 P3,
+    是<b>可看的仪表读数</b>,不是弹出的成绩单。三段固定:
+  </p>
+  <div class="sembox">
+    <table class="map">
+      <tr><th>段</th><th>内容</th><th>诚实来源</th></tr>
+      <tr><td>1 · 对话</td>
+        <td>本地 Whisper 转写为主体(你的话=信号青左缘),对方文本为辅;provider caption
+        默认折叠(「guidance 版本」按需展开)</td>
+        <td>learner output=本地转写,与现有语义分层完全一致</td></tr>
+      <tr><td>2 · 靶子</td>
+        <td><b style="color:var(--amber)">这场对话里你卡住/求助/换说法的地方</b>,琥珀标注,
+        每条可一键进词汇本/我的表达</td>
+        <td>只标既有后端信号,前端不新造判定(呈现≠语义)</td></tr>
+      <tr><td>3 · 回流</td>
+        <td>「N 个词条获得了说通道证据」+ 方向 A/B 各自的形收尾(罗盘微更新/回声条落痕);
+        转写还在处理时如实显示进度,不假装完成</td>
+        <td>postProcessing 状态原样呈现(P4)</td></tr>
+    </table>
+  </div>
+
+  <h2>拍板点 <span class="en">DECISIONS NEEDED · OWNER</span></h2>
+  <div class="decisions">
+    <ol>
+      <li><b>方向:A 罗盘 / B 回声水面 / C 光斑</b>,或组合(如 B 为主、结束页借 A 的罗盘收尾)。
+        我的推荐:<b>B 为主</b>——字幕沉底与结束页→回声条的衔接是三者中唯一「形自己会讲闭环」的;
+        A 的画像/对话双语义风险需要 owner 判断能否接受。</li>
+      <li><b>色的角色分配</b>:对方=月白(新色,#c7d4cf,进 palette 纪律测试)还是复用既有
+        onSurfaceVariant 系?月白是新增语义色,按宪章需要 owner 点头。</li>
+      <li><b>字幕默认开还是默认关</b>?(本稿设默认开+门厅可关;更激进的「默认关」
+        更贴 GPT Live 原教旨。)</li>
+      <li><b>你的话 live 中完全不上屏</b>(本稿立场)——接受吗?这是与现状差异最大的一条。</li>
+      <li><b>舞台态不联动系统全屏</b>(F 仍归播放器,#25 边界不动)——确认?</li>
+      <li><b>provider 管理迁至设置域</b>(审计 D4),门厅只留声音选择——确认后单独拆刀。</li>
+      <li><b>「舞台态」要不要升格进宪章</b>(P2 扩注或新原则),连同审计里的另两条宪章修订
+        (光源清单过时、列宽 token 归属)一起裁决。</li>
+    </ol>
+  </div>
+
+  <div class="pending">
+    拍板记录 <span style="font-family:var(--mono);font-size:10.5px">DECISION · OWNER · 待填</span><br>
+    owner 拍板后在此记录:选定方向、各拍板点结论、修改要求。
+  </div>
+</div>
