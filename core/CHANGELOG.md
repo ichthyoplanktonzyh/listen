@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-23: provider 对话框重构为 StatefulWidget,controller 归 State 所有(refs #27 收尾)。
+  #58 的「await showDialog 后逐个 dispose」与退场动画存在竞态:保存成功时 registerProfile
+  触发面板刷新,pop 后 future 立即 resolve、dispose 先于退场动画结束执行,退场中的
+  TextField 重建即触发「used after being disposed」(与 #61 的诚实反馈测试组合时暴露)。
+  改为 issue #27 点名的第二种合法模式(settings_dialog 同款):六个 controller 由
+  `_ProviderDialog` State 持有、`State.dispose` 释放(secret 先 clear)——路由完全移除后
+  才触发,竞态从构造上消失;leak 回归测试维持零泄漏。585 项测试绿;analyze 零告警。
 - 2026-07-23: 实时会话「Add provider」对话框补诚实反馈（refs #24/#45 静默清查遗漏，
   源自 e30d6ba0/#7）。Qwen 未填 Workspace ID 时点「Save securely」原是静默 return——
   用户零反馈；现按 #45 判据（说明原因 + 给出恢复动作）在 Workspace ID 字段内联
