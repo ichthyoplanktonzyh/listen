@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-24: 复习后端能力拆三刀提 issue（refs #70 · Phase 1 · 设计轨）。按拍板点 6 的
+  授权起草并提交：**#72 anki 兼容 FSRS 调度内核**（互通地基·第一优先；引用现状
+  `crates/application/src/practice/review.rs:6,16-37,42-43`＝heuristic_proxy 硬编码间隔表、
+  stability/difficulty 恒 None，论证「不换内核则导入卡语义打架、导出 anki 不认」，
+  含存量迁移不丢进度）；**#73 .apkg 双向互通**（SQLite/media 解析、anki schema 生成、
+  媒体切片渲染音频、外来卡来源标识+保留原 deck 树+默认无四通道归属、往返无损测试、
+  v1 不含 colpkg/AnkiConnect/AnkiWeb）；**#74 复习查询能力**（四态字段、间隔预览
+  只读接口「调用后调度未变」测试、牌组两类计数、每日上限全局、custom study 四种
+  临时队列不污染正常调度）。三刀均写明依赖顺序（#72→#73/#74）与「呈现≠语义，不改
+  卡片生成与四通道判定，前端归 #70 前端刀」。同步修正稿内笔误：ReviewCardKind 是
+  **5 种**（认词/块填空/连读在场/源句回忆/延迟复述），非 6 种。
+
 - 2026-07-24: 复习 owner 拍板落库 + 宪章加第 5 色（refs #70 · Phase 1 · 设计轨）。9 条
   拍板点按「全部按默认」采纳本稿推荐：牌组主维度=通道自动分面（与导入 anki deck 树
   双轨共存）；**第 2 条 owner 另有明确指令「加第五色」——月蓝 `#6db3ff` = new 新卡

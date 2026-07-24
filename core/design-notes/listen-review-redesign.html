@@ -406,7 +406,8 @@
     <table class="map">
       <tr><th>listen</th><th>↔</th><th>anki</th><th>保真</th></tr>
       <tr><td>ReviewItem</td><td>↔</td><td>note</td><td style="color:var(--teal)">无损</td></tr>
-      <tr><td>ReviewCard.kind(6 种)</td><td>↔</td><td>note type + 模板(每 kind 一型)</td><td style="color:var(--teal)">无损</td></tr>
+      <tr><td>ReviewCard.kind(<b>5 种</b>:认词/块填空/连读在场/源句回忆/延迟复述)</td><td>↔</td>
+        <td>note type + 模板(每 kind 一型)</td><td style="color:var(--teal)">无损</td></tr>
       <tr><td>prompt/target/answer</td><td>↔</td><td>note fields</td><td style="color:var(--teal)">无损</td></tr>
       <tr><td><b>schedule</b>(stability/difficulty/due/ivl/lapse)</td><td>↔</td>
         <td>card 的 FSRS 状态</td><td style="color:var(--teal)"><b>无损(前提:两边都 FSRS)</b></td></tr>
@@ -550,9 +551,13 @@
       <li><b>custom study v1 做四张动词卡</b>:多学新卡 / 提前复习 / 只练某通道 /
         重练遗忘;<b>「按媒体」列 v2</b>(依赖后端媒体维度查询,先不铺)。
         每张只触发一次临时队列,不改变正常调度。</li>
-      <li><b>授权起草后端 issue</b>:anki 兼容 FSRS(第一优先·互通地基)+ 间隔预览接口 +
-        card state 字段 + 牌组计数 + 每日上限 + custom study 查询 + .apkg 导入导出 +
-        媒体渲染管线。起草后交 owner 过目再提交。</li>
+      <li><b>后端 issue 已提交</b>(owner 授权后拆三刀,依赖顺序 #72 → #73/#74):
+        <b>#72</b> anki 兼容 FSRS 调度内核(地基·第一优先;现状 heuristic_proxy 硬编码、
+        stability/difficulty 恒 None,含存量迁移不丢进度);
+        <b>#73</b> .apkg 双向互通(解析/生成/媒体渲染/外来卡来源标识/保留 deck 树/
+        往返无损测试);
+        <b>#74</b> 复习查询能力(四态字段/间隔预览只读接口/牌组两类计数/每日上限/
+        custom study 四种临时队列)。三刀均写明「呈现≠语义,不改卡片生成与四通道判定」。</li>
       <li><b>互通 v1 = .apkg 文件双向</b>(离线卡包,最标准);
         `.colpkg`(整 collection)、AnkiConnect(实时对接)、AnkiWeb 同步<b>列为未来</b>,
         不进 v1 范围。</li>
