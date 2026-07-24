@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- 2026-07-24: S3 词汇本工作台——差距面默认页 + 双栏外壳 + 筛选修正(refs #79 ·
+  #70 Phase 2 · B波)。词汇本改「方向 A 工作台」,呈现≠语义(筛选/评估/差距来源/四通道
+  判定零改动,前端只并排呈现)。**双栏外壳**:左=列表+透镜列(固定 340,元素几何非断点),
+  右=活动面;宽窗(≥`ListenBreakpoints.vocabularyTwoPane`=900)双栏、窄窗退化单列(B 形态),
+  同一套语义两个断点形态。**差距面=右面默认页**:进词汇本第一眼即 gap-(c);新 `VocabularyGapPanel`
+  把两个后端来源(`crossModalReviewGaps` 跨通道候选 + `semanticProductionGapReview`/回退
+  `productionGapReview` 产出差距)**并排合并成一张清单**,各自 best-effort 降级为行内提示,
+  语义不动;候选行图形复用 `capability_viz` 家族的 **entry-scale `CapabilityRing`**(四通道
+  字符串→三态四象限环,raw 字符串死刑)——按 capability_viz 既定分工(echo bars=聚合、mini
+  ring=词条尺度),单候选词条正确图形是 mini ring,故未套聚合 echo bars(诚实取舍见 PR)。
+  **AppBar 永不变身(C3/V5)**:标题固定、只留狩猎(徽标)+「工具」溢出菜单(导入/导出/重建
+  索引/语义索引管理);详情动作(加复习/狩猎/投影审计)迁入详情面自带动作行,不再劫持顶栏;
+  两个差距弹窗 + 跨通道弹窗全部替死为差距面;`_SemanticSearchDialog` 转为工具菜单里的语义
+  索引管理入口(用/装分离)。语义搜索「用」并入主搜索框(能力可用时出「语义」开关,内联呈现
+  hits)。**筛选修正(V1)**:通道 chip 通过 `CapabilityRing.focusChannel` 换词条环视角
+  ——点了永远有视觉回应,但评估档未选时查询仍不加 capability 过滤(呈现层不修控件撒谎);
+  评估三档保留三态色点前缀。**cross_modal_review 路由**:coach 环心跳转(`openCrossModalReviewOnStart`)
+  不再弹窗,直接落到差距面并高亮候选段(供 S2 环心跳转)。窄窗顶置差距仪表条带缺口读数。
+  新增 `vocabulary_workbench_test.dart` 5 测试(默认落差距面/点词条切详情不丢列表与 AppBar/
+  通道 chip 有回应且不改查询语义/窄窗退化单列/cross_modal_review 落地不弹窗);列宽走 S0
+  `contentColumnMax`。`flutter analyze` 零告警,全量 645 绿(基线 640)。
 - 2026-07-24: S5 复习卡面呈现修复——切片解绑主播放器 + 四档评分 + 塌陷/进度(refs #80 ·
   #70 Phase 2 · B波)。复习页不依赖后端的呈现层修复,呈现≠语义(调度/卡片生成/rating
   提交零改动)。**R1(本页最重)**:`_canPlay` 不再要求 `currentMediaId==source.mediaId`;
