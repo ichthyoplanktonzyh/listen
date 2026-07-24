@@ -1333,7 +1333,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     context: context,
     api: api,
     playerController: playerController,
-    playbackActions: playbackActions,
+    pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
     startReviewShadowing: _startReviewShadowing,
     startDelayedRetelling: _startDelayedRetelling,
   );

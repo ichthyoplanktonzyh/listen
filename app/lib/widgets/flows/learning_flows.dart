@@ -288,7 +288,7 @@ Future<void> openReviewQueueFlow({
   required BuildContext context,
   required LocalApi? api,
   required PlayerController playerController,
-  required PlaybackActionsCoordinator playbackActions,
+  required Future<void> Function() pauseBackgroundPlayback,
   required Future<void> Function(ReviewQueueEntry entry) startReviewShadowing,
   required Future<void> Function(ReviewQueueEntry entry) startDelayedRetelling,
 }) async {
@@ -303,16 +303,11 @@ Future<void> openReviewQueueFlow({
   await Navigator.push<void>(
     context,
     MaterialPageRoute(
+      // The card plays its source clip on its own decoder (S5 · R1); it only
+      // needs a way to silence the primary player so the clip owns audio.
       builder: (_) => ReviewQueueScreen(
         api: service,
-        currentMediaId: playerController.mediaId,
-        onPlayRange: (startMs, endMs) => playbackActions.loopRange(
-          startMs,
-          endMs,
-          'Looping review card',
-          labelKey: 'loopReview',
-        ),
-        onPausePlayback: playbackActions.pauseReviewRange,
+        onPauseBackgroundPlayback: pauseBackgroundPlayback,
         onStartShadowing: startReviewShadowing,
         onStartDelayedRetelling: startDelayedRetelling,
       ),

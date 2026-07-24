@@ -1,12 +1,17 @@
 import 'dart:async';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/review_controller.dart';
+import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
 import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../state/builder.dart';
+import '../theme/breakpoints.dart';
+import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
@@ -15,19 +20,30 @@ class ReviewQueueScreen extends StatefulWidget {
   const ReviewQueueScreen({
     super.key,
     required this.api,
-    required this.onPlayRange,
-    required this.onPausePlayback,
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
-    this.currentMediaId,
+    this.onPauseBackgroundPlayback,
+    this.resolver,
+    this.createSlicePlaybackAdapter,
   });
 
   final LocalApi api;
-  final Future<void> Function(int startMs, int endMs) onPlayRange;
-  final Future<void> Function() onPausePlayback;
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
   final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
-  final String? currentMediaId;
+
+  /// Silences the primary player so a review clip owns audio focus alone. The
+  /// clip runs on a second decoder ([SlicePlayerController]) that is otherwise
+  /// completely independent of the main player (S5 · R1).
+  final Future<void> Function()? onPauseBackgroundPlayback;
+
+  /// The clip resolver. Production builds one from [api] exactly like the
+  /// vocabulary dictionary's; tests inject a stub so a clip can resolve
+  /// without a real file on disk.
+  final OccurrenceMediaResolver? resolver;
+
+  /// The second-decoder adapter factory, overridable so tests inject a fake
+  /// instead of opening a real video_player instance.
+  final CreateSlicePlaybackAdapter? createSlicePlaybackAdapter;
 
   @override
   State<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
@@ -35,6 +51,24 @@ class ReviewQueueScreen extends StatefulWidget {
 
 class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
   final controller = ReviewController();
+
+  /// The review card plays its source clip on its own decoder, so a card is
+  /// reviewable even when no media (or a different one) is loaded in the main
+  /// player — the fix for the whole-queue "clip unavailable" state (S5 · R1).
+  late final SlicePlayerController _slicePlayer = SlicePlayerController(
+    createAdapter: widget.createSlicePlaybackAdapter,
+  );
+
+  late final OccurrenceMediaResolver _resolver =
+      widget.resolver ??
+      OccurrenceMediaResolver(
+        readMedia: widget.api.readMedia,
+        fingerprintFile: widget.api.fingerprintFile,
+        registerMedia: (path) async {
+          await widget.api.registerMedia(path);
+        },
+        pickFile: (groups) => openFile(acceptedTypeGroups: groups),
+      );
 
   @override
   void initState() {
@@ -44,106 +78,188 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
 
   @override
   void dispose() {
+    _slicePlayer.dispose();
     controller.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(AppLocalizations.of(context).text('reviewTitle')),
-      actions: [
-        StoreBuilder<ReviewState, int>(
-          store: controller.store,
-          select: (state) => state.remaining,
-          builder: (context, remaining) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Center(
-              child: Text(
-                AppLocalizations.of(
-                  context,
-                ).text('reviewDueCount').replaceAll('{count}', '$remaining'),
-              ),
-            ),
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l.text('reviewTitle')),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(3),
+          child: StoreBuilder<ReviewState, ReviewState>(
+            store: controller.store,
+            select: (state) => state,
+            builder: (context, state) {
+              final total = state.queue.length;
+              // Indeterminate only while the first load is still in flight;
+              // once the queue is known the bar reports real progress.
+              final value = state.busy && total == 0
+                  ? null
+                  : total == 0
+                  ? 0.0
+                  : state.index / total;
+              return LinearProgressIndicator(value: value, minHeight: 3);
+            },
           ),
         ),
-      ],
-    ),
-    body: StoreBuilder<ReviewState, ReviewState>(
-      store: controller.store,
-      select: (state) => state,
-      builder: (context, state) {
-        if (state.busy && state.queue.isEmpty) {
-          return const Center(child: ListenLoading());
-        }
-        if (state.current == null) {
-          return _Finished(
-            state: state,
-            onRetry: () => controller.load(widget.api),
-            onResolve: (id, confirm) => controller.resolveUpgradeSuggestion(
-              widget.api,
-              id,
-              confirm: confirm,
-            ),
+        actions: [
+          StoreBuilder<ReviewState, ReviewState>(
+            store: controller.store,
+            select: (state) => state,
+            builder: (context, state) {
+              final total = state.queue.length;
+              // R4: while reviewing, "card N of M" places the learner in the
+              // round; on the finished/empty screen the remaining count is the
+              // honest read instead.
+              final label = state.current != null
+                  ? l
+                        .text('reviewRoundProgress')
+                        .replaceAll('{index}', '${state.index + 1}')
+                        .replaceAll('{total}', '$total')
+                  : l
+                        .text('reviewDueCount')
+                        .replaceAll('{count}', '${state.remaining}');
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Center(child: Text(label)),
+              );
+            },
+          ),
+        ],
+      ),
+      body: StoreBuilder<ReviewState, ReviewState>(
+        store: controller.store,
+        select: (state) => state,
+        builder: (context, state) {
+          if (state.busy && state.queue.isEmpty) {
+            return const Center(child: ListenLoading());
+          }
+          if (state.current == null) {
+            return _Finished(
+              state: state,
+              onRetry: () => controller.load(widget.api),
+              onResolve: (id, confirm) => controller.resolveUpgradeSuggestion(
+                widget.api,
+                id,
+                confirm: confirm,
+              ),
+            );
+          }
+          final entry = state.current!;
+          return _ReviewCard(
+            key: ValueKey(entry.item.id),
+            entry: entry,
+            clipAvailable: _clipAvailable(entry),
+            shadowAvailable: _canShadow(entry),
+            revealed: state.revealed,
+            busy: state.busy,
+            error: state.error,
+            slicePlayer: _slicePlayer,
+            onPlayClip: () => unawaited(_playClip(entry)),
+            onShadowing: () async {
+              await _slicePlayer.close();
+              if (!context.mounted) return;
+              Navigator.of(context).pop();
+              if (entry.card.kind == 'delayed_retelling') {
+                await widget.onStartDelayedRetelling(entry);
+              } else {
+                await widget.onStartShadowing(entry);
+              }
+            },
+            onReveal: controller.reveal,
+            onRate: (rating) async {
+              await _slicePlayer.close();
+              return controller.rate(widget.api, rating);
+            },
           );
-        }
-        return _ReviewCard(
-          key: ValueKey(state.current!.item.id),
-          entry: state.current!,
-          audioAvailable: _canPlay(state.current!),
-          shadowAvailable: _canShadow(state.current!),
-          revealed: state.revealed,
-          busy: state.busy,
-          error: state.error,
-          onPlay: () => _play(state.current!),
-          onPause: widget.onPausePlayback,
-          onShadowing: () async {
-            final entry = state.current!;
-            await widget.onPausePlayback();
-            if (!context.mounted) return;
-            Navigator.of(context).pop();
-            if (entry.card.kind == 'delayed_retelling') {
-              await widget.onStartDelayedRetelling(entry);
-            } else {
-              await widget.onStartShadowing(entry);
-            }
-          },
-          onReveal: controller.reveal,
-          onRate: (rating) => controller.rate(widget.api, rating),
-        );
-      },
-    ),
-  );
-
-  Future<void> _play(ReviewQueueEntry entry) async {
-    final start = entry.playbackStartMs;
-    final end = entry.playbackEndMs;
-    if (start == null || end == null || end <= start) return;
-    await widget.onPlayRange(start, end);
+        },
+      ),
+    );
   }
 
-  bool _canPlay(ReviewQueueEntry entry) =>
-      widget.currentMediaId != null &&
-      entry.item.source.mediaId == widget.currentMediaId &&
-      entry.playbackStartMs != null &&
-      entry.playbackEndMs != null;
+  /// A clip can be *attempted* whenever the source names a media and a bounded
+  /// range; whether the local file is actually reachable is resolved on tap
+  /// and reported in place, never guessed up front against the main player.
+  bool _clipAvailable(ReviewQueueEntry entry) {
+    final start = entry.playbackStartMs;
+    final end = entry.playbackEndMs;
+    return entry.item.source.mediaId != null &&
+        start != null &&
+        end != null &&
+        end > start;
+  }
 
   bool _canShadow(ReviewQueueEntry entry) =>
       entry.item.source.mediaId != null &&
       entry.playbackStartMs != null &&
       entry.playbackEndMs != null;
+
+  Future<void> _playClip(ReviewQueueEntry entry) async {
+    final source = entry.item.source;
+    final mediaId = source.mediaId;
+    final startMs = entry.playbackStartMs;
+    final endMs = entry.playbackEndMs;
+    if (mediaId == null ||
+        startMs == null ||
+        endMs == null ||
+        endMs <= startMs) {
+      return;
+    }
+    // The source snapshot needs the media fingerprint for the resolver to
+    // locate the local file. Read it through the resolver's own `readMedia`
+    // so production and tests share a single media source.
+    String? fingerprint;
+    try {
+      fingerprint = (await _resolver.readMedia(mediaId)).fingerprint;
+    } catch (_) {
+      fingerprint = null;
+    }
+    if (!mounted) return;
+    final occurrence = currentMediaSliceOccurrence(
+      mediaId: mediaId,
+      trackId: source.trackId,
+      sentenceId: source.id ?? entry.item.id,
+      textSnapshot: entry.card.answer,
+      startMs: startMs,
+      endMs: endMs,
+      mediaFingerprint: fingerprint,
+    );
+    await widget.onPauseBackgroundPlayback?.call();
+    final resolution = await _resolver.resolve(
+      occurrence,
+      currentMediaFingerprint: null,
+      currentMediaPath: null,
+      filterMediaExtensions: true,
+    );
+    if (!mounted) return;
+    if (resolution is UnresolvedOccurrenceMedia) {
+      await _slicePlayer.showError(resolution.message, occurrence: occurrence);
+      return;
+    }
+    await _slicePlayer.open(
+      path: (resolution as ResolvedOccurrenceMedia).path,
+      occurrence: occurrence,
+    );
+    // Review is audio-first; the clip's video track stays hidden.
+    _slicePlayer.setShowVideo(false);
+  }
 }
 
 class _ReviewCard extends StatefulWidget {
   const _ReviewCard({
     super.key,
     required this.entry,
-    required this.audioAvailable,
+    required this.clipAvailable,
     required this.shadowAvailable,
     required this.revealed,
     required this.busy,
-    required this.onPlay,
-    required this.onPause,
+    required this.slicePlayer,
+    required this.onPlayClip,
     required this.onShadowing,
     required this.onReveal,
     required this.onRate,
@@ -151,13 +267,13 @@ class _ReviewCard extends StatefulWidget {
   });
 
   final ReviewQueueEntry entry;
-  final bool audioAvailable;
+  final bool clipAvailable;
   final bool shadowAvailable;
   final bool revealed;
   final bool busy;
   final String? error;
-  final Future<void> Function() onPlay;
-  final Future<void> Function() onPause;
+  final SlicePlayerController slicePlayer;
+  final VoidCallback onPlayClip;
   final Future<void> Function() onShadowing;
   final VoidCallback onReveal;
   final Future<bool> Function(String rating) onRate;
@@ -171,80 +287,40 @@ class _ReviewCardState extends State<_ReviewCard> {
 
   AppLocalizations get l => AppLocalizations.of(context);
   String? _presenceChoice;
-  bool _playing = false;
 
   @override
   void dispose() {
-    if (_playing) unawaited(widget.onPause());
     _clozeController.dispose();
     super.dispose();
   }
 
-  bool get playable {
-    final start = widget.entry.playbackStartMs;
-    final end = widget.entry.playbackEndMs;
-    return widget.audioAvailable && start != null && end != null && end > start;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final card = widget.entry.card;
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.cardColumnMax,
+          ),
           child: Card(
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      Icon(_kindIcon(card.kind), color: colors.primary),
-                      const SizedBox(width: ListenSpacing.gap8),
-                      Expanded(
-                        child: Text(
-                          _kindLabel(l, card.kind),
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                      ),
-                      Text(
-                        widget.entry.schedule.lapseCount == 0
-                            ? l.text('reviewNewCard')
-                            : l
-                                  .text('reviewRelearnCount')
-                                  .replaceAll(
-                                    '{count}',
-                                    '${widget.entry.schedule.lapseCount}',
-                                  ),
-                      ),
-                    ],
-                  ),
+                  _CardHead(entry: widget.entry),
                   const SizedBox(height: ListenSpacing.gap12),
                   Text(
                     _instruction(l, card.kind),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: ListenSpacing.gap32),
-                  FilledButton.icon(
-                    onPressed: playable ? _togglePlayback : null,
-                    icon: Icon(
-                      playable
-                          ? _playing
-                                ? Icons.pause
-                                : Icons.volume_up_outlined
-                          : Icons.volume_off_outlined,
-                    ),
-                    label: Text(
-                      playable
-                          ? _playing
-                                ? l.text('reviewPauseClip')
-                                : l.text('reviewPlayClip')
-                          : l.text('reviewClipUnavailable'),
-                    ),
+                  _PlaybackControls(
+                    slicePlayer: widget.slicePlayer,
+                    clipAvailable: widget.clipAvailable,
+                    onPlayClip: widget.onPlayClip,
                   ),
                   const SizedBox(height: ListenSpacing.gap8),
                   OutlinedButton.icon(
@@ -280,16 +356,6 @@ class _ReviewCardState extends State<_ReviewCard> {
         ),
       ),
     );
-  }
-
-  Future<void> _togglePlayback() async {
-    if (_playing) {
-      await widget.onPause();
-      if (mounted) setState(() => _playing = false);
-      return;
-    }
-    await widget.onPlay();
-    if (mounted) setState(() => _playing = true);
   }
 
   Widget _promptContent(BuildContext context) {
@@ -364,7 +430,25 @@ class _ReviewCardState extends State<_ReviewCard> {
         onPressed: widget.busy ? null : widget.onReveal,
         child: Text(l.text('reviewShowHeardWord')),
       ),
-      'delayed_retelling' => const SizedBox.shrink(),
+      // R3: the delayed-retelling card used to collapse to an empty box here.
+      // It gives no answer to flip (the learner retells, then enters speaking),
+      // so it shows the task framing and that the source stays hidden.
+      'delayed_retelling' => Container(
+        key: const ValueKey('delayed-retelling-prompt'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(ListenSpacing.gap16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: ListenRadii.surfaceBorder,
+        ),
+        child: Text(
+          l.text('reviewRetellPromptNote'),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
       _ => OutlinedButton(
         key: const ValueKey('source-sentence-prompt'),
         onPressed: widget.busy ? null : widget.onReveal,
@@ -420,30 +504,11 @@ class _ReviewCardState extends State<_ReviewCard> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: ListenSpacing.gap24),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: widget.busy ? null : () => widget.onRate('again'),
-                child: Text(l.text('reviewGradeMissed')),
-              ),
-            ),
-            const SizedBox(width: ListenSpacing.gap8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: widget.busy ? null : () => widget.onRate('hard'),
-                child: Text(l.text('reviewGradeFuzzy')),
-              ),
-            ),
-            const SizedBox(width: ListenSpacing.gap8),
-            Expanded(
-              child: FilledButton(
-                onPressed: widget.busy ? null : () => widget.onRate('good'),
-                child: Text(l.text('reviewGradeGot')),
-              ),
-            ),
-          ],
-        ),
+        // R5: four grades (Again/Hard/Good/Easy). The backend `ReviewRating`
+        // enum has always had four; the frontend previously exposed three and
+        // never let a learner press Easy. Descriptive labels are kept (P4 —
+        // no guilt), Good stays the emphasized default.
+        _GradeRow(busy: widget.busy, onRate: widget.onRate),
       ],
     );
   }
@@ -451,6 +516,76 @@ class _ReviewCardState extends State<_ReviewCard> {
   void _choosePresence(String choice) {
     setState(() => _presenceChoice = choice);
     widget.onReveal();
+  }
+
+  static String _instruction(AppLocalizations l, String kind) =>
+      l.text(switch (kind) {
+        'word_recognition' => 'reviewHintWordRecognition',
+        'chunk_cloze' => 'reviewHintChunkCloze',
+        'phrase_presence' => 'reviewHintPhrasePresence',
+        'source_sentence_recall' => 'reviewHintSourceRecall',
+        'delayed_retelling' => 'reviewHintDelayedRetelling',
+        _ => 'reviewHintGeneric',
+      });
+}
+
+/// R2: the card head names *which channel* the card trains (derived from its
+/// kind, a durable backend fact) with the shared capability graphic language,
+/// instead of a raw stock icon that said nothing about the practice. The
+/// per-word three-state ring is deferred — the queue entry carries no
+/// capability profile, and fetching one would be new backend work (波次 D).
+class _CardHead extends StatelessWidget {
+  const _CardHead({required this.entry});
+
+  final ReviewQueueEntry entry;
+
+  /// Every review kind trains one channel; the mapping is presentation, not a
+  /// new judgment (the kinds themselves are generated by the backend).
+  static String _channel(String kind) => switch (kind) {
+    'delayed_retelling' || 'source_sentence_recall' => 'speaking',
+    _ => 'listening',
+  };
+
+  static ({String labelKey, IconData icon}) _channelFace(String channel) =>
+      switch (channel) {
+        'speaking' => (
+          labelKey: 'capabilitySpeaking',
+          icon: Icons.record_voice_over_outlined,
+        ),
+        'reading' => (
+          labelKey: 'capabilityReading',
+          icon: Icons.menu_book_outlined,
+        ),
+        'writing' => (labelKey: 'capabilityWriting', icon: Icons.edit_outlined),
+        _ => (labelKey: 'capabilityListening', icon: Icons.hearing_outlined),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final card = entry.card;
+    final face = _channelFace(_channel(card.kind));
+    return Row(
+      children: [
+        Icon(face.icon, size: 18, color: colors.primary),
+        const SizedBox(width: ListenSpacing.gap8),
+        Expanded(
+          child: Text(
+            '${l.text(face.labelKey)} · ${_kindLabel(l, card.kind)}',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+        ),
+        Text(
+          entry.schedule.lapseCount == 0
+              ? l.text('reviewNewCard')
+              : l
+                    .text('reviewRelearnCount')
+                    .replaceAll('{count}', '${entry.schedule.lapseCount}'),
+          style: TextStyle(color: colors.onSurfaceVariant),
+        ),
+      ],
+    );
   }
 
   static String _kindLabel(AppLocalizations l, String kind) =>
@@ -462,25 +597,126 @@ class _ReviewCardState extends State<_ReviewCard> {
         'delayed_retelling' => 'reviewKindDelayedRetelling',
         _ => 'reviewKindGeneric',
       });
+}
 
-  static String _instruction(AppLocalizations l, String kind) =>
-      l.text(switch (kind) {
-        'word_recognition' => 'reviewHintWordRecognition',
-        'chunk_cloze' => 'reviewHintChunkCloze',
-        'phrase_presence' => 'reviewHintPhrasePresence',
-        'source_sentence_recall' => 'reviewHintSourceRecall',
-        'delayed_retelling' => 'reviewHintDelayedRetelling',
-        _ => 'reviewHintGeneric',
-      });
+/// R1: the play button is backed by the independent second decoder, so it
+/// plays a source clip on its own regardless of the main player's state, and
+/// reports resolution failures in place instead of graying out the whole card.
+class _PlaybackControls extends StatelessWidget {
+  const _PlaybackControls({
+    required this.slicePlayer,
+    required this.clipAvailable,
+    required this.onPlayClip,
+  });
 
-  static IconData _kindIcon(String kind) => switch (kind) {
-    'word_recognition' => Icons.hearing_outlined,
-    'chunk_cloze' => Icons.space_bar_outlined,
-    'phrase_presence' => Icons.rule_outlined,
-    'source_sentence_recall' => Icons.record_voice_over_outlined,
-    'delayed_retelling' => Icons.event_repeat_outlined,
-    _ => Icons.graphic_eq,
-  };
+  final SlicePlayerController slicePlayer;
+  final bool clipAvailable;
+  final VoidCallback onPlayClip;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return ListenableBuilder(
+      listenable: slicePlayer.store,
+      builder: (context, _) {
+        final state = slicePlayer.state;
+        final loading = state.open && state.loading;
+        final playing = state.open && state.playing;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FilledButton.icon(
+              onPressed: !clipAvailable || loading
+                  ? null
+                  : () {
+                      // A fresh card, or one whose last attempt errored, starts
+                      // a new resolution; an open clip toggles in place.
+                      if (!state.open || state.error != null) {
+                        onPlayClip();
+                      } else if (state.playing) {
+                        unawaited(slicePlayer.pause());
+                      } else {
+                        unawaited(slicePlayer.togglePlayback());
+                      }
+                    },
+              icon: Icon(
+                !clipAvailable
+                    ? Icons.volume_off_outlined
+                    : playing
+                    ? Icons.pause
+                    : Icons.volume_up_outlined,
+              ),
+              label: Text(
+                !clipAvailable
+                    ? l.text('reviewClipNoSource')
+                    : playing
+                    ? l.text('reviewPauseClip')
+                    : l.text('reviewPlayClip'),
+              ),
+            ),
+            if (state.open && state.error != null) ...[
+              const SizedBox(height: ListenSpacing.gap8),
+              Text(
+                state.error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _GradeRow extends StatelessWidget {
+  const _GradeRow({required this.busy, required this.onRate});
+
+  final bool busy;
+  final Future<bool> Function(String rating) onRate;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    Widget grade(String rating, String labelKey, {bool emphasized = false}) {
+      final child = Text(
+        l.text(labelKey),
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+      final onPressed = busy ? null : () => onRate(rating);
+      return Expanded(
+        child: emphasized
+            ? FilledButton(
+                onPressed: onPressed,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                child: child,
+              )
+            : OutlinedButton(
+                onPressed: onPressed,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
+                child: child,
+              ),
+      );
+    }
+
+    return Row(
+      children: [
+        grade('again', 'reviewGradeMissed'),
+        const SizedBox(width: ListenSpacing.gap6),
+        grade('hard', 'reviewGradeFuzzy'),
+        const SizedBox(width: ListenSpacing.gap6),
+        grade('good', 'reviewGradeGot', emphasized: true),
+        const SizedBox(width: ListenSpacing.gap6),
+        grade('easy', 'reviewGradeEasy'),
+      ],
+    );
+  }
 }
 
 class _Finished extends StatelessWidget {
