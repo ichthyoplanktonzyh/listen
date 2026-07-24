@@ -221,18 +221,6 @@ void main() {
     tester,
   ) async {
     final player = PlayerController();
-    final adapter = DesktopPlayerAdapter();
-    addTearDown(adapter.dispose);
-    final playback =
-        PlaybackActionsCoordinator(
-          adapter: adapter,
-          player: player,
-          subtitle: SubtitleController(),
-        )..bind(
-          getApi: () => null,
-          isMounted: () => true,
-          reloadLearningEntries: () async {},
-        );
 
     await tester.pumpWidget(
       _Harness(
@@ -240,7 +228,7 @@ void main() {
           context: context,
           api: null,
           playerController: player,
-          playbackActions: playback,
+          pauseBackgroundPlayback: () async {},
           startReviewShadowing: (_) async {},
           startDelayedRetelling: (_) async {},
         ),
