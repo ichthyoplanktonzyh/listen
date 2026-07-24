@@ -5,6 +5,7 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/models/production_corpus.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/widgets/common/capability_viz.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/listening_dictionary_entry_view.dart';
@@ -152,11 +153,25 @@ void main() {
     expect(find.text('take care of'), findsOneWidget);
     // Phrases are surfaced with a kind badge (the book is no longer word-only).
     expect(find.text('Phrase'), findsOneWidget);
-    // One icon per capability channel, always shown even when unassessed.
-    expect(find.byIcon(Icons.menu_book_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.hearing_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.record_voice_over_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    // The four-channel snapshot is the portrait ring (#47): one widget,
+    // always shown even when fully unassessed, with the per-channel states
+    // spelled out for hover and assistive tech.
+    final ring = tester.widget<CapabilityRing>(find.byType(CapabilityRing));
+    expect(ring.assessments, {
+      'listening': 'unassessed',
+      'reading': 'unassessed',
+      'speaking': 'unassessed',
+      'writing': 'unassessed',
+    });
+    expect(
+      find.byTooltip(
+        'Listening: Not yet assessed\n'
+        'Reading: Not yet assessed\n'
+        'Writing: Not yet assessed\n'
+        'Speaking: Not yet assessed',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('empty vocabulary book has an explicit state', (tester) async {
@@ -437,6 +452,10 @@ void main() {
         ),
       );
 
+      // The portrait ring (#47) made the entry header taller, so make sure
+      // the search affordance is fully inside the viewport before tapping.
+      await tester.ensureVisible(find.text('Search my library'));
+      await tester.pump();
       await tester.tap(find.text('Search my library'));
       await tester.pump();
       await tester.pump();
