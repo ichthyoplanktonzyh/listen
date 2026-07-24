@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-24: 两个前置决策拍板 + 宪章光源清单修订（refs #70 · Phase 2 · 设计轨）。owner 定：
+  ①内容列宽 token（C4）**归 `ListenBreakpoints`**（与 vocabularyTwoPane 断点同家，不新建
+  文件）；②宪章原则 2 的「全仓仅有的 3 处 CustomPaint」**改为「光源家族」不带硬数字**
+  （`CustomPaint` 只用于内容发光的光源家族：词级高亮/连读带/节奏带/能力画像/对话回声
+  水面…，新增光源须证明画的是内容而非点缀）——一次性改到位，S7 落地回声水面无需再动
+  宪章。`listen-design-charter.md` 原则 2 已改，`listen-phase2-frontend-slices.md` 的两个
+  前置决策从「待 owner」更新为「已定」并回填 S0/S7。纯文档，无代码改动。
+
 - 2026-07-24: Phase 2 前端拆刀清单落库（refs #70 · Phase 2 · 设计轨）。新增
   `design-notes/listen-phase2-frontend-slices.md`：把五页拍板落成 15 把**自包含可逐刀
   转交新会话**的实现刀，按波次组织——A 基建（S0 主题加月白/月蓝+列宽 token+

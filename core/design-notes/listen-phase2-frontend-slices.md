@@ -26,24 +26,25 @@
 
 ---
 
-## ⚠️ 两个前置决策(owner 先定,否则卡 S0)
+## ✅ 两个前置决策(owner 已定 2026-07-24)
 
-1. **内容列宽 token 归属**(审计 C4:五页列宽各自硬编码,`ListenBreakpoints` 零使用)。
-   宪章「列宽 token 缺席」修订待裁决——token 放 `ListenBreakpoints` 还是新建 `ListenLayout`?
-   S0 要建这个 token,需要先定家。
-2. **CustomPaint 光源清单修订**(宪章现写「仅 3 处」,画像已是第 4 处,回声水面将是第 5 处)。
-   S7 落地时要更新宪章这句——确认表述(如改为「光源家族」而非硬数字)。
+1. **内容列宽 token 归属**(审计 C4)= **归 `ListenBreakpoints`**。列宽阈值与 `vocabularyTwoPane`
+   断点同家,不新建文件——S0 在 `theme/breakpoints.dart` 建列宽 token,替换五页硬编码宽度。
+2. **CustomPaint 光源清单**= **改「光源家族」不带硬数字**。宪章原则 2 已改为
+   「`CustomPaint` 只用于内容发光的光源家族(词级高亮/连读带/节奏带/能力画像/对话回声水面…)」。
+   S7 落地回声水面时**无需再改这句**(已一次性改到位),只需确认新光源画的是内容而非点缀。
 
 ---
 
 ## 波次 A · 基建(前置,多刀依赖,先做)
 
 ### S0 · 主题加色 + 列宽 token
-- **依赖**:前置决策 1、2 已定。无后端依赖。
+- **依赖**:前置决策 1、2 已定(见上)。无后端依赖。
 - **范围**:
   - `theme/listen_theme.dart`:加**月白 `#c7d4cf`**(对方的声音)、**月蓝 `#6db3ff`**(复习 new 态);
     进 `theme_palette_discipline_test` + 对比度校验(暗底 AA)。
-  - `theme/breakpoints.dart`(或新建):内容列宽 token,替换五页硬编码宽度(C4)。
+  - `theme/breakpoints.dart`:内容列宽 token(**归 `ListenBreakpoints`**,前置决策 1),
+    替换五页硬编码宽度(C4)。
   - `theme/breakpoints.dart`:加 `vocabularyTwoPane` 断点(词汇本双栏/单列切换阈值)。
 - **验收**:palette 纪律测试含两新色;至少一页接上列宽 token 作示范;analyze 零告警。
 - **为何先做**:S3(词汇本双栏需断点)、S7(回声水面需月白)、S11(复习需月蓝)都依赖它。
@@ -129,7 +130,7 @@
 - **验收**:进入是舞台不是表单(修 D1);退出确认在;窗口内舞台,不抢系统全屏。
 
 ### S7 · 回声水面可视化
-- **依赖**:S0(月白)、S6(shell)。**落地时更新宪章 CustomPaint 光源清单**(前置决策 2)。
+- **依赖**:S0(月白)、S6(shell)。宪章光源清单已改「光源家族」(前置决策 2,无需再动宪章)。
 - **范围**:屏幕中线水面;四态形变(listening 微澜/learnerSpeaking 青波升起/thinking 涟漪/
   assistantSpeaking 月白落下);**打断**=你开口月白被水面吸走(≤90ms 响应)。
   新 CustomPaint,归 `capability_viz` 家族语言。修 D2(状态=一枚 Chip)、D5(打断零可供性)。
