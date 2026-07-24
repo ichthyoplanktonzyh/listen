@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 2026-07-24: 学习教练 owner 拍板落库（refs #70 · Phase 1 · 设计轨）。拍板记录写入
+  `listen-coach-redesign.html`：**方向=A 画像即导航**；owner「按你的建议」一并授权
+  2–5：环心 gap 数→词汇本差距面（走既有 cross_modal_review destination，语义不动）、
+  趋势微条按后端有无按日序列取舍（无则只留读数，不造数）、章节定序=画像→下一步→
+  通道证据→素材架（起步条件性插入）、features 段降入「工具/关于」层级。纯文档，
+  无代码改动。
+
 - 2026-07-23: 学习教练重设计探索稿（refs #70 · Phase 1 · 设计轨）。落库
   `design-notes/listen-coach-redesign.html`：主张「画像不是插图，画像是导航系统」，
   对准审计 K1–K4/C2。**共享语义**：画像三热区（罗盘象限→页内通道证据段联动、
