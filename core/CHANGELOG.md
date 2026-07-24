@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-24: S0 主题加色 + 列宽 token + 双栏断点(refs #77 · #70 Phase 2 · 基建)。Phase 2
+  基建起点刀,解锁 B/C 波。①`theme/listen_theme.dart` 入宪章色表第 4/5 色:**月白
+  `#c7d4cf`**(对方的声音/照进来的光)、**月蓝 `#6db3ff`**(复习 `new` 首见态),作光源家族
+  内容色直读(不走 `ListenSchemeShades`,与 sound/phoneme 家族同宗),`theme_palette_
+  discipline_test` 加暗底 AA 对比度门(取最亮暗面为最坏况,过则更暗面皆过)+ 第五色确为
+  新 hue 校验。②`theme/breakpoints.dart` 建内容列宽 token `contentColumnMax`(780,阅读列
+  测量,合并词条详情 780/对话 760 的偶然差)、`cardColumnMax`(680,复习卡列),归属依前置
+  决策 1;类文档说明列宽 caps 为何与断点同家。③加 `vocabularyTwoPane`(900)断点供 S3 双栏。
+  ④示范:词条详情 `_detailBody` 硬编码 780 → `ListenBreakpoints.contentColumnMax`(零视觉
+  变化的纯 token 接入)。呈现≠语义,后端零改动。`flutter analyze` 零告警,全量测试绿。
+
 - 2026-07-24: Phase 2 前 11 刀开 issue + 清单回填对照（refs #70 · Phase 2 · 设计轨）。波次
   A+B+C 共 11 刀开成自包含 GitHub issue（S0=#77／S1=#78 S2=#81 S3=#79 S4=#82 S5=#80／
   S6=#83 S7=#84 S8=#85 S9=#86 S10=#87），每个正文指向 `listen-phase2-frontend-slices.md`
