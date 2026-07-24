@@ -70,6 +70,23 @@ abstract final class ListenColors {
   static const learningNeedsReview = Color(0xffffbf47);
   static const learningRecognized = Color(0xff68d391);
 
+  // Charter color table additions (#70 Phase 2, design-notes/
+  // listen-design-charter.md · "底色定义"). Content light sources in the
+  // "光源家族" — the other person's voice and the review "first seen" state —
+  // not chrome. Like the sound/phoneme family above they are brightness-
+  // independent by design: they only ever appear on the dark stage/cards, so
+  // they read directly (not through [ListenSchemeShades]) and are covered by a
+  // dark-background AA gate in theme_palette_discipline_test.dart.
+  /// 月白 — the other person's voice / the light shining in (owner 2026-07-23,
+  /// #70 conversation stage). The月白 that falls when the assistant speaks and
+  /// gets pulled into the water when you interrupt (S7 回声水面).
+  static const moonWhite = Color(0xffc7d4cf);
+
+  /// 月蓝 — the review `new` card "first seen" state (owner 2026-07-24, #70
+  /// review page, "加第五色"). The fifth palette color, reserved for cards a
+  /// learner has never studied (S11 卡状态四态).
+  static const moonBlue = Color(0xff6db3ff);
+
   // Judgment verdict shades (#22). Covered/partial labels render as 12px w700
   // text — below the WCAG large-text exemption — so each tone must clear
   // 4.5:1 against every chrome surface of its brightness (surface, fog,

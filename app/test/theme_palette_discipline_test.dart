@@ -1,6 +1,28 @@
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/listen_theme.dart';
+
+/// WCAG 2.1 relative luminance / contrast ratio (same math as
+/// listen_theme_test.dart), used to gate the content light-source colors that
+/// read directly instead of through the ColorScheme.
+double _luminance(Color color) {
+  double channel(double value) => value <= 0.03928
+      ? value / 12.92
+      : math.pow((value + 0.055) / 1.055, 2.4).toDouble();
+  return 0.2126 * channel(color.r) +
+      0.7152 * channel(color.g) +
+      0.0722 * channel(color.b);
+}
+
+double _contrast(Color foreground, Color background) {
+  final a = _luminance(foreground);
+  final b = _luminance(background);
+  return (math.max(a, b) + 0.05) / (math.min(a, b) + 0.05);
+}
 
 /// Colors in [ListenColors] that only make sense under one brightness. Reading
 /// them straight from a widget pins that widget to the light theme, which is
@@ -143,5 +165,50 @@ void main() {
             'own justification here.',
       );
     }
+  });
+
+  // #70 Phase 2 (S0): 月白/月蓝 are content light sources (the other person's
+  // voice; the review "new" state), read directly like the sound/phoneme
+  // family rather than through the ColorScheme — so the discipline that other
+  // palette colors get from the ColorScheme's own AA gate has to be spelled
+  // out for these. They only ever appear on the dark stage/cards, so the gate
+  // is dark-background AA. Testing against the *lightest* dark surface is the
+  // worst case: for a light foreground, contrast only rises as the background
+  // darkens, so clearing AA here clears it on every darker dark surface
+  // (including the stage's compressed ground).
+  test('the月白/月蓝 content light sources clear WCAG AA on dark surfaces', () {
+    final dark = ListenTheme.dark().colorScheme;
+    // The lightest surface either color can sit on, plus the dark scaffold.
+    final backgrounds = [dark.surfaceContainerHighest, dark.surfaceContainer];
+    for (final light in [ListenColors.moonWhite, ListenColors.moonBlue]) {
+      for (final background in backgrounds) {
+        expect(
+          _contrast(light, background),
+          greaterThan(4.5),
+          reason:
+              'a content light source must stay legible on the dark stage; '
+              '$light on $background fell below AA.',
+        );
+      }
+    }
+    // The fifth color really is a new hue, not a restated teal/amber.
+    expect(ListenColors.moonWhite, isNot(ListenColors.moonBlue));
+    expect(ListenColors.moonBlue, isNot(ListenColors.darkPrimary));
+    expect(ListenColors.moonBlue, isNot(ListenColors.darkAccent));
+  });
+
+  test('the content column tokens stay a legible measure within their fold', () {
+    // A reading column caps narrower than the window that would fold the
+    // vocabulary workbench to one column, so the capped column never has to
+    // share the row it was sized for.
+    expect(
+      ListenBreakpoints.contentColumnMax,
+      lessThan(ListenBreakpoints.vocabularyTwoPane),
+    );
+    // A card reads narrower than a full text column.
+    expect(
+      ListenBreakpoints.cardColumnMax,
+      lessThan(ListenBreakpoints.contentColumnMax),
+    );
   });
 }
