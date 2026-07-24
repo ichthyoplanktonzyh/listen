@@ -13,10 +13,21 @@ class VocabularyBookView extends StatelessWidget {
     super.key,
     required this.words,
     required this.onWord,
+    this.focusCapability,
+    this.selectedEntryId,
   });
 
   final List<LexicalEntryDetails> words;
   final ValueChanged<LexicalEntryDetails> onWord;
+
+  /// The lens channel: the picked channel's quadrant leads each entry ring and
+  /// the others recede, so the channel picker always has a visible effect
+  /// (presentation only — the query is unchanged).
+  final String? focusCapability;
+
+  /// The entry currently open in the detail pane, highlighted in the list so
+  /// the two-pane workbench shows which word the detail belongs to.
+  final String? selectedEntryId;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +53,10 @@ class VocabularyBookView extends StatelessWidget {
         final hasMedia =
             occurrences.isNotEmpty && occurrences.first.mediaId != null;
         return ListTile(
+          selected: selectedEntryId != null && entry.id == selectedEntryId,
+          selectedTileColor: Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: 0.08),
           title: Row(
             children: [
               Flexible(
@@ -60,6 +75,7 @@ class VocabularyBookView extends StatelessWidget {
               CapabilityRing(
                 assessments: capabilityProfileAssessments(profile),
                 withTooltip: true,
+                focusChannel: focusCapability,
               ),
               const SizedBox(height: ListenSpacing.gap2),
               Text(

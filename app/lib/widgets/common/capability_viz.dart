@@ -116,12 +116,19 @@ class CapabilityRing extends StatelessWidget {
     required this.assessments,
     this.size = 16,
     this.withTooltip = false,
+    this.focusChannel,
   });
 
   /// Effective assessment per channel key; missing channels read unassessed.
   final Map<String, String> assessments;
   final double size;
   final bool withTooltip;
+
+  /// When set, that channel's quadrant is drawn as the primary lens and the
+  /// other three recede — a presentation-only cue so the vocabulary lens's
+  /// channel picker always has a visible effect. The underlying assessments
+  /// (and the query behind them) are unchanged.
+  final String? focusChannel;
 
   String _describe(AppLocalizations l) => _quadrants.keys
       .map(
@@ -142,6 +149,7 @@ class CapabilityRing extends StatelessWidget {
         painter: _RingPainter(
           assessments: assessments,
           colors: Theme.of(context).colorScheme,
+          focusChannel: focusChannel,
         ),
       ),
     );
@@ -151,10 +159,15 @@ class CapabilityRing extends StatelessWidget {
 }
 
 class _RingPainter extends CustomPainter {
-  const _RingPainter({required this.assessments, required this.colors});
+  const _RingPainter({
+    required this.assessments,
+    required this.colors,
+    this.focusChannel,
+  });
 
   final Map<String, String> assessments;
   final ColorScheme colors;
+  final String? focusChannel;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -165,10 +178,18 @@ class _RingPainter extends CustomPainter {
     for (final entry in _quadrants.entries) {
       final assessment = assessments[entry.key] ?? 'unassessed';
       final dim = assessment != 'acquired' && assessment != 'not_acquired';
+      // The lens: when a channel is focused the other quadrants recede so the
+      // picker's effect is always visible. Purely a presentation cue.
+      final unfocused = focusChannel != null && entry.key != focusChannel;
       final paint = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = dim ? mainStroke * 0.55 : mainStroke
-        ..color = capabilityAssessmentColor(colors, assessment);
+        ..color = unfocused
+            ? capabilityAssessmentColor(
+                colors,
+                assessment,
+              ).withValues(alpha: 0.3)
+            : capabilityAssessmentColor(colors, assessment);
       final (start, end, _) = entry.value;
       canvas.drawArc(
         rect,
@@ -183,6 +204,7 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_RingPainter oldDelegate) =>
       oldDelegate.colors != colors ||
+      oldDelegate.focusChannel != focusChannel ||
       !mapEquals(oldDelegate.assessments, assessments);
 }
 
