@@ -15,6 +15,64 @@
   HuntingController + 路由 push）的首帧回归测试，修复前红、修复后绿。
   `flutter analyze` 零告警。
 
+- 2026-07-23: 五常用页现状审计落库（refs #70 · Phase 0 · 设计轨）。新增
+  `design-notes/listen-common-pages-audit.md`：五页（词汇本/我的表达/复习/对话/教练）
+  逐页对照宪章五原则 + 核心论点（四通道闭环 + gap-(c)），每条痛点带 file:line 可指认、
+  可证伪。**横切 6 条**：C1 弹窗承载核心动线（gap-(c) 两个仪表、写句练习全是
+  AlertDialog）、C2 raw 枚举/内部 UUID 直出（诚实仪器≠debug 输出）、C3 词汇本 AppBar
+  6 图标堆核心与维护平级、C4 五页内容列宽各自硬编码且 `ListenBreakpoints` 零使用
+  （grep 验证）、C5 文案三制度（表达硬编码中文/对话硬编码英文/其余 l.text，处置归
+  #21）、C6 #47 图形语言止步画像未下沉动线。**逐页最重**：词汇本 V1 能力 chip 在
+  「全部」档静默失效 + V2 gap-(c) 无常驻家；表达 E1 删除无确认 + E2 支架渐撤教学法
+  沦为下拉框；复习 R1 音频可用性绑死主播放器（无媒体进复习全队 clip unavailable，
+  第二解码器先例在词汇本）+ R3 delayed_retelling 卡面塌陷；对话 D1 一屏三职到 D7
+  通用路由（owner 已定 GPT Live 全屏重设计，controller 状态机与「本地 Whisper 才是
+  learner output」诚实分层列为必继承资产）；教练 K1 起步清单不可勾 + K4 画像与下钻
+  断连。**核心论点地图**：闭环每环都在但「环」没被画出来，gap-(c) 呈现规格全场最低。
+  宪章修订 3 点单列交 owner（CustomPaint 光源清单过时、缺「舞台态」规则、内容列宽
+  token 缺席）。附严重度排序：对话 → 词汇本 → 教练 → 复习 → 表达，作 Phase 1 排产
+  依据。纯文档，无代码改动。
+
+- 2026-07-23: 能力画像换装——拍板方向落地（refs #47 · 设计轨）。新增
+  `widgets/common/capability_viz.dart` 作为画像图形语言的唯一家，dashboard 与词条
+  快照从此同一套语言：**罗盘总览**（`CapabilityCompass`：四象限=2×2，左声右文、
+  上收下产；每象限亮弧=已证实、琥珀=练习靶子、细暗弧=未评估存量在场；接收的光聚
+  12 点、产出聚 6 点——上亮下暗即 gap-(c)，环心只在后端 cross-modal suggestion
+  在场时直书其 evidence_count，绝不前端造数）＋**回声条**（`CapabilityEchoBars`：
+  听/说、读/写两列镜像条共享一把尺=四通道最大总量，接收 acquired 高度镜像到产出侧
+  成琥珀虚框「回声缺口」；缺口标注只并置既有计数「听得懂 46 · 说得出 12」不做减法）＋
+  **词条三态环**（`CapabilityRing`：词条列表 16px 行内与词条详情 44px 同构，比例在
+  词条尺度诚实归零只留三态；tooltip/Semantics 四通道全裸露）。coach dashboard 标题
+  换「你的语言画像」，三态 Chip 堆叠退役，通道卡降为纯 metric 下钻（无证据即不渲染，
+  evidence 弹窗行为不变）；词条快照的四个 Material 图标退役；`capabilityAssessmentColor`
+  移入 capability_viz 并按拍板把 acquired 从 learningRecognized 绿改为
+  colorScheme.primary 信号青（词汇本筛选 chips 同步）。截图自检后两处视觉校正：
+  聚合尺度的未评估大面积段/弧压暗到 outlineVariant（hairline 级「在场不抢光」，
+  词条环细弧保留 0.45 灰维持行内可辨），回声条限宽 200 不随面板拉伸。新增断点
+  `ListenBreakpoints.capabilityPortraitSideBySide=640`（breakpoint 纪律测试逮到
+  硬编码后补正）。l10n +4（画像标题/环心/两条缺口并置，en/zh），清死键
+  coachFourChannels/coachUnassessed。**测试 +9（共 635 绿）**：罗盘分段纯函数 4 条
+  （锚点聚光方向、零计数诚实 unassessed、零段跳过）、gap 数只认后端 join、三态色
+  （青/琥珀/压暗 alpha<0.5）、词条环 tooltip 全通道、回声条 ghost 高度=接收比例+
+  并置文案+悬停三态数、环心有无 gap 双态；词条书测试改断言 CapabilityRing。
+  `flutter analyze` 零告警；`dart format` 已跑。呈现≠语义：分析数据与 evidence
+  门控零改动（controller/api 层零 diff）。
+
+- 2026-07-23: 能力画像设计探索 + owner 拍板（refs #47 · 设计轨）。落库
+  `design-notes/listen-capability-viz.html`：给四通道闭环 + gap-(c)（产品命脉）出三个
+  图形语言方向，每个方向都验 dashboard 聚合 → 词条详情 → 列表行内 16px 三个尺度。
+  共享语义先钉死：四通道是 2×2（声音听↔说 × 文字读↔写，各有接收/产出端），gap-(c)
+  住在同模态跨方向里；三态色 = 信号青（已证实=你的语言=光）/ 琥珀（练习靶子，不是
+  失败红）/ 压暗在场（未评估，诚实展示存量）。**A 回声条**：基线上=照进来的光（听/读）
+  下=你的回声（说/写），接收的光镜像到产出侧成琥珀虚框——「回声没跟上的部分」即缺口，
+  gap 是图形固有属性；**B 语言罗盘**：四象限环（左声右文、上收下产），接收的光聚 12 点
+  产出聚 6 点，上亮下暗即缺口，环心直书 gap-(c) 数；**C 风筝**：雷达四轴，诚实证伪后
+  不推荐（通用 BI 仪表脸、unassessed 无处安放、早期词库塌缩、16px 崩坏）。
+  **owner 拍板（2026-07-23，记录在稿内）**：B 总览 + A 通道细节，词条尺度（详情+行内）
+  统一用 B 的三态小环（比四小方块立得住）；acquired 的光 = 信号青（colorScheme.primary
+  映射）；unassessed = 压暗在场 + 悬停显数，gap 标注只并置既有计数不做前端减法。
+  实现（dashboard/词条快照换装）为本 issue 下一刀。
+
 - 2026-07-23: macOS 原生菜单栏（refs #23）。`PlatformMenuBar` 接管菜单栏（AppKit 原生
   渲染，零新增 Swift），模板脚手架的死项整体消失。**⌘, 复活**：App 菜单 Preferences…
   直通应用设置；About/Services/Hide/Quit 走 `PlatformProvidedMenuItem` 系统项。
