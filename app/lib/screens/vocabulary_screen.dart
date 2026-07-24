@@ -15,6 +15,7 @@ import '../models/projection_review.dart';
 import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
+import '../theme/breakpoints.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_empty_state.dart';
 import '../widgets/common/listen_error_state.dart';
@@ -1493,7 +1494,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   Widget _detailBody(LexicalEntryDetails value) => Center(
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 780),
+      constraints: const BoxConstraints(
+        maxWidth: ListenBreakpoints.contentColumnMax,
+      ),
       child: ListeningDictionaryEntryView(
         // Rebind state when switching entries so reveal/mark/search state
         // never leaks from another word.

@@ -3,6 +3,14 @@
 /// Only thresholds compared against `constraints.maxWidth` belong here — fixed
 /// `width:` / `SizedBox` sizes are element geometry, not breakpoints.
 ///
+/// The one deliberate exception is the `*ColumnMax` block at the bottom:
+/// content-column caps (`ConstrainedBox(maxWidth:)`) that keep a reading or
+/// card column from sprawling on a wide window. They are a shared vocabulary,
+/// not a layout switch, but owner (#77, 前置决策 1) put them here rather than
+/// spawning a new file, since a column's cap and the breakpoint that folds it
+/// are the same "how wide should content be" concern. The五页 that each
+/// hard-coded their own width (audit C4) migrate to these as they are rebuilt.
+///
 /// Values that happen to coincide are kept as separate constants when the
 /// reason for the threshold differs: each one is derived from what its own
 /// widget needs to stay usable, so they are free to drift apart. Only merge two
@@ -72,4 +80,29 @@ abstract final class ListenBreakpoints {
   /// The reading word inspector sits beside the reader; below it the inspector
   /// moves under the reader instead.
   static const readingInspectorSideBySide = 980.0;
+
+  /// The vocabulary workbench (#79 / S3) keeps its list+lens column beside the
+  /// activity pane; below it the two collapse to a single column (the narrow
+  /// "B" form). Derived from the two panes' floors: the list needs ~320 to show
+  /// word rows with their lens, the activity pane ~540 to stay usable, plus the
+  /// gutter ≈ 880; 900 leaves a little margin before the fold.
+  static const vocabularyTwoPane = 900.0;
+
+  // ── Content column max-widths ──
+  // Caps for a centered content column (a `ConstrainedBox(maxWidth:)`), so a
+  // single column of text or a card stops growing before line length gets
+  // tiring on a wide window (charter principle 5, "降低疲劳"). See the class
+  // doc for why these live alongside the layout breakpoints.
+
+  /// A single reading column of text-dense content — word detail, conversation
+  /// transcript, coach evidence. Sized to a comfortable measure (~70ch at the
+  /// body size) so lines stay legible. Replaces the 780/760 that vocabulary
+  /// detail and the conversation panel each hard-coded (audit C4); the 20px
+  /// spread between them was incidental — the reason is one.
+  static const contentColumnMax = 780.0;
+
+  /// A single centered card — the review card, a page-inline studio card —
+  /// which reads narrower than a full text column. Replaces the review card's
+  /// hard-coded 680 (audit C4).
+  static const cardColumnMax = 680.0;
 }
