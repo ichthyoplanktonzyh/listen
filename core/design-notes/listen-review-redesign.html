@@ -3,7 +3,9 @@
   :root{
     --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
     --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
-    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --moon:#c7d4cf; --new:#6db3ff;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --moon:#c7d4cf;
+    /* 第 5 色 · 月蓝 = new 新卡「首见」态（owner 2026-07-24 拍板加色） */
+    --new:#6db3ff;
     --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
@@ -529,7 +531,39 @@
     </ol>
   </div>
 
-  <div class="pending">
+  <h2 style="margin-top:46px">拍板记录 <span class="en">DECISION · OWNER · 2026-07-24</span></h2>
+  <div class="decisions">
+    <p style="font-size:13px;color:var(--muted);margin:0 0 8px">
+      owner:「需要的拍板点都按默认来」——除第 2 条外全部采纳本稿推荐;
+      第 2 条 owner 另有明确指令。</p>
+    <ol>
+      <li><b>牌组主维度=通道自动分面</b>(听/说/读/写),与导入 anki deck 树双轨共存
+        (智能牌组区 / 导入牌组区)。一张卡多通道归属的处理交后端 issue 定,
+        前端只呈现后端归组。</li>
+      <li><b>加第 5 色:月蓝 #6db3ff = new 新卡「首见」态</b>
+        (<b>owner 2026-07-24 明确指令「加第五色」</b>,推翻我改用中性灰空心的提议;
+        实现时进 listen_theme + palette 纪律测试 + 对比度校验)。</li>
+      <li><b>间隔预览依赖后端只读预测接口</b>;接口就位前前端<b>隐藏预览</b>
+        (4 档评分照常可用),绝不前端估算——预览是承诺,估算是撒谎。</li>
+      <li><b>每日上限归全局</b>(v1),达上限的措辞按「保护而非 KPI」基调
+        (「今天的量够了,明天见」,不出成绩感叹号)。每通道上限列 v2。</li>
+      <li><b>custom study v1 做四张动词卡</b>:多学新卡 / 提前复习 / 只练某通道 /
+        重练遗忘;<b>「按媒体」列 v2</b>(依赖后端媒体维度查询,先不铺)。
+        每张只触发一次临时队列,不改变正常调度。</li>
+      <li><b>授权起草后端 issue</b>:anki 兼容 FSRS(第一优先·互通地基)+ 间隔预览接口 +
+        card state 字段 + 牌组计数 + 每日上限 + custom study 查询 + .apkg 导入导出 +
+        媒体渲染管线。起草后交 owner 过目再提交。</li>
+      <li><b>互通 v1 = .apkg 文件双向</b>(离线卡包,最标准);
+        `.colpkg`(整 collection)、AnkiConnect(实时对接)、AnkiWeb 同步<b>列为未来</b>,
+        不进 v1 范围。</li>
+      <li><b>接受媒体保真有损</b>:切片导出到 anki 为音频,视频/原媒体跳转/影子跟读
+        不带走;<b>导出前对话框明说</b>(P4 诚实),不静默丢信息。</li>
+      <li><b>外来卡不进四通道画像</b>:默认无通道归属(它无听力证据来源),
+        除非用户手动归;卡头 badge 标「来自 anki · 无听力增强」。</li>
+    </ol>
+  </div>
+
+  <div class="pending" style="display:none">
     拍板记录 <span style="font-family:var(--mono);font-size:10.5px">DECISION · OWNER · 待填</span><br>
     owner 拍板后在此记录:各拍板点结论、修改要求。
   </div>

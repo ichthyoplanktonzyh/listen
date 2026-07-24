@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-24: 复习 owner 拍板落库 + 宪章加第 5 色（refs #70 · Phase 1 · 设计轨）。9 条
+  拍板点按「全部按默认」采纳本稿推荐：牌组主维度=通道自动分面（与导入 anki deck 树
+  双轨共存）；**第 2 条 owner 另有明确指令「加第五色」——月蓝 `#6db3ff` = new 新卡
+  「首见」态**（推翻我改用中性灰空心的提议，已同步写入 `listen-design-charter.md`
+  色表，实现时进 palette 纪律测试 + 对比度校验）；间隔预览接口就位前隐藏（绝不前端
+  估算）；每日上限归全局、措辞按「保护非 KPI」；custom study v1 四张动词卡（多学新卡/
+  提前复习/只练某通道/重练遗忘，「按媒体」列 v2）；授权起草后端 issue（anki 兼容 FSRS
+  为第一优先·互通地基）；互通 v1=.apkg 双向（colpkg/AnkiConnect/AnkiWeb 列未来）；
+  接受媒体保真有损但导出前对话框明说；外来卡不进四通道画像。纯文档，无代码改动。
+
 - 2026-07-24: 复习稿再扩展——anki 数据双向互通（refs #70 · Phase 1 · 设计轨）。owner 补充
   定位从「anki 式体验」升级为「完全接入 anki 数据体系」：.apkg 卡包导入 listen 使用、
   listen 卡导出回 anki。`listen-review-redesign.html` 增补：**牌组改双轨**（listen 原生
