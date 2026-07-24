@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-24: 复习重设计探索稿（refs #70 · Phase 1 · 设计轨）。落库
+  `design-notes/listen-review-redesign.html`：审计判复习页骨架最贴 P5，故一稿微调、
+  保骨架换三处血肉，复习语义（#10/#11）零改动。**R1 音频自带第二解码器（技术已
+  验证可行）**：复习卡 source.mediaId + anchor startMs/endMs 齐全，走词汇本 _playCorpus
+  同路径（readMedia→OccurrenceMediaResolver→SlicePlayerController.open）与主播放器
+  彻底解耦——不载任何媒体也能复习整队，修掉现状 _canPlay 绑死同媒体导致的整队
+  clip unavailable。**R2 卡面接图形语言**：card.kind 隐含训练通道（认词/cloze=听、
+  延迟复述=说），库存 Material 图标换成通道色点+人话；卡头可选 16px 词条三态环
+  （需队列预取 capability，列为决策点，不做则只留色点仍达标）。**R3 delayed_retelling
+  补塌陷**：prompt 区从 SizedBox.shrink() 改为任务说明+源句遮罩，与揭示动线统一。
+  **R4 进度可见**：顶部细进度带「本轮 N/M」（数据来自既有 remaining/completedCount，
+  呈现层聚合）。呈现≠语义守门测试三条（不载主媒体切片可用/回放不改主播放器状态/
+  三档评分 payload 逐字节不变）。拍板点 4 条待 owner（R1 解耦/词条环取数与否/R4 进度带/
+  R2·R3 默认执行），拍板记录节留空。纯设计稿，无代码改动。
+
 - 2026-07-24: 学习教练 owner 拍板落库（refs #70 · Phase 1 · 设计轨）。拍板记录写入
   `listen-coach-redesign.html`：**方向=A 画像即导航**；owner「按你的建议」一并授权
   2–5：环心 gap 数→词汇本差距面（走既有 cross_modal_review destination，语义不动）、

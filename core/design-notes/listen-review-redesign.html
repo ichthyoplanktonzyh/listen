@@ -1,0 +1,235 @@
+<title>listen · 复习重设计探索</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --moon:#c7d4cf;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:66ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 4px}
+  .constraints .c{font-size:12px;color:var(--muted);background:var(--raised);
+    border:1px solid var(--hair);border-radius:999px;padding:5px 12px}
+  h2{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:46px 0 10px}
+  h2 .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;
+    font-weight:500;margin-left:9px}
+  h3{font-size:14px;font-weight:700;margin:0 0 10px}
+  h3 .en{font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:500;margin-left:7px}
+  .note{font-size:14px;color:var(--muted);max-width:70ch;margin:0 0 18px}
+  .note b{color:var(--ink)}
+  .sembox{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:18px 20px;margin-top:16px}
+  .legend{display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--muted)}
+  .legend .row{display:flex;align-items:flex-start;gap:10px}
+  .sw{width:26px;height:12px;border-radius:3px;flex:none;margin-top:5px}
+  .legend b{color:var(--ink)}
+  table.map{width:100%;border-collapse:collapse;font-size:13px;color:var(--muted);margin-top:6px}
+  table.map th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);
+    text-align:left;font-weight:500;padding:6px 10px;border-bottom:1px solid var(--hair)}
+  table.map td{padding:8px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+  table.map b{color:var(--ink)}
+  .dir{background:var(--raised);border:1px solid var(--hair);border-radius:18px;overflow:hidden;margin-top:26px}
+  .dir-body{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:0}
+  @media(max-width:880px){.dir-body{grid-template-columns:1fr}}
+  .stage{background:radial-gradient(120% 100% at 50% 30%, #22302a 0%, var(--ground2) 80%);
+    padding:24px 18px;display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:flex-start}
+  .stage .cap,.side .cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);font-family:var(--mono);align-self:flex-start;margin-bottom:2px}
+  .side{padding:20px 20px 22px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--hair)}
+  @media(max-width:880px){.side{border-left:none;border-top:1px solid var(--hair)}}
+  .qa{font-size:13px;color:var(--muted)}
+  .qa dt{color:var(--ink);font-weight:700;font-size:12.5px;margin-top:10px}
+  .qa dt .qn{font-family:var(--mono);color:var(--teal);font-size:10.5px;margin-right:6px}
+  .qa dd{margin:2px 0 0}
+  .qa b{color:var(--ink)}
+  .verdict{margin:14px 22px 20px;padding:12px 16px;border-radius:12px;font-size:13.5px;
+    background:var(--ground2);border:1px solid var(--hair);color:var(--muted)}
+  .verdict b{color:var(--ink)}
+  .decisions{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px}
+  .decisions ol{margin:8px 0 0;padding-left:22px;font-size:14px;color:var(--muted)}
+  .decisions li{margin-bottom:12px}
+  .decisions b{color:var(--ink)}
+  .pending{border:1px dashed var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px;
+    color:var(--faint);font-size:14px}
+
+  /* review card mock */
+  .card{width:100%;max-width:400px;background:#1d2823;border:1px solid var(--hair);
+    border-radius:16px;padding:20px 22px;color:var(--muted);font-size:12px}
+  .card .top{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+  .card .kindchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--hair);
+    border-radius:999px;padding:3px 11px;font-size:10.5px}
+  .card .chan{width:8px;height:8px;border-radius:50%}
+  .card .prog{flex:1;text-align:right;font-family:var(--mono);font-size:10px;color:var(--faint)}
+  .card .instr{color:var(--ink);font-size:14px;font-weight:600;margin-bottom:18px}
+  .card .playbtn{background:var(--teal-dim);color:#0d1512;border-radius:9px;padding:9px;
+    text-align:center;font-size:12px;font-weight:600;margin-bottom:8px}
+  .card .subbtn{border:1px solid var(--hair);border-radius:9px;padding:8px;text-align:center;font-size:11px;margin-bottom:16px}
+  .card .cue{text-align:center;font-size:19px;color:var(--ink);letter-spacing:.02em;margin:14px 0}
+  .card .field{border:1px solid var(--hair);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--faint)}
+  .card .grades{display:flex;gap:7px;margin-top:16px}
+  .card .grades span{flex:1;text-align:center;border:1px solid var(--hair);border-radius:8px;padding:6px 0;font-size:10.5px}
+  .card .grades .got{border-color:var(--teal-dim);color:var(--teal)}
+  .card .ring{width:14px;height:14px;border-radius:50%;border:3px solid var(--teal);flex:none}
+  .card .ring.amb{border-color:var(--amber) var(--amber) #3a4a44 #3a4a44}
+  .prbar{width:100%;max-width:400px;height:5px;background:var(--ground2);border-radius:3px;overflow:hidden;margin-top:-6px}
+  .prbar i{display:block;height:100%;background:var(--teal-dim)}
+  .caplabel{max-width:400px;width:100%;font-family:var(--mono);font-size:9.5px;color:var(--faint);text-align:center}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · #70 · phase 1 / 4</div>
+  <h1>复习:让好骨架呼吸</h1>
+  <p class="lede">
+    审计给复习页的评价是五页里最正面的:单卡居中、一次一事,是最贴 P5 的骨架;
+    三档评分不愧疚,贴 P3/P4。所以这是<b>一稿微调</b>,不是重构——保骨架、换三处血肉:
+    R1 音频不该绑死主播放器(核心可供性大面积死亡)、R2 卡面与图形语言零血缘、
+    R3 delayed_retelling 卡面塌陷。复习语义(#10/#11)一个字节都不碰。
+  </p>
+  <div class="constraints">
+    <span class="c">呈现≠语义:调度/评分/卡片生成(#10/#11)零改动,测试证明</span>
+    <span class="c">保骨架:单卡居中、AnimatedSwitcher 揭示、三档评分</span>
+    <span class="c">第二解码器复用词汇本 SlicePlayerController</span>
+    <span class="c">#47 三态色下沉卡面</span>
+  </div>
+
+  <h2>三处血肉 <span class="en">THE THREE FIXES</span></h2>
+
+  <div class="sembox">
+    <h3>R1 · 音频自带第二解码器(技术已验证)<span class="en">CLIP PLAYS ITSELF</span></h3>
+    <p class="note" style="margin-bottom:10px">
+      现状 <span style="font-family:var(--mono);font-size:12px">_canPlay</span> 要求
+      <b>主播放器恰好载着同一媒体</b>(<span style="font-family:var(--mono);font-size:12px">currentMediaId == source.mediaId</span>)——不载媒体直接进复习,
+      整队卡显示「clip unavailable」。但复习卡的
+      <span style="font-family:var(--mono);font-size:12px">source.mediaId</span> +
+      anchor 的 <span style="font-family:var(--mono);font-size:12px">startMs/endMs</span>
+      已经齐全,词汇本早已示范正解。
+    </p>
+    <table class="map">
+      <tr><th>现状</th><th>修正(与词汇本 _playCorpus 同路径)</th></tr>
+      <tr><td>onPlayRange(start,end) → 操控主播放器,仅当同媒体可用</td>
+        <td><b>页内第二解码器</b>:readMedia(source.mediaId) → OccurrenceMediaResolver
+        解析到本地 path → SlicePlayerController.open(path, {startMs,endMs}) 循环切片。
+        复习卡自带音频,与主播放器状态<b>彻底解耦</b>——不载任何媒体也能复习。</td></tr>
+      <tr><td>源不可用=按钮死灰,无解释</td>
+        <td>媒体文件找不到时走 resolver 的诚实失败(showError + 一句原因),
+        可触发重新定位(词汇本已有动线)——不再是沉默的死按钮(P4)。</td></tr>
+    </table>
+    <p class="note" style="margin:10px 0 0;color:var(--faint)">
+      呈现≠语义护栏:此改动只换「音频从哪来」,不碰卡片生成/调度/评分;
+      新增测试断言「不载主媒体时切片仍可用」+「回放不触碰主播放器状态」。
+    </p>
+  </div>
+
+  <div class="sembox">
+    <h3>R2 · 卡面接图形语言 <span class="en">THE CARD SPEAKS THE PORTRAIT'S LANGUAGE</span></h3>
+    <div class="legend">
+      <div class="row"><span class="sw" style="background:var(--teal)"></span>
+        <span><b>训练通道标签(呈现层已有信息,零新数据)</b>:card.kind 本就隐含训练的
+        通道——word_recognition/chunk_cloze/phrase_presence=听,delayed_retelling/
+        source_sentence_recall=说。卡头的库存 Material 图标换成
+        <b>通道色点+人话</b>(「● 听 · 认词」),用 #47 的声/文语言,不再是随机图标堆。</span></div>
+      <div class="row"><span class="sw" style="background:var(--amber)"></span>
+        <span><b>词条三态环(需一次轻量取数,列为决策点)</b>:卡若挂在某词条上
+        (source.lexicalEntryId 在场),卡头可放一枚 16px 词条环显示该词四通道处境
+        ——「你正在复习的这个词,整体学得怎样」。代价=每卡一次 capability 取数
+        (或队列预取)。<b>不做则卡面只有通道色点</b>(仍比现状强),取数与否 owner 拍板。</span></div>
+    </div>
+  </div>
+
+  <div class="sembox">
+    <h3>R3 · delayed_retelling 卡面塌陷 <span class="en">FILL THE HOLLOW CARD</span></h3>
+    <p class="note" style="margin-bottom:0">
+      该卡型 prompt 区现状是 <span style="font-family:var(--mono);font-size:12px">SizedBox.shrink()</span>
+      ——卡面只剩两个按钮悬空。修正:延迟复述本就是「听完 → 隔一会儿 → 复述」,
+      prompt 区应有<b>一句任务说明 + 源句遮罩提示</b>(揭示前显示「凭记忆复述刚才那句」,
+      揭示后才亮出源句),与其他卡型的「揭示」动线统一,不再是空洞卡。
+    </p>
+  </div>
+
+  <!-- ───────────────────────── the single direction ───────────────────────── -->
+  <h2>微调稿 · 一张会呼吸的卡 <span class="en">THE BREATHING CARD</span></h2>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">MOCK · 卡头带进度条 + 通道标签(揭示前)</span>
+        <div class="prbar"><i style="width:38%"></i></div>
+        <div class="caplabel">本轮 3 / 8 · 顶部细进度带(R4:进度可见)</div>
+        <div class="card">
+          <div class="top">
+            <span class="kindchip"><span class="chan" style="background:var(--teal)"></span>听 · 认词</span>
+            <span class="ring amb" title="词条三态环(可选取数)"></span>
+            <span class="prog">新卡</span>
+          </div>
+          <div class="instr">听音,认出这个词</div>
+          <div class="playbtn">▶ 播放切片(自带解码器,无需载媒体)</div>
+          <div class="subbtn">🎙 影子跟读这条</div>
+          <div class="cue">＿＿＿＿</div>
+          <div class="field">在此输入你听到的词…</div>
+          <div class="grades"><span>没认出</span><span>模糊</span><span class="got">认得</span></div>
+        </div>
+        <span class="cap">MOCK · delayed_retelling(修塌陷:任务说明+遮罩)</span>
+        <div class="card">
+          <div class="top">
+            <span class="kindchip"><span class="chan" style="background:var(--moon)"></span>说 · 延迟复述</span>
+            <span class="ring"></span>
+            <span class="prog">复习 ×2</span>
+          </div>
+          <div class="instr">凭记忆复述刚才那句</div>
+          <div class="playbtn">▶ 再听一次</div>
+          <div class="subbtn">🎙 开始复述</div>
+          <div class="field" style="text-align:center;color:var(--faint)">
+            源句已遮起 · 复述后点「揭示」对照</div>
+          <div class="grades"><span>没说出</span><span>磕绊</span><span class="got">流畅</span></div>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">保留 + 修改</span>
+        <dl class="qa">
+          <dt><span class="qn">保</span>骨架原样</dt>
+          <dd>单卡居中、maxWidth 收敛(接 ListenBreakpoints)、AnimatedSwitcher
+          prompt↔answer、三档评分文案(描述性不愧疚)——审计判为资产,不动。</dd>
+          <dt><span class="qn">R1</span>解耦音频</dt>
+          <dd>第二解码器,与主播放器彻底分开;不载媒体也能复习整队。</dd>
+          <dt><span class="qn">R2</span>卡面语言</dt>
+          <dd>库存图标 → 通道色点+人话;可选词条环(取数决策点)。</dd>
+          <dt><span class="qn">R3</span>补塌陷</dt>
+          <dd>delayed_retelling 有了 prompt(任务说明+源句遮罩),与揭示动线统一。</dd>
+          <dt><span class="qn">R4</span>进度可见</dt>
+          <dd>顶部细进度带「本轮 N/M」(P4:仪器该有读数);数据来自既有
+          remaining/completedCount,呈现层聚合,无新语义。</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="verdict">
+      <b>呈现≠语义自检:</b>本稿全部改动落在「音频来源 / 卡头视觉 / 空卡填充 / 进度显示」
+      四处纯呈现;卡片 kind、评分档、调度全部原样。守门测试:①不载主媒体切片可用;
+      ②回放不改主播放器状态;③三档评分提交 payload 逐字节不变(#10/#11 铁律)。
+    </div>
+  </div>
+
+  <h2>拍板点 <span class="en">DECISIONS NEEDED · OWNER</span></h2>
+  <div class="decisions">
+    <ol>
+      <li><b>R1 第二解码器解耦</b>(不载媒体也能复习)——确认?(这是本页最重的价值,
+        技术已验证可行。)</li>
+      <li><b>卡头词条三态环</b>:做(每卡/队列取一次 capability)还是不做(只留通道色点)?
+        我倾向<b>做队列预取</b>——环是三层家在复习页的落点,与词汇本/教练同语言;
+        但若嫌取数重,通道色点已达标。</li>
+      <li><b>R4 进度带</b>:加顶部「本轮 N/M」细带——确认?(纯呈现,数据已有。)</li>
+      <li>其余(R2 通道标签、R3 补塌陷)是明确的死刑/填坑,默认执行,无异议即落。</li>
+    </ol>
+  </div>
+
+  <div class="pending">
+    拍板记录 <span style="font-family:var(--mono);font-size:10.5px">DECISION · OWNER · 待填</span><br>
+    owner 拍板后在此记录:各拍板点结论、修改要求。
+  </div>
+</div>
