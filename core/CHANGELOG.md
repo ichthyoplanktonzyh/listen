@@ -2,20 +2,25 @@
 
 ## Unreleased
 
-- 2026-07-24: 复习重设计探索稿（refs #70 · Phase 1 · 设计轨）。落库
-  `design-notes/listen-review-redesign.html`：审计判复习页骨架最贴 P5，故一稿微调、
-  保骨架换三处血肉，复习语义（#10/#11）零改动。**R1 音频自带第二解码器（技术已
-  验证可行）**：复习卡 source.mediaId + anchor startMs/endMs 齐全，走词汇本 _playCorpus
-  同路径（readMedia→OccurrenceMediaResolver→SlicePlayerController.open）与主播放器
-  彻底解耦——不载任何媒体也能复习整队，修掉现状 _canPlay 绑死同媒体导致的整队
-  clip unavailable。**R2 卡面接图形语言**：card.kind 隐含训练通道（认词/cloze=听、
-  延迟复述=说），库存 Material 图标换成通道色点+人话；卡头可选 16px 词条三态环
-  （需队列预取 capability，列为决策点，不做则只留色点仍达标）。**R3 delayed_retelling
-  补塌陷**：prompt 区从 SizedBox.shrink() 改为任务说明+源句遮罩，与揭示动线统一。
-  **R4 进度可见**：顶部细进度带「本轮 N/M」（数据来自既有 remaining/completedCount，
-  呈现层聚合）。呈现≠语义守门测试三条（不载主媒体切片可用/回放不改主播放器状态/
-  三档评分 payload 逐字节不变）。拍板点 4 条待 owner（R1 解耦/词条环取数与否/R4 进度带/
-  R2·R3 默认执行），拍板记录节留空。纯设计稿，无代码改动。
+- 2026-07-24: 复习重设计探索稿——就地重写纳入 anki 完整接入（refs #70 · Phase 1 · 设计轨）。
+  owner 定调复习系统完整接入 anki 体系（牌组+4 档评分+间隔预览+每日上限+自定义学习），
+  算法/后端由 issue 交付、本稿只管前端。**关键发现（挖后端）**：地基已铺好、前端没接——
+  `ReviewRating` 后端已是 4 档 Again/Hard/Good/Easy（coach 已统计 Easy），`ReviewSchedule`
+  已带 algorithm/due_at_ms/interval_days/stability/difficulty/lapse_count，现状前端只用
+  lapse_count、只暴露 3 档；真算法仍是占位 `listen_review_v1_heuristic_proxy`（硬编码
+  分段，stability/difficulty 恒 None）。`design-notes/listen-review-redesign.html` 整篇
+  重写：**差距地图**（8 要素分纯前端补/后端 issue）＋**三层结构 deck→session→card**
+  （牌组=通道自动分面而非用户手建文件夹，呼应四通道命脉+复用 #47 罗盘/环）＋**卡片四
+  状态**（new 月蓝新增第 5 色/learning 琥珀/review 青/suspended 压暗）＋**4 档评分带间隔
+  预览**（每档下 10m·1d·4d·9d，来自后端只读预测接口，未就位则隐藏不造数）。三个页面
+  mock：①牌组总览（罗盘环心=今日待复习数，四通道行带 new/learning/due 三色计数，空
+  牌组压暗）②复习会话（保骨架+R1 第二解码器解耦+状态徽标+R3 补塌陷+R4 进度带）
+  ③自定义学习（动词卡：多学新卡/提前/只练某通道/重练遗忘/按媒体）＋每日上限（保护非
+  KPI，达上限诚实态）。**前端/后端分工表**（9 行）：纯前端=4 档/间隔显示/第二解码器/
+  R2-R4/牌组总览页/custom study 入口；后端新 issue=真 FSRS/间隔预览接口/显式 state 字段/
+  牌组分组计数/每日上限配置/临时队列查询。呈现≠语义守门三条不变。拍板点 6 条待 owner
+  （牌组维度+多归属/new 第 5 色/间隔预览降级/每日上限归属/custom study v1 取舍/授权起草
+  后端 issue），拍板记录节留空。纯设计稿，无代码改动。
 
 - 2026-07-24: 学习教练 owner 拍板落库（refs #70 · Phase 1 · 设计轨）。拍板记录写入
   `listen-coach-redesign.html`：**方向=A 画像即导航**；owner「按你的建议」一并授权
