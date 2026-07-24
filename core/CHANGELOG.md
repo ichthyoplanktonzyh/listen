@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-24: Phase 2 前端拆刀清单落库（refs #70 · Phase 2 · 设计轨）。新增
+  `design-notes/listen-phase2-frontend-slices.md`：把五页拍板落成 15 把**自包含可逐刀
+  转交新会话**的实现刀，按波次组织——A 基建（S0 主题加月白/月蓝+列宽 token+
+  vocabularyTwoPane 断点）；B 纯前端不依赖后端（S1 表达写作台/S2 教练画像即导航/
+  S3 词汇本工作台差距面/S4 词汇本详情分段/S5 复习卡面呈现修复，跨刀依赖仅 S2←S3、
+  S4←S3）；C 对话页 realtime 已在（S6 舞台态 shell/S7 回声水面/S8 余音字幕诚实分层/
+  S9 结束页回流/S10 provider 迁设置域，S7-9←S6）；D 复习 anki 能力阻塞后端 #72/#73/#74
+  （S11 四态+间隔预览/S12 牌组双轨/S13 导入导出/S14 custom study+上限）。每刀标注
+  依赖/涉及文件行号/范围/验收，铁律（呈现≠语义、CHANGELOG、analyze 零告警、独立
+  worktree、CI 停摆靠本地兜底）统一前置不重复。**两个前置决策待 owner**：内容列宽
+  token 归属、CustomPaint 光源清单修订表述。波次 A+B+C 共 11 刀现在可推进，D 波 4 刀
+  等后端。纯文档，无代码改动。
+
 - 2026-07-24: 我的表达重设计探索稿（refs #70 · Phase 1 · 设计轨 · 五页最后一页）。落库
   `design-notes/listen-expression-redesign.html`，对准审计 E1–E5。**核心主张**：支架渐撤
   （看完整模板→只看槽位→只看关键词→隐藏模板）是本页唯一的产品级概念，现状却是弹窗
