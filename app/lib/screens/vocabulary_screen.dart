@@ -451,7 +451,13 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void initState() {
     super.initState();
     unawaited(_load());
-    unawaited(hunting.load(widget.api));
+    // The hunting controller is shared with the app shell, whose
+    // ListenableBuilder is already subscribed while this route's first build
+    // is in progress — load() notifies synchronously, so defer it past the
+    // frame (same pattern as realtime_conversation_panel).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(hunting.load(widget.api));
+    });
     final initialEntryId = widget.initialEntryId;
     if (initialEntryId != null) {
       unawaited(_openEntryById(initialEntryId));
