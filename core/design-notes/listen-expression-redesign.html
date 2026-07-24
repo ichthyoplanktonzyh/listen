@@ -1,0 +1,309 @@
+<title>listen · 我的表达重设计</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --moon:#c7d4cf;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:66ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 4px}
+  .constraints .c{font-size:12px;color:var(--muted);background:var(--raised);
+    border:1px solid var(--hair);border-radius:999px;padding:5px 12px}
+  h2{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:46px 0 10px}
+  h2 .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;
+    font-weight:500;margin-left:9px}
+  h3{font-size:14px;font-weight:700;margin:0 0 10px}
+  h3 .en{font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:500;margin-left:7px}
+  .note{font-size:14px;color:var(--muted);max-width:70ch;margin:0 0 18px}
+  .note b{color:var(--ink)}
+  .sembox{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:18px 20px;margin-top:16px}
+  .legend{display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--muted)}
+  .legend .row{display:flex;align-items:flex-start;gap:10px}
+  .sw{width:26px;height:12px;border-radius:3px;flex:none;margin-top:5px}
+  .legend b{color:var(--ink)}
+  table.map{width:100%;border-collapse:collapse;font-size:13px;color:var(--muted);margin-top:6px}
+  table.map th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;color:var(--faint);
+    text-align:left;font-weight:500;padding:6px 10px;border-bottom:1px solid var(--hair)}
+  table.map td{padding:8px 10px;border-bottom:1px solid var(--hair);vertical-align:top}
+  table.map b{color:var(--ink)}
+  .dir{background:var(--raised);border:1px solid var(--hair);border-radius:18px;overflow:hidden;margin-top:26px}
+  .dir-body{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:0}
+  @media(max-width:880px){.dir-body{grid-template-columns:1fr}}
+  .stage{background:radial-gradient(120% 100% at 50% 30%, #22302a 0%, var(--ground2) 80%);
+    padding:22px 18px;display:flex;flex-direction:column;gap:14px;align-items:center}
+  .stage .cap,.side .cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);font-family:var(--mono);align-self:flex-start;margin-bottom:2px}
+  .side{padding:20px 20px 22px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--hair)}
+  @media(max-width:880px){.side{border-left:none;border-top:1px solid var(--hair)}}
+  .qa{font-size:13px;color:var(--muted)}
+  .qa dt{color:var(--ink);font-weight:700;font-size:12.5px;margin-top:10px}
+  .qa dt .qn{font-family:var(--mono);color:var(--teal);font-size:10.5px;margin-right:6px}
+  .qa dd{margin:2px 0 0}
+  .qa b{color:var(--ink)}
+  .verdict{margin:14px 22px 20px;padding:12px 16px;border-radius:12px;font-size:13.5px;
+    background:var(--ground2);border:1px solid var(--hair);color:var(--muted)}
+  .verdict b{color:var(--ink)}
+  .decisions{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px}
+  .decisions ol{margin:8px 0 0;padding-left:22px;font-size:14px;color:var(--muted)}
+  .decisions li{margin-bottom:12px}
+  .decisions b{color:var(--ink)}
+  .pending{border:1px dashed var(--hair);border-radius:16px;padding:20px 22px;margin-top:16px;
+    color:var(--faint);font-size:14px}
+
+  /* ── the ladder ── */
+  .ladder{display:flex;flex-direction:column;gap:0;width:100%;max-width:460px}
+  .rung{display:flex;align-items:center;gap:11px;padding:9px 12px;border-left:2px solid var(--hair);
+    position:relative}
+  .rung.cur{border-left-color:var(--amber);background:#22302a}
+  .rung .lbl{font-size:11.5px;color:var(--ink);min-width:92px}
+  .rung .sub{font-size:9.5px;color:var(--faint)}
+  .rung .mix{display:flex;align-items:center;gap:0;height:9px;flex:1;max-width:150px;
+    border-radius:3px;overflow:hidden}
+  .rung .mix .mo{background:var(--moon);height:100%}
+  .rung .mix .yo{background:var(--teal);height:100%}
+  .rung .used{font-size:9px;color:var(--teal-dim);font-family:var(--mono)}
+
+  /* mock */
+  .mock{width:100%;max-width:520px;background:var(--ground);border:1px solid var(--hair);
+    border-radius:12px;overflow:hidden;font-size:10.5px;color:var(--muted)}
+  .mock .bar{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--hair);
+    background:#1d2823}
+  .mock .pane{padding:12px 14px}
+  .mock .w{color:var(--ink)}
+  .mock .mine{color:var(--teal);font-size:13.5px;line-height:1.5}
+  .mock .tmpl{color:var(--moon);opacity:.62;font-size:11px}
+  .mock .btnr{border:1px solid var(--hair);border-radius:6px;padding:2px 9px;font-size:9px;color:var(--muted)}
+  .mock .btnr.hot{border-color:var(--teal-dim);color:var(--teal)}
+  .mock .btnr.danger{border-color:#7a4a4a;color:#c98080}
+  .mock .card{border:1px solid var(--hair);border-radius:9px;padding:9px 11px;margin-bottom:7px}
+  .mock .t{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;color:var(--faint);
+    text-transform:uppercase;margin-bottom:4px}
+  .mock .histrow{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #223029}
+  .mock .histrow:last-child{border-bottom:none}
+  .mock .minibar{display:flex;height:7px;width:44px;border-radius:2px;overflow:hidden;flex:none}
+  .mock .minibar .mo{background:var(--moon);opacity:.7}
+  .mock .minibar .yo{background:var(--teal)}
+  .mock textarea,.mock .fakeinput{width:100%;background:var(--ground2);border:1px solid var(--hair);
+    border-radius:7px;padding:8px 10px;color:var(--teal);font-size:12.5px;font-family:var(--sans)}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · #70 · phase 1 / 5</div>
+  <h1>我的表达:把脚手架变成看得见的梯子</h1>
+  <p class="lede">
+    审计判词最轻,但埋着这五页里<b>教学法价值最高的概念</b>:支架渐撤
+    (看完整模板 → 只看槽位 → 只看关键词 → 隐藏模板)。它现在是弹窗底部一个
+    <b>默认永远停在最高辅助档的下拉框</b>,系统从不提降档,梯度沦为元数据标注(E2)。
+    加上用户自己的语言被当 subtitle 三行截断(E3)、删除无确认(E1)、导出零反馈(E5)。
+    本稿主张:<b>梯子要看得见,而且撤掉一阶,光就多归你一分</b>。
+  </p>
+  <div class="constraints">
+    <span class="c">呈现≠语义:四档 assistance / 三档自评的后端取值不动</span>
+    <span class="c">写作记录仍走 recordPersonalExpressionAttempt(channel=writing)</span>
+    <span class="c">版本历史/来源链路不动</span>
+    <span class="c">建议≠判定:降档是轻提示,用户自己决定(P3)</span>
+    <span class="c">i18n 归 #21(本页现全硬编码中文)</span>
+  </div>
+
+  <h2>共享语义 <span class="en">SHARED SEMANTICS</span></h2>
+
+  <div class="sembox">
+    <h3>梯子的光语义 <span class="en">THE LADDER — 与对话页 B 同宗</span></h3>
+    <p class="note" style="margin-bottom:12px">
+      对话页拍板的 B 回声水面里,<b>月白=别人给的光、信号青=你自己的回声</b>。
+      写作的支架完全同构:<b>模板是别人的语言(月白),你写的是自己的语言(青)</b>。
+      撤掉一阶脚手架,月白就少一分、你的青就多一分——梯子不是设置项,是一条光的迁移。
+    </p>
+    <div class="ladder">
+      <div class="rung"><span class="lbl">看完整模板</span>
+        <span class="mix"><span class="mo" style="flex:3"></span><span class="yo" style="flex:1"></span></span>
+        <span class="sub">模板 + 槽位全给</span></div>
+      <div class="rung cur"><span class="lbl">只看槽位</span>
+        <span class="mix"><span class="mo" style="flex:2"></span><span class="yo" style="flex:2"></span></span>
+        <span class="sub">只规划内容,不给结构</span><span class="used">你在这</span></div>
+      <div class="rung"><span class="lbl">只看关键词</span>
+        <span class="mix"><span class="mo" style="flex:1"></span><span class="yo" style="flex:3"></span></span>
+        <span class="sub">只剩词,句子归你</span></div>
+      <div class="rung"><span class="lbl">不看模板</span>
+        <span class="mix"><span class="yo" style="flex:4"></span></span>
+        <span class="sub">全是你的语言</span></div>
+    </div>
+    <p class="note" style="margin:12px 0 0;color:var(--faint)">
+      四阶=后端既有四取值(`template_visible` / `slot_hints` / `keywords` / `no_text`),
+      <b>不新增语义</b>,只是把下拉框换成一条能看见自己位置的梯子。
+    </p>
+  </div>
+
+  <div class="sembox">
+    <h3>三处诚实修复 <span class="en">HONESTY FIXES</span></h3>
+    <table class="map">
+      <tr><th>审计</th><th>现状</th><th>修复</th></tr>
+      <tr><td><b>E1</b> 删除无确认</td>
+        <td>底部「删除这个表达」直接执行,连版本历史一起消失</td>
+        <td>确认对话框,<b>明说会一起删掉 N 个版本与 M 条使用记录</b>
+          (与教练毕业动线同规格)</td></tr>
+      <tr><td><b>E3</b> 你的语言不发光</td>
+        <td>模板文本当 subtitle 三行截断、来源与它挤在一起</td>
+        <td><b>模板文本升为卡片主角</b>(大字号),名称降为眉标,
+          来源降为脚注;最近一次你写的句子以信号青出现在卡上</td></tr>
+      <tr><td><b>E5</b> 导出零反馈</td>
+        <td>写完文件即结束,不说成功也不说失败</td>
+        <td>成功:一行「已导出到 …/expressions.json」;失败:如实报错(P4)</td></tr>
+      <tr><td><b>E4</b> raw 枚举直出</td>
+        <td>使用历史直出 `template_visible` / `partly_expressed`</td>
+        <td>历史行=<b>梯子微条 + 人话</b>(见下方 mock)</td></tr>
+    </table>
+  </div>
+
+  <!-- ───────────────── A ───────────────── -->
+  <h2>方向 A · 写作台 <span class="en">THE WRITING DESK — 推荐</span></h2>
+  <p class="note">
+    弹窗死刑(E2):写作从 AlertDialog 变成<b>页内写作台</b>。梯子在左、你的句子在右,
+    模板随档位在场或退场;写完不消失,历史在同一页往下累积——你能看见自己一路撤掉了多少脚手架。
+  </p>
+  <div class="dir">
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">MOCK · 写作台(当前档=只看槽位)</span>
+        <div class="mock">
+          <div class="bar"><span class="w">谈论一次经历</span>
+            <span style="flex:1"></span><span class="btnr">编辑</span><span class="btnr danger">删除</span></div>
+          <div class="pane">
+            <div class="t">帮助梯子 · 撤一阶,光多归你一分</div>
+            <div class="ladder" style="max-width:100%;margin-bottom:10px">
+              <div class="rung"><span class="lbl">看完整模板</span>
+                <span class="mix"><span class="mo" style="flex:3"></span><span class="yo" style="flex:1"></span></span>
+                <span class="used">用过 4 次</span></div>
+              <div class="rung cur"><span class="lbl">只看槽位</span>
+                <span class="mix"><span class="mo" style="flex:2"></span><span class="yo" style="flex:2"></span></span>
+                <span class="used">你在这</span></div>
+              <div class="rung"><span class="lbl">只看关键词</span>
+                <span class="mix"><span class="mo" style="flex:1"></span><span class="yo" style="flex:3"></span></span>
+                <span class="sub">还没试过</span></div>
+              <div class="rung"><span class="lbl">不看模板</span>
+                <span class="mix"><span class="yo" style="flex:4"></span></span>
+                <span class="sub">还没试过</span></div>
+            </div>
+            <div class="tmpl" style="margin-bottom:8px">
+              槽位:<b style="color:var(--moon)">时间</b> ·
+              <b style="color:var(--moon)">发生的事</b> ·
+              <b style="color:var(--moon)">你的感受</b>
+              <span style="color:var(--faint)">(模板结构本档不显示)</span></div>
+            <div class="t">你的句子</div>
+            <div class="fakeinput" style="min-height:52px">Last summer I ended up
+              taking a job I never planned for, and honestly it changed how I
+              think about risk.</div>
+            <div style="display:flex;align-items:center;gap:7px;margin-top:9px">
+              <span style="font-size:9.5px">写完感觉:</span>
+              <span class="btnr">还需要练习</span>
+              <span class="btnr hot">基本表达出来</span>
+              <span class="btnr">表达自然</span>
+              <span style="flex:1"></span><span class="btnr hot">保存</span></div>
+          </div>
+        </div>
+        <span class="cap">MOCK · 列表卡(你的语言当主角)+ 使用历史</span>
+        <div class="mock">
+          <div class="pane">
+            <div class="card">
+              <div class="t">谈论一次经历 · 来自《The Interview》0:12:30</div>
+              <div class="w" style="font-size:12.5px">I ended up {动作}, and it
+                {结果}.</div>
+              <div class="mine" style="font-size:11px;margin-top:5px">
+                ↳ 你上次写:Last summer I ended up taking a job I never planned for…</div>
+            </div>
+            <div class="t">使用历史 · 梯子轨迹替 raw 枚举</div>
+            <div class="histrow">
+              <span class="minibar"><span class="mo" style="flex:2"></span><span class="yo" style="flex:2"></span></span>
+              <span class="w">只看槽位</span><span>· 基本表达出来</span>
+              <span style="flex:1"></span><span>3 天前</span></div>
+            <div class="histrow">
+              <span class="minibar"><span class="mo" style="flex:3"></span><span class="yo" style="flex:1"></span></span>
+              <span class="w">看完整模板</span><span>· 表达自然</span>
+              <span style="flex:1"></span><span>6 天前</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="side">
+        <span class="cap">要点</span>
+        <dl class="qa">
+          <dt><span class="qn">E2</span>梯子取代下拉框</dt>
+          <dd>四阶可见、当前档高亮、<b>用过几次/还没试过</b>如实标注。
+          换档即时改变模板区的在场程度——所见即所选。</dd>
+          <dt><span class="qn">P3</span>建议 ≠ 判定</dt>
+          <dd>当上一次在某档得到「表达自然」时,下一阶显示一行轻提示
+          「要不要试试更少的帮助?」——<b>只提一次、可忽略、不催</b>;
+          绝不自动降档,也不把它做成任务。</dd>
+          <dt><span class="qn">P2</span>你的句子发光</dt>
+          <dd>写作区文本用信号青(你的语言=光);模板区用月白且随档位递减——
+          页面本身演示「撤脚手架」这件事。</dd>
+          <dt><span class="qn">诚实</span>历史即证据</dt>
+          <dd>历史行=梯子微条+人话+自评,可看出「我是不是真的在往下走」;
+          <b>不做进度条、不算分</b>(P3/P4)。</dd>
+          <dt><span class="qn">窄窗</span></dt>
+          <dd>梯子横置为四段控件,其余不变。</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="verdict">
+      <b>自我证伪:</b>①梯子把「四个下拉选项」升级成页面主结构,若用户其实只想快速记一句,
+      成本变高——缓解:保存按钮始终可达,梯子不挡路(不强制交互);
+      ②「用过 N 次/还没试过」需要读既有 attempts 聚合,若历史为空则梯子只显示当前档,
+      不编造。
+    </div>
+  </div>
+
+  <!-- ───────────────── B ───────────────── -->
+  <h2>方向 B · 弹窗转页 <span class="en">DIALOG → PAGE — 保守案</span></h2>
+  <p class="note">
+    只做最小修:弹窗改成页面、两个 Dropdown 改成分段控件、加删除确认与导出反馈、
+    列表卡把模板文本升为主角。<b>不做梯子的光语义、不做降档提示</b>。
+  </p>
+  <div class="dir">
+    <div class="dir-body" style="grid-template-columns:1fr">
+      <div class="side" style="border-left:none">
+        <dl class="qa">
+          <dt><span class="qn">价值</span></dt>
+          <dd>E1/E3/E5 全修,E2 修一半(弹窗死了,但支架仍是「选项」而非「梯子」)。
+          实现刀很小。</dd>
+          <dt><span class="qn">证伪</span></dt>
+          <dd>支架渐撤是这页<b>唯一的产品级概念</b>,B 把它留在原地——
+          修完页面依然是「一个带下拉框的表单」。除非 owner 认为该概念应先验证再投入,
+          否则不推荐。</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <h2>拍板点 <span class="en">DECISIONS NEEDED · OWNER</span></h2>
+  <div class="decisions">
+    <ol>
+      <li><b>方向:A 写作台 / B 弹窗转页</b>。推荐 A——支架渐撤是本页唯一的产品级概念。</li>
+      <li><b>降档轻提示</b>(上次某档得「表达自然」→ 提示试试更少帮助,只提一次可忽略)
+        ——保留还是连提示也不要(纯用户自主)?</li>
+      <li><b>「用过 N 次」聚合</b>基于既有 attempts 前端聚合(不新增后端语义)——确认?</li>
+      <li><b>删除确认措辞</b>明说牵连(N 个版本 + M 条使用记录)——确认这个规格?</li>
+    </ol>
+  </div>
+
+  <h2 style="margin-top:46px">拍板记录 <span class="en">DECISION · OWNER · 2026-07-24</span></h2>
+  <div class="decisions">
+    <ol>
+      <li><b>方向:A 写作台</b>(弹窗死刑,梯子取代下拉框,你的句子发光)。</li>
+      <li><b>保留降档轻提示</b>:上次某档得「表达自然」→ 提示试试更少帮助;
+        <b>只提一次、可忽略、绝不自动降档、不做任务、不算分</b>(P3 建议≠判定)。</li>
+      <li><b>「用过 N 次」基于既有 attempts 前端聚合</b>,不新增后端语义;
+        历史为空则梯子只显示当前档,不编造。</li>
+      <li><b>删除确认明说牵连</b>(N 个版本 + M 条使用记录),与教练毕业动线同规格。</li>
+    </ol>
+  </div>
+</div>
