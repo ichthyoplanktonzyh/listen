@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- 2026-07-24: S1 我的表达写作台——支架渐撤变看得见的梯子(refs #78 · #70 Phase 2 · B波)。
+  呈现≠语义:四档 assistance / 三档自评的后端取值、attempt 记录、版本/来源链路零改动,前端只
+  呈现。**弹窗死刑**:`_write` 的 AlertDialog → 页内写作台 `_WritingDeskPage`(独立 route,梯子
+  在上、模板区随档在场/退场、你的句子在下,保存仍走 `recordPersonalExpressionAttempt(channel=
+  writing)`)。**梯子**:四阶 assistance 从 `DropdownButtonFormField` 变可见梯子,当前档高亮
+  (secondary/amber 左框)+ **月白→青光迁移**(月白 `ListenColors.moonWhite`=模板/别人的语言,
+  信号青 `colorScheme.primary`=你自己的语言;`moonFlex` 3→2→1→0 单调递减、`signalFlex` 1→2→3→4
+  单调递增);「用过 N 次/还没试过」由既有 attempts **纯前端聚合**(仅 writing channel),历史
+  为空则只标当前档「你在这」、其余档留白不编造。**降档轻提示**(P3 建议≠判定):最近一次
+  writing 得「表达自然」且非最底档 → 一行提示试更少帮助(指向下一阶),**只提一次、可忽略、绝不
+  自动降档**(无跨会话偏好存储,「只提一次」落在本写作台会话内,不新增后端)。**E1** 删除加确认
+  对话框,明说牵连 N 个版本 + M 条使用记录;**E3** 列表卡重排:模板文本升主角(大字号)、名称
+  降眉标、来源降脚注、最近一次你写的句子以信号青上屏;**E4** 使用历史行=梯子微条 + 人话(通道/
+  档名/自评/相对时间)替 raw 枚举;**E5** 导出成功/失败 SnackBar 反馈。光比例条沿用回声水面
+  月白→青光语义但因数据语义不同(脚手架撤除比例 vs 四通道能力)自建 `_LightMixBar`,未复用
+  `CapabilityEchoBars`。动效走 `ListenMotion`(换档/模板切换 base + reduce-motion 归零),圆角
+  用 `ListenRadii`、列宽接 `ListenBreakpoints.contentColumnMax`,无颜色/圆角字面量。新增 6 测试
+  (页非弹窗+光比例单调+隐藏模板/前端聚合计数/历史空不编造/降档提示三性质/删除确认牵连/E3+E4
+  呈现);`flutter analyze` 零告警,全量 645 绿(基线 640,替原 1 个写作弹窗测试为 6 个)。
+
 - 2026-07-24: S5 复习卡面呈现修复——切片解绑主播放器 + 四档评分 + 塌陷/进度(refs #80 ·
   #70 Phase 2 · B波)。复习页不依赖后端的呈现层修复,呈现≠语义(调度/卡片生成/rating
   提交零改动)。**R1(本页最重)**:`_canPlay` 不再要求 `currentMediaId==source.mediaId`;
