@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-23: 运行时异常修复——词汇本首帧不再触发 `setState() or markNeedsBuild()
+  called during build`（refs #68）。根因：`showVocabularyFlow` 路由挂载
+  `VocabularyScreen` 时，`initState` 同步调 `HuntingController.load` →
+  `Store.update` 同步 `notifyListeners`，而 shell 的 `ListenableBuilder`
+  （Navigator 的祖先）已订阅该共享 controller——祖先在路由子树 build 期被
+  markNeedsBuild，框架抛异常。修复对齐仓库既有惯例（realtime_conversation_panel
+  同一模式）：共享 controller 的 load 移入 `addPostFrameCallback`，首帧后再通知；
+  不动 Store 通知语义。全仓排查 initState 同步调用共享可监听对象，仅此一处命中
+  （coach_dashboard/review_queue 是本地 controller，initState 时无 listener，安全）。
+  **测试 +1（共 627 绿）**：复刻 shell 形状（祖先 ListenableBuilder 订阅共享
+  HuntingController + 路由 push）的首帧回归测试，修复前红、修复后绿。
+  `flutter analyze` 零告警。
+
 - 2026-07-23: 五常用页现状审计落库（refs #70 · Phase 0 · 设计轨）。新增
   `design-notes/listen-common-pages-audit.md`：五页（词汇本/我的表达/复习/对话/教练）
   逐页对照宪章五原则 + 核心论点（四通道闭环 + gap-(c)），每条痛点带 file:line 可指认、
