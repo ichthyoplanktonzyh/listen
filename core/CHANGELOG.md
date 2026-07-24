@@ -165,6 +165,37 @@
   节留空。动效自检：呼吸 2.6s 对齐 ListenMotion.ambient，禁 bounce，
   prefers-reduced-motion 全降级。纯设计稿，无代码改动。
 
+- 2026-07-23: 运行时异常修复——词汇本首帧不再触发 `setState() or markNeedsBuild()
+  called during build`（refs #68）。根因：`showVocabularyFlow` 路由挂载
+  `VocabularyScreen` 时，`initState` 同步调 `HuntingController.load` →
+  `Store.update` 同步 `notifyListeners`，而 shell 的 `ListenableBuilder`
+  （Navigator 的祖先）已订阅该共享 controller——祖先在路由子树 build 期被
+  markNeedsBuild，框架抛异常。修复对齐仓库既有惯例（realtime_conversation_panel
+  同一模式）：共享 controller 的 load 移入 `addPostFrameCallback`，首帧后再通知；
+  不动 Store 通知语义。全仓排查 initState 同步调用共享可监听对象，仅此一处命中
+  （coach_dashboard/review_queue 是本地 controller，initState 时无 listener，安全）。
+  **测试 +1（共 627 绿）**：复刻 shell 形状（祖先 ListenableBuilder 订阅共享
+  HuntingController + 路由 push）的首帧回归测试，修复前红、修复后绿。
+  `flutter analyze` 零告警。
+
+- 2026-07-23: 五常用页现状审计落库（refs #70 · Phase 0 · 设计轨）。新增
+  `design-notes/listen-common-pages-audit.md`：五页（词汇本/我的表达/复习/对话/教练）
+  逐页对照宪章五原则 + 核心论点（四通道闭环 + gap-(c)），每条痛点带 file:line 可指认、
+  可证伪。**横切 6 条**：C1 弹窗承载核心动线（gap-(c) 两个仪表、写句练习全是
+  AlertDialog）、C2 raw 枚举/内部 UUID 直出（诚实仪器≠debug 输出）、C3 词汇本 AppBar
+  6 图标堆核心与维护平级、C4 五页内容列宽各自硬编码且 `ListenBreakpoints` 零使用
+  （grep 验证）、C5 文案三制度（表达硬编码中文/对话硬编码英文/其余 l.text，处置归
+  #21）、C6 #47 图形语言止步画像未下沉动线。**逐页最重**：词汇本 V1 能力 chip 在
+  「全部」档静默失效 + V2 gap-(c) 无常驻家；表达 E1 删除无确认 + E2 支架渐撤教学法
+  沦为下拉框；复习 R1 音频可用性绑死主播放器（无媒体进复习全队 clip unavailable，
+  第二解码器先例在词汇本）+ R3 delayed_retelling 卡面塌陷；对话 D1 一屏三职到 D7
+  通用路由（owner 已定 GPT Live 全屏重设计，controller 状态机与「本地 Whisper 才是
+  learner output」诚实分层列为必继承资产）；教练 K1 起步清单不可勾 + K4 画像与下钻
+  断连。**核心论点地图**：闭环每环都在但「环」没被画出来，gap-(c) 呈现规格全场最低。
+  宪章修订 3 点单列交 owner（CustomPaint 光源清单过时、缺「舞台态」规则、内容列宽
+  token 缺席）。附严重度排序：对话 → 词汇本 → 教练 → 复习 → 表达，作 Phase 1 排产
+  依据。纯文档，无代码改动。
+
 - 2026-07-23: 能力画像换装——拍板方向落地（refs #47 · 设计轨）。新增
   `widgets/common/capability_viz.dart` 作为画像图形语言的唯一家，dashboard 与词条
   快照从此同一套语言：**罗盘总览**（`CapabilityCompass`：四象限=2×2，左声右文、
