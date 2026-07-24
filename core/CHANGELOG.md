@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-24: S5 复习卡面呈现修复——切片解绑主播放器 + 四档评分 + 塌陷/进度(refs #80 ·
+  #70 Phase 2 · B波)。复习页不依赖后端的呈现层修复,呈现≠语义(调度/卡片生成/rating
+  提交零改动)。**R1(本页最重)**:`_canPlay` 不再要求 `currentMediaId==source.mediaId`;
+  复习页自持第二解码器 `SlicePlayerController` + `OccurrenceMediaResolver`(走词汇本
+  `_playCorpus` 同路径:`source.mediaId`→`readMedia` 取指纹→resolve 本地文件→独立播放),
+  与主播放器彻底解耦——不载媒体也能复习整队,修掉整队 clip unavailable;解析失败在卡内
+  诚实报错不灰整卡。**四档评分**:三档(again/hard/good)→ 四档,补 `easy`(后端 `ReviewRating`
+  enum 本已四档,前端只暴露三档);提交仍是既有 rating 字符串,payload 与后端 snake_case
+  一致。**R3**:`delayed_retelling` prompt 区从 `SizedBox.shrink()`(塌陷)改任务说明框
+  (源句遮起)。**R4**:AppBar 加进度条 + 「本轮 N/M」读数(数据已有,呈现层)。**R2**:
+  卡头 kind 库存图标 → 该卡训练哪个通道(kind→通道 呈现映射 + capability 图形语言);
+  词条三态环因队列 entry 不带画像数据、需后端 fetch,诚实留给波次 D 不前端造。构造签名去
+  `onPlayRange`/`onPausePlayback`/`currentMediaId`,加 `onPauseBackgroundPlayback`/`resolver`/
+  `createSlicePlaybackAdapter`(后二为测试缝);flow 与 main.dart 接线同步。列宽 token 接
+  `cardColumnMax`(680→S0 token)。新增 4 测试(切片独立解码播放/解析失败诚实报错/Easy 四档
+  payload/塌陷改任务框);`flutter analyze` 零告警,全量 640 绿(基线 636)。
+
 - 2026-07-24: S0 主题加色 + 列宽 token + 双栏断点(refs #77 · #70 Phase 2 · 基建)。Phase 2
   基建起点刀,解锁 B/C 波。①`theme/listen_theme.dart` 入宪章色表第 4/5 色:**月白
   `#c7d4cf`**(对方的声音/照进来的光)、**月蓝 `#6db3ff`**(复习 `new` 首见态),作光源家族
