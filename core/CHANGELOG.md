@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- 2026-07-24: 复习稿再扩展——anki 数据双向互通（refs #70 · Phase 1 · 设计轨）。owner 补充
+  定位从「anki 式体验」升级为「完全接入 anki 数据体系」：.apkg 卡包导入 listen 使用、
+  listen 卡导出回 anki。`listen-review-redesign.html` 增补：**牌组改双轨**（listen 原生
+  卡按四通道自动分面=智能牌组，导入 anki 卡保留其原 deck 树=导入牌组，总览分两区；
+  通道可作跨两类的过滤视图，外来卡默认无四通道归属不瞎归）＋**新增④ anki 数据互通
+  章节**：模型映射表（ReviewItem↔note、kind↔note type、schedule↔card FSRS 状态、
+  ReviewAttempt↔revlog 无损；媒体切片→[sound:]音频有损、四通道→tag 降级、影子跟读/
+  画像回流 listen 独有不导出）＋导入（anki 通用卡成「外来卡」：纯文本复习+FSRS 调度，
+  但无切片/不能影子跟读/不进四通道画像，卡头 badge 诚实标注）＋导出（保真提示对话框
+  明说有损，P4）＋外来卡会话 mock。**关键论点**：调度内核必须是 anki 兼容 FSRS——
+  否则导入卡带 anki stability/difficulty 而 listen 用 heuristic_proxy 瞎算，两边语义
+  打架、导出 anki 不认，故「真 FSRS」从「更好算法」升为「互通地基·后端第一优先」。
+  分工表加 3 行（导入/导出/FSRS 互通前提）。拍板点增至 9 条（+导入格式深度 .apkg vs
+  colpkg/AnkiConnect/AnkiWeb、媒体保真边界、外来卡不进画像）。纯设计稿，无代码改动。
+
 - 2026-07-24: 复习重设计探索稿——就地重写纳入 anki 完整接入（refs #70 · Phase 1 · 设计轨）。
   owner 定调复习系统完整接入 anki 体系（牌组+4 档评分+间隔预览+每日上限+自定义学习），
   算法/后端由 issue 交付、本稿只管前端。**关键发现（挖后端）**：地基已铺好、前端没接——

@@ -116,18 +116,21 @@
   <div class="eyebrow">listen · #70 · phase 1 / 4 · anki 接入</div>
   <h1>复习:接入 anki 的间隔重复体系</h1>
   <p class="lede">
-    owner 定调:复习系统<b>完整接入 anki 体系</b>(牌组 + 4 档评分 + 间隔预览 +
-    每日上限 + 自定义学习),算法与后端由 issue 交付,本稿只管前端。挖后端有个好消息:
-    <b>地基已经铺好、前端却没接</b>——`ReviewRating` 后端已是 4 档
+    owner 定调:复习系统<b>完全接入 anki 体系</b>——不只是 anki 式体验(牌组+4 档+间隔
+    预览+每日上限+自定义学习),更是<b>数据双向互通</b>:anki 卡包能导入 listen 使用,
+    listen 的卡能导出回 anki。定位=<b>「anki 的调度内核 + anki 的数据格式 + listen 的
+    UI 和增强卡型」</b>。挖后端有个好消息:地基已铺好——`ReviewRating` 后端已是 4 档
     (Again/Hard/Good/Easy),`ReviewSchedule` 已带 algorithm/due_at_ms/interval_days/
-    stability/difficulty/lapse_count。现状前端只用了其中 <b>1 个字段</b>(lapse_count)、
-    只暴露了 <b>3 档</b>评分。anki 化的一大半是「把已有数据显示出来」。
+    <b>stability/difficulty</b>/lapse_count。stability/difficulty 正是 FSRS(anki 现行内核)
+    的两个状态变量——<b>这不是巧合,是为互通预留的位</b>。现状前端只用了 1 个字段、
+    只暴露 3 档评分。
   </p>
   <div class="constraints">
     <span class="c">呈现≠语义:调度算法/卡片生成(#10/#11)零改动</span>
     <span class="c">保骨架:单卡居中、揭示动线、切片播放</span>
     <span class="c">anki 长在 listen 语言里:暗场/#47 图形/诚实/不催促</span>
-    <span class="c">牌组=系统自动分面,非用户手建文件夹</span>
+    <span class="c">牌组双轨:listen 原生通道分面 + 导入 anki deck 树共存</span>
+    <span class="c">互通=anki 兼容 FSRS + .apkg 双向 + 诚实的保真边界</span>
     <span class="c">后端能力缺口→GitHub issue,前端预留接口</span>
   </div>
 
@@ -152,26 +155,41 @@
       <td class="be">后端配置 + 前端设置</td></tr>
     <tr><td>自定义学习 custom study</td><td>无临时队列</td><td>无</td>
       <td class="be">后端查询 + 前端入口</td></tr>
+    <tr><td><b>anki 卡包导入(.apkg)</b></td><td>无解析器</td><td>无</td>
+      <td class="be">后端解析+映射 + 前端入口/外来卡呈现</td></tr>
+    <tr><td><b>导出到 anki(.apkg)</b></td><td>无生成器</td><td>无</td>
+      <td class="be">后端生成+媒体渲染 + 前端保真提示</td></tr>
   </table>
+  <p class="note" style="margin-top:12px;color:var(--faint)">
+    互通的硬前提:<b>调度内核必须是 anki 兼容的 FSRS</b>。否则导入的卡带 anki 的
+    stability/difficulty,listen 却用 heuristic_proxy 重新瞎算,两边语义打架、导出回去
+    anki 不认。所以「真 FSRS」从「更好的算法」升级为<b>互通的地基</b>——后端 issue 第一优先。
+  </p>
 
   <h2>三层结构 <span class="en">DECK → SESSION → CARD(anki 的三层,listen 化)</span></h2>
 
   <div class="sembox">
-    <h3>牌组=通道自动分面(关键提案,待拍板)<span class="en">DECKS ARE FACETS, NOT FOLDERS</span></h3>
+    <h3>牌组双轨:通道分面 + 导入 deck 树共存 <span class="en">TWO KINDS OF DECKS</span></h3>
     <p class="note" style="margin-bottom:10px">
-      anki 的 deck 是用户手建的层级文件夹。但 listen 的复习卡是<b>系统从真实媒体/练习
-      自动生成的</b>(认词卡来自词条、延迟复述来自口语尝试)——用户不"建牌组",卡自动流入。
-      强行让用户建文件夹既违反「在场不催促」(P3),也没有素材可组织。
-      <b>提案:牌组=按四通道自动分面</b>(听/说/读/写),直接呼应产品命脉,
-      且牌组总览可直接复用 #47 罗盘/环。备选维度见拍板点。
+      互通带来一个新张力:<b>listen 原生卡没有 deck、导入的 anki 卡自带 deck 树</b>。
+      我原本推荐「不要用户手建文件夹」——对 listen 原生卡成立(卡从媒体/练习自动流入,
+      按四通道自动分面即可)。但导入的 anki 卡是用户在 anki 里<b>已经组织好的</b>,
+      强行按通道打散会毁掉他熟悉的结构。所以牌组分两类,总览分两区:
     </p>
     <table class="map">
-      <tr><th>牌组</th><th>装什么卡</th><th>图形</th></tr>
-      <tr><td>听</td><td>认词/块填空/连读在场/源句回忆</td><td rowspan="4">每牌组一枚 #47 小环,罗盘作总览</td></tr>
-      <tr><td>说</td><td>延迟复述/源句复述</td></tr>
-      <tr><td>读</td><td>(未来读通道复习卡)</td></tr>
-      <tr><td>写</td><td>(未来写通道复习卡)</td></tr>
+      <tr><th>牌组类型</th><th>来源</th><th>组织方式</th><th>图形</th></tr>
+      <tr><td><b>智能牌组</b></td><td>listen 原生卡(认词/复述/切片…)</td>
+        <td>按四通道<b>自动分面</b>(听/说/读/写),不需用户建</td>
+        <td>#47 小环 + 罗盘总览</td></tr>
+      <tr><td><b>导入牌组</b></td><td>.apkg 导入的 anki 卡</td>
+        <td><b>保留 anki 原 deck 树</b>(尊重用户已有组织)</td>
+        <td>中性图标 + due 计数(外来卡无四通道,不套 #47)</td></tr>
     </table>
+    <p class="note" style="margin:10px 0 0;color:var(--faint)">
+      通道也可作为跨两类牌组的<b>过滤视图</b>(「只看说通道」能同时抓智能牌组的说 +
+      导入牌组里被标为说的卡),但组织单位仍是牌组。诚实边界:外来卡默认无四通道归属
+      (它没有听力证据来源),除非用户手动归通道——不前端瞎归。
+    </p>
   </div>
 
   <div class="sembox">
@@ -373,8 +391,90 @@
     </p>
   </div>
 
+  <!-- ───────────────── anki 数据互通 ───────────────── -->
+  <h2>④ anki 数据互通 <span class="en">TWO-WAY INTEROP — 本次范围扩展的核心</span></h2>
+  <p class="note">
+    完全接入 anki 的数据体系:<b>anki 卡包(.apkg)导入 listen 使用,listen 卡导出回
+    anki</b>。这不是简单的文件转换——两个模型要做<b>诚实的有损映射</b>:能无损的无损、
+    该丢的明说,绝不假装保真(P4)。
+  </p>
+
+  <div class="sembox">
+    <h3>模型映射 <span class="en">MODEL MAPPING</span></h3>
+    <table class="map">
+      <tr><th>listen</th><th>↔</th><th>anki</th><th>保真</th></tr>
+      <tr><td>ReviewItem</td><td>↔</td><td>note</td><td style="color:var(--teal)">无损</td></tr>
+      <tr><td>ReviewCard.kind(6 种)</td><td>↔</td><td>note type + 模板(每 kind 一型)</td><td style="color:var(--teal)">无损</td></tr>
+      <tr><td>prompt/target/answer</td><td>↔</td><td>note fields</td><td style="color:var(--teal)">无损</td></tr>
+      <tr><td><b>schedule</b>(stability/difficulty/due/ivl/lapse)</td><td>↔</td>
+        <td>card 的 FSRS 状态</td><td style="color:var(--teal)"><b>无损(前提:两边都 FSRS)</b></td></tr>
+      <tr><td>复习历史(ReviewAttempt)</td><td>↔</td><td>revlog</td><td style="color:var(--teal)">无损</td></tr>
+      <tr><td><b>媒体切片</b>(mediaId+start/endMs)</td><td>→</td>
+        <td>渲染成音频 [sound:x.mp3] + 时间戳存元数据字段</td>
+        <td style="color:var(--amber)">有损:视频→音频、原媒体锚点丢失</td></tr>
+      <tr><td><b>四通道归属</b></td><td>→</td><td>tag `listen::channel::…`</td>
+        <td style="color:var(--amber)">降级:anki 只当标签,无画像语义</td></tr>
+      <tr><td>影子跟读 / 四通道画像回流</td><td>—</td><td>anki 无对应</td>
+        <td style="color:var(--faint)">listen 独有,不导出</td></tr>
+    </table>
+  </div>
+
+  <div class="split2">
+    <div class="sembox" style="margin-top:16px">
+      <h3>导入:anki → listen <span class="en">IMPORT</span></h3>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--moon)"></span>
+          <span>anki 通用卡(正/反、cloze)进 listen 成<b>外来卡</b>:纯文本复习,
+          享受 anki 兼容的 FSRS 调度,但<b>无媒体切片、不能影子跟读、不进四通道画像</b>
+          (它没有听力证据来源——诚实)。</span></div>
+        <div class="row"><span class="sw" style="background:var(--new)"></span>
+          <span><b>外来卡 badge</b>:卡头明确标「来自 anki · 无听力增强」,
+          不假装是 listen 原生卡。[sound:] 音频可播(普通音频,非切片播放器)。</span></div>
+        <div class="row"><span class="sw" style="background:#3a4a44"></span>
+          <span>保留 anki 的 deck 树(导入牌组区)+ guid(去重/回传锚点);
+          调度状态(due/ivl/factor→stability)按 FSRS 映射入库。</span></div>
+      </div>
+    </div>
+    <div class="sembox" style="margin-top:16px">
+      <h3>导出:listen → anki <span class="en">EXPORT</span></h3>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--teal)"></span>
+          <span>选牌组/通道导出成 .apkg:文本字段 + <b>切片渲染为嵌入音频</b> +
+          schedule 写入 card FSRS 状态 + 四通道进 tag。导入任意 anki 即可复习。</span></div>
+        <div class="row"><span class="sw" style="background:var(--amber)"></span>
+          <span><b>导出前保真提示对话框</b>(P4):明说「视频将转为音频、原媒体跳转/
+          影子跟读/画像回流不会带到 anki」,让用户知情再导——不静默丢信息。</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sembox">
+    <h3>外来卡在会话里 <span class="en">IMPORTED CARD IN SESSION</span></h3>
+    <div class="mock" style="max-width:420px">
+      <div class="pane">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
+          <span class="statechip"><span class="dot" style="background:var(--new)"></span>来自 anki</span>
+          <span style="font-size:9.5px;color:var(--faint)">· 无听力增强 · deck: 日语 N3</span>
+          <span style="flex:1"></span><span class="kind" style="color:var(--faint);font-family:var(--mono);font-size:10px">imported</span>
+        </div>
+        <div class="w" style="font-size:15px;text-align:center;margin:10px 0">これ は 何 ですか</div>
+        <div class="subbtn">🔊 播放卡片音频([sound:])</div>
+        <div class="grades4">
+          <div class="g"><div class="lab">没记住</div><div class="iv">10m</div></div>
+          <div class="g"><div class="lab">模糊</div><div class="iv">1d</div></div>
+          <div class="g good"><div class="lab">记得</div><div class="iv">4d</div></div>
+          <div class="g easy"><div class="lab">轻松</div><div class="iv">9d</div></div>
+        </div>
+      </div>
+    </div>
+    <p class="note" style="margin:10px 0 0;color:var(--faint)">
+      同一套单卡骨架 + 4 档评分(统一体验),但缺切片播放器/影子跟读/四通道徽标——
+      UI 诚实反映它是外来卡,不给它 listen 卡才有的能力假象。
+    </p>
+  </div>
+
   <!-- ───────────────── 每日上限 / 设置 ───────────────── -->
-  <h2>④ 每日上限 <span class="en">DAILY LIMITS</span></h2>
+  <h2>⑤ 每日上限 <span class="en">DAILY LIMITS</span></h2>
   <p class="note">
     anki 每牌组有「每日新卡上限 / 每日复习上限」。listen 现状 limit=20 写死。
     加一个轻设置:全局(或每通道)新卡/复习上限,达上限后总览诚实显示「今日已达上限,
@@ -395,6 +495,12 @@
     <tr><td>牌组</td><td class="fe">牌组总览页(复用罗盘/环)</td><td class="be"><b>按通道分组 + new/learning/due 计数</b></td></tr>
     <tr><td>每日上限</td><td class="fe">轻设置 + 达上限诚实态</td><td class="be"><b>配置存储 + 队列尊重上限</b></td></tr>
     <tr><td>自定义学习</td><td class="fe">动词卡入口</td><td class="be"><b>临时队列查询参数</b></td></tr>
+    <tr><td><b>anki 导入 .apkg</b></td><td class="fe">导入入口 + 外来卡呈现 + 导入牌组区</td>
+      <td class="be"><b>.apkg 解析(SQLite/media)→ note/card/deck/FSRS 映射入库</b></td></tr>
+    <tr><td><b>导出 .apkg</b></td><td class="fe">导出入口 + 保真提示对话框</td>
+      <td class="be"><b>anki schema 生成 + 切片渲染音频 + FSRS 状态写出 + 打包</b></td></tr>
+    <tr><td>FSRS(互通前提)</td><td class="fe">—</td>
+      <td class="be"><b>anki 兼容 FSRS(非自研启发式),状态语义与 anki 一致</b></td></tr>
   </table>
 
   <h2>拍板点 <span class="en">DECISIONS NEEDED · OWNER</span></h2>
@@ -410,8 +516,16 @@
       <li><b>每日上限归全局还是每通道</b>?达上限的措辞按「保护非 KPI」(P3)——确认基调?</li>
       <li><b>custom study 五张动词卡</b>的取舍(多学新卡/提前/只练某通道/重练遗忘/按媒体)
         ——哪些进 v1?</li>
-      <li><b>后端 issue 我起草交你过目</b>:含真 FSRS + 预览接口 + state 字段 + 牌组计数 +
-        每日上限 + custom study 查询——授权我先拟 issue 正文?</li>
+      <li><b>后端 issue 我起草交你过目</b>:含 anki 兼容 FSRS + 预览接口 + state 字段 +
+        牌组计数 + 每日上限 + custom study 查询 + <b>.apkg 导入导出 + 媒体渲染</b>——
+        授权我先拟 issue 正文?</li>
+      <li><b>【互通】导入格式深度</b>:v1 做 <b>.apkg 文件双向</b>(离线卡包,最标准、够用,
+        推荐)——是否够?更深的 `.colpkg`(整个 collection)、AnkiConnect(实时对接运行中
+        的 anki)、AnkiWeb 账号同步是完全不同量级,列为未来?</li>
+      <li><b>【互通】媒体保真边界</b>:listen 切片导出到 anki 只能是<b>音频</b>
+        (视频转音频、原媒体跳转/影子跟读丢失),导出前对话框明说——接受这个有损?</li>
+      <li><b>【互通】外来卡不进四通道画像</b>(它无听力证据来源,默认无通道归属,
+        除非用户手动归)——确认这个诚实边界?</li>
     </ol>
   </div>
 
