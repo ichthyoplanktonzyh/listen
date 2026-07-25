@@ -7,9 +7,9 @@ use domain::{
     ListeningComprehensionReport, ListeningInboxResolution, MediaId, MediaItem, MediaKind,
     MediaTriageIntent, ObservationResult, PlayableSegment, PracticeAnchor, PracticeItemId,
     PracticeKind, PracticeMode, PracticeSessionId, PracticeTarget, RecordingAssetId,
-    RecordingAudioMetadata, ReviewAttempt, ReviewItem, ReviewItemId, ReviewRating, ReviewSchedule,
-    ReviewSource, SubtitleSentenceId, SubtitleTrackId, TimelineCreator, TimelineMetrics,
-    TimelineStatus, TimingSource, UpgradeSuggestion, WordTimelineId, WordTiming,
+    RecordingAudioMetadata, ReviewAttempt, ReviewCardState, ReviewItem, ReviewItemId, ReviewRating,
+    ReviewSchedule, ReviewSource, SubtitleSentenceId, SubtitleTrackId, TimelineCreator,
+    TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion, WordTimelineId, WordTiming,
 };
 use serde::{Deserialize, Serialize};
 
@@ -239,7 +239,7 @@ pub struct CreateReviewItem {
     pub prompt_snapshot: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewCardKind {
     WordRecognition,
@@ -261,7 +261,46 @@ pub struct ReviewCard {
 pub struct ReviewQueueEntry {
     pub item: ReviewItem,
     pub schedule: ReviewSchedule,
+    pub state: ReviewCardState,
     pub card: ReviewCard,
+    pub origin: ReviewItemOrigin,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewOriginKind {
+    Native,
+    ImportedAnki,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewItemOrigin {
+    pub kind: ReviewOriginKind,
+    pub anki_guid: Option<String>,
+    pub deck_id: Option<String>,
+    pub deck_name: Option<String>,
+    /// Imported cards have no Listen evidence/channel assignment by default.
+    pub has_listening_enhancements: bool,
+}
+
+impl ReviewItemOrigin {
+    pub fn native() -> Self {
+        Self {
+            kind: ReviewOriginKind::Native,
+            anki_guid: None,
+            deck_id: None,
+            deck_name: None,
+            has_listening_enhancements: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewIntervalPreview {
+    pub rating: ReviewRating,
+    pub due_at_ms: u64,
+    pub interval_days: f32,
+    pub state: ReviewCardState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -271,12 +310,165 @@ pub struct SubmitReviewAttempt {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmitCustomStudyAttempt {
+    pub item_id: ReviewItemId,
+    pub rating: ReviewRating,
+    #[serde(flatten)]
+    pub kind: CustomStudyKind,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReviewSubmission {
     pub attempt: ReviewAttempt,
     pub schedule: ReviewSchedule,
     pub generated_observation_ids: Vec<LexicalObservationId>,
     pub hunting_candidate_ids: Vec<HuntingCandidateId>,
     pub upgrade_suggestions: Vec<UpgradeSuggestion>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewChannel {
+    Listening,
+    Speaking,
+    Reading,
+    Writing,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewStateCounts {
+    pub new: u32,
+    pub due: u32,
+    pub learning: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewChannelCounts {
+    pub channel: ReviewChannel,
+    pub counts: ReviewStateCounts,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportedDeckCounts {
+    pub deck_id: String,
+    pub name: String,
+    pub parent_deck_id: Option<String>,
+    pub counts: ReviewStateCounts,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportedDeckSchedule {
+    pub item_id: ReviewItemId,
+    pub anki_guid: String,
+    pub deck_id: String,
+    pub name: String,
+    pub parent_deck_id: Option<String>,
+    pub schedule: ReviewSchedule,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewDailyLimits {
+    pub new_cards: u32,
+    pub reviews: u32,
+}
+
+impl Default for ReviewDailyLimits {
+    fn default() -> Self {
+        Self {
+            new_cards: 20,
+            reviews: 200,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewLimitStatus {
+    pub limits: ReviewDailyLimits,
+    pub new_completed: u32,
+    pub reviews_completed: u32,
+    pub new_limit_reached: bool,
+    pub review_limit_reached: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewQueue {
+    pub entries: Vec<ReviewQueueEntry>,
+    pub limit_status: ReviewLimitStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReviewDeckOverview {
+    pub channels: Vec<ReviewChannelCounts>,
+    pub imported_decks: Vec<ImportedDeckCounts>,
+    pub limit_status: ReviewLimitStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CustomStudyKind {
+    MoreNew,
+    ReviewAhead,
+    Channel { channel: ReviewChannel },
+    Forgotten { minimum_lapses: Option<u32> },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomStudyRequest {
+    #[serde(flatten)]
+    pub kind: CustomStudyKind,
+    pub limit: Option<u32>,
+    pub at_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomStudyQueue {
+    pub entries: Vec<ReviewQueueEntry>,
+    /// Only "review ahead" intentionally advances the official schedule when
+    /// its cards are submitted. Other custom queues are extra practice.
+    pub advances_normal_schedule: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageImportRequest {
+    pub package_path: String,
+    pub media_directory: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageImportSummary {
+    pub imported_cards: u32,
+    pub updated_cards: u32,
+    pub skipped_cards: u32,
+    pub imported_decks: u32,
+    pub imported_revlog_entries: u32,
+    pub imported_media_files: u32,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageExportRequest {
+    pub package_path: String,
+    #[serde(default)]
+    pub deck_ids: Vec<String>,
+    #[serde(default)]
+    pub channels: Vec<ReviewChannel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiExportFidelity {
+    pub cards_with_media_slices: u32,
+    pub video_slices_rendered_as_audio: u32,
+    pub media_render_failures: u32,
+    pub omitted_capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnkiPackageExportSummary {
+    pub exported_cards: u32,
+    pub exported_revlog_entries: u32,
+    pub exported_media_files: u32,
+    pub fidelity: AnkiExportFidelity,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

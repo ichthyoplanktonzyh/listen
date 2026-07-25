@@ -14,7 +14,7 @@ use super::PersistenceError;
 // Phase 3.15 append-only writing feedback and user disposition facts. v39 adds
 // the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
 // 3.15.7 realtime provider config and local session/turn facts.
-pub const MIGRATION_VERSION: u32 = 45;
+pub const MIGRATION_VERSION: u32 = 48;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -363,6 +363,32 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         for path in recording_paths {
             let _ = std::fs::remove_file(path);
         }
+    }
+    if current < 46 {
+        let tx = connection.unchecked_transaction()?;
+        if table_exists(&tx, "review_schedules")? {
+            tx.execute_batch(include_str!("../migrations/0046_fsrs_review_schedule.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 46)?;
+        tx.commit()?;
+    }
+    if current < 47 {
+        let tx = connection.unchecked_transaction()?;
+        if table_exists(&tx, "review_items")? && !table_exists(&tx, "review_settings")? {
+            tx.execute_batch(include_str!("../migrations/0047_review_capabilities.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 47)?;
+        tx.commit()?;
+    }
+    if current < 48 {
+        let tx = connection.unchecked_transaction()?;
+        if table_exists(&tx, "anki_review_items")?
+            && !table_has_column(&tx, "anki_review_items", "card_ordinal")?
+        {
+            tx.execute_batch(include_str!("../migrations/0048_anki_card_identity.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 48)?;
+        tx.commit()?;
     }
     Ok(())
 }

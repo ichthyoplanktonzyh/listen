@@ -496,12 +496,31 @@ async fn practice_routes_create_and_read_attempts() {
     )
     .unwrap();
     let review_id = due[0]["item"]["id"].as_str().unwrap();
-    assert_eq!(
-        due[0]["schedule"]["algorithm"],
-        "listen_review_v1_heuristic_proxy"
-    );
+    assert_eq!(due[0]["schedule"]["algorithm"], "fsrs_6_default_v1");
+    assert_eq!(due[0]["state"], "new");
+    assert_eq!(due[0]["origin"]["kind"], "native");
     assert_eq!(due[0]["card"]["kind"], "source_sentence_recall");
     assert_eq!(due[0]["card"]["answer"], "hello world");
+
+    let preview_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/review/items/{review_id}/interval-preview"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preview_response.status(), StatusCode::OK);
+    let preview: serde_json::Value = serde_json::from_slice(
+        &to_bytes(preview_response.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(preview.as_array().unwrap().len(), 4);
+    assert_eq!(preview[0]["rating"], "again");
 
     let review_response = app
         .clone()
@@ -524,7 +543,23 @@ async fn practice_routes_create_and_read_attempts() {
     )
     .unwrap();
     assert_eq!(review_submission["attempt"]["rating"], "good");
-    assert_eq!(review_submission["schedule"]["interval_days"], 3.0);
+    assert_eq!(
+        review_submission["schedule"]["algorithm"],
+        "fsrs_6_default_v1"
+    );
+    assert!(
+        review_submission["schedule"]["interval_days"]
+            .as_f64()
+            .unwrap()
+            >= 1.0
+    );
+    assert!(review_submission["schedule"]["stability"].as_f64().unwrap() > 0.0);
+    assert!(
+        review_submission["schedule"]["difficulty"]
+            .as_f64()
+            .unwrap()
+            > 0.0
+    );
     assert_eq!(
         review_submission["generated_observation_ids"],
         serde_json::json!([])

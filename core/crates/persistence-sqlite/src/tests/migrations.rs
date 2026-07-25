@@ -734,3 +734,53 @@ fn upgrades_v29_database_with_empty_optional_sense_folders() {
         "lexical_sense_folder_occurrences"
     ));
 }
+
+#[test]
+fn v46_seeds_fsrs_without_resetting_legacy_review_progress() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let connection = repo.connection.lock().unwrap();
+    connection
+        .execute(
+            "INSERT INTO review_items
+             (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
+             VALUES ('legacy-review','\"sentence\"','\"active\"',1,1,'{}')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO review_schedules(item_id,due_at_ms,algorithm,schedule_json)
+             VALUES ('legacy-review',8640000000,'listen_review_v1_heuristic_proxy',?1)",
+            [serde_json::json!({
+                "item_id": "legacy-review",
+                "algorithm": "listen_review_v1_heuristic_proxy",
+                "due_at_ms": 8_640_000_000_u64,
+                "stability": null,
+                "difficulty": null,
+                "interval_days": 30.0,
+                "lapse_count": 3
+            })
+            .to_string()],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 45).unwrap();
+
+    migrate(&connection).unwrap();
+
+    let value: serde_json::Value = serde_json::from_str(
+        &connection
+            .query_row(
+                "SELECT schedule_json FROM review_schedules WHERE item_id='legacy-review'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(value["algorithm"], "fsrs_6_default_v1");
+    assert_eq!(value["interval_days"], 30.0);
+    assert_eq!(value["lapse_count"], 3);
+    assert_eq!(value["review_count"], 1);
+    assert!(value["stability"].as_f64().unwrap() > 0.0);
+    assert!(value["difficulty"].as_f64().unwrap() > 0.0);
+}

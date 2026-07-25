@@ -390,6 +390,106 @@ pub(crate) async fn list_due_review_items(
         .map_err(ApiError::from)
 }
 
+pub(crate) async fn review_queue(
+    State(state): State<ApiState>,
+    Query(query): Query<ReviewQueueQuery>,
+) -> Result<Json<application::ReviewQueue>, ApiError> {
+    state
+        .services
+        .practice_learning()
+        .review_queue(query.at_ms, query.limit.unwrap_or(20))
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ReviewOverviewQuery {
+    at_ms: Option<u64>,
+}
+
+pub(crate) async fn review_deck_overview(
+    State(state): State<ApiState>,
+    Query(query): Query<ReviewOverviewQuery>,
+) -> Result<Json<application::ReviewDeckOverview>, ApiError> {
+    state
+        .services
+        .practice_learning()
+        .review_deck_overview(query.at_ms)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn review_daily_limits(
+    State(state): State<ApiState>,
+) -> Result<Json<application::ReviewDailyLimits>, ApiError> {
+    state
+        .services
+        .practice_learning()
+        .review_daily_limits()
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn update_review_daily_limits(
+    State(state): State<ApiState>,
+    Json(request): Json<application::ReviewDailyLimits>,
+) -> Result<Json<application::ReviewDailyLimits>, ApiError> {
+    state
+        .services
+        .practice_learning()
+        .update_review_daily_limits(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn custom_study(
+    State(state): State<ApiState>,
+    Json(request): Json<application::CustomStudyRequest>,
+) -> Result<Json<application::CustomStudyQueue>, ApiError> {
+    state
+        .services
+        .practice_learning()
+        .custom_study(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn submit_custom_study_attempt(
+    State(state): State<ApiState>,
+    Json(request): Json<application::SubmitCustomStudyAttempt>,
+) -> Result<Json<application::ReviewSubmission>, ApiError> {
+    state
+        .services
+        .practice_learning()
+        .submit_custom_study_attempt(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn import_anki_package(
+    State(state): State<ApiState>,
+    Json(request): Json<application::AnkiPackageImportRequest>,
+) -> Result<Json<application::AnkiPackageImportSummary>, ApiError> {
+    let use_cases = state.services.practice_learning();
+    tokio::task::spawn_blocking(move || use_cases.import_anki_package(request))
+        .await
+        .map_err(|error| ApplicationError::Repository(error.to_string()))?
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+pub(crate) async fn export_anki_package(
+    State(state): State<ApiState>,
+    Json(request): Json<application::AnkiPackageExportRequest>,
+) -> Result<Json<application::AnkiPackageExportSummary>, ApiError> {
+    let use_cases = state.services.practice_learning();
+    tokio::task::spawn_blocking(move || use_cases.export_anki_package(request))
+        .await
+        .map_err(|error| ApplicationError::Repository(error.to_string()))?
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 pub(crate) async fn submit_review_attempt(
     State(state): State<ApiState>,
     Json(request): Json<application::SubmitReviewAttempt>,
@@ -398,6 +498,25 @@ pub(crate) async fn submit_review_attempt(
         .services
         .practice_learning()
         .submit_review_attempt(request)
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ReviewPreviewQuery {
+    at_ms: Option<u64>,
+}
+
+pub(crate) async fn review_interval_preview(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Query(query): Query<ReviewPreviewQuery>,
+) -> Result<Json<Vec<application::ReviewIntervalPreview>>, ApiError> {
+    let id = ReviewItemId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .services
+        .practice_learning()
+        .review_interval_preview(&id, query.at_ms)
         .map(Json)
         .map_err(ApiError::from)
 }

@@ -515,6 +515,31 @@ pub trait ReviewQueueRepository: Send + Sync {
         due_at_or_before_ms: u64,
         limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError>;
+    fn list_review_items_with_schedules(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError>;
+    fn review_attempt_counts_between(
+        &self,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<(u32, u32), ApplicationError>;
+    fn get_review_daily_limits(&self) -> Result<crate::ReviewDailyLimits, ApplicationError>;
+    fn save_review_daily_limits(
+        &self,
+        limits: crate::ReviewDailyLimits,
+    ) -> Result<crate::ReviewDailyLimits, ApplicationError>;
+    fn list_imported_deck_schedules(
+        &self,
+    ) -> Result<Vec<crate::ImportedDeckSchedule>, ApplicationError>;
+    fn import_anki_package(
+        &self,
+        request: &crate::AnkiPackageImportRequest,
+    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError>;
+    fn export_anki_package(
+        &self,
+        request: &crate::AnkiPackageExportRequest,
+    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError>;
 }
 
 /// Hunting candidates and targets evolve together as one discovery workflow.

@@ -99,6 +99,18 @@ pub enum ReviewRating {
     Easy,
 }
 
+/// Anki's four scheduler states. This is deliberately derived from durable
+/// schedule facts instead of stored independently, so imports and native
+/// cards cannot drift into contradictory states.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewCardState {
+    New,
+    Learning,
+    Review,
+    Relearning,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HuntingCandidateStatus {
@@ -333,6 +345,30 @@ pub struct ReviewSchedule {
     pub difficulty: Option<f32>,
     pub interval_days: Option<f32>,
     pub lapse_count: u32,
+    /// Timestamp of the review that produced this schedule. Older schedules
+    /// omit it and are migrated from their existing due/interval facts.
+    #[serde(default)]
+    pub last_reviewed_at_ms: Option<u64>,
+    /// Number of completed reviews. Unlike `stability`, this preserves the
+    /// new/learning distinction for imported Anki learning cards.
+    #[serde(default)]
+    pub review_count: u32,
+}
+
+impl ReviewSchedule {
+    pub fn state(&self) -> ReviewCardState {
+        if self.review_count == 0 && self.stability.is_none() {
+            ReviewCardState::New
+        } else if self.interval_days.unwrap_or_default() < 1.0 {
+            if self.lapse_count > 0 {
+                ReviewCardState::Relearning
+            } else {
+                ReviewCardState::Learning
+            }
+        } else {
+            ReviewCardState::Review
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -343,6 +379,14 @@ pub struct ReviewAttempt {
     pub rating: ReviewRating,
     pub practice_attempt_id: Option<PracticeAttemptId>,
     pub next_due_at_ms: Option<u64>,
+    #[serde(default)]
+    pub previous_state: Option<ReviewCardState>,
+    #[serde(default = "default_true")]
+    pub advances_schedule: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

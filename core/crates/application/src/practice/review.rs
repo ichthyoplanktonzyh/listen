@@ -1,48 +1,148 @@
+use fsrs::{FSRS, ItemState, MemoryState, NextStates};
+
 use crate::{
-    PracticeAnchorKind, ReviewCard, ReviewCardKind, ReviewItem, ReviewRating, ReviewSchedule,
-    ReviewSourceKind,
+    PracticeAnchorKind, ReviewCard, ReviewCardKind, ReviewIntervalPreview, ReviewItem,
+    ReviewRating, ReviewSchedule, ReviewSourceKind,
 };
 
-pub(super) const REVIEW_ALGORITHM: &str = "listen_review_v1_heuristic_proxy";
+/// The identifier intentionally names both the algorithm generation and the
+/// default parameter generation. Imported/custom parameters can use a
+/// different suffix without changing the durable schedule shape.
+pub(super) const REVIEW_ALGORITHM: &str = "fsrs_6_default_v1";
+const DESIRED_RETENTION: f32 = 0.9;
 const MINUTE_MS: u64 = 60_000;
 const DAY_MS: u64 = 24 * 60 * MINUTE_MS;
+const AGAIN_DELAY_MS: u64 = 10 * MINUTE_MS;
+
+pub(super) fn migrate_legacy_schedule(current: &ReviewSchedule) -> ReviewSchedule {
+    if current.stability.is_some()
+        && current.difficulty.is_some()
+        && current.last_reviewed_at_ms.is_some()
+    {
+        return current.clone();
+    }
+
+    let Some(interval_days) = current.interval_days.filter(|days| *days > 0.0) else {
+        return ReviewSchedule {
+            algorithm: REVIEW_ALGORITHM.into(),
+            ..current.clone()
+        };
+    };
+
+    // Existing Listen schedules are an SM-2-like heuristic. FSRS exposes an
+    // explicit SM-2 migration function; using the existing interval and a
+    // lapse-adjusted ease preserves progress instead of resetting the card.
+    let ease = (2.5 - current.lapse_count as f32 * 0.15).clamp(1.3, 2.5);
+    let memory = FSRS::default()
+        .memory_state_from_sm2(ease, interval_days.max(1.0), DESIRED_RETENTION)
+        .unwrap_or(MemoryState {
+            stability: interval_days.max(0.1),
+            difficulty: (5.0 + current.lapse_count as f32 * 0.5).clamp(1.0, 10.0),
+        });
+    let interval_ms = (interval_days * DAY_MS as f32) as u64;
+    ReviewSchedule {
+        algorithm: REVIEW_ALGORITHM.into(),
+        stability: Some(memory.stability),
+        difficulty: Some(memory.difficulty),
+        last_reviewed_at_ms: current
+            .last_reviewed_at_ms
+            .or_else(|| Some(current.due_at_ms.saturating_sub(interval_ms))),
+        review_count: current.review_count.max(1),
+        ..current.clone()
+    }
+}
 
 pub(super) fn next_review_schedule(
     current: &ReviewSchedule,
     rating: ReviewRating,
     reviewed_at_ms: u64,
 ) -> ReviewSchedule {
-    let previous_days = current.interval_days.unwrap_or(0.0);
-    let (interval_days, delay_ms, lapse_count) = match rating {
-        ReviewRating::Again => (0.0, 10 * MINUTE_MS, current.lapse_count.saturating_add(1)),
-        ReviewRating::Hard => (1.0, DAY_MS, current.lapse_count),
-        ReviewRating::Good => {
-            let days = if previous_days < 1.0 {
-                3.0
-            } else if previous_days <= 3.0 {
-                7.0
-            } else {
-                (previous_days * 2.0).min(60.0)
-            };
-            (days, (days * DAY_MS as f32) as u64, current.lapse_count)
+    schedule_for_rating(current, rating, reviewed_at_ms)
+}
+
+pub(super) fn preview_review_intervals(
+    current: &ReviewSchedule,
+    reviewed_at_ms: u64,
+) -> Vec<ReviewIntervalPreview> {
+    [
+        ReviewRating::Again,
+        ReviewRating::Hard,
+        ReviewRating::Good,
+        ReviewRating::Easy,
+    ]
+    .into_iter()
+    .map(|rating| {
+        let schedule = schedule_for_rating(current, rating, reviewed_at_ms);
+        ReviewIntervalPreview {
+            rating,
+            due_at_ms: schedule.due_at_ms,
+            interval_days: schedule.interval_days.unwrap_or_default(),
+            state: schedule.state(),
         }
-        ReviewRating::Easy => {
-            let days = if previous_days < 1.0 {
-                7.0
-            } else {
-                (previous_days * 2.5).clamp(7.0, 90.0)
-            };
-            (days, (days * DAY_MS as f32) as u64, current.lapse_count)
-        }
+    })
+    .collect()
+}
+
+fn schedule_for_rating(
+    current: &ReviewSchedule,
+    rating: ReviewRating,
+    reviewed_at_ms: u64,
+) -> ReviewSchedule {
+    let current = migrate_legacy_schedule(current);
+    let previous_state = current.state();
+    let memory = current
+        .stability
+        .zip(current.difficulty)
+        .map(|(stability, difficulty)| MemoryState {
+            stability,
+            difficulty,
+        });
+    let elapsed_days = current
+        .last_reviewed_at_ms
+        .map(|last| reviewed_at_ms.saturating_sub(last) / DAY_MS)
+        .unwrap_or_default()
+        .min(u32::MAX as u64) as u32;
+    let states = FSRS::default()
+        .next_states(memory, DESIRED_RETENTION, elapsed_days)
+        .expect("stored FSRS memory state is finite");
+    let selected = select_state(&states, rating);
+    let is_learning_step = rating == ReviewRating::Again;
+    let interval_days = if is_learning_step {
+        0.0
+    } else {
+        selected.interval.round().max(1.0)
     };
+    let delay_ms = if is_learning_step {
+        AGAIN_DELAY_MS
+    } else {
+        (interval_days * DAY_MS as f32) as u64
+    };
+
     ReviewSchedule {
-        item_id: current.item_id.clone(),
+        item_id: current.item_id,
         algorithm: REVIEW_ALGORITHM.into(),
         due_at_ms: reviewed_at_ms.saturating_add(delay_ms),
-        stability: None,
-        difficulty: None,
+        stability: Some(selected.memory.stability),
+        difficulty: Some(selected.memory.difficulty),
         interval_days: Some(interval_days),
-        lapse_count,
+        lapse_count: current.lapse_count.saturating_add(u32::from(
+            rating == ReviewRating::Again
+                && matches!(
+                    previous_state,
+                    domain::ReviewCardState::Review | domain::ReviewCardState::Relearning
+                ),
+        )),
+        last_reviewed_at_ms: Some(reviewed_at_ms),
+        review_count: current.review_count.saturating_add(1),
+    }
+}
+
+fn select_state(states: &NextStates, rating: ReviewRating) -> ItemState {
+    match rating {
+        ReviewRating::Again => states.again.clone(),
+        ReviewRating::Hard => states.hard.clone(),
+        ReviewRating::Good => states.good.clone(),
+        ReviewRating::Easy => states.easy.clone(),
     }
 }
 
@@ -147,11 +247,10 @@ fn cloze_prompt(snapshot: &str, target: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain::{PracticeAnchor, ReviewItemId, ReviewItemStatus, ReviewSource};
+    use domain::{PracticeAnchor, ReviewCardState, ReviewItemId, ReviewItemStatus, ReviewSource};
 
-    #[test]
-    fn review_scheduler_uses_short_failure_and_growing_success_intervals() {
-        let current = ReviewSchedule {
+    fn new_schedule() -> ReviewSchedule {
+        ReviewSchedule {
             item_id: ReviewItemId::parse("review-schedule-test").unwrap(),
             algorithm: REVIEW_ALGORITHM.into(),
             due_at_ms: 0,
@@ -159,15 +258,69 @@ mod tests {
             difficulty: None,
             interval_days: None,
             lapse_count: 0,
-        };
+            last_reviewed_at_ms: None,
+            review_count: 0,
+        }
+    }
+
+    #[test]
+    fn fsrs_writes_memory_state_and_preserves_anki_learning_states() {
+        let current = new_schedule();
+        assert_eq!(current.state(), ReviewCardState::New);
+
         let failed = next_review_schedule(&current, ReviewRating::Again, 1_000);
-        assert_eq!(failed.due_at_ms, 1_000 + 10 * MINUTE_MS);
-        assert_eq!(failed.lapse_count, 1);
+        assert_eq!(failed.due_at_ms, 1_000 + AGAIN_DELAY_MS);
+        assert_eq!(failed.state(), ReviewCardState::Learning);
+        assert!(failed.stability.unwrap() > 0.0);
+        assert!((1.0..=10.0).contains(&failed.difficulty.unwrap()));
 
         let first_success = next_review_schedule(&current, ReviewRating::Good, 1_000);
-        assert_eq!(first_success.interval_days, Some(3.0));
-        let later_success = next_review_schedule(&first_success, ReviewRating::Good, 1_000);
-        assert_eq!(later_success.interval_days, Some(7.0));
+        assert_eq!(first_success.state(), ReviewCardState::Review);
+        assert!(first_success.interval_days.unwrap() >= 1.0);
+        assert_eq!(first_success.algorithm, REVIEW_ALGORITHM);
+
+        let failed_review =
+            next_review_schedule(&first_success, ReviewRating::Again, DAY_MS + 1_000);
+        assert_eq!(failed_review.state(), ReviewCardState::Relearning);
+        assert_eq!(failed_review.lapse_count, 1);
+    }
+
+    #[test]
+    fn four_state_boundaries_are_derived_from_schedule_facts() {
+        let mut schedule = new_schedule();
+        assert_eq!(schedule.state(), ReviewCardState::New);
+        schedule.review_count = 1;
+        schedule.stability = Some(0.4);
+        schedule.interval_days = Some(0.0);
+        assert_eq!(schedule.state(), ReviewCardState::Learning);
+        schedule.lapse_count = 1;
+        assert_eq!(schedule.state(), ReviewCardState::Relearning);
+        schedule.interval_days = Some(1.0);
+        assert_eq!(schedule.state(), ReviewCardState::Review);
+    }
+
+    #[test]
+    fn legacy_migration_preserves_interval_and_lapses() {
+        let mut legacy = new_schedule();
+        legacy.algorithm = "listen_review_v1_heuristic_proxy".into();
+        legacy.interval_days = Some(30.0);
+        legacy.due_at_ms = 100 * DAY_MS;
+        legacy.lapse_count = 3;
+        let migrated = migrate_legacy_schedule(&legacy);
+        assert_eq!(migrated.interval_days, Some(30.0));
+        assert_eq!(migrated.lapse_count, 3);
+        assert_eq!(migrated.review_count, 1);
+        assert!(migrated.stability.unwrap() > 0.0);
+        assert!(migrated.last_reviewed_at_ms.is_some());
+    }
+
+    #[test]
+    fn interval_preview_does_not_mutate_the_input() {
+        let current = new_schedule();
+        let snapshot = current.clone();
+        let previews = preview_review_intervals(&current, 42);
+        assert_eq!(previews.len(), 4);
+        assert_eq!(current, snapshot);
     }
 
     #[test]

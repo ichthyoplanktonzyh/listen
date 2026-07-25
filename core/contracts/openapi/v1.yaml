@@ -2333,6 +2333,119 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewItem" }
+  /v1/review/items/{id}/interval-preview:
+    get:
+      operationId: reviewIntervalPreview
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: at_ms, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Pure FSRS prediction for all four ratings; no schedule write
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/ReviewIntervalPreview" } }
+  /v1/review/queue:
+    get:
+      operationId: reviewQueue
+      parameters:
+        - { name: at_ms, in: query, required: false, schema: { type: integer, minimum: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Due queue after global daily-limit clipping, with factual limit status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewQueue" }
+  /v1/review/decks:
+    get:
+      operationId: reviewDeckOverview
+      parameters:
+        - { name: at_ms, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: Native smart-channel and imported Anki deck-tree counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewDeckOverview" }
+  /v1/review/settings/limits:
+    get:
+      operationId: reviewDailyLimits
+      responses:
+        "200":
+          description: Global daily new-card and review limits
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewDailyLimits" }
+    put:
+      operationId: updateReviewDailyLimits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewDailyLimits" }
+      responses:
+        "200":
+          description: Updated global daily limits
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewDailyLimits" }
+  /v1/review/custom-study:
+    post:
+      operationId: customStudy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomStudyRequest" }
+      responses:
+        "200":
+          description: One-shot read-only custom-study queue
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomStudyQueue" }
+  /v1/review/custom-study/attempts:
+    post:
+      operationId: submitCustomStudyAttempt
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SubmitCustomStudyAttempt" }
+      responses:
+        "200":
+          description: Records extra practice without changing the official schedule, except review_ahead
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewSubmission" }
+  /v1/review/anki/import:
+    post:
+      operationId: importAnkiPackage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnkiPackageImportRequest" }
+      responses:
+        "200":
+          description: Imported apkg cards, deck tree, FSRS state, revlog and media summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnkiPackageImportSummary" }
+  /v1/review/anki/export:
+    post:
+      operationId: exportAnkiPackage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnkiPackageExportRequest" }
+      responses:
+        "200":
+          description: Exported apkg summary with explicit fidelity report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnkiPackageExportSummary" }
   /v1/review/attempts:
     post:
       operationId: submitReviewAttempt
@@ -5409,7 +5522,7 @@ components:
         prompt_snapshot: { type: string }
     ReviewSchedule:
       type: object
-      required: [item_id, algorithm, due_at_ms, stability, difficulty, interval_days, lapse_count]
+      required: [item_id, algorithm, due_at_ms, stability, difficulty, interval_days, lapse_count, last_reviewed_at_ms, review_count]
       properties:
         item_id: { type: string }
         algorithm: { type: string }
@@ -5418,9 +5531,14 @@ components:
         difficulty: { type: [number, "null"] }
         interval_days: { type: [number, "null"], minimum: 0 }
         lapse_count: { type: integer, minimum: 0 }
+        last_reviewed_at_ms: { type: [integer, "null"], minimum: 0 }
+        review_count: { type: integer, minimum: 0 }
+    ReviewCardState:
+      type: string
+      enum: [new, learning, review, relearning]
     ReviewAttempt:
       type: object
-      required: [id, item_id, reviewed_at_ms, rating, practice_attempt_id, next_due_at_ms]
+      required: [id, item_id, reviewed_at_ms, rating, practice_attempt_id, next_due_at_ms, previous_state, advances_schedule]
       properties:
         id: { type: string }
         item_id: { type: string }
@@ -5428,6 +5546,11 @@ components:
         rating: { $ref: "#/components/schemas/ReviewRating" }
         practice_attempt_id: { type: [string, "null"] }
         next_due_at_ms: { type: [integer, "null"], minimum: 0 }
+        previous_state:
+          oneOf:
+            - { $ref: "#/components/schemas/ReviewCardState" }
+            - { type: "null" }
+        advances_schedule: { type: boolean }
     ReviewCardKind:
       type: string
       enum: [word_recognition, chunk_cloze, phrase_presence, source_sentence_recall, delayed_retelling]
@@ -5495,11 +5618,146 @@ components:
         target: { type: [string, "null"] }
     ReviewQueueEntry:
       type: object
-      required: [item, schedule, card]
+      required: [item, schedule, state, card, origin]
       properties:
         item: { $ref: "#/components/schemas/ReviewItem" }
         schedule: { $ref: "#/components/schemas/ReviewSchedule" }
+        state: { $ref: "#/components/schemas/ReviewCardState" }
         card: { $ref: "#/components/schemas/ReviewCard" }
+        origin: { $ref: "#/components/schemas/ReviewItemOrigin" }
+    ReviewItemOrigin:
+      type: object
+      required: [kind, anki_guid, deck_id, deck_name, has_listening_enhancements]
+      properties:
+        kind: { type: string, enum: [native, imported_anki] }
+        anki_guid: { type: [string, "null"] }
+        deck_id: { type: [string, "null"] }
+        deck_name: { type: [string, "null"] }
+        has_listening_enhancements: { type: boolean }
+    ReviewIntervalPreview:
+      type: object
+      required: [rating, due_at_ms, interval_days, state]
+      properties:
+        rating: { $ref: "#/components/schemas/ReviewRating" }
+        due_at_ms: { type: integer, minimum: 0 }
+        interval_days: { type: number, minimum: 0 }
+        state: { $ref: "#/components/schemas/ReviewCardState" }
+    ReviewDailyLimits:
+      type: object
+      required: [new_cards, reviews]
+      properties:
+        new_cards: { type: integer, minimum: 0, maximum: 10000 }
+        reviews: { type: integer, minimum: 0, maximum: 10000 }
+    ReviewLimitStatus:
+      type: object
+      required: [limits, new_completed, reviews_completed, new_limit_reached, review_limit_reached]
+      properties:
+        limits: { $ref: "#/components/schemas/ReviewDailyLimits" }
+        new_completed: { type: integer, minimum: 0 }
+        reviews_completed: { type: integer, minimum: 0 }
+        new_limit_reached: { type: boolean }
+        review_limit_reached: { type: boolean }
+    ReviewQueue:
+      type: object
+      required: [entries, limit_status]
+      properties:
+        entries: { type: array, items: { $ref: "#/components/schemas/ReviewQueueEntry" } }
+        limit_status: { $ref: "#/components/schemas/ReviewLimitStatus" }
+    ReviewStateCounts:
+      type: object
+      required: [new, due, learning]
+      properties:
+        new: { type: integer, minimum: 0 }
+        due: { type: integer, minimum: 0 }
+        learning: { type: integer, minimum: 0 }
+    ReviewDeckOverview:
+      type: object
+      required: [channels, imported_decks, limit_status]
+      properties:
+        channels:
+          type: array
+          items:
+            type: object
+            required: [channel, counts]
+            properties:
+              channel: { type: string, enum: [listening, speaking, reading, writing] }
+              counts: { $ref: "#/components/schemas/ReviewStateCounts" }
+        imported_decks:
+          type: array
+          items:
+            type: object
+            required: [deck_id, name, parent_deck_id, counts]
+            properties:
+              deck_id: { type: string }
+              name: { type: string }
+              parent_deck_id: { type: [string, "null"] }
+              counts: { $ref: "#/components/schemas/ReviewStateCounts" }
+        limit_status: { $ref: "#/components/schemas/ReviewLimitStatus" }
+    CustomStudyRequest:
+      type: object
+      required: [kind]
+      description: kind is more_new, review_ahead, channel, or forgotten; channel/minimum_lapses apply to the matching kind.
+      properties:
+        kind: { type: string, enum: [more_new, review_ahead, channel, forgotten] }
+        channel: { type: string, enum: [listening, speaking, reading, writing] }
+        minimum_lapses: { type: [integer, "null"], minimum: 1 }
+        limit: { type: [integer, "null"], minimum: 1, maximum: 100 }
+        at_ms: { type: [integer, "null"], minimum: 0 }
+    CustomStudyQueue:
+      type: object
+      required: [entries, advances_normal_schedule]
+      properties:
+        entries: { type: array, items: { $ref: "#/components/schemas/ReviewQueueEntry" } }
+        advances_normal_schedule: { type: boolean }
+    SubmitCustomStudyAttempt:
+      type: object
+      required: [item_id, rating, kind]
+      properties:
+        item_id: { type: string }
+        rating: { $ref: "#/components/schemas/ReviewRating" }
+        kind: { type: string, enum: [more_new, review_ahead, channel, forgotten] }
+        channel: { type: string, enum: [listening, speaking, reading, writing] }
+        minimum_lapses: { type: [integer, "null"], minimum: 1 }
+    AnkiPackageImportRequest:
+      type: object
+      required: [package_path, media_directory]
+      properties:
+        package_path: { type: string }
+        media_directory: { type: string }
+    AnkiPackageImportSummary:
+      type: object
+      required: [imported_cards, updated_cards, skipped_cards, imported_decks, imported_revlog_entries, imported_media_files, warnings]
+      properties:
+        imported_cards: { type: integer, minimum: 0 }
+        updated_cards: { type: integer, minimum: 0 }
+        skipped_cards: { type: integer, minimum: 0 }
+        imported_decks: { type: integer, minimum: 0 }
+        imported_revlog_entries: { type: integer, minimum: 0 }
+        imported_media_files: { type: integer, minimum: 0 }
+        warnings: { type: array, items: { type: string } }
+    AnkiPackageExportRequest:
+      type: object
+      required: [package_path]
+      properties:
+        package_path: { type: string }
+        deck_ids: { type: array, items: { type: string } }
+        channels: { type: array, items: { type: string, enum: [listening, speaking, reading, writing] } }
+    AnkiPackageExportSummary:
+      type: object
+      required: [exported_cards, exported_revlog_entries, exported_media_files, fidelity, warnings]
+      properties:
+        exported_cards: { type: integer, minimum: 0 }
+        exported_revlog_entries: { type: integer, minimum: 0 }
+        exported_media_files: { type: integer, minimum: 0 }
+        fidelity:
+          type: object
+          required: [cards_with_media_slices, video_slices_rendered_as_audio, media_render_failures, omitted_capabilities]
+          properties:
+            cards_with_media_slices: { type: integer, minimum: 0 }
+            video_slices_rendered_as_audio: { type: integer, minimum: 0 }
+            media_render_failures: { type: integer, minimum: 0 }
+            omitted_capabilities: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
     SubmitReviewAttempt:
       type: object
       required: [item_id, rating]

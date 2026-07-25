@@ -106,6 +106,8 @@ fn learning_loop_practice_review_and_events_round_trip() {
         difficulty: None,
         interval_days: None,
         lapse_count: 0,
+        last_reviewed_at_ms: None,
+        review_count: 0,
     };
     repo.save_review_schedule(&schedule).unwrap();
     assert_eq!(
@@ -1509,4 +1511,176 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
             .iter()
             .any(|event| event.kind == LearningEventKind::FamiliarMaterialMarked)
     );
+}
+
+#[test]
+fn review_queries_enforce_limits_and_custom_study_is_read_only() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    let practice = services.practice_learning();
+    let make_item = |source_kind, prompt: &str| {
+        practice
+            .create_review_item(application::CreateReviewItem {
+                source: ReviewSource {
+                    kind: source_kind,
+                    id: Some(prompt.into()),
+                    practice_attempt_id: None,
+                    lexical_entry_id: None,
+                    media_id: None,
+                    track_id: None,
+                },
+                anchors: Vec::new(),
+                prompt_snapshot: prompt.into(),
+            })
+            .unwrap()
+    };
+    let completed_new = make_item(ReviewSourceKind::Sentence, "completed-new");
+    let extra_new = make_item(ReviewSourceKind::Chunk, "extra-new");
+    let ahead = make_item(ReviewSourceKind::LexicalEntry, "ahead");
+    let speaking = make_item(ReviewSourceKind::SpeakingAttempt, "speaking");
+    let forgotten = make_item(ReviewSourceKind::ConnectedSpeech, "forgotten");
+    let now = application::now_ms();
+    for (item, due, lapses) in [
+        (&ahead, now + 5 * 86_400_000, 0),
+        (&speaking, now, 0),
+        (&forgotten, now, 4),
+    ] {
+        repo.save_review_schedule(&ReviewSchedule {
+            item_id: item.id.clone(),
+            algorithm: "fsrs_6_default_v1".into(),
+            due_at_ms: due,
+            stability: Some(10.0),
+            difficulty: Some(5.0),
+            interval_days: Some(10.0),
+            lapse_count: lapses,
+            last_reviewed_at_ms: Some(now - 10 * 86_400_000),
+            review_count: 3,
+        })
+        .unwrap();
+    }
+
+    let before_preview = repo.get_review_schedule(&extra_new.id).unwrap().unwrap();
+    let previews = practice
+        .review_interval_preview(&extra_new.id, Some(now))
+        .unwrap();
+    assert_eq!(previews.len(), 4);
+    assert_eq!(
+        repo.get_review_schedule(&extra_new.id).unwrap().unwrap(),
+        before_preview
+    );
+
+    practice
+        .update_review_daily_limits(application::ReviewDailyLimits {
+            new_cards: 1,
+            reviews: 100,
+        })
+        .unwrap();
+    practice
+        .submit_review_attempt(application::SubmitReviewAttempt {
+            item_id: completed_new.id,
+            rating: ReviewRating::Good,
+        })
+        .unwrap();
+    let queue = practice
+        .review_queue(Some(application::now_ms()), 100)
+        .unwrap();
+    assert!(queue.limit_status.new_limit_reached);
+    assert!(
+        queue
+            .entries
+            .iter()
+            .all(|entry| entry.item.id != extra_new.id)
+    );
+
+    let schedule_snapshot = repo
+        .list_review_items_with_schedules(100)
+        .unwrap()
+        .into_iter()
+        .map(|(item, schedule)| (item.id, schedule))
+        .collect::<std::collections::HashMap<_, _>>();
+    let more_new = practice
+        .custom_study(application::CustomStudyRequest {
+            kind: application::CustomStudyKind::MoreNew,
+            limit: Some(10),
+            at_ms: Some(now),
+        })
+        .unwrap();
+    assert!(
+        more_new
+            .entries
+            .iter()
+            .any(|entry| entry.item.id == extra_new.id)
+    );
+    assert!(!more_new.advances_normal_schedule);
+
+    let review_ahead = practice
+        .custom_study(application::CustomStudyRequest {
+            kind: application::CustomStudyKind::ReviewAhead,
+            limit: Some(10),
+            at_ms: Some(now),
+        })
+        .unwrap();
+    assert!(
+        review_ahead
+            .entries
+            .iter()
+            .any(|entry| entry.item.id == ahead.id)
+    );
+    assert!(review_ahead.advances_normal_schedule);
+
+    let by_channel = practice
+        .custom_study(application::CustomStudyRequest {
+            kind: application::CustomStudyKind::Channel {
+                channel: application::ReviewChannel::Speaking,
+            },
+            limit: Some(10),
+            at_ms: Some(now),
+        })
+        .unwrap();
+    assert_eq!(by_channel.entries[0].item.id, speaking.id);
+
+    let forgotten_queue = practice
+        .custom_study(application::CustomStudyRequest {
+            kind: application::CustomStudyKind::Forgotten {
+                minimum_lapses: Some(3),
+            },
+            limit: Some(10),
+            at_ms: Some(now),
+        })
+        .unwrap();
+    assert_eq!(forgotten_queue.entries[0].item.id, forgotten.id);
+    let extra_practice = practice
+        .submit_custom_study_attempt(application::SubmitCustomStudyAttempt {
+            item_id: extra_new.id.clone(),
+            rating: ReviewRating::Good,
+            kind: application::CustomStudyKind::MoreNew,
+        })
+        .unwrap();
+    assert!(!extra_practice.attempt.advances_schedule);
+    assert_eq!(extra_practice.schedule, before_preview);
+    let after_custom = repo
+        .list_review_items_with_schedules(100)
+        .unwrap()
+        .into_iter()
+        .map(|(item, schedule)| (item.id, schedule))
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(schedule_snapshot, after_custom);
+
+    let overview = practice.review_deck_overview(Some(now)).unwrap();
+    let speaking_counts = overview
+        .channels
+        .iter()
+        .find(|entry| entry.channel == application::ReviewChannel::Speaking)
+        .unwrap();
+    assert_eq!(speaking_counts.counts.due, 1);
 }

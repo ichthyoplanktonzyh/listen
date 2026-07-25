@@ -1,6 +1,7 @@
 use application::{
-    ApplicationError, HuntingRepository, LearningEventRepository, ListeningInboxRepository,
-    PracticeRepository, RecognitionUpgradeRepository, ReviewQueueRepository,
+    ApplicationError, HuntingRepository, ImportedDeckSchedule, LearningEventRepository,
+    ListeningInboxRepository, PracticeRepository, RecognitionUpgradeRepository, ReviewDailyLimits,
+    ReviewQueueRepository,
 };
 use domain::{
     HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
@@ -380,6 +381,135 @@ impl ReviewQueueRepository for SqliteRepository {
             .map_err(repo)?
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)
+    }
+
+    fn list_review_items_with_schedules(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT i.item_json, s.schedule_json
+                 FROM review_schedules s
+                 JOIN review_items i ON i.id=s.item_id
+                 WHERE i.status=?1
+                 ORDER BY s.due_at_ms ASC, i.created_at_ms ASC
+                 LIMIT ?2",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(
+                params![json(&ReviewItemStatus::Active)?, limit.min(10_000)],
+                |row| {
+                    Ok((
+                        from_json(&row.get::<_, String>(0)?)?,
+                        from_json(&row.get::<_, String>(1)?)?,
+                    ))
+                },
+            )
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn review_attempt_counts_between(
+        &self,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<(u32, u32), ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT
+               COALESCE(SUM(CASE
+                 WHEN json_extract(attempt_json, '$.previous_state')='new' THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE
+                 WHEN json_extract(attempt_json, '$.previous_state')='review'
+                   OR json_extract(attempt_json, '$.previous_state') IS NULL
+                 THEN 1 ELSE 0 END), 0)
+             FROM review_attempts
+             WHERE reviewed_at_ms>=?1 AND reviewed_at_ms<?2
+               AND COALESCE(json_extract(attempt_json, '$.advances_schedule'), 1)=1",
+            params![start_ms, end_ms],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(repo)
+    }
+
+    fn get_review_daily_limits(&self) -> Result<ReviewDailyLimits, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.query_row(
+            "SELECT new_cards_per_day,reviews_per_day
+             FROM review_settings WHERE singleton=1",
+            [],
+            |row| {
+                Ok(ReviewDailyLimits {
+                    new_cards: row.get(0)?,
+                    reviews: row.get(1)?,
+                })
+            },
+        )
+        .map_err(repo)
+    }
+
+    fn save_review_daily_limits(
+        &self,
+        limits: ReviewDailyLimits,
+    ) -> Result<ReviewDailyLimits, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        conn.execute(
+            "UPDATE review_settings
+             SET new_cards_per_day=?1,reviews_per_day=?2
+             WHERE singleton=1",
+            params![limits.new_cards, limits.reviews],
+        )
+        .map_err(repo)?;
+        Ok(limits)
+    }
+
+    fn list_imported_deck_schedules(&self) -> Result<Vec<ImportedDeckSchedule>, ApplicationError> {
+        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut statement = conn
+            .prepare(
+                "SELECT imported.item_id,imported.guid,deck.deck_id,deck.name,deck.parent_deck_id,
+                        schedule.schedule_json
+                 FROM anki_review_items imported
+                 JOIN anki_decks deck ON deck.deck_id=imported.deck_id
+                 JOIN review_schedules schedule ON schedule.item_id=imported.item_id
+                 JOIN review_items item ON item.id=imported.item_id
+                 WHERE item.status=?1
+                 ORDER BY deck.name, schedule.due_at_ms",
+            )
+            .map_err(repo)?;
+        statement
+            .query_map(params![json(&ReviewItemStatus::Active)?], |row| {
+                Ok(ImportedDeckSchedule {
+                    item_id: ReviewItemId::parse(row.get::<_, String>(0)?)
+                        .map_err(super::domain_sql)?,
+                    anki_guid: row.get(1)?,
+                    deck_id: row.get(2)?,
+                    name: row.get(3)?,
+                    parent_deck_id: row.get(4)?,
+                    schedule: from_json(&row.get::<_, String>(5)?)?,
+                })
+            })
+            .map_err(repo)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(repo)
+    }
+
+    fn import_anki_package(
+        &self,
+        request: &application::AnkiPackageImportRequest,
+    ) -> Result<application::AnkiPackageImportSummary, ApplicationError> {
+        super::anki::import_package(self, request)
+    }
+
+    fn export_anki_package(
+        &self,
+        request: &application::AnkiPackageExportRequest,
+    ) -> Result<application::AnkiPackageExportSummary, ApplicationError> {
+        super::anki::export_package(self, request)
     }
 }
 

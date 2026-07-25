@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-25: 复习后端接入 FSRS-6 默认调度并补齐 Anki 数据通道与查询能力（refs #72
+  #73 #74）：schedule 持久化 stability/difficulty/last-review/review-count，稳定派生
+  new/learning/review/relearning 四态；旧 heuristic schedule 按原 interval/lapse 原地迁移，
+  不清零进度。新增纯只读四档间隔预览、智能通道/导入 deck 树计数、全局每日新卡/复习上限
+  与队列裁剪、more-new/review-ahead/channel/forgotten 四种一次性 custom-study 队列。
+  `.apkg` 后端支持 schema11/anki21 导入导出、guid 去重、原 deck/字段/tag/revlog/FSRS card
+  data (`s`/`d`/`lrt`) 保真、媒体清单落地及原生媒体切片经 ffmpeg 渲染 MP3；导入卡默认无
+  Listen 四通道归属/切片增强，导出结果返回媒体与 Listen 独有能力的保真报告。HTTP 文件操作
+  走 blocking worker，不占 Tokio 执行线程；卡片生成逻辑与 Flutter 前端均未改动。
+
 - 2026-07-24: S1 我的表达写作台——支架渐撤变看得见的梯子(refs #78 · #70 Phase 2 · B波)。
   呈现≠语义:四档 assistance / 三档自评的后端取值、attempt 记录、版本/来源链路零改动,前端只
   呈现。**弹窗死刑**:`_write` 的 AlertDialog → 页内写作台 `_WritingDeskPage`(独立 route,梯子

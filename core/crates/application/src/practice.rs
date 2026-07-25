@@ -1,5 +1,7 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
+
+use domain::ReviewCardState;
 
 use crate::{
     AppServices, ApplicationError, CompleteListeningSessionInput, CorpusIndexRepository,
@@ -25,7 +27,10 @@ use crate::{
 
 mod review;
 mod upgrade;
-use review::{REVIEW_ALGORITHM, next_review_schedule, review_card};
+use review::{
+    REVIEW_ALGORITHM, migrate_legacy_schedule, next_review_schedule, preview_review_intervals,
+    review_card,
+};
 
 /// Owns practice sessions, review scheduling, hunting targets, and listening
 /// inbox processing. They share learning-event and queue transition invariants;
@@ -347,6 +352,8 @@ impl PracticeUseCases {
             difficulty: None,
             interval_days: None,
             lapse_count: 0,
+            last_reviewed_at_ms: None,
+            review_count: 0,
         })?;
         Ok(saved)
     }
@@ -360,26 +367,285 @@ impl PracticeUseCases {
         at_ms: Option<u64>,
         limit: u32,
     ) -> Result<Vec<ReviewQueueEntry>, ApplicationError> {
-        self.review_queue
-            .list_due_review_items(at_ms.unwrap_or_else(now_ms), limit.min(100))
-            .map(|entries| {
-                entries
-                    .into_iter()
-                    .map(|(item, schedule)| {
-                        let card = review_card(&item);
-                        ReviewQueueEntry {
-                            item,
-                            schedule,
-                            card,
-                        }
-                    })
-                    .collect()
+        self.review_queue(at_ms, limit).map(|queue| queue.entries)
+    }
+
+    pub fn review_queue(
+        &self,
+        at_ms: Option<u64>,
+        limit: u32,
+    ) -> Result<crate::ReviewQueue, ApplicationError> {
+        let at_ms = at_ms.unwrap_or_else(now_ms);
+        let status = self.review_limit_status(at_ms)?;
+        let remaining_new = status.limits.new_cards.saturating_sub(status.new_completed);
+        let remaining_reviews = status
+            .limits
+            .reviews
+            .saturating_sub(status.reviews_completed);
+        let mut accepted_new = 0;
+        let mut accepted_reviews = 0;
+        let mut entries = Vec::new();
+        let mut imported_origins = self
+            .review_queue
+            .list_imported_deck_schedules()?
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.item_id,
+                    crate::ReviewItemOrigin {
+                        kind: crate::ReviewOriginKind::ImportedAnki,
+                        anki_guid: Some(entry.anki_guid),
+                        deck_id: Some(entry.deck_id),
+                        deck_name: Some(entry.name),
+                        has_listening_enhancements: false,
+                    },
+                )
             })
+            .collect::<HashMap<_, _>>();
+        for (item, schedule) in self.review_queue.list_due_review_items(at_ms, 10_000)? {
+            let schedule = migrate_legacy_schedule(&schedule);
+            let accepted = match schedule.state() {
+                ReviewCardState::New if accepted_new >= remaining_new => false,
+                ReviewCardState::New => {
+                    accepted_new += 1;
+                    true
+                }
+                ReviewCardState::Review if accepted_reviews >= remaining_reviews => false,
+                ReviewCardState::Review => {
+                    accepted_reviews += 1;
+                    true
+                }
+                // Intraday learning/relearning steps are already committed
+                // work and do not consume a second daily new/review slot.
+                ReviewCardState::Learning | ReviewCardState::Relearning => true,
+            };
+            if accepted {
+                let origin = imported_origins.remove(&item.id);
+                entries.push(review_queue_entry(item, schedule, origin));
+            }
+            if entries.len() >= limit.min(100) as usize {
+                break;
+            }
+        }
+        Ok(crate::ReviewQueue {
+            entries,
+            limit_status: status,
+        })
+    }
+
+    pub fn review_daily_limits(&self) -> Result<crate::ReviewDailyLimits, ApplicationError> {
+        self.review_queue.get_review_daily_limits()
+    }
+
+    pub fn update_review_daily_limits(
+        &self,
+        limits: crate::ReviewDailyLimits,
+    ) -> Result<crate::ReviewDailyLimits, ApplicationError> {
+        if limits.new_cards > 10_000 || limits.reviews > 10_000 {
+            return Err(ApplicationError::Invalid(
+                "daily review limits must be at most 10000".into(),
+            ));
+        }
+        self.review_queue.save_review_daily_limits(limits)
+    }
+
+    pub fn review_deck_overview(
+        &self,
+        at_ms: Option<u64>,
+    ) -> Result<crate::ReviewDeckOverview, ApplicationError> {
+        let at_ms = at_ms.unwrap_or_else(now_ms);
+        let imported = self.review_queue.list_imported_deck_schedules()?;
+        let imported_ids = imported
+            .iter()
+            .map(|entry| entry.item_id.clone())
+            .collect::<HashSet<_>>();
+        let mut channels = [
+            crate::ReviewChannel::Listening,
+            crate::ReviewChannel::Speaking,
+            crate::ReviewChannel::Reading,
+            crate::ReviewChannel::Writing,
+        ]
+        .into_iter()
+        .map(|channel| crate::ReviewChannelCounts {
+            channel,
+            counts: crate::ReviewStateCounts::default(),
+        })
+        .collect::<Vec<_>>();
+        for (item, schedule) in self.review_queue.list_review_items_with_schedules(10_000)? {
+            if imported_ids.contains(&item.id) {
+                continue;
+            }
+            let channel = primary_review_channel(&item);
+            let counts = &mut channels
+                .iter_mut()
+                .find(|entry| entry.channel == channel)
+                .expect("all channels are initialized")
+                .counts;
+            add_schedule_count(counts, &migrate_legacy_schedule(&schedule), at_ms);
+        }
+
+        let mut decks =
+            BTreeMap::<(String, String, Option<String>), crate::ReviewStateCounts>::new();
+        for entry in imported {
+            add_schedule_count(
+                decks
+                    .entry((entry.deck_id, entry.name, entry.parent_deck_id))
+                    .or_default(),
+                &migrate_legacy_schedule(&entry.schedule),
+                at_ms,
+            );
+        }
+        Ok(crate::ReviewDeckOverview {
+            channels,
+            imported_decks: decks
+                .into_iter()
+                .map(
+                    |((deck_id, name, parent_deck_id), counts)| crate::ImportedDeckCounts {
+                        deck_id,
+                        name,
+                        parent_deck_id,
+                        counts,
+                    },
+                )
+                .collect(),
+            limit_status: self.review_limit_status(at_ms)?,
+        })
+    }
+
+    pub fn custom_study(
+        &self,
+        request: crate::CustomStudyRequest,
+    ) -> Result<crate::CustomStudyQueue, ApplicationError> {
+        let at_ms = request.at_ms.unwrap_or_else(now_ms);
+        let limit = request.limit.unwrap_or(20).min(100) as usize;
+        let imported_origins = self
+            .review_queue
+            .list_imported_deck_schedules()?
+            .into_iter()
+            .map(|entry| {
+                (
+                    entry.item_id,
+                    crate::ReviewItemOrigin {
+                        kind: crate::ReviewOriginKind::ImportedAnki,
+                        anki_guid: Some(entry.anki_guid),
+                        deck_id: Some(entry.deck_id),
+                        deck_name: Some(entry.name),
+                        has_listening_enhancements: false,
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let mut entries = self
+            .review_queue
+            .list_review_items_with_schedules(10_000)?
+            .into_iter()
+            .filter_map(|(item, schedule)| {
+                let schedule = migrate_legacy_schedule(&schedule);
+                let selected = match &request.kind {
+                    crate::CustomStudyKind::MoreNew => schedule.state() == ReviewCardState::New,
+                    crate::CustomStudyKind::ReviewAhead => {
+                        schedule.state() != ReviewCardState::New && schedule.due_at_ms > at_ms
+                    }
+                    crate::CustomStudyKind::Channel { channel } => {
+                        !imported_origins.contains_key(&item.id)
+                            && primary_review_channel(&item) == *channel
+                    }
+                    crate::CustomStudyKind::Forgotten { minimum_lapses } => {
+                        schedule.lapse_count >= minimum_lapses.unwrap_or(2).max(1)
+                    }
+                };
+                selected.then(|| {
+                    let origin = imported_origins.get(&item.id).cloned();
+                    review_queue_entry(item, schedule, origin)
+                })
+            })
+            .collect::<Vec<_>>();
+        if matches!(&request.kind, crate::CustomStudyKind::Forgotten { .. }) {
+            entries.sort_by_key(|entry| std::cmp::Reverse(entry.schedule.lapse_count));
+        }
+        entries.truncate(limit);
+        Ok(crate::CustomStudyQueue {
+            entries,
+            advances_normal_schedule: matches!(&request.kind, crate::CustomStudyKind::ReviewAhead),
+        })
+    }
+
+    pub fn import_anki_package(
+        &self,
+        request: crate::AnkiPackageImportRequest,
+    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError> {
+        if request.package_path.trim().is_empty() || request.media_directory.trim().is_empty() {
+            return Err(ApplicationError::Validation("anki package paths"));
+        }
+        self.review_queue.import_anki_package(&request)
+    }
+
+    pub fn export_anki_package(
+        &self,
+        request: crate::AnkiPackageExportRequest,
+    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError> {
+        if request.package_path.trim().is_empty() {
+            return Err(ApplicationError::Validation("anki export path"));
+        }
+        self.review_queue.export_anki_package(&request)
+    }
+
+    /// Pure FSRS prediction. It reads the schedule once and performs no
+    /// repository write.
+    pub fn review_interval_preview(
+        &self,
+        id: &ReviewItemId,
+        at_ms: Option<u64>,
+    ) -> Result<Vec<crate::ReviewIntervalPreview>, ApplicationError> {
+        self.review_queue
+            .get_review_schedule(id)?
+            .map(|schedule| preview_review_intervals(&schedule, at_ms.unwrap_or_else(now_ms)))
+            .ok_or(ApplicationError::NotFound("review schedule"))
+    }
+
+    fn review_limit_status(
+        &self,
+        at_ms: u64,
+    ) -> Result<crate::ReviewLimitStatus, ApplicationError> {
+        let day_start = at_ms - at_ms % (24 * 60 * 60 * 1_000);
+        let (new_completed, reviews_completed) = self
+            .review_queue
+            .review_attempt_counts_between(day_start, day_start + 24 * 60 * 60 * 1_000)?;
+        let limits = self.review_queue.get_review_daily_limits()?;
+        Ok(crate::ReviewLimitStatus {
+            limits,
+            new_completed,
+            reviews_completed,
+            new_limit_reached: new_completed >= limits.new_cards,
+            review_limit_reached: reviews_completed >= limits.reviews,
+        })
     }
 
     pub fn submit_review_attempt(
         &self,
         input: SubmitReviewAttempt,
+    ) -> Result<ReviewSubmission, ApplicationError> {
+        self.submit_review_attempt_internal(input, true)
+    }
+
+    pub fn submit_custom_study_attempt(
+        &self,
+        input: crate::SubmitCustomStudyAttempt,
+    ) -> Result<ReviewSubmission, ApplicationError> {
+        let advances_normal_schedule = matches!(&input.kind, crate::CustomStudyKind::ReviewAhead);
+        self.submit_review_attempt_internal(
+            SubmitReviewAttempt {
+                item_id: input.item_id,
+                rating: input.rating,
+            },
+            advances_normal_schedule,
+        )
+    }
+
+    fn submit_review_attempt_internal(
+        &self,
+        input: SubmitReviewAttempt,
+        advances_normal_schedule: bool,
     ) -> Result<ReviewSubmission, ApplicationError> {
         let item = self
             .review_queue
@@ -400,8 +666,15 @@ impl PracticeUseCases {
                 difficulty: None,
                 interval_days: None,
                 lapse_count: 0,
+                last_reviewed_at_ms: None,
+                review_count: 0,
             });
-        let schedule = next_review_schedule(&current, input.rating, now);
+        let proposed_schedule = next_review_schedule(&current, input.rating, now);
+        let schedule = if advances_normal_schedule {
+            proposed_schedule
+        } else {
+            migrate_legacy_schedule(&current)
+        };
         let fingerprint = format!("{}:{now}:{:?}", item.id.as_str(), input.rating);
         let attempt = self.review_queue.create_review_attempt(&ReviewAttempt {
             id: ReviewAttemptId::from_fingerprint("review-attempt", &fingerprint),
@@ -410,8 +683,14 @@ impl PracticeUseCases {
             rating: input.rating,
             practice_attempt_id: None,
             next_due_at_ms: Some(schedule.due_at_ms),
+            previous_state: Some(current.state()),
+            advances_schedule: advances_normal_schedule,
         })?;
-        let schedule = self.review_queue.save_review_schedule(&schedule)?;
+        let schedule = if advances_normal_schedule {
+            self.review_queue.save_review_schedule(&schedule)?
+        } else {
+            schedule
+        };
         {
             let spec = observation_spec_for_review(input.rating);
             let fallback_sentence = item
@@ -489,7 +768,8 @@ impl PracticeUseCases {
                 "rating": input.rating,
                 "next_due_at_ms": schedule.due_at_ms,
                 "algorithm": schedule.algorithm,
-                "evidence_class": "heuristic_proxy",
+                "evidence_class": "fsrs_schedule",
+                "custom_study_extra_practice": !advances_normal_schedule,
                 "generated_observation_ids": generated_observation_ids
                     .iter()
                     .map(|id| id.as_str())
@@ -751,6 +1031,60 @@ impl PracticeUseCases {
     }
 }
 
+fn review_queue_entry(
+    item: ReviewItem,
+    schedule: ReviewSchedule,
+    origin: Option<crate::ReviewItemOrigin>,
+) -> ReviewQueueEntry {
+    let state = schedule.state();
+    let card = review_card(&item);
+    ReviewQueueEntry {
+        item,
+        schedule,
+        state,
+        card,
+        origin: origin.unwrap_or_else(crate::ReviewItemOrigin::native),
+    }
+}
+
+/// Native cards are assigned to one deterministic primary smart deck so a
+/// multi-anchor card is never double-counted. Imported Anki cards are excluded
+/// before this rule and remain in their original deck tree.
+fn primary_review_channel(item: &ReviewItem) -> crate::ReviewChannel {
+    match item.source.kind {
+        ReviewSourceKind::SpeakingAttempt => crate::ReviewChannel::Speaking,
+        ReviewSourceKind::Sentence => crate::ReviewChannel::Reading,
+        ReviewSourceKind::PracticeFailure
+            if item
+                .anchors
+                .iter()
+                .all(|anchor| anchor.kind == PracticeAnchorKind::Sentence) =>
+        {
+            crate::ReviewChannel::Writing
+        }
+        ReviewSourceKind::LexicalEntry
+        | ReviewSourceKind::PracticeFailure
+        | ReviewSourceKind::ListeningInbox
+        | ReviewSourceKind::Chunk
+        | ReviewSourceKind::ConnectedSpeech => crate::ReviewChannel::Listening,
+    }
+}
+
+fn add_schedule_count(
+    counts: &mut crate::ReviewStateCounts,
+    schedule: &ReviewSchedule,
+    at_ms: u64,
+) {
+    match schedule.state() {
+        ReviewCardState::New => counts.new += 1,
+        ReviewCardState::Learning | ReviewCardState::Relearning => {
+            counts.learning += 1;
+        }
+        ReviewCardState::Review if schedule.due_at_ms <= at_ms => counts.due += 1,
+        ReviewCardState::Review => {}
+    }
+}
+
 fn evaluate_text_answer(expected: &str, actual: &str) -> PracticeEvaluation {
     let expected_tokens = normalize_answer_tokens(expected);
     let actual_tokens = normalize_answer_tokens(actual);
@@ -941,6 +1275,52 @@ impl ReviewQueueRepository for DisabledLearningLoopRepository {
         _due_at_or_before_ms: u64,
         _limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_review_items_with_schedules(
+        &self,
+        _limit: u32,
+    ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn review_attempt_counts_between(
+        &self,
+        _start_ms: u64,
+        _end_ms: u64,
+    ) -> Result<(u32, u32), ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn get_review_daily_limits(&self) -> Result<crate::ReviewDailyLimits, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn save_review_daily_limits(
+        &self,
+        _limits: crate::ReviewDailyLimits,
+    ) -> Result<crate::ReviewDailyLimits, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn list_imported_deck_schedules(
+        &self,
+    ) -> Result<Vec<crate::ImportedDeckSchedule>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn import_anki_package(
+        &self,
+        _request: &crate::AnkiPackageImportRequest,
+    ) -> Result<crate::AnkiPackageImportSummary, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn export_anki_package(
+        &self,
+        _request: &crate::AnkiPackageExportRequest,
+    ) -> Result<crate::AnkiPackageExportSummary, ApplicationError> {
         Err(Self::disabled())
     }
 }

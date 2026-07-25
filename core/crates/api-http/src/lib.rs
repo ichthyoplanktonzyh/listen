@@ -75,12 +75,15 @@ use routes::practice::{
     archive_hunting_target, capture_listening_inbox_item, coach_dashboard, coach_evidence,
     compare_shadowing, complete_listening_session, complete_shadowing_attempt,
     confirm_upgrade_suggestion, create_hunting_target, create_practice_item,
-    create_practice_session, create_recording_asset, create_review_item, delete_recording_asset,
-    graduate_coach_material, list_due_review_items, list_hunting_candidates,
-    list_hunting_occurrences, list_hunting_targets, list_listening_inbox_items,
-    list_upgrade_suggestions, practice_attempt, process_listening_inbox_item, recording_asset,
-    recording_audio_facts, reject_upgrade_suggestion, review_item, submit_hunting_check,
-    submit_practice_attempt, submit_review_attempt, upgrade_suggestion_history,
+    create_practice_session, create_recording_asset, create_review_item, custom_study,
+    delete_recording_asset, export_anki_package, graduate_coach_material, import_anki_package,
+    list_due_review_items, list_hunting_candidates, list_hunting_occurrences, list_hunting_targets,
+    list_listening_inbox_items, list_upgrade_suggestions, practice_attempt,
+    process_listening_inbox_item, recording_asset, recording_audio_facts,
+    reject_upgrade_suggestion, review_daily_limits, review_deck_overview, review_interval_preview,
+    review_item, review_queue, submit_custom_study_attempt, submit_hunting_check,
+    submit_practice_attempt, submit_review_attempt, update_review_daily_limits,
+    upgrade_suggestion_history,
 };
 use routes::production_corpus::{
     production_gap_review, reindex_production_corpus, search_production_corpus,
@@ -662,7 +665,24 @@ pub fn router(state: ApiState) -> Router {
             "/v1/review/items",
             get(list_due_review_items).post(create_review_item),
         )
+        .route("/v1/review/queue", get(review_queue))
+        .route("/v1/review/decks", get(review_deck_overview))
+        .route(
+            "/v1/review/settings/limits",
+            get(review_daily_limits).put(update_review_daily_limits),
+        )
+        .route("/v1/review/custom-study", post(custom_study))
+        .route(
+            "/v1/review/custom-study/attempts",
+            post(submit_custom_study_attempt),
+        )
+        .route("/v1/review/anki/import", post(import_anki_package))
+        .route("/v1/review/anki/export", post(export_anki_package))
         .route("/v1/review/items/{id}", get(review_item))
+        .route(
+            "/v1/review/items/{id}/interval-preview",
+            get(review_interval_preview),
+        )
         .route("/v1/review/attempts", post(submit_review_attempt))
         .route("/v1/review/cross-modal", get(cross_modal_gaps))
         .route("/v1/projections/rebuild", post(rebuild_projections))
