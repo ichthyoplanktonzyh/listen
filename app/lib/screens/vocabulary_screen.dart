@@ -17,6 +17,7 @@ import '../models/types.dart';
 import '../services/api_service.dart';
 import '../theme/breakpoints.dart';
 import '../theme/spacing.dart';
+import '../theme/typography.dart';
 import '../widgets/common/listen_empty_state.dart';
 import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
@@ -24,7 +25,7 @@ import '../widgets/vocabulary/hunting_list_panel.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
 import '../widgets/common/capability_viz.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
-import '../widgets/vocabulary/vocabulary_transfer_actions.dart';
+import '../widgets/vocabulary/vocabulary_gap_panel.dart';
 
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({
@@ -402,7 +403,31 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   /// Non-null while the in-page entry detail is open (master → detail).
   LexicalEntryDetails? details;
-  bool returnToCrossModalReview = false;
+
+  /// The gap instrument room — the right pane's default page. Two independent
+  /// best-effort backend sources are juxtaposed here (rendering only); each
+  /// degrades to a notice instead of failing the workbench.
+  bool gapLoading = true;
+  List<CrossModalReviewCandidateView>? gapCandidates;
+  String? gapCandidatesError;
+  ProductionGapReviewView? gapProduction;
+  String? gapProductionError;
+
+  /// Set when the coach's cross-modal hand-off lands us here so the candidates
+  /// section is emphasised (the number the coach clicked).
+  bool gapHighlightCandidates = false;
+
+  /// Narrow (single-column, "B") form only: whether the gap pane is showing
+  /// full-width instead of the word list. Ignored in the two-pane form where
+  /// the gap pane is simply the right pane whenever no entry is open.
+  bool narrowGapOpen = false;
+
+  /// Whether semantic search can run, so the main search box can offer a
+  /// "semantic" toggle; management lives in the tools menu. Best-effort.
+  bool semanticCanSearch = false;
+  bool semanticMode = false;
+  List<SemanticSearchHitView> semanticHits = const [];
+  bool semanticSearching = false;
 
   /// Pending listening upgrade suggestions and the dictionary-provider
   /// pronunciation audio for the open entry (both best-effort).
@@ -452,6 +477,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void initState() {
     super.initState();
     unawaited(_load());
+    // The gap instrument room is the default right pane, so its two sources
+    // load up front (best-effort, each caught) rather than behind a click.
+    unawaited(_loadGapPanel());
+    unawaited(_probeSemanticSearch());
     // The hunting controller is shared with the app shell, whose
     // ListenableBuilder is already subscribed while this route's first build
     // is in progress — load() notifies synchronously, so defer it past the
@@ -464,9 +493,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       unawaited(_openEntryById(initialEntryId));
     }
     if (widget.openCrossModalReviewOnStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_openCrossModalReview());
-      });
+      // The coach's cross-modal hand-off lands on the gap pane (the default
+      // right pane) rather than a dialog; emphasise the candidates section.
+      _landOnGapPane(highlightCandidates: true);
     }
   }
 
@@ -564,10 +593,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void _closeDetails() {
     unawaited(widget.auxiliaryAudio.stop());
     setState(() => details = null);
-    if (returnToCrossModalReview) {
-      returnToCrossModalReview = false;
-      unawaited(_openCrossModalReview());
-    }
   }
 
   Future<void> _openProductionAttempt(ProductionCorpusHitView hit) async {
@@ -616,177 +641,98 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     );
   }
 
-  Future<void> _openProductionGapReview() async {
-    final l = AppLocalizations.of(context);
-    ProductionGapReviewView review;
-    Map<String, List<NearSemanticProductionMatchView>> semanticMatches =
-        const {};
-    try {
-      final enriched = await widget.api.semanticProductionGapReview(
-        language: widget.language,
-      );
-      review = enriched.review;
-      semanticMatches = enriched.matchesByTarget;
-    } catch (error) {
-      try {
-        review = await widget.api.productionGapReview(
-          language: widget.language,
-        );
-      } catch (fallbackError) {
-        if (mounted) {
-          _snack(
-            l
-                .text('productionGapUnavailable')
-                .replaceAll('{error}', '$fallbackError'),
-          );
-        }
-        return;
-      }
-    }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.text('productionGapTitle')),
-        content: SizedBox(
-          width: 620,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              Text(
-                l
-                    .text('productionGapFacts')
-                    .replaceAll('{documents}', '${review.documentCount}')
-                    .replaceAll('{tokens}', '${review.tokenCount}')
-                    .replaceAll('{lemmas}', '${review.lemmaCount}'),
-              ),
-              if (review.readiness == 'empty') ...[
-                const SizedBox(height: ListenSpacing.gap12),
-                Text(l.text('productionGapEmpty')),
-              ] else ...[
-                if (review.readiness == 'starter') ...[
-                  const SizedBox(height: ListenSpacing.gap12),
-                  Text(
-                    l.text('productionGapStarter'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.tertiary,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: ListenSpacing.gap12),
-                for (final target in review.targets) ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(target.displayForm),
-                    subtitle: Text(
-                      l
-                          .text('productionGapTargetReason')
-                          .replaceAll(
-                            '{frequency}',
-                            target.frequencyRank == null
-                                ? l.text('productionGapFrequencyUnavailable')
-                                : 'BNC #${target.frequencyRank}',
-                          )
-                          .replaceAll(
-                            '{evidence}',
-                            '${target.evidenceStrength}',
-                          )
-                          .replaceAll('{recency}', '${target.recencyBand}'),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    trailing: TextButton(
-                      onPressed: () {
-                        Navigator.pop(dialogContext);
-                        unawaited(_openEntryById(target.lexicalEntryId));
-                      },
-                      child: Text(l.text('productionGapOpenTarget')),
-                    ),
-                  ),
-                  for (final match
-                      in semanticMatches[target.lexicalEntryId] ?? const [])
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16, bottom: 8),
-                      child: Text(
-                        l
-                            .text('productionGapSemanticClue')
-                            .replaceAll('{word}', match.normalizedKey)
-                            .replaceAll(
-                              '{score}',
-                              match.similarity.toStringAsFixed(3),
-                            ),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                ],
-                if (review.targets.isEmpty)
-                  Text(l.text('productionGapNoCandidates')),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l.text('close')),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openCrossModalReview() async {
-    final l = AppLocalizations.of(context);
-    List<CrossModalReviewCandidateView> candidates;
+  /// Loads the two gap-pane sources. Each is best-effort and degrades to an
+  /// inline notice — the workbench never fails because a decoration source is
+  /// down. Rendering only: neither query is changed, they are juxtaposed.
+  Future<void> _loadGapPanel() async {
+    List<CrossModalReviewCandidateView>? candidates;
+    String? candidatesError;
     try {
       candidates = await widget.api.crossModalReviewGaps(
         language: widget.language,
       );
     } catch (error) {
-      if (mounted) _snack('${l.text('crossModalReviewUnavailable')}: $error');
+      candidatesError = '$error';
+    }
+    ProductionGapReviewView? production;
+    String? productionError;
+    try {
+      final enriched = await widget.api.semanticProductionGapReview(
+        language: widget.language,
+      );
+      production = enriched.review;
+    } catch (_) {
+      // The semantic enrichment is optional; fall back to the plain review.
+      try {
+        production = await widget.api.productionGapReview(
+          language: widget.language,
+        );
+      } catch (error) {
+        productionError = '$error';
+      }
+    }
+    if (mounted) {
+      setState(() {
+        gapCandidates = candidates;
+        gapCandidatesError = candidatesError;
+        gapProduction = production;
+        gapProductionError = productionError;
+        gapLoading = false;
+      });
+    }
+  }
+
+  /// Lands on the gap pane (the default right pane): closes any open detail
+  /// and, in the narrow form, brings the gap surface forward. Replaces the two
+  /// old app-bar dialogs and the coach's cross-modal dialog hand-off.
+  void _landOnGapPane({bool highlightCandidates = false}) {
+    if (!mounted) return;
+    setState(() {
+      details = null;
+      narrowGapOpen = true;
+      if (highlightCandidates) gapHighlightCandidates = true;
+    });
+  }
+
+  Future<void> _probeSemanticSearch() async {
+    try {
+      final capability = await widget.api.semanticEmbeddingCapability();
+      if (mounted) setState(() => semanticCanSearch = capability.canSearch);
+    } catch (_) {
+      // Optional capability; the exact-search box stays fully usable.
+    }
+  }
+
+  Future<void> _runSemanticSearch() async {
+    if (search.trim().isEmpty) {
+      setState(() => semanticHits = const []);
       return;
     }
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.text('crossModalReviewTitle')),
-        content: SizedBox(
-          width: 680,
-          child: candidates.isEmpty
-              ? Text(l.text('crossModalReviewEmpty'))
-              : ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final candidate in candidates)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(candidate.displayForm),
-                        subtitle: Text(
-                          '${candidate.reviewKind}\n'
-                          '${candidate.reading} · ${candidate.listening} · '
-                          '${candidate.speaking} · ${candidate.writing}\n'
-                          '${candidate.reason}\n${candidate.source.snapshot}',
-                        ),
-                        isThreeLine: false,
-                        trailing: TextButton(
-                          onPressed: () {
-                            returnToCrossModalReview = true;
-                            Navigator.pop(dialogContext);
-                            unawaited(_openEntryById(candidate.lexicalEntryId));
-                          },
-                          child: Text(l.text('productionGapOpenTarget')),
-                        ),
-                      ),
-                  ],
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(l.text('close')),
-          ),
-        ],
+    setState(() => semanticSearching = true);
+    List<SemanticSearchHitView> hits;
+    try {
+      final result = await widget.api.semanticSearch(
+        query: search,
+        language: widget.language,
+      );
+      hits = result.hits;
+    } catch (_) {
+      hits = const [];
+    }
+    if (mounted) {
+      setState(() {
+        semanticHits = hits;
+        semanticSearching = false;
+      });
+    }
+  }
+
+  void _openSemanticIndexManager() {
+    unawaited(
+      showDialog<void>(
+        context: context,
+        builder: (_) =>
+            _SemanticSearchDialog(api: widget.api, language: widget.language),
       ),
     );
   }
@@ -1400,199 +1346,361 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final openDetails = details;
-    return ListenableBuilder(
-      listenable: Listenable.merge([hunting, widget.auxiliaryAudio]),
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(
-          leading: openDetails == null
-              ? null
-              : BackButton(onPressed: _closeDetails),
-          title: Text(
-            openDetails?.entry.displayForm ?? l.text('listeningDictionary'),
-          ),
-          actions: [
-            IconButton(
-              tooltip: l.text('huntingOpen'),
-              onPressed: () => unawaited(_openHuntingList()),
-              icon: Badge(
-                isLabelVisible: hunting.state.targets.isNotEmpty,
-                label: Text('${hunting.state.targets.length}'),
-                child: const Icon(Icons.gps_fixed),
-              ),
-            ),
-            if (openDetails != null)
-              IconButton(
-                tooltip:
-                    hunting.state.containsLexicalEntry(openDetails.entry.id)
-                    ? l.text('huntingAlreadyAdded')
-                    : l.text('huntingAddCurrent'),
-                onPressed:
-                    hunting.state.busy ||
-                        hunting.state.containsLexicalEntry(openDetails.entry.id)
-                    ? null
-                    : () => unawaited(_addToHuntingList(openDetails.entry)),
-                icon: Icon(
-                  hunting.state.containsLexicalEntry(openDetails.entry.id)
-                      ? Icons.gps_fixed
-                      : Icons.add_location_alt_outlined,
-                ),
-              ),
-            if (openDetails != null)
-              TextButton.icon(
-                onPressed: () => unawaited(_addToReview(openDetails.entry)),
-                icon: const Icon(Icons.queue_music_outlined, size: 18),
-                label: Text(l.text('dictionaryAddToReview')),
-              )
-            else
-              const SizedBox.shrink(),
-            if (openDetails != null)
-              IconButton(
-                tooltip: l.text('projectionReviewTitle'),
-                onPressed: () =>
-                    unawaited(_openProjectionReview(openDetails.entry.id)),
-                icon: const Icon(Icons.fact_check_outlined),
-              )
-            else ...[
-              IconButton(
-                tooltip: l.text('semanticSearchTitle'),
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => _SemanticSearchDialog(
-                    api: widget.api,
-                    language: widget.language,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Two panes side by side above the fold, single column below it (the
+        // narrow "B" form). Same semantics, two breakpoint shapes (S0).
+        final twoPane =
+            constraints.maxWidth >= ListenBreakpoints.vocabularyTwoPane;
+        return ListenableBuilder(
+          listenable: Listenable.merge([hunting, widget.auxiliaryAudio]),
+          builder: (context, _) {
+            final openDetails = details;
+            // The narrow form stacks the list, gap pane and detail, so a
+            // sub-surface needs a back affordance. The two-pane form keeps the
+            // list beside the pane, so its app bar never grows a leading — it
+            // never transforms (V5).
+            final narrowSubSurface =
+                !twoPane && (openDetails != null || narrowGapOpen);
+            return Scaffold(
+              appBar: AppBar(
+                leading: narrowSubSurface
+                    ? BackButton(
+                        onPressed: () {
+                          if (details != null) {
+                            _closeDetails();
+                          } else {
+                            setState(() => narrowGapOpen = false);
+                          }
+                        },
+                      )
+                    : null,
+                // Never transforms: title and tools stay constant whatever the
+                // right pane shows. Detail actions live in the detail pane, not
+                // the top bar (V5 death).
+                title: Text(l.text('listeningDictionary')),
+                actions: [
+                  IconButton(
+                    tooltip: l.text('huntingOpen'),
+                    onPressed: () => unawaited(_openHuntingList()),
+                    icon: Badge(
+                      isLabelVisible: hunting.state.targets.isNotEmpty,
+                      label: Text('${hunting.state.targets.length}'),
+                      child: const Icon(Icons.gps_fixed),
+                    ),
                   ),
-                ),
-                icon: const Icon(Icons.travel_explore_outlined),
+                  _toolsMenu(l),
+                ],
               ),
-              IconButton(
-                tooltip: l.text('productionGapTitle'),
-                onPressed: () => unawaited(_openProductionGapReview()),
-                icon: const Icon(Icons.compare_arrows_outlined),
-              ),
-              IconButton(
-                tooltip: l.text('crossModalReviewTitle'),
-                onPressed: () => unawaited(_openCrossModalReview()),
-                icon: const Icon(Icons.hub_outlined),
-              ),
-              IconButton(
-                tooltip: l.text('dictionaryReindex'),
-                onPressed: () => unawaited(_reindexCorpus()),
-                icon: const Icon(Icons.manage_search_outlined),
-              ),
-              VocabularyTransferActions(
-                onExport: widget.onExport,
-                onImport: widget.onImport,
-              ),
-            ],
-          ],
-        ),
-        body: openDetails == null ? _bookBody(l) : _detailBody(openDetails),
-      ),
+              body: twoPane ? _twoPaneBody(l) : _narrowBody(l),
+            );
+          },
+        );
+      },
     );
   }
+
+  /// The maintenance domain, permanently layered off the core flow: import,
+  /// export, corpus reindex and semantic-index management all live in one
+  /// overflow menu (C3/V5).
+  Widget _toolsMenu(AppLocalizations l) => PopupMenuButton<String>(
+    tooltip: l.text('vocabToolsMenu'),
+    icon: const Icon(Icons.more_vert),
+    onSelected: (value) {
+      switch (value) {
+        case 'import':
+          unawaited(widget.onImport());
+        case 'export':
+          unawaited(widget.onExport());
+        case 'reindex':
+          unawaited(_reindexCorpus());
+        case 'semantic':
+          _openSemanticIndexManager();
+      }
+    },
+    itemBuilder: (context) => [
+      PopupMenuItem(
+        value: 'import',
+        child: _toolsItem(Icons.file_download_outlined, l.text('importAssets')),
+      ),
+      PopupMenuItem(
+        value: 'export',
+        child: _toolsItem(Icons.file_upload_outlined, l.text('exportAssets')),
+      ),
+      PopupMenuItem(
+        value: 'reindex',
+        child: _toolsItem(
+          Icons.manage_search_outlined,
+          l.text('dictionaryReindex'),
+        ),
+      ),
+      PopupMenuItem(
+        value: 'semantic',
+        child: _toolsItem(
+          Icons.travel_explore_outlined,
+          l.text('vocabToolsSemanticIndex'),
+        ),
+      ),
+    ],
+  );
+
+  Widget _toolsItem(IconData icon, String label) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 18),
+      const SizedBox(width: ListenSpacing.gap12),
+      Text(label),
+    ],
+  );
+
+  Widget _twoPaneBody(AppLocalizations l) {
+    final colors = Theme.of(context).colorScheme;
+    final openDetails = details;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          width: 340,
+          child: _listColumn(l, gapSelected: openDetails == null),
+        ),
+        VerticalDivider(width: 1, color: colors.outlineVariant),
+        Expanded(
+          child: openDetails == null ? _gapPane() : _detailBody(openDetails),
+        ),
+      ],
+    );
+  }
+
+  Widget _narrowBody(AppLocalizations l) {
+    final openDetails = details;
+    if (openDetails != null) return _detailBody(openDetails);
+    if (narrowGapOpen) return _gapPane();
+    return _listColumn(l, gapSelected: false, showGapStrip: true);
+  }
+
+  Widget _gapPane() => VocabularyGapPanel(
+    loading: gapLoading,
+    candidates: gapCandidates,
+    candidatesError: gapCandidatesError,
+    production: gapProduction,
+    productionError: gapProductionError,
+    highlightCandidates: gapHighlightCandidates,
+    onOpenEntry: (id) => unawaited(_openEntryById(id)),
+  );
 
   Widget _detailBody(LexicalEntryDetails value) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(
         maxWidth: ListenBreakpoints.contentColumnMax,
       ),
-      child: ListeningDictionaryEntryView(
-        // Rebind state when switching entries so reveal/mark/search state
-        // never leaks from another word.
-        key: ValueKey(value.entry.id),
-        details: value,
-        showProductionCorpus: true,
-        productionHits: productionHits,
-        productionLoadFailed: productionLoadFailed,
-        onOpenProductionAttempt: _openProductionAttempt,
-        slicePlayer: slicePlayer,
-        onPlay: (occurrence) =>
-            unawaited(_playOccurrenceMap(occurrence.toJson())),
-        onShadowing: widget.onStartShadowing == null
-            ? null
-            : _startShadowingOccurrence,
-        onMark: (occurrence, heard) =>
-            _markOccurrence(value.entry, occurrence, heard),
-        onSearchLibrary: () => _searchLibraryFor(value.entry),
-        onPlayCorpus: (occurrence) => unawaited(_playCorpus(occurrence)),
-        onCollectCorpus: (occurrence) =>
-            _collectCorpus(value.entry, occurrence),
-        suggestions: suggestions,
-        onConfirmSuggestion: (suggestion) =>
-            _confirmSuggestion(value.entry, suggestion),
-        onRejectSuggestion: (suggestion) =>
-            _rejectSuggestion(value.entry, suggestion),
-        onCapabilityOverride: (capability, conclusion) =>
-            _setOverride(value.entry, capability, conclusion),
-        onLoadEvidenceHistory: ({String? capability, int offset = 0}) =>
-            widget.api.learningObservationHistory(
-              value.entry.id,
-              capability: capability,
-              offset: offset,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _detailActionsHeader(value),
+          Expanded(
+            child: ListeningDictionaryEntryView(
+              // Rebind state when switching entries so reveal/mark/search state
+              // never leaks from another word.
+              key: ValueKey(value.entry.id),
+              details: value,
+              showProductionCorpus: true,
+              productionHits: productionHits,
+              productionLoadFailed: productionLoadFailed,
+              onOpenProductionAttempt: _openProductionAttempt,
+              slicePlayer: slicePlayer,
+              onPlay: (occurrence) =>
+                  unawaited(_playOccurrenceMap(occurrence.toJson())),
+              onShadowing: widget.onStartShadowing == null
+                  ? null
+                  : _startShadowingOccurrence,
+              onMark: (occurrence, heard) =>
+                  _markOccurrence(value.entry, occurrence, heard),
+              onSearchLibrary: () => _searchLibraryFor(value.entry),
+              onPlayCorpus: (occurrence) => unawaited(_playCorpus(occurrence)),
+              onCollectCorpus: (occurrence) =>
+                  _collectCorpus(value.entry, occurrence),
+              suggestions: suggestions,
+              onConfirmSuggestion: (suggestion) =>
+                  _confirmSuggestion(value.entry, suggestion),
+              onRejectSuggestion: (suggestion) =>
+                  _rejectSuggestion(value.entry, suggestion),
+              onCapabilityOverride: (capability, conclusion) =>
+                  _setOverride(value.entry, capability, conclusion),
+              onLoadEvidenceHistory: ({String? capability, int offset = 0}) =>
+                  widget.api.learningObservationHistory(
+                    value.entry.id,
+                    capability: capability,
+                    offset: offset,
+                  ),
+              onSaveContent: (definition, note) =>
+                  _saveContent(value.entry, definition, note),
+              onCreateSenseFolder: (label, definition, gloss, externalRef) =>
+                  _createSenseFolder(
+                    value.entry,
+                    label,
+                    definition,
+                    gloss,
+                    externalRef,
+                  ),
+              onUpdateSenseFolder:
+                  (id, label, definition, gloss, externalRef) =>
+                      _updateSenseFolder(
+                        value.entry,
+                        id,
+                        label,
+                        definition,
+                        gloss,
+                        externalRef,
+                      ),
+              onDeleteSenseFolder: (id) => _deleteSenseFolder(value.entry, id),
+              onAssignSenseFolder: (senseId, occurrence) =>
+                  _assignSenseFolder(value.entry, senseId, occurrence),
+              onUnassignSenseFolder: (senseId, occurrence) =>
+                  _unassignSenseFolder(value.entry, senseId, occurrence),
+              onReviewClip: (occurrence) =>
+                  _reviewClip(value.entry, occurrence),
+              externalLookupUrl: _externalLookupUrlFor(
+                value.entry.displayForm,
+                value.entry.language,
+              ),
+              onOpenExternal: _openExternal,
+              pronunciationAudioUrl: pronunciationAudioUrl,
+              onPlayPronunciationAudio: (url) =>
+                  unawaited(_playPronunciationAudio(url)),
+              onSpeakSynthetic: (text, purpose) =>
+                  unawaited(_speakSynthetic(text, purpose)),
+              speechBusy: widget.auxiliaryAudio.busy,
             ),
-        onSaveContent: (definition, note) =>
-            _saveContent(value.entry, definition, note),
-        onCreateSenseFolder: (label, definition, gloss, externalRef) =>
-            _createSenseFolder(
-              value.entry,
-              label,
-              definition,
-              gloss,
-              externalRef,
-            ),
-        onUpdateSenseFolder: (id, label, definition, gloss, externalRef) =>
-            _updateSenseFolder(
-              value.entry,
-              id,
-              label,
-              definition,
-              gloss,
-              externalRef,
-            ),
-        onDeleteSenseFolder: (id) => _deleteSenseFolder(value.entry, id),
-        onAssignSenseFolder: (senseId, occurrence) =>
-            _assignSenseFolder(value.entry, senseId, occurrence),
-        onUnassignSenseFolder: (senseId, occurrence) =>
-            _unassignSenseFolder(value.entry, senseId, occurrence),
-        onReviewClip: (occurrence) => _reviewClip(value.entry, occurrence),
-        externalLookupUrl: _externalLookupUrlFor(
-          value.entry.displayForm,
-          value.entry.language,
-        ),
-        onOpenExternal: _openExternal,
-        pronunciationAudioUrl: pronunciationAudioUrl,
-        onPlayPronunciationAudio: (url) =>
-            unawaited(_playPronunciationAudio(url)),
-        onSpeakSynthetic: (text, purpose) =>
-            unawaited(_speakSynthetic(text, purpose)),
-        speechBusy: widget.auxiliaryAudio.busy,
+          ),
+        ],
       ),
     ),
   );
 
-  Widget _bookBody(AppLocalizations l) {
+  /// The detail pane's own action bar. These used to hijack the app bar (V5);
+  /// they now travel with the detail so the shell never transforms.
+  Widget _detailActionsHeader(LexicalEntryDetails value) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final inHunting = hunting.state.containsLexicalEntry(value.entry.id);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              value.entry.displayForm,
+              style: ListenType.emphasis,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () => unawaited(_addToReview(value.entry)),
+            icon: const Icon(Icons.queue_music_outlined, size: 18),
+            label: Text(l.text('dictionaryAddToReview')),
+          ),
+          IconButton(
+            tooltip: inHunting
+                ? l.text('huntingAlreadyAdded')
+                : l.text('huntingAddCurrent'),
+            onPressed: hunting.state.busy || inHunting
+                ? null
+                : () => unawaited(_addToHuntingList(value.entry)),
+            icon: Icon(
+              inHunting ? Icons.gps_fixed : Icons.add_location_alt_outlined,
+              color: inHunting ? colors.primary : null,
+            ),
+          ),
+          IconButton(
+            tooltip: l.text('projectionReviewTitle'),
+            onPressed: () => unawaited(_openProjectionReview(value.entry.id)),
+            icon: const Icon(Icons.fact_check_outlined),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The list column (left of the workbench, or the whole narrow screen): the
+  /// search box, the persistent gap entry, the channel/assessment lens, then
+  /// the word list.
+  Widget _listColumn(
+    AppLocalizations l, {
+    required bool gapSelected,
+    bool showGapStrip = false,
+  }) {
     final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-          child: TextField(
-            decoration: InputDecoration(
-              isDense: true,
-              prefixIcon: const Icon(Icons.search),
-              hintText: l.text('searchVocabulary'),
-            ),
-            onChanged: (value) {
-              search = value;
-              homeResults = null;
-              unawaited(_load());
-            },
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    isDense: true,
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: semanticMode
+                        ? l.text('semanticSearchHint')
+                        : l.text('searchVocabulary'),
+                  ),
+                  onChanged: (value) {
+                    search = value;
+                    homeResults = null;
+                    if (!semanticMode) unawaited(_load());
+                  },
+                  onSubmitted: (_) {
+                    if (semanticMode) unawaited(_runSemanticSearch());
+                  },
+                ),
+              ),
+              // The semantic "use" surface folds into the main box; only the
+              // "manage" surface stays in the tools menu. The toggle appears
+              // only when the capability can actually search.
+              if (semanticCanSearch) ...[
+                const SizedBox(width: ListenSpacing.gap8),
+                FilterChip(
+                  label: Text(l.text('semanticSearchToggle')),
+                  selected: semanticMode,
+                  onSelected: (on) {
+                    setState(() {
+                      semanticMode = on;
+                      semanticHits = const [];
+                    });
+                    if (on) {
+                      if (search.trim().isNotEmpty) {
+                        unawaited(_runSemanticSearch());
+                      }
+                    } else {
+                      unawaited(_load());
+                    }
+                  },
+                ),
+              ],
+            ],
           ),
         ),
-        // Primary lens: the four-channel capability axis. The channel picker
-        // only affects results once a specific assessment is chosen.
+        // The gap instrument room is a permanent entry, not a buried icon —
+        // the workbench's self-falsification note asks for a visible way back
+        // to the gap list. Two-pane uses a selectable entry row; the narrow
+        // form uses a compact gap strip with live counts instead.
+        if (showGapStrip)
+          _narrowGapStrip(l)
+        else
+          ListTile(
+            dense: true,
+            selected: gapSelected,
+            selectedTileColor: colors.primary.withValues(alpha: 0.08),
+            leading: const Icon(Icons.hub_outlined),
+            title: Text(l.text('vocabGapEntry')),
+            onTap: _landOnGapPane,
+          ),
+        Divider(height: 1, color: colors.outlineVariant),
+        // Primary lens: the four-channel capability axis. The channel always
+        // re-lenses the entry rings (presentation); it only re-queries once an
+        // assessment is picked, which is when the backend filters by capability.
         _filterRow(
           children: [
             for (final cap in capabilities)
@@ -1622,14 +1730,87 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         ),
         const SizedBox(height: ListenSpacing.gap4),
         Divider(height: 1, color: colors.outlineVariant),
-        Expanded(
-          child: loading
-              ? const Center(child: ListenLoading())
-              : words.isEmpty && search.trim().isNotEmpty
-              ? _homeCorpusFallback(l)
-              : VocabularyBookView(words: words, onWord: _openDetails),
-        ),
+        Expanded(child: _listResults(l)),
       ],
+    );
+  }
+
+  Widget _listResults(AppLocalizations l) {
+    if (semanticMode) {
+      if (semanticSearching) return const Center(child: ListenLoading());
+      if (semanticHits.isEmpty) {
+        return ListenEmptyState(
+          icon: Icons.search_off,
+          message: l.text('semanticSearchNoHits'),
+        );
+      }
+      return ListView.separated(
+        itemCount: semanticHits.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (_, index) {
+          final hit = semanticHits[index];
+          return ListTile(
+            title: Text(
+              hit.source.text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${hit.source.kind}'
+              '${hit.source.channel == null ? '' : ' · ${hit.source.channel}'}',
+            ),
+            trailing: Text(hit.similarity.toStringAsFixed(3)),
+          );
+        },
+      );
+    }
+    if (loading) return const Center(child: ListenLoading());
+    if (words.isEmpty && search.trim().isNotEmpty) {
+      return _homeCorpusFallback(l);
+    }
+    return VocabularyBookView(
+      words: words,
+      onWord: _openDetails,
+      focusCapability: capability,
+      selectedEntryId: details?.entry.id,
+    );
+  }
+
+  /// The narrow ("B") form keeps a compact gap strip at the top of the list so
+  /// gap-(c) is one tap away even without a second pane.
+  Widget _narrowGapStrip(AppLocalizations l) {
+    final colors = Theme.of(context).colorScheme;
+    final candidateCount = gapCandidates?.length;
+    final targetCount = gapProduction?.targets.length;
+    final subtitle = (candidateCount == null && targetCount == null)
+        ? l.text('vocabGapEntry')
+        : l
+              .text('gapPaneSubtitle')
+              .replaceAll('{candidates}', '${candidateCount ?? 0}')
+              .replaceAll('{targets}', '${targetCount ?? 0}');
+    return InkWell(
+      onTap: _landOnGapPane,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        child: Row(
+          children: [
+            Icon(Icons.hub_outlined, size: 18, color: colors.secondary),
+            const SizedBox(width: ListenSpacing.gap8),
+            Expanded(
+              child: Text(
+                subtitle,
+                style: ListenType.caption.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Text(
+              l.text('vocabGapStripAction'),
+              style: ListenType.caption.copyWith(color: colors.secondary),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

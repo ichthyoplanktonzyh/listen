@@ -364,6 +364,24 @@ class AppLocalizations {
           'Semantic search is optional. Exact search remains available.',
       'semanticSearchNoHits': 'No semantic matches yet.',
       'semanticSearchFailure': 'Semantic search unavailable: {error}',
+      'semanticSearchToggle': 'Semantic',
+      // S3 · the vocabulary workbench's gap instrument room (default right pane)
+      'gapPaneTitle': 'Where output lags input',
+      'gapPaneSubtitle':
+          'Cross-channel candidates {candidates} · '
+          'output gap {targets}',
+      'gapPaneCandidatesSection':
+          'Cross-channel candidates · '
+          'words you take in but don\'t produce',
+      'gapPaneProductionSection': 'Output gap · frequent yet never said',
+      'gapPaneEmpty':
+          'No cross-channel gaps yet. Words you understand but haven\'t '
+          'produced will surface here first.',
+      'gapPaneViewEntry': 'View entry',
+      'vocabGapEntry': 'Gaps',
+      'vocabGapStripAction': 'View gaps →',
+      'vocabToolsMenu': 'Tools',
+      'vocabToolsSemanticIndex': 'Semantic index',
       'huntingAddCurrent': 'Add to Hunting List',
       'huntingStartMode': 'Start Hunting Mode',
       'huntingStopMode': 'Stop Hunting Mode',
@@ -1796,6 +1814,18 @@ class AppLocalizations {
       'semanticSearchUnavailable': '语义搜索是可选能力；精确搜索仍可使用。',
       'semanticSearchNoHits': '暂时没有语义近邻结果。',
       'semanticSearchFailure': '语义搜索不可用：{error}',
+      'semanticSearchToggle': '语义',
+      // S3 · 词汇本工作台的差距仪表间(右面默认页)
+      'gapPaneTitle': '输出跟不上输入的词',
+      'gapPaneSubtitle': '跨通道候选 {candidates} · 产出差距 {targets}',
+      'gapPaneCandidatesSection': '跨通道候选 · 听懂却没说出口的词',
+      'gapPaneProductionSection': '产出差距 · 高频却没说过',
+      'gapPaneEmpty': '暂无跨通道差距。听懂但还没说出口的词会先出现在这里。',
+      'gapPaneViewEntry': '看词条',
+      'vocabGapEntry': '差距',
+      'vocabGapStripAction': '看差距 →',
+      'vocabToolsMenu': '工具',
+      'vocabToolsSemanticIndex': '语义索引管理',
       'huntingAddCurrent': '加入猎词单',
       'huntingStartMode': '开始狩猎模式',
       'huntingStopMode': '结束狩猎模式',
