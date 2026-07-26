@@ -12,7 +12,8 @@ use std::time::Duration;
 
 use application::{
     JudgeRequest, LlmChatAdapter, OutputFeedbackProvider, OutputFeedbackRequest,
-    SemanticJudgeProvider,
+    SemanticJudgeProvider, SenseGroupPartitionProvider, SenseGroupPartitionRequest,
+    SenseGroupProtectedSpan, SenseGroupTokenInput,
 };
 use axum::{Json, Router, extract::State, http::HeaderMap, http::StatusCode, routing::post};
 use domain::{
@@ -195,6 +196,16 @@ impl Judge {
             Judge::Anthropic(provider) => provider.give_feedback(request).await,
         }
     }
+
+    async fn sense_groups(
+        &self,
+        request: &SenseGroupPartitionRequest,
+    ) -> Result<application::SenseGroupPartitionDraft, LlmProviderError> {
+        match self {
+            Judge::OpenAi(provider) => provider.partition_sense_groups(request).await,
+            Judge::Anthropic(provider) => provider.partition_sense_groups(request).await,
+        }
+    }
 }
 
 fn feedback_request() -> OutputFeedbackRequest {
@@ -206,6 +217,55 @@ fn feedback_request() -> OutputFeedbackRequest {
         prompt_snapshot: Some("Retell what happened in your own words.".into()),
         learner_response: "quake at dawn".into(),
         asr_reliability: Some(AsrReliability::Reliable),
+    }
+}
+
+fn sense_group_request() -> SenseGroupPartitionRequest {
+    SenseGroupPartitionRequest {
+        language: Some(LanguageCode::parse("en").unwrap()),
+        source_text: "When it rains, we stay inside.".into(),
+        tokens: vec![
+            SenseGroupTokenInput {
+                index: 0,
+                text: "When".into(),
+                kind: "word".into(),
+            },
+            SenseGroupTokenInput {
+                index: 2,
+                text: "it".into(),
+                kind: "word".into(),
+            },
+            SenseGroupTokenInput {
+                index: 4,
+                text: "rains".into(),
+                kind: "word".into(),
+            },
+            SenseGroupTokenInput {
+                index: 5,
+                text: ",".into(),
+                kind: "punctuation".into(),
+            },
+            SenseGroupTokenInput {
+                index: 7,
+                text: "we".into(),
+                kind: "word".into(),
+            },
+            SenseGroupTokenInput {
+                index: 9,
+                text: "stay".into(),
+                kind: "word".into(),
+            },
+            SenseGroupTokenInput {
+                index: 11,
+                text: "inside".into(),
+                kind: "word".into(),
+            },
+        ],
+        protected_spans: vec![SenseGroupProtectedSpan {
+            start_token_index: 9,
+            end_token_index: 11,
+        }],
+        candidate_boundary_after_token_indices: vec![4],
     }
 }
 
@@ -261,6 +321,26 @@ async fn feedback_success_yields_identical_text_across_protocols() {
         texts.push(draft.feedback);
     }
     assert_eq!(texts[0], texts[1]);
+}
+
+#[tokio::test]
+async fn sense_group_partition_is_protocol_neutral() {
+    let output = serde_json::json!({ "boundary_after_token_indices": [4] });
+    let mut results = Vec::new();
+    for protocol in ALL_PROTOCOLS {
+        let canned = success_envelope(protocol, "sense_group_partition", output.clone());
+        let base = spawn(canned).await;
+        let draft = Judge::build(protocol, &base, T)
+            .sense_groups(&sense_group_request())
+            .await
+            .expect("sense groups");
+        assert_eq!(
+            draft.prompt_version.as_deref(),
+            Some("sense-group-partition/v1")
+        );
+        results.push(draft.boundary_after_token_indices);
+    }
+    assert_eq!(results[0], results[1]);
 }
 
 #[tokio::test]
@@ -572,8 +652,13 @@ async fn openai_adapter_uses_json_object_mode_with_schema_in_prompt() {
     });
     let base = format!("http://{addr}");
 
-    let adapter =
-        OpenAiChatAdapter::new(base, "m", Some("k".into()), Duration::from_secs(5)).unwrap();
+    let adapter = OpenAiChatAdapter::new(
+        base,
+        "deepseek-v4-flash",
+        Some("k".into()),
+        Duration::from_secs(5),
+    )
+    .unwrap();
     adapter.probe_structured_output().await.expect("probe");
 
     let body = captured.lock().unwrap().clone().expect("request captured");
@@ -584,4 +669,5 @@ async fn openai_adapter_uses_json_object_mode_with_schema_in_prompt() {
     let system = body["messages"][0]["content"].as_str().unwrap();
     assert!(system.to_lowercase().contains("json"));
     assert!(system.contains("ok"));
+    assert_eq!(body["thinking"]["type"], "disabled");
 }

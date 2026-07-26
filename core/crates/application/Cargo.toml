@@ -9,6 +9,7 @@ rust-version.workspace = true
 domain = { path = "../domain" }
 diagnosis-core = { path = "../diagnosis-core" }
 fsrs.workspace = true
+futures-util.workspace = true
 subtitle-core = { path = "../subtitle-core" }
 speech-analysis = { path = "../speech-analysis" }
 writing-feedback = { path = "../writing-feedback" }

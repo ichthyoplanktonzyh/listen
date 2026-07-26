@@ -122,6 +122,7 @@ dependencies = [
  "diagnosis-core",
  "domain",
  "fsrs",
+ "futures-util",
  "hex",
  "serde",
  "serde_json",

@@ -197,6 +197,52 @@ pub struct StructuredChatResponse {
     pub usage: Option<TokenUsage>,
 }
 
+/// One immutable token snapshot supplied to an LLM sense-group partitioner.
+/// The model returns boundaries over these server-owned indices; it never
+/// rewrites subtitle text.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SenseGroupTokenInput {
+    pub index: u32,
+    pub text: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SenseGroupProtectedSpan {
+    pub start_token_index: u32,
+    pub end_token_index: u32,
+}
+
+/// A rule/NLP proposal plus the exact source snapshot. The LLM may move,
+/// remove, or add boundaries, while protected lexical spans remain indivisible.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SenseGroupPartitionRequest {
+    pub language: Option<LanguageCode>,
+    pub source_text: String,
+    pub tokens: Vec<SenseGroupTokenInput>,
+    pub protected_spans: Vec<SenseGroupProtectedSpan>,
+    pub candidate_boundary_after_token_indices: Vec<u32>,
+}
+
+/// Identity-free model proposal. Coverage and span construction remain
+/// server-owned and are validated against the request snapshot.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SenseGroupPartitionDraft {
+    pub boundary_after_token_indices: Vec<u32>,
+    pub model_id: Option<String>,
+    pub prompt_version: Option<String>,
+    pub schema_version: Option<String>,
+}
+
+#[async_trait]
+pub trait SenseGroupPartitionProvider: Send + Sync {
+    fn descriptor(&self) -> LlmProviderDescriptor;
+    async fn partition_sense_groups(
+        &self,
+        request: &SenseGroupPartitionRequest,
+    ) -> Result<SenseGroupPartitionDraft, LlmProviderError>;
+}
+
 /// A runtime view of a configured provider: which protocol, which model, and
 /// its (declared or probed) capabilities.
 #[derive(Debug, Clone, PartialEq)]

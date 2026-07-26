@@ -2215,6 +2215,39 @@ paths:
                   model_id: { type: [string, "null"] }
                   prompt_version: { type: [string, "null"] }
                   schema_version: { type: [string, "null"] }
+  /v1/llm/providers/{id}/sense-groups:
+    post:
+      operationId: generateSenseGroupsViaLlmProvider
+      description: >
+        Generates and persists a hybrid SenseGroup analysis for one subtitle
+        track. The provider returns boundary token indices only. The server
+        validates ordering, complete token coverage, protected lexical spans,
+        and safety length; an invalid or failed sentence falls back to the
+        deterministic partitioner without coupling SenseGroup to ChunkTimeline.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [track_id]
+              properties:
+                track_id: { type: string }
+                status:
+                  anyOf:
+                    - $ref: "#/components/schemas/TimelineStatus"
+                    - type: "null"
+      responses:
+        "200":
+          description: Persisted hybrid SenseGroup analysis
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SenseGroupAnalysis" }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates
@@ -4135,7 +4168,7 @@ components:
           items: { $ref: "#/components/schemas/SenseGroupSource" }
     SenseGroupSource:
       type: string
-      enum: [dependency_parse, phrase_structure, punctuation, length_limit, rule, user]
+      enum: [dependency_parse, phrase_structure, language_model, punctuation, length_limit, rule, user]
     ChunkTimelinePrecision:
       type: string
       enum: [precise, approximate, text_only]
@@ -5201,7 +5234,7 @@ components:
       enum: [openai_chat_completions, anthropic_messages]
     LlmUse:
       type: string
-      enum: [rubric_generation, semantic_judgment]
+      enum: [rubric_generation, semantic_judgment, sense_group_partition]
     DataRetentionPreference:
       type: string
       enum: [no_retention, provider_default, unknown]

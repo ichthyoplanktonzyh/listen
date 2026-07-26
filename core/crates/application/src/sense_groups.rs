@@ -1,10 +1,29 @@
 use crate::{
     ApplicationError, MediaAnalysisUseCases, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SenseGroupAnalysisSummary, SenseGroupId, SubtitleSentence, SubtitleToken, SubtitleTrackId,
-    SyntacticAnalysis, SyntacticConsumerBatch, SyntacticSenseGroupSpan, TimelineCreator,
-    TimelineStatus, WordTimelineId, now_ms, validate_syntactic_analysis,
+    SenseGroupAnalysisSummary, SenseGroupId, SenseGroupPartitionProvider,
+    SenseGroupPartitionRequest, SenseGroupProtectedSpan, SenseGroupTokenInput, SubtitleSentence,
+    SubtitleToken, SubtitleTrackId, SyntacticAnalysis, SyntacticConsumerBatch,
+    SyntacticSenseGroupSpan, TimelineCreator, TimelineStatus, WordTimelineId, now_ms,
+    validate_syntactic_analysis,
 };
-use domain::SenseGroupSource;
+use domain::{LlmProviderError, SenseGroupSource, SubtitleTokenKind};
+use futures_util::{StreamExt, stream};
+
+const LLM_PROVIDER_ID: &str = "llm-sense-group";
+const LLM_ALGORITHM: &str = "hybrid_rule_llm_partition_v1";
+// DeepSeek V4 Flash currently allows 2,500 account-wide concurrent requests.
+// Keep the desktop batch below that shared ceiling while allowing a typical
+// subtitle track to complete in one wave.
+const LLM_BATCH_CONCURRENCY: usize = 1000;
+
+struct LlmSentenceOutcome {
+    sentence: SubtitleSentence,
+    spans: Vec<speech_analysis::audible_structure::SenseGroupSpan>,
+    used_llm: bool,
+    retry_count: u64,
+    prompt_version: Option<String>,
+    reported_model: Option<String>,
+}
 
 impl MediaAnalysisUseCases {
     pub fn list_sense_group_analyses(
@@ -35,6 +54,149 @@ impl MediaAnalysisUseCases {
         requested_status: Option<TimelineStatus>,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
         self.generate_sense_group_analysis_internal(track_id, requested_status, None)
+    }
+
+    /// Generates a candidate analysis through an LLM while keeping rules as a
+    /// per-sentence fallback. Model output is boundary indices only; the
+    /// server validates it against the immutable token snapshot and constructs
+    /// the final spans, so malformed output can never corrupt coverage.
+    pub async fn generate_sense_group_analysis_via_llm(
+        &self,
+        track_id: &SubtitleTrackId,
+        requested_status: Option<TimelineStatus>,
+        provider: &dyn SenseGroupPartitionProvider,
+        max_retries: u32,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let config = speech_analysis::audible_structure::SenseGroupPartitionConfig::default();
+        let descriptor = provider.descriptor();
+        // Repository reads happen before remote work. Once prepared, every
+        // sentence is independent and can safely share the provider seam.
+        let mut prepared = Vec::with_capacity(track.sentences.len());
+        for (sentence_order, sentence) in track.sentences.iter().enumerate() {
+            let candidates = self.lexical_learning().phrase_candidates(&sentence.id)?;
+            let fallback = speech_analysis::audible_structure::partition_sentence(
+                sentence,
+                &candidates,
+                &config,
+            );
+            if fallback.is_empty() {
+                continue;
+            }
+            let request =
+                llm_partition_request(track.language.clone(), sentence, &candidates, &fallback);
+            prepared.push((
+                sentence_order,
+                sentence.clone(),
+                candidates,
+                fallback,
+                request,
+            ));
+        }
+
+        let concurrency = LLM_BATCH_CONCURRENCY.max(1).min(prepared.len().max(1));
+        let config_ref = &config;
+        let mut outcomes = stream::iter(prepared.into_iter().map(
+            |(sentence_order, sentence, candidates, fallback, request)| async move {
+                let outcome = partition_sentence_via_llm(
+                    provider,
+                    sentence,
+                    &candidates,
+                    fallback,
+                    request,
+                    config_ref,
+                    max_retries,
+                )
+                .await;
+                (sentence_order, outcome)
+            },
+        ))
+        .buffer_unordered(concurrency)
+        .collect::<Vec<_>>()
+        .await;
+        // Completion order is deliberately irrelevant to persisted identity.
+        outcomes.sort_by_key(|(sentence_order, _)| *sentence_order);
+
+        let mut groups = Vec::new();
+        let mut llm_sentence_count = 0_u64;
+        let mut fallback_sentence_count = 0_u64;
+        let mut retry_count = 0_u64;
+        let mut prompt_versions = std::collections::BTreeSet::new();
+        let mut reported_models = std::collections::BTreeSet::new();
+        for (_, outcome) in outcomes {
+            if outcome.used_llm {
+                llm_sentence_count += 1;
+            } else {
+                fallback_sentence_count += 1;
+            }
+            retry_count += outcome.retry_count;
+            if let Some(version) = outcome.prompt_version {
+                prompt_versions.insert(version);
+            }
+            if let Some(model) = outcome.reported_model {
+                reported_models.insert(model);
+            }
+            for span in outcome.spans {
+                let group_index = groups.len() as u32;
+                groups.push(sense_group_from_span(&outcome.sentence, group_index, &span));
+            }
+        }
+        if groups.is_empty() {
+            return Err(ApplicationError::Validation("sense group analysis groups"));
+        }
+
+        let provider_version = descriptor.model_id;
+        let fingerprint = format!(
+            "{}:{}:{}:{}:{}",
+            track.id.as_str(),
+            LLM_PROVIDER_ID,
+            provider_version,
+            LLM_ALGORITHM,
+            serde_json::to_string(&groups).unwrap_or_default()
+        );
+        let now = now_ms();
+        let mut analysis = SenseGroupAnalysis {
+            id: SenseGroupAnalysisId::from_fingerprint("sense-group-analysis", &fingerprint),
+            track_id: track.id.clone(),
+            media_id: track.media_id.clone(),
+            parent_word_timeline_id: self
+                .word_timelines
+                .active_word_timeline(track_id)?
+                .map(|timeline| timeline.id),
+            provider_id: LLM_PROVIDER_ID.into(),
+            provider_version,
+            algorithm: LLM_ALGORITHM.into(),
+            status: requested_status,
+            created_by: TimelineCreator::Algorithm,
+            metrics_json: serde_json::json!({
+                "llm_sentence_count": llm_sentence_count,
+                "fallback_sentence_count": fallback_sentence_count,
+                "retry_count": retry_count,
+                "batch_sentence_count": llm_sentence_count + fallback_sentence_count,
+                "max_concurrency": concurrency,
+                "prompt_versions": prompt_versions,
+                "reported_models": reported_models,
+                "chunk_timeline_dependency": false,
+            })
+            .into(),
+            groups,
+            created_at_ms: now,
+            updated_at_ms: now,
+        };
+        if requested_status == TimelineStatus::Active {
+            analysis.status = TimelineStatus::Candidate;
+        }
+        let analysis = self.sense_groups.save_sense_group_analysis(&analysis)?;
+        if requested_status == TimelineStatus::Active {
+            self.sense_groups
+                .activate_sense_group_analysis(&analysis.id)
+        } else {
+            Ok(analysis)
+        }
     }
 
     pub fn persist_sense_group_analysis_from_batch(
@@ -195,6 +357,179 @@ impl MediaAnalysisUseCases {
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
         self.sense_groups.delete_sense_group_analysis(id)
     }
+}
+
+async fn partition_sentence_via_llm(
+    provider: &dyn SenseGroupPartitionProvider,
+    sentence: SubtitleSentence,
+    candidates: &[domain::PhraseCandidate],
+    fallback: Vec<speech_analysis::audible_structure::SenseGroupSpan>,
+    request: SenseGroupPartitionRequest,
+    config: &speech_analysis::audible_structure::SenseGroupPartitionConfig,
+    max_retries: u32,
+) -> LlmSentenceOutcome {
+    let mut attempt = 0_u32;
+    let mut prompt_version = None;
+    let mut reported_model = None;
+    loop {
+        match provider.partition_sense_groups(&request).await {
+            Ok(draft) => {
+                prompt_version = draft.prompt_version;
+                reported_model = draft.model_id;
+                match spans_from_llm_boundaries(
+                    &sentence,
+                    candidates,
+                    &draft.boundary_after_token_indices,
+                    config,
+                ) {
+                    Ok(spans) => {
+                        return LlmSentenceOutcome {
+                            sentence,
+                            spans,
+                            used_llm: true,
+                            retry_count: attempt as u64,
+                            prompt_version,
+                            reported_model,
+                        };
+                    }
+                    Err(_) if attempt < max_retries.min(1) => attempt += 1,
+                    Err(_) => break,
+                }
+            }
+            Err(error) if attempt < max_retries.min(1) && retryable_sense_group_error(&error) => {
+                attempt += 1;
+            }
+            Err(_) => break,
+        }
+    }
+    LlmSentenceOutcome {
+        sentence,
+        spans: fallback,
+        used_llm: false,
+        retry_count: attempt as u64,
+        prompt_version,
+        reported_model,
+    }
+}
+
+fn retryable_sense_group_error(error: &LlmProviderError) -> bool {
+    matches!(
+        error,
+        LlmProviderError::Offline
+            | LlmProviderError::RateLimit { .. }
+            | LlmProviderError::Timeout
+            | LlmProviderError::Truncated
+            | LlmProviderError::SchemaInvalid { .. }
+            | LlmProviderError::Protocol { .. }
+    )
+}
+
+fn token_kind_name(kind: SubtitleTokenKind) -> &'static str {
+    match kind {
+        SubtitleTokenKind::Word => "word",
+        SubtitleTokenKind::Whitespace => "whitespace",
+        SubtitleTokenKind::Punctuation => "punctuation",
+        SubtitleTokenKind::Other => "other",
+    }
+}
+
+fn llm_partition_request(
+    language: Option<domain::LanguageCode>,
+    sentence: &SubtitleSentence,
+    phrases: &[domain::PhraseCandidate],
+    fallback: &[speech_analysis::audible_structure::SenseGroupSpan],
+) -> SenseGroupPartitionRequest {
+    let final_word_index = sentence
+        .tokens
+        .iter()
+        .rev()
+        .find(|token| token.kind == SubtitleTokenKind::Word)
+        .map(|token| token.index);
+    SenseGroupPartitionRequest {
+        language,
+        source_text: sentence.display_text.clone(),
+        tokens: sentence
+            .tokens
+            .iter()
+            .map(|token| SenseGroupTokenInput {
+                index: token.index,
+                text: token.text.clone(),
+                kind: token_kind_name(token.kind).into(),
+            })
+            .collect(),
+        protected_spans: phrases
+            .iter()
+            .map(|phrase| SenseGroupProtectedSpan {
+                start_token_index: phrase.token_start,
+                end_token_index: phrase.token_end,
+            })
+            .collect(),
+        candidate_boundary_after_token_indices: fallback
+            .iter()
+            .map(|span| span.end_token_index)
+            .filter(|index| Some(*index) != final_word_index)
+            .collect(),
+    }
+}
+
+fn spans_from_llm_boundaries(
+    sentence: &SubtitleSentence,
+    phrases: &[domain::PhraseCandidate],
+    boundaries: &[u32],
+    config: &speech_analysis::audible_structure::SenseGroupPartitionConfig,
+) -> Result<Vec<speech_analysis::audible_structure::SenseGroupSpan>, &'static str> {
+    let word_indices = sentence
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .map(|token| token.index)
+        .collect::<Vec<_>>();
+    let Some(&final_word_index) = word_indices.last() else {
+        return Ok(Vec::new());
+    };
+    if boundaries.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err("boundaries must be strictly increasing");
+    }
+    for &boundary in boundaries {
+        if boundary == final_word_index || !word_indices.contains(&boundary) {
+            return Err("boundary must name a non-final word token");
+        }
+        if phrases
+            .iter()
+            .any(|phrase| boundary >= phrase.token_start && boundary < phrase.token_end)
+        {
+            return Err("boundary splits a protected phrase");
+        }
+    }
+
+    let mut spans = Vec::with_capacity(boundaries.len() + 1);
+    let mut start_position = 0_usize;
+    for &boundary in boundaries.iter().chain(std::iter::once(&final_word_index)) {
+        let end_position = word_indices
+            .iter()
+            .position(|index| *index == boundary)
+            .ok_or("boundary did not resolve to a word")?;
+        if end_position < start_position {
+            return Err("boundary order produced an empty span");
+        }
+        let word_count = end_position - start_position + 1;
+        if word_count > config.hard_max_words.saturating_mul(2) {
+            return Err("sense group exceeds the safety length limit");
+        }
+        spans.push(speech_analysis::audible_structure::SenseGroupSpan {
+            start_token_index: word_indices[start_position],
+            end_token_index: boundary,
+            sources: vec![SenseGroupSource::LanguageModel],
+            confidence: 0.8,
+            label: None,
+            head_token_index: None,
+        });
+        start_position = end_position + 1;
+    }
+    if start_position != word_indices.len() {
+        return Err("sense groups did not cover every word");
+    }
+    Ok(spans)
 }
 
 fn sense_group_from_span(
@@ -815,5 +1150,62 @@ mod tests {
             .unwrap();
 
         assert_eq!(actual.groups, expected);
+    }
+
+    #[test]
+    fn llm_boundaries_build_contiguous_server_owned_spans() {
+        let sentence = sentence(
+            "llm-valid",
+            0,
+            "When practice becomes regular learners make steady progress",
+        );
+        let config = speech_analysis::audible_structure::SenseGroupPartitionConfig::default();
+        let spans = spans_from_llm_boundaries(&sentence, &[], &[4, 8], &config).unwrap();
+
+        assert_eq!(
+            spans
+                .iter()
+                .map(|span| (span.start_token_index, span.end_token_index))
+                .collect::<Vec<_>>(),
+            vec![(0, 4), (6, 8), (10, 14)]
+        );
+        assert!(spans.iter().all(|span| {
+            span.sources == vec![SenseGroupSource::LanguageModel]
+                && (span.confidence - 0.8).abs() < f32::EPSILON
+        }));
+    }
+
+    #[test]
+    fn llm_boundary_cannot_split_a_protected_phrase() {
+        let sentence = sentence(
+            "llm-protected",
+            0,
+            "We should take care of this problem today",
+        );
+        let phrase = domain::PhraseCandidate {
+            canonical_form: "take care of".into(),
+            display_form: "take care of".into(),
+            normalized_form: "take care of".into(),
+            token_start: 4,
+            token_end: 8,
+            reason: "test".into(),
+        };
+        let result = spans_from_llm_boundaries(
+            &sentence,
+            &[phrase],
+            &[6],
+            &speech_analysis::audible_structure::SenseGroupPartitionConfig::default(),
+        );
+        assert_eq!(result, Err("boundary splits a protected phrase"));
+    }
+
+    #[test]
+    fn llm_boundaries_reject_duplicates_unknown_tokens_and_final_boundary() {
+        let sentence = sentence("llm-invalid", 0, "one two three four");
+        let config = speech_analysis::audible_structure::SenseGroupPartitionConfig::default();
+
+        assert!(spans_from_llm_boundaries(&sentence, &[], &[2, 2], &config).is_err());
+        assert!(spans_from_llm_boundaries(&sentence, &[], &[1], &config).is_err());
+        assert!(spans_from_llm_boundaries(&sentence, &[], &[6], &config).is_err());
     }
 }

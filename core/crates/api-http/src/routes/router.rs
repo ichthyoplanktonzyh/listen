@@ -8,8 +8,8 @@ use super::language::{language_profile, list_languages};
 use super::learner::{l1_specialty_occurrences, learner_profile, update_learner_profile};
 use super::llm::{
     delete_llm_provider, feedback_via_llm_provider, generate_rubric_via_llm_provider,
-    get_llm_provider, judge_via_llm_provider, list_llm_providers, probe_llm_provider,
-    register_llm_provider,
+    generate_sense_groups_via_llm_provider, get_llm_provider, judge_via_llm_provider,
+    list_llm_providers, probe_llm_provider, register_llm_provider,
 };
 use super::media::{
     archive_subtitle, cold_start_words, delete_subtitle, export_subtitle, import_lltimeline,
@@ -785,6 +785,10 @@ fn generative_routes() -> Router<ApiState> {
         .route(
             "/v1/llm/providers/{id}/rubric",
             post(generate_rubric_via_llm_provider),
+        )
+        .route(
+            "/v1/llm/providers/{id}/sense-groups",
+            post(generate_sense_groups_via_llm_provider),
         )
         .route("/v1/languages", get(list_languages))
         .route("/v1/languages/{code}/profile", get(language_profile))

@@ -16,7 +16,8 @@ use application::RubricGenerationRequest;
 use domain::{
     CapabilityClaim, CostBudget, DataRetentionPreference, LanguageCode, LlmAdapterKind,
     LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability, RubricPointImportance,
-    SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind, llm_provider_profile_id,
+    SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SubtitleTrackId,
+    TimelineStatus, llm_provider_profile_id,
 };
 use llm_provider::BuiltSemanticProvider;
 
@@ -336,8 +337,57 @@ pub(crate) async fn generate_rubric_via_llm_provider(
     }))
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ProviderSenseGroupRequest {
+    pub track_id: String,
+    #[serde(default)]
+    pub status: Option<TimelineStatus>,
+}
+
+/// Generates and persists one hybrid SenseGroup analysis. Each sentence is
+/// proposed by the configured LLM, validated against server-owned token
+/// indices, and independently falls back to the deterministic partitioner.
+pub(crate) async fn generate_sense_groups_via_llm_provider(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(request): Json<ProviderSenseGroupRequest>,
+) -> Result<Json<SenseGroupAnalysis>, ApiError> {
+    let track_id = SubtitleTrackId::parse(request.track_id).map_err(ApplicationError::from)?;
+    let (provider, profile) = build_provider_with_profile(&state, &id).await?;
+    if !profile.allows(LlmUse::SenseGroupPartition) {
+        return Err(ApiError::from(ApplicationError::Invalid(
+            "LLM provider profile does not allow sense_group_partition".into(),
+        )));
+    }
+    let max_retries = profile.max_retries;
+    let status = request.status;
+    state
+        .application
+        .execute_async("llm.generate_sense_groups", move |services| async move {
+            services
+                .media_analysis()
+                .generate_sense_group_analysis_via_llm(
+                    &track_id,
+                    status,
+                    provider.as_sense_groups(),
+                    max_retries,
+                )
+                .await
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
 /// Loads a profile, resolves its secret, and builds the concrete provider.
 async fn build_provider(state: &ApiState, id: &str) -> Result<BuiltSemanticProvider, ApiError> {
+    Ok(build_provider_with_profile(state, id).await?.0)
+}
+
+async fn build_provider_with_profile(
+    state: &ApiState,
+    id: &str,
+) -> Result<(BuiltSemanticProvider, LlmProviderProfile), ApiError> {
     let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     let secret_store = state.infrastructure.secret_store.clone();
     let (profile, secret) = state
@@ -351,7 +401,8 @@ async fn build_provider(state: &ApiState, id: &str) -> Result<BuiltSemanticProvi
             Ok((profile, secret))
         })
         .await?;
-    BuiltSemanticProvider::build(&profile, secret)
+    let provider = BuiltSemanticProvider::build(&profile, secret)
         .map_err(ApplicationError::from)
-        .map_err(ApiError::from)
+        .map_err(ApiError::from)?;
+    Ok((provider, profile))
 }

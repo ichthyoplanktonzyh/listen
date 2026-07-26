@@ -143,6 +143,14 @@ impl LlmChatAdapter for OpenAiChatAdapter {
         if let Some(temperature) = request.temperature {
             body["temperature"] = serde_json::json!(temperature);
         }
+        // DeepSeek V4 enables thinking by default. Sense-group partitioning
+        // and the other structured tasks in this adapter are deterministic,
+        // low-latency jobs, so explicitly select non-thinking mode for the
+        // V4 family. Other OpenAI-compatible providers never see this
+        // vendor-specific extension.
+        if self.model_id.starts_with("deepseek-v4") {
+            body["thinking"] = serde_json::json!({ "type": "disabled" });
+        }
 
         let mut builder = self.client.post(self.endpoint()).json(&body);
         if let Some(key) = &self.api_key {

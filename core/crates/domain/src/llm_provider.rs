@@ -55,6 +55,7 @@ impl LlmAdapterKind {
 pub enum LlmUse {
     RubricGeneration,
     SemanticJudgment,
+    SenseGroupPartition,
 }
 
 /// User-declared data-retention expectation for content leaving the device.

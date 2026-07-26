@@ -6,7 +6,10 @@
 
 use std::time::Duration;
 
-use application::{OutputFeedbackProvider, SemanticJudgeProvider, SemanticRubricProvider};
+use application::{
+    OutputFeedbackProvider, SemanticJudgeProvider, SemanticRubricProvider,
+    SenseGroupPartitionProvider,
+};
 use domain::{CapabilityClaim, LlmAdapterKind, LlmProviderError, LlmProviderProfile};
 
 use crate::{AnthropicMessagesAdapter, LlmSemanticProvider, OpenAiChatAdapter};
@@ -62,6 +65,13 @@ impl BuiltSemanticProvider {
     }
 
     pub fn as_feedback(&self) -> &dyn OutputFeedbackProvider {
+        match self {
+            Self::OpenAi(provider) => provider,
+            Self::Anthropic(provider) => provider,
+        }
+    }
+
+    pub fn as_sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
         match self {
             Self::OpenAi(provider) => provider,
             Self::Anthropic(provider) => provider,

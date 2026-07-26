@@ -10,6 +10,7 @@ use crate::{
 pub enum SenseGroupSource {
     DependencyParse,
     PhraseStructure,
+    LanguageModel,
     Punctuation,
     LengthLimit,
     Rule,
