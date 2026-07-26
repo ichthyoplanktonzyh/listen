@@ -14,7 +14,6 @@ impl TranscriptionRepository for SqliteRepository {
     ) -> Result<TranscriptionModelDescriptor, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO transcription_models(id,provider_id,descriptor_json,updated_at_ms)
                  VALUES (?1,?2,?3,?4)
@@ -32,7 +31,7 @@ impl TranscriptionRepository for SqliteRepository {
     }
 
     fn list_models(&self) -> Result<Vec<TranscriptionModelDescriptor>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare("SELECT descriptor_json FROM transcription_models ORDER BY provider_id,id")
             .map_err(repo)?;
@@ -51,7 +50,6 @@ impl TranscriptionRepository for SqliteRepository {
     ) -> Result<Option<TranscriptionModelDescriptor>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT descriptor_json FROM transcription_models WHERE id=?1",
                 [id.as_str()],
@@ -64,7 +62,6 @@ impl TranscriptionRepository for SqliteRepository {
     fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM transcription_models WHERE id=?1",
                 [id.as_str()],
@@ -76,7 +73,6 @@ impl TranscriptionRepository for SqliteRepository {
     fn create_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO transcription_jobs(id,media_id,input_fingerprint,status,job_json,updated_at_ms)
                  VALUES (?1,?2,?3,?4,?5,?6)",
@@ -96,7 +92,6 @@ impl TranscriptionRepository for SqliteRepository {
     fn update_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE transcription_jobs SET status=?2,job_json=?3,updated_at_ms=?4 WHERE id=?1",
                 params![
@@ -116,7 +111,6 @@ impl TranscriptionRepository for SqliteRepository {
     ) -> Result<Option<TranscriptionJob>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT job_json FROM transcription_jobs WHERE id=?1",
                 [id.as_str()],
@@ -127,7 +121,7 @@ impl TranscriptionRepository for SqliteRepository {
     }
 
     fn list_jobs(&self) -> Result<Vec<TranscriptionJob>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare("SELECT job_json FROM transcription_jobs ORDER BY updated_at_ms DESC")
             .map_err(repo)?;
@@ -151,7 +145,6 @@ impl TranscriptionRepository for SqliteRepository {
     ) -> Result<Option<TranscriptionJob>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT job_json FROM transcription_jobs
                  WHERE input_fingerprint=?1 AND status='\"completed\"'
@@ -165,7 +158,7 @@ impl TranscriptionRepository for SqliteRepository {
     }
 
     fn interrupt_active_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let mut query = tx
             .prepare(
@@ -205,7 +198,6 @@ impl TranscriptionRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO subtitle_track_provenance(track_id,transcription_job_id,provenance_json)
                  VALUES (?1,?2,?3)

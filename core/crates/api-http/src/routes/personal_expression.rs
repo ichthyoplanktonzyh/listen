@@ -127,17 +127,20 @@ pub(crate) async fn create_pattern(
         &format!("{}:{now}:{}", language.as_str(), snapshot.text),
     );
     let current_version = version(id.clone(), 1, request.version, now)?;
+    let asset = UserSentencePatternAsset {
+        id,
+        language,
+        source: snapshot,
+        current_version,
+        created_at_ms: now,
+        updated_at_ms: now,
+    };
     let asset = state
-        .services
-        .personal_expression()
-        .create(UserSentencePatternAsset {
-            id,
-            language,
-            source: snapshot,
-            current_version,
-            created_at_ms: now,
-            updated_at_ms: now,
-        })?;
+        .application
+        .execute("personal_expression.create", move |services| {
+            services.personal_expression().create(asset)
+        })
+        .await?;
     Ok((StatusCode::CREATED, Json(asset)))
 }
 
@@ -150,10 +153,15 @@ pub(crate) async fn list_patterns(
         .map(LanguageCode::parse)
         .transpose()
         .map_err(application::ApplicationError::from)?;
+    let text = query.query;
     state
-        .services
-        .personal_expression()
-        .list(language.as_ref(), query.query.as_deref())
+        .application
+        .execute("personal_expression.list", move |services| {
+            services
+                .personal_expression()
+                .list(language.as_ref(), text.as_deref())
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -167,10 +175,15 @@ pub(crate) async fn export_patterns(
         .map(LanguageCode::parse)
         .transpose()
         .map_err(application::ApplicationError::from)?;
+    let now = application::now_ms();
     state
-        .services
-        .personal_expression()
-        .export(language.as_ref(), application::now_ms())
+        .application
+        .execute("personal_expression.export", move |services| {
+            services
+                .personal_expression()
+                .export(language.as_ref(), now)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -181,9 +194,11 @@ pub(crate) async fn get_pattern(
 ) -> Result<Json<UserSentencePatternAsset>, ApiError> {
     let id = UserSentencePatternId::parse(id).map_err(application::ApplicationError::from)?;
     state
-        .services
-        .personal_expression()
-        .get(&id)
+        .application
+        .execute("personal_expression.get", move |services| {
+            services.personal_expression().get(&id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -194,8 +209,14 @@ pub(crate) async fn revise_pattern(
     Json(request): Json<PatternVersionInput>,
 ) -> Result<Json<UserSentencePatternAsset>, ApiError> {
     let id = UserSentencePatternId::parse(id).map_err(application::ApplicationError::from)?;
-    let current = state.services.personal_expression().get(&id)?;
     let now = application::now_ms();
+    let executor = state.application.clone();
+    let current = executor
+        .execute("personal_expression.get_for_revision", {
+            let id = id.clone();
+            move |services| services.personal_expression().get(&id)
+        })
+        .await?;
     let next = version(
         id.clone(),
         current.current_version.version + 1,
@@ -203,9 +224,11 @@ pub(crate) async fn revise_pattern(
         now,
     )?;
     state
-        .services
-        .personal_expression()
-        .revise(&id, next, now)
+        .application
+        .execute("personal_expression.revise", move |services| {
+            services.personal_expression().revise(&id, next, now)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -215,7 +238,12 @@ pub(crate) async fn delete_pattern(
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     let id = UserSentencePatternId::parse(id).map_err(application::ApplicationError::from)?;
-    state.services.personal_expression().delete(&id)?;
+    state
+        .application
+        .execute("personal_expression.delete", move |services| {
+            services.personal_expression().delete(&id)
+        })
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -225,9 +253,11 @@ pub(crate) async fn list_pattern_versions(
 ) -> Result<Json<Vec<UserSentencePatternVersion>>, ApiError> {
     let id = UserSentencePatternId::parse(id).map_err(application::ApplicationError::from)?;
     state
-        .services
-        .personal_expression()
-        .versions(&id)
+        .application
+        .execute("personal_expression.versions", move |services| {
+            services.personal_expression().versions(&id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -261,36 +291,37 @@ pub(crate) async fn record_pattern_attempt(
         context_note: request.context_note,
         completed_at_ms: now,
     };
-    if attempt.channel == PersonalExpressionChannel::Speaking {
-        let semantic_attempt_id = attempt.semantic_attempt_id.as_ref().ok_or_else(|| {
-            application::ApplicationError::Invalid(
-                "speaking use requires a semantic attempt".into(),
-            )
-        })?;
-        let source_attempt = state
-            .services
-            .semantic()
-            .semantic_attempt(semantic_attempt_id)?
-            .ok_or(application::ApplicationError::NotFound("semantic attempt"))?;
-        let source_response = source_attempt.responses.last().ok_or_else(|| {
-            application::ApplicationError::Invalid(
-                "linked semantic attempt has no learner response".into(),
-            )
-        })?;
-        if source_attempt.kind != SemanticTaskKind::PatternProduction
-            || source_response.transcript.trim() != attempt.response_text.trim()
-            || source_response.recording_asset_id != attempt.recording_asset_id
-        {
-            return Err(application::ApplicationError::Invalid(
-                "speaking use must summarize its linked pattern-production attempt".into(),
-            )
-            .into());
-        }
-    }
     let saved = state
-        .services
-        .personal_expression()
-        .record_attempt(attempt)?;
+        .application
+        .execute("personal_expression.record_attempt", move |services| {
+            if attempt.channel == PersonalExpressionChannel::Speaking {
+                let semantic_attempt_id =
+                    attempt.semantic_attempt_id.as_ref().ok_or_else(|| {
+                        application::ApplicationError::Invalid(
+                            "speaking use requires a semantic attempt".into(),
+                        )
+                    })?;
+                let source_attempt = services
+                    .semantic()
+                    .semantic_attempt(semantic_attempt_id)?
+                    .ok_or(application::ApplicationError::NotFound("semantic attempt"))?;
+                let source_response = source_attempt.responses.last().ok_or_else(|| {
+                    application::ApplicationError::Invalid(
+                        "linked semantic attempt has no learner response".into(),
+                    )
+                })?;
+                if source_attempt.kind != SemanticTaskKind::PatternProduction
+                    || source_response.transcript.trim() != attempt.response_text.trim()
+                    || source_response.recording_asset_id != attempt.recording_asset_id
+                {
+                    return Err(application::ApplicationError::Invalid(
+                        "speaking use must summarize its linked pattern-production attempt".into(),
+                    ));
+                }
+            }
+            services.personal_expression().record_attempt(attempt)
+        })
+        .await?;
     Ok((StatusCode::CREATED, Json(saved)))
 }
 
@@ -300,9 +331,11 @@ pub(crate) async fn list_pattern_attempts(
 ) -> Result<Json<Vec<PersonalExpressionAttempt>>, ApiError> {
     let id = UserSentencePatternId::parse(id).map_err(application::ApplicationError::from)?;
     state
-        .services
-        .personal_expression()
-        .attempts(&id)
+        .application
+        .execute("personal_expression.attempts", move |services| {
+            services.personal_expression().attempts(&id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }

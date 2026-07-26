@@ -18,6 +18,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Registering the handler lazily would let those early signals fall through
     // to the default action and kill us instead of shutting us down.
     let interrupt = Interrupt::install()?;
+    tracing_subscriber::fmt()
+        .json()
+        .with_writer(std::io::stderr)
+        .with_current_span(false)
+        .with_span_list(false)
+        .init();
     let database_path = database_path();
     if let Some(parent) = database_path.parent() {
         fs::create_dir_all(parent)?;

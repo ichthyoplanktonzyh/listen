@@ -8,7 +8,6 @@ impl DictionaryCacheRepository for SqliteRepository {
     fn put(&self, e: &DictionaryEntry) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO dictionary_cache
                  (id, language, normalized_lemma, provider, payload_json, cached_at_ms)
@@ -36,7 +35,6 @@ impl DictionaryCacheRepository for SqliteRepository {
     ) -> Result<Option<DictionaryEntry>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT id, language, normalized_lemma, provider, payload_json, cached_at_ms
                  FROM dictionary_cache WHERE language=?1 AND normalized_lemma=?2 AND provider=?3",

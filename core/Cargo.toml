@@ -23,6 +23,7 @@ resolver = "2"
 edition = "2024"
 rust-version = "1.94"
 version = "0.7.0"
+publish = false
 
 [workspace.dependencies]
 axum = { version = "0.8", features = ["ws"] }
@@ -38,6 +39,7 @@ http = "1"
 hound = "3.5"
 libc = "0.2"
 harper-core = "=0.40.0"
+parking_lot = "0.12"
 rand = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -49,5 +51,6 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "process", "rt-m
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 tower = "0.5"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "json"] }
 url = "2"
 zip = { version = "5.1.1", default-features = false, features = ["deflate"] }

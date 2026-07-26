@@ -208,7 +208,6 @@ fn sense_folder_moves_stay_entry_scoped_and_import_skips_corrupt_edges() {
     let error = repo
         .connection
         .lock()
-        .unwrap()
         .execute(
             "UPDATE lexical_sense_folder_occurrences SET lexical_sense_id=?1
              WHERE lexical_occurrence_id=?2",

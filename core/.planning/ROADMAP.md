@@ -1505,6 +1505,11 @@ Phase 3.7–3.10 仍按既有计划完成，不在本轮重排。听力主线与
       local Whisper authority、learner-only corpus 与 history revisit 已贯通；权限先于 provider socket，
       finish drain/partial failure/dedup 有回归，真实 Qwen 多轮设备旅程与修复后 owner 回归通过；
       研究与收口证据见 `.planning/phases/3.19.1-realtime-conversation-product-correction/`。
+    - 3.19.2 Backend Runtime Hardening & Interface Deepening ✅ COMPLETE（2026-07-26）：
+      统一 blocking execution seam、SSE lag 恢复、非 poisoning SQLite 序列化、route/runtime
+      composition locality、错误脱敏/correlation tracing 与 cargo-deny/架构门均已落地；Rust 709、
+      Flutter 650、Clippy/analyze/contracts/full strict 全绿，未编辑并行 Flutter 前端。收口见
+      `.planning/phases/3.19.2-backend-runtime-hardening/3.19.2-CLOSEOUT.md`。
 
 上述顺序表达当前依赖与建议交付次序；phase scope 不构成长期产品非目标。各 PLAN 是方向承诺
 而非永久执行规格，

@@ -9,7 +9,7 @@ use crate::{SqliteRepository, domain_sql, from_json, json, repo};
 
 impl SubtitleTrackRepository for SqliteRepository {
     fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         tx.execute(
             "INSERT INTO subtitle_tracks(id, media_id, fingerprint, language, source, status)
@@ -75,7 +75,7 @@ impl SubtitleTrackRepository for SqliteRepository {
     }
 
     fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut track = conn
             .query_row(
                 "SELECT id, media_id, fingerprint, language, source, status FROM subtitle_tracks WHERE id=?1",
@@ -130,7 +130,7 @@ impl SubtitleTrackRepository for SqliteRepository {
         media_id: &MediaId,
     ) -> Result<Vec<SubtitleTrack>, ApplicationError> {
         let ids = {
-            let conn = self.connection.lock().expect("sqlite mutex poisoned");
+            let conn = self.connection.lock();
             let mut query = conn
                 .prepare("SELECT id FROM subtitle_tracks WHERE media_id=?1 ORDER BY rowid DESC")
                 .map_err(repo)?;
@@ -156,7 +156,6 @@ impl SubtitleTrackRepository for SqliteRepository {
         let updated = self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE subtitle_tracks SET status=?2 WHERE id=?1",
                 params![id.as_str(), json(&status)?],
@@ -177,7 +176,6 @@ impl SubtitleTrackRepository for SqliteRepository {
         let updated = self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE subtitle_tracks SET language=?2 WHERE id=?1",
                 params![id.as_str(), language.as_str()],
@@ -198,7 +196,7 @@ impl SubtitleTrackRepository for SqliteRepository {
         if existing.is_none() {
             return Ok(None);
         }
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         // Clear the FTS companion rows before the FK cascade removes the
         // corpus projection rows: coherence must not depend on whether
@@ -221,7 +219,7 @@ impl SubtitleTrackRepository for SqliteRepository {
         fingerprint: &str,
     ) -> Result<Option<SubtitleTrack>, ApplicationError> {
         let id = {
-            let conn = self.connection.lock().expect("sqlite mutex poisoned");
+            let conn = self.connection.lock();
             conn.query_row(
                 "SELECT id FROM subtitle_tracks WHERE media_id=?1 AND fingerprint=?2",
                 params![media_id.as_str(), fingerprint],
@@ -242,7 +240,6 @@ impl SubtitleTrackRepository for SqliteRepository {
     ) -> Result<Option<SubtitleSentence>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT id, cue_index, start_ms, end_ms, original_text, display_text, tokens_json
                  FROM subtitle_sentences WHERE id=?1",
@@ -270,7 +267,6 @@ impl SubtitleTrackRepository for SqliteRepository {
     ) -> Result<Option<LanguageCode>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT t.language FROM subtitle_sentences s
                  JOIN subtitle_tracks t ON t.id = s.track_id
@@ -292,7 +288,6 @@ impl SubtitleTrackRepository for SqliteRepository {
     ) -> Result<Option<SubtitleTrackId>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT track_id FROM subtitle_sentences WHERE id = ?1",
                 [id.as_str()],

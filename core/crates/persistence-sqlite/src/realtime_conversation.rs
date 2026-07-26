@@ -20,7 +20,7 @@ impl RealtimeConversationRepository for SqliteRepository {
         &self,
         profile: &RealtimeProviderProfile,
     ) -> Result<RealtimeProviderProfile, ApplicationError> {
-        self.connection.lock().expect("sqlite mutex poisoned").execute(
+        self.connection.lock().execute(
             "INSERT INTO realtime_provider_profiles
              (id,display_name,adapter_kind,base_url,model_id,voice,auth_ref,created_at_ms,profile_json)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
@@ -40,7 +40,6 @@ impl RealtimeConversationRepository for SqliteRepository {
     ) -> Result<Option<RealtimeProviderProfile>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT profile_json FROM realtime_provider_profiles WHERE id=?1",
                 params![id.as_str()],
@@ -51,7 +50,7 @@ impl RealtimeConversationRepository for SqliteRepository {
     }
 
     fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT profile_json FROM realtime_provider_profiles ORDER BY created_at_ms,id",
@@ -70,7 +69,6 @@ impl RealtimeConversationRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM realtime_provider_profiles WHERE id=?1",
                 params![id.as_str()],
@@ -83,7 +81,7 @@ impl RealtimeConversationRepository for SqliteRepository {
         &self,
         session: &RealtimeConversationSession,
     ) -> Result<RealtimeConversationSession, ApplicationError> {
-        self.connection.lock().expect("sqlite mutex poisoned").execute(
+        self.connection.lock().execute(
             "INSERT INTO realtime_conversation_sessions (id,profile_id,language,status,started_at_ms,ended_at_ms,session_json)
              VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET
              status=excluded.status,ended_at_ms=excluded.ended_at_ms,session_json=excluded.session_json",
@@ -98,7 +96,6 @@ impl RealtimeConversationRepository for SqliteRepository {
     ) -> Result<Option<RealtimeConversationSession>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT session_json FROM realtime_conversation_sessions WHERE id=?1",
                 params![id.as_str()],
@@ -109,7 +106,7 @@ impl RealtimeConversationRepository for SqliteRepository {
     }
 
     fn list_realtime_sessions(&self) -> Result<Vec<RealtimeConversationSession>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT session_json FROM realtime_conversation_sessions
@@ -127,7 +124,7 @@ impl RealtimeConversationRepository for SqliteRepository {
         &self,
         turn: &RealtimeConversationTurn,
     ) -> Result<RealtimeConversationTurn, ApplicationError> {
-        self.connection.lock().expect("sqlite mutex poisoned").execute(
+        self.connection.lock().execute(
             "INSERT INTO realtime_conversation_turns (id,session_id,sequence,role,status,recording_asset_id,turn_json)
              VALUES (?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET
              status=excluded.status,recording_asset_id=excluded.recording_asset_id,turn_json=excluded.turn_json",
@@ -142,7 +139,6 @@ impl RealtimeConversationRepository for SqliteRepository {
     ) -> Result<Option<RealtimeConversationTurn>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT turn_json FROM realtime_conversation_turns WHERE id=?1",
                 params![id.as_str()],
@@ -156,7 +152,7 @@ impl RealtimeConversationRepository for SqliteRepository {
         &self,
         session_id: &RealtimeConversationSessionId,
     ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection.prepare("SELECT turn_json FROM realtime_conversation_turns WHERE session_id=?1 ORDER BY sequence").map_err(repo)?;
         statement
             .query_map(params![session_id.as_str()], |row| {

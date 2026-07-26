@@ -42,7 +42,7 @@ impl LexicalCapabilityRepository for SqliteRepository {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Option<LexicalCapabilityProfile>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         read_capability_profile(&conn, lexical_entry_id, sense_id)
     }
 
@@ -98,7 +98,7 @@ impl LexicalCapabilityRepository for SqliteRepository {
         lexical_entry_id: &LexicalEntryId,
         sense_id: Option<&LexicalSenseId>,
     ) -> Result<Vec<LexicalCapabilityHistory>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT id,lexical_entry_id,sense_id,capability,previous_state_json,
@@ -122,7 +122,7 @@ impl LexicalCapabilityRepository for SqliteRepository {
         &self,
         proposal: &ProjectionProposal,
     ) -> Result<ProjectionProposal, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT OR IGNORE INTO projection_proposals
              (id,lexical_entry_id,capability,algorithm_version,evidence_as_of_ms,proposal_json,created_at_ms)
@@ -140,7 +140,7 @@ impl LexicalCapabilityRepository for SqliteRepository {
         &self,
         id: &ProjectionProposalId,
     ) -> Result<Option<ProjectionProposal>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         read_projection_proposal(&conn, id)
     }
 
@@ -149,7 +149,7 @@ impl LexicalCapabilityRepository for SqliteRepository {
         lexical_entry_id: &LexicalEntryId,
         capability: Option<LexicalCapability>,
     ) -> Result<Vec<ProjectionProposal>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let capability_json = capability.map(|value| json(&value)).transpose()?;
         let mut statement = conn.prepare(
             "SELECT p.proposal_json,d.decision_json,
@@ -191,7 +191,7 @@ impl LexicalCapabilityRepository for SqliteRepository {
         proposal: &ProjectionProposal,
         confirmed_projection: Option<CapabilityProjection>,
     ) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         tx.execute(
             "INSERT INTO projection_decisions(id,proposal_id,decision_json,decided_at_ms) VALUES (?1,?2,?3,?4)",
@@ -265,7 +265,7 @@ impl LexicalEntryRepository for SqliteRepository {
         change_source: LearningChangeSource,
     ) -> Result<LexicalEntryDetails, ApplicationError> {
         entry.validate_unit_coherence()?;
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let effective_id = tx
             .query_row(
@@ -414,7 +414,7 @@ impl LexicalEntryRepository for SqliteRepository {
         &self,
         id: &LexicalEntryId,
     ) -> Result<Option<LexicalEntryDetails>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let entry = conn
             .query_row(
                 "SELECT id,language,kind,granularity,normalization,normalized_key,
@@ -479,7 +479,7 @@ impl LexicalEntryRepository for SqliteRepository {
         offset: u32,
     ) -> Result<Vec<LexicalEntryDetails>, ApplicationError> {
         let ids: Vec<String> = {
-            let conn = self.connection.lock().expect("sqlite mutex poisoned");
+            let conn = self.connection.lock();
             match capability_filter {
                 None => {
                     let mut statement = conn
@@ -582,7 +582,6 @@ impl LexicalEntryRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO lemma_overrides(language,original_normalized,corrected_normalized,updated_at_ms)
                  VALUES (?1,?2,?3,?4)
@@ -601,7 +600,6 @@ impl LexicalEntryRepository for SqliteRepository {
     ) -> Result<Option<String>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT corrected_normalized FROM lemma_overrides WHERE language=?1 AND original_normalized=?2",
                 params![language.as_str(), original_normalized],
@@ -619,7 +617,6 @@ impl LexicalEntryRepository for SqliteRepository {
     ) -> Result<Option<LexicalEntry>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT id,language,kind,granularity,normalization,normalized_key,
                         canonical_form,normalized_form,display_form,status,
@@ -656,7 +653,7 @@ impl LexicalEntryRepository for SqliteRepository {
         );
         let mut values = vec![language.as_str().to_owned(), json(&kind)?];
         values.extend(normalized_forms.iter().cloned());
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn.prepare(&sql).map_err(repo)?;
         statement
             .query_map(params_from_iter(values), lexical_entry_row)
@@ -669,7 +666,7 @@ impl LexicalEntryRepository for SqliteRepository {
         &self,
         language: &LanguageCode,
     ) -> Result<(u64, u64), ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT COUNT(*), COALESCE(MAX(learning_updated_at_ms), 0)
              FROM lexical_entries WHERE language=?1",
@@ -687,7 +684,6 @@ impl LearningObservationRepository for SqliteRepository {
     ) -> Result<LexicalObservation, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO lexical_observations
                  (id,lexical_entry_id,sentence_id,sentence_id_snapshot,original_form,result,
@@ -716,7 +712,7 @@ impl LearningObservationRepository for SqliteRepository {
         &self,
         sentence_id: &SubtitleSentenceId,
     ) -> Result<Vec<LexicalObservation>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT id,lexical_entry_id,COALESCE(sentence_id,sentence_id_snapshot),
@@ -739,7 +735,6 @@ impl LearningObservationRepository for SqliteRepository {
     ) -> Result<LearningObservation, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT OR IGNORE INTO learning_observations
                  (id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
@@ -777,7 +772,7 @@ impl LearningObservationRepository for SqliteRepository {
         offset: u32,
     ) -> Result<Vec<LearningObservation>, ApplicationError> {
         let capability_json = capability.map(|value| json(&value)).transpose()?;
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
@@ -805,7 +800,6 @@ impl LearningObservationRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE lexical_observations SET cleared_at_ms=unixepoch('subsec') * 1000
                  WHERE lexical_entry_id=?1 AND sentence_id=?2",
@@ -826,7 +820,6 @@ impl LexicalContentRepository for SqliteRepository {
     ) -> Result<LexicalEntryDetails, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE lexical_entries
                  SET user_definition=?2,personal_note=?3,learning_updated_at_ms=?4
@@ -849,7 +842,6 @@ impl LexicalContentRepository for SqliteRepository {
     ) -> Result<LexicalSenseFolder, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO lexical_sense_folders
                  (id,lexical_entry_id,label,definition,gloss,external_ref,created_at_ms,updated_at_ms)
@@ -876,7 +868,6 @@ impl LexicalContentRepository for SqliteRepository {
         let changed = self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE lexical_sense_folders
                  SET label=?3,definition=?4,gloss=?5,external_ref=?6,updated_at_ms=?7
@@ -895,7 +886,7 @@ impl LexicalContentRepository for SqliteRepository {
         if changed == 0 {
             return Err(ApplicationError::NotFound("lexical sense folder"));
         }
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         read_lexical_sense_folder(&conn, &folder.id)?
             .ok_or(ApplicationError::NotFound("lexical sense folder"))
     }
@@ -908,7 +899,6 @@ impl LexicalContentRepository for SqliteRepository {
         let changed = self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM lexical_sense_folders WHERE id=?1 AND lexical_entry_id=?2",
                 params![sense_id.as_str(), lexical_entry_id.as_str()],
@@ -929,7 +919,6 @@ impl LexicalContentRepository for SqliteRepository {
         let changed = self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO lexical_sense_folder_occurrences(lexical_sense_id,lexical_occurrence_id)
                  SELECT ?1,?2
@@ -954,7 +943,7 @@ impl LexicalContentRepository for SqliteRepository {
         sense_id: &LexicalSenseId,
         occurrence_id: &LexicalOccurrenceId,
     ) -> Result<(), ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let folder_exists = conn
             .query_row(
                 "SELECT 1 FROM lexical_sense_folders WHERE id=?1 AND lexical_entry_id=?2",
@@ -983,7 +972,7 @@ impl VocabularyAssetRepository for SqliteRepository {
             self.export_lexical_assets()?;
         let capability_profiles = self.export_all_capability_profiles()?;
         let learning_observations = self.export_all_learning_observations()?;
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let lexical_sense_folders = read_all_lexical_sense_folders(&conn)?;
         let lexical_sense_folder_occurrences = read_all_lexical_sense_folder_occurrences(&conn)?;
         Ok(VocabularyAssetBundle {
@@ -1020,7 +1009,7 @@ impl VocabularyAssetRepository for SqliteRepository {
         // by the same existence rule as capability profiles.
         for observation in &bundle.learning_observations {
             let exists = {
-                let conn = self.connection.lock().expect("sqlite mutex poisoned");
+                let conn = self.connection.lock();
                 conn.query_row(
                     "SELECT 1 FROM lexical_entries WHERE id=?1",
                     [observation.lexical_entry_id.as_str()],
@@ -1034,7 +1023,7 @@ impl VocabularyAssetRepository for SqliteRepository {
                 self.append_learning_observation(observation)?;
             }
         }
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         for feedback in &bundle.phonetic_finding_feedback {
             tx.execute(
@@ -1059,7 +1048,7 @@ impl VocabularyAssetRepository for SqliteRepository {
     fn export_all_capability_profiles(
         &self,
     ) -> Result<Vec<LexicalCapabilityProfile>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT lexical_entry_id,sense_id,capability,projection_json,override_json

@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-22. Reflects Phase 3.19.1 realtime conversation correction.
+Last updated: 2026-07-26. Reflects Phase 3.19.2 backend runtime hardening.
 
 ## Overview
 
@@ -152,14 +152,43 @@ application use cases and provider/repository boundaries.
 ### `api-http`
 
 - Axum loopback HTTP server with bearer-token auth.
-- Root `lib.rs` is the composition root for route groups, middleware, SSE, and
-  service construction.
+- Root `lib.rs` is the small composition root for public health, protected-route
+  merge, auth, request diagnostics and state construction. Protected endpoints
+  live in coherent media-analysis, learning, generative and provider/event route
+  groups under `routes/router.rs`.
+- `ApplicationExecutor` is the only async-transport to synchronous-application
+  seam. It drives repository-bearing use cases on Tokio's blocking pool, including
+  mixed provider futures whose synchronous repository sections must not occupy an
+  async worker. Route modules cannot access `AppServices` or dispatch their own
+  `spawn_blocking`.
+- `ApiState` groups change by lifecycle: `AnalysisRuntime`, `LanguageRuntime`,
+  `GenerativeRuntime` and `ApiInfrastructure`; use-case ownership remains in
+  `AppServices`.
+- JSON diagnostics emit one completion record per request with method, matched
+  route, status, duration and correlation ID. Generic failures retain internal
+  diagnostics while returning path/SQL/secret-free public messages.
+- SSE is a notification channel, not a durable log. Lag is logged, lost
+  notifications are skipped, retained events continue, and authoritative GET
+  endpoints remain the recovery source.
 - OpenAPI parity is tested bidirectionally: implemented `/v1` routes and
   documented OpenAPI paths must match.
 - Route modules own only HTTP extraction, response/error mapping and event
   adaptation. Lexical entries, downloadable learning resources, and subtitle
   search use explicitly named route modules; milestone-coded `m18.rs` no longer
   exists.
+
+### `persistence-sqlite`
+
+- One bundled-rusqlite connection preserves transaction locality and deterministic
+  synchronous application tests. HTTP concurrency is provided above the adapter
+  by `ApplicationExecutor`, not by splitting transactions across a pool.
+- File databases use a five-second busy timeout, migration-before-use and a
+  pre-migration backup. The single-connection design retains SQLite's default
+  journal and synchronous durability modes; WAL would not add useful intra-process
+  writer concurrency here and is therefore not enabled implicitly.
+- The connection uses a non-poisoning mutex. A panic cannot permanently turn all
+  later repository calls into mutex-poison panics; ordinary SQLite failures still
+  return typed repository errors.
 
 ### `local-runtime`
 

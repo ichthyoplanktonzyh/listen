@@ -61,9 +61,11 @@ pub(crate) async fn create_semantic_rubric(
         created_at_ms: application::now_ms(),
     };
     state
-        .services
-        .semantic()
-        .save_semantic_rubric(rubric)
+        .application
+        .execute("semantic.save_rubric", move |services| {
+            services.semantic().save_semantic_rubric(rubric)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -89,17 +91,22 @@ pub(crate) async fn lookup_semantic_rubric(
     State(state): State<ApiState>,
     Query(query): Query<SemanticRubricLookupQuery>,
 ) -> Result<Json<Option<SemanticRubric>>, ApiError> {
+    let media_id = query.media_id;
+    let response_language = query.response_language;
+    let source_sha256 = query.source_sha256;
     state
-        .services
-        .semantic()
-        .find_rubric_for_source(
-            query.media_id.as_deref(),
-            query.start_ms,
-            query.end_ms,
-            query.purpose,
-            &query.response_language,
-            &query.source_sha256,
-        )
+        .application
+        .execute("semantic.lookup_rubric", move |services| {
+            services.semantic().find_rubric_for_source(
+                media_id.as_deref(),
+                query.start_ms,
+                query.end_ms,
+                query.purpose,
+                &response_language,
+                &source_sha256,
+            )
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -111,10 +118,11 @@ pub(crate) async fn semantic_rubric(
 ) -> Result<Json<SemanticRubric>, ApiError> {
     let id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .semantic_rubric(&id, query.version)
-        .map_err(ApiError::from)?
+        .application
+        .execute("semantic.rubric", move |services| {
+            services.semantic().semantic_rubric(&id, query.version)
+        })
+        .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("semantic rubric"))
 }
@@ -125,9 +133,11 @@ pub(crate) async fn semantic_rubric_attempts(
 ) -> Result<Json<Vec<SemanticTaskAttempt>>, ApiError> {
     let id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .semantic_attempts_for_rubric(&id)
+        .application
+        .execute("semantic.rubric_attempts", move |services| {
+            services.semantic().semantic_attempts_for_rubric(&id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -174,9 +184,13 @@ pub(crate) async fn create_semantic_attempt(
         ended_at_ms: request.ended_at_ms,
     };
     state
-        .services
-        .production_corpus()
-        .record_semantic_attempt_and_index(attempt)
+        .application
+        .execute("semantic.create_attempt", move |services| {
+            services
+                .production_corpus()
+                .record_semantic_attempt_and_index(attempt)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -187,10 +201,11 @@ pub(crate) async fn semantic_attempt(
 ) -> Result<Json<SemanticTaskAttempt>, ApiError> {
     let id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .semantic_attempt(&id)
-        .map_err(ApiError::from)?
+        .application
+        .execute("semantic.attempt", move |services| {
+            services.semantic().semantic_attempt(&id)
+        })
+        .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("semantic attempt"))
 }
@@ -214,42 +229,43 @@ pub(crate) async fn create_writing_finding(
     Json(request): Json<CreateWritingFindingRequest>,
 ) -> Result<Json<WritingFeedbackFinding>, ApiError> {
     let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
-    let attempt = state
-        .services
-        .semantic()
-        .semantic_attempt(&attempt_id)?
-        .ok_or_else(|| ApiError::not_found("semantic attempt"))?;
-    let response = attempt
-        .responses
-        .iter()
-        .find(|response| response.revision == request.response_revision)
-        .ok_or(ApplicationError::NotFound("writing response revision"))?;
     let created_at_ms = application::now_ms();
-    let finding = WritingFeedbackFinding {
-        id: writing_feedback_finding_id(
-            &attempt_id,
-            request.response_revision,
-            &response.transcript,
-            request.layer,
-            request.source_span,
-            &request.message,
-            &request.provenance,
-        ),
-        attempt_id,
-        response_revision: request.response_revision,
-        response_transcript_sha256: domain::transcript_sha256(&response.transcript),
-        layer: request.layer,
-        severity: request.severity,
-        source_span: request.source_span,
-        message: request.message,
-        suggested_replacement: request.suggested_replacement,
-        provenance: request.provenance,
-        created_at_ms,
-    };
     state
-        .services
-        .semantic()
-        .record_writing_feedback_finding(finding)
+        .application
+        .execute("semantic.create_writing_finding", move |services| {
+            let module = services.semantic();
+            let attempt = module
+                .semantic_attempt(&attempt_id)?
+                .ok_or(ApplicationError::NotFound("semantic attempt"))?;
+            let response = attempt
+                .responses
+                .iter()
+                .find(|response| response.revision == request.response_revision)
+                .ok_or(ApplicationError::NotFound("writing response revision"))?;
+            let finding = WritingFeedbackFinding {
+                id: writing_feedback_finding_id(
+                    &attempt_id,
+                    request.response_revision,
+                    &response.transcript,
+                    request.layer,
+                    request.source_span,
+                    &request.message,
+                    &request.provenance,
+                ),
+                attempt_id,
+                response_revision: request.response_revision,
+                response_transcript_sha256: domain::transcript_sha256(&response.transcript),
+                layer: request.layer,
+                severity: request.severity,
+                source_span: request.source_span,
+                message: request.message,
+                suggested_replacement: request.suggested_replacement,
+                provenance: request.provenance,
+                created_at_ms,
+            };
+            module.record_writing_feedback_finding(finding)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -260,9 +276,11 @@ pub(crate) async fn writing_findings(
 ) -> Result<Json<Vec<WritingFeedbackFinding>>, ApiError> {
     let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .writing_feedback_findings(&attempt_id)
+        .application
+        .execute("semantic.writing_findings", move |services| {
+            services.semantic().writing_feedback_findings(&attempt_id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -278,14 +296,17 @@ pub(crate) async fn generate_local_writing_findings(
     Json(request): Json<GenerateLocalWritingFindingsRequest>,
 ) -> Result<Json<Vec<WritingFeedbackFinding>>, ApiError> {
     let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
+    let now = application::now_ms();
     state
-        .services
-        .semantic()
-        .generate_local_writing_findings(
-            &attempt_id,
-            request.response_revision,
-            application::now_ms(),
-        )
+        .application
+        .execute("semantic.generate_local_findings", move |services| {
+            services.semantic().generate_local_writing_findings(
+                &attempt_id,
+                request.response_revision,
+                now,
+            )
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -307,11 +328,6 @@ pub(crate) async fn create_writing_disposition(
     Json(request): Json<CreateWritingDispositionRequest>,
 ) -> Result<Json<WritingFindingDisposition>, ApiError> {
     let finding_id = WritingFeedbackFindingId::parse(id).map_err(ApplicationError::from)?;
-    state
-        .services
-        .semantic()
-        .writing_feedback_finding(&finding_id)?
-        .ok_or_else(|| ApiError::not_found("writing feedback finding"))?;
     let resulting_attempt_id = request
         .resulting_attempt_id
         .map(SemanticTaskAttemptId::parse)
@@ -326,7 +342,7 @@ pub(crate) async fn create_writing_disposition(
             request.resulting_response_revision,
             occurred_at_ms,
         ),
-        finding_id,
+        finding_id: finding_id.clone(),
         decision: request.decision,
         resulting_attempt_id,
         resulting_response_revision: request.resulting_response_revision,
@@ -334,9 +350,15 @@ pub(crate) async fn create_writing_disposition(
         occurred_at_ms,
     };
     state
-        .services
-        .semantic()
-        .record_writing_finding_disposition(disposition)
+        .application
+        .execute("semantic.create_writing_disposition", move |services| {
+            let module = services.semantic();
+            module
+                .writing_feedback_finding(&finding_id)?
+                .ok_or(ApplicationError::NotFound("writing feedback finding"))?;
+            module.record_writing_finding_disposition(disposition)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -347,9 +369,13 @@ pub(crate) async fn writing_dispositions(
 ) -> Result<Json<Vec<WritingFindingDisposition>>, ApiError> {
     let finding_id = WritingFeedbackFindingId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .writing_finding_dispositions(&finding_id)
+        .application
+        .execute("semantic.writing_dispositions", move |services| {
+            services
+                .semantic()
+                .writing_finding_dispositions(&finding_id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -366,9 +392,11 @@ pub(crate) async fn writing_draft(
 ) -> Result<Json<Option<WritingDraft>>, ApiError> {
     let rubric_id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .writing_draft(&rubric_id)
+        .application
+        .execute("semantic.writing_draft", move |services| {
+            services.semantic().writing_draft(&rubric_id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -379,15 +407,18 @@ pub(crate) async fn save_writing_draft(
     Json(request): Json<SaveWritingDraftRequest>,
 ) -> Result<Json<WritingDraft>, ApiError> {
     let rubric_id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
+    let draft = WritingDraft {
+        rubric_id,
+        prompt_snapshot: request.prompt_snapshot,
+        transcript: request.transcript,
+        updated_at_ms: application::now_ms(),
+    };
     state
-        .services
-        .semantic()
-        .save_writing_draft(WritingDraft {
-            rubric_id,
-            prompt_snapshot: request.prompt_snapshot,
-            transcript: request.transcript,
-            updated_at_ms: application::now_ms(),
+        .application
+        .execute("semantic.save_writing_draft", move |services| {
+            services.semantic().save_writing_draft(draft)
         })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -397,7 +428,12 @@ pub(crate) async fn delete_writing_draft(
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     let rubric_id = SemanticRubricId::parse(id).map_err(ApplicationError::from)?;
-    state.services.semantic().delete_writing_draft(&rubric_id)?;
+    state
+        .application
+        .execute("semantic.delete_writing_draft", move |services| {
+            services.semantic().delete_writing_draft(&rubric_id)
+        })
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -415,33 +451,6 @@ pub(crate) async fn confirm_speaking_target(
     Json(request): Json<ConfirmSpeakingTargetRequest>,
 ) -> Result<StatusCode, ApiError> {
     let attempt_id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
-    let attempt = state
-        .services
-        .semantic()
-        .semantic_attempt(&attempt_id)?
-        .ok_or_else(|| ApiError::not_found("semantic attempt"))?;
-    if attempt.kind != SemanticTaskKind::L2Retelling
-        || attempt.status != SemanticAttemptStatus::Completed
-    {
-        return Err(ApplicationError::Validation("constructed speaking attempt").into());
-    }
-    let response = attempt
-        .responses
-        .first()
-        .ok_or(ApplicationError::Validation("speaking response"))?;
-    if response.asr_reliability == Some(AsrReliability::Unreliable) {
-        return Err(ApplicationError::Validation("reliable speaking transcript").into());
-    }
-    let surface = request.surface_form.trim();
-    if surface.is_empty() || !contains_literal_target(&response.transcript, surface) {
-        return Err(ApplicationError::Validation("literal target in speaking response").into());
-    }
-    let assistance = AssistanceLevel::None;
-    let rubric = state
-        .services
-        .semantic()
-        .semantic_rubric(&attempt.rubric_id, Some(attempt.rubric_version))?
-        .ok_or_else(|| ApiError::not_found("semantic rubric"))?;
     let lexical_entry_id =
         LexicalEntryId::parse(request.lexical_entry_id).map_err(ApplicationError::from)?;
     let sentence_id = request
@@ -449,23 +458,53 @@ pub(crate) async fn confirm_speaking_target(
         .map(SubtitleSentenceId::parse)
         .transpose()
         .map_err(ApplicationError::from)?;
-    let source_ref = format!(
-        "speaking:{}:{}",
-        attempt.id.as_str(),
-        lexical_entry_id.as_str()
-    );
+    let surface = request.surface_form.trim().to_owned();
     state
-        .services
-        .lexical_learning()
-        .record_speaking_production(RecordSpeakingProduction {
-            lexical_entry_id,
-            sentence_id,
-            surface_form: surface.to_owned(),
-            media_id: rubric.source.media_id,
-            assistance,
-            source_ref,
-            occurred_at_ms: attempt.ended_at_ms.unwrap_or(attempt.started_at_ms),
-        })?;
+        .application
+        .execute("semantic.confirm_speaking_target", move |services| {
+            let attempt = services
+                .semantic()
+                .semantic_attempt(&attempt_id)?
+                .ok_or(ApplicationError::NotFound("semantic attempt"))?;
+            if attempt.kind != SemanticTaskKind::L2Retelling
+                || attempt.status != SemanticAttemptStatus::Completed
+            {
+                return Err(ApplicationError::Validation("constructed speaking attempt"));
+            }
+            let response = attempt
+                .responses
+                .first()
+                .ok_or(ApplicationError::Validation("speaking response"))?;
+            if response.asr_reliability == Some(AsrReliability::Unreliable) {
+                return Err(ApplicationError::Validation("reliable speaking transcript"));
+            }
+            if surface.is_empty() || !contains_literal_target(&response.transcript, &surface) {
+                return Err(ApplicationError::Validation(
+                    "literal target in speaking response",
+                ));
+            }
+            let rubric = services
+                .semantic()
+                .semantic_rubric(&attempt.rubric_id, Some(attempt.rubric_version))?
+                .ok_or(ApplicationError::NotFound("semantic rubric"))?;
+            let source_ref = format!(
+                "speaking:{}:{}",
+                attempt.id.as_str(),
+                lexical_entry_id.as_str()
+            );
+            services
+                .lexical_learning()
+                .record_speaking_production(RecordSpeakingProduction {
+                    lexical_entry_id,
+                    sentence_id,
+                    surface_form: surface,
+                    media_id: rubric.source.media_id,
+                    assistance: AssistanceLevel::None,
+                    source_ref,
+                    occurred_at_ms: attempt.ended_at_ms.unwrap_or(attempt.started_at_ms),
+                })
+        })
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -489,9 +528,11 @@ pub(crate) async fn semantic_attempt_judgments(
 ) -> Result<Json<Vec<SemanticJudgment>>, ApiError> {
     let id = SemanticTaskAttemptId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .semantic_judgments_for_attempt(&id)
+        .application
+        .execute("semantic.attempt_judgments", move |services| {
+            services.semantic().semantic_judgments_for_attempt(&id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -545,9 +586,11 @@ pub(crate) async fn create_semantic_judgment(
         created_at_ms,
     };
     state
-        .services
-        .semantic()
-        .record_semantic_judgment(judgment)
+        .application
+        .execute("semantic.record_judgment", move |services| {
+            services.semantic().record_semantic_judgment(judgment)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -558,9 +601,11 @@ pub(crate) async fn semantic_judgment_adjudications(
 ) -> Result<Json<Vec<JudgmentAdjudication>>, ApiError> {
     let id = SemanticJudgmentId::parse(id).map_err(ApplicationError::from)?;
     state
-        .services
-        .semantic()
-        .judgment_adjudications(&id)
+        .application
+        .execute("semantic.judgment_adjudications", move |services| {
+            services.semantic().judgment_adjudications(&id)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }
@@ -598,9 +643,13 @@ pub(crate) async fn create_judgment_adjudication(
         occurred_at_ms,
     };
     state
-        .services
-        .semantic()
-        .record_judgment_adjudication(adjudication)
+        .application
+        .execute("semantic.record_adjudication", move |services| {
+            services
+                .semantic()
+                .record_judgment_adjudication(adjudication)
+        })
+        .await
         .map(Json)
         .map_err(ApiError::from)
 }

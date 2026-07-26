@@ -15,7 +15,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<PhoneticAnalysisModelDescriptor, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO phonetic_analysis_models(id,provider_id,descriptor_json,updated_at_ms)
                  VALUES (?1,?2,?3,?4)
@@ -35,7 +34,7 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     fn list_phonetic_models(
         &self,
     ) -> Result<Vec<PhoneticAnalysisModelDescriptor>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare("SELECT descriptor_json FROM phonetic_analysis_models ORDER BY provider_id,id")
             .map_err(repo)?;
@@ -52,7 +51,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<Option<PhoneticAnalysisModelDescriptor>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT descriptor_json FROM phonetic_analysis_models WHERE id=?1",
                 [id.as_str()],
@@ -65,7 +63,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     fn delete_phonetic_model(&self, id: &PhoneticAnalysisModelId) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM phonetic_analysis_models WHERE id=?1",
                 [id.as_str()],
@@ -80,7 +77,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<PhoneticAnalysisJob, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO phonetic_analysis_jobs
                  (id,media_id,track_id,sentence_id,input_fingerprint,status,job_json,updated_at_ms)
@@ -106,7 +102,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<PhoneticAnalysisJob, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "UPDATE phonetic_analysis_jobs SET status=?2,job_json=?3,updated_at_ms=?4
                  WHERE id=?1",
@@ -127,7 +122,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT job_json FROM phonetic_analysis_jobs WHERE id=?1",
                 [id.as_str()],
@@ -138,7 +132,7 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     }
 
     fn list_phonetic_jobs(&self) -> Result<Vec<PhoneticAnalysisJob>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare("SELECT job_json FROM phonetic_analysis_jobs ORDER BY updated_at_ms DESC")
             .map_err(repo)?;
@@ -155,7 +149,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<Option<PhoneticAnalysisJob>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT job_json FROM phonetic_analysis_jobs
                  WHERE input_fingerprint=?1 AND status='\"completed\"'
@@ -170,7 +163,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     fn delete_phonetic_job(&self, id: &PhoneticAnalysisJobId) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM phonetic_analysis_jobs WHERE id=?1",
                 params![id.as_str()],
@@ -184,7 +176,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
         let count = self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM phonetic_analysis_jobs WHERE status IN (?1,?2,?3,?4)",
                 params![terminal[0], terminal[1], terminal[2], terminal[3]],
@@ -194,7 +185,7 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     }
 
     fn interrupt_active_phonetic_jobs(&self, updated_at_ms: u64) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let active = [
             PhoneticAnalysisJobStatus::Queued,
@@ -250,7 +241,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
         analysis.validate().map_err(ApplicationError::from)?;
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO phonetic_analyses
                  (id,job_id,media_id,track_id,sentence_id,provider_id,model_id,analysis_json,created_at_ms)
@@ -277,7 +267,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<Option<PhoneticAnalysis>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT analysis_json FROM phonetic_analyses WHERE id=?1",
                 [id.as_str()],
@@ -291,7 +280,7 @@ impl PhoneticAnalysisRepository for SqliteRepository {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<PhoneticAnalysis>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare(
                 "SELECT analysis_json FROM phonetic_analyses
@@ -313,7 +302,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<PhoneticFindingFeedback, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO phonetic_finding_feedback(finding_id,feedback_json,updated_at_ms)
                  VALUES (?1,?2,?3)
@@ -335,7 +323,6 @@ impl PhoneticAnalysisRepository for SqliteRepository {
     ) -> Result<Option<PhoneticFindingFeedback>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT feedback_json FROM phonetic_finding_feedback WHERE finding_id=?1",
                 [finding_id.as_str()],

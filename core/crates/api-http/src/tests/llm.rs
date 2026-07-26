@@ -3,6 +3,7 @@
 //! endpoint, so the whole path runs offline.
 
 use super::*;
+use axum::routing::post;
 use tokio::net::TcpListener;
 
 async fn fake_ok(State(body): State<serde_json::Value>) -> Json<serde_json::Value> {

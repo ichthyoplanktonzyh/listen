@@ -91,7 +91,7 @@ fn writing_attempt_incrementally_indexes_lemma_and_phrase_without_evidence_write
     assert_eq!(phrase.len(), 1);
     assert!(phrase[0].entry.is_none());
 
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     let observations: i64 = connection
         .query_row("SELECT COUNT(*) FROM lexical_observations", [], |row| {
             row.get(0)
@@ -117,7 +117,7 @@ fn gap_review_is_ranked_read_only_and_small_n_stays_starter() {
         .production_corpus()
         .record_semantic_attempt_and_index(attempt)
         .unwrap();
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     connection.execute(
         "INSERT INTO lexical_entries
          (id,language,kind,granularity,normalization,normalized_key,canonical_form,normalized_form,display_form,status,normalization_provider,normalization_version,updated_at_ms,learning_updated_at_ms)
@@ -147,7 +147,7 @@ fn gap_review_is_ranked_read_only_and_small_n_stays_starter() {
     assert_eq!(review.targets[0].normalized_key, "enjoy");
     assert!(review.targets[0].reading_acquired);
 
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     let writes: i64 = connection
         .query_row(
             "SELECT (SELECT COUNT(*) FROM learning_observations) +
@@ -187,7 +187,7 @@ fn rebuild_is_idempotent_and_keeps_one_response_copy_per_document() {
         .unwrap();
     assert_eq!(before, after);
 
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     let documents: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM production_corpus_documents",

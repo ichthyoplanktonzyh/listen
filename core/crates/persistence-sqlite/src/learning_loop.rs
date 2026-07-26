@@ -21,7 +21,7 @@ impl PracticeRepository for SqliteRepository {
         &self,
         session: &PracticeSession,
     ) -> Result<PracticeSession, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             // Query columns are projections of the JSON snapshot; every upsert
             // must rewrite all of them together or column-filtered queries
@@ -54,7 +54,7 @@ impl PracticeRepository for SqliteRepository {
         &self,
         id: &PracticeSessionId,
     ) -> Result<Option<PracticeSession>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT session_json FROM practice_sessions WHERE id=?1",
             [id.as_str()],
@@ -65,7 +65,7 @@ impl PracticeRepository for SqliteRepository {
     }
 
     fn create_practice_item(&self, item: &PracticeItem) -> Result<PracticeItem, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO practice_items
              (id,session_id,kind,target_kind,created_at_ms,item_json)
@@ -93,7 +93,7 @@ impl PracticeRepository for SqliteRepository {
         &self,
         id: &PracticeItemId,
     ) -> Result<Option<PracticeItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT item_json FROM practice_items WHERE id=?1",
             [id.as_str()],
@@ -109,7 +109,7 @@ impl PracticeRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<PracticeItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT item_json FROM practice_items
@@ -132,7 +132,7 @@ impl PracticeRepository for SqliteRepository {
         &self,
         attempt: &PracticeAttempt,
     ) -> Result<PracticeAttempt, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO practice_attempts
              (id,item_id,result,submitted_at_ms,attempt_json)
@@ -158,7 +158,7 @@ impl PracticeRepository for SqliteRepository {
         &self,
         id: &PracticeAttemptId,
     ) -> Result<Option<PracticeAttempt>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT attempt_json FROM practice_attempts WHERE id=?1",
             [id.as_str()],
@@ -174,7 +174,7 @@ impl PracticeRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<PracticeAttempt>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT attempt_json FROM practice_attempts
@@ -195,7 +195,7 @@ impl PracticeRepository for SqliteRepository {
 
 impl ReviewQueueRepository for SqliteRepository {
     fn create_review_item(&self, item: &ReviewItem) -> Result<ReviewItem, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO review_items
              (id,source_kind,status,created_at_ms,updated_at_ms,item_json)
@@ -220,7 +220,7 @@ impl ReviewQueueRepository for SqliteRepository {
     }
 
     fn get_review_item(&self, id: &ReviewItemId) -> Result<Option<ReviewItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT item_json FROM review_items WHERE id=?1",
             [id.as_str()],
@@ -236,7 +236,7 @@ impl ReviewQueueRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ReviewItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         if let Some(status) = status {
             let mut statement = conn
                 .prepare(
@@ -275,7 +275,7 @@ impl ReviewQueueRepository for SqliteRepository {
         &self,
         attempt: &ReviewAttempt,
     ) -> Result<ReviewAttempt, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO review_attempts
              (id,item_id,reviewed_at_ms,rating,attempt_json)
@@ -301,7 +301,7 @@ impl ReviewQueueRepository for SqliteRepository {
         &self,
         id: &ReviewAttemptId,
     ) -> Result<Option<ReviewAttempt>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT attempt_json FROM review_attempts WHERE id=?1",
             [id.as_str()],
@@ -315,7 +315,7 @@ impl ReviewQueueRepository for SqliteRepository {
         &self,
         schedule: &ReviewSchedule,
     ) -> Result<ReviewSchedule, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO review_schedules (item_id,due_at_ms,algorithm,schedule_json)
              VALUES (?1,?2,?3,?4)
@@ -338,7 +338,7 @@ impl ReviewQueueRepository for SqliteRepository {
         &self,
         item_id: &ReviewItemId,
     ) -> Result<Option<ReviewSchedule>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT schedule_json FROM review_schedules WHERE item_id=?1",
             [item_id.as_str()],
@@ -353,7 +353,7 @@ impl ReviewQueueRepository for SqliteRepository {
         due_at_or_before_ms: u64,
         limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT i.item_json, s.schedule_json
@@ -387,7 +387,7 @@ impl ReviewQueueRepository for SqliteRepository {
         &self,
         limit: u32,
     ) -> Result<Vec<(ReviewItem, ReviewSchedule)>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT i.item_json, s.schedule_json
@@ -418,7 +418,7 @@ impl ReviewQueueRepository for SqliteRepository {
         start_ms: u64,
         end_ms: u64,
     ) -> Result<(u32, u32), ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT
                COALESCE(SUM(CASE
@@ -437,7 +437,7 @@ impl ReviewQueueRepository for SqliteRepository {
     }
 
     fn get_review_daily_limits(&self) -> Result<ReviewDailyLimits, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT new_cards_per_day,reviews_per_day
              FROM review_settings WHERE singleton=1",
@@ -456,7 +456,7 @@ impl ReviewQueueRepository for SqliteRepository {
         &self,
         limits: ReviewDailyLimits,
     ) -> Result<ReviewDailyLimits, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "UPDATE review_settings
              SET new_cards_per_day=?1,reviews_per_day=?2
@@ -468,7 +468,7 @@ impl ReviewQueueRepository for SqliteRepository {
     }
 
     fn list_imported_deck_schedules(&self) -> Result<Vec<ImportedDeckSchedule>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT imported.item_id,imported.guid,deck.deck_id,deck.name,deck.parent_deck_id,
@@ -518,7 +518,7 @@ impl HuntingRepository for SqliteRepository {
         &self,
         candidate: &HuntingCandidate,
     ) -> Result<HuntingCandidate, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO hunting_candidates
              (id,lexical_entry_id,review_item_id,status,failure_count,last_failed_at_ms,candidate_json)
@@ -547,7 +547,7 @@ impl HuntingRepository for SqliteRepository {
         &self,
         id: &HuntingCandidateId,
     ) -> Result<Option<HuntingCandidate>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT candidate_json FROM hunting_candidates WHERE id=?1",
             [id.as_str()],
@@ -563,7 +563,7 @@ impl HuntingRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingCandidate>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         if let Some(status) = status {
             let mut statement = conn
                 .prepare(
@@ -602,7 +602,7 @@ impl HuntingRepository for SqliteRepository {
         &self,
         target: &HuntingTarget,
     ) -> Result<HuntingTarget, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO hunting_targets
              (id,lexical_entry_id,status,created_at_ms,updated_at_ms,target_json)
@@ -629,7 +629,7 @@ impl HuntingRepository for SqliteRepository {
         &self,
         id: &HuntingTargetId,
     ) -> Result<Option<HuntingTarget>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT target_json FROM hunting_targets WHERE id=?1",
             [id.as_str()],
@@ -645,7 +645,7 @@ impl HuntingRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<HuntingTarget>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         if let Some(status) = status {
             let mut statement = conn
                 .prepare(
@@ -686,7 +686,7 @@ impl RecognitionUpgradeRepository for SqliteRepository {
         &self,
         evidence: &RecognitionEvidence,
     ) -> Result<RecognitionEvidence, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO recognition_evidence
              (id,lexical_entry_id,context_key,source_kind,occurred_at_ms,evidence_json)
@@ -724,7 +724,7 @@ impl RecognitionUpgradeRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<RecognitionEvidence>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT evidence_json FROM recognition_evidence
@@ -747,7 +747,7 @@ impl RecognitionUpgradeRepository for SqliteRepository {
         &self,
         suggestion: &UpgradeSuggestion,
     ) -> Result<UpgradeSuggestion, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO upgrade_suggestions
              (id,lexical_entry_id,status,created_at_ms,resolved_at_ms,cooldown_until_ms,suggestion_json)
@@ -775,7 +775,7 @@ impl RecognitionUpgradeRepository for SqliteRepository {
         &self,
         id: &UpgradeSuggestionId,
     ) -> Result<Option<UpgradeSuggestion>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT suggestion_json FROM upgrade_suggestions WHERE id=?1",
             [id.as_str()],
@@ -792,7 +792,7 @@ impl RecognitionUpgradeRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<UpgradeSuggestion>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let status = status.map(|value| json(&value)).transpose()?;
         let mut statement = conn
             .prepare(
@@ -824,7 +824,7 @@ impl LearningEventRepository for SqliteRepository {
         &self,
         event: &LearningEvent,
     ) -> Result<LearningEvent, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT OR IGNORE INTO learning_events
              (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json)
@@ -848,7 +848,7 @@ impl LearningEventRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT event_json FROM learning_events
@@ -871,7 +871,7 @@ impl LearningEventRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<LearningEvent>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT event_json FROM learning_events
@@ -895,7 +895,7 @@ impl LearningEventRepository for SqliteRepository {
         kind: LearningEventKind,
         subject_kind: LearningEventSubjectKind,
     ) -> Result<Vec<String>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         // The kind/subject_kind columns store the serde JSON encoding
         // (quoted strings), matching append_learning_event above.
         let mut statement = conn
@@ -919,7 +919,7 @@ impl ListeningInboxRepository for SqliteRepository {
         &self,
         item: &ListeningInboxItem,
     ) -> Result<ListeningInboxItem, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             "INSERT INTO listening_inbox_items
              (id,session_id,media_id,track_id,status,captured_at_ms,updated_at_ms,expires_at_ms,item_json)
@@ -953,7 +953,7 @@ impl ListeningInboxRepository for SqliteRepository {
         &self,
         id: &ListeningInboxItemId,
     ) -> Result<Option<ListeningInboxItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT item_json FROM listening_inbox_items WHERE id=?1",
             [id.as_str()],
@@ -969,7 +969,7 @@ impl ListeningInboxRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ListeningInboxItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         if let Some(status) = status {
             let mut statement = conn
                 .prepare(

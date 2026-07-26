@@ -9,7 +9,7 @@ impl RecordingRepository for SqliteRepository {
         &self,
         asset: &RecordingAsset,
     ) -> Result<RecordingAsset, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         connection
             .execute(
                 "INSERT INTO recording_assets
@@ -41,7 +41,7 @@ impl RecordingRepository for SqliteRepository {
         &self,
         id: &RecordingAssetId,
     ) -> Result<Option<RecordingAsset>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         connection
             .query_row(
                 "SELECT media_id,asset_json FROM recording_assets WHERE id=?1",
@@ -74,7 +74,6 @@ impl RecordingRepository for SqliteRepository {
         if existing.is_some() {
             self.connection
                 .lock()
-                .expect("sqlite mutex poisoned")
                 .execute(
                     "DELETE FROM recording_assets WHERE id=?1",
                     params![id.as_str()],

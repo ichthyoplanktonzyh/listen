@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
+use parking_lot::Mutex;
 use rusqlite::Connection;
 
 use super::{PersistenceError, migrate};
@@ -40,7 +40,6 @@ impl SqliteRepository {
         Ok(self
             .connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row("PRAGMA user_version", [], |r| r.get(0))?)
     }
 }

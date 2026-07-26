@@ -12,13 +12,13 @@ use domain::{
     PracticeAnchor, PracticeAnchorKind, ReviewAttempt, ReviewCardState, ReviewItem, ReviewItemId,
     ReviewItemStatus, ReviewSchedule, ReviewSource, ReviewSourceKind,
 };
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-use crate::{from_json, json as sql_json, repo, SqliteRepository};
+use crate::{SqliteRepository, from_json, json as sql_json, repo};
 
 const DAY_MS: u64 = 86_400_000;
 const ANKI_SCHEMA: &str = r#"
@@ -144,7 +144,7 @@ pub(crate) fn import_package(
             .map(|reference| (reference.name.clone(), reference.clone()))
             .collect::<HashMap<_, _>>();
 
-        let mut conn = repository.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = repository.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let mut card_items = HashMap::<i64, ReviewItemId>::new();
         let mut imported_cards = 0;
@@ -766,7 +766,7 @@ fn sound_names(value: &str) -> Vec<String> {
 }
 
 fn read_export_cards(repository: &SqliteRepository) -> Result<Vec<ExportCard>, ApplicationError> {
-    let conn = repository.connection.lock().expect("sqlite mutex poisoned");
+    let conn = repository.connection.lock();
     let mut statement = conn
         .prepare(
             "SELECT item.item_json,schedule.schedule_json,imported.guid,
@@ -1012,7 +1012,7 @@ fn export_revlog(
     cards: &[ExportCard],
     now_secs: u64,
 ) -> Result<u32, ApplicationError> {
-    let conn = repository.connection.lock().expect("sqlite mutex poisoned");
+    let conn = repository.connection.lock();
     let mut count = 0;
     for card in cards {
         let card_id = card_ids[&card.item.id];

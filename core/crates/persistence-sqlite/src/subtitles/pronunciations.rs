@@ -8,7 +8,6 @@ impl PronunciationRepository for SqliteRepository {
     fn save_pronunciation(&self, analysis: &SentencePronunciation) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO pronunciation_analysis
                  (sentence_id,provider_id,provider_version,analysis_json,updated_at_ms)
@@ -37,7 +36,6 @@ impl PronunciationRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO pronunciation_cache
                  (language,accent,normalized_text,provider_id,provider_version,
@@ -69,7 +67,6 @@ impl PronunciationRepository for SqliteRepository {
     ) -> Result<Option<WordPronunciation>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT pronunciation_json FROM pronunciation_cache
                  WHERE language=?1 AND accent=?2 AND normalized_text=?3
@@ -93,7 +90,6 @@ impl PronunciationRepository for SqliteRepository {
     ) -> Result<Option<SentencePronunciation>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT analysis_json FROM pronunciation_analysis WHERE sentence_id=?1",
                 [id.as_str()],

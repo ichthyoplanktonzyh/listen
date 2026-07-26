@@ -11,7 +11,6 @@ impl ReadingPositionRepository for SqliteRepository {
     ) -> Result<ReadingPosition, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO reading_positions
                  (track_id,media_id,anchor_cue_id,paragraph_index,updated_at_ms)
@@ -39,7 +38,6 @@ impl ReadingPositionRepository for SqliteRepository {
     ) -> Result<Option<ReadingPosition>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT track_id,media_id,anchor_cue_id,paragraph_index,updated_at_ms
                  FROM reading_positions WHERE track_id=?1",

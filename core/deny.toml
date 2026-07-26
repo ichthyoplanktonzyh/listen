@@ -1,0 +1,39 @@
+# Phase 3.19.2 supply-chain policy. Workspace crates are intentionally private:
+# the repository grants no distribution license.
+[graph]
+all-features = true
+
+[advisories]
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "Transitive macro dependency of pinned harper-core and tokenizers; no runtime behavior or safe compatible replacement is available." },
+  { id = "RUSTSEC-2026-0173", reason = "Transitive build-time macro dependency of jieba-rs 0.10.3; no compatible upstream release removes it." },
+]
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "simplest-path"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

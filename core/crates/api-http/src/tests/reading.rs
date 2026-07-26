@@ -281,8 +281,11 @@ async fn learning_observation_history_reads_back_marking_evidence() {
         .unwrap();
     assert_eq!(marking_response.status(), StatusCode::NO_CONTENT);
 
-    let (status, history) =
-        get_json(&app, &format!("/v1/lexical-entries/{entry_id}/observations")).await;
+    let (status, history) = get_json(
+        &app,
+        &format!("/v1/lexical-entries/{entry_id}/observations"),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{history}");
     let rows = history.as_array().unwrap();
     assert_eq!(rows.len(), 1, "{history}");
@@ -300,7 +303,6 @@ async fn learning_observation_history_reads_back_marking_evidence() {
     assert_eq!(status, StatusCode::OK, "{filtered}");
     assert!(filtered.as_array().unwrap().is_empty(), "{filtered}");
 
-    let (status, missing) =
-        get_json(&app, "/v1/lexical-entries/no-such-entry/observations").await;
+    let (status, missing) = get_json(&app, "/v1/lexical-entries/no-such-entry/observations").await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{missing}");
 }

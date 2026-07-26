@@ -23,7 +23,7 @@ fn resource_error(error: local_runtime::LearningResourceError) -> ApiError {
 }
 
 pub(crate) async fn list(State(state): State<ApiState>) -> Json<Vec<LearningResourceDescriptor>> {
-    Json(state.learning_resources.list())
+    Json(state.language.learning_resources.list())
 }
 
 pub(crate) async fn install(
@@ -31,6 +31,7 @@ pub(crate) async fn install(
     Path(id): Path<String>,
 ) -> Result<Json<LearningResourceDescriptor>, ApiError> {
     state
+        .language
         .learning_resources
         .install(&LearningResourceId::parse(id).map_err(ApplicationError::from)?)
         .await
@@ -43,6 +44,7 @@ pub(crate) async fn remove(
     Path(id): Path<String>,
 ) -> Result<Json<LearningResourceDescriptor>, ApiError> {
     state
+        .language
         .learning_resources
         .remove(&LearningResourceId::parse(id).map_err(ApplicationError::from)?)
         .await

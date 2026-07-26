@@ -17,7 +17,7 @@ impl CoachDashboardRepository for SqliteRepository {
         end: u64,
         as_of: u64,
     ) -> Result<CoachDashboardFacts, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let practice = conn.query_row(
             "SELECT COUNT(*), COALESCE(SUM(CASE WHEN result=?1 THEN 1 ELSE 0 END),0) FROM practice_attempts WHERE submitted_at_ms>=?2 AND submitted_at_ms<?3",
             params![json(&PracticeResult::Correct)?, start, end], |r| Ok((r.get::<_, u64>(0)?, r.get::<_, u64>(1)?))).map_err(repo)?;
@@ -84,7 +84,7 @@ impl CoachDashboardRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<application::CoachEvidenceFact>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         if let Some((channel, fact)) = metric.split_once('_')
             && matches!(channel, "listening" | "reading" | "speaking" | "writing")
         {

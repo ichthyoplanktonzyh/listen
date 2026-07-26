@@ -1,6 +1,6 @@
 # LLPlayerNext — 测试体系
 
-> 最后更新：2026-07-13
+> 最后更新：2026-07-26
 
 ## 1. 测试层次
 
@@ -42,6 +42,23 @@
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
 | `api-http` | 路由 handler、错误映射、认证中间件 |
 | `api-events` | 事件 Schema 验证 |
+
+Phase 3.19.2 增加四类运行时回归：
+
+- current-thread Tokio heartbeat 证明同步仓储及 sync/async 混合用例不会占住 async worker；
+- SSE 覆盖正常接收、lag 后继续 retained event 和 closed shutdown；
+- 500 响应脱敏测试同时捕获内部路径/SQL 诊断，并用同一 correlation ID 联结；
+- 每个响应携带 `x-correlation-id`，completion diagnostic 不记录 token、header 或 body。
+
+供应链与架构门：
+
+```bash
+cargo deny --locked check advisories licenses sources
+python3 scripts/check-architecture-coupling.py
+```
+
+架构脚本阻止路由直接访问 `AppServices`、自行 `spawn_blocking`、重新混淆 SSE lag/closed，
+以及把受保护资源路由塞回 composition root。
 
 ### 集成测试（`tests/` 目录）
 

@@ -11,7 +11,6 @@ impl LearnerProfileRepository for SqliteRepository {
     ) -> Result<LearnerProfile, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO learner_profiles
                  (id,ui_language,l1_language,active_l2_language,created_at_ms,updated_at_ms)
@@ -43,7 +42,6 @@ impl LearnerProfileRepository for SqliteRepository {
     ) -> Result<Option<LearnerProfile>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT id,ui_language,l1_language,active_l2_language,created_at_ms,updated_at_ms
                  FROM learner_profiles WHERE id=?1",

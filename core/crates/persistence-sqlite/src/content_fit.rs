@@ -9,7 +9,7 @@ impl DifficultyRepository for SqliteRepository {
         &self,
         profile: &ContentDifficultyProfile,
     ) -> Result<ContentDifficultyProfile, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             // Cache semantics: one row per subject, replaced wholesale. Query
             // columns are projections of the JSON snapshot and must be
@@ -43,7 +43,7 @@ impl DifficultyRepository for SqliteRepository {
         subject_kind: &str,
         subject_id: &str,
     ) -> Result<Option<ContentDifficultyProfile>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT profile_json FROM content_difficulty_profiles
              WHERE subject_kind=?1 AND subject_id=?2",
@@ -58,7 +58,7 @@ impl DifficultyRepository for SqliteRepository {
         &self,
         calibration: &SoundFitCalibration,
     ) -> Result<SoundFitCalibration, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.execute(
             // Durable evidence, one row per subject; unlike the profile
             // cache above this table is never invalidated, only updated.
@@ -84,7 +84,7 @@ impl DifficultyRepository for SqliteRepository {
         subject_kind: &str,
         subject_id: &str,
     ) -> Result<Option<SoundFitCalibration>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT calibration_json FROM content_fit_calibrations
              WHERE subject_kind=?1 AND subject_id=?2",

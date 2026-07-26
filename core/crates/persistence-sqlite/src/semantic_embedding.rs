@@ -18,7 +18,7 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
                 "semantic index replacement mixed model fingerprints".into(),
             ));
         }
-        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut connection = self.connection.lock();
         let tx = connection.transaction().map_err(repo)?;
         // Only a committed complete rebuild becomes visible. Old vector spaces
         // are removed in this transaction; a provider/encode failure happens
@@ -52,7 +52,7 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
         &self,
         model_fingerprint: &str,
     ) -> Result<Vec<SemanticEmbeddingIndexRecord>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT source_kind,source_id,language,channel,text_sha256,model_fingerprint,
@@ -69,7 +69,7 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
     }
 
     fn semantic_embedding_index_summary(&self) -> Result<Vec<(String, u32)>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT model_fingerprint,COUNT(*) FROM semantic_embedding_index
@@ -84,7 +84,7 @@ impl SemanticEmbeddingIndexRepository for SqliteRepository {
     }
 
     fn delete_semantic_embedding_index(&self) -> Result<(), ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         connection
             .execute("DELETE FROM semantic_embedding_index", [])
             .map(|_| ())

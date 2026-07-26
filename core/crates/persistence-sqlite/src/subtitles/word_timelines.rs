@@ -17,7 +17,6 @@ impl WordTimelineRepository for SqliteRepository {
         };
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO word_timings
                  (sentence_id,timing_source,provider_id,provider_version,timings_json,updated_at_ms)
@@ -44,7 +43,6 @@ impl WordTimelineRepository for SqliteRepository {
     ) -> Result<Vec<WordTiming>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timings_json FROM word_timings WHERE sentence_id=?1",
                 [sentence_id.as_str()],
@@ -61,7 +59,6 @@ impl WordTimelineRepository for SqliteRepository {
     ) -> Result<WordTimeline, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO word_timeline_runs
                  (id,track_id,media_id,status,timeline_json,created_at_ms,updated_at_ms)
@@ -87,7 +84,7 @@ impl WordTimelineRepository for SqliteRepository {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<WordTimeline>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare(
                 "SELECT timeline_json FROM word_timeline_runs
@@ -109,7 +106,6 @@ impl WordTimelineRepository for SqliteRepository {
     ) -> Result<Option<WordTimeline>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timeline_json FROM word_timeline_runs WHERE id=?1",
                 [id.as_str()],
@@ -125,7 +121,6 @@ impl WordTimelineRepository for SqliteRepository {
     ) -> Result<Option<WordTimeline>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timeline_json FROM word_timeline_runs
                  WHERE track_id=?1 AND status=?2
@@ -141,7 +136,7 @@ impl WordTimelineRepository for SqliteRepository {
         &self,
         id: &WordTimelineId,
     ) -> Result<WordTimeline, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let selected_json = tx
             .query_row(
@@ -258,7 +253,6 @@ impl WordTimelineRepository for SqliteRepository {
         if was_active {
             self.connection
                 .lock()
-                .expect("sqlite mutex poisoned")
                 .execute(
                     "DELETE FROM word_timings
                      WHERE sentence_id IN (
@@ -272,7 +266,7 @@ impl WordTimelineRepository for SqliteRepository {
     }
 
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let timeline_json = tx
             .query_row(

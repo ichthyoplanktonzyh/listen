@@ -348,7 +348,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
 fn vocabulary_query_handles_ten_thousand_profiles_and_fifty_thousand_sources() {
     let repo = SqliteRepository::in_memory().unwrap();
     {
-        let mut conn = repo.connection.lock().unwrap();
+        let mut conn = repo.connection.lock();
         let tx = conn.transaction().unwrap();
         for word in 0..10_000 {
             let lexical_kind = if word % 2 == 0 {

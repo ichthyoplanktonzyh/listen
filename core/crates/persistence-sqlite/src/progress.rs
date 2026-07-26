@@ -8,7 +8,6 @@ impl PlaybackProgressRepository for SqliteRepository {
     fn load(&self, media_id: &MediaId) -> Result<Option<TimeMs>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT position_ms FROM playback_progress WHERE media_id=?1",
                 [media_id.as_str()],
@@ -21,7 +20,6 @@ impl PlaybackProgressRepository for SqliteRepository {
     fn save(&self, media_id: &MediaId, position: TimeMs) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO playback_progress(media_id, position_ms, updated_at_ms)
                  VALUES (?1, ?2, unixepoch('subsec') * 1000)

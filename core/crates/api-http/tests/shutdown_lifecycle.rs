@@ -82,7 +82,10 @@ fn sidecar_exits_after_its_parent_is_killed() {
     parent.kill().expect("failed to kill the parent shell");
     parent.wait().expect("failed to reap the parent shell");
 
-    let until = Instant::now() + Duration::from_secs(20);
+    // Full-workspace low-memory CI can briefly starve this process while other
+    // integration binaries link/start. Keep the assertion bounded but allow
+    // enough scheduling headroom that it measures lifecycle, not host load.
+    let until = Instant::now() + Duration::from_secs(45);
     while Instant::now() < until {
         if !alive(sidecar) {
             let _ = fs::remove_dir_all(&home);
@@ -95,7 +98,7 @@ fn sidecar_exits_after_its_parent_is_killed() {
     // leak the very process it is complaining about.
     unsafe { libc::kill(sidecar, libc::SIGKILL) };
     let _ = fs::remove_dir_all(&home);
-    panic!("sidecar outlived its parent by more than 20s");
+    panic!("sidecar outlived its parent by more than 45s");
 }
 
 #[test]

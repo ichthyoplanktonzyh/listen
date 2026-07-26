@@ -70,7 +70,7 @@ async fn semantic_index_rebuild_search_and_model_stale_are_read_only() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let language = LanguageCode::parse("en").unwrap();
     {
-        let connection = repo.connection.lock().unwrap();
+        let connection = repo.connection.lock();
         connection.execute("INSERT INTO media_items (id,path,fingerprint,title,kind,created_at_ms,updated_at_ms) VALUES ('media-semantic','/tmp/semantic.mp4','semantic-fp','Semantic fixture','\"video\"',1,1)", []).unwrap();
         connection.execute("INSERT INTO subtitle_tracks (id,media_id,fingerprint,language,source) VALUES ('track-semantic','media-semantic','track-fp','en','\"embedded\"')", []).unwrap();
     }
@@ -155,7 +155,7 @@ fn semantic_index_replacement_is_atomic_and_rejects_mixed_spaces() {
 }
 
 fn writer_counts(repo: &SqliteRepository) -> Vec<u32> {
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     [
         "learning_observations",
         "recognition_evidence",

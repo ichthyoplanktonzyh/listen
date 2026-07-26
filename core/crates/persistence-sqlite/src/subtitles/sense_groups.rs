@@ -13,7 +13,6 @@ impl SenseGroupRepository for SqliteRepository {
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO sense_group_analysis_runs
                  (id,track_id,media_id,parent_word_timeline_id,status,analysis_json,created_at_ms,updated_at_ms)
@@ -41,7 +40,7 @@ impl SenseGroupRepository for SqliteRepository {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<SenseGroupAnalysis>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare(
                 "SELECT analysis_json FROM sense_group_analysis_runs
@@ -63,7 +62,6 @@ impl SenseGroupRepository for SqliteRepository {
     ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT analysis_json FROM sense_group_analysis_runs WHERE id=?1",
                 [id.as_str()],
@@ -79,7 +77,6 @@ impl SenseGroupRepository for SqliteRepository {
     ) -> Result<Option<SenseGroupAnalysis>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT analysis_json FROM sense_group_analysis_runs
                  WHERE track_id=?1 AND status=?2
@@ -95,7 +92,7 @@ impl SenseGroupRepository for SqliteRepository {
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let selected_json = tx
             .query_row(
@@ -181,7 +178,7 @@ impl SenseGroupRepository for SqliteRepository {
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let analysis_json = tx
             .query_row(

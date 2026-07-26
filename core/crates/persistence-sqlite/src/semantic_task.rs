@@ -36,7 +36,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<SemanticRubric, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO semantic_rubrics
                  (id,version,purpose,media_id,start_ms,end_ms,source_language,
@@ -67,7 +66,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<SemanticRubric>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT rubric_json FROM semantic_rubrics WHERE id=?1 AND version=?2",
                 params![id.as_str(), version],
@@ -83,7 +81,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<SemanticRubric>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT rubric_json FROM semantic_rubrics
                  WHERE id=?1 ORDER BY version DESC LIMIT 1",
@@ -105,7 +102,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<SemanticRubric>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 // `purpose` is stored JSON-encoded (with quotes) by
                 // save_semantic_rubric; encode the probe the same way.
@@ -133,7 +129,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<SemanticTaskAttempt, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO semantic_task_attempts
                  (id,kind,rubric_id,rubric_version,status,started_at_ms,attempt_json)
@@ -158,7 +153,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<SemanticTaskAttempt>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT attempt_json FROM semantic_task_attempts WHERE id=?1",
                 [id.as_str()],
@@ -172,7 +166,7 @@ impl SemanticTaskRepository for SqliteRepository {
         &self,
         rubric_id: &SemanticRubricId,
     ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT attempt_json FROM semantic_task_attempts
@@ -191,7 +185,7 @@ impl SemanticTaskRepository for SqliteRepository {
         &self,
         kinds: &[SemanticTaskKind],
     ) -> Result<Vec<SemanticTaskAttempt>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let placeholders = (1..=kinds.len())
             .map(|index| format!("?{index}"))
             .collect::<Vec<_>>()
@@ -220,7 +214,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<SemanticJudgment, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO semantic_judgments
                  (id,attempt_id,response_revision,rubric_id,rubric_version,
@@ -247,7 +240,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<SemanticJudgment>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT judgment_json FROM semantic_judgments WHERE id=?1",
                 [id.as_str()],
@@ -261,7 +253,7 @@ impl SemanticTaskRepository for SqliteRepository {
         &self,
         attempt_id: &SemanticTaskAttemptId,
     ) -> Result<Vec<SemanticJudgment>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT judgment_json FROM semantic_judgments
@@ -282,7 +274,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<JudgmentAdjudication, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO judgment_adjudications
                  (id,judgment_id,point_id,occurred_at_ms,adjudication_json)
@@ -303,7 +294,7 @@ impl SemanticTaskRepository for SqliteRepository {
         &self,
         judgment_id: &SemanticJudgmentId,
     ) -> Result<Vec<JudgmentAdjudication>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT adjudication_json FROM judgment_adjudications
@@ -326,7 +317,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<WritingFeedbackFinding, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO writing_feedback_findings
                  (id,attempt_id,response_revision,layer,provider_id,created_at_ms,finding_json)
@@ -351,7 +341,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<WritingFeedbackFinding>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT finding_json FROM writing_feedback_findings WHERE id=?1",
                 [id.as_str()],
@@ -365,7 +354,7 @@ impl SemanticTaskRepository for SqliteRepository {
         &self,
         attempt_id: &SemanticTaskAttemptId,
     ) -> Result<Vec<WritingFeedbackFinding>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT finding_json FROM writing_feedback_findings
@@ -385,7 +374,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<WritingFindingDisposition, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO writing_finding_dispositions
                  (id,finding_id,decision,occurred_at_ms,disposition_json)
@@ -408,7 +396,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<WritingFindingDisposition>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT disposition_json FROM writing_finding_dispositions WHERE id=?1",
                 [id.as_str()],
@@ -422,7 +409,7 @@ impl SemanticTaskRepository for SqliteRepository {
         &self,
         finding_id: &WritingFeedbackFindingId,
     ) -> Result<Vec<WritingFindingDisposition>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT disposition_json FROM writing_finding_dispositions
@@ -439,7 +426,6 @@ impl SemanticTaskRepository for SqliteRepository {
     fn upsert_writing_draft(&self, draft: &WritingDraft) -> Result<WritingDraft, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO writing_drafts (rubric_id,updated_at_ms,draft_json)
                  VALUES (?1,?2,?3)
@@ -458,7 +444,6 @@ impl SemanticTaskRepository for SqliteRepository {
     ) -> Result<Option<WritingDraft>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT draft_json FROM writing_drafts WHERE rubric_id=?1",
                 [rubric_id.as_str()],
@@ -471,7 +456,6 @@ impl SemanticTaskRepository for SqliteRepository {
     fn delete_writing_draft(&self, rubric_id: &SemanticRubricId) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM writing_drafts WHERE rubric_id=?1",
                 [rubric_id.as_str()],

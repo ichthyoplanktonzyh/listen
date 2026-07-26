@@ -154,7 +154,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         documents: &[ProductionCorpusDocument],
         entries: &[ProductionCorpusEntry],
     ) -> Result<(), ApplicationError> {
-        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut connection = self.connection.lock();
         replace_projection(&mut connection, Some(rubric_id), documents, entries)
     }
 
@@ -163,7 +163,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         documents: &[ProductionCorpusDocument],
         entries: &[ProductionCorpusEntry],
     ) -> Result<(), ApplicationError> {
-        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut connection = self.connection.lock();
         replace_projection(&mut connection, None, documents, entries)
     }
 
@@ -173,7 +173,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         documents: &[ProductionCorpusDocument],
         entries: &[ProductionCorpusEntry],
     ) -> Result<(), ApplicationError> {
-        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut connection = self.connection.lock();
         let tx = connection.transaction().map_err(repo)?;
         tx.execute(
             "DELETE FROM production_corpus_documents WHERE realtime_turn_id=?1",
@@ -191,7 +191,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(&format!(
                 "SELECT e.id,e.document_id,e.normalized_key,e.display_text,e.start_char,e.end_char,
@@ -219,7 +219,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<ProductionCorpusHit>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let phrase = format!("\"{}\"", query.trim().to_lowercase().replace('"', " "));
         let mut statement = connection
             .prepare(&format!(
@@ -245,7 +245,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         language: &LanguageCode,
         channel: ProductionChannel,
     ) -> Result<ProductionCorpusSummary, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         connection
             .query_row(
                 "SELECT COUNT(DISTINCT d.id),COUNT(e.id),COUNT(DISTINCT e.normalized_key)
@@ -269,7 +269,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         language: &LanguageCode,
         channel: ProductionChannel,
     ) -> Result<Vec<ProductionGapCandidateFacts>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection.prepare(
             "WITH capability AS (
                SELECT lexical_entry_id,
@@ -334,7 +334,7 @@ impl ProductionCorpusRepository for SqliteRepository {
     }
 
     fn list_production_documents(&self) -> Result<Vec<ProductionCorpusDocument>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(&format!(
                 "SELECT {DOCUMENT_COLUMNS} FROM production_corpus_documents d
@@ -353,7 +353,7 @@ impl ProductionCorpusRepository for SqliteRepository {
         language: &LanguageCode,
         channel: ProductionChannel,
     ) -> Result<Vec<String>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT DISTINCT e.normalized_key FROM production_corpus_entries e

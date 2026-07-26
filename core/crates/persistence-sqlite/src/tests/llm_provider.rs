@@ -42,7 +42,7 @@ fn sample_profile(auth_ref: Option<LlmAuthRef>) -> LlmProviderProfile {
 }
 
 fn dump_profiles_table(repo: &SqliteRepository) -> String {
-    let conn = repo.connection.lock().unwrap();
+    let conn = repo.connection.lock();
     let mut statement = conn
         .prepare("SELECT id,display_name,adapter_kind,base_url,model_id,auth_ref,profile_json FROM llm_provider_profiles")
         .unwrap();

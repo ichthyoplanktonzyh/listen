@@ -3,7 +3,12 @@ use crate::{ApiError, ApiState, CreateSpeechBatchJob, Json, Path, State};
 pub(crate) async fn speech_jobs(
     State(state): State<ApiState>,
 ) -> Result<Json<Vec<local_runtime::SpeechBatchJob>>, ApiError> {
-    state.speech_jobs.list().map(Json).map_err(ApiError::from)
+    state
+        .analysis
+        .speech_jobs
+        .list()
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn create_speech_job(
@@ -11,6 +16,7 @@ pub(crate) async fn create_speech_job(
     Json(request): Json<CreateSpeechBatchJob>,
 ) -> Result<Json<local_runtime::SpeechBatchJob>, ApiError> {
     state
+        .analysis
         .speech_jobs
         .clone()
         .create(request)
@@ -23,6 +29,7 @@ pub(crate) async fn speech_job(
     Path(job_id): Path<String>,
 ) -> Result<Json<local_runtime::SpeechBatchJob>, ApiError> {
     state
+        .analysis
         .speech_jobs
         .get(&job_id)?
         .map(Json)
@@ -34,6 +41,7 @@ pub(crate) async fn cancel_speech_job(
     Path(job_id): Path<String>,
 ) -> Result<Json<local_runtime::SpeechBatchJob>, ApiError> {
     state
+        .analysis
         .speech_jobs
         .cancel(&job_id)
         .map(Json)
@@ -45,6 +53,7 @@ pub(crate) async fn retry_speech_job(
     Path(job_id): Path<String>,
 ) -> Result<Json<local_runtime::SpeechBatchJob>, ApiError> {
     state
+        .analysis
         .speech_jobs
         .clone()
         .retry(&job_id)

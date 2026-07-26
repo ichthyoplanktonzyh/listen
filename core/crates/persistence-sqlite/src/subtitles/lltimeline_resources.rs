@@ -13,7 +13,6 @@ impl LLTimelineResourceRepository for SqliteRepository {
     ) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO lltimeline_resources
                  (track_id,metadata_json,artifacts_json,updated_at_ms)
@@ -34,7 +33,6 @@ impl LLTimelineResourceRepository for SqliteRepository {
     ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT metadata_json, artifacts_json FROM lltimeline_resources
                  WHERE track_id=?1",

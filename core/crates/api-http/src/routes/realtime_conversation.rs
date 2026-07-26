@@ -60,14 +60,14 @@ fn default_timeout() -> u64 {
 pub(crate) async fn list_profiles(
     State(state): State<ApiState>,
 ) -> Result<Json<Vec<RealtimeProfileView>>, ApiError> {
+    let profiles = state
+        .application
+        .execute("realtime.list_profiles", move |services| {
+            services.realtime_conversations().list_profiles()
+        })
+        .await?;
     Ok(Json(
-        state
-            .services
-            .realtime_conversations()
-            .list_profiles()?
-            .iter()
-            .map(RealtimeProfileView::from)
-            .collect(),
+        profiles.iter().map(RealtimeProfileView::from).collect(),
     ))
 }
 
@@ -98,11 +98,18 @@ pub(crate) async fn register_profile(
         timeout_ms: request.timeout_ms,
         created_at_ms: application::now_ms(),
     };
-    let saved = state.services.realtime_conversations().register_profile(
-        profile,
-        &request.secret,
-        state.secret_store.as_ref(),
-    )?;
+    let secret = request.secret;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let saved = state
+        .application
+        .execute("realtime.register_profile", move |services| {
+            services.realtime_conversations().register_profile(
+                profile,
+                &secret,
+                secret_store.as_ref(),
+            )
+        })
+        .await?;
     Ok(Json(RealtimeProfileView::from(&saved)))
 }
 
@@ -111,10 +118,15 @@ pub(crate) async fn delete_profile(
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let id = RealtimeProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
     state
-        .services
-        .realtime_conversations()
-        .delete_profile(&id, state.secret_store.as_ref())?;
+        .application
+        .execute("realtime.delete_profile", move |services| {
+            services
+                .realtime_conversations()
+                .delete_profile(&id, secret_store.as_ref())
+        })
+        .await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -122,18 +134,27 @@ pub(crate) async fn save_session(
     State(state): State<ApiState>,
     Json(session): Json<RealtimeConversationSession>,
 ) -> Result<Json<RealtimeConversationSession>, ApiError> {
-    Ok(Json(
-        state
-            .services
-            .realtime_conversations()
-            .save_session(session)?,
-    ))
+    state
+        .application
+        .execute("realtime.save_session", move |services| {
+            services.realtime_conversations().save_session(session)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn list_sessions(
     State(state): State<ApiState>,
 ) -> Result<Json<Vec<RealtimeConversationSession>>, ApiError> {
-    Ok(Json(state.services.realtime_conversations().sessions()?))
+    state
+        .application
+        .execute("realtime.list_sessions", move |services| {
+            services.realtime_conversations().sessions()
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn list_turns(
@@ -141,19 +162,30 @@ pub(crate) async fn list_turns(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<RealtimeConversationTurn>>, ApiError> {
     let id = domain::RealtimeConversationSessionId::parse(id).map_err(ApplicationError::from)?;
-    Ok(Json(state.services.realtime_conversations().turns(&id)?))
+    state
+        .application
+        .execute("realtime.list_turns", move |services| {
+            services.realtime_conversations().turns(&id)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn save_turn(
     State(state): State<ApiState>,
     Json(turn): Json<RealtimeConversationTurn>,
 ) -> Result<Json<RealtimeConversationTurn>, ApiError> {
-    Ok(Json(
-        state
-            .services
-            .production_corpus()
-            .record_realtime_turn_and_index(turn)?,
-    ))
+    state
+        .application
+        .execute("realtime.save_turn", move |services| {
+            services
+                .production_corpus()
+                .record_realtime_turn_and_index(turn)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,23 +209,27 @@ pub(crate) async fn connect(
     axum::extract::Query(query): axum::extract::Query<ConnectQuery>,
 ) -> Result<axum::response::Response, ApiError> {
     let id = RealtimeProviderProfileId::parse(query.profile_id).map_err(ApplicationError::from)?;
-    let profile = state
-        .services
-        .realtime_conversations()
-        .profile(&id)?
-        .ok_or_else(|| ApiError::not_found("realtime provider profile"))?;
-    let credential = state
-        .services
-        .realtime_conversations()
-        .resolve_secret(&profile, state.secret_store.as_ref())?
-        .ok_or_else(|| {
-            ApiError::new(
-                axum::http::StatusCode::BAD_REQUEST,
-                "realtime_credential_missing",
-                "realtime provider credential is missing",
-                false,
-            )
-        })?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let (profile, credential) = state
+        .application
+        .execute("realtime.connect_profile", move |services| {
+            let profile = services.realtime_conversations().profile(&id)?.ok_or(
+                application::ApplicationError::NotFound("realtime provider profile"),
+            )?;
+            let credential = services
+                .realtime_conversations()
+                .resolve_secret(&profile, secret_store.as_ref())?;
+            Ok((profile, credential))
+        })
+        .await?;
+    let credential = credential.ok_or_else(|| {
+        ApiError::new(
+            axum::http::StatusCode::BAD_REQUEST,
+            "realtime_credential_missing",
+            "realtime provider credential is missing",
+            false,
+        )
+    })?;
     let language = LanguageCode::parse(query.language).map_err(ApplicationError::from)?;
     Ok(ws.on_upgrade(move |socket| {
         run_socket(

@@ -14,6 +14,7 @@ pub(crate) mod projection_review;
 pub(crate) mod pronunciation;
 pub(crate) mod reading;
 pub(crate) mod realtime_conversation;
+pub(crate) mod router;
 pub(crate) mod semantic;
 pub(crate) mod semantic_embedding;
 pub(crate) mod sound_line;

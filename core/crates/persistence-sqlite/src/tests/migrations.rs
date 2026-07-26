@@ -4,7 +4,7 @@ use super::*;
 fn new_database_migrates_to_latest() {
     let repo = SqliteRepository::in_memory().unwrap();
     assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     assert!(!table_exists(&connection, removed_resource_table_name()));
     assert!(table_exists(&connection, "hunting_candidates"));
     assert!(table_exists(&connection, "hunting_targets"));
@@ -20,7 +20,7 @@ fn v45_removes_role_reply_facts_projections_and_recording_file() {
     let recording_path =
         std::env::temp_dir().join(format!("llplayer-role-reply-{}.wav", std::process::id()));
     std::fs::write(&recording_path, b"role reply audio").unwrap();
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     connection
         .execute_batch(&format!(
             r#"
@@ -738,7 +738,7 @@ fn upgrades_v29_database_with_empty_optional_sense_folders() {
 #[test]
 fn v46_seeds_fsrs_without_resetting_legacy_review_progress() {
     let repo = SqliteRepository::in_memory().unwrap();
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     connection
         .execute(
             "INSERT INTO review_items

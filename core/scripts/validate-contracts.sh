@@ -302,7 +302,10 @@ const examples = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const events = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
 const openapi = fs.readFileSync(process.argv[4], "utf8");
 const client = fs.readFileSync(process.argv[5], "utf8");
-const routerSource = fs.readFileSync(process.argv[6], "utf8");
+const routerSource = process.argv
+  .slice(6)
+  .map(path => fs.readFileSync(path, "utf8"))
+  .join("\n");
 if (schema.$defs.command.properties.version.const !== 1) throw new Error("command version missing");
 if (schema.$defs.event.properties.version.const !== 1) throw new Error("event version missing");
 if (!Array.isArray(examples) || examples.length === 0) throw new Error("examples missing");
@@ -335,4 +338,5 @@ console.log(`Validated player, event, and OpenAPI contracts with ${examples.leng
   "$root/contracts/events/v1.schema.json" \
   "$root/contracts/openapi/v1.yaml" \
   "$root/contracts/generated/local-api-v1.ts" \
-  "$root/crates/api-http/src/lib.rs"
+  "$root/crates/api-http/src/lib.rs" \
+  "$root/crates/api-http/src/routes/router.rs"

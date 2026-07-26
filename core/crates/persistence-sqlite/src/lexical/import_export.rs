@@ -28,7 +28,7 @@ impl SqliteRepository {
         folders: &[LexicalSenseFolder],
         assignments: &[LexicalSenseFolderOccurrence],
     ) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         for folder in folders {
             let entry_exists = tx
@@ -78,7 +78,7 @@ impl SqliteRepository {
     }
 
     pub(crate) fn export_lexical_assets(&self) -> Result<LexicalAssets, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let entries = {
             let mut statement = conn
                 .prepare(
@@ -154,7 +154,7 @@ impl SqliteRepository {
             let details = self.upsert_lexical_entry(&merged, None, LearningChangeSource::Import)?;
             imported_ids.insert(entry.id.clone(), details.entry.id);
         }
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         for value in history {
             let lexical_entry_id = imported_ids
@@ -284,7 +284,7 @@ impl SqliteRepository {
     pub(super) fn export_all_learning_observations(
         &self,
     ) -> Result<Vec<LearningObservation>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(
                 "SELECT id,lexical_entry_id,sense_id,capability,task_type,outcome,assistance,
@@ -304,7 +304,7 @@ impl SqliteRepository {
         &self,
         imported: &LexicalCapabilityProfile,
     ) -> Result<(), ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let exists = conn
             .query_row(
                 "SELECT 1 FROM lexical_entries WHERE id=?1",
@@ -359,7 +359,7 @@ impl SqliteRepository {
         change_kind: CapabilityStateChangeKind,
         update: impl FnOnce(&mut CapabilityDimensionState),
     ) -> Result<LexicalCapabilityProfile, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let exists = tx
             .query_row(

@@ -3,9 +3,35 @@ use axum::body::to_bytes;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use persistence_sqlite::SqliteRepository;
 use std::collections::BTreeSet;
+use std::io;
+use std::sync::Mutex;
 use tower::ServiceExt;
 
 mod semantic_embedding;
+
+#[derive(Clone, Default)]
+struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
+
+struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturedLogs {
+    type Writer = CapturedWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        CapturedWriter(self.0.clone())
+    }
+}
+
+impl io::Write for CapturedWriter {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buffer);
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 fn test_state() -> ApiState {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
@@ -38,6 +64,128 @@ fn test_state() -> ApiState {
 
 fn test_app() -> Router {
     router(test_state())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn application_executor_keeps_async_runtime_responsive_during_blocking_work() {
+    let executor = test_state().application;
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let operation = tokio::spawn(async move {
+        executor
+            .execute("test.blocking", move |_| {
+                started_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(7_u8)
+            })
+            .await
+    });
+    started_rx.await.unwrap();
+
+    let heartbeat = tokio::spawn(async {
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        42_u8
+    });
+    assert_eq!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), heartbeat)
+            .await
+            .expect("async runtime heartbeat must not be blocked")
+            .unwrap(),
+        42
+    );
+
+    release_tx.send(()).unwrap();
+    assert_eq!(operation.await.unwrap().unwrap(), 7);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn application_executor_drives_mixed_async_work_off_the_runtime_worker() {
+    let executor = test_state().application;
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let operation = tokio::spawn(async move {
+        executor
+            .execute_async("test.mixed", move |_| async move {
+                started_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                Ok(9_u8)
+            })
+            .await
+    });
+    started_rx.await.unwrap();
+
+    let heartbeat = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        tokio::time::sleep(std::time::Duration::from_millis(10)),
+    );
+    heartbeat
+        .await
+        .expect("mixed application future must not block the async runtime");
+
+    release_tx.send(()).unwrap();
+    assert_eq!(operation.await.unwrap().unwrap(), 9);
+}
+
+#[tokio::test]
+async fn internal_repository_details_are_redacted_from_http_errors() {
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .without_time()
+        .with_writer(logs.clone())
+        .finish();
+    let response = tracing::subscriber::with_default(subscriber, || {
+        ApiError::from(ApplicationError::Repository(
+            "database /private/user/listen.sqlite: secret_table failed".to_owned(),
+        ))
+        .into_response()
+    });
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body.contains("\"code\":\"repository_error\""));
+    assert!(body.contains("local data operation failed"));
+    assert!(!body.contains("/private/user"));
+    assert!(!body.contains("secret_table"));
+
+    let diagnostics = String::from_utf8(logs.0.lock().unwrap().clone()).unwrap();
+    assert!(diagnostics.contains("/private/user/listen.sqlite"));
+    assert!(diagnostics.contains("secret_table"));
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(diagnostics.contains(body["correlation_id"].as_str().unwrap()));
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn every_response_has_a_correlation_id_and_completion_diagnostic() {
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .json()
+        .without_time()
+        .with_writer(logs.clone())
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let response = test_app()
+        .oneshot(Request::get("/v1/media").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let header = response
+        .headers()
+        .get("x-correlation-id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["correlation_id"], header);
+
+    let diagnostics = String::from_utf8(logs.0.lock().unwrap().clone()).unwrap();
+    assert!(diagnostics.contains("\"event\":\"api.request.completed\""));
+    assert!(diagnostics.contains(&header));
+    assert!(!diagnostics.contains("Bearer secret"));
 }
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 # LLPlayerNext — 技术栈
 
-> 最后更新：2026-07-13
+> 最后更新：2026-07-26
 
 ## 1. 总览
 
@@ -42,6 +42,7 @@ workspace: Cargo.toml (11 crates, resolver 2)
 | tokio | 1 | 异步运行时 |
 | serde / serde_json | 1 | 序列化 |
 | rusqlite | 0.37 (bundled) | SQLite |
+| parking_lot | 0.12 | SQLite 单连接非 poisoning 互斥 |
 | reqwest | 0.12 (rustls-tls) | HTTP 客户端 |
 | thiserror | 2 | 错误类型派生 |
 | sha2 | 0.10 | 内容指纹 |
@@ -49,6 +50,10 @@ workspace: Cargo.toml (11 crates, resolver 2)
 | hound | 3.5 | WAV 读写 |
 | rand | 0.9 | 令牌生成 |
 | async-trait | 0.1 | 异步 trait |
+
+CI 使用固定版本 `cargo-deny 0.19.7 --locked` 检查 RustSec advisories、许可证与
+crate source。workspace crates 均为 `publish = false`，与仓库当前不授予分发许可的状态一致。
+中文分词升级到 `jieba-rs 0.10.3`；其 token span API 在 `subtitle-core` 边界内适配。
 
 ## 3. Flutter 桌面端
 

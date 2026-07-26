@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- 2026-07-26 18:35 CST: Phase 3.19.2 Backend Runtime Hardening & Interface
+  Deepening 完成。全部 HTTP 路由经单一 `ApplicationExecutor` 把同步 repository work 移出
+  Tokio async worker，current-thread heartbeat 回归覆盖 sync 与 mixed-async workflow；
+  SSE 明确 lag/closed 并在 lag 后继续 retained event。SQLite 333 个 mutex-poison panic
+  改为非 poisoning 序列化，保留单连接 transaction locality、5 秒 busy timeout 与默认
+  journal/synchronous durability。根 composition 从 1216 行收缩到约 469 行，protected routes
+  分成 media-analysis/learning/generative/provider-event 四组，`ApiState` 分成四个 lifecycle
+  context。500 响应不再泄漏 SQL/路径/process/secret 细节，JSON completion/error/slow-op
+  diagnostics 与 `x-correlation-id` 联结且不记录 token/body。新增 ADR 0029、route/SSE/blocking
+  architecture guards、固定 `cargo-deny 0.19.7 --locked` CI；修复 ammonia/crossbeam RustSec，
+  升级 jieba-rs 并移除 fxhash。最终 strict low-memory：Rust 709、Flutter 650、Clippy、
+  analyze、contracts、cargo-deny 与 diff checks 全绿；`apps/desktop/**` 零编辑。
+
+- 2026-07-26 17:36 CST: 建立 Phase 3.19.2 Backend Runtime Hardening & Interface
+  Deepening，固定后端-only 范围与基线：SQLite/Tokio 阻塞执行、SSE lag 恢复、
+  route/composition locality、内部错误脱敏、结构化观测、Rust 供应链门和严格收口；明确
+  不编辑并行推进的 Flutter 前端、不改变学习权威或既有 HTTP wire contract。
+
+- 2026-07-26 17:49 CST: Phase 3.19.2 首批运行时加固：恢复 Rust formatting 严格门；
+  SSE 显式区分 lag/closed，慢消费者跳过丢失通知后继续接收 retained events；新增 concrete
+  `ApplicationExecutor` 作为 async transport → sync application 的唯一 blocking seam，并迁移
+  media/subtitle 16 条调用，single-worker Tokio heartbeat 回归通过。HTTP repository/
+  secret-store/local-process 错误改为 public/internal 双消息，响应不再暴露路径/SQL 细节；
+  后端启用 JSON tracing、request completion 与 slow application operation 诊断。api-http
+  58 tests、Clippy、quick strict 基线全绿。
+
 - 2026-07-25: 复习后端接入 FSRS-6 默认调度并补齐 Anki 数据通道与查询能力（refs #72
   #73 #74）：schedule 持久化 stability/difficulty/last-review/review-count，稳定派生
   new/learning/review/relearning 四态；旧 heuristic schedule 按原 interval/lapse 原地迁移，

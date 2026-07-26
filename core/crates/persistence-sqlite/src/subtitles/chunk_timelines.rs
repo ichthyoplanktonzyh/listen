@@ -11,7 +11,6 @@ impl ChunkTimelineRepository for SqliteRepository {
     ) -> Result<ChunkTimeline, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO chunk_timeline_runs
                  (id,track_id,media_id,parent_word_timeline_id,status,timeline_json,created_at_ms,updated_at_ms)
@@ -39,7 +38,7 @@ impl ChunkTimelineRepository for SqliteRepository {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<ChunkTimeline>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare(
                 "SELECT timeline_json FROM chunk_timeline_runs
@@ -61,7 +60,6 @@ impl ChunkTimelineRepository for SqliteRepository {
     ) -> Result<Option<ChunkTimeline>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timeline_json FROM chunk_timeline_runs WHERE id=?1",
                 [id.as_str()],
@@ -77,7 +75,6 @@ impl ChunkTimelineRepository for SqliteRepository {
     ) -> Result<Option<ChunkTimeline>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timeline_json FROM chunk_timeline_runs
                  WHERE track_id=?1 AND status=?2
@@ -93,7 +90,7 @@ impl ChunkTimelineRepository for SqliteRepository {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let selected_json = tx
             .query_row(
@@ -177,7 +174,7 @@ impl ChunkTimelineRepository for SqliteRepository {
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let timeline_json = tx
             .query_row(

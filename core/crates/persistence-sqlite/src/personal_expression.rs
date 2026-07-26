@@ -12,7 +12,7 @@ impl PersonalExpressionRepository for SqliteRepository {
         &self,
         asset: &UserSentencePatternAsset,
     ) -> Result<UserSentencePatternAsset, ApplicationError> {
-        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut connection = self.connection.lock();
         let tx = connection.transaction().map_err(repo)?;
         tx.execute(
             "INSERT INTO user_sentence_patterns
@@ -52,7 +52,7 @@ impl PersonalExpressionRepository for SqliteRepository {
         version: &UserSentencePatternVersion,
         updated_at_ms: u64,
     ) -> Result<UserSentencePatternAsset, ApplicationError> {
-        let mut connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut connection = self.connection.lock();
         let tx = connection.transaction().map_err(repo)?;
         let mut asset = tx
             .query_row(
@@ -105,7 +105,6 @@ impl PersonalExpressionRepository for SqliteRepository {
     ) -> Result<Option<UserSentencePatternAsset>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT asset_json FROM user_sentence_patterns WHERE id=?1",
                 [id.as_str()],
@@ -120,7 +119,7 @@ impl PersonalExpressionRepository for SqliteRepository {
         language: Option<&LanguageCode>,
         query: Option<&str>,
     ) -> Result<Vec<UserSentencePatternAsset>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let query = query.map(str::trim).filter(|value| !value.is_empty());
         let pattern = query.map(|value| format!("%{value}%"));
         let mut statement = connection
@@ -145,7 +144,7 @@ impl PersonalExpressionRepository for SqliteRepository {
         &self,
         id: &UserSentencePatternId,
     ) -> Result<Vec<UserSentencePatternVersion>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT version_json FROM user_sentence_pattern_versions
@@ -162,7 +161,6 @@ impl PersonalExpressionRepository for SqliteRepository {
     fn delete_pattern(&self, id: &UserSentencePatternId) -> Result<bool, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM user_sentence_patterns WHERE id=?1",
                 [id.as_str()],
@@ -177,7 +175,6 @@ impl PersonalExpressionRepository for SqliteRepository {
     ) -> Result<PersonalExpressionAttempt, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO personal_expression_attempts
                  (id,pattern_id,pattern_version_id,channel,assistance,completed_at_ms,attempt_json)
@@ -203,7 +200,7 @@ impl PersonalExpressionRepository for SqliteRepository {
         &self,
         id: &UserSentencePatternId,
     ) -> Result<Vec<PersonalExpressionAttempt>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
                 "SELECT attempt_json FROM personal_expression_attempts

@@ -64,6 +64,47 @@ def guard_http_runtime_ownership() -> None:
                 fail(f"{path.relative_to(ROOT)} owns {responsibility} ({token})")
 
 
+def guard_http_blocking_seam() -> None:
+    """Keep synchronous application work behind the single transport seam."""
+    route_root = ROOT / "crates/api-http/src/routes"
+    for path in rust_sources(route_root):
+        source = path.read_text(encoding="utf-8")
+        if re.search(r"\bstate\s*\.\s*services\b", source, re.DOTALL):
+            fail(f"{path.relative_to(ROOT)} bypasses ApplicationExecutor")
+        if "spawn_blocking" in source:
+            fail(f"{path.relative_to(ROOT)} owns blocking dispatch")
+
+    executor = (ROOT / "crates/api-http/src/application_executor.rs").read_text(
+        encoding="utf-8"
+    )
+    if "spawn_blocking" not in executor:
+        fail("ApplicationExecutor no longer owns blocking dispatch")
+
+
+def guard_event_stream_semantics() -> None:
+    """Lag and shutdown are distinct notification conditions."""
+    source = (ROOT / "crates/api-http/src/event_stream.rs").read_text(encoding="utf-8")
+    required = ["RecvError::Lagged", "RecvError::Closed"]
+    missing = [token for token in required if token not in source]
+    if missing:
+        fail(f"event stream omits explicit receive states: {missing}")
+
+
+def guard_http_composition_root() -> None:
+    """Root composition stays limited to public health, merge, observation and state."""
+    source = (ROOT / "crates/api-http/src/lib.rs").read_text(encoding="utf-8")
+    if source.count(".route(") > 1:
+        fail("api-http lib.rs has regained protected resource route registration")
+    if "routes::router::protected_router(&state)" not in source:
+        fail("api-http root no longer delegates protected route composition")
+
+    state = source.split("pub struct ApiState {", 1)[1].split("}", 1)[0]
+    expected = ["analysis:", "language:", "generative:", "infrastructure:"]
+    missing = [field for field in expected if field not in state]
+    if missing:
+        fail(f"ApiState runtime contexts regressed: {missing}")
+
+
 def guard_flutter_transport_parsing() -> None:
     roots = [
         ROOT / "apps/desktop/lib/controllers",
@@ -135,6 +176,9 @@ def main() -> int:
     guard_application_public_interface()
     guard_production_rust_wildcards()
     guard_http_runtime_ownership()
+    guard_http_blocking_seam()
+    guard_event_stream_semantics()
+    guard_http_composition_root()
     guard_flutter_transport_parsing()
     guard_flutter_raw_api_allowlist()
     guard_descriptive_module_names()

@@ -57,7 +57,6 @@ fn save_gold_fixture(services: &AppServices, fixture: &SemanticTaskGoldFixture) 
 fn count(repo: &SqliteRepository, table: &str) -> i64 {
     repo.connection
         .lock()
-        .unwrap()
         .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
         })
@@ -225,7 +224,7 @@ fn writing_findings_and_dispositions_are_append_only_and_user_revision_bound() {
     assert_eq!(count(&repo, "writing_feedback_findings"), 1);
     assert_eq!(count(&repo, "writing_finding_dispositions"), 1);
 
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     assert!(
         connection
             .execute(
@@ -309,7 +308,7 @@ fn semantic_tables_are_append_only() {
     let services = semantic_services(&repo);
     save_gold_fixture(&services, &gold_fixture());
 
-    let conn = repo.connection.lock().unwrap();
+    let conn = repo.connection.lock();
     let statements = [
         "UPDATE semantic_rubrics SET version = 99",
         "DELETE FROM semantic_rubrics",
@@ -337,7 +336,6 @@ fn semantic_snapshots_survive_media_deletion() {
     let media_id = fixture.rubric.source.media_id.clone().unwrap();
     repo.connection
         .lock()
-        .unwrap()
         .execute(
             "INSERT INTO media_items (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms)
              VALUES (?1,'/tmp/x.mp4','fp-1','CNN10','video',600000,1,1)",
@@ -348,7 +346,6 @@ fn semantic_snapshots_survive_media_deletion() {
 
     repo.connection
         .lock()
-        .unwrap()
         .execute("DELETE FROM media_items WHERE id=?1", [media_id.as_str()])
         .unwrap();
 
@@ -398,7 +395,6 @@ fn adjudication_never_rewrites_the_original_judgment() {
     let raw_before: String = repo
         .connection
         .lock()
-        .unwrap()
         .query_row(
             "SELECT judgment_json FROM semantic_judgments WHERE id=?1",
             [adjudication.judgment_id.as_str()],
@@ -414,7 +410,6 @@ fn adjudication_never_rewrites_the_original_judgment() {
     let raw_after: String = repo
         .connection
         .lock()
-        .unwrap()
         .query_row(
             "SELECT judgment_json FROM semantic_judgments WHERE id=?1",
             [adjudication.judgment_id.as_str()],

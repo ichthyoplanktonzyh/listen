@@ -7,7 +7,7 @@ use super::{SqliteRepository, domain_sql, from_json, json, repo};
 impl MediaRepository for SqliteRepository {
     fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError> {
         {
-            let conn = self.connection.lock().expect("sqlite mutex poisoned");
+            let conn = self.connection.lock();
             conn.execute(
                 "INSERT INTO media_items
                  (id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability)
@@ -68,7 +68,7 @@ impl MediaRepository for SqliteRepository {
     }
 
     fn get(&self, id: &MediaId) -> Result<Option<MediaItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability
              FROM media_items WHERE id=?1",
@@ -92,7 +92,7 @@ impl MediaRepository for SqliteRepository {
     }
 
     fn list(&self) -> Result<Vec<MediaItem>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare(
                 "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability
@@ -125,7 +125,7 @@ impl MediaRepository for SqliteRepository {
         intent: Option<MediaTriageIntent>,
         updated_at_ms: u64,
     ) -> Result<(), ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         match intent {
             Some(intent) => conn
                 .execute(
@@ -150,7 +150,7 @@ impl MediaRepository for SqliteRepository {
         &self,
         media_id: &MediaId,
     ) -> Result<Option<MediaTriageIntent>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             "SELECT intent FROM media_triage_intents WHERE media_id=?1",
             [media_id.as_str()],
@@ -161,7 +161,7 @@ impl MediaRepository for SqliteRepository {
     }
 
     fn list_triage_intents(&self) -> Result<Vec<(MediaId, MediaTriageIntent)>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare("SELECT media_id, intent FROM media_triage_intents")
             .map_err(repo)?;
@@ -183,7 +183,7 @@ impl MediaRepository for SqliteRepository {
         id: &MediaId,
         availability: MediaAvailability,
     ) -> Result<MediaItem, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         tx.execute(
                 "UPDATE media_items SET availability=?2, updated_at_ms=unixepoch('subsec') * 1000 WHERE id=?1",

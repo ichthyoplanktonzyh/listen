@@ -44,7 +44,7 @@ fn only_local_finalized_learner_turn_projects_into_spoken_corpus() {
         .realtime_conversations()
         .save_session(session.clone())
         .unwrap();
-    repo.connection.lock().unwrap().execute(
+    repo.connection.lock().execute(
         "INSERT INTO recording_assets (id,language,file_path,duration_ms,created_at_ms,asset_json) VALUES ('recording-spoken','en','/tmp/spoken.wav',1000,10,'{}')",
         [],
     ).unwrap();
@@ -115,7 +115,7 @@ fn only_local_finalized_learner_turn_projects_into_spoken_corpus() {
         .production_gap_review("en", ProductionChannel::Spoken, 10)
         .unwrap();
     assert_eq!(summary.document_count, 1);
-    let stored: (String, Option<String>) = repo.connection.lock().unwrap().query_row(
+    let stored: (String, Option<String>) = repo.connection.lock().query_row(
         "SELECT response_text,attempt_id FROM production_corpus_documents WHERE realtime_turn_id='learner-spoken'",
         [], |row| Ok((row.get(0)?, row.get(1)?)),
     ).unwrap();
@@ -124,7 +124,6 @@ fn only_local_finalized_learner_turn_projects_into_spoken_corpus() {
     let observations: u32 = repo
         .connection
         .lock()
-        .unwrap()
         .query_row("SELECT COUNT(*) FROM learning_observations", [], |row| {
             row.get(0)
         })
@@ -162,7 +161,6 @@ fn credential_never_enters_realtime_profile_storage() {
     let row: String = repo
         .connection
         .lock()
-        .unwrap()
         .query_row(
             "SELECT auth_ref || profile_json FROM realtime_provider_profiles WHERE id=?1",
             [saved.id.as_str()],

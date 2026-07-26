@@ -6,7 +6,7 @@ use crate::{ApiError, ApiState, Json, State, StatusCode};
 pub(crate) async fn speech_synthesis_capability(
     State(state): State<ApiState>,
 ) -> Json<SpeechSynthesisCapabilityView> {
-    Json(state.speech_synthesis.capability().await)
+    Json(state.generative.speech_synthesis.capability().await)
 }
 
 pub(crate) async fn synthesize_speech(
@@ -14,6 +14,7 @@ pub(crate) async fn synthesize_speech(
     Json(request): Json<SpeechSynthesisRequest>,
 ) -> Result<Json<SpeechSynthesisAsset>, ApiError> {
     state
+        .generative
         .speech_synthesis
         .synthesize(request)
         .await
@@ -25,6 +26,7 @@ pub(crate) async fn clear_speech_synthesis_cache(
     State(state): State<ApiState>,
 ) -> Result<Json<SpeechSynthesisCapabilityView>, ApiError> {
     state
+        .generative
         .speech_synthesis
         .clear_cache()
         .await

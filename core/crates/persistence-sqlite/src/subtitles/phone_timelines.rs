@@ -14,7 +14,6 @@ impl PhoneTimelineRepository for SqliteRepository {
     ) -> Result<PhoneTimeline, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO phone_timeline_runs
                  (id,track_id,media_id,sentence_id,parent_word_timeline_id,
@@ -56,7 +55,7 @@ impl PhoneTimelineRepository for SqliteRepository {
         &self,
         track_id: &SubtitleTrackId,
     ) -> Result<Vec<PhoneTimeline>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut query = conn
             .prepare(
                 "SELECT timeline_json FROM phone_timeline_runs
@@ -78,7 +77,6 @@ impl PhoneTimelineRepository for SqliteRepository {
     ) -> Result<Option<PhoneTimeline>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timeline_json FROM phone_timeline_runs WHERE id=?1",
                 [id.as_str()],
@@ -94,7 +92,6 @@ impl PhoneTimelineRepository for SqliteRepository {
     ) -> Result<Option<PhoneTimeline>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT timeline_json FROM phone_timeline_runs
                  WHERE track_id=?1 AND status=?2
@@ -110,7 +107,7 @@ impl PhoneTimelineRepository for SqliteRepository {
         &self,
         id: &PhoneTimelineId,
     ) -> Result<PhoneTimeline, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let selected_json = tx
             .query_row(
@@ -194,7 +191,7 @@ impl PhoneTimelineRepository for SqliteRepository {
         &self,
         id: &PhoneTimelineId,
     ) -> Result<PhoneTimeline, ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         let timeline_json = tx
             .query_row(

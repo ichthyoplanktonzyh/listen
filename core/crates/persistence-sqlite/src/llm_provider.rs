@@ -22,7 +22,6 @@ impl LlmProviderProfileRepository for SqliteRepository {
     ) -> Result<LlmProviderProfile, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "INSERT INTO llm_provider_profiles
                  (id,display_name,adapter_kind,base_url,model_id,auth_ref,created_at_ms,profile_json)
@@ -56,7 +55,6 @@ impl LlmProviderProfileRepository for SqliteRepository {
     ) -> Result<Option<LlmProviderProfile>, ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .query_row(
                 "SELECT profile_json FROM llm_provider_profiles WHERE id=?1",
                 params![id.as_str()],
@@ -67,7 +65,7 @@ impl LlmProviderProfileRepository for SqliteRepository {
     }
 
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError> {
-        let connection = self.connection.lock().expect("sqlite mutex poisoned");
+        let connection = self.connection.lock();
         let mut statement = connection
             .prepare("SELECT profile_json FROM llm_provider_profiles ORDER BY created_at_ms, id")
             .map_err(repo)?;
@@ -82,7 +80,6 @@ impl LlmProviderProfileRepository for SqliteRepository {
     fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError> {
         self.connection
             .lock()
-            .expect("sqlite mutex poisoned")
             .execute(
                 "DELETE FROM llm_provider_profiles WHERE id=?1",
                 params![id.as_str()],

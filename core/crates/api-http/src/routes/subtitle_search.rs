@@ -67,6 +67,7 @@ pub(crate) async fn search(
     Json(request): Json<SubtitleSearchRequest>,
 ) -> Result<Json<Vec<SubtitleSearchResult>>, ApiError> {
     state
+        .language
         .subtitle_search
         .search(&request)
         .await
@@ -79,6 +80,7 @@ pub(crate) async fn download(
     Json(request): Json<SubtitleDownloadRequest>,
 ) -> Result<Response, ApiError> {
     state
+        .language
         .subtitle_search
         .download(&request)
         .await

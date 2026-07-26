@@ -3,7 +3,10 @@ use super::*;
 #[test]
 fn openapi_paths_match_implemented_routes() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
-    let router_source = include_str!("../lib.rs");
+    let router_source = concat!(
+        include_str!("../lib.rs"),
+        include_str!("../routes/router.rs")
+    );
     let documented = openapi_v1_paths(openapi);
     let implemented = implemented_v1_paths(router_source);
 
@@ -40,7 +43,11 @@ fn openapi_version_snapshot_and_path_count() {
     // Count documented paths using the router source as the implementation fact
     // source, so new routes cannot bypass OpenAPI.
     let path_count = openapi.lines().filter(|l| l.starts_with("  /v1/")).count();
-    let implemented_count = implemented_v1_paths(include_str!("../lib.rs")).len();
+    let implemented_count = implemented_v1_paths(concat!(
+        include_str!("../lib.rs"),
+        include_str!("../routes/router.rs")
+    ))
+    .len();
     assert_eq!(
         path_count, implemented_count,
         "OpenAPI path count must match implemented /v1 route count"

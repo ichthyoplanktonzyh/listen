@@ -81,7 +81,6 @@ fn reading_use_case_rejects_empty_anchor() {
 fn observation_count(repo: &SqliteRepository, table: &str) -> i64 {
     repo.connection
         .lock()
-        .unwrap()
         .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
         })

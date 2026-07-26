@@ -191,7 +191,6 @@ fn learning_loop_practice_review_and_events_round_trip() {
     let kind_column: String = repo
         .connection
         .lock()
-        .unwrap()
         .query_row(
             "SELECT kind FROM practice_items WHERE id=?1",
             [updated_item.id.as_str()],
@@ -213,7 +212,6 @@ fn learning_loop_practice_review_and_events_round_trip() {
     let result_column: String = repo
         .connection
         .lock()
-        .unwrap()
         .query_row(
             "SELECT result FROM practice_attempts WHERE id=?1",
             [updated_attempt.id.as_str()],
@@ -332,7 +330,6 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         let semantic_rows: i64 = repo
             .connection
             .lock()
-            .unwrap()
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)
             })

@@ -15,7 +15,7 @@ impl CorpusIndexRepository for SqliteRepository {
         track_id: &SubtitleTrackId,
         occurrences: &[CorpusOccurrence],
     ) -> Result<(), ApplicationError> {
-        let mut conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
         tx.execute(
             "DELETE FROM corpus_occurrences WHERE track_id=?1",
@@ -32,7 +32,7 @@ impl CorpusIndexRepository for SqliteRepository {
         &self,
         occurrence: &CorpusOccurrence,
     ) -> Result<CorpusOccurrence, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         insert_occurrence(&conn, occurrence)?;
         Ok(occurrence.clone())
     }
@@ -44,7 +44,7 @@ impl CorpusIndexRepository for SqliteRepository {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let normalized = query.trim().to_lowercase();
         let is_phrase = normalized.contains(char::is_whitespace);
         // Giant entries ("the") are round-robin sampled across media instead
@@ -115,7 +115,7 @@ impl CorpusIndexRepository for SqliteRepository {
         media_id: &MediaId,
         track_id: Option<&SubtitleTrackId>,
     ) -> Result<bool, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let count = if let Some(track_id) = track_id {
             conn.query_row(
                 "SELECT COUNT(*) FROM corpus_occurrences WHERE media_id=?1 AND track_id=?2",
@@ -141,7 +141,7 @@ impl CorpusIndexRepository for SqliteRepository {
         track_id: Option<&SubtitleTrackId>,
         limit: u32,
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let normalized = query.trim().to_lowercase();
         let track_id = track_id.map(SubtitleTrackId::as_str);
         if normalized.contains(char::is_whitespace) {
@@ -210,7 +210,7 @@ impl CorpusIndexRepository for SqliteRepository {
         if families.is_empty() {
             return Ok(Vec::new());
         }
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         // Same round-robin-across-media ranking as word search, so one long
         // movie cannot monopolize a specialty page.
         let placeholders = (0..families.len())
@@ -255,7 +255,7 @@ impl CorpusIndexRepository for SqliteRepository {
         id: &CorpusOccurrenceId,
     ) -> Result<Option<CorpusOccurrence>, ApplicationError> {
         use rusqlite::OptionalExtension;
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         conn.query_row(
             &format!("SELECT {SELECT_COLUMNS} FROM corpus_occurrences WHERE id=?1"),
             [id.as_str()],
@@ -266,7 +266,7 @@ impl CorpusIndexRepository for SqliteRepository {
     }
 
     fn list_semantic_corpus_occurrences(&self) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
-        let conn = self.connection.lock().expect("sqlite mutex poisoned");
+        let conn = self.connection.lock();
         let mut statement = conn
             .prepare(&format!(
                 "SELECT {SELECT_COLUMNS} FROM corpus_occurrences

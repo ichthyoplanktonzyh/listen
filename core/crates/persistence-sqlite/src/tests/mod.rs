@@ -13,7 +13,7 @@ use application::{
 #[test]
 fn coach_dashboard_aggregates_period_facts_without_scanning_json_in_application() {
     let repo = SqliteRepository::in_memory().unwrap();
-    let conn = repo.connection.lock().unwrap();
+    let conn = repo.connection.lock();
     conn.execute("INSERT INTO practice_items (id,kind,target_kind,created_at_ms,item_json) VALUES ('item','\"cloze\"','\"sentence\"',100,'{}')", []).unwrap();
     conn.execute("INSERT INTO practice_attempts (id,item_id,result,submitted_at_ms,attempt_json) VALUES ('attempt','item','\"correct\"',150,'{}')", []).unwrap();
     conn.execute("INSERT INTO practice_sessions (id,mode,started_at_ms,ended_at_ms,session_json) VALUES ('session','\"extensive\"',100,6100,'{}')", []).unwrap();
@@ -35,7 +35,7 @@ fn coach_dashboard_aggregates_period_facts_without_scanning_json_in_application(
 #[test]
 fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    let conn = repo.connection.lock().unwrap();
+    let conn = repo.connection.lock();
     conn.execute("INSERT INTO media_items (id,path,fingerprint,title,kind,created_at_ms,updated_at_ms) VALUES ('media-coach','/tmp/coach.mp4','coach-fp','Coach media','\"video\"',1,1)", []).unwrap();
     for (id, started) in [("session-a", 100_u64), ("session-b", 200_u64)] {
         conn.execute("INSERT INTO practice_sessions (id,mode,media_id,started_at_ms,ended_at_ms,session_json) VALUES (?1,'\"extensive\"','media-coach',?2,?3,'{}')", params![id, started, started + 50]).unwrap();
@@ -76,7 +76,7 @@ fn coach_dashboard_derives_material_trajectory_and_requires_confirmed_graduation
 #[test]
 fn coach_dashboard_large_event_query_stays_bounded() {
     let repo = SqliteRepository::in_memory().unwrap();
-    let mut conn = repo.connection.lock().unwrap();
+    let mut conn = repo.connection.lock();
     let tx = conn.transaction().unwrap();
     for index in 0..10_000_u64 {
         tx.execute(
@@ -97,7 +97,7 @@ fn coach_dashboard_large_event_query_stays_bounded() {
 #[test]
 fn cross_modal_coach_reads_layered_channel_facts_without_becoming_a_writer() {
     let repo = SqliteRepository::in_memory().unwrap();
-    let conn = repo.connection.lock().unwrap();
+    let conn = repo.connection.lock();
     conn.execute("INSERT INTO lexical_entries (id,language,kind,granularity,normalization,normalized_key,canonical_form,normalized_form,display_form,normalization_provider,normalization_version,updated_at_ms,learning_updated_at_ms) VALUES ('word','en','\"word\"','word','lemma','word','word','word','word','test','1',1,1)", []).unwrap();
     for (capability, conclusion) in [
         ("reading", "acquired"),
@@ -180,7 +180,6 @@ fn cross_modal_coach_reads_layered_channel_facts_without_becoming_a_writer() {
 fn coach_table_count(repo: &SqliteRepository, table: &str) -> u64 {
     repo.connection
         .lock()
-        .unwrap()
         .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
             row.get(0)
         })

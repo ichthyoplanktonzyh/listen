@@ -28,9 +28,11 @@ pub(crate) async fn capability(
     State(state): State<ApiState>,
 ) -> Result<Json<domain::SemanticEmbeddingCapability>, ApiError> {
     state
-        .services
-        .semantic_embedding()
-        .capability()
+        .application
+        .execute("semantic_embedding.capability", move |services| {
+            services.semantic_embedding().capability()
+        })
+        .await
         .map(Json)
         .map_err(Into::into)
 }
@@ -39,14 +41,18 @@ pub(crate) async fn install(
     State(state): State<ApiState>,
 ) -> Result<Json<domain::SemanticEmbeddingCapability>, ApiError> {
     state
+        .generative
         .semantic_embedding
         .install()
         .await
         .map_err(ApiError::from)?;
     state
-        .services
-        .semantic_embedding()
-        .capability()
+        .application
+        .execute(
+            "semantic_embedding.capability_after_install",
+            move |services| services.semantic_embedding().capability(),
+        )
+        .await
         .map(Json)
         .map_err(Into::into)
 }
@@ -54,11 +60,18 @@ pub(crate) async fn install(
 pub(crate) async fn enable(
     State(state): State<ApiState>,
 ) -> Result<Json<domain::SemanticEmbeddingCapability>, ApiError> {
-    state.semantic_embedding.enable().map_err(ApiError::from)?;
     state
-        .services
-        .semantic_embedding()
-        .capability()
+        .generative
+        .semantic_embedding
+        .enable()
+        .map_err(ApiError::from)?;
+    state
+        .application
+        .execute(
+            "semantic_embedding.capability_after_enable",
+            move |services| services.semantic_embedding().capability(),
+        )
+        .await
         .map(Json)
         .map_err(Into::into)
 }
@@ -66,11 +79,14 @@ pub(crate) async fn enable(
 pub(crate) async fn disable(
     State(state): State<ApiState>,
 ) -> Result<Json<domain::SemanticEmbeddingCapability>, ApiError> {
-    state.semantic_embedding.disable();
+    state.generative.semantic_embedding.disable();
     state
-        .services
-        .semantic_embedding()
-        .capability()
+        .application
+        .execute(
+            "semantic_embedding.capability_after_disable",
+            move |services| services.semantic_embedding().capability(),
+        )
+        .await
         .map(Json)
         .map_err(Into::into)
 }
@@ -79,13 +95,16 @@ pub(crate) async fn uninstall(
     State(state): State<ApiState>,
 ) -> Result<Json<domain::SemanticEmbeddingCapability>, ApiError> {
     state
+        .generative
         .semantic_embedding
         .uninstall()
         .map_err(ApiError::from)?;
     state
-        .services
-        .semantic_embedding()
-        .delete_index()
+        .application
+        .execute("semantic_embedding.uninstall_index", move |services| {
+            services.semantic_embedding().delete_index()
+        })
+        .await
         .map(Json)
         .map_err(Into::into)
 }
@@ -94,9 +113,10 @@ pub(crate) async fn rebuild(
     State(state): State<ApiState>,
 ) -> Result<Json<domain::SemanticEmbeddingCapability>, ApiError> {
     state
-        .services
-        .semantic_embedding()
-        .rebuild()
+        .application
+        .execute_async("semantic_embedding.rebuild", move |services| async move {
+            services.semantic_embedding().rebuild().await
+        })
         .await
         .map(Json)
         .map_err(Into::into)
@@ -119,16 +139,17 @@ pub(crate) async fn search(
         }
     };
     let channel = parse_channel(query.channel.as_deref())?;
+    let text = query.query;
+    let language = query.language;
+    let limit = query.limit.unwrap_or(20);
     state
-        .services
-        .semantic_embedding()
-        .search(
-            &query.query,
-            query.language.as_deref(),
-            source,
-            channel,
-            query.limit.unwrap_or(20),
-        )
+        .application
+        .execute_async("semantic_embedding.search", move |services| async move {
+            services
+                .semantic_embedding()
+                .search(&text, language.as_deref(), source, channel, limit)
+                .await
+        })
         .await
         .map(Json)
         .map_err(Into::into)
@@ -139,13 +160,18 @@ pub(crate) async fn enrich_gap_review(
     Query(query): Query<SemanticGapQuery>,
 ) -> Result<Json<domain::SemanticallyEnrichedProductionGapReview>, ApiError> {
     let channel = parse_channel(query.channel.as_deref())?.unwrap_or(ProductionChannel::Written);
+    let language = query.language.unwrap_or_else(|| "en".to_owned());
+    let limit = query.limit.unwrap_or(10);
     state
-        .services
-        .semantic_embedding()
-        .enrich_gap_review(
-            query.language.as_deref().unwrap_or("en"),
-            channel,
-            query.limit.unwrap_or(10),
+        .application
+        .execute_async(
+            "semantic_embedding.enrich_gap_review",
+            move |services| async move {
+                services
+                    .semantic_embedding()
+                    .enrich_gap_review(&language, channel, limit)
+                    .await
+            },
         )
         .await
         .map(Json)

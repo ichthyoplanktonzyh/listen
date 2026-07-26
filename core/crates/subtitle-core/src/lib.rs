@@ -372,7 +372,11 @@ impl ChineseTokenizer {
     fn segments<'t>(&self, text: &'t str) -> Vec<&'t str> {
         #[cfg(feature = "jieba")]
         {
-            self.jieba.cut(text, true)
+            self.jieba
+                .cut(text, true)
+                .into_iter()
+                .map(|token| token.word)
+                .collect()
         }
         #[cfg(not(feature = "jieba"))]
         {

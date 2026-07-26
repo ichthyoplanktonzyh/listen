@@ -13,49 +13,49 @@ use crate::{
 };
 
 pub(crate) async fn syntax_capability(State(state): State<ApiState>) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.view().await)
+    Json(state.language.syntax_capability.view().await)
 }
 
 pub(crate) async fn install_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.start_install().await)
+    Json(state.language.syntax_capability.start_install().await)
 }
 
 pub(crate) async fn update_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.start_install().await)
+    Json(state.language.syntax_capability.start_install().await)
 }
 
 pub(crate) async fn cancel_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.cancel().await)
+    Json(state.language.syntax_capability.cancel().await)
 }
 
 pub(crate) async fn validate_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.validate().await)
+    Json(state.language.syntax_capability.validate().await)
 }
 
 pub(crate) async fn enable_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.set_enabled(true).await)
+    Json(state.language.syntax_capability.set_enabled(true).await)
 }
 
 pub(crate) async fn disable_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.set_enabled(false).await)
+    Json(state.language.syntax_capability.set_enabled(false).await)
 }
 
 pub(crate) async fn uninstall_syntax_capability(
     State(state): State<ApiState>,
 ) -> Json<SyntaxCapabilityView> {
-    Json(state.syntax_capability.uninstall().await)
+    Json(state.language.syntax_capability.uninstall().await)
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -105,21 +105,26 @@ struct TrackSyntaxCacheEntry {
     batch: SyntacticConsumerBatch,
 }
 
-fn persist_sense_groups_from_batch(
+async fn persist_sense_groups_from_batch(
     state: &ApiState,
-    track_id: &SubtitleTrackId,
-    batch: &SyntacticConsumerBatch,
+    track_id: SubtitleTrackId,
+    batch: SyntacticConsumerBatch,
 ) {
     if batch.sentences.is_empty() {
         return;
     }
+    let diagnostic_track_id = track_id.clone();
     if let Err(error) = state
-        .services
-        .media_analysis()
-        .persist_sense_group_analysis_from_batch(track_id, batch)
+        .application
+        .execute("syntax.persist_sense_groups", move |services| {
+            services
+                .media_analysis()
+                .persist_sense_group_analysis_from_batch(&track_id, &batch)
+        })
+        .await
     {
         tracing::warn!(
-            track_id = track_id.as_str(),
+            track_id = diagnostic_track_id.as_str(),
             error = ?error,
             "failed to persist sense group analysis from syntax batch"
         );
@@ -132,29 +137,33 @@ pub(crate) async fn run_syntactic_consumers(
     request: Option<Json<RunSyntacticConsumersRequest>>,
 ) -> Result<Json<application::SyntacticConsumerBatch>, ApiError> {
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
-    let track = state
-        .services
-        .media_analysis()
-        .read_subtitle_track(&track_id)?
-        .ok_or(ApplicationError::NotFound("subtitle track"))?;
+    let (track, phrases) = state
+        .application
+        .execute("syntax.load_track_and_phrases", {
+            let track_id = track_id.clone();
+            move |services| {
+                let track = services
+                    .media_analysis()
+                    .read_subtitle_track(&track_id)?
+                    .ok_or(ApplicationError::NotFound("subtitle track"))?;
+                let module = services.lexical_learning();
+                let mut phrases = HashMap::new();
+                for sentence in &track.sentences {
+                    phrases.insert(sentence.id.clone(), module.phrase_candidates(&sentence.id)?);
+                }
+                Ok((track, phrases))
+            }
+        })
+        .await?;
     let language = track
         .language
         .clone()
         .unwrap_or(LanguageCode::parse("en").map_err(ApplicationError::from)?);
-    let mut phrases = HashMap::new();
-    for sentence in &track.sentences {
-        phrases.insert(
-            sentence.id.clone(),
-            state
-                .services
-                .lexical_learning()
-                .phrase_candidates(&sentence.id)?,
-        );
-    }
     let patterns = request
         .map(|Json(value)| value.patterns)
         .unwrap_or_default();
     let batch = state
+        .language
         .syntactic_consumers
         .consume(
             SyntacticAnalysisRequest {
@@ -181,21 +190,24 @@ pub(crate) async fn run_track_syntax_analysis(
     let request = request.map(|Json(value)| value).unwrap_or_default();
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services
-        .media_analysis()
-        .read_subtitle_track(&track_id)?
+        .application
+        .execute("syntax.load_track", {
+            let track_id = track_id.clone();
+            move |services| services.media_analysis().read_subtitle_track(&track_id)
+        })
+        .await?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language
         .clone()
         .unwrap_or(LanguageCode::parse("en").map_err(ApplicationError::from)?);
-    let capability = state.syntax_capability.view().await;
+    let capability = state.language.syntax_capability.view().await;
     let fingerprint = track_syntax_fingerprint(
         &language,
         &track.sentences,
         &capability.delivery_checksum_sha256,
     );
-    if !state.syntax_capability.is_ready().await {
+    if !state.language.syntax_capability.is_ready().await {
         return Ok(Json(TrackSyntaxAnalysisView {
             status: TrackSyntaxStatus::Unavailable,
             fingerprint,
@@ -206,15 +218,16 @@ pub(crate) async fn run_track_syntax_analysis(
             batch: None,
         }));
     }
-    let _single_flight = state.syntax_analysis_lock.lock().await;
+    let _single_flight = state.language.syntax_analysis_lock.lock().await;
     if !request.force
         && let Some(cached) = state
+            .language
             .syntax_capability
             .read_track_cache::<TrackSyntaxCacheEntry>(track_id.as_str())
             .await
         && cached.fingerprint == fingerprint
     {
-        persist_sense_groups_from_batch(&state, &track_id, &cached.batch);
+        persist_sense_groups_from_batch(&state, track_id.clone(), cached.batch.clone()).await;
         return Ok(Json(TrackSyntaxAnalysisView {
             status: cached.status,
             fingerprint: cached.fingerprint,
@@ -225,17 +238,24 @@ pub(crate) async fn run_track_syntax_analysis(
             batch: Some(cached.batch),
         }));
     }
-    let mut phrases = HashMap::new();
-    for sentence in &track.sentences {
-        phrases.insert(
-            sentence.id.clone(),
-            state
-                .services
-                .lexical_learning()
-                .phrase_candidates(&sentence.id)?,
-        );
-    }
+    let sentence_ids = track
+        .sentences
+        .iter()
+        .map(|sentence| sentence.id.clone())
+        .collect::<Vec<_>>();
+    let phrases = state
+        .application
+        .execute("syntax.load_phrases", move |services| {
+            let module = services.lexical_learning();
+            let mut phrases = HashMap::new();
+            for sentence_id in sentence_ids {
+                phrases.insert(sentence_id.clone(), module.phrase_candidates(&sentence_id)?);
+            }
+            Ok(phrases)
+        })
+        .await?;
     let batch = state
+        .language
         .syntactic_consumers
         .consume(
             SyntacticAnalysisRequest {
@@ -276,6 +296,7 @@ pub(crate) async fn run_track_syntax_analysis(
         )
     {
         state
+            .language
             .syntax_capability
             .mark_partial(format!("syntax runtime unavailable: {reason:?}"))
             .await;
@@ -290,11 +311,12 @@ pub(crate) async fn run_track_syntax_analysis(
     };
     if analyzed_sentence_count > 0 {
         state
+            .language
             .syntax_capability
             .write_track_cache(track_id.as_str(), &cached)
             .await;
     }
-    persist_sense_groups_from_batch(&state, &track_id, &batch);
+    persist_sense_groups_from_batch(&state, track_id.clone(), batch.clone()).await;
     Ok(Json(TrackSyntaxAnalysisView {
         status,
         fingerprint,
@@ -312,22 +334,26 @@ pub(crate) async fn track_syntax_analysis_status(
 ) -> Result<Json<TrackSyntaxAnalysisView>, ApiError> {
     let track_id = SubtitleTrackId::parse(track_id).map_err(ApplicationError::from)?;
     let track = state
-        .services
-        .media_analysis()
-        .read_subtitle_track(&track_id)?
+        .application
+        .execute("syntax.status_track", {
+            let track_id = track_id.clone();
+            move |services| services.media_analysis().read_subtitle_track(&track_id)
+        })
+        .await?
         .ok_or(ApplicationError::NotFound("subtitle track"))?;
     let language = track
         .language
         .clone()
         .unwrap_or(LanguageCode::parse("en").map_err(ApplicationError::from)?);
-    let capability = state.syntax_capability.view().await;
+    let capability = state.language.syntax_capability.view().await;
     let fingerprint = track_syntax_fingerprint(
         &language,
         &track.sentences,
         &capability.delivery_checksum_sha256,
     );
-    let unavailable = !state.syntax_capability.is_ready().await;
+    let unavailable = !state.language.syntax_capability.is_ready().await;
     let cached = state
+        .language
         .syntax_capability
         .read_track_cache::<TrackSyntaxCacheEntry>(track_id.as_str())
         .await;

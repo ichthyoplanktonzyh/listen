@@ -51,7 +51,7 @@ fn asset() -> UserSentencePatternAsset {
 }
 
 fn long_term_writer_counts(repo: &SqliteRepository) -> (u32, u32, u32, u32) {
-    let connection = repo.connection.lock().unwrap();
+    let connection = repo.connection.lock();
     let count = |table: &str| {
         connection
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
