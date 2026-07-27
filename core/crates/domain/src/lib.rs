@@ -195,6 +195,7 @@ string_id!(PhoneticAnalysisModelId);
 string_id!(PhoneticAnalysisJobId);
 string_id!(PhoneticAnalysisId);
 string_id!(PhoneticFindingId);
+string_id!(ShadowingAnalysisId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]

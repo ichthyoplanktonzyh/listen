@@ -1,5 +1,7 @@
 use application::{ApplicationError, RecordingRepository};
-use domain::{MediaId, PlayableSegmentAvailability, RecordingAsset, RecordingAssetId};
+use domain::{
+    MediaId, PlayableSegmentAvailability, RecordingAsset, RecordingAssetId, ShadowingAnalysisRecord,
+};
 use rusqlite::{OptionalExtension, params};
 
 use crate::{SqliteRepository, domain_sql, from_json, json, repo};
@@ -81,5 +83,53 @@ impl RecordingRepository for SqliteRepository {
                 .map_err(repo)?;
         }
         Ok(existing)
+    }
+
+    fn save_shadowing_analysis(
+        &self,
+        record: &ShadowingAnalysisRecord,
+    ) -> Result<ShadowingAnalysisRecord, ApplicationError> {
+        let connection = self.connection.lock();
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO shadowing_analyses
+                 (id,recording_id,attempt_id,provider_id,provider_version,
+                  reference_audio_sha256,created_at_ms,analysis_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![
+                    record.id.as_str(),
+                    record.recording_id.as_str(),
+                    record.attempt_id.as_str(),
+                    record.analysis.provider_id,
+                    record.analysis.provider_version,
+                    record.reference_audio_sha256,
+                    record.created_at_ms,
+                    json(record)?,
+                ],
+            )
+            .map_err(repo)?;
+        connection
+            .query_row(
+                "SELECT analysis_json FROM shadowing_analyses WHERE id=?1",
+                params![record.id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .map_err(repo)
+    }
+
+    fn latest_shadowing_analysis(
+        &self,
+        recording_id: &RecordingAssetId,
+    ) -> Result<Option<ShadowingAnalysisRecord>, ApplicationError> {
+        self.connection
+            .lock()
+            .query_row(
+                "SELECT analysis_json FROM shadowing_analyses
+                 WHERE recording_id=?1 ORDER BY created_at_ms DESC,id DESC LIMIT 1",
+                params![recording_id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
     }
 }

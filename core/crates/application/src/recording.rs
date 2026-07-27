@@ -1,22 +1,26 @@
+use std::io::Read;
 use std::sync::Arc;
 
 use domain::{
     LearningEvent, LearningEventId, LearningEventKind, LearningEventSubject,
     LearningEventSubjectKind, PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeKind,
     PracticeResult, RecordingAsset, RecordingAssetId, RecordingAudioFacts, RecordingAudioMetadata,
-    ShadowingComparison,
+    ShadowingAnalysisId, ShadowingAnalysisRecord, ShadowingComparison,
 };
+use sha2::{Digest, Sha256};
 
 use crate::{
     ApplicationError, CompleteShadowingAttempt, CreateRecordingAsset, CreateShadowingComparison,
     DisabledLearningLoopRepository, LearningEventRepository, PracticeRepository,
-    RecordingRepository, clean_required, now_ms,
+    RecordingRepository, SubtitleTrackRepository, WordTimelineRepository, clean_required, now_ms,
 };
 
 pub struct RecordingUseCases {
     recordings: Arc<dyn RecordingRepository>,
     practice: Arc<dyn PracticeRepository>,
     learning_events: Arc<dyn LearningEventRepository>,
+    subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+    word_timelines: Arc<dyn WordTimelineRepository>,
 }
 
 impl RecordingUseCases {
@@ -24,11 +28,15 @@ impl RecordingUseCases {
         recordings: Arc<dyn RecordingRepository>,
         practice: Arc<dyn PracticeRepository>,
         learning_events: Arc<dyn LearningEventRepository>,
+        subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
+        word_timelines: Arc<dyn WordTimelineRepository>,
     ) -> Self {
         Self {
             recordings,
             practice,
             learning_events,
+            subtitle_tracks,
+            word_timelines,
         }
     }
 
@@ -98,6 +106,13 @@ impl RecordingUseCases {
         id: &RecordingAssetId,
     ) -> Result<Option<RecordingAsset>, ApplicationError> {
         self.recordings.delete_recording_asset(id)
+    }
+
+    pub fn latest_shadowing_analysis(
+        &self,
+        recording_id: &RecordingAssetId,
+    ) -> Result<Option<ShadowingAnalysisRecord>, ApplicationError> {
+        self.recordings.latest_shadowing_analysis(recording_id)
     }
 
     /// Records that a shadowing activity finished without pretending that an
@@ -184,11 +199,62 @@ impl RecordingUseCases {
             .practice_attempt_id
             .clone()
             .ok_or(ApplicationError::Validation("completed shadowing attempt"))?;
+
+        let sentence = if let Some(ref sentence_id) = recording.target.sentence_id {
+            self.subtitle_tracks.get_sentence(sentence_id)?
+        } else {
+            None
+        };
+        let reference_word_timings = if let Some(ref sentence_id) = recording.target.sentence_id {
+            self.word_timelines.get_word_timings(sentence_id)?
+        } else {
+            Vec::new()
+        };
+
+        let model_dir = resolve_ctc_model_dir();
+        let model_revision = resolve_ctc_model_revision();
+
         let analysis = speech_analysis::phonetics::compare_pcm16_wav_paths(
-            reference_wav_path,
+            &reference_wav_path,
             &recording.file_path,
         )
         .map_err(|_| ApplicationError::Validation("shadowing comparison audio"))?;
+
+        let analysis_v2 = speech_analysis::phonetics::compare_shadowing_v2(
+            &reference_wav_path,
+            &recording.file_path,
+            sentence.as_ref(),
+            &reference_word_timings,
+            recording.source_segment.start_ms,
+            model_dir.as_deref(),
+            Some(&model_revision),
+        )
+        .map_err(|_| ApplicationError::Validation("shadowing v2 comparison audio"))?;
+
+        let reference_audio_sha256 = sha256_file(&reference_wav_path)
+            .map_err(|_| ApplicationError::Validation("reference WAV path"))?;
+        let analysis_id = ShadowingAnalysisId::from_fingerprint(
+            "shadowing-analysis",
+            &format!(
+                "{}:{}:{}:{}:{}",
+                recording.id.as_str(),
+                recording.audio.content_sha256,
+                reference_audio_sha256,
+                analysis_v2.provider_version,
+                model_revision,
+            ),
+        );
+        let saved_analysis = self
+            .recordings
+            .save_shadowing_analysis(&ShadowingAnalysisRecord {
+                id: analysis_id,
+                recording_id: recording.id.clone(),
+                attempt_id: attempt_id.clone(),
+                reference_audio_sha256,
+                created_at_ms: now_ms(),
+                analysis: analysis_v2,
+            })?;
+
         Ok(ShadowingComparison {
             attempt_id,
             reference_segment: recording.source_segment,
@@ -197,6 +263,7 @@ impl RecordingUseCases {
             pause_alignment: analysis.pause_alignment,
             reference_waveform: analysis.reference_waveform,
             recording_waveform: analysis.recording_waveform,
+            analysis_v2: Some(saved_analysis.analysis),
         })
     }
 
@@ -240,4 +307,55 @@ impl RecordingRepository for DisabledLearningLoopRepository {
     ) -> Result<Option<RecordingAsset>, ApplicationError> {
         Err(Self::disabled())
     }
+
+    fn save_shadowing_analysis(
+        &self,
+        _record: &ShadowingAnalysisRecord,
+    ) -> Result<ShadowingAnalysisRecord, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn latest_shadowing_analysis(
+        &self,
+        _recording_id: &RecordingAssetId,
+    ) -> Result<Option<ShadowingAnalysisRecord>, ApplicationError> {
+        Err(Self::disabled())
+    }
+}
+
+fn resolve_ctc_model_dir() -> Option<String> {
+    if let Ok(path) = std::env::var("LLPLAYERNEXT_PHONEME_MODEL_DIR")
+        && std::path::Path::new(&path).is_dir()
+    {
+        return Some(path);
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let default = std::path::PathBuf::from(home)
+            .join("Library/Application Support/LLPlayerNext/models/wav2vec2-phoneme");
+        if default.is_dir() {
+            return Some(default.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+fn resolve_ctc_model_revision() -> String {
+    std::env::var("LLPLAYERNEXT_PHONEME_MODEL_REVISION")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| speech_analysis::phonetics::PHONE_PROVIDER_VERSION.into())
+}
+
+fn sha256_file(path: impl AsRef<std::path::Path>) -> std::io::Result<String> {
+    let mut file = std::fs::File::open(path)?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    Ok(hex::encode(digest.finalize()))
 }

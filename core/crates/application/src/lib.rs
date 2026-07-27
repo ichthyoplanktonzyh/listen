@@ -211,6 +211,8 @@ impl AppServices {
             self.recordings.clone(),
             self.practice.clone(),
             self.learning_events.clone(),
+            self.subtitle_tracks.clone(),
+            self.word_timelines.clone(),
         )
     }
 

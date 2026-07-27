@@ -155,6 +155,37 @@ async fn recording_and_unscored_shadowing_routes_round_trip() {
     .unwrap();
     assert_eq!(facts["duration_ms"], 1000);
     assert_eq!(facts["pauses"].as_array().unwrap().len(), 1);
+    let comparison = post(
+        &app,
+        "/v1/shadowing/comparisons",
+        serde_json::json!({
+            "recording_id": recording_id,
+            "reference_wav_path": recording_path.to_string_lossy()
+        }),
+    )
+    .await;
+    assert_eq!(
+        comparison["analysis_v2"]["abstain_reason"],
+        "missing_reference_timeline"
+    );
+    let analysis_response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/recordings/{recording_id}/shadowing-analysis"))
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(analysis_response.status(), StatusCode::OK);
+    let persisted_analysis: serde_json::Value = serde_json::from_slice(
+        &to_bytes(analysis_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(persisted_analysis["analysis"], comparison["analysis_v2"]);
     let delete_response = app
         .oneshot(
             Request::delete(format!("/v1/recordings/{recording_id}"))

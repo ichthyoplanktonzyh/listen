@@ -197,6 +197,21 @@ pub(crate) async fn recording_audio_facts(
         .map_err(ApiError::from)
 }
 
+pub(crate) async fn latest_shadowing_analysis(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> Result<Json<domain::ShadowingAnalysisRecord>, ApiError> {
+    let id = RecordingAssetId::parse(id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("recording.shadowing_analysis", move |services| {
+            services.recordings().latest_shadowing_analysis(&id)
+        })
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("shadowing analysis"))
+}
+
 pub(crate) async fn delete_recording_asset(
     State(state): State<ApiState>,
     Path(id): Path<String>,

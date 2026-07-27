@@ -21,8 +21,8 @@ use domain::{
     RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
     ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
     SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
-    SenseGroupAnalysisId, SentencePronunciation, SoundFitCalibration, SubtitleSentence,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
+    SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord, SoundFitCalibration,
+    SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
     SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
     TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
     UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
@@ -968,6 +968,14 @@ pub trait RecordingRepository: Send + Sync {
         &self,
         id: &RecordingAssetId,
     ) -> Result<Option<RecordingAsset>, ApplicationError>;
+    fn save_shadowing_analysis(
+        &self,
+        record: &ShadowingAnalysisRecord,
+    ) -> Result<ShadowingAnalysisRecord, ApplicationError>;
+    fn latest_shadowing_analysis(
+        &self,
+        recording_id: &RecordingAssetId,
+    ) -> Result<Option<ShadowingAnalysisRecord>, ApplicationError>;
 }
 
 /// Phase 3.11 semantic task fact layer (ADR 0021). Submitted facts are append-only end to end:

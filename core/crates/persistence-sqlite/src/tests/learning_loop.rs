@@ -1,4 +1,5 @@
 use super::*;
+use application::RecordingRepository;
 
 #[test]
 fn learning_loop_practice_review_and_events_round_trip() {
@@ -364,6 +365,15 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
     assert_eq!(comparison.pause_alignment.reference_pauses.len(), 1);
     assert_eq!(comparison.pause_alignment.recording_pauses.len(), 1);
     assert!(!comparison.reference_waveform.peaks.is_empty());
+    let persisted_analysis = repo
+        .latest_shadowing_analysis(&recording.id)
+        .unwrap()
+        .expect("comparison must persist its versioned v2 analysis");
+    assert_eq!(
+        persisted_analysis.analysis,
+        comparison.analysis_v2.clone().unwrap()
+    );
+    assert_eq!(persisted_analysis.analysis.provider_version, "v2");
     let events = repo
         .list_learning_events_for_session(&session.id, 10, 0)
         .unwrap();
@@ -386,6 +396,12 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
             .recording_asset(&recording.id)
             .unwrap()
             .is_none()
+    );
+    assert!(
+        repo.latest_shadowing_analysis(&recording.id)
+            .unwrap()
+            .is_none(),
+        "recording deletion must cascade to its analysis artifacts"
     );
     let _ = std::fs::remove_file(recording_path);
     let _ = std::fs::remove_file(reference_path);

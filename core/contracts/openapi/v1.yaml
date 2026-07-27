@@ -1232,6 +1232,17 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingAudioFacts" }
+  /v1/recordings/{id}/shadowing-analysis:
+    get:
+      operationId: latestShadowingAnalysis
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Latest persisted, versioned Shadowing v2 analysis for the recording
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShadowingAnalysisRecord" }
   /v1/recording-transcriptions:
     post:
       operationId: createRecordingTranscription
@@ -5525,6 +5536,118 @@ components:
         pause_alignment: { $ref: "#/components/schemas/ShadowingPauseAlignment" }
         reference_waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
         recording_waveform: { $ref: "#/components/schemas/AudioWaveformSummary" }
+        analysis_v2: { $ref: "#/components/schemas/ShadowingAnalysis" }
+    ShadowingAnalysisRecord:
+      type: object
+      required: [id, recording_id, attempt_id, reference_audio_sha256, created_at_ms, analysis]
+      properties:
+        id: { type: string }
+        recording_id: { type: string }
+        attempt_id: { type: string }
+        reference_audio_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        created_at_ms: { type: integer, minimum: 0 }
+        analysis: { $ref: "#/components/schemas/ShadowingAnalysis" }
+    ShadowingAnalysis:
+      type: object
+      required: [provider_id, provider_version, coverage, confidence, evidence_coverage, word_details]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        phone_provider: { $ref: "#/components/schemas/ShadowingProviderInfo" }
+        coverage: { type: number, minimum: 0, maximum: 1 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        evidence_coverage: { $ref: "#/components/schemas/ShadowingEvidenceCoverage" }
+        prosody: { $ref: "#/components/schemas/ShadowingProsodyComparison" }
+        audio_quality: { $ref: "#/components/schemas/AudioQualitySummary" }
+        abstain_reason: { $ref: "#/components/schemas/ShadowingAbstainReason" }
+        word_details:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingWordDetail" }
+        unassigned_phone_alignments:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingPhoneAlignmentDetail" }
+    ShadowingProviderInfo:
+      type: object
+      required: [provider_id, provider_version, model_revision]
+      properties:
+        provider_id: { type: string }
+        provider_version: { type: string }
+        model_revision: { type: string }
+    ShadowingEvidenceCoverage:
+      type: object
+      required: [word_alignment, phone_alignment, stress, rhythm, f0, energy]
+      properties:
+        word_alignment: { type: number, minimum: 0, maximum: 1 }
+        phone_alignment: { type: number, minimum: 0, maximum: 1 }
+        stress: { type: number, minimum: 0, maximum: 1 }
+        rhythm: { type: number, minimum: 0, maximum: 1 }
+        f0: { type: number, minimum: 0, maximum: 1 }
+        energy: { type: number, minimum: 0, maximum: 1 }
+        missing:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingMissingEvidence" }
+    ShadowingMissingEvidence:
+      type: object
+      required: [component, reason]
+      properties:
+        component:
+          type: string
+          enum: [reference_timeline, phone_recognition, word_alignment, stress, rhythm, f0, energy]
+        reason:
+          type: string
+          enum: [reference_timeline_unavailable, provider_unavailable, provider_failed, insufficient_coverage, acoustic_extraction_failed, no_voiced_frames]
+    ShadowingProsodyComparison:
+      type: object
+      required: [reference_pause_count, recording_pause_count]
+      properties:
+        reference_pause_count: { type: integer, minimum: 0 }
+        recording_pause_count: { type: integer, minimum: 0 }
+        pause_alignment_offset_ms: { type: integer, minimum: 0 }
+        mean_word_duration_ratio: { type: number, minimum: 0 }
+        rhythm_similarity: { type: number, minimum: 0, maximum: 1 }
+        f0_contour_similarity: { type: number, minimum: 0, maximum: 1 }
+        energy_prominence_similarity: { type: number, minimum: 0, maximum: 1 }
+    AudioQualitySummary:
+      type: object
+      required: [snr_db, clipping_ratio, dc_offset, sample_rate_hz, channels]
+      properties:
+        snr_db: { type: number }
+        clipping_ratio: { type: number, minimum: 0, maximum: 1 }
+        dc_offset: { type: number }
+        sample_rate_hz: { type: integer, minimum: 1 }
+        channels: { type: integer, minimum: 1 }
+    ShadowingAbstainReason:
+      type: string
+      enum: [low_audio_quality, low_confidence, mismatched_speech, audio_too_short, missing_reference_timeline, provider_unavailable, provider_failure]
+    ShadowingWordDetail:
+      type: object
+      required: [token_index, text, status, reference_duration_ms, phone_alignments]
+      properties:
+        token_index: { type: integer, minimum: 0 }
+        text: { type: string }
+        status: { type: string, enum: [unassessed, match, substituted, deleted, inserted] }
+        reference_duration_ms: { type: integer, minimum: 0 }
+        recording_duration_ms: { type: integer, minimum: 0 }
+        reference_stress: { type: integer, minimum: 0 }
+        recording_stress: { type: integer, minimum: 0 }
+        reference_f0_hz: { type: number, minimum: 0 }
+        recording_f0_hz: { type: number, minimum: 0 }
+        reference_f0_range_semitones: { type: number, minimum: 0 }
+        recording_f0_range_semitones: { type: number, minimum: 0 }
+        reference_pitch_reset_after: { type: number }
+        recording_pitch_reset_after: { type: number }
+        reference_energy_prominence: { type: number }
+        recording_energy_prominence: { type: number }
+        phone_alignments:
+          type: array
+          items: { $ref: "#/components/schemas/ShadowingPhoneAlignmentDetail" }
+    ShadowingPhoneAlignmentDetail:
+      type: object
+      required: [status]
+      properties:
+        reference_phone: { type: string }
+        recording_phone: { type: string }
+        status: { type: string, enum: [match, substitution, insertion, deletion] }
     ReviewSource:
       type: object
       required: [kind, id, practice_attempt_id, lexical_entry_id, media_id, track_id]

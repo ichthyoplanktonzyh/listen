@@ -35,13 +35,13 @@ use super::practice::{
     confirm_upgrade_suggestion, create_hunting_target, create_practice_item,
     create_practice_session, create_recording_asset, create_review_item, custom_study,
     delete_recording_asset, export_anki_package, graduate_coach_material, import_anki_package,
-    list_due_review_items, list_hunting_candidates, list_hunting_occurrences, list_hunting_targets,
-    list_listening_inbox_items, list_upgrade_suggestions, practice_attempt,
-    process_listening_inbox_item, recording_asset, recording_audio_facts,
-    reject_upgrade_suggestion, review_daily_limits, review_deck_overview, review_interval_preview,
-    review_item, review_queue, submit_custom_study_attempt, submit_hunting_check,
-    submit_practice_attempt, submit_review_attempt, update_review_daily_limits,
-    upgrade_suggestion_history,
+    latest_shadowing_analysis, list_due_review_items, list_hunting_candidates,
+    list_hunting_occurrences, list_hunting_targets, list_listening_inbox_items,
+    list_upgrade_suggestions, practice_attempt, process_listening_inbox_item, recording_asset,
+    recording_audio_facts, reject_upgrade_suggestion, review_daily_limits, review_deck_overview,
+    review_interval_preview, review_item, review_queue, submit_custom_study_attempt,
+    submit_hunting_check, submit_practice_attempt, submit_review_attempt,
+    update_review_daily_limits, upgrade_suggestion_history,
 };
 use super::production_corpus::{
     production_gap_review, reindex_production_corpus, search_production_corpus,
@@ -541,6 +541,10 @@ fn learning_routes() -> Router<ApiState> {
         .route(
             "/v1/recordings/{id}/audio-facts",
             get(recording_audio_facts),
+        )
+        .route(
+            "/v1/recordings/{id}/shadowing-analysis",
+            get(latest_shadowing_analysis),
         )
         .route(
             "/v1/recording-transcriptions",
