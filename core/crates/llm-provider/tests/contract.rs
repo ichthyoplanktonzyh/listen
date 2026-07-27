@@ -562,6 +562,7 @@ fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
         auth_ref: None,
         timeout_ms: 5000,
         max_retries: 0,
+        batch_policy: domain::LlmBatchPolicy::default(),
         cost_budget: None,
         retention: DataRetentionPreference::Unknown,
         allowed_uses: vec![LlmUse::SemanticJudgment],

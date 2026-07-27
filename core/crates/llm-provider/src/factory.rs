@@ -31,18 +31,24 @@ impl BuiltSemanticProvider {
         let timeout = Duration::from_millis(profile.timeout_ms);
         match profile.adapter_kind {
             LlmAdapterKind::OpenAiChatCompletions => {
-                let adapter =
-                    OpenAiChatAdapter::new(&profile.base_url, &profile.model_id, api_key, timeout)?
-                        .with_capability(profile.capability);
+                let adapter = OpenAiChatAdapter::new_with_pool(
+                    &profile.base_url,
+                    &profile.model_id,
+                    api_key,
+                    timeout,
+                    profile.batch_policy.max_idle_connections_per_host,
+                )?
+                .with_capability(profile.capability);
                 Ok(Self::OpenAi(LlmSemanticProvider::new(adapter)))
             }
             LlmAdapterKind::AnthropicMessages => {
-                let adapter = AnthropicMessagesAdapter::new(
+                let adapter = AnthropicMessagesAdapter::new_with_pool(
                     &profile.base_url,
                     &profile.model_id,
                     api_key,
                     profile.protocol_version.clone(),
                     timeout,
+                    profile.batch_policy.max_idle_connections_per_host,
                 )?
                 .with_capability(profile.capability);
                 Ok(Self::Anthropic(LlmSemanticProvider::new(adapter)))

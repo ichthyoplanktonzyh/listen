@@ -1,6 +1,6 @@
 # LLPlayerNext System Architecture
 
-Last updated: 2026-07-26. Reflects Phase 3.19.2 backend runtime hardening.
+Last updated: 2026-07-27. Reflects issue #96 account-scoped LLM batch governance.
 
 ## Overview
 
@@ -137,6 +137,13 @@ application use cases and provider/repository boundaries.
   one batch, then finalises each sentence independently. B, SenseGroup, and the
   dependency matcher share the same per-sentence artifact; a bad sentence
   falls back without invalidating its siblings.
+- `application::batch_governor` owns provider/account-scoped in-flight and
+  request-start limits, cancellation-aware permit acquisition, bounded jittered
+  retry policy and per-batch metrics. LLM Sense Group cache identity covers the
+  provider profile, prompt contract and immutable request snapshot. Successful
+  sentence checkpoints persist through `SenseGroupRepository`; a cancelled
+  batch keeps those checkpoints but never writes a complete analysis from
+  unprocessed rule fallbacks.
 
 ### `syntactic-provider`
 
@@ -163,7 +170,9 @@ application use cases and provider/repository boundaries.
   `spawn_blocking`.
 - `ApiState` groups change by lifecycle: `AnalysisRuntime`, `LanguageRuntime`,
   `GenerativeRuntime` and `ApiInfrastructure`; use-case ownership remains in
-  `AppServices`.
+  `AppServices`. `GenerativeRuntime::llm_batches` exposes the narrow lifecycle
+  coordinator used by provider routes: clients supply a batch ID, and separate
+  status/cancel endpoints can act while the generating request is in flight.
 - JSON diagnostics emit one completion record per request with method, matched
   route, status, duration and correlation ID. Generic failures retain internal
   diagnostics while returning path/SQL/secret-free public messages.
@@ -178,6 +187,11 @@ application use cases and provider/repository boundaries.
   exists.
 
 ### `persistence-sqlite`
+
+- Schema v50 adds durable LLM Sense Group sentence checkpoints keyed by the
+  provider/prompt/request fingerprint. They are rebuildable provider output
+  cache, not learning evidence, and allow interrupted or repeated batches to
+  dispatch only missing sentences.
 
 - One bundled-rusqlite connection preserves transaction locality and deterministic
   synchronous application tests. HTTP concurrency is provided above the adapter

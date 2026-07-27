@@ -2263,8 +2263,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [track_id]
+              required: [batch_id, track_id]
               properties:
+                batch_id:
+                  type: string
+                  description: Client-owned identifier used for progress and cancellation.
                 track_id: { type: string }
                 status:
                   anyOf:
@@ -2276,6 +2279,36 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SenseGroupAnalysis" }
+  /v1/llm/batches/{batch_id}:
+    get:
+      operationId: getLlmBatchProgress
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current or terminal LLM batch progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LlmBatchProgress" }
+        "404": { description: Unknown batch identifier }
+  /v1/llm/batches/{batch_id}/cancel:
+    post:
+      operationId: cancelLlmBatch
+      parameters:
+        - name: batch_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Cancellation accepted or terminal progress returned
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LlmBatchProgress" }
+        "404": { description: Unknown batch identifier }
   /v1/hunting/candidates:
     get:
       operationId: listHuntingCandidates
@@ -5404,7 +5437,7 @@ components:
       description: >
         Secret-free view of a provider profile. Never carries the credential or
         the opaque keychain reference — only has_credential.
-      required: [id, display_name, adapter_kind, base_url, model_id, has_credential, timeout_ms, max_retries, retention, allowed_uses, capability, created_at_ms]
+      required: [id, display_name, adapter_kind, base_url, model_id, has_credential, timeout_ms, max_retries, batch_policy, retention, allowed_uses, capability, created_at_ms]
       properties:
         id: { type: string }
         display_name: { type: string }
@@ -5415,6 +5448,7 @@ components:
         has_credential: { type: boolean }
         timeout_ms: { type: integer, minimum: 0 }
         max_retries: { type: integer, minimum: 0 }
+        batch_policy: { $ref: "#/components/schemas/LlmBatchPolicy" }
         cost_budget: { $ref: "#/components/schemas/CostBudget" }
         retention: { $ref: "#/components/schemas/DataRetentionPreference" }
         allowed_uses: { type: array, items: { $ref: "#/components/schemas/LlmUse" } }
@@ -5434,9 +5468,31 @@ components:
           description: Write-only; stored in the OS keychain, never returned or persisted to SQLite.
         timeout_ms: { type: integer, minimum: 0 }
         max_retries: { type: integer, minimum: 0 }
+        batch_policy: { $ref: "#/components/schemas/LlmBatchPolicy" }
         cost_budget: { $ref: "#/components/schemas/CostBudget" }
         retention: { $ref: "#/components/schemas/DataRetentionPreference" }
         allowed_uses: { type: array, items: { $ref: "#/components/schemas/LlmUse" } }
+    LlmBatchPolicy:
+      type: object
+      required: [max_in_flight, max_idle_connections_per_host]
+      properties:
+        account_scope:
+          type: [string, "null"]
+          description: Profiles with the same value share one account-level governor.
+        max_in_flight: { type: integer, minimum: 1, default: 800 }
+        start_rate_per_second:
+          type: [integer, "null"]
+          minimum: 1
+        max_idle_connections_per_host: { type: integer, minimum: 0, default: 32 }
+    LlmBatchProgress:
+      type: object
+      required: [batch_id, state, completed_sentences, total_sentences]
+      properties:
+        batch_id: { type: string }
+        state:
+          enum: [running, cancelling, completed, cancelled, failed]
+        completed_sentences: { type: integer, minimum: 0 }
+        total_sentences: { type: integer, minimum: 0 }
     PracticeItem:
       type: object
       required: [id, session_id, kind, target, prompt_snapshot, expected_answer, anchors, created_at_ms]

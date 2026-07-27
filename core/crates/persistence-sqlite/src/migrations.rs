@@ -14,7 +14,7 @@ use super::PersistenceError;
 // Phase 3.15 append-only writing feedback and user disposition facts. v39 adds
 // the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
 // 3.15.7 realtime provider config and local session/turn facts.
-pub const MIGRATION_VERSION: u32 = 49;
+pub const MIGRATION_VERSION: u32 = 50;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -396,6 +396,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             tx.execute_batch(include_str!("../migrations/0049_shadowing_analyses.sql"))?;
         }
         tx.pragma_update(None, "user_version", 49)?;
+        tx.commit()?;
+    }
+    if current < 50 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0050_llm_sentence_checkpoints.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 50)?;
         tx.commit()?;
     }
     Ok(())

@@ -289,6 +289,16 @@ different provider runs rather than in-place upgrades. A syntax-aware run stores
 the source syntactic artifact ID/provider descriptor in `metrics_json`, while
 `chunk_timeline_dependency=false` makes the non-relationship explicit.
 
+Schema v50 adds `llm_sense_group_sentence_checkpoints`, a rebuildable cache for
+successful provider boundary drafts. Its SHA-256 key length-prefixes the
+provider-profile scope, local prompt-contract version, and complete immutable
+partition request snapshot (language, text, tokens, protected spans and
+candidate boundaries). It is not a timeline, learning asset, observation or
+capability fact. Cancellation may leave successful sentence checkpoints but
+must not create a complete `SenseGroupAnalysis` containing unprocessed
+fallbacks; a later batch reads checkpoints and dispatches only missing or
+invalid sentences.
+
 `DependencyMatchCandidate` is an ephemeral query result over a validated,
 qualified syntactic artifact. Its matcher-local key, subtitle token span and
 bindings are diagnostics for a later curated layer; they are not a

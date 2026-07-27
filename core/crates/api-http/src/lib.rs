@@ -81,6 +81,9 @@ pub struct GenerativeRuntime {
     /// Explicit opt-in model lifecycle. It has no learning repositories and
     /// cannot write corpus/evidence/projection facts.
     pub semantic_embedding: Arc<embedding_provider::ManagedFastEmbedProvider>,
+    /// Provider/account-scoped LLM batch governors plus explicit batch
+    /// cancellation and progress lifecycle.
+    pub llm_batches: application::batch_governor::LlmBatchCoordinator,
 }
 
 #[derive(Clone)]
@@ -174,6 +177,7 @@ impl ApiState {
                         std::process::id()
                     )),
                 )),
+                llm_batches: application::batch_governor::LlmBatchCoordinator::default(),
             },
             infrastructure: ApiInfrastructure {
                 token: token.into(),
@@ -412,6 +416,12 @@ impl From<ApplicationError> for ApiError {
             ApplicationError::Conflict(message) => {
                 Self::new(StatusCode::CONFLICT, "asset_conflict", message, false)
             }
+            ApplicationError::Cancelled(operation) => Self::new(
+                StatusCode::CONFLICT,
+                "batch_cancelled",
+                format!("{operation} was cancelled"),
+                false,
+            ),
             ApplicationError::ExternalProcess(message) => Self::internal(
                 StatusCode::BAD_GATEWAY,
                 "external_process_error",

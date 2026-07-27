@@ -1,4 +1,4 @@
-use application::{ApplicationError, SenseGroupRepository};
+use application::{ApplicationError, SenseGroupRepository, batch_governor::CachedPartition};
 use domain::{
     SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleTrackId, TimelineStatus, WordTimelineId,
 };
@@ -7,6 +7,44 @@ use rusqlite::{OptionalExtension, params};
 use crate::{SqliteRepository, from_json, json, repo};
 
 impl SenseGroupRepository for SqliteRepository {
+    fn get_llm_sentence_checkpoint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<CachedPartition>, ApplicationError> {
+        self.connection
+            .lock()
+            .query_row(
+                "SELECT partition_json
+                 FROM llm_sense_group_sentence_checkpoints
+                 WHERE fingerprint=?1",
+                [fingerprint],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)
+    }
+
+    fn save_llm_sentence_checkpoint(
+        &self,
+        fingerprint: &str,
+        partition: &CachedPartition,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError> {
+        self.connection
+            .lock()
+            .execute(
+                "INSERT INTO llm_sense_group_sentence_checkpoints
+                 (fingerprint,partition_json,updated_at_ms)
+                 VALUES (?1,?2,?3)
+                 ON CONFLICT(fingerprint) DO UPDATE SET
+                   partition_json=excluded.partition_json,
+                   updated_at_ms=excluded.updated_at_ms",
+                params![fingerprint, json(partition)?, updated_at_ms],
+            )
+            .map_err(repo)?;
+        Ok(())
+    }
+
     fn save_sense_group_analysis(
         &self,
         analysis: &SenseGroupAnalysis,

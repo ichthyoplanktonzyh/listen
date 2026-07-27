@@ -200,14 +200,14 @@ pub struct StructuredChatResponse {
 /// One immutable token snapshot supplied to an LLM sense-group partitioner.
 /// The model returns boundaries over these server-owned indices; it never
 /// rewrites subtitle text.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SenseGroupTokenInput {
     pub index: u32,
     pub text: String,
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct SenseGroupProtectedSpan {
     pub start_token_index: u32,
     pub end_token_index: u32,
@@ -215,7 +215,7 @@ pub struct SenseGroupProtectedSpan {
 
 /// A rule/NLP proposal plus the exact source snapshot. The LLM may move,
 /// remove, or add boundaries, while protected lexical spans remain indivisible.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SenseGroupPartitionRequest {
     pub language: Option<LanguageCode>,
     pub source_text: String,

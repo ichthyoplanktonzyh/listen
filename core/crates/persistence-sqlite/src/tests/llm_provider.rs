@@ -33,6 +33,7 @@ fn sample_profile(auth_ref: Option<LlmAuthRef>) -> LlmProviderProfile {
         auth_ref,
         timeout_ms: 30_000,
         max_retries: 1,
+        batch_policy: LlmBatchPolicy::default(),
         cost_budget: None,
         retention: DataRetentionPreference::Unknown,
         allowed_uses: vec![LlmUse::SemanticJudgment],
@@ -129,6 +130,27 @@ fn provider_profile_round_trips_and_lists() {
         .unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].display_name, "Renamed");
+}
+
+#[test]
+fn llm_sentence_checkpoint_survives_repository_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("checkpoint.sqlite");
+    let partition = application::batch_governor::CachedPartition {
+        boundary_after_token_indices: vec![2, 4],
+        model_id: Some("model-x".into()),
+        prompt_version: Some("sense-group-partition-v1".into()),
+    };
+    {
+        let repo = SqliteRepository::open(&database).unwrap();
+        repo.save_llm_sentence_checkpoint("fingerprint", &partition, 42)
+            .unwrap();
+    }
+    let reopened = SqliteRepository::open(&database).unwrap();
+    assert_eq!(
+        reopened.get_llm_sentence_checkpoint("fingerprint").unwrap(),
+        Some(partition)
+    );
 }
 
 #[test]

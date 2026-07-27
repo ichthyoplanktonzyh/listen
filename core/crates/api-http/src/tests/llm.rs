@@ -30,9 +30,11 @@ struct ConcurrentFake {
     body: serde_json::Value,
     active: Arc<AtomicUsize>,
     max_active: Arc<AtomicUsize>,
+    request_count: Arc<AtomicUsize>,
 }
 
 async fn fake_concurrent(State(state): State<ConcurrentFake>) -> Json<serde_json::Value> {
+    state.request_count.fetch_add(1, Ordering::SeqCst);
     let active = state.active.fetch_add(1, Ordering::SeqCst) + 1;
     state.max_active.fetch_max(active, Ordering::SeqCst);
     tokio::time::sleep(std::time::Duration::from_millis(40)).await;
@@ -40,12 +42,16 @@ async fn fake_concurrent(State(state): State<ConcurrentFake>) -> Json<serde_json
     Json(state.body)
 }
 
-async fn spawn_concurrent_fake_openai(body: serde_json::Value) -> (String, Arc<AtomicUsize>) {
+async fn spawn_concurrent_fake_openai(
+    body: serde_json::Value,
+) -> (String, Arc<AtomicUsize>, Arc<AtomicUsize>) {
     let max_active = Arc::new(AtomicUsize::new(0));
+    let request_count = Arc::new(AtomicUsize::new(0));
     let state = ConcurrentFake {
         body,
         active: Arc::new(AtomicUsize::new(0)),
         max_active: max_active.clone(),
+        request_count: request_count.clone(),
     };
     let router = Router::new()
         .route("/chat/completions", post(fake_concurrent))
@@ -55,7 +61,7 @@ async fn spawn_concurrent_fake_openai(body: serde_json::Value) -> (String, Arc<A
     tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
     });
-    (format!("http://{addr}"), max_active)
+    (format!("http://{addr}"), max_active, request_count)
 }
 
 fn openai_content_envelope(content: &str) -> serde_json::Value {
@@ -106,6 +112,46 @@ fn register_body(base_url: &str, secret: Option<&str>) -> serde_json::Value {
         body["secret"] = serde_json::json!(secret);
     }
     body
+}
+
+async fn setup_sense_group_track(
+    app: &Router,
+    base_url: &str,
+    batch_policy: serde_json::Value,
+) -> (String, String) {
+    let mut provider_body = register_body(base_url, Some("sk-x"));
+    provider_body["allowed_uses"] = serde_json::json!(["sense_group_partition"]);
+    provider_body["batch_policy"] = batch_policy;
+    let (status, provider) = post_json(app, "/v1/llm/providers", provider_body).await;
+    assert_eq!(status, StatusCode::OK, "provider registration failed");
+
+    let (status, media) = post_json(
+        app,
+        "/v1/media",
+        serde_json::json!({
+            "path": "/tmp/llm-batch-governor.mp4",
+            "fingerprint": "llm-batch-governor-media",
+            "title": "LLM Batch Governor",
+            "kind": "video"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "media registration failed");
+    let fixture = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/subtitles/timeline.srt"
+    );
+    let (status, track) = post_json(
+        app,
+        &format!("/v1/media/{}/subtitles", media["id"].as_str().unwrap()),
+        serde_json::json!({ "path": fixture, "language": "en" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "subtitle import failed");
+    (
+        provider["id"].as_str().unwrap().to_string(),
+        track["id"].as_str().unwrap().to_string(),
+    )
 }
 
 #[tokio::test]
@@ -255,7 +301,7 @@ async fn judge_via_unknown_provider_is_not_found() {
 
 #[tokio::test]
 async fn sense_group_provider_generates_a_valid_persisted_analysis() {
-    let (base, max_active) = spawn_concurrent_fake_openai(openai_content_envelope(
+    let (base, max_active, request_count) = spawn_concurrent_fake_openai(openai_content_envelope(
         "{\"boundary_after_token_indices\": []}",
     ))
     .await;
@@ -301,6 +347,7 @@ async fn sense_group_provider_generates_a_valid_persisted_analysis() {
             provider["id"].as_str().unwrap()
         ),
         serde_json::json!({
+            "batch_id": "sense-group-success",
             "track_id": track["id"],
             "status": "candidate"
         }),
@@ -312,7 +359,7 @@ async fn sense_group_provider_generates_a_valid_persisted_analysis() {
     assert_eq!(analysis["metrics_json"]["llm_sentence_count"], 4);
     assert_eq!(analysis["metrics_json"]["fallback_sentence_count"], 0);
     assert_eq!(analysis["metrics_json"]["batch_sentence_count"], 4);
-    assert_eq!(analysis["metrics_json"]["max_concurrency"], 4);
+    assert_eq!(analysis["metrics_json"]["task_concurrency"], 4);
     assert!(
         max_active.load(Ordering::SeqCst) >= 2,
         "track sentences should be analyzed concurrently"
@@ -327,6 +374,27 @@ async fn sense_group_provider_generates_a_valid_persisted_analysis() {
             .as_array()
             .is_some_and(|sources| sources.iter().any(|source| source == "language_model"))
     }));
+
+    let calls_after_first_run = request_count.load(Ordering::SeqCst);
+    let (status, resumed) = post_json(
+        &app,
+        &format!(
+            "/v1/llm/providers/{}/sense-groups",
+            provider["id"].as_str().unwrap()
+        ),
+        serde_json::json!({
+            "batch_id": "sense-group-resume",
+            "track_id": track["id"]
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "resume failed: {resumed}");
+    assert_eq!(
+        request_count.load(Ordering::SeqCst),
+        calls_after_first_run,
+        "a completed sentence checkpoint should not be requested again"
+    );
+    assert_eq!(resumed["metrics_json"]["governor"]["cache"]["hits"], 4);
 
     // A syntactically valid JSON response with impossible token indices is
     // retried once per sentence, then safely replaced by rule output.
@@ -344,7 +412,10 @@ async fn sense_group_provider_generates_a_valid_persisted_analysis() {
             "/v1/llm/providers/{}/sense-groups",
             invalid_provider["id"].as_str().unwrap()
         ),
-        serde_json::json!({ "track_id": track["id"] }),
+        serde_json::json!({
+            "batch_id": "sense-group-fallback",
+            "track_id": track["id"]
+        }),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "fallback failed: {fallback}");
@@ -356,4 +427,105 @@ async fn sense_group_provider_generates_a_valid_persisted_analysis() {
             .as_array()
             .is_some_and(|sources| sources.iter().all(|source| source != "language_model"))
     }));
+}
+
+#[tokio::test]
+async fn concurrent_media_batches_share_the_profile_limit() {
+    let (base, max_active, _) = spawn_concurrent_fake_openai(openai_content_envelope(
+        "{\"boundary_after_token_indices\": []}",
+    ))
+    .await;
+    let app = test_app();
+    let (provider_id, track_id) = setup_sense_group_track(
+        &app,
+        &base,
+        serde_json::json!({
+            "max_in_flight": 2,
+            "start_rate_per_second": null,
+            "max_idle_connections_per_host": 2
+        }),
+    )
+    .await;
+    let uri = format!("/v1/llm/providers/{provider_id}/sense-groups");
+    let first = post_json(
+        &app,
+        &uri,
+        serde_json::json!({ "batch_id": "shared-a", "track_id": track_id }),
+    );
+    let second = post_json(
+        &app,
+        &uri,
+        serde_json::json!({ "batch_id": "shared-b", "track_id": track_id }),
+    );
+    let ((first_status, first_body), (second_status, second_body)) = tokio::join!(first, second);
+    assert_eq!(first_status, StatusCode::OK, "{first_body}");
+    assert_eq!(second_status, StatusCode::OK, "{second_body}");
+    assert!(
+        max_active.load(Ordering::SeqCst) <= 2,
+        "account-scoped in-flight limit was exceeded"
+    );
+}
+
+#[tokio::test]
+async fn cancellation_stops_queued_sentence_dispatch_and_retains_progress() {
+    let (base, max_active, _) = spawn_concurrent_fake_openai(openai_content_envelope(
+        "{\"boundary_after_token_indices\": []}",
+    ))
+    .await;
+    let app = test_app();
+    let (provider_id, track_id) = setup_sense_group_track(
+        &app,
+        &base,
+        serde_json::json!({
+            "max_in_flight": 1,
+            "start_rate_per_second": 1,
+            "max_idle_connections_per_host": 1
+        }),
+    )
+    .await;
+    let generation_app = app.clone();
+    let generation = tokio::spawn(async move {
+        post_json(
+            &generation_app,
+            &format!("/v1/llm/providers/{provider_id}/sense-groups"),
+            serde_json::json!({
+                "batch_id": "cancel-me",
+                "track_id": track_id
+            }),
+        )
+        .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    let (cancel_status, cancelling) = post_json(
+        &app,
+        "/v1/llm/batches/cancel-me/cancel",
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(cancel_status, StatusCode::OK, "{cancelling}");
+    assert_eq!(cancelling["state"], "cancelling");
+
+    let (generation_status, generation_body) = generation.await.unwrap();
+    assert_eq!(generation_status, StatusCode::CONFLICT, "{generation_body}");
+    assert_eq!(generation_body["code"], "batch_cancelled");
+    let status_response = app
+        .oneshot(
+            Request::get("/v1/llm/batches/cancel-me")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let final_status: serde_json::Value = serde_json::from_slice(
+        &to_bytes(status_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(final_status["state"], "cancelled");
+    assert!(
+        max_active.load(Ordering::SeqCst) <= 1,
+        "cancelled batch exceeded its configured in-flight limit"
+    );
 }

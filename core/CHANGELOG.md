@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- 2026-07-27 11:59 CST: 补全 issue #96 LLM Sense Group 批处理验收：显式
+  `batch_id` 状态/取消 API，排队与退避均可协作取消且取消批次不提交伪完整分析；账号作用域
+  governor 可配置总 in-flight、启动速率和连接池空闲上限，不同 profile 默认隔离、同账号可
+  显式共享。成功句 checkpoint 由 schema v50 持久化并在重启/重跑后只补缺失句；Retry-After
+  支持 delta-seconds/HTTP-date 且服务端等待不受本地指数 cap 截短；指标按批次隔离。新增
+  多批共享上限、排队取消、持久化恢复、千句并发容量及 Retry-After 回归，更新 OpenAPI 与架构
+  说明；不改 Flutter、不运行付费模型测试。
+
+- 2026-07-27 11:26 CST: 将初版账号级 request governor、退避、取消 token、句级 cache 与
+  metrics 接入 LLM Sense Group 批处理和 `ApiState`（refs #96）；后续 11:59 条目修正审查发现的
+  取消入口、持久恢复、profile 隔离、Retry-After 和验收测试缺口。
+
+- 2026-07-27 11:25 CST: 新增初版 `application::batch_governor` 深模块，建立 semaphore、
+  bounded backoff、协作取消、fingerprint cache 与原子指标组件（refs #96）；完整产品接线与
+  审查修正见后续同日条目。
+
 - 2026-07-27 10:31 CST: 完成 issue #94 Content Fit v3 后端与契约升级：保留
   meaning/sound 双维，新增词与短语能力、Sense Group、句法深度/依存跨度、
   WPM/停顿/弱读/压缩/chunk/字幕时序特征，输出归一化分数、逐信号贡献、完整

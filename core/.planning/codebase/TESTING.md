@@ -36,7 +36,7 @@
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
 | `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、provider-neutral dependency candidate matcher、RhythmFrame bridge、chunk 分区 |
-| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam、共享 consumer 单 batch/artifact ID、坏句隔离、timeout 精确 fallback |
+| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam、共享 consumer 单 batch/artifact ID、坏句隔离、timeout 精确 fallback；LLM batch 的账号级 semaphore、启动速率、排队取消、Retry-After 与 1000 请求容量 |
 | `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |
@@ -66,6 +66,7 @@ python3 scripts/check-architecture-coupling.py
 |---|---|
 | `crates/persistence-sqlite/tests/persistence_integration_test.rs` | 持久化全流程集成测试（亦驱动 `AppServices` 编排） |
 | `crates/persistence-sqlite/tests/migration_recovery_test.rs` | 迁移备份/失败恢复刻画：升级旧库建 `.pre-migration.bak`、全新/最新库不建备份、**迁移失败时原库完整保留在备份中可恢复**、版本不前进 |
+| `crates/persistence-sqlite/src/tests/llm_provider.rs::llm_sentence_checkpoint_survives_repository_reopen` | schema v50 句级 LLM Sense Group checkpoint 跨 SQLite reopen 保留并可恢复 |
 | `crates/persistence-sqlite/src/tests.rs::current_version_with_legacy_lexical_schema_is_destructively_repaired` | 旧 v7 lexical schema 已跑过且 `user_version=15` 的坏库回归：v16 断代重建 lexical/learning-resource 表，恢复 `lexical_observations` 与 LexicalUnit identity columns |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::session_summary_derives_stuck_point_statuses_from_events_attempts_and_review` | Phase 3.2 卡点 summary 聚合：事件、practice attempt、review item 派生状态与熟料标记 |
 | `crates/persistence-sqlite/src/tests/learning_loop.rs::listening_inbox_capture_process_review_and_micro_intensive_round_trip` | Phase 3.3 泛听 Inbox 编排：soft interrupt capture、ReviewItem 去向、micro-intensive PracticeItem 去向、理解度自报事件 |
@@ -75,6 +76,7 @@ python3 scripts/check-architecture-coupling.py
 | `crates/persistence-sqlite/src/tests/production_corpus.rs::gap_review_is_ranked_read_only_and_small_n_stays_starter` | Phase 3.15.6 receptive join、production exclusion、starter 降级与零 evidence/capability history writer |
 | `crates/api-http/src/tests/practice.rs::practice_routes_capture_and_process_listening_inbox_items` | Phase 3.3 HTTP 路由：Listening Inbox capture/list/process 端到端 JSON contract |
 | `crates/api-http/src/tests/practice.rs::recording_and_unscored_shadowing_routes_round_trip` | Phase 3.8 recording create/get/delete 与 `completed` shadowing HTTP contract |
+| `crates/api-http/src/tests/llm.rs` batch cases | 两个并发媒体批次共享 profile/account in-flight 上限；取消可打断排队与启动速率等待且保留终态进度；重复批次只读持久 checkpoint、零重复 provider 请求 |
 | `crates/api-http/src/tests/semantic.rs::writing_attempt_is_queryable_from_personal_production_corpus` | Writing typed attempt 落库后增量摄入，exact lemma 与 FTS phrase HTTP 查询端到端 |
 | `crates/api-http/tests/api_integration_test.rs` | 全栈 HTTP 集成：真实 `router(ApiState::new(...))` + in-memory SQLite，`tower::oneshot` 进程内驱动 `api-http → application → persistence`（鉴权拒绝、media 注册/读取/404、字幕导入往返、archive/restore/delete 生命周期、LLTimeline v1 文档导入往返、word timeline create→activate、句子 diagnosis、lexical entry upsert→list→detail→学习内容更新） |
 | `crates/api-http/src/transcription.rs::tests::*dtw*` | whisper.cpp DTW preset 解析回归：内置模型名、自定义/量化 `ggml-*` 路径、非 whisper.cpp provider 降级 |

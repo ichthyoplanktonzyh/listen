@@ -39,8 +39,20 @@ impl AnthropicMessagesAdapter {
         protocol_version: Option<String>,
         timeout: Duration,
     ) -> Result<Self, LlmProviderError> {
+        Self::new_with_pool(base_url, model_id, api_key, protocol_version, timeout, 32)
+    }
+
+    pub fn new_with_pool(
+        base_url: impl Into<String>,
+        model_id: impl Into<String>,
+        api_key: Option<String>,
+        protocol_version: Option<String>,
+        timeout: Duration,
+        max_idle_per_host: usize,
+    ) -> Result<Self, LlmProviderError> {
         let client = reqwest::Client::builder()
             .timeout(timeout)
+            .pool_max_idle_per_host(max_idle_per_host)
             .build()
             .map_err(|_| sanitized_protocol("failed to build http client"))?;
         Ok(Self {

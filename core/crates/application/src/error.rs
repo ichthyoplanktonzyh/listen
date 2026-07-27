@@ -23,6 +23,8 @@ pub enum ApplicationError {
     LexicalNormalizationProvider(#[from] LexicalNormalizationProviderError),
     #[error("{0}")]
     Conflict(&'static str),
+    #[error("{0} was cancelled")]
+    Cancelled(&'static str),
     #[error("external process failed: {0}")]
     ExternalProcess(String),
     /// A vendor LLM provider failed. Carries the standardized, secret-free

@@ -45,11 +45,38 @@ pub(crate) fn sanitized_protocol(detail: &str) -> LlmProviderError {
     }
 }
 
-/// Parse a `Retry-After` header value (seconds) into milliseconds.
+/// Parse either standard `Retry-After` form: delta-seconds or HTTP-date.
 pub(crate) fn retry_after_ms(headers: &reqwest::header::HeaderMap) -> Option<u64> {
-    headers
+    let value = headers
         .get(reqwest::header::RETRY_AFTER)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.trim().parse::<u64>().ok())
-        .map(|secs| secs.saturating_mul(1000))
+        .map(str::trim)?;
+    if let Ok(seconds) = value.parse::<u64>() {
+        return Some(seconds.saturating_mul(1000));
+    }
+    let retry_at = httpdate::parse_http_date(value).ok()?;
+    let delay = retry_at
+        .duration_since(std::time::SystemTime::now())
+        .unwrap_or_default();
+    Some(delay.as_millis().min(u128::from(u64::MAX)) as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retry_after_accepts_delta_seconds_and_http_date() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::RETRY_AFTER, "2".parse().unwrap());
+        assert_eq!(retry_after_ms(&headers), Some(2_000));
+
+        let future = std::time::SystemTime::now() + std::time::Duration::from_secs(60);
+        headers.insert(
+            reqwest::header::RETRY_AFTER,
+            httpdate::fmt_http_date(future).parse().unwrap(),
+        );
+        let parsed = retry_after_ms(&headers).unwrap();
+        assert!((58_000..=60_000).contains(&parsed), "{parsed}");
+    }
 }

@@ -10,6 +10,7 @@ application = { path = "../application" }
 domain = { path = "../domain" }
 async-trait.workspace = true
 reqwest.workspace = true
+httpdate.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

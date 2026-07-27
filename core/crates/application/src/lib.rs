@@ -51,6 +51,8 @@ use domain::{
 };
 use serde::Serialize;
 
+pub mod batch_governor;
+
 mod chunks;
 mod coach_dashboard;
 mod content_fit;

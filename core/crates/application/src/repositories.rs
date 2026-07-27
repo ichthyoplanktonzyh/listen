@@ -187,6 +187,16 @@ pub trait ChunkTimelineRepository: Send + Sync {
 
 /// Sense-group analyses are versioned and activated as one resource family.
 pub trait SenseGroupRepository: Send + Sync {
+    fn get_llm_sentence_checkpoint(
+        &self,
+        fingerprint: &str,
+    ) -> Result<Option<crate::batch_governor::CachedPartition>, ApplicationError>;
+    fn save_llm_sentence_checkpoint(
+        &self,
+        fingerprint: &str,
+        partition: &crate::batch_governor::CachedPartition,
+        updated_at_ms: u64,
+    ) -> Result<(), ApplicationError>;
     fn save_sense_group_analysis(
         &self,
         analysis: &SenseGroupAnalysis,

@@ -15,9 +15,9 @@ use crate::{
 use application::RubricGenerationRequest;
 use domain::{
     CapabilityClaim, CostBudget, DataRetentionPreference, LanguageCode, LlmAdapterKind,
-    LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability, RubricPointImportance,
-    SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SubtitleTrackId,
-    TimelineStatus, llm_provider_profile_id,
+    LlmBatchPolicy, LlmProviderProfile, LlmProviderProfileId, LlmUse, ProviderCapability,
+    RubricPointImportance, SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind,
+    SenseGroupAnalysis, SubtitleTrackId, TimelineStatus, llm_provider_profile_id,
 };
 use llm_provider::BuiltSemanticProvider;
 
@@ -34,6 +34,7 @@ pub(crate) struct ProviderProfileView {
     pub has_credential: bool,
     pub timeout_ms: u64,
     pub max_retries: u32,
+    pub batch_policy: LlmBatchPolicy,
     pub cost_budget: Option<CostBudget>,
     pub retention: DataRetentionPreference,
     pub allowed_uses: Vec<LlmUse>,
@@ -53,6 +54,7 @@ impl From<&LlmProviderProfile> for ProviderProfileView {
             has_credential: profile.auth_ref.is_some(),
             timeout_ms: profile.timeout_ms,
             max_retries: profile.max_retries,
+            batch_policy: profile.batch_policy.clone(),
             cost_budget: profile.cost_budget,
             retention: profile.retention,
             allowed_uses: profile.allowed_uses.clone(),
@@ -83,6 +85,8 @@ pub(crate) struct RegisterProviderRequest {
     #[serde(default)]
     pub max_retries: u32,
     #[serde(default)]
+    pub batch_policy: LlmBatchPolicy,
+    #[serde(default)]
     pub cost_budget: Option<CostBudget>,
     pub retention: DataRetentionPreference,
     pub allowed_uses: Vec<LlmUse>,
@@ -106,6 +110,16 @@ pub(crate) async fn register_llm_provider(
     State(state): State<ApiState>,
     Json(request): Json<RegisterProviderRequest>,
 ) -> Result<Json<ProviderProfileView>, ApiError> {
+    if request.batch_policy.max_in_flight == 0 {
+        return Err(ApiError::from(ApplicationError::Invalid(
+            "batch_policy.max_in_flight must be greater than zero".into(),
+        )));
+    }
+    if request.batch_policy.start_rate_per_second == Some(0) {
+        return Err(ApiError::from(ApplicationError::Invalid(
+            "batch_policy.start_rate_per_second must be greater than zero".into(),
+        )));
+    }
     let id = llm_provider_profile_id(request.adapter_kind, &request.base_url, &request.model_id);
     let profile = LlmProviderProfile {
         id,
@@ -117,6 +131,7 @@ pub(crate) async fn register_llm_provider(
         auth_ref: None,
         timeout_ms: request.timeout_ms,
         max_retries: request.max_retries,
+        batch_policy: request.batch_policy,
         cost_budget: request.cost_budget,
         retention: request.retention,
         allowed_uses: request.allowed_uses,
@@ -339,6 +354,7 @@ pub(crate) async fn generate_rubric_via_llm_provider(
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct ProviderSenseGroupRequest {
+    pub batch_id: String,
     pub track_id: String,
     #[serde(default)]
     pub status: Option<TimelineStatus>,
@@ -359,9 +375,30 @@ pub(crate) async fn generate_sense_groups_via_llm_provider(
             "LLM provider profile does not allow sense_group_partition".into(),
         )));
     }
-    let max_retries = profile.max_retries;
+    let batch_id = request.batch_id;
+    let account_scope = profile
+        .batch_policy
+        .account_scope
+        .as_deref()
+        .filter(|scope| !scope.trim().is_empty())
+        .unwrap_or_else(|| profile.id.as_str())
+        .to_string();
+    let coordinator = state.generative.llm_batches.clone();
+    let (governor, cancellation) = coordinator.begin(
+        &batch_id,
+        &account_scope,
+        profile.batch_policy.max_in_flight as usize,
+        profile.batch_policy.start_rate_per_second,
+    )?;
+    let backoff = application::batch_governor::BackoffPolicy::new(500, 30_000, profile.max_retries);
+    let execution = application::batch_governor::LlmBatchExecution::new(
+        profile.id.as_str(),
+        governor,
+        cancellation,
+        backoff,
+    );
     let status = request.status;
-    state
+    let result = state
         .application
         .execute_async("llm.generate_sense_groups", move |services| async move {
             services
@@ -370,13 +407,37 @@ pub(crate) async fn generate_sense_groups_via_llm_provider(
                     &track_id,
                     status,
                     provider.as_sense_groups(),
-                    max_retries,
+                    &execution,
                 )
                 .await
         })
-        .await
+        .await;
+    coordinator.finish(&batch_id, result.is_ok());
+    result.map(Json).map_err(ApiError::from)
+}
+
+pub(crate) async fn llm_batch_status(
+    State(state): State<ApiState>,
+    Path(batch_id): Path<String>,
+) -> Result<Json<application::batch_governor::BatchProgress>, ApiError> {
+    state
+        .generative
+        .llm_batches
+        .status(&batch_id)
         .map(Json)
-        .map_err(ApiError::from)
+        .ok_or_else(|| ApiError::not_found("LLM batch"))
+}
+
+pub(crate) async fn cancel_llm_batch(
+    State(state): State<ApiState>,
+    Path(batch_id): Path<String>,
+) -> Result<Json<application::batch_governor::BatchProgress>, ApiError> {
+    state
+        .generative
+        .llm_batches
+        .cancel(&batch_id)
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("LLM batch"))
 }
 
 /// Loads a profile, resolves its secret, and builds the concrete provider.

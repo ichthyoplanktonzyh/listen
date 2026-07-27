@@ -1,3 +1,7 @@
+use crate::batch_governor::{
+    BackoffPolicy, BatchCancellationToken, BatchMetrics, CachedPartition, LlmBatchExecution,
+    RequestGovernor, SentenceCache,
+};
 use crate::{
     ApplicationError, MediaAnalysisUseCases, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
     SenseGroupAnalysisSummary, SenseGroupId, SenseGroupPartitionProvider,
@@ -8,13 +12,14 @@ use crate::{
 };
 use domain::{LlmProviderError, SenseGroupSource, SubtitleTokenKind};
 use futures_util::{StreamExt, stream};
+use std::sync::Arc;
 
 const LLM_PROVIDER_ID: &str = "llm-sense-group";
 const LLM_ALGORITHM: &str = "hybrid_rule_llm_partition_v1";
-// DeepSeek V4 Flash currently allows 2,500 account-wide concurrent requests.
-// Keep the desktop batch below that shared ceiling while allowing a typical
-// subtitle track to complete in one wave.
-const LLM_BATCH_CONCURRENCY: usize = 1000;
+// Per-task concurrency is a local ceiling; the account-level governor provides
+// the global bound across all concurrent media tasks.
+const LLM_TASK_CONCURRENCY: usize = 1000;
+const LLM_SENSE_GROUP_PROMPT_CONTRACT: &str = "sense-group-partition-v1";
 
 fn syntactic_complexity<'a>(
     analyses: impl Iterator<Item = &'a SyntacticAnalysis>,
@@ -103,13 +108,20 @@ impl MediaAnalysisUseCases {
     /// per-sentence fallback. Model output is boundary indices only; the
     /// server validates it against the immutable token snapshot and constructs
     /// the final spans, so malformed output can never corrupt coverage.
+    ///
+    /// The governor bounds account-wide in-flight requests; the cancellation
+    /// token allows the caller to abort the batch; the sentence cache provides
+    /// idempotency for resumed or repeated runs.
     pub async fn generate_sense_group_analysis_via_llm(
         &self,
         track_id: &SubtitleTrackId,
         requested_status: Option<TimelineStatus>,
         provider: &dyn SenseGroupPartitionProvider,
-        max_retries: u32,
+        execution: &LlmBatchExecution,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        let governor = execution.governor();
+        let cancellation = execution.cancellation();
+        let backoff = execution.backoff();
         let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
         let track = self
             .subtitle_tracks
@@ -117,6 +129,9 @@ impl MediaAnalysisUseCases {
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let config = speech_analysis::audible_structure::SenseGroupPartitionConfig::default();
         let descriptor = provider.descriptor();
+        let cache = SentenceCache::new();
+        let metrics = Arc::new(BatchMetrics::new());
+
         // Repository reads happen before remote work. Once prepared, every
         // sentence is independent and can safely share the provider seam.
         let mut prepared = Vec::with_capacity(track.sentences.len());
@@ -132,37 +147,101 @@ impl MediaAnalysisUseCases {
             }
             let request =
                 llm_partition_request(track.language.clone(), sentence, &candidates, &fallback);
+            let request_snapshot = serde_json::to_vec(&request).map_err(|error| {
+                ApplicationError::Repository(format!(
+                    "failed to fingerprint LLM sentence request: {error}"
+                ))
+            })?;
+            let checkpoint_fingerprint = SentenceCache::fingerprint(
+                execution.provider_cache_scope(),
+                LLM_SENSE_GROUP_PROMPT_CONTRACT,
+                &request_snapshot,
+            );
+            if let Some(checkpoint) = self
+                .sense_groups
+                .get_llm_sentence_checkpoint(&checkpoint_fingerprint)?
+            {
+                cache.insert(checkpoint_fingerprint.clone(), checkpoint);
+            }
             prepared.push((
                 sentence_order,
                 sentence.clone(),
                 candidates,
                 fallback,
                 request,
+                checkpoint_fingerprint,
             ));
         }
 
-        let concurrency = LLM_BATCH_CONCURRENCY.max(1).min(prepared.len().max(1));
+        cancellation.set_total_count(prepared.len() as u64);
+        let task_concurrency = LLM_TASK_CONCURRENCY.max(1).min(prepared.len().max(1));
         let config_ref = &config;
-        let mut outcomes = stream::iter(prepared.into_iter().map(
-            |(sentence_order, sentence, candidates, fallback, request)| async move {
-                let outcome = partition_sentence_via_llm(
-                    provider,
+        let governor_ref = governor;
+        let cancel_ref = cancellation;
+        let backoff_ref = backoff;
+        let cache_ref = &cache;
+        let metrics_ref = &metrics;
+
+        let mut outcomes =
+            stream::iter(prepared.into_iter().map(
+                |(
+                    sentence_order,
                     sentence,
-                    &candidates,
+                    candidates,
                     fallback,
                     request,
-                    config_ref,
-                    max_retries,
-                )
-                .await;
-                (sentence_order, outcome)
-            },
-        ))
-        .buffer_unordered(concurrency)
-        .collect::<Vec<_>>()
-        .await;
+                    checkpoint_fingerprint,
+                )| async move {
+                    // Cancellation gate: skip dispatch if already cancelled.
+                    if cancel_ref.is_cancelled() {
+                        metrics_ref.record_cancelled();
+                        return (
+                            sentence_order,
+                            LlmSentenceOutcome {
+                                sentence,
+                                spans: fallback,
+                                used_llm: false,
+                                retry_count: 0,
+                                prompt_version: None,
+                                reported_model: None,
+                            },
+                        );
+                    }
+                    let outcome = partition_sentence_via_llm_governed(
+                        provider,
+                        sentence,
+                        &candidates,
+                        fallback,
+                        request,
+                        config_ref,
+                        governor_ref,
+                        cancel_ref,
+                        backoff_ref,
+                        cache_ref,
+                        metrics_ref,
+                        checkpoint_fingerprint,
+                    )
+                    .await;
+                    (sentence_order, outcome)
+                },
+            ))
+            .buffer_unordered(task_concurrency)
+            .collect::<Vec<_>>()
+            .await;
         // Completion order is deliberately irrelevant to persisted identity.
         outcomes.sort_by_key(|(sentence_order, _)| *sentence_order);
+
+        let checkpointed_at_ms = now_ms();
+        for (fingerprint, partition) in cache.snapshot() {
+            self.sense_groups.save_llm_sentence_checkpoint(
+                &fingerprint,
+                &partition,
+                checkpointed_at_ms,
+            )?;
+        }
+        if !cancellation.begin_commit() {
+            return Err(ApplicationError::Cancelled("LLM sense-group batch"));
+        }
 
         let mut groups = Vec::new();
         let mut llm_sentence_count = 0_u64;
@@ -202,6 +281,7 @@ impl MediaAnalysisUseCases {
             serde_json::to_string(&groups).unwrap_or_default()
         );
         let now = now_ms();
+        let governor_metrics = metrics.to_json();
         let mut analysis = SenseGroupAnalysis {
             id: SenseGroupAnalysisId::from_fingerprint("sense-group-analysis", &fingerprint),
             track_id: track.id.clone(),
@@ -220,10 +300,11 @@ impl MediaAnalysisUseCases {
                 "fallback_sentence_count": fallback_sentence_count,
                 "retry_count": retry_count,
                 "batch_sentence_count": llm_sentence_count + fallback_sentence_count,
-                "max_concurrency": concurrency,
+                "task_concurrency": task_concurrency,
                 "prompt_versions": prompt_versions,
                 "reported_models": reported_models,
                 "chunk_timeline_dependency": false,
+                "governor": governor_metrics,
             })
             .into(),
             groups,
@@ -407,20 +488,69 @@ impl MediaAnalysisUseCases {
     }
 }
 
-async fn partition_sentence_via_llm(
+/// Governor-aware per-sentence LLM partition with backoff, cache, and
+/// cancellation. Acquires a permit from the shared governor before each
+/// attempt, respects Retry-After via the backoff policy, and checks the
+/// sentence cache for idempotent results.
+#[allow(clippy::too_many_arguments)]
+async fn partition_sentence_via_llm_governed(
     provider: &dyn SenseGroupPartitionProvider,
     sentence: SubtitleSentence,
     candidates: &[domain::PhraseCandidate],
     fallback: Vec<speech_analysis::audible_structure::SenseGroupSpan>,
     request: SenseGroupPartitionRequest,
     config: &speech_analysis::audible_structure::SenseGroupPartitionConfig,
-    max_retries: u32,
+    governor: &RequestGovernor,
+    cancellation: &BatchCancellationToken,
+    backoff: &BackoffPolicy,
+    cache: &SentenceCache,
+    metrics: &Arc<BatchMetrics>,
+    fingerprint: String,
 ) -> LlmSentenceOutcome {
+    // Check sentence cache first (idempotency for resumed batches).
+    if let Some(cached) = cache.get(&fingerprint) {
+        metrics.record_cache_hit();
+        if let Ok(spans) = spans_from_llm_boundaries(
+            &sentence,
+            candidates,
+            &cached.boundary_after_token_indices,
+            config,
+        ) {
+            cancellation.record_completion();
+            return LlmSentenceOutcome {
+                sentence,
+                spans,
+                used_llm: true,
+                retry_count: 0,
+                prompt_version: cached.prompt_version,
+                reported_model: cached.model_id,
+            };
+        }
+        // Cached result failed validation (stale); fall through to live call.
+    }
+    metrics.record_cache_miss();
+
     let mut attempt = 0_u32;
     let mut prompt_version = None;
     let mut reported_model = None;
     loop {
-        match provider.partition_sense_groups(&request).await {
+        // Cancellation check before each attempt.
+        if cancellation.is_cancelled() {
+            metrics.record_cancelled();
+            break;
+        }
+
+        // Acquire governor permit (bounds account-wide in-flight).
+        let Some(permit) = governor.acquire(cancellation, metrics).await else {
+            metrics.record_cancelled();
+            break;
+        };
+
+        let started = std::time::Instant::now();
+        let provider_result = provider.partition_sense_groups(&request).await;
+        metrics.record_latency(started.elapsed().as_millis() as u64);
+        drop(permit);
+        match provider_result {
             Ok(draft) => {
                 prompt_version = draft.prompt_version;
                 reported_model = draft.model_id;
@@ -431,6 +561,16 @@ async fn partition_sentence_via_llm(
                     config,
                 ) {
                     Ok(spans) => {
+                        // Cache the successful result.
+                        cache.insert(
+                            fingerprint,
+                            CachedPartition {
+                                boundary_after_token_indices: draft.boundary_after_token_indices,
+                                model_id: reported_model.clone(),
+                                prompt_version: prompt_version.clone(),
+                            },
+                        );
+                        cancellation.record_completion();
                         return LlmSentenceOutcome {
                             sentence,
                             spans,
@@ -440,15 +580,47 @@ async fn partition_sentence_via_llm(
                             reported_model,
                         };
                     }
-                    Err(_) if attempt < max_retries.min(1) => attempt += 1,
+                    Err(_) if backoff.should_retry(attempt) => {
+                        let delay = backoff.delay_for_attempt(attempt, None);
+                        attempt += 1;
+                        metrics.record_retry();
+                        if sleep_or_cancel(delay, cancellation).await {
+                            metrics.record_cancelled();
+                            break;
+                        }
+                    }
                     Err(_) => break,
                 }
             }
-            Err(error) if attempt < max_retries.min(1) && retryable_sense_group_error(&error) => {
-                attempt += 1;
+            Err(error) => {
+                if let LlmProviderError::RateLimit { retry_after_ms } = &error {
+                    metrics.record_rate_limit();
+                    if backoff.should_retry(attempt) {
+                        let delay = backoff.delay_for_attempt(attempt, *retry_after_ms);
+                        attempt += 1;
+                        metrics.record_retry();
+                        if sleep_or_cancel(delay, cancellation).await {
+                            metrics.record_cancelled();
+                            break;
+                        }
+                        continue;
+                    }
+                } else if retryable_sense_group_error(&error) && backoff.should_retry(attempt) {
+                    let delay = backoff.delay_for_attempt(attempt, None);
+                    attempt += 1;
+                    metrics.record_retry();
+                    if sleep_or_cancel(delay, cancellation).await {
+                        metrics.record_cancelled();
+                        break;
+                    }
+                    continue;
+                }
+                break;
             }
-            Err(_) => break,
         }
+    }
+    if !cancellation.is_cancelled() {
+        metrics.record_fallback();
     }
     LlmSentenceOutcome {
         sentence,
@@ -457,6 +629,16 @@ async fn partition_sentence_via_llm(
         retry_count: attempt as u64,
         prompt_version,
         reported_model,
+    }
+}
+
+async fn sleep_or_cancel(
+    delay: std::time::Duration,
+    cancellation: &BatchCancellationToken,
+) -> bool {
+    tokio::select! {
+        _ = cancellation.cancelled() => true,
+        _ = tokio::time::sleep(delay) => false,
     }
 }
 
@@ -809,9 +991,30 @@ mod tests {
     #[derive(Default)]
     struct MemorySenseGroups {
         analyses: Mutex<Vec<SenseGroupAnalysis>>,
+        checkpoints: Mutex<std::collections::HashMap<String, CachedPartition>>,
     }
 
     impl SenseGroupRepository for MemorySenseGroups {
+        fn get_llm_sentence_checkpoint(
+            &self,
+            fingerprint: &str,
+        ) -> Result<Option<CachedPartition>, ApplicationError> {
+            Ok(self.checkpoints.lock().unwrap().get(fingerprint).cloned())
+        }
+
+        fn save_llm_sentence_checkpoint(
+            &self,
+            fingerprint: &str,
+            partition: &CachedPartition,
+            _updated_at_ms: u64,
+        ) -> Result<(), ApplicationError> {
+            self.checkpoints
+                .lock()
+                .unwrap()
+                .insert(fingerprint.to_string(), partition.clone());
+            Ok(())
+        }
+
         fn save_sense_group_analysis(
             &self,
             analysis: &SenseGroupAnalysis,

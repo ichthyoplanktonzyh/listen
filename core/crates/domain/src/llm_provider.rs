@@ -98,6 +98,43 @@ pub struct CostBudget {
     pub max_requests: Option<u32>,
 }
 
+fn default_batch_max_in_flight() -> u32 {
+    800
+}
+
+fn default_pool_max_idle_per_host() -> usize {
+    32
+}
+
+/// Runtime limits for provider-backed batch work.
+///
+/// Profiles with the same non-empty `account_scope` share one governor. This
+/// lets multiple model profiles using the same provider account obey one
+/// account-level ceiling while unrelated providers remain isolated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LlmBatchPolicy {
+    #[serde(default)]
+    pub account_scope: Option<String>,
+    #[serde(default = "default_batch_max_in_flight")]
+    pub max_in_flight: u32,
+    /// Maximum request starts per second. `None` disables start-rate shaping.
+    #[serde(default)]
+    pub start_rate_per_second: Option<u32>,
+    #[serde(default = "default_pool_max_idle_per_host")]
+    pub max_idle_connections_per_host: usize,
+}
+
+impl Default for LlmBatchPolicy {
+    fn default() -> Self {
+        Self {
+            account_scope: None,
+            max_in_flight: default_batch_max_in_flight(),
+            start_rate_per_second: None,
+            max_idle_connections_per_host: default_pool_max_idle_per_host(),
+        }
+    }
+}
+
 /// One capability claim. The whole point of Phase 3.12 is that OpenAI-compatible
 /// endpoints (esp. local ones) must have their real capability *probed*, not
 /// assumed from protocol compatibility. `Declared` is config/catalog truth;
@@ -171,6 +208,8 @@ pub struct LlmProviderProfile {
     pub auth_ref: Option<LlmAuthRef>,
     pub timeout_ms: u64,
     pub max_retries: u32,
+    #[serde(default)]
+    pub batch_policy: LlmBatchPolicy,
     pub cost_budget: Option<CostBudget>,
     pub retention: DataRetentionPreference,
     pub allowed_uses: Vec<LlmUse>,
@@ -299,6 +338,7 @@ mod tests {
             auth_ref: Some(LlmAuthRef::new("kc://llm/abc")),
             timeout_ms: 30_000,
             max_retries: 1,
+            batch_policy: LlmBatchPolicy::default(),
             cost_budget: None,
             retention: DataRetentionPreference::Unknown,
             allowed_uses: vec![LlmUse::SemanticJudgment],
