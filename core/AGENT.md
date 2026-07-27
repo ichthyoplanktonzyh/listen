@@ -199,14 +199,133 @@ Follow `.planning/MAINTENANCE.md` exactly:
 
 ## Phase Branch Workflow
 
-- Every phase must use a dedicated phase branch; do not implement phase work
-  directly on `main`.
+- Every phase must use a dedicated phase branch and PR; do not implement,
+  commit, or push phase work directly on `main`.
 - Phase 3.19 is a subtraction-first product correction gate. Do not start or
   plan new product features until retained Phase 3.x journeys are usable,
   discoverable, owner-accepted, and the fake-requirement/fallback audit is
   complete. Existing code is not evidence that a feature should be kept.
-- After the phase functionality is complete, merge its dedicated branch into
-  `main` so `main` remains the integrated record of completed phases.
+- After the phase functionality is complete and validated, merge its dedicated
+  branch through an approved PR so `main` remains the integrated record of
+  completed phases.
+
+## Git and Pull Request Workflow
+
+These rules apply to every agent and every worktree.
+
+### Safety and ownership
+
+- Treat the user's existing changes, branches, commits, and worktrees as
+  user-owned. Do not discard, overwrite, amend, rebase, delete, or clean them
+  unless the user explicitly authorizes the exact action.
+- Start every task with `git status --short --branch`, inspect relevant diffs,
+  and check `git worktree list` before selecting or creating a branch.
+- Fetching and pruning remote-tracking refs is allowed:
+  `git fetch origin --prune`. Pruning remote-tracking refs is not permission to
+  delete local branches or worktrees.
+- Never use destructive broad commands such as `git reset --hard` or
+  `git clean -fd` to recover a worktree.
+- Never force-push `main`. Use `--force-with-lease`, never `--force`, only on an
+  agent-owned feature branch after a necessary rebase, and disclose it first
+  if anyone else may be using the branch.
+
+### Branch and worktree discipline
+
+- `main` is integration-only. Never implement, commit, or push task work
+  directly on `main`.
+- Start new work from the latest `origin/main`, not from a stale local branch:
+
+  ```bash
+  git fetch origin --prune
+  git switch -c codex/<issue-or-phase>-<short-slug> origin/main
+  ```
+
+- Codex branches use `codex/`; another tool may use its required agent
+  namespace. Keep the remainder short, descriptive, and tied to an issue or
+  phase when one exists. Use one branch for one coherent PR.
+- Use a dedicated worktree for concurrent tasks. Never reuse a branch already
+  checked out in another worktree, and never let two agents edit the same files
+  without explicit coordination.
+- Do not merge `main` into a feature branch merely to update it. Rebase an
+  agent-owned branch onto `origin/main` before review when safe. If the branch
+  is shared or already under review, coordinate before rewriting it.
+- After a PR is merged or closed, cleanup is a separate explicit operation.
+  Verify the branch is integrated, the worktree is clean, and no agent is using
+  it. Prefer `git worktree remove` and `git branch -d`; do not manually delete
+  worktree metadata.
+
+### Commit discipline
+
+- Make small, atomic commits with one purpose. Do not mix unrelated formatting,
+  refactors, generated files, or opportunistic fixes.
+- Use Conventional Commit subjects:
+  `feat(scope): ...`, `fix(scope): ...`, `refactor(scope): ...`,
+  `test(scope): ...`, `docs(scope): ...`, or `chore(scope): ...`.
+- Explain intent and non-obvious tradeoffs in the commit body. Reference the
+  issue with `refs #N`; use `fixes #N`/`closes #N` only when the change actually
+  completes it.
+- Review `git diff --check`, `git diff --staged`, and the staged file list
+  before committing. Never commit secrets, local credentials, build outputs,
+  editor state, temporary files, or unrelated user changes.
+- Do not amend commits already pushed to a shared branch unless coordination
+  and history rewriting are explicit.
+
+### Validation before push
+
+- Run the smallest relevant formatter, linter, and tests during development,
+  then run the required checks for the affected area before asking for review.
+  Report exact commands and results; never claim a check passed if it was not
+  run.
+- Routine validation must not invoke ignored, paid, live-model, or
+  credential-dependent tests.
+- Before push, confirm the branch is based on current `origin/main`, inspect
+  `git log --oneline origin/main..HEAD`, and verify the diff contains only the
+  intended PR scope.
+
+### Pull request discipline
+
+- Push with an upstream and open a draft PR while work is in progress. Never
+  open a PR from `main`, and never combine independent tasks into one PR.
+- A PR must state the problem and user-visible outcome, implementation scope
+  and non-goals, linked issue/phase, exact validation commands and results,
+  relevant risks/migrations/rollback considerations, and UI evidence for
+  visible changes.
+- Keep PRs reviewable. Split changes when they span unrelated domains or cannot
+  be understood as one coherent unit.
+- Mark a PR ready only when the diff is self-reviewed, required local checks
+  pass, the description is complete, and CI has finished successfully.
+- Agents must not approve their own PRs and must not merge without explicit
+  user authorization. Do not merge with unresolved review threads, failing or
+  pending required checks, conflicts, or an out-of-date base.
+- Use squash merge by default so `main` receives one coherent Conventional
+  Commit per PR. Use another strategy only when the user explicitly chooses it
+  for a documented reason.
+- After merge, perform safe source-branch cleanup when authorized and update
+  local `main` with `git pull --ff-only origin main`.
+
+### CI infrastructure exception
+
+- GitHub Actions is currently blocked by account billing/spending state; see
+  issue `#75`. A job that never started is an infrastructure failure, not a
+  passing check and not evidence that the code failed.
+- An agent may document the outage, link `#75`, and provide exact local
+  validation as temporary evidence. It must not silently ignore the red check,
+  mark it successful, or decide to merge anyway.
+- Only the user may explicitly authorize an exceptional merge while CI is
+  unavailable. Record that exception and the local evidence in the PR.
+- Once Actions can run again, the normal green-CI requirement applies
+  immediately. Re-run the checks before merge.
+
+### Target repository settings
+
+- When the GitHub plan permits it, protect `main` with PR-only changes,
+  required CI checks, required resolved conversations, no force pushes, and no
+  branch deletion. Until then, agents must enforce the same policy manually.
+- Enable automatic deletion of merged PR branches.
+- Keep squash merge as the default merge method.
+- Maintain a PR template matching the required PR content above.
+- Avoid duplicate feature-branch CI runs from both `push` and `pull_request`.
+  Use per-branch concurrency with `cancel-in-progress: true`.
 
 ## Before Finishing Work
 

@@ -1,3 +1,8 @@
+# Project Instructions
+
+Read and follow `AGENT.md` before working in this repository. It is the
+canonical project guide, including the required Git and pull request workflow.
+
 # Local Model Test Credentials
 
 These instructions apply to model tests run on this machine.

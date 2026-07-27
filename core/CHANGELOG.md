@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- 2026-07-27 09:15 CST: 收紧 Git 与 PR 治理：在项目权威 `AGENT.md` 中统一分支、
+  worktree、原子提交、验证、review、squash merge、CI 故障例外和安全清理规则；
+  新增 PR 模板；CI 仅对 `main` push 与 PR 运行，并按分支取消过期 run，避免重复消耗
+  Actions 额度；PR 的 Rust 严格检查只跑 Ubuntu，macOS/Windows 改为合并到 `main` 后运行。
+  GitHub 仓库已开启合并后自动删源分支、关闭 merge commit/rebase merge，仅保留 squash
+  merge；清理 13 条失效 worktree 注册和 27 个已合并且未被有效 worktree 占用的远端分支，
+  并为 `AGENTS.md` 增加权威入口指针。
+
 - 2026-07-26 18:35 CST: Phase 3.19.2 Backend Runtime Hardening & Interface
   Deepening 完成。全部 HTTP 路由经单一 `ApplicationExecutor` 把同步 repository work 移出
   Tokio async worker，current-thread heartbeat 回归覆盖 sync 与 mixed-async workflow；
