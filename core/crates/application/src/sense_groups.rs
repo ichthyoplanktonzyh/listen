@@ -16,6 +16,49 @@ const LLM_ALGORITHM: &str = "hybrid_rule_llm_partition_v1";
 // subtitle track to complete in one wave.
 const LLM_BATCH_CONCURRENCY: usize = 1000;
 
+fn syntactic_complexity<'a>(
+    analyses: impl Iterator<Item = &'a SyntacticAnalysis>,
+) -> (Option<f32>, Option<f32>) {
+    let mut max_depth = 0u32;
+    let mut span_total = 0u64;
+    let mut span_count = 0u32;
+    let mut sentence_count = 0u32;
+    for analysis in analyses {
+        sentence_count += analysis.sentences.len() as u32;
+        for sentence in &analysis.sentences {
+            for token in &sentence.tokens {
+                if let Some(head) = token.head_parser_token_index {
+                    span_total += token.parser_token_index.abs_diff(head) as u64;
+                    span_count += 1;
+                }
+                let mut current = token.parser_token_index;
+                let mut depth = 0u32;
+                let mut visited = std::collections::HashSet::new();
+                while visited.insert(current) {
+                    let Some(parent) = sentence
+                        .tokens
+                        .iter()
+                        .find(|candidate| candidate.parser_token_index == current)
+                        .and_then(|candidate| candidate.head_parser_token_index)
+                    else {
+                        break;
+                    };
+                    if parent == current {
+                        break;
+                    }
+                    depth += 1;
+                    current = parent;
+                }
+                max_depth = max_depth.max(depth);
+            }
+        }
+    }
+    (
+        (sentence_count > 0).then_some(max_depth as f32),
+        (span_count > 0).then_some(span_total as f32 / span_count as f32),
+    )
+}
+
 struct LlmSentenceOutcome {
     sentence: SubtitleSentence,
     spans: Vec<speech_analysis::audible_structure::SenseGroupSpan>,
@@ -302,6 +345,9 @@ impl MediaAnalysisUseCases {
                 .unwrap_or("none"),
             serde_json::to_string(&groups).unwrap_or_default()
         );
+        let (syntax_max_depth, syntax_mean_dependency_span) = syntax
+            .map(|analysis| syntactic_complexity(std::iter::once(analysis)))
+            .unwrap_or((None, None));
         let mut analysis = SenseGroupAnalysis {
             id: SenseGroupAnalysisId::from_fingerprint("sense-group-analysis", &fingerprint),
             track_id: track.id.clone(),
@@ -318,6 +364,8 @@ impl MediaAnalysisUseCases {
             metrics_json: serde_json::json!({
                 "syntactic_analysis_id": syntax.map(|analysis| analysis.id.as_str()),
                 "syntactic_provider": syntax.map(|analysis| &analysis.descriptor),
+                "syntax_max_depth": syntax_max_depth,
+                "syntax_mean_dependency_span": syntax_mean_dependency_span,
                 "chunk_timeline_dependency": false
             })
             .into(),
@@ -684,6 +732,12 @@ fn persist_sense_group_analysis_from_batch(
         .filter(|sentence| sentence.analysis.is_some())
         .count() as u64;
     let fallback_sentence_count = batch.sentences.len() as u64 - analyzed_sentence_count;
+    let (syntax_max_depth, syntax_mean_dependency_span) = syntactic_complexity(
+        batch
+            .sentences
+            .iter()
+            .filter_map(|sentence| sentence.analysis.as_ref()),
+    );
     let now = now_ms();
     let analysis = SenseGroupAnalysis {
         id,
@@ -702,6 +756,8 @@ fn persist_sense_group_analysis_from_batch(
                 speech_analysis::audible_structure::SYNTAX_PROVIDER_ID: syntax_group_count,
                 speech_analysis::audible_structure::PROVIDER_ID: fallback_group_count,
             },
+            "syntax_max_depth": syntax_max_depth,
+            "syntax_mean_dependency_span": syntax_mean_dependency_span,
         })
         .into(),
         groups,

@@ -107,6 +107,8 @@ assets:
 | `recognition_evidence` | Successful listening-recognition evidence, unique per lexical entry + sentence/media context |
 | `upgrade_suggestions` | Pending/resolved `known_not_recognized -> known_recognized` proposals with evidence snapshot and rejection cooldown |
 | `learning_events` | Append-mostly analytics facts for practice/review/listening/status/stuck-point events |
+| `content_difficulty_profiles` | Disposable fingerprinted Content Fit cache; v3 JSON embeds the material/learner feature snapshot, meaning/sound contributions, score, and explicit evidence coverage |
+| `content_fit_calibrations` | Durable per-media comprehension/practice counters; survives profile recomputation and supplies online correction plus offline observed labels |
 | `listening_inbox_items` | Queryable projection for extensive-listening soft interrupts, snapshots, expiry, and整理 outcomes |
 | `recording_assets` | Local recording path plus transcription-ready audio metadata and durable target/source snapshots |
 | `writing_feedback_findings` | Append-only provider/manual suggestions bound to one exact typed learner revision |

@@ -409,11 +409,12 @@ async fn content_fit_endpoint_serves_dual_dimension_profile() {
     assert_eq!(profile["subject_kind"], "media");
     assert_eq!(profile["subject_id"], media["id"]);
     assert_eq!(profile["language"], "en");
-    assert_eq!(profile["algorithm_version"], "content-fit-v2");
+    assert_eq!(profile["algorithm_version"], "content-fit-v3");
     assert_eq!(profile["evidence_grade"], "initial_estimate");
-    // Nothing is marked yet: the whole transcript is unassessed, so the
-    // conservative estimate reports too_hard with an honest zero ratio.
-    assert_eq!(profile["meaning"]["fit"], "too_hard");
+    // Nothing is marked yet: v3 still emits a provisional band, while the
+    // zero assessed ratio and explicit missing-feature list carry the honest
+    // cold-start uncertainty.
+    assert_eq!(profile["meaning"]["fit"], "challenging");
     assert!((profile["assessed_token_ratio"].as_f64().unwrap()).abs() < 1e-6);
     let signals = profile["meaning"]["signals"].as_array().unwrap();
     assert!(
@@ -422,6 +423,18 @@ async fn content_fit_endpoint_serves_dual_dimension_profile() {
             .any(|signal| { signal["kind"] == "unassessed_density" && signal["decisive"] == true })
     );
     assert!(profile["input_fingerprint"].as_str().unwrap().len() == 64);
+    assert!(profile["meaning"]["score"].as_f64().is_some());
+    assert_eq!(
+        profile["feature_snapshot"]["replay_density"],
+        serde_json::Value::Null
+    );
+    assert!(
+        profile["feature_coverage"]["missing_features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature == "replay_density")
+    );
 
     // Second read is served from cache and stays identical.
     let response = app
@@ -441,6 +454,20 @@ async fn content_fit_endpoint_serves_dual_dimension_profile() {
     let cached: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(cached, profile);
+
+    let response = app
+        .oneshot(
+            Request::get("/v1/content-fit/calibration-samples?language=en")
+                .header(AUTHORIZATION, "Bearer secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let samples: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(samples, serde_json::json!([]));
 }
 
 #[tokio::test]

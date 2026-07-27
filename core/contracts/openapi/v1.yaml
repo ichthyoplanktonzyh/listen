@@ -300,6 +300,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ContentDifficultyProfile" }
+  /v1/content-fit/calibration-samples:
+    get:
+      operationId: contentFitCalibrationSamples
+      description: >-
+        Export v3 feature snapshots, uncalibrated predictions, frozen v2
+        comparison bands, and eligible user-feedback labels for offline
+        threshold search. Missing evidence remains null.
+      parameters:
+        - { name: language, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Content-fit calibration samples
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CalibrationSample" }
   /v1/subtitles/{track_id}/cold-start-words:
     get:
       operationId: coldStartWords
@@ -4805,10 +4822,19 @@ components:
           type: string
           enum: [unknown_meaning_density, unassessed_density, known_not_recognized_density,
                  speech_rate_wpm, weak_form_density, compression_density, mean_chunk_length,
-                 comprehension_report_unclear_ratio, practice_correct_rate]
+                 comprehension_report_unclear_ratio, practice_correct_rate,
+                 mean_sense_group_length, sense_group_density, multi_word_expression_density,
+                 unknown_phrase_density, unassessed_phrase_density, syntax_depth,
+                 mean_dependency_span, pause_ratio, replay_density, lookup_density,
+                 subtitle_timing_quality]
         value: { type: number, format: float }
         # True when this signal selected or escalated the band (vs informational).
         decisive: { type: boolean }
+        contribution:
+          type: number
+          format: float
+          minimum: -1
+          maximum: 1
     DifficultyDimension:
       type: object
       required: [fit, signals]
@@ -4817,6 +4843,7 @@ components:
         signals:
           type: array
           items: { $ref: "#/components/schemas/FitSignal" }
+        score: { type: number, format: float, minimum: 0, maximum: 1 }
     ColdStartWordCandidate:
       type: object
       required: [display_form, normalized_form, occurrence_count]
@@ -4843,6 +4870,82 @@ components:
         algorithm_version: { type: string }
         computed_at_ms: { type: integer }
         input_fingerprint: { type: string }
+        feature_snapshot: { $ref: "#/components/schemas/ContentFitFeatureSnapshot" }
+        feature_coverage: { $ref: "#/components/schemas/FeatureCoverage" }
+    ContentFitFeatureSnapshot:
+      type: object
+      required: [unknown_meaning_density, unassessed_density,
+                 known_not_recognized_density, speech_rate_wpm,
+                 weak_form_density, compression_density, mean_chunk_length,
+                 mean_sense_group_length, sense_group_density,
+                 multi_word_expression_density, unknown_phrase_density,
+                 unassessed_phrase_density, syntax_depth, mean_dependency_span,
+                 pause_ratio, replay_density, lookup_density,
+                 subtitle_timing_quality, assessed_token_ratio]
+      properties:
+        unknown_meaning_density: { type: number, format: float, minimum: 0, maximum: 1 }
+        unassessed_density: { type: number, format: float, minimum: 0, maximum: 1 }
+        known_not_recognized_density: { type: number, format: float, minimum: 0, maximum: 1 }
+        speech_rate_wpm: { type: [number, "null"], format: float, minimum: 0 }
+        weak_form_density: { type: [number, "null"], format: float, minimum: 0 }
+        compression_density: { type: [number, "null"], format: float, minimum: 0 }
+        mean_chunk_length: { type: [number, "null"], format: float, minimum: 0 }
+        mean_sense_group_length: { type: [number, "null"], format: float, minimum: 0 }
+        sense_group_density: { type: [number, "null"], format: float, minimum: 0 }
+        multi_word_expression_density: { type: [number, "null"], format: float, minimum: 0 }
+        unknown_phrase_density: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        unassessed_phrase_density: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        syntax_depth: { type: [number, "null"], format: float, minimum: 0 }
+        mean_dependency_span: { type: [number, "null"], format: float, minimum: 0 }
+        pause_ratio: { type: [number, "null"], format: float, minimum: 0 }
+        replay_density: { type: [number, "null"], format: float, minimum: 0 }
+        lookup_density: { type: [number, "null"], format: float, minimum: 0 }
+        subtitle_timing_quality: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        assessed_token_ratio: { type: number, format: float, minimum: 0, maximum: 1 }
+    FeatureCoverage:
+      type: object
+      required: [total_features, available_features, coverage_ratio, missing_features]
+      properties:
+        total_features: { type: integer, minimum: 0 }
+        available_features: { type: integer, minimum: 0 }
+        coverage_ratio: { type: number, format: float, minimum: 0, maximum: 1 }
+        missing_features:
+          type: array
+          items:
+            type: string
+            enum: [speech_rate_wpm, weak_form_density, compression_density,
+                   mean_chunk_length, mean_sense_group_length, sense_group_density,
+                   multi_word_expression_density, unknown_phrase_density,
+                   unassessed_phrase_density, syntax_depth, mean_dependency_span,
+                   pause_ratio, replay_density, lookup_density,
+                   subtitle_timing_quality]
+    CalibrationSample:
+      type: object
+      required: [subject_kind, subject_id, language, snapshot,
+                 predicted_meaning_score, predicted_sound_score,
+                 predicted_meaning_band, predicted_sound_band,
+                 v2_meaning_band, v2_sound_band, observed_difficulty,
+                 reports_understood_all, reports_got_the_gist,
+                 reports_unclear, practice_attempts, practice_correct,
+                 sampled_at_ms]
+      properties:
+        subject_kind: { type: string }
+        subject_id: { type: string }
+        language: { type: string }
+        snapshot: { $ref: "#/components/schemas/ContentFitFeatureSnapshot" }
+        predicted_meaning_score: { type: number, format: float, minimum: 0, maximum: 1 }
+        predicted_sound_score: { type: number, format: float, minimum: 0, maximum: 1 }
+        predicted_meaning_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        predicted_sound_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        v2_meaning_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        v2_sound_band: { type: string, enum: [too_easy, comprehensible, challenging, too_hard] }
+        observed_difficulty: { type: [number, "null"], format: float, minimum: 0, maximum: 1 }
+        reports_understood_all: { type: integer, minimum: 0 }
+        reports_got_the_gist: { type: integer, minimum: 0 }
+        reports_unclear: { type: integer, minimum: 0 }
+        practice_attempts: { type: integer, minimum: 0 }
+        practice_correct: { type: integer, minimum: 0 }
+        sampled_at_ms: { type: integer, minimum: 0 }
     NormalizeLexicalRequest:
       type: object
       required: [language, value]

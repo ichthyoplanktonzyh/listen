@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-27 10:31 CST: 完成 issue #94 Content Fit v3 后端与契约升级：保留
+  meaning/sound 双维，新增词与短语能力、Sense Group、句法深度/依存跨度、
+  WPM/停顿/弱读/压缩/chunk/字幕时序特征，输出归一化分数、逐信号贡献、完整
+  feature snapshot 与明确 missing-feature coverage；不存在权威 media identity 的复播/
+  查词保持 `null`，不再误用 DiagnosisViewed/ListeningCompleted。理解度与评分练习继续
+  在线校准并可从新 API 导出为无标签泄漏样本；新增 deterministic threshold search、
+  frozen-v2 holdout MAE 对照工具、ADR 0030、OpenAPI/Dart DTO 及 domain/application/
+  persistence/HTTP/contract 回归。
+
 - 2026-07-27 09:15 CST: 收紧 Git 与 PR 治理：在项目权威 `AGENT.md` 中统一分支、
   worktree、原子提交、验证、review、squash merge、CI 故障例外和安全清理规则；
   新增 PR 模板；CI 仅对 `main` push 与 PR 运行，并按分支取消过期 run，避免重复消耗

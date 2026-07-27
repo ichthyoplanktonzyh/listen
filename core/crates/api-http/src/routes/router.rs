@@ -12,10 +12,10 @@ use super::llm::{
     list_llm_providers, probe_llm_provider, register_llm_provider,
 };
 use super::media::{
-    archive_subtitle, cold_start_words, delete_subtitle, export_subtitle, import_lltimeline,
-    import_lltimeline_for_media, import_subtitle, list_media_library, media_subtitles, read_media,
-    read_subtitle, register_media, restore_subtitle, set_media_triage_intent, track_content_fit,
-    update_track_language,
+    archive_subtitle, cold_start_words, content_fit_calibration_samples, delete_subtitle,
+    export_subtitle, import_lltimeline, import_lltimeline_for_media, import_subtitle,
+    list_media_library, media_subtitles, read_media, read_subtitle, register_media,
+    restore_subtitle, set_media_triage_intent, track_content_fit, update_track_language,
 };
 use super::personal_expression::{
     create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
@@ -159,6 +159,10 @@ fn media_analysis_routes() -> Router<ApiState> {
         .route(
             "/v1/subtitles/{track_id}/content-fit",
             get(track_content_fit),
+        )
+        .route(
+            "/v1/content-fit/calibration-samples",
+            get(content_fit_calibration_samples),
         )
         .route(
             "/v1/subtitles/{track_id}/cold-start-words",

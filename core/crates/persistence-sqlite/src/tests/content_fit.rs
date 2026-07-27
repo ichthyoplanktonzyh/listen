@@ -143,6 +143,49 @@ fn content_fit_profile_computes_dual_dimensions_from_transcript_and_vocabulary()
 }
 
 #[test]
+fn content_fit_phrase_features_follow_the_learners_phrase_profile() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = fit_services(&repo);
+    MediaRepository::upsert(repo.as_ref(), &transcription_media()).unwrap();
+    let mut track = fit_track(Some("en"));
+    track.sentences[0].tokens[0].text = "make".into();
+    track.sentences[0].tokens[1].text = "sure".into();
+    track.sentences[0].original_text = "make sure".into();
+    track.sentences[0].display_text = "make sure".into();
+    repo.save_track(&track).unwrap();
+
+    let before = services
+        .media_analysis()
+        .compute_content_fit_for_track(&track.id)
+        .unwrap();
+    let before_snapshot = before.feature_snapshot.unwrap();
+    assert_eq!(before_snapshot.unassessed_phrase_density, Some(1.0));
+    assert!(before_snapshot.multi_word_expression_density.unwrap() > 0.0);
+
+    services
+        .lexical_learning()
+        .create_lexical_entry(UpsertLexicalEntry {
+            language: "en".into(),
+            kind: LexicalEntryKind::Phrase,
+            canonical_form: "make sure".into(),
+            display_form: "make sure".into(),
+            status: Some(LearningStatus::KnownRecognized),
+            user_definition: None,
+            personal_note: None,
+            source: None,
+        })
+        .unwrap();
+    let after = services
+        .media_analysis()
+        .compute_content_fit_for_track(&track.id)
+        .unwrap();
+    assert_eq!(
+        after.feature_snapshot.unwrap().unassessed_phrase_density,
+        Some(0.0)
+    );
+}
+
+#[test]
 fn fast_delivery_escalates_sound_fit_via_active_word_timeline() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = fit_services(&repo);
@@ -188,9 +231,11 @@ fn fast_delivery_escalates_sound_fit_via_active_word_timeline() {
         .compute_content_fit_for_track(&track.id)
         .unwrap();
 
-    // challenging base (knr 0.05) + fast-speech escalation saturates the
-    // remaining headroom regardless of what the derived rhythm frames add.
-    assert_eq!(profile.sound.fit, InputFit::TooHard);
+    // The v3 weighted model keeps this material challenging while exposing
+    // fast delivery as a material contribution instead of an unconditional
+    // one-band escalation.
+    assert_eq!(profile.sound.fit, InputFit::Challenging);
+    assert!(profile.sound.score.unwrap() > 0.35);
     let wpm = signal_value(&profile.sound, FitSignalKind::SpeechRateWpm).unwrap();
     assert!((wpm - 200.0).abs() < 0.5, "expected ~200 wpm, got {wpm}");
     assert!(
@@ -430,6 +475,16 @@ fn comprehension_feedback_calibrates_sound_fit_and_survives_recompute() {
         signal_value(&calibrated.sound, FitSignalKind::KnownNotRecognizedDensity),
         signal_value(&baseline.sound, FitSignalKind::KnownNotRecognizedDensity),
     );
+    let language = LanguageCode::parse("en").unwrap();
+    let samples = services
+        .media_analysis()
+        .export_calibration_samples(Some(&language))
+        .unwrap();
+    assert_eq!(samples.len(), 1);
+    assert_eq!(samples[0].subject_id, track.media_id.as_str());
+    assert_eq!(samples[0].observed_difficulty, Some(1.0));
+    assert_eq!(samples[0].snapshot.replay_density, None);
+    assert_eq!(samples[0].snapshot.lookup_density, None);
 
     // Vocabulary changes force a full recompute; the calibration survives it
     // because it lives outside the profile cache.

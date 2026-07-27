@@ -367,3 +367,17 @@ scripts/validate-contracts.sh    # 单独契约验证
 - HTTP/OpenAPI/Flutter：proposal audit/decision、cross-modal candidate、immutable snapshot 与 unassessed
   wire shape；Dart client focused tests 2 项，全量 Flutter 453 项及 strict analyze 通过。
 - 真实数据库、重启、来源删除降级和完整 owner 体验由 `3.17-MANUAL-QA.md` 验收，自动化不代验。
+
+# Content Fit v3 testing delta (2026-07-27, issue #94)
+
+- Domain：word/phrase learner personalization、missing-feature coverage、per-signal
+  contribution、continuous feedback label、deterministic threshold search 与 frozen-v2
+  mean-absolute-band-error 对照。
+- Persistence/application：v3 snapshot JSON round-trip、phrase profile 改变触发 fingerprint
+  重算、Word/Chunk/SenseGroup/syntax/timing 特征提取、feedback calibration export 且
+  replay/lookup 无权威 media identity 时保持 `null`。
+- HTTP/OpenAPI/Dart contract：`content-fit-v3` profile 新字段、校准样本导出路由、旧 v2
+  profile 向后解析和 v3 可选字段 round-trip。
+- 离线校准：`cargo run -p domain --example content_fit_calibrate -- samples.json` 使用稳定
+  4:1 subject split，训练集搜索阈值，holdout 报 v2/v3 band MAE；没有代表性真实标签时不得
+  宣称 v3 已优于 v2。

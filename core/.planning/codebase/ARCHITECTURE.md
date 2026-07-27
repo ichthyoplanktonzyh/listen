@@ -447,6 +447,27 @@ complete extensive session -> PracticeSession.ended_at_ms
   + optional content-fit calibration feedback
 ```
 
+### Content Fit v3
+
+```text
+subtitle + active Word/Chunk/SenseGroup resources
+  + word/phrase lexical capability profile
+  + syntax metrics persisted by validated sense-group generation
+  -> ContentFitFeatureSnapshot
+  -> weighted meaning/sound scores + per-signal contributions
+  -> FeatureCoverage (explicit missing evidence)
+  -> fingerprinted SQLite ContentDifficultyProfile cache
+
+comprehension reports + scored practice calibration
+  -> online one-band correction
+  -> /v1/content-fit/calibration-samples (label kept out of prediction)
+  -> domain content_fit_calibrate threshold search + frozen-v2 comparison
+```
+
+Replay and dictionary-lookup features remain absent until those actions carry
+an authoritative media identity; unrelated learning events are not proxies.
+See ADR 0030.
+
 ### Extensive Listening Inbox
 
 ```text

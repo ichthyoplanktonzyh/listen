@@ -246,6 +246,34 @@ pub(crate) async fn track_content_fit(
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct CalibrationSamplesQuery {
+    language: Option<String>,
+}
+
+/// Offline calibration export. Predictions are uncalibrated and feedback is
+/// emitted only as the observed label, preventing target leakage.
+pub(crate) async fn content_fit_calibration_samples(
+    State(state): State<ApiState>,
+    Query(query): Query<CalibrationSamplesQuery>,
+) -> Result<Json<Vec<domain::CalibrationSample>>, ApiError> {
+    let language = query
+        .language
+        .map(LanguageCode::parse)
+        .transpose()
+        .map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("media.content_fit_calibration_samples", move |services| {
+            services
+                .media_analysis()
+                .export_calibration_samples(language.as_ref())
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct ColdStartWordsQuery {
     limit: Option<u32>,
 }
