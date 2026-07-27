@@ -11,27 +11,35 @@ class FitSignal {
     required this.kind,
     required this.value,
     required this.decisive,
+    this.contribution,
   });
 
   factory FitSignal.fromJson(Map<String, dynamic> json) => FitSignal(
     kind: json['kind'] as String,
     value: (json['value'] as num).toDouble(),
     decisive: json['decisive'] as bool? ?? false,
+    contribution: (json['contribution'] as num?)?.toDouble(),
   );
 
   final String kind;
   final double value;
   final bool decisive;
+  final double? contribution;
 
   Map<String, dynamic> toJson() => {
     'kind': kind,
     'value': value,
     'decisive': decisive,
+    if (contribution != null) 'contribution': contribution,
   };
 }
 
 class DifficultyDimension {
-  const DifficultyDimension({required this.fit, required this.signals});
+  const DifficultyDimension({
+    required this.fit,
+    required this.signals,
+    this.score,
+  });
 
   factory DifficultyDimension.fromJson(Map<String, dynamic> json) =>
       DifficultyDimension(
@@ -42,10 +50,12 @@ class DifficultyDimension {
               (value) => FitSignal.fromJson(Map<String, dynamic>.from(value)),
             )
             .toList(),
+        score: (json['score'] as num?)?.toDouble(),
       );
 
   final String fit;
   final List<FitSignal> signals;
+  final double? score;
 
   List<FitSignal> get decisiveSignals =>
       signals.where((signal) => signal.decisive).toList();
@@ -53,6 +63,55 @@ class DifficultyDimension {
   Map<String, dynamic> toJson() => {
     'fit': fit,
     'signals': signals.map((signal) => signal.toJson()).toList(),
+    if (score != null) 'score': score,
+  };
+}
+
+class ContentFitFeatureSnapshot {
+  const ContentFitFeatureSnapshot(this.values);
+
+  factory ContentFitFeatureSnapshot.fromJson(Map<String, dynamic> json) =>
+      ContentFitFeatureSnapshot(Map<String, dynamic>.unmodifiable(json));
+
+  /// Typed numeric feature bag whose keys are versioned by the OpenAPI
+  /// ContentFitFeatureSnapshot schema. Null means evidence was unavailable,
+  /// never a favorable zero.
+  final Map<String, dynamic> values;
+
+  double? value(String key) => (values[key] as num?)?.toDouble();
+
+  Map<String, dynamic> toJson() => Map<String, dynamic>.from(values);
+}
+
+class ContentFitFeatureCoverage {
+  const ContentFitFeatureCoverage({
+    required this.totalFeatures,
+    required this.availableFeatures,
+    required this.coverageRatio,
+    required this.missingFeatures,
+  });
+
+  factory ContentFitFeatureCoverage.fromJson(Map<String, dynamic> json) =>
+      ContentFitFeatureCoverage(
+        totalFeatures: json['total_features'] as int,
+        availableFeatures: json['available_features'] as int,
+        coverageRatio: (json['coverage_ratio'] as num).toDouble(),
+        missingFeatures:
+            (json['missing_features'] as List<dynamic>? ?? const [])
+                .whereType<String>()
+                .toList(growable: false),
+      );
+
+  final int totalFeatures;
+  final int availableFeatures;
+  final double coverageRatio;
+  final List<String> missingFeatures;
+
+  Map<String, dynamic> toJson() => {
+    'total_features': totalFeatures,
+    'available_features': availableFeatures,
+    'coverage_ratio': coverageRatio,
+    'missing_features': missingFeatures,
   };
 }
 
@@ -71,6 +130,8 @@ class ContentDifficultyProfile {
     required this.algorithmVersion,
     required this.computedAtMs,
     required this.inputFingerprint,
+    this.featureSnapshot,
+    this.featureCoverage,
   });
 
   factory ContentDifficultyProfile.fromJson(Map<String, dynamic> json) =>
@@ -89,6 +150,16 @@ class ContentDifficultyProfile {
         algorithmVersion: json['algorithm_version'] as String,
         computedAtMs: json['computed_at_ms'] as int,
         inputFingerprint: json['input_fingerprint'] as String,
+        featureSnapshot: json['feature_snapshot'] is Map
+            ? ContentFitFeatureSnapshot.fromJson(
+                Map<String, dynamic>.from(json['feature_snapshot'] as Map),
+              )
+            : null,
+        featureCoverage: json['feature_coverage'] is Map
+            ? ContentFitFeatureCoverage.fromJson(
+                Map<String, dynamic>.from(json['feature_coverage'] as Map),
+              )
+            : null,
       );
 
   final String subjectKind;
@@ -101,6 +172,8 @@ class ContentDifficultyProfile {
   final String algorithmVersion;
   final int computedAtMs;
   final String inputFingerprint;
+  final ContentFitFeatureSnapshot? featureSnapshot;
+  final ContentFitFeatureCoverage? featureCoverage;
 
   /// Mirrors the backend honesty threshold (MIN_ASSESSED_TOKEN_RATIO): below
   /// it the bands are a conservative guess and the degraded-estimate state
@@ -128,6 +201,8 @@ class ContentDifficultyProfile {
     'algorithm_version': algorithmVersion,
     'computed_at_ms': computedAtMs,
     'input_fingerprint': inputFingerprint,
+    if (featureSnapshot != null) 'feature_snapshot': featureSnapshot!.toJson(),
+    if (featureCoverage != null) 'feature_coverage': featureCoverage!.toJson(),
   };
 }
 

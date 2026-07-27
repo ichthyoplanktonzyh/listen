@@ -11,8 +11,14 @@ void main() {
     'language': 'en',
     'meaning': {
       'fit': 'comprehensible',
+      'score': 0.2,
       'signals': [
-        {'kind': 'unknown_meaning_density', 'value': 0.03, 'decisive': true},
+        {
+          'kind': 'unknown_meaning_density',
+          'value': 0.03,
+          'decisive': true,
+          'contribution': 0.12,
+        },
         {'kind': 'unassessed_density', 'value': 0.01, 'decisive': true},
       ],
     },
@@ -30,10 +36,23 @@ void main() {
     },
     'assessed_token_ratio': 0.99,
     'evidence_grade': 'initial_estimate',
-    'algorithm_version': 'content-fit-v2',
+    'algorithm_version': 'content-fit-v3',
     'computed_at_ms': 1700000000000,
     'input_fingerprint':
         '0000000000000000000000000000000000000000000000000000000000000000',
+    'feature_snapshot': {
+      'unknown_meaning_density': 0.03,
+      'unassessed_density': 0.01,
+      'known_not_recognized_density': 0.06,
+      'syntax_depth': 5.0,
+      'replay_density': null,
+    },
+    'feature_coverage': {
+      'total_features': 18,
+      'available_features': 12,
+      'coverage_ratio': 0.6666667,
+      'missing_features': ['replay_density', 'lookup_density'],
+    },
   };
 
   group('ContentDifficultyProfile', () {
@@ -50,7 +69,14 @@ void main() {
       ]);
       expect(profile.evidenceGrade, 'initial_estimate');
       expect(profile.usageCalibrated, isFalse);
-      expect(profile.algorithmVersion, 'content-fit-v2');
+      expect(profile.algorithmVersion, 'content-fit-v3');
+      expect(profile.meaning.score, closeTo(0.2, 1e-9));
+      expect(profile.meaning.signals.first.contribution, closeTo(0.12, 1e-9));
+      expect(profile.featureSnapshot!.value('syntax_depth'), 5.0);
+      expect(
+        profile.featureCoverage!.missingFeatures,
+        contains('replay_density'),
+      );
     });
 
     test('golden target derivation: meaning easy x sound hard', () {
