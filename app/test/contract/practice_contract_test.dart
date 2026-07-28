@@ -10,14 +10,15 @@ void main() {
       'submitted_at_ms': 10,
       'input': {'text': 'hello'},
       'result': 'partial',
-      'score': 0.5,
+      'score': 2 / 3,
       'evaluation': {
-        'summary': '1/2 tokens matched',
+        'summary': '2/3 tokens matched',
         'token_results': [
           {'expected': 'hello', 'actual': 'hello', 'result': 'correct'},
+          {'expected': 'goes', 'actual': 'go', 'result': 'equivalent'},
           {'expected': 'world', 'actual': null, 'result': 'missing'},
         ],
-        'extra': {'expected_token_count': 2},
+        'extra': {'expected_token_count': 3},
       },
       'generated_observation_ids': ['obs-1'],
       'generated_review_item_ids': ['review-1'],
@@ -25,6 +26,7 @@ void main() {
 
     expect(attempt.id, 'attempt-1');
     expect(attempt.result, 'partial');
+    expect(attempt.evaluation.tokenResults[1].result, 'equivalent');
     expect(attempt.evaluation.tokenResults.last.result, 'missing');
     expect(attempt.generatedObservationIds, ['obs-1']);
     expect(attempt.generatedReviewItemIds, ['review-1']);

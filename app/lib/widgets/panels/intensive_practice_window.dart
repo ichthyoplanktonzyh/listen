@@ -823,6 +823,8 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   String _diffLabel(PracticeTokenEvaluation token) => switch (token.result) {
     'correct' => token.expected ?? token.actual ?? '',
+    'equivalent' =>
+      '${token.actual ?? ''} ≈ ${token.expected ?? ''}',
     'missing' => '- ${token.expected ?? ''}',
     'extra' => '+ ${token.actual ?? ''}',
     'mismatch' =>
@@ -832,6 +834,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   Color _resultColor(String result) => switch (result) {
     'correct' => Theme.of(context).colorScheme.primary,
+    'equivalent' => Theme.of(context).colorScheme.primary,
     'missing' => Theme.of(context).colorScheme.secondary,
     'extra' => Theme.of(context).colorScheme.tertiary,
     'mismatch' => Theme.of(context).colorScheme.error,
