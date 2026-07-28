@@ -1,0 +1,196 @@
+<title>listen · 动效语言</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    /* motion tokens — the deliverable; copy these into #32 */
+    --dur-tap:90ms; --dur-hover:160ms; --dur-base:240ms; --dur-slow:360ms;
+    --dur-ambient:2600ms;
+    --ease-enter:cubic-bezier(.2,.8,.2,1);   /* decelerate · settle in */
+    --ease-exit:cubic-bezier(.4,0,1,1);       /* accelerate · leave */
+    --ease-move:cubic-bezier(.4,0,.2,1);      /* standard · reposition */
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:58ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+
+  .sec{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);
+    font-weight:700;margin:48px 0 16px}
+
+  /* token tables */
+  .tok{width:100%;border-collapse:collapse;font-size:14px}
+  .tok td{padding:10px 0;border-bottom:1px solid var(--hair);vertical-align:top}
+  .tok td.k{font-family:var(--mono);color:var(--teal);white-space:nowrap;width:150px}
+  .tok td.v{font-family:var(--mono);color:var(--muted);white-space:nowrap;width:190px}
+  .tok td.d{color:var(--muted)}
+  @media(max-width:640px){.tok td.v{display:none}}
+
+  .demos{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+  @media(max-width:720px){.demos{grid-template-columns:1fr}}
+  .demo{background:var(--raised);border:1px solid var(--hair);border-radius:14px;overflow:hidden}
+  .demo .stage{background:radial-gradient(120% 100% at 50% 20%, #24312c 0%, var(--ground2) 75%);
+    height:150px;display:flex;align-items:center;justify-content:center;position:relative;padding:16px}
+  .demo .cap{padding:14px 16px 16px}
+  .demo .t{font-size:14.5px;font-weight:700;margin-bottom:4px}
+  .demo .s{font-size:12.5px;color:var(--muted)}
+  .demo .s code{font-family:var(--mono);color:var(--teal);font-size:11.5px}
+
+  /* demo 1 · current-word power-on */
+  .sent{font-size:20px;font-weight:600;text-align:center;color:#c1cdc8}
+  .sent .w{transition:none;color:#6f7f79}
+  .sent .w.g{animation:powerword 8s infinite}
+  .sent .w:nth-child(1){animation-delay:0s}
+  .sent .w:nth-child(2){animation-delay:2s}
+  .sent .w:nth-child(3){animation-delay:4s}
+  .sent .w:nth-child(4){animation-delay:6s}
+  @keyframes powerword{
+    0%{color:#6f7f79;text-shadow:none}
+    3%{color:var(--teal);text-shadow:0 0 18px #4db8a877}
+    20%{color:var(--teal);text-shadow:0 0 18px #4db8a877}
+    26%{color:#6f7f79;text-shadow:none}
+    100%{color:#6f7f79;text-shadow:none}
+  }
+
+  /* demo 2 · rhythm beat breath */
+  .rib{display:flex;align-items:flex-end;gap:8px;height:56px}
+  .rib .b{width:12px;border-radius:3px;background:var(--teal-dim)}
+  .rib .b.st{background:var(--teal)}
+  .rib .b.cur{background:linear-gradient(var(--teal),#7fe0d1);animation:breath var(--dur-ambient) ease-in-out infinite}
+  @keyframes breath{0%,100%{opacity:.72;box-shadow:0 0 0 #0000}50%{opacity:1;box-shadow:0 0 14px -2px #4db8a8aa}}
+
+  /* demo 3 · chrome recede (hover to reveal transport) */
+  .player{width:100%;height:100%;border-radius:10px;position:relative;overflow:hidden;
+    background:linear-gradient(160deg,#1c2622,#0f1614);border:1px solid var(--hair)}
+  .player .word{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:17px;color:var(--teal);text-shadow:0 0 16px #4db8a866}
+  .player .bar{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;gap:9px;
+    padding:9px 12px;background:#0e1513e0;border-top:1px solid var(--hair);
+    opacity:0;transform:translateY(6px);
+    transition:opacity var(--dur-base) var(--ease-enter),transform var(--dur-base) var(--ease-enter)}
+  .player:hover .bar,.player:focus-within .bar{opacity:1;transform:translateY(0)}
+  .player .bar .p{width:26px;height:26px;border-radius:50%;background:var(--teal);flex:none}
+  .player .bar .ln{flex:1;height:3px;background:#33413b;border-radius:2px;position:relative}
+  .player .bar .ln::after{content:"";position:absolute;left:0;top:0;bottom:0;width:40%;background:var(--teal);border-radius:2px}
+
+  /* demo 4 · content settle-in (auto loop) */
+  .settle{width:78%;animation:settle 4s var(--ease-enter) infinite}
+  .settle .row{height:12px;border-radius:4px;background:#33413b;margin:8px 0}
+  .settle .row.a{width:60%;background:#43554e}
+  @keyframes settle{
+    0%{opacity:0;transform:translateY(10px)}
+    12%{opacity:1;transform:translateY(0)}
+    80%{opacity:1;transform:translateY(0)}
+    92%{opacity:0;transform:translateY(0)}
+    100%{opacity:0;transform:translateY(10px)}
+  }
+
+  .never{background:#241a1a55;border:1px solid #4a2f2f;border-radius:12px;padding:16px 18px;margin-top:8px}
+  .never .t{font-size:14px;font-weight:700;color:#ef9a9a;margin-bottom:6px}
+  .never ul{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted)}
+  .never li{margin:3px 0}
+
+  .rm{font-size:13px;color:var(--faint);margin-top:22px;padding-left:14px;border-left:2px solid var(--teal-dim)}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+    .player .bar{opacity:1;transform:none}
+    .settle{opacity:1;transform:none}
+  }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · 动效语言</div>
+  <h1>像在<span style="color:var(--teal)">安定</span>，不在表演</h1>
+  <p class="lede">一句话：<b>内容靠「通电/落定」出现，外壳靠「退后」消失，绝不弹跳。</b>
+    动效稀疏、功能性、安静——它是原则 2「让内容发光」和原则 5「做减法」的时间版本。
+    下面每个 demo 都在实时跑，数值可直接抄进 #32。</p>
+
+  <div class="sec">动效 token（#32 的 motion tokens）</div>
+  <table class="tok">
+    <tr><td class="k">--dur-tap</td><td class="v">90ms</td><td class="d">按下、开关的即时反馈</td></tr>
+    <tr><td class="k">--dur-hover</td><td class="v">160ms</td><td class="d">悬停、小状态变化、控件淡入</td></tr>
+    <tr><td class="k">--dur-base</td><td class="v">240ms</td><td class="d">内容切换、当前词通电、面板落定</td></tr>
+    <tr><td class="k">--dur-slow</td><td class="v">360ms</td><td class="d">工作台展开、整页切换、外壳退场</td></tr>
+    <tr><td class="k">--dur-ambient</td><td class="v">2600ms</td><td class="d">节奏拍呼吸、wordmark 呼吸——活着但不吵</td></tr>
+    <tr><td class="k">--ease-enter</td><td class="v">(.2,.8,.2,1)</td><td class="d">减速落定，<b style="color:var(--ink)">无过冲</b>。内容进场用它</td></tr>
+    <tr><td class="k">--ease-exit</td><td class="v">(.4,0,1,1)</td><td class="d">加速离场。外壳退出用它</td></tr>
+    <tr><td class="k">--ease-move</td><td class="v">(.4,0,.2,1)</td><td class="d">标准，位置移动</td></tr>
+  </table>
+
+  <div class="sec">四个签名动作（实时）</div>
+  <div class="demos">
+    <div class="demo">
+      <div class="stage">
+        <div class="sent">
+          <span class="w g">I've</span> <span class="w g">been</span>
+          <span class="w g">meaning</span> <span class="w g">to…</span>
+        </div>
+      </div>
+      <div class="cap"><div class="t">当前词通电</div>
+        <div class="s">随播放推进，当前词染青 + 柔光淡入 <code>240ms · ease-enter</code>，
+          离开时 <code>160ms</code> 淡出。不放大、不弹。</div></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage">
+        <div class="rib">
+          <div class="b" style="height:20px"></div>
+          <div class="b st" style="height:44px"></div>
+          <div class="b" style="height:16px"></div>
+          <div class="b cur" style="height:34px"></div>
+          <div class="b st" style="height:28px"></div>
+          <div class="b" style="height:18px"></div>
+        </div>
+      </div>
+      <div class="cap"><div class="t">节奏拍呼吸</div>
+        <div class="s">当前拍在 <code>2600ms · ease-in-out</code> 里轻轻呼吸（透明度 + 柔光），
+          活着但不抢戏。不是跳高。</div></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage">
+        <div class="player" tabindex="0">
+          <div class="word">meaning</div>
+          <div class="bar"><span class="p"></span><span class="ln"></span></div>
+        </div>
+      </div>
+      <div class="cap"><div class="t">外壳退后（悬停/聚焦看）</div>
+        <div class="s">鼠标静止→控件 <code>240ms</code> 淡出退场，画面只剩内容；移动/悬停→
+          <code>160ms</code> 淡入。<b>把鼠标移上去试试。</b></div></div>
+    </div>
+
+    <div class="demo">
+      <div class="stage">
+        <div class="settle">
+          <div class="row"></div><div class="row"></div><div class="row a"></div>
+        </div>
+      </div>
+      <div class="cap"><div class="t">内容落定</div>
+        <div class="s">面板/内容进场：淡入 + 上移 8px <code>240ms · ease-enter</code>，
+          「落」进来而不是「滑」过来。绝不横向飞入。</div></div>
+    </div>
+  </div>
+
+  <div class="sec">禁止</div>
+  <div class="never">
+    <div class="t">这些一旦出现，就不是 listen 了</div>
+    <ul>
+      <li>弹跳 / 橡皮筋 / 过冲（back、elastic 曲线）——那是玩具，违反「诚实的仪器」。</li>
+      <li>庆祝式动效：连胜、撒花、弹窗跳动——违反「不催促、不讨好」。</li>
+      <li>装饰性 loading 转圈、无意义的入场大动作。</li>
+      <li>抢注意力的动效：真正重要的是内容，动效只负责让内容安静地到位。</li>
+    </ul>
+  </div>
+
+  <p class="rm">全部动效尊重 <code style="font-family:var(--mono);color:var(--teal)">prefers-reduced-motion</code>：
+    开启后所有动画/过渡降级为即时，环境呼吸停止，控件常显——本页此刻也遵守这条（打开系统「减弱动态效果」再看）。</p>
+</div>

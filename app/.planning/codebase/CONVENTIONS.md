@@ -12,4 +12,5 @@
 - New visible behavior adds controller/widget tests and considers accessibility,
   responsiveness and reduced motion.
 - Vendored/generated files are not casually edited; provenance is preserved.
-- Conventional Commits, exact-minute changelog, one coherent PR.
+- Conventional Commits and one coherent PR per task. Changelog updates are
+  release-only.

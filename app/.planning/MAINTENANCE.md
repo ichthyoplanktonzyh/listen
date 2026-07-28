@@ -10,7 +10,7 @@
 | `STATE.md` | 当前体验状态、pinned core、下一步 | 每个有效工作切片 |
 | `MILESTONES.md` | 已完成 frontend phase 索引 | phase/milestone 收口 |
 | `codebase/*` | 当前 Flutter 代码事实 | 架构或结构改变 |
-| `CHANGELOG.md` | 每次提交的事实历史 | 每个 commit-worthy change |
+| `CHANGELOG.md` | 已发布、人工整理的历史 | release 收口 |
 
 ## 维护规则
 
@@ -20,7 +20,9 @@
 - `STATE.md` 保持简短；不复制 changelog，不记录瞬时分支状态。
 - `codebase/` 从当前 `lib/`、`macos/`、`tool/`、`test/` 更新。
 - 完成的 phase 写 `CLOSEOUT.md` 后冻结。
-- 每个 commit-worthy change 在根 `CHANGELOG.md` 添加精确到分钟的时间戳。
+- 普通 feature、fix、refactor、planning、docs 分支不修改根 `CHANGELOG.md`。
+- 发布负责人在发布 app version 时，根据已合并 PR 一次性整理 `CHANGELOG.md`；重点记录
+  用户可见功能、修复、兼容性、迁移与已知限制。
 
 ## Frontend Phase 生命周期
 

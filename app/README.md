@@ -6,9 +6,46 @@ The UI repository is independently versioned from `listen-core`. Its exact API
 contract and backend runtime are pinned in `backend.lock.json`; no sibling
 checkout or moving backend branch is read during build.
 
+## Run the complete app locally
+
+Run from the `listen-app` repository root so the app can find the pinned
+sidecar under `.backend/`.
+
+First setup, or after `backend.lock.json` changes:
+
 ```sh
-python3 tool/backend_artifacts.py install
+flutter pub get
+GITHUB_TOKEN="$(gh auth token)" python3 tool/backend_artifacts.py install
+python3 tool/backend_artifacts.py verify
+```
+
+The token is passed only to the installer process. Then start the complete
+desktop app:
+
+```sh
 flutter run -d macos
+```
+
+The Flutter client automatically starts the installed `api-http` sidecar,
+reads its loopback address and one-time token from the startup handshake, and
+stops it when the app closes. Backend logs are written to
+`~/Library/Logs/listen/core.log`.
+
+For later runs, verify and start:
+
+```sh
+python3 tool/backend_artifacts.py verify
+flutter run -d macos
+```
+
+To test current, unreleased local backend code instead of the pinned release:
+
+```sh
+cd /Users/shadow/listen-core
+cargo build -p api-http
+cd /Users/shadow/listen-app
+LLPLAYERNEXT_API_BINARY=/Users/shadow/listen-core/target/debug/api-http \
+  flutter run -d macos
 ```
 
 For private core releases, provide a read token as `GITHUB_TOKEN`, or pass
