@@ -278,6 +278,8 @@ paths:
         default:
           $ref: "#/components/responses/Error"
   /v1/subtitles/{track_id}/export:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: exportSubtitle
       parameters:
@@ -286,6 +288,8 @@ paths:
       responses:
         "200": { description: Generated SRT subtitle }
   /v1/subtitles/{track_id}/content-fit:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackContentFit
       description: >-
@@ -318,6 +322,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/CalibrationSample" }
   /v1/subtitles/{track_id}/cold-start-words:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: coldStartWords
       description: >-
@@ -388,23 +394,29 @@ paths:
     post:
       operationId: analyzeSentencePronunciation
       responses:
-        "200": { description: Sentence pronunciation, token mapping, and rule hints }
+        "200": { description: "Sentence pronunciation, token mapping, and rule hints" }
   /v1/pronunciation/rules:
     get:
       operationId: pronunciationRules
       responses:
         "200": { description: Deterministic rule analyzer metadata and disclaimer }
   /v1/subtitles/{track_id}/pronunciation:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackPronunciation
       responses:
         "200": { description: Cached or generated pronunciation analyses for a track }
   /v1/subtitles/{track_id}/pronunciation-analysis:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: generateTrackPronunciation
       responses:
         "200": { description: Generated pronunciation analyses for a track }
   /v1/subtitles/{track_id}/word-timings:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackWordTimings
       responses:
@@ -426,6 +438,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/WordTiming" }
   /v1/subtitles/{track_id}/word-timelines:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackWordTimelines
       responses:
@@ -452,6 +466,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
   /v1/subtitles/{track_id}/word-timelines/summary:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackWordTimelineSummaries
       responses:
@@ -463,6 +479,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/WordTimelineSummary" }
   /v1/subtitles/{track_id}/lltimeline/export:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: exportTrackLLTimeline
       responses:
@@ -473,6 +491,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/LLTimelineDocument"
   /v1/word-timelines/{timeline_id}:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: wordTimeline
       responses:
@@ -492,6 +512,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/activate:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: activateWordTimeline
       responses:
@@ -502,6 +524,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/publish:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: publishWordTimeline
       responses:
@@ -512,6 +536,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/archive:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: archiveWordTimeline
       responses:
@@ -522,6 +548,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
   /v1/word-timelines/{timeline_id}/export:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: exportWordTimeline
       responses:
@@ -532,16 +560,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/WordTimeline"
   /v1/subtitles/{track_id}/word-timing-diagnostics:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackWordTimingDiagnostics
       responses:
         "200": { description: Developer-facing inter-word gaps with timing source and provider provenance }
   /v1/subtitles/{track_id}/chunk-partitions:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackChunkPartitions
       responses:
         "200": { description: Product-facing complete chunk partitions for a subtitle track }
   /v1/subtitles/{track_id}/chunk-diagnostics:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackChunkDiagnostics
       responses:
@@ -550,8 +584,10 @@ paths:
     get:
       operationId: chunkProviders
       responses:
-        "200": { description: Optional learned chunk evidence providers, revisions, runtimes, and licenses }
+        "200": { description: "Optional learned chunk evidence providers, revisions, runtimes, and licenses" }
   /v1/subtitles/{track_id}/chunk-timelines:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackChunkTimelines
       responses:
@@ -578,6 +614,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChunkTimeline"
   /v1/subtitles/{track_id}/chunk-timelines/summary:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackChunkTimelineSummaries
       responses:
@@ -589,6 +627,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/ChunkTimelineSummary" }
   /v1/chunk-timelines/{timeline_id}:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: chunkTimeline
       responses:
@@ -608,6 +648,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChunkTimeline"
   /v1/chunk-timelines/{timeline_id}/activate:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: activateChunkTimeline
       responses:
@@ -618,6 +660,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChunkTimeline"
   /v1/chunk-timelines/{timeline_id}/archive:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: archiveChunkTimeline
       responses:
@@ -628,6 +672,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChunkTimeline"
   /v1/chunk-timelines/{timeline_id}/export:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: exportChunkTimeline
       responses:
@@ -638,6 +684,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChunkTimeline"
   /v1/subtitles/{track_id}/sense-group-analyses:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackSenseGroupAnalyses
       responses:
@@ -664,6 +712,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/SenseGroupAnalysis"
   /v1/subtitles/{track_id}/sense-group-analyses/summary:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackSenseGroupAnalysisSummaries
       responses:
@@ -675,6 +725,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/SenseGroupAnalysisSummary" }
   /v1/subtitles/{track_id}/syntactic-consumers:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: runSyntacticConsumers
       description: Runs the optional qualified syntax provider once for the track and shares per-sentence artifacts across Reference B, SenseGroup, and dependency candidate matching; unavailable or invalid syntax returns explicit existing fallbacks.
@@ -696,6 +748,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/SyntacticConsumerBatch"
   /v1/subtitles/{track_id}/syntax-analysis:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackSyntaxAnalysisStatus
       responses:
@@ -755,6 +809,8 @@ paths:
   /v1/syntax/capability/update:
     post: { operationId: updateSyntaxCapability, responses: { "200": { description: Capability update started } } }
   /v1/sense-group-analyses/{analysis_id}:
+    parameters:
+      - { name: analysis_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: senseGroupAnalysis
       responses:
@@ -774,6 +830,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/SenseGroupAnalysis"
   /v1/sense-group-analyses/{analysis_id}/activate:
+    parameters:
+      - { name: analysis_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: activateSenseGroupAnalysis
       responses:
@@ -784,6 +842,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/SenseGroupAnalysis"
   /v1/sense-group-analyses/{analysis_id}/archive:
+    parameters:
+      - { name: analysis_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: archiveSenseGroupAnalysis
       responses:
@@ -794,6 +854,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/SenseGroupAnalysis"
   /v1/subtitles/{track_id}/phone-timelines:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackPhoneTimelines
       responses:
@@ -805,6 +867,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/PhoneTimeline" }
   /v1/subtitles/{track_id}/phone-timelines/summary:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackPhoneTimelineSummaries
       responses:
@@ -816,6 +880,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/PhoneTimelineSummary" }
   /v1/phone-timelines/{timeline_id}:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: phoneTimeline
       responses:
@@ -835,6 +901,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/PhoneTimeline"
   /v1/phone-timelines/{timeline_id}/activate:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: activatePhoneTimeline
       responses:
@@ -845,6 +913,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/PhoneTimeline"
   /v1/phone-timelines/{timeline_id}/archive:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: archivePhoneTimeline
       responses:
@@ -855,6 +925,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/PhoneTimeline"
   /v1/phone-timelines/{timeline_id}/export:
+    parameters:
+      - { name: timeline_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: exportPhoneTimeline
       responses:
@@ -874,16 +946,22 @@ paths:
       responses:
         "200": { description: Queued non-blocking pronunciation or word timing job }
   /v1/speech/jobs/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: speechBatchJob
       responses:
         "200": { description: Speech enhancement batch job status }
   /v1/speech/jobs/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelSpeechBatchJob
       responses:
         "200": { description: Cancelled speech enhancement batch job }
   /v1/speech/jobs/{job_id}/retry:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: retrySpeechBatchJob
       responses:
@@ -898,16 +976,22 @@ paths:
       responses:
         "200": { description: Queued background sound-line enrichment job }
   /v1/sound-line/jobs/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: soundLineJob
       responses:
         "200": { description: Sound-line job status }
   /v1/sound-line/jobs/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelSoundLineJob
       responses:
         "200": { description: Cancelled sound-line job }
   /v1/sound-line/jobs/{job_id}/retry:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: retrySoundLineJob
       responses:
@@ -956,6 +1040,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
   /v1/lexical-entries/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: lexicalEntryDetails
       parameters:
@@ -967,6 +1053,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
   /v1/lexical-entries/{id}/capability-profile:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: getCapabilityProfile
       parameters:
@@ -978,6 +1066,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalCapabilityProfile" }
   /v1/lexical-entries/{id}/observations:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: listLearningObservationHistory
       parameters:
@@ -992,6 +1082,8 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/LearningObservation" } }
   /v1/lexical-entries/{id}/capability/{capability}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     put:
       operationId: setCapabilityOverride
       parameters:
@@ -1020,6 +1112,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalCapabilityProfile" }
   /v1/lexical-entries/{id}/learning-content:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     put:
       operationId: updateLexicalLearningContent
       parameters:
@@ -1036,6 +1130,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LexicalEntryDetails" }
   /v1/lexical-entries/{entry_id}/sense-folders:
+    parameters:
+      - { name: entry_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: createLexicalSenseFolder
       parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }]
@@ -1044,6 +1140,9 @@ paths:
         content: { application/json: { schema: { $ref: "#/components/schemas/UpsertLexicalSenseFolder" } } }
       responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
   /v1/lexical-entries/{entry_id}/sense-folders/{sense_id}:
+    parameters:
+      - { name: entry_id, in: path, required: true, schema: { type: string } }
+      - { name: sense_id, in: path, required: true, schema: { type: string } }
     put:
       operationId: updateLexicalSenseFolder
       parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }]
@@ -1056,6 +1155,10 @@ paths:
       parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }]
       responses: { "200": { description: Updated lexical entry details, content: { application/json: { schema: { $ref: "#/components/schemas/LexicalEntryDetails" } } } } }
   /v1/lexical-entries/{entry_id}/sense-folders/{sense_id}/occurrences/{occurrence_id}:
+    parameters:
+      - { name: entry_id, in: path, required: true, schema: { type: string } }
+      - { name: occurrence_id, in: path, required: true, schema: { type: string } }
+      - { name: sense_id, in: path, required: true, schema: { type: string } }
     put:
       operationId: assignLexicalSenseFolderOccurrence
       parameters: [{ name: entry_id, in: path, required: true, schema: { type: string } }, { name: sense_id, in: path, required: true, schema: { type: string } }, { name: occurrence_id, in: path, required: true, schema: { type: string } }]
@@ -1110,6 +1213,8 @@ paths:
               schema: { $ref: "#/components/schemas/LexicalNormalization" }
         "409": { $ref: "#/components/responses/Error" }
   /v1/sentences/{sentence_id}/phrase-candidates:
+    parameters:
+      - { name: sentence_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: phraseCandidates
       parameters:
@@ -1135,6 +1240,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PracticeSession" }
   /v1/listening/sessions/{id}/complete:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: completeListeningSession
       parameters:
@@ -1179,6 +1286,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/PracticeAttempt" }
   /v1/practice/attempts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: practiceAttempt
       parameters:
@@ -1218,6 +1327,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingAsset" }
   /v1/recordings/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: recordingAsset
       parameters:
@@ -1239,6 +1350,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingAsset" }
   /v1/recordings/{id}/audio-facts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: recordingAudioFacts
       parameters:
@@ -1250,6 +1363,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingAudioFacts" }
   /v1/recordings/{id}/shadowing-analysis:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: latestShadowingAnalysis
       parameters:
@@ -1275,6 +1390,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
   /v1/recording-transcriptions/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: recordingTranscriptionJob
       parameters:
@@ -1286,6 +1403,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RecordingTranscriptionJob" }
   /v1/recording-transcriptions/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelRecordingTranscription
       parameters:
@@ -1339,6 +1458,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ListeningInboxItem" }
   /v1/listening-inbox/items/{id}/process:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: processListeningInboxItem
       parameters:
@@ -1448,6 +1569,8 @@ paths:
                         status: { enum: [configured, not_configured] }
                         reason: { type: string }
   /v1/coach/materials/{media_id}/graduate:
+    parameters:
+      - { name: media_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: graduateCoachMaterial
       parameters:
@@ -1647,6 +1770,8 @@ paths:
         default:
           $ref: "#/components/responses/Error"
   /v1/semantic/rubrics/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: semanticRubric
       parameters:
@@ -1659,6 +1784,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticRubric" }
   /v1/semantic/rubrics/{id}/attempts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: semanticRubricAttempts
       parameters:
@@ -1706,6 +1833,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
   /v1/semantic/attempts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: semanticAttempt
       parameters:
@@ -1717,6 +1846,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticTaskAttempt" }
   /v1/semantic/writing-drafts/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: writingDraft
       description: Reads mutable crash-recovery text for a rubric; this projection is not learning evidence.
@@ -1758,6 +1889,8 @@ paths:
       responses:
         "204": { description: Draft removed }
   /v1/semantic/attempts/{id}/writing-findings:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: writingFindings
       parameters:
@@ -1797,6 +1930,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/WritingFeedbackFinding" }
   /v1/semantic/attempts/{id}/writing-findings/local:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: generateLocalWritingFindings
       description: Runs the bundled offline rule checker only after an explicit learner request and appends revision-bound heuristic findings.
@@ -1820,6 +1955,8 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/WritingFeedbackFinding" }
   /v1/semantic/attempts/{id}/speaking-targets:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: confirmSpeakingTarget
       description: User confirms a literal lexical target produced in a completed constructed-speaking response.
@@ -1839,6 +1976,8 @@ paths:
       responses:
         "204": { description: Idempotent speaking observation appended }
   /v1/semantic/attempts/{id}/judgments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: semanticAttemptJudgments
       parameters:
@@ -1885,6 +2024,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SemanticJudgment" }
   /v1/semantic/judgments/{id}/adjudications:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: semanticJudgmentAdjudications
       parameters:
@@ -1924,6 +2065,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/JudgmentAdjudication" }
   /v1/semantic/writing-findings/{id}/dispositions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: writingFindingDispositions
       parameters:
@@ -1985,6 +2128,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
   /v1/realtime/providers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     delete:
       operationId: deleteRealtimeProvider
       parameters:
@@ -2023,6 +2168,8 @@ paths:
       responses:
         "200": { description: Saved local session fact }
   /v1/realtime/sessions/{id}/turns:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: listRealtimeSessionTurns
       description: Lists both roles by local monotonic sequence for history replay.
@@ -2353,6 +2500,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/HuntingTarget" }
   /v1/hunting/targets/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     delete:
       operationId: archiveHuntingTarget
       parameters:
@@ -2417,6 +2566,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewItem" }
   /v1/review/items/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: reviewItem
       parameters:
@@ -2428,6 +2579,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ReviewItem" }
   /v1/review/items/{id}/interval-preview:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: reviewIntervalPreview
       parameters:
@@ -2582,6 +2735,8 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/UpgradeSuggestion" } }
   /v1/review/upgrade-suggestions/{id}/confirm:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: confirmUpgradeSuggestion
       parameters:
@@ -2593,6 +2748,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/UpgradeSuggestion" }
   /v1/review/upgrade-suggestions/{id}/reject:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: rejectUpgradeSuggestion
       parameters:
@@ -2628,6 +2785,8 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/ProjectionAudit" } }
   /v1/projections/entries/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: listProjectionProposals
       parameters:
@@ -2649,6 +2808,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ProjectionAudit" }
   /v1/projections/proposals/{id}/decision:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: decideProjectionProposal
       parameters:
@@ -2679,6 +2840,8 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/LearningResource" } }
   /v1/learning-resources/{id}/install:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     post:
       operationId: installLearningResource
       parameters:
@@ -2690,6 +2853,8 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/LearningResource" }
   /v1/learning-resources/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     delete:
       operationId: removeLearningResource
       parameters:
@@ -2860,6 +3025,8 @@ paths:
       responses:
         "204": { description: Explicitly deleted pattern and its own history }
   /v1/personal-expression/patterns/{id}/versions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: sentencePatternVersions
       parameters:
@@ -2871,6 +3038,8 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: "#/components/schemas/UserSentencePatternVersion" } }
   /v1/personal-expression/patterns/{id}/attempts:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
     get:
       operationId: personalExpressionAttempts
       parameters:
@@ -3214,11 +3383,15 @@ paths:
       responses:
         "200": { description: Custom model registered }
   /v1/transcription/models/{model_id}/cancel-install:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelTranscriptionModelInstall
       responses:
         "200": { description: Model installation cancelled }
   /v1/transcription/models/{model_id}:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
     delete:
       operationId: deleteTranscriptionModel
       responses:
@@ -3233,21 +3406,29 @@ paths:
       responses:
         "200": { description: Queued or idempotently reused transcription job }
   /v1/transcription/jobs/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: transcriptionJob
       responses:
         "200": { description: Durable transcription job }
   /v1/transcription/jobs/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelTranscriptionJob
       responses:
         "200": { description: Cancelled transcription job }
   /v1/transcription/jobs/{job_id}/retry:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: retryTranscriptionJob
       responses:
         "200": { description: Retried transcription job }
   /v1/transcription/jobs/{job_id}/archive:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: archiveTranscriptionJob
       responses:
@@ -3261,7 +3442,7 @@ paths:
     get:
       operationId: phoneticAnalysisModels
       responses:
-        "200": { description: Phonetic model catalog, provenance, licensing, and state }
+        "200": { description: "Phonetic model catalog, provenance, licensing, and state" }
   /v1/phonetic-analysis/models/install:
     post:
       operationId: installPhoneticAnalysisModel
@@ -3273,11 +3454,15 @@ paths:
       responses:
         "200": { description: Registered custom phonetic model }
   /v1/phonetic-analysis/models/{model_id}/cancel-install:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelPhoneticAnalysisModelInstall
       responses:
         "200": { description: Cancelled phonetic model installation }
   /v1/phonetic-analysis/models/{model_id}:
+    parameters:
+      - { name: model_id, in: path, required: true, schema: { type: string } }
     delete:
       operationId: deletePhoneticAnalysisModel
       responses:
@@ -3305,31 +3490,47 @@ paths:
                 properties:
                   deleted: { type: integer, minimum: 0 }
   /v1/phonetic-analysis/jobs/{job_id}:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: phoneticAnalysisJob
       responses:
         "200": { description: Durable phonetic analysis job }
+    delete:
+      operationId: deletePhoneticAnalysisJob
+      responses:
+        "204": { description: Deleted terminal phonetic analysis job }
   /v1/phonetic-analysis/jobs/{job_id}/cancel:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelPhoneticAnalysisJob
       responses:
         "200": { description: Cancelled phonetic analysis job }
   /v1/phonetic-analysis/jobs/{job_id}/retry:
+    parameters:
+      - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: retryPhoneticAnalysisJob
       responses:
         "200": { description: Retried phonetic analysis job }
   /v1/subtitles/{track_id}/phonetic-analyses:
+    parameters:
+      - { name: track_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: trackPhoneticAnalyses
       responses:
         "200": { description: Versioned detected-phone timelines and analyses }
   /v1/phonetic-analysis/{analysis_id}/findings:
+    parameters:
+      - { name: analysis_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: phoneticAnalysisFindings
       responses:
         "200": { description: Explainable findings for one phonetic analysis }
   /v1/phonetic-analysis/findings/{finding_id}/feedback:
+    parameters:
+      - { name: finding_id, in: path, required: true, schema: { type: string } }
     put:
       operationId: updatePhoneticFindingFeedback
       responses:
@@ -3429,10 +3630,12 @@ components:
         updated_at_ms: { type: integer, minimum: 0 }
     Health:
       type: object
-      required: [status, api_version]
+      required: [status, api_version, contract_version, runtime_version]
       properties:
         status: { const: ok }
         api_version: { const: 1 }
+        contract_version: { type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$' }
+        runtime_version: { type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$' }
     RegisterMedia:
       type: object
       required: [path, fingerprint, title, kind]
@@ -4398,7 +4601,6 @@ components:
       required: [original_form, sentence_text, media_title, media_fingerprint, start_ms, end_ms]
       properties:
         media_id: { type: [string, "null"] }
-        media_fingerprint: { type: [string, "null"] }
         sentence_id: { type: [string, "null"] }
         original_form: { type: string }
         sentence_text: { type: string }

@@ -3,7 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use api_http::{ApiState, KeychainSecretStore, SyntaxCapabilityManager, router};
+use api_http::{
+    API_VERSION, ApiState, CONTRACT_VERSION, KeychainSecretStore, SyntaxCapabilityManager, router,
+};
 use application::AppServices;
 use embedding_provider::ManagedFastEmbedProvider;
 use local_runtime::SpeechSynthesisManager;
@@ -84,6 +86,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::json!({
             "event": "api.started",
             "version": env!("CARGO_PKG_VERSION"),
+            "runtime_version": env!("CARGO_PKG_VERSION"),
+            "contract_version": CONTRACT_VERSION,
+            "api_version": API_VERSION,
             "platform": env::consts::OS,
             "address": address.to_string(),
             "token": token,
@@ -98,6 +103,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         serde_json::json!({
             "event": "api.stopped",
             "version": env!("CARGO_PKG_VERSION"),
+            "runtime_version": env!("CARGO_PKG_VERSION"),
+            "contract_version": CONTRACT_VERSION,
+            "api_version": API_VERSION,
             "platform": env::consts::OS
         })
     );

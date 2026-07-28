@@ -124,6 +124,14 @@ fn sidecar_shuts_down_gracefully_on_sigint() {
         handshake.contains("api.started"),
         "unexpected handshake: {handshake}"
     );
+    let handshake_json: serde_json::Value =
+        serde_json::from_str(&handshake).expect("handshake must be JSON");
+    assert_eq!(handshake_json["api_version"], api_http::API_VERSION);
+    assert_eq!(
+        handshake_json["contract_version"],
+        api_http::CONTRACT_VERSION
+    );
+    assert_eq!(handshake_json["runtime_version"], env!("CARGO_PKG_VERSION"));
 
     // What `LocalApi.requestStop` sends from the app's dispose().
     // SAFETY: signalling a child this test spawned.

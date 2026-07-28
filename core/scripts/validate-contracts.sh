@@ -5,6 +5,12 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+python3 -m unittest "$root/scripts/test_release_artifacts.py"
+python3 "$root/scripts/openapi_contract.py" check
+if command -v openapi-generator >/dev/null 2>&1; then
+  openapi-generator validate -i "$root/contracts/openapi/v1.yaml"
+fi
+
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/check-architecture-coupling.py" \
   "$root/scripts/benchmark-datasets.py" \

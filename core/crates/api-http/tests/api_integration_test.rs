@@ -153,6 +153,8 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
+    assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
+    assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }
 
 #[tokio::test]

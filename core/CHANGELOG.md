@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- 2026-07-28 15:42 CST: Phase 3.19.3 Slice 3 让 Flutter 脱离 monorepo root。
+  `fvp`、contract fixtures、smoke fixtures 与 artifact installer/build/verify tooling 已自包含，
+  不再从 ancestor `target` 或根 `contracts/testdata` 读取；installer 校验 archive/per-file
+  SHA-256、core commit 与 contract/runtime compatibility 后原子安装到 `.backend`。
+  纯 frontend staging analyze + contract tests、locked-artifact Release build 与 packaged
+  macOS smoke 通过。standalone smoke 改用 bundled LGPL FFmpeg 可用的 MPEG-4 encoder，
+  不再隐式要求未打包的 `libx264`。
+
+- 2026-07-28 15:41 CST: Phase 3.19.3 Slices 1–2 建立可拆仓 artifact 路径。
+  `api.started`/Health 新增 API、contract、runtime 版本协商，Flutter 在正常请求前拒绝
+  incompatible core major；OpenAPI parity 从 path 升级为 method + path，并发现/补齐
+  phonetic job DELETE 漂移。修复 canonical spec 的 47 个未声明 path parameters、
+  3 个 flow-description YAML 误解析及重复字段，OpenAPI Generator 7.24.0 validate 通过。
+  新增 deterministic contract/runtime tarball、per-file SHA-256、safe verifier 与源码树外
+  runtime smoke；51MB runtime bundle 已验证 handshake/Health/优雅退出。dart-dio spike
+  在生成 370 files（291 weakly typed）后 build_runner 失败，按 ADR 0031 gate
+  拒绝扩大，未提交生成代码。
+
 - 2026-07-28 15:04 CST: 建立 Phase 3.19.3 前端/Core 版本化拆仓计划。ADR 0031
   确立 `listen-core` 为 canonical contract/runtime bundle owner，`listen-app` 为 Flutter、
   `fvp` 与最终 macOS assembly/release owner；跨仓只暴露 immutable contract release、

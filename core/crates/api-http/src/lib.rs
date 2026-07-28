@@ -50,6 +50,9 @@ pub use secret_store_keychain::KeychainSecretStore;
 
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
+pub const API_VERSION: u16 = 1;
+pub const CONTRACT_VERSION: &str = "1.0.0";
+
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))
 }
@@ -288,12 +291,16 @@ async fn authorize(
 struct Health {
     status: &'static str,
     api_version: u16,
+    contract_version: &'static str,
+    runtime_version: &'static str,
 }
 
 async fn health() -> Json<Health> {
     Json(Health {
         status: "ok",
-        api_version: 1,
+        api_version: API_VERSION,
+        contract_version: CONTRACT_VERSION,
+        runtime_version: env!("CARGO_PKG_VERSION"),
     })
 }
 

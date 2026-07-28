@@ -1,8 +1,0 @@
-# Only track macOS/Darwin platforms and core lib for this project
-example/
-ios/
-android/
-ohos/
-elinux/
-windows/
-linux/

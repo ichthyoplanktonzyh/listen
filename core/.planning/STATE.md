@@ -3,23 +3,26 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: local production engine and lightweight consumer app
 status: active
-last_updated: "2026-07-28T15:04:00.000+08:00"
+last_updated: "2026-07-28T15:41:00.000+08:00"
 ---
 
 # LLPlayerNext — 项目活记忆
 
-> 最后更新：2026-07-28 15:04 CST
-> 更新原因：建立 Phase 3.19.3 前端/Core 版本化拆仓计划与 ADR 0031。
+> 最后更新：2026-07-28 15:41 CST
+> 更新原因：完成 Phase 3.19.3 Slices 1–3 artifact interface 与 standalone frontend 验证。
 
 ## 当前位置
 
-- **Phase 3.19.3 Versioned Frontend / Core Repository Separation**：📋 PLANNED。
+- **Phase 3.19.3 Versioned Frontend / Core Repository Separation**：🚧 ACTIVE。
   ADR 0031 决定以 `listen-core` / `listen-app` 两仓推进，canonical contract 归 core；
   跨仓只暴露不可变 contract release、checksummed runtime bundle 与 app product assembly
   三个 seam。前端固定 `backend.lock`，禁止 CI 拉取移动的 core `main`；Dart codegen 只先做
   wire-layer spike，timeline/SSE 兼容解析继续受 ADR 0014 保护。Slices 1–3 先在当前仓建立
-  external-artifact build path，独立仓通过后才迁移历史；旧仓归档是所有集成/owner gate 通过后的
-  单独授权动作。该阶段是 3.19 retained-product 工程治理，不新增产品功能。详见
+  external-artifact build path，独立仓通过后才迁移历史；Slices 1–3 已完成 version handshake、
+  method-level parity、spec repair、deterministic contract/runtime artifacts、standalone frontend
+  staging 与 packaged smoke。dart-dio spike 未过 static-type/build gate，保持手写 wire client。
+  下一步 materialize 两个历史保留仓库并建立各自 CI/release。旧仓归档是所有集成/owner gate
+  通过后的单独授权动作。该阶段是 3.19 retained-product 工程治理，不新增产品功能。详见
   `.planning/phases/3.19.3-repository-separation/3.19.3-PLAN.md`。
 - **Phase 3.19.2 Backend Runtime Hardening & Interface Deepening**：✅ COMPLETE（2026-07-26）。
   `ApplicationExecutor` 成为 HTTP→同步 application 的唯一阻塞 seam；SSE lag 可恢复；SQLite

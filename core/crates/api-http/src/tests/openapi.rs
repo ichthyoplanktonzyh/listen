@@ -1,14 +1,14 @@
 use super::*;
 
 #[test]
-fn openapi_paths_match_implemented_routes() {
+fn openapi_operations_match_implemented_routes() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
     let router_source = concat!(
         include_str!("../lib.rs"),
         include_str!("../routes/router.rs")
     );
-    let documented = openapi_v1_paths(openapi);
-    let implemented = implemented_v1_paths(router_source);
+    let documented = openapi_v1_operations(openapi);
+    let implemented = implemented_v1_operations(router_source);
 
     let undocumented = implemented
         .difference(&documented)
@@ -20,7 +20,7 @@ fn openapi_paths_match_implemented_routes() {
         .collect::<Vec<_>>();
     assert!(
         undocumented.is_empty() && unimplemented.is_empty(),
-        "OpenAPI route drift\nimplemented but undocumented: {undocumented:#?}\ndocumented but unimplemented: {unimplemented:#?}"
+        "OpenAPI operation drift\nimplemented but undocumented: {undocumented:#?}\ndocumented but unimplemented: {unimplemented:#?}"
     );
 }
 
@@ -113,19 +113,124 @@ fn practice_token_result_openapi_values_match_domain() {
     assert_eq!(documented, format!("enum: [{values}]"));
 }
 
-fn openapi_v1_paths(openapi: &str) -> BTreeSet<String> {
-    openapi
-        .lines()
-        .filter_map(|line| line.strip_prefix("  /v1/"))
-        .filter_map(|line| line.strip_suffix(':'))
-        .map(|path| format!("/v1/{path}"))
-        .collect()
+fn openapi_v1_operations(openapi: &str) -> BTreeSet<(String, String)> {
+    let methods = ["get", "post", "put", "patch", "delete"];
+    let mut path = None;
+    let mut operations = BTreeSet::new();
+    for line in openapi.lines() {
+        if let Some(value) = line
+            .strip_prefix("  /v1/")
+            .and_then(|value| value.strip_suffix(':'))
+        {
+            path = Some(format!("/v1/{value}"));
+            continue;
+        }
+        let Some(current_path) = path.as_ref() else {
+            continue;
+        };
+        if line.starts_with("  ") && !line.starts_with("    ") && line.trim_start().starts_with('/')
+        {
+            path = None;
+            continue;
+        }
+        let trimmed = line.strip_prefix("    ").unwrap_or_default();
+        for method in methods {
+            if trimmed.starts_with(&format!("{method}:")) {
+                operations.insert((method.to_owned(), current_path.clone()));
+            }
+        }
+    }
+    operations
 }
 
 fn implemented_v1_paths(router_source: &str) -> BTreeSet<String> {
-    router_source
-        .split('"')
-        .filter(|value| value.starts_with("/v1/"))
-        .map(str::to_owned)
+    implemented_v1_operations(router_source)
+        .into_iter()
+        .map(|(_, path)| path)
         .collect()
+}
+
+fn implemented_v1_operations(router_source: &str) -> BTreeSet<(String, String)> {
+    let methods = ["get", "post", "put", "patch", "delete"];
+    let mut operations = BTreeSet::new();
+    let mut offset = 0;
+    while let Some(relative_start) = router_source[offset..].find(".route(") {
+        let start = offset + relative_start;
+        let Some(relative_end) = matching_call_end(&router_source[start..]) else {
+            break;
+        };
+        let end = start + relative_end;
+        let call = &router_source[start..end];
+        let Some(path) = call
+            .split('"')
+            .nth(1)
+            .filter(|value| value.starts_with("/v1/"))
+        else {
+            offset = end;
+            continue;
+        };
+        for method in methods {
+            if call.contains(&format!("{method}("))
+                || call.contains(&format!(".{method}("))
+                || call.contains(&format!("routing::{method}("))
+            {
+                operations.insert((method.to_owned(), path.to_owned()));
+            }
+        }
+        offset = end;
+    }
+    operations
+}
+
+fn matching_call_end(source: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut saw_open = false;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (index, ch) in source.char_indices() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '(' => {
+                saw_open = true;
+                depth += 1;
+            }
+            ')' if saw_open => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index + ch.len_utf8());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+#[test]
+fn route_operation_parser_handles_chained_and_qualified_methods() {
+    let source = r#"
+        Router::new()
+            .route("/v1/a", get(read_a).post(create_a))
+            .route("/v1/b", axum::routing::patch(update_b))
+            .route("/v1/c", delete(delete_c))
+    "#;
+    assert_eq!(
+        implemented_v1_operations(source),
+        BTreeSet::from([
+            ("delete".to_owned(), "/v1/c".to_owned()),
+            ("get".to_owned(), "/v1/a".to_owned()),
+            ("patch".to_owned(), "/v1/b".to_owned()),
+            ("post".to_owned(), "/v1/a".to_owned()),
+        ])
+    );
 }
