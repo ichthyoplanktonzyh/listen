@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- 2026-07-28 17:20 CST: 对话舞台中央换成回声水面（refs #84 · S7）。`capability_viz.dart`
+  新增 `EchoSurfaceLevels` / `ConversationEchoSurface` / `EchoSurfacePainter`：屏幕中线一条
+  水面，上方月白（对方的声音）落下、下方信号青（你的回声）升起，血缘同 `CapabilityEchoBars`
+  的基线上下不对称。四态形变由 `conversationEchoLevelsOf` 从 controller 的 activity 纯映射
+  （listening 微澜 / learnerSpeaking 青波升起 / thinking 涟漪 / assistantSpeaking 月白落下），
+  三条独立轴分开四态，形本身可辨（修 D2 状态退化成一枚 Chip）；活动文字保留为读屏与文字读者的
+  第二份拷贝。打断（修 D5）：你开口时青波在 `ListenMotion.tap`（90ms）内占住水面、月白按
+  `ListenMotion.slow` exit 被水面吸走；assistantSpeaking 时你这侧保留可见静水位并补一行
+  「Just speak to cut in」。包络只取 3 条低频线、禁高频抖动（设计稿自我证伪的疲劳预算）；
+  ambient 2.6s 漂移、禁 bounce，reduce-motion 下漂移停摆、各层瞬时到位，整面水静止。
+  S6 的占位 `ConversationStagePresence` 整体替换。后端判定、状态机与诚实分层零改动。
+
 - 2026-07-28 15:05 CST: 实时对话进场改为舞台态 shell（refs #83 · S6）。新增
   `conversation_stage_shell.dart`：全屏暗场容器（底色压到 ground2 并在明暗两套主题下
   都保持暗场）、门厅→舞台→结束页三段以 `ListenMotion.slow`/enter/exit 交叉淡入淡出、
