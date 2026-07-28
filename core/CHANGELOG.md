@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-28 15:46 CST
+
+- Materialized `listen-core` as the independent backend and contract authority
+  with preserved relevant Git history.
+- Removed frontend execution from core CI and documented immutable artifact
+  consumption as the only supported cross-repository dependency.
+
 ## Unreleased
 
 - 2026-07-28 15:42 CST: Phase 3.19.3 Slice 3 让 Flutter 脱离 monorepo root。

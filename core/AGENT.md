@@ -1,4 +1,4 @@
-# LLPlayerNext Agent Notes
+# listen-core Agent Notes
 
 This file is the fast memory card for coding agents working in this repository.
 The canonical project memory lives under `.planning/`; use this file as the
@@ -11,7 +11,7 @@ Start every fresh session from these files:
 1. `.planning/STATE.md` — current phase, open work, recent decisions.
 2. `.planning/MAINTENANCE.md` — documentation ownership and update rules.
 3. `.planning/codebase/ARCHITECTURE.md` — crate boundaries and data flow.
-4. `.planning/codebase/STACK.md` — Rust/Flutter/Python stack and commands.
+4. `.planning/codebase/STACK.md` — Rust/Python stack and commands.
 5. `.planning/codebase/DATA-MODEL.md` — persistence identity and learning data
    invariants.
 6. `.planning/codebase/TESTING.md` — validation strategy and command scope.
@@ -21,19 +21,17 @@ needed. Completed phase folders are historical records and should stay frozen.
 
 ## Project Shape
 
-LLPlayerNext has two coordinated tracks:
+listen-core has two coordinated tracks:
 
 - Local production engine: Python-heavy, local-first tooling that creates
   accurate `.lltimeline.json` resources, including WordTimeline, ChunkTimeline,
   PhoneTimeline, artifacts, evaluation reports, and manual-review inputs.
-- Lightweight consumer app: Flutter desktop UI plus Rust sidecar that reads
-  timeline resources, plays media, highlights words/chunks, and supports
-  learning workflows without bundling heavy research runtimes.
+- Local application backend: Rust services and an HTTP sidecar consumed by the
+  independently versioned `listen-app` repository.
 
 Core directories:
 
 - `crates/` — Rust workspace libraries and the `api-http` binary.
-- `apps/desktop/` — Flutter macOS desktop client.
 - `scripts/` — test runner, contract validation, Python production/evaluation
   tooling.
 - `contracts/` — shared API/resource contracts.
@@ -106,7 +104,7 @@ Local QA media:
 - Subtitle parsing/tokenization: `crates/subtitle-core/`.
 - Diagnosis rules: `crates/diagnosis-core/`.
 - Speech/timing/chunk/phonetic analysis: `crates/speech-analysis/`.
-- Flutter models/controllers/widgets: `apps/desktop/lib/`.
+- Consumer UI work belongs in the separate `listen-app` repository.
 - Production pipeline work: `scripts/timeline-production/` or related scripts.
 - New durable architecture decisions: new numbered files in `docs/decisions/`.
 
@@ -169,8 +167,6 @@ Use focused commands while iterating, then broaden validation based on risk.
 ./scripts/validate-contracts.sh
 cargo test --workspace
 cargo clippy --workspace --all-targets
-cd apps/desktop && flutter analyze
-cd apps/desktop && flutter test
 ```
 
 For low-memory local runs:

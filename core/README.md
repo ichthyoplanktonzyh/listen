@@ -1,6 +1,12 @@
-# listen
+# listen-core
 
-Clean-room, macOS-first rewrite of a listening-comprehension media player.
+Local-first production engine, Rust application services, loopback HTTP API,
+canonical contracts, and release runtime for the listen desktop application.
+
+This repository is the authority for `contracts/openapi/v1.yaml`. Consumer
+repositories integrate through immutable contract and runtime archives; they
+must pin an exact core commit rather than reading this repository's moving
+`main` branch.
 
 **New thread / maintainer handoff:** read
 [`docs/handoff/project-handoff-2026-06-14-m2.0-progress.md`](docs/handoff/project-handoff-2026-06-14-m2.0-progress.md).
@@ -61,8 +67,8 @@ whisper.cpp/FFmpeg runtimes. Models remain explicit user downloads.
 - `contracts/player-adapter/`: transport-neutral player command, state, and event schemas.
 - `docs/decisions/`: architecture decision records.
 - `docs/verification/`: behavior baselines and verification results.
-- `spikes/`: disposable M0 technology prototypes.
-- `apps/desktop/`: formal Flutter macOS desktop client.
+- `crates/`: Rust domain, application, persistence, and HTTP API.
+- `scripts/`: contract validation, release packaging, and production tooling.
 - `testdata/`: generated, license-clear M0 media and subtitle fixtures.
 
 ## M0 quick start
@@ -77,14 +83,15 @@ Prototype-specific commands live in each spike README.
 ## Verification
 
 ```sh
-# Fast local feedback: formatting, lint, Rust lib tests, Flutter analysis
-./scripts/test.sh --quick
+# Fast local feedback for the Rust workspace
+./scripts/test.sh --rust
 
-# Complete strict quality gate used by CI
-./scripts/test.sh --full --strict
+# Complete strict Rust quality gate used by CI
+./scripts/test.sh --rust --strict
 
-# Complete strict gate with reduced build/test concurrency
-./scripts/test.sh --full --strict --low-memory
+# Contract and artifact checks
+./scripts/validate-contracts.sh
+python3 -m unittest scripts/test_release_artifacts.py
 
 # Test the testing infrastructure itself
 ./scripts/test-infrastructure.sh
@@ -102,8 +109,6 @@ Prototype-specific commands live in each spike README.
 ./scripts/verify-m17.sh
 ./scripts/verify-m18.sh
 ./scripts/verify-m19.sh
-./scripts/build-macos-mvp.sh
-./scripts/verify-mvp.sh
 ```
 
 See `docs/features/testing-workflow.md` for runner modes, retained failure logs,
@@ -113,8 +118,9 @@ The local API binds only to loopback and reports its random port and bearer
 token in a structured startup handshake. See `docs/architecture/` for module,
 data, and lifecycle boundaries.
 
-The macOS Apple Silicon release artifact is written to
-`dist/listen-macos-arm64.zip`.
+Versioned consumer inputs are built with `scripts/package-contracts.sh` and
+`scripts/package-runtime-bundle.sh`. Both archives include manifests with the
+source commit, compatibility versions, and per-file SHA-256 hashes.
 
 Build and license-check the pinned ASR runtime with
 `./scripts/build-asr-runtime.sh`. Runtime provenance and redistribution notes

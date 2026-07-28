@@ -179,8 +179,6 @@ def main() -> int:
     guard_http_blocking_seam()
     guard_event_stream_semantics()
     guard_http_composition_root()
-    guard_flutter_transport_parsing()
-    guard_flutter_raw_api_allowlist()
     guard_descriptive_module_names()
     guard_pipeline_entrypoint()
     print("Architecture coupling guards passed.")
