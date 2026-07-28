@@ -148,6 +148,10 @@ require artifact unit tests plus package/verify/smoke checks. Paid, ignored,
 credential-dependent, and live-model tests run only when the owner explicitly
 authorizes them.
 
+For complete app startup, pinned-release testing, unreleased local-core
+integration, manual smoke coverage, logs, and troubleshooting, follow
+`docs/development/full-app-local-testing.md`.
+
 GitHub Actions may be unavailable because of account billing. A job that never
 started is infrastructure failure, not validation. In that case record exact
 local commands and results; only the owner may authorize merge without CI.

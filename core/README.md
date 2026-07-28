@@ -82,6 +82,10 @@ Prototype-specific commands live in each spike README.
 
 ## Verification
 
+To start and manually test the complete Flutter app with either the pinned
+runtime or unreleased local core code, follow
+[`docs/development/full-app-local-testing.md`](docs/development/full-app-local-testing.md).
+
 ```sh
 # Fast local feedback for the Rust workspace
 ./scripts/test.sh --rust
