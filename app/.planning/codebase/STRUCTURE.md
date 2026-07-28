@@ -17,5 +17,7 @@
 | `tool` | core artifact install/verify and macOS assembly/smoke |
 | `test` | controller, widget, contract and regression tests |
 | `test/fixtures` | pinned frontend-owned contract/smoke fixtures |
+| `design-notes` | frontend design charter, audits and approved explorations |
+| `docs/decisions` | append-only frontend ADRs |
 | `backend.lock.json` | immutable core baseline |
 | `.planning` | current frontend project memory |

@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-07-28 16:59 CST
+> Updated: 2026-07-28 17:16 CST
 
 ## Position
 
@@ -15,8 +15,9 @@
 
 ## Current Work
 
-Active maintenance slice: establish independent frontend governance and a
-code-derived `.planning` baseline for future Claude sessions.
+Independent frontend governance is merged. The current maintenance slice makes
+this repository authoritative for frontend design assets, adopts release-only
+changelog maintenance, and documents complete local app startup.
 
 ## Established Boundaries
 
@@ -24,6 +25,8 @@ code-derived `.planning` baseline for future Claude sessions.
 - Core owns canonical contract, backend behavior and release artifacts.
 - App consumes only immutable artifacts pinned by `backend.lock.json`.
 - Normal app work does not require the old monorepo or a sibling core checkout.
+- `design-notes/` owns the frontend charter, audits, and approved explorations.
+- Root `CHANGELOG.md` is updated only by a release owner from merged PRs.
 
 ## Known Operational Constraint
 
@@ -33,6 +36,6 @@ that constraint.
 
 ## Next
 
-1. Review and merge repository governance.
+1. Run the pinned complete app and perform owner smoke testing.
 2. Let Claude perform the next frontend journey/UX fact audit.
 3. Use `CROSS_REPO.md` for the next backend-dependent feature.

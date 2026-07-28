@@ -1,0 +1,550 @@
+<title>listen · 能力画像探索</title>
+<style>
+  :root{
+    --ground:#1a2420; --ground2:#141d1a; --raised:#212e29; --hair:#2e3a35;
+    --ink:#e9efec; --muted:#9aa9a2; --faint:#6d7c75;
+    --teal:#4db8a8; --teal-dim:#2f8578; --amber:#e6b45c; --green:#68d391;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--ground)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:52px 24px 90px}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--teal);font-weight:700}
+  h1{font-size:clamp(28px,4.2vw,42px);font-weight:800;letter-spacing:-.02em;margin:.35em 0 .3em}
+  .lede{font-size:17px;color:var(--muted);max-width:64ch;margin:0}
+  .lede b{color:var(--ink);font-weight:600}
+  .constraints{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 4px}
+  .constraints .c{font-size:12px;color:var(--muted);background:var(--raised);
+    border:1px solid var(--hair);border-radius:999px;padding:5px 12px}
+
+  h2{font-size:20px;font-weight:800;letter-spacing:-.01em;margin:46px 0 10px}
+  h2 .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;
+    font-weight:500;margin-left:9px}
+  .note{font-size:14px;color:var(--muted);max-width:66ch;margin:0 0 18px}
+  .note b{color:var(--ink)}
+
+  /* shared-semantics strip */
+  .sem{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px}
+  @media(max-width:820px){.sem{grid-template-columns:1fr}}
+  .sembox{background:var(--raised);border:1px solid var(--hair);border-radius:16px;padding:18px 20px}
+  .sembox h3{margin:0 0 10px;font-size:14px;font-weight:700}
+  .sembox h3 .en{font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:500;margin-left:7px}
+  .legend{display:flex;flex-direction:column;gap:9px;font-size:13px;color:var(--muted)}
+  .legend .row{display:flex;align-items:center;gap:10px}
+  .sw{width:26px;height:12px;border-radius:3px;flex:none}
+  .legend b{color:var(--ink);font-weight:600}
+  .grid22{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px 10px;font-size:13px;
+    color:var(--muted);align-items:center;font-family:var(--mono)}
+  .grid22 .h{font-size:10px;letter-spacing:.1em;color:var(--faint)}
+  .grid22 .cell{background:var(--ground2);border:1px solid var(--hair);border-radius:8px;
+    padding:7px 10px;color:var(--ink);font-family:var(--sans);font-size:13.5px}
+  .grid22 .cell span{color:var(--faint);font-size:11px;margin-left:5px}
+
+  /* direction cards */
+  .dir{background:var(--raised);border:1px solid var(--hair);border-radius:18px;
+    overflow:hidden;margin-top:26px}
+  .dir-head{padding:18px 22px 4px}
+  .dir-head .mname{font-size:17px;font-weight:800;display:flex;align-items:baseline;gap:10px}
+  .dir-head .en{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;font-weight:500}
+  .dir-body{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:0}
+  @media(max-width:860px){.dir-body{grid-template-columns:1fr}}
+  .stage{background:radial-gradient(120% 100% at 50% 30%, #24312c 0%, var(--ground2) 78%);
+    padding:22px 18px;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center}
+  .stage .cap,.side .cap{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);font-family:var(--mono);align-self:flex-start;margin-bottom:2px}
+  .stage svg{max-width:100%;height:auto}
+  .side{padding:20px 20px 22px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--hair)}
+  @media(max-width:860px){.side{border-left:none;border-top:1px solid var(--hair)}}
+  .meta{padding:16px 22px 20px;border-top:1px solid var(--hair)}
+  .mdesc{font-size:13.5px;color:var(--muted);max-width:78ch}
+  .mdesc b{color:var(--teal);font-weight:600}
+  .mdesc .risk{color:var(--amber);font-weight:600}
+  .mdesc + .mdesc{margin-top:8px}
+
+  /* mock entry detail + list tiles */
+  .entry{background:var(--ground);border:1px solid var(--hair);border-radius:12px;padding:14px 16px}
+  .entry .word{font-size:17px;font-weight:700;letter-spacing:-.01em;margin-bottom:8px}
+  .entry .viz{display:flex;align-items:center;gap:14px}
+  .entry .viz .lab{font-size:11px;color:var(--faint);font-family:var(--mono);line-height:1.5}
+  .tiles{background:var(--ground);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+  .tile{display:flex;align-items:center;gap:12px;padding:9px 14px}
+  .tile + .tile{border-top:1px solid var(--hair)}
+  .tile .tx{min-width:0;flex:1}
+  .tile .t-title{font-size:13.5px;font-weight:600;line-height:1.35}
+  .tile .t-viz{margin:3px 0 2px;display:flex}
+  .tile .t-sub{font-size:11.5px;color:var(--faint);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .tile .t-trail{color:var(--faint);font-size:13px}
+
+  svg text{font-family:var(--sans)}
+  svg .mono{font-family:var(--mono)}
+
+  /* settle-in motion demo (direction A) — implementation maps to
+     ListenMotion.base (240ms) with a decelerate curve; no celebration. */
+  .gu,.gd{transform-box:fill-box;animation:settle .24s cubic-bezier(.2,.7,.2,1) both}
+  .gu{transform-origin:50% 100%}
+  .gd{transform-origin:50% 0%}
+  @keyframes settle{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+  .d1{animation-delay:.05s}.d2{animation-delay:.1s}.d3{animation-delay:.15s}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important}}
+
+  .foot{margin-top:46px;border-top:1px solid var(--hair);padding-top:24px;font-size:14px;
+    color:var(--muted);max-width:70ch}
+  .foot b{color:var(--ink)}
+  .foot ol{margin:10px 0 0;padding-left:22px}
+  .foot li{margin-bottom:8px}
+  :focus-visible{outline:2px solid var(--teal);outline-offset:2px;border-radius:4px}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">listen · 能力画像探索 · #47</div>
+  <h1>你的语言画像:三个方向</h1>
+  <p class="lede">产品的命脉是<b>四通道闭环 + gap-(c) 跨端差异</b>,但它的呈现从来是通用组件堆叠:
+    dashboard 是 Card + Chip,词条快照是四个 Material 图标。下面三个方向给它一个
+    <b>只属于 listen 的图形语言</b>——同一套语言覆盖 dashboard 聚合、词条详情、列表行内三个尺度,
+    并让「能认不能产出」一眼可读。呈现≠语义:数据与 evidence 门控零改动。</p>
+  <div class="constraints">
+    <span class="c">✓ 一套语言 · 三个尺度</span><span class="c">✓ gap-(c) 一眼可读</span>
+    <span class="c">✓ 三态诚实(不藏 unassessed)</span><span class="c">✓ 16px 行内立得住</span>
+    <span class="c">✗ 无庆祝动效</span><span class="c">✗ 不改数据语义</span>
+  </div>
+
+  <h2>共享语义 <span class="en">SHARED SEMANTICS</span></h2>
+  <p class="note">四通道不是并列的四项,是一张 <b>2×2</b>:声音模态(听↔说)与文字模态(读↔写),
+    各有接收端与产出端。gap-(c) 就住在每一列里——<b>同模态、跨方向</b>:听得懂却说不出,读得懂却写不出。
+    三个方向共享这张结构与同一套三态色,选型只在「形」。</p>
+  <div class="sem">
+    <div class="sembox">
+      <h3>2×2 结构 <span class="en">STRUCTURE</span></h3>
+      <div class="grid22">
+        <span></span><span class="h">声音 SOUND</span><span class="h">文字 TEXT</span>
+        <span class="h">接收<br>IN</span>
+        <div class="cell">听 <span>listening</span></div>
+        <div class="cell">读 <span>reading</span></div>
+        <span class="h">产出<br>OUT</span>
+        <div class="cell">说 <span>speaking</span></div>
+        <div class="cell">写 <span>writing</span></div>
+      </div>
+    </div>
+    <div class="sembox">
+      <h3>三态色 <span class="en">STATES</span></h3>
+      <div class="legend">
+        <div class="row"><span class="sw" style="background:var(--teal)"></span>
+          <span><b>已证实 acquired</b> —— 你的语言,唯一的光源</span></div>
+        <div class="row"><span class="sw" style="background:var(--amber)"></span>
+          <span><b>练习靶子 not_acquired</b> —— 琥珀是靶子,不是失败红</span></div>
+        <div class="row"><span class="sw" style="background:var(--hair)"></span>
+          <span><b>未评估 unassessed</b> —— 压暗但在场:证据不足就诚实说不知道</span></div>
+        <div class="row" style="margin-top:4px">
+          <span class="sw" style="background:linear-gradient(90deg,var(--teal) 50%,var(--green) 50%)"></span>
+          <span>拍板点:acquired 的光用<b>信号青</b>(画像=内容的光)还是
+            <b>learningRecognized 绿</b>(全 app 既有「已认得」色)——见文末</span></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:18px">聚合稿的 mock 数据全稿一致(160 词的词库):
+    听 46 / 读 88 / 说 12 / 写 8 个已证实;听→说缺口 38 词,读→写缺口 83 词,
+    合计 96 个「能认还不能产出」。词条稿用三个词:<b>nevertheless</b>(典型 gap 词)、
+    <b>thorough</b>(早期词)、<b>cadence</b>(四通道全亮)。</p>
+
+  <!-- ══════════════ A · 回声条 ══════════════ -->
+  <div class="dir">
+    <div class="dir-head"><div class="mname">A · 回声条 <span class="en">ECHO BARS</span></div></div>
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">dashboard · 能力总览</span>
+        <svg viewBox="0 0 660 352" aria-label="Direction A dashboard: mirrored bars around a baseline">
+          <!-- channel labels (top) -->
+          <text x="115" y="46" fill="var(--muted)" font-size="13" font-weight="600">听</text>
+          <text x="133" y="46" class="mono" fill="var(--faint)" font-size="10">listening · 46</text>
+          <text x="395" y="46" fill="var(--muted)" font-size="13" font-weight="600">读</text>
+          <text x="413" y="46" class="mono" fill="var(--faint)" font-size="10">reading · 88</text>
+          <!-- reception bars (grow up from baseline) -->
+          <g>
+            <rect class="gu" x="115" y="60" width="150" height="72" fill="var(--hair)" opacity=".55"/>
+            <rect class="gu d1" x="115" y="132" width="150" height="13.5" fill="var(--amber)"/>
+            <rect class="gu d2" x="115" y="145.5" width="150" height="34.5" fill="var(--teal)"/>
+            <rect class="gu d1" x="395" y="60" width="150" height="46.5" fill="var(--hair)" opacity=".55"/>
+            <rect class="gu d2" x="395" y="106.5" width="150" height="7.5" fill="var(--amber)"/>
+            <rect class="gu d3" x="395" y="114" width="150" height="66" fill="var(--teal)"/>
+          </g>
+          <!-- baseline -->
+          <line x1="70" y1="183" x2="590" y2="183" stroke="var(--hair)" stroke-width="1.5"/>
+          <text x="596" y="187" class="mono" fill="var(--faint)" font-size="9">160 词</text>
+          <!-- production bars (grow down) -->
+          <g>
+            <rect class="gd d2" x="115" y="186" width="150" height="9" fill="var(--teal)"/>
+            <rect class="gd d2" x="115" y="195" width="150" height="22.5" fill="var(--amber)"/>
+            <rect class="gd d1" x="115" y="217.5" width="150" height="88.5" fill="var(--hair)" opacity=".55"/>
+            <rect class="gd d3" x="395" y="186" width="150" height="6" fill="var(--teal)"/>
+            <rect class="gd d3" x="395" y="192" width="150" height="16.5" fill="var(--amber)"/>
+            <rect class="gd d2" x="395" y="208.5" width="150" height="97.5" fill="var(--hair)" opacity=".55"/>
+          </g>
+          <!-- echo-gap ghosts: reception light mirrored below the line -->
+          <rect x="115" y="186" width="150" height="34.5" fill="none" stroke="var(--amber)"
+            stroke-width="1.3" stroke-dasharray="4 4" opacity=".85"/>
+          <rect x="395" y="186" width="150" height="66" fill="none" stroke="var(--amber)"
+            stroke-width="1.3" stroke-dasharray="4 4" opacity=".85"/>
+          <!-- gap annotations -->
+          <line x1="268" y1="205" x2="292" y2="205" stroke="var(--hair)" stroke-width="1"/>
+          <text x="296" y="201" fill="var(--amber)" font-size="12" font-weight="700">38 词</text>
+          <text x="296" y="215" fill="var(--muted)" font-size="10.5">听得懂 · 说不出</text>
+          <line x1="548" y1="225" x2="572" y2="225" stroke="var(--hair)" stroke-width="1"/>
+          <text x="576" y="221" fill="var(--amber)" font-size="12" font-weight="700">83 词</text>
+          <text x="576" y="235" fill="var(--muted)" font-size="10.5">读得懂 · 写不出</text>
+          <!-- channel labels (bottom) -->
+          <text x="115" y="330" fill="var(--muted)" font-size="13" font-weight="600">说</text>
+          <text x="133" y="330" class="mono" fill="var(--faint)" font-size="10">speaking · 12</text>
+          <text x="395" y="330" fill="var(--muted)" font-size="13" font-weight="600">写</text>
+          <text x="413" y="330" class="mono" fill="var(--faint)" font-size="10">writing · 8</text>
+          <!-- side gloss -->
+          <text x="70" y="128" class="mono" fill="var(--faint)" font-size="9" text-anchor="end"
+            transform="rotate(-90 70 128)">接收 IN</text>
+          <text x="70" y="268" class="mono" fill="var(--faint)" font-size="9" text-anchor="end"
+            transform="rotate(-90 70 268)">产出 OUT</text>
+        </svg>
+      </div>
+      <div class="side">
+        <span class="cap">词条详情 · 能力概览</span>
+        <div class="entry">
+          <div class="word">nevertheless</div>
+          <div class="viz">
+            <svg width="96" height="52" viewBox="0 0 96 52" aria-label="entry capability, direction A">
+              <text x="8" y="16" class="mono" fill="var(--faint)" font-size="8">收</text>
+              <text x="8" y="44" class="mono" fill="var(--faint)" font-size="8">产</text>
+              <rect x="26" y="4" width="16" height="18" rx="2" fill="var(--teal)"/>
+              <rect x="52" y="4" width="16" height="18" rx="2" fill="var(--teal)"/>
+              <line x1="20" y1="26" x2="76" y2="26" stroke="var(--hair)" stroke-width="1.2"/>
+              <rect x="26" y="30" width="16" height="18" rx="2" fill="var(--amber)"/>
+              <rect x="52" y="43" width="16" height="5" rx="1.5" fill="var(--hair)"/>
+              <rect x="52" y="30" width="16" height="18" rx="2" fill="none"
+                stroke="var(--amber)" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>
+            </svg>
+            <div class="lab">左列=声(听/说)<br>右列=文(读/写)<br>虚框=回声缺口</div>
+          </div>
+        </div>
+        <span class="cap">列表行内 · 16px</span>
+        <div class="tiles">
+          <div class="tile"><div class="tx">
+            <div class="t-title">nevertheless</div>
+            <div class="t-viz"><svg width="28" height="16" viewBox="0 0 28 16">
+              <rect x="4" y="1" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+              <rect x="16" y="1" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+              <line x1="2" y1="8" x2="26" y2="8" stroke="var(--hair)" stroke-width=".8"/>
+              <rect x="4" y="9" width="8" height="6" rx="1.2" fill="var(--amber)"/>
+              <rect x="16" y="12.5" width="8" height="2.5" rx="1" fill="var(--hair)"/>
+            </svg></div>
+            <div class="t-sub">He was ill; nevertheless he came.</div>
+          </div><span class="t-trail">▶</span></div>
+          <div class="tile"><div class="tx">
+            <div class="t-title">thorough</div>
+            <div class="t-viz"><svg width="28" height="16" viewBox="0 0 28 16">
+              <rect x="4" y="1" width="8" height="6" rx="1.2" fill="var(--amber)"/>
+              <rect x="16" y="1" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+              <line x1="2" y1="8" x2="26" y2="8" stroke="var(--hair)" stroke-width=".8"/>
+              <rect x="4" y="12.5" width="8" height="2.5" rx="1" fill="var(--hair)"/>
+              <rect x="16" y="12.5" width="8" height="2.5" rx="1" fill="var(--hair)"/>
+            </svg></div>
+            <div class="t-sub">a thorough review of the evidence</div>
+          </div><span class="t-trail">▶</span></div>
+          <div class="tile"><div class="tx">
+            <div class="t-title">cadence</div>
+            <div class="t-viz"><svg width="28" height="16" viewBox="0 0 28 16">
+              <rect x="4" y="1" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+              <rect x="16" y="1" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+              <line x1="2" y1="8" x2="26" y2="8" stroke="var(--hair)" stroke-width=".8"/>
+              <rect x="4" y="9" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+              <rect x="16" y="9" width="8" height="6" rx="1.2" fill="var(--teal)"/>
+            </svg></div>
+            <div class="t-sub">the cadence of her sentences</div>
+          </div><span class="t-trail">▶</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="mdesc">一条基线,上面是<b>照进来的光</b>(听/读),下面是<b>你的回声</b>(说/写)——
+        与 wordmark「双向波形」同一血缘,把双向倾听直接搬进画像。同列=同模态,所以
+        <b>gap-(c) 是图形的固有属性</b>:上半的光镜像到下半成一圈琥珀虚框,「回声没跟上的部分」
+        就是缺口,不需要任何附加图表。条长=词库总量,暗段=未评估,数字全裸露:诚实仪器。</div>
+      <div class="mdesc">三个尺度同构退化:聚合=分段条,词条=四块实色,行内=上下两排小条(上亮下暗
+        自动显形为 gap 词)。进场动效=从基线长出(240ms · 落定,分通道错峰 50ms),更新=长度过渡,无庆祝。
+        <span class="risk">风险:</span>镜像条不如环「上相」,作为产品截图的第一眼冲击力弱于 B;
+        虚框在琥珀实段相邻时需要留缝防混淆。</div>
+    </div>
+  </div>
+
+  <!-- ══════════════ B · 语言罗盘 ══════════════ -->
+  <div class="dir">
+    <div class="dir-head"><div class="mname">B · 语言罗盘 <span class="en">COMPASS RING</span></div></div>
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">dashboard · 能力总览</span>
+        <svg id="ringMain" viewBox="0 0 520 344" aria-label="Direction B dashboard: four-quadrant ring">
+          <!-- quadrant arcs injected by script -->
+          <text x="248" y="162" text-anchor="middle" fill="var(--amber)" font-size="34"
+            font-weight="800" class="mono">96</text>
+          <text x="248" y="184" text-anchor="middle" fill="var(--muted)" font-size="11.5">能认 · 还不能产出</text>
+          <text x="248" y="199" text-anchor="middle" class="mono" fill="var(--faint)" font-size="9">gap-(c)</text>
+          <!-- quadrant labels -->
+          <text x="118" y="52" text-anchor="end" fill="var(--muted)" font-size="13" font-weight="600">听
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 46</tspan></text>
+          <text x="378" y="52" fill="var(--muted)" font-size="13" font-weight="600">读
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 88</tspan></text>
+          <text x="118" y="304" text-anchor="end" fill="var(--muted)" font-size="13" font-weight="600">说
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 12</tspan></text>
+          <text x="378" y="304" fill="var(--muted)" font-size="13" font-weight="600">写
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 8</tspan></text>
+          <!-- hemisphere gloss -->
+          <text x="500" y="120" text-anchor="end" class="mono" fill="var(--faint)" font-size="9">上半 · 接收 IN</text>
+          <text x="500" y="240" text-anchor="end" class="mono" fill="var(--faint)" font-size="9">下半 · 产出 OUT</text>
+          <line x1="88" y1="172" x2="120" y2="172" stroke="var(--hair)" stroke-width="1"/>
+          <line x1="376" y1="172" x2="408" y2="172" stroke="var(--hair)" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="side">
+        <span class="cap">词条详情 · 能力概览</span>
+        <div class="entry">
+          <div class="word">nevertheless</div>
+          <div class="viz">
+            <svg id="ringEntry" width="52" height="52" viewBox="0 0 52 52"
+              aria-label="entry capability, direction B"></svg>
+            <div class="lab">左=声 右=文<br>上=收 下=产<br>光聚顶 · 暗在底 = gap 词</div>
+          </div>
+        </div>
+        <span class="cap">列表行内 · 16px</span>
+        <div class="tiles">
+          <div class="tile"><div class="tx">
+            <div class="t-title">nevertheless</div>
+            <div class="t-viz"><svg class="miniring" data-states="acq,acq,tgt,un"
+              width="16" height="16" viewBox="0 0 16 16"></svg></div>
+            <div class="t-sub">He was ill; nevertheless he came.</div>
+          </div><span class="t-trail">▶</span></div>
+          <div class="tile"><div class="tx">
+            <div class="t-title">thorough</div>
+            <div class="t-viz"><svg class="miniring" data-states="tgt,acq,un,un"
+              width="16" height="16" viewBox="0 0 16 16"></svg></div>
+            <div class="t-sub">a thorough review of the evidence</div>
+          </div><span class="t-trail">▶</span></div>
+          <div class="tile"><div class="tx">
+            <div class="t-title">cadence</div>
+            <div class="t-viz"><svg class="miniring" data-states="acq,acq,acq,acq"
+              width="16" height="16" viewBox="0 0 16 16"></svg></div>
+            <div class="t-sub">the cadence of her sentences</div>
+          </div><span class="t-trail">▶</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="mdesc">一个环即一张画像:四象限=2×2(左半声、右半文;上半收、下半产),
+        每象限的亮弧=已证实比例,琥珀=靶子,细暗弧=未评估存量。接收的光刻意<b>聚向 12 点</b>、
+        产出的光聚向 6 点——于是 gap-(c) 显形为整只环的<b>上亮下暗</b>,不对称即缺口;
+        环心裸数字直书「96 · 能认还不能产出」。这是三案里最像「画像」的一张:
+        <b>一个可以指认的形</b>,你的罗盘,别人的长得不一样。</div>
+      <div class="mdesc">词条尺度放弃比例只留三态:四段等长弧按态染色,16px 仍可辨(实测下限 14px)。
+        进场=四弧同时从各自锚点扫出(240ms · 落定),更新=弧长过渡。
+        <span class="risk">风险:</span>圆环天生与健身环/进度环撞脸,靠四方位语义与「细暗弧诚实展示存量」
+        拉开;比例信息在行内尺度归零(只剩三态);环上难再挂 per-metric 细节,指标下钻仍需环外列表。</div>
+    </div>
+  </div>
+
+  <!-- ══════════════ C · 风筝 ══════════════ -->
+  <div class="dir">
+    <div class="dir-head"><div class="mname">C · 风筝 <span class="en">KITE / RADAR</span></div></div>
+    <div class="dir-body">
+      <div class="stage">
+        <span class="cap">dashboard · 能力总览</span>
+        <svg viewBox="0 0 420 344" aria-label="Direction C dashboard: four-axis kite">
+          <!-- full-scale outline -->
+          <polygon points="200,42 330,172 200,302 70,172" fill="none" stroke="var(--hair)"
+            stroke-width="1" stroke-dasharray="4 5"/>
+          <line x1="200" y1="42" x2="200" y2="302" stroke="var(--hair)" stroke-width="1"/>
+          <line x1="70" y1="172" x2="330" y2="172" stroke="var(--hair)" stroke-width="1"/>
+          <!-- kite: acquired share per axis -->
+          <polygon points="200,134.6 271.5,172 200,181.75 193.5,172"
+            fill="rgba(77,184,168,.16)" stroke="var(--teal)" stroke-width="2" stroke-linejoin="round"/>
+          <!-- amber ticks at acquired+target -->
+          <line x1="193" y1="120" x2="207" y2="120" stroke="var(--amber)" stroke-width="2"/>
+          <line x1="279.5" y1="165" x2="279.5" y2="179" stroke="var(--amber)" stroke-width="2"/>
+          <line x1="193" y1="206.15" x2="207" y2="206.15" stroke="var(--amber)" stroke-width="2"/>
+          <line x1="175.5" y1="165" x2="175.5" y2="179" stroke="var(--amber)" stroke-width="2"/>
+          <!-- axis labels -->
+          <text x="200" y="30" text-anchor="middle" fill="var(--muted)" font-size="13" font-weight="600">听
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 46</tspan></text>
+          <text x="342" y="176" fill="var(--muted)" font-size="13" font-weight="600">读
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 88</tspan></text>
+          <text x="200" y="325" text-anchor="middle" fill="var(--muted)" font-size="13" font-weight="600">说
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 12</tspan></text>
+          <text x="58" y="176" text-anchor="end" fill="var(--muted)" font-size="13" font-weight="600">写
+            <tspan class="mono" fill="var(--faint)" font-size="10"> 8</tspan></text>
+          <!-- annotation -->
+          <text x="256" y="120" fill="var(--muted)" font-size="10.5">形状上倾 = 收强产弱</text>
+          <text x="256" y="134" class="mono" fill="var(--faint)" font-size="9">轴长 = acquired / 160</text>
+        </svg>
+      </div>
+      <div class="side">
+        <span class="cap">词条详情 · 能力概览</span>
+        <div class="entry">
+          <div class="word">nevertheless</div>
+          <div class="viz">
+            <svg width="52" height="52" viewBox="0 0 52 52" aria-label="entry capability, direction C">
+              <polygon points="26,6 46,26 26,46 6,26" fill="none" stroke="var(--hair)"
+                stroke-width="1" stroke-dasharray="3 3"/>
+              <polygon points="26,8 44,26 26,35 17,26" fill="rgba(77,184,168,.16)"
+                stroke="var(--teal)" stroke-width="1.6" stroke-linejoin="round"/>
+            </svg>
+            <div class="lab">上=听 右=读<br>下=说 左=写<br>acq 满轴 · tgt 半 · un 缩</div>
+          </div>
+        </div>
+        <span class="cap">列表行内 · 16px</span>
+        <div class="tiles">
+          <div class="tile"><div class="tx">
+            <div class="t-title">nevertheless</div>
+            <div class="t-viz"><svg width="16" height="16" viewBox="0 0 16 16">
+              <polygon points="8,2 14,8 8,10.7 5.3,8" fill="rgba(77,184,168,.2)"
+                stroke="var(--teal)" stroke-width="1"/>
+            </svg></div>
+            <div class="t-sub">He was ill; nevertheless he came.</div>
+          </div><span class="t-trail">▶</span></div>
+          <div class="tile"><div class="tx">
+            <div class="t-title">thorough</div>
+            <div class="t-viz"><svg width="16" height="16" viewBox="0 0 16 16">
+              <polygon points="8,4.7 14,8 8,10 6.7,8" fill="rgba(77,184,168,.2)"
+                stroke="var(--teal)" stroke-width="1"/>
+            </svg></div>
+            <div class="t-sub">a thorough review of the evidence</div>
+          </div><span class="t-trail">▶</span></div>
+          <div class="tile"><div class="tx">
+            <div class="t-title">cadence</div>
+            <div class="t-viz"><svg width="16" height="16" viewBox="0 0 16 16">
+              <polygon points="8,2 14,8 8,14 2,8" fill="rgba(77,184,168,.2)"
+                stroke="var(--teal)" stroke-width="1"/>
+            </svg></div>
+            <div class="t-sub">the cadence of her sentences</div>
+          </div><span class="t-trail">▶</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="mdesc">四轴放射:垂直轴=声音(听上说下),水平轴=文字(读右写左),
+        轴长=已证实比例,连成风筝。gap-(c) = 形状的<b>上倾</b>。是三案里实现最快的一个。</div>
+      <div class="mdesc"><span class="risk">诚实的证伪:</span>它也是三案里最<b>通用 BI 仪表</b>的一个——
+        雷达图属于任何 dashboard 库。三态被挤压:未评估在图形里没有位置,轴长必须归一化,
+        词库早期(多数 unassessed)整只风筝塌缩成中心一粒,mock 里说/写轴已经贴底;
+        16px 行内退化成无法解读的歪多边形(左列可见)。列入以完成探索,<b>不推荐</b>。</div>
+    </div>
+  </div>
+
+  <h2 style="margin-top:46px">拍板记录 <span class="en">DECISION · OWNER · 2026-07-23</span></h2>
+  <div class="sembox" style="border-color:var(--teal-dim)">
+    <div class="legend">
+      <div class="row"><span class="sw" style="background:var(--teal)"></span>
+        <span><b>方向:B 总览 + A 通道细节,词条尺度统一用 B 的小环。</b>
+          dashboard 顶部一只语言罗盘做画像(聚合环 + gap-(c) 环心);通道分解走回声条
+          (镜像条 + 回声虚框);词条详情与列表行内一律用 B 的三态四象限环——
+          owner 裁决:小环比 A 的四小方块更立得住。</span></div>
+      <div class="row"><span class="sw" style="background:var(--teal)"></span>
+        <span><b>acquired 的光 = 信号青</b>(画像与内容同源;colorScheme.primary 映射,
+          AA 由 listen_theme_test 钉住)。</span></div>
+      <div class="row"><span class="sw" style="background:var(--hair)"></span>
+        <span><b>unassessed = 压暗在场 + 悬停显数</b>;聚合尺度不堆三态数字。
+          gap 标注只并置既有计数(听得懂 46 · 说得出 12),不做前端减法造新指标。</span></div>
+    </div>
+  </div>
+
+  <p class="foot"><b>我的私心排序:B 与 A,C 出局。</b>
+    B(语言罗盘)最有「画像」气质——一个可指认、可截图、可比较的形,上亮下暗即 gap,
+    是产品名片;弱点是行内尺度只剩三态、且要防健身环即视感。
+    A(回声条)概念血缘最正(wordmark 双向波形的直系),gap-(c) 的「回声虚框」是三案里
+    语义最精确的表达,三尺度退化也最稳;弱点是第一眼冲击力弱。
+    两者可组合:<b>dashboard 顶部一只罗盘做画像,通道细节与词条尺度走回声条语言</b>——
+    代价是两套形要维护一致性。请拍板:</p>
+  <div class="foot" style="border:none;padding-top:0;margin-top:10px">
+    <ol>
+      <li><b>方向</b>:A 全套 / B 全套 / B 总览 + A 细节 / C(不推荐)?</li>
+      <li><b>acquired 的光</b>:信号青(画像与内容同源,「光」语言统一)还是
+        learningRecognized 绿(与词级高亮的既有「已认得」语义一致)?拍板后由
+        colorScheme 映射,AA 交给 listen_theme_test 钉住。</li>
+      <li><b>unassessed 的深度</b>:细暗段/细暗弧的「在场但压暗」是否足够诚实,
+        还是聚合尺度必须同时裸露三态数字(现稿 dashboard 只裸露 acquired 数)?</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+  // Arc helpers for direction B. Angles in degrees, 0 = 12 o'clock, clockwise.
+  const pt = (cx, cy, r, a) => {
+    const t = a * Math.PI / 180;
+    return [cx + r * Math.sin(t), cy - r * Math.cos(t)];
+  };
+  const arc = (cx, cy, r, a0, a1) => {
+    const [x0, y0] = pt(cx, cy, r, a0), [x1, y1] = pt(cx, cy, r, a1);
+    const large = a1 - a0 > 180 ? 1 : 0;
+    return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  };
+  const NS = 'http://www.w3.org/2000/svg';
+  const seg = (svg, d, stroke, w, dash) => {
+    const p = document.createElementNS(NS, 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', stroke);
+    p.setAttribute('stroke-width', w);
+    p.setAttribute('stroke-linecap', 'butt');
+    if (dash) p.setAttribute('stroke-dasharray', dash);
+    svg.prepend(p);
+  };
+  const C = { acq: 'var(--teal)', tgt: 'var(--amber)', un: 'var(--hair)' };
+
+  // Quadrants (start/end in degrees; 4° gaps at the seams). anchor: where the
+  // acquired light gathers — reception toward 12 o'clock, production toward 6.
+  const QUADS = {
+    listening: { a0: 274, a1: 356, anchor: 'end' },
+    reading:   { a0: 4,   a1: 86,  anchor: 'start' },
+    writing:   { a0: 94,  a1: 176, anchor: 'end' },
+    speaking:  { a0: 184, a1: 266, anchor: 'start' },
+  };
+
+  // Aggregate mock: [acquired, not_acquired, unassessed] out of 160.
+  const AGG = {
+    listening: [46, 18, 96], reading: [88, 10, 62],
+    speaking: [12, 30, 118], writing: [8, 22, 130],
+  };
+
+  function drawAggRing(svg, cx, cy, r, wMain, wDim) {
+    for (const [ch, q] of Object.entries(QUADS)) {
+      const span = q.a1 - q.a0;
+      const total = AGG[ch].reduce((a, b) => a + b, 0);
+      const fr = AGG[ch].map(v => v / total * span);
+      // order along the arc: acquired first from the anchor
+      let segs = [['acq', fr[0]], ['tgt', fr[1]], ['un', fr[2]]];
+      let a = q.a0;
+      if (q.anchor === 'end') { segs = segs.reverse(); }
+      for (const [state, len] of segs) {
+        seg(svg, arc(cx, cy, r, a, a + len), C[state],
+          state === 'un' ? wDim : wMain, state === 'un' ? '2 3' : null);
+        a += len;
+      }
+    }
+  }
+  drawAggRing(document.getElementById('ringMain'), 248, 172, 122, 14, 5);
+
+  // Entry-scale rings: three states only, one solid arc per quadrant.
+  // states order: [listening, reading, speaking, writing]
+  function drawStateRing(svg, cx, cy, r, wMain, wDim, states) {
+    const order = ['listening', 'reading', 'speaking', 'writing'];
+    order.forEach((ch, i) => {
+      const q = QUADS[ch];
+      const s = states[i];
+      seg(svg, arc(cx, cy, r, q.a0, q.a1), C[s],
+        s === 'un' ? wDim : wMain, s === 'un' ? '2 2.6' : null);
+    });
+  }
+  drawStateRing(document.getElementById('ringEntry'), 26, 26, 19, 5, 2.2,
+    ['acq', 'acq', 'tgt', 'un']);
+  document.querySelectorAll('.miniring').forEach(svg => {
+    drawStateRing(svg, 8, 8, 5.6, 2.6, 1.3, svg.dataset.states.split(','));
+  });
+</script>

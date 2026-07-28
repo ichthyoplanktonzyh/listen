@@ -29,6 +29,8 @@ Read these files before planning or changing code:
 7. `.planning/CROSS_REPO.md` when backend data or behavior may change
 
 Read only the active phase under `.planning/phases/`.
+For visible design work, also read `design-notes/listen-design-charter.md` and
+the relevant audit or approved exploration under `design-notes/`.
 
 ## Repository Responsibilities
 
@@ -128,6 +130,7 @@ not a shared branch or moving core `main`.
 - Native macOS integration: `macos/`
 - Vendored player adapter: `third_party/fvp/`
 - Artifact/release tooling: `tool/`
+- Design charter, audits, and approved explorations: `design-notes/`
 - Tests and pinned fixtures: `test/`
 
 Models must not import widgets. Widgets must not launch processes or decode raw
@@ -171,10 +174,11 @@ The live `.planning` tree describes only frontend facts in this repository.
 - `codebase/`: current code-derived frontend architecture and maintenance facts
 - `phases/`: active and completed frontend phases
 
-Follow `.planning/MAINTENANCE.md`. Every commit-worthy change adds an exact
-minute entry to `CHANGELOG.md`. Do not copy core planning into this repository.
-Reference core facts by repository, release tag, commit, contract version, or
-issue/PR URL.
+Follow `.planning/MAINTENANCE.md`. Root `CHANGELOG.md` is release-only: ordinary
+feature, fix, refactor, planning, and documentation branches do not edit it.
+The release owner curates it once from merged PRs when publishing an app
+version. Do not copy core planning into this repository. Reference core facts by
+repository, release tag, commit, contract version, or issue/PR URL.
 
 ## Git and Pull Requests
 
@@ -204,6 +208,6 @@ Work is complete only when:
 - accessibility and responsive behavior are considered;
 - core dependency is either unchanged or immutably pinned and verified;
 - planning/codebase docs match the new code fact;
-- `CHANGELOG.md` is updated;
+- release notes are updated only when this task publishes an app version;
 - the branch is pushed and the PR accurately reports evidence and residual
   risk.
