@@ -8,6 +8,7 @@ import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
 import 'conversation_stage_shell.dart';
 
@@ -245,7 +246,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
 
   /// 舞台: the room with the lights off. The transcript deliberately does not
   /// appear here — 「你的话 live 中不上屏」 and the 余音字幕 arrive with S8
-  /// (#85); the shape in the middle is replaced by S7's 回声水面 (#84).
+  /// (#85); the shape in the middle is S7's 回声水面 (#84).
   Widget _stage(BuildContext context, RealtimeConversationState state) =>
       ConversationStageLayout(
         exitAffordance: IconButton(
@@ -257,8 +258,14 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
         visualization: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ConversationStagePresence(activity: state.activity),
+            ConversationEchoSurface(
+              key: const ValueKey('conversation-echo-surface'),
+              levels: conversationEchoLevelsOf(state.activity),
+            ),
             const SizedBox(height: ListenSpacing.gap16),
+            // The surface carries the state; this line stays as the screen
+            // reader's and the label-reader's version of the same thing —
+            // never the only place the state exists (D2).
             Text(
               key: const ValueKey('realtime-activity'),
               _activityLabel(state.activity),
@@ -266,6 +273,22 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
+            // D5: while the other voice is speaking, say out loud that cutting
+            // in is allowed. The surface already shows your open channel; this
+            // names it once, dimly, and disappears the moment it is your turn.
+            if (state.activity ==
+                RealtimeConversationActivity.assistantSpeaking) ...[
+              const SizedBox(height: ListenSpacing.gap8),
+              Text(
+                key: const ValueKey('realtime-interrupt-hint'),
+                'Just speak to cut in',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
             if (state.error != null) ...[
               const SizedBox(height: ListenSpacing.gap16),
               ConstrainedBox(

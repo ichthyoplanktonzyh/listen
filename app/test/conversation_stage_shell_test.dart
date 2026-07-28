@@ -145,7 +145,7 @@ void main() {
     // The stage: one glowing shape and the way out. No voice picker, no
     // history list, and — per the charter — no transcript of your own words.
     expect(
-      find.byKey(const ValueKey('conversation-stage-presence')),
+      find.byKey(const ValueKey('conversation-echo-surface')),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('realtime-finish')), findsOneWidget);

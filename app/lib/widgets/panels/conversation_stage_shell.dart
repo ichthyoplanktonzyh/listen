@@ -4,7 +4,7 @@ import '../../controllers/realtime_conversation_controller.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
-import '../common/ambient_breath.dart';
+import '../common/capability_viz.dart';
 
 /// Which of the conversation's three rooms is on screen (#70 Phase 2 · S6).
 ///
@@ -181,53 +181,43 @@ Route<T> conversationStageRoute<T>({
   },
 );
 
-/// Placeholder for the stage's one glowing shape until S7 (#84) lands the
-/// 回声水面 CustomPaint here.
+/// Maps the controller's activity onto the 回声水面's light levels (#84 · S7).
 ///
-/// It reads the controller's activity — the state machine is reused as-is, no
-/// front-end estimation — and gives it the app's shared [AmbientBreath]
-/// (2.6s, no bounce, halted under reduce-motion). It carries no shape language
-/// of its own on purpose: S7 replaces this widget wholesale rather than
-/// extending it.
-class ConversationStagePresence extends StatelessWidget {
-  const ConversationStagePresence({super.key, required this.activity});
-
-  final RealtimeConversationActivity activity;
-
-  @override
-  Widget build(BuildContext context) {
-    // 色的角色分配 (charter): your voice is signal teal — the brightest moment
-    // in the flow; the other person's voice is 月白. Nothing else glows.
-    final learnerSpeaking =
-        activity == RealtimeConversationActivity.learnerSpeaking;
-    final color = learnerSpeaking
-        ? ListenColors.overlaySignal
-        : ListenColors.moonWhite;
-    return AmbientBreath(
-      child: Container(
-        key: const ValueKey('conversation-stage-presence'),
-        width: 168,
-        height: 168,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [
-              color.withValues(alpha: learnerSpeaking ? 0.34 : 0.20),
-              color.withValues(alpha: 0),
-            ],
-          ),
-        ),
-        child: Center(
-          child: Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: learnerSpeaking ? 0.95 : 0.55),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+/// **Presentation only.** The state machine is reused as-is: this function
+/// reads `activity` and returns light — it never estimates, smooths, or
+/// re-decides who is speaking. 色的角色分配 (charter): your voice is signal
+/// teal, the brightest moment of the flow; the other person's voice is 月白;
+/// nothing else glows.
+///
+/// The four states are separated on three independent axes so they stay
+/// legible without reading a label (fixes D2, 状态退化成一枚 Chip):
+/// - `listening` 微澜 — your side barely stirs, the water waits for you;
+/// - `learnerSpeaking` 青波升起 — your echo takes the surface, the moon is gone;
+/// - `thinking` 涟漪 — no voice, one ripple spreading from the waterline;
+/// - `assistantSpeaking` 月白落下 — light falls from above, and your side keeps
+///   a visible resting swell: the channel is open, you may cut in (fixes D5).
+EchoSurfaceLevels conversationEchoLevelsOf(
+  RealtimeConversationActivity activity,
+) => switch (activity) {
+  RealtimeConversationActivity.inactive => EchoSurfaceLevels.still,
+  RealtimeConversationActivity.listening => const EchoSurfaceLevels(
+    moon: 0.1,
+    learner: 0.26,
+    ripple: 0,
+  ),
+  RealtimeConversationActivity.learnerSpeaking => const EchoSurfaceLevels(
+    moon: 0,
+    learner: 1,
+    ripple: 0,
+  ),
+  RealtimeConversationActivity.thinking => const EchoSurfaceLevels(
+    moon: 0.14,
+    learner: 0.12,
+    ripple: 1,
+  ),
+  RealtimeConversationActivity.assistantSpeaking => const EchoSurfaceLevels(
+    moon: 1,
+    learner: 0.2,
+    ripple: 0,
+  ),
+};
