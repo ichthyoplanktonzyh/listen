@@ -2,6 +2,14 @@
 
 All notable changes to the listen desktop app.
 
+## 2026-07-28 16:59 CST — Frontend Governance
+
+- Added an independent frontend planning system derived from the current
+  Flutter repository, including architecture, structure, testing, requirements,
+  roadmap, concerns, and cross-repository handoff rules.
+- Expanded `AGENT.md` with Claude frontend ownership, UI/UX rules, pinned-core
+  consumption, validation, documentation, Git, and completion requirements.
+
 ## 2026-07-28 16:05 CST — Pinned Core Baseline
 
 - Pinned contract `1.0.0` and macOS arm64 runtime `0.7.0` from immutable
