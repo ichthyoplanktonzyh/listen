@@ -10,6 +10,14 @@
   引导、本地 Whisper=学习者产出的诚实分层保留并在设置页复述。表单控件仍由 State 持有
   并在 dispose 释放（#27），内联后不再有退场动画竞态。
 
+- 2026-07-28 09:43 CST: 修正 issue #98 练习答案评估 baseline（PR #169）：
+  以学习语言 profile tokenizer 和无可调阈值的全局 edit-distance 对齐替代位置比较，
+  听写保持表层严格，其余现有 bounded practice 可通过带版本 provenance 的 lexical
+  provider 接受单 token lemma 等价；provider 故障在写入 attempt/evidence 前显式失败。
+  `equivalent` 同步 OpenAPI、Flutter 展示与 contract test，evaluation trace 记录版本、
+  evidence class、语言、policy、provider 及等价匹配。移除未生效的 contraction/penalty
+  声明，并将 PR 收窄为 `refs #98`，开放题 rubric/meaning-unit/LLM judgment 继续留在 issue。
+
 - 2026-07-27 11:59 CST: 补全 issue #96 LLM Sense Group 批处理验收：显式
   `batch_id` 状态/取消 API，排队与退避均可协作取消且取消批次不提交伪完整分析；账号作用域
   governor 可配置总 in-flight、启动速率和连接池空闲上限，不同 profile 默认隔离、同账号可

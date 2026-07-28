@@ -65,6 +65,10 @@ pub enum PracticeResult {
 #[serde(rename_all = "snake_case")]
 pub enum PracticeTokenResult {
     Correct,
+    /// Surface forms differ but a configured language provider resolves both
+    /// single tokens to the same lemma (e.g. "goes" ≈ "go"). Scores as correct
+    /// but remains distinguishable in the evaluation trace.
+    Equivalent,
     Missing,
     Extra,
     Mismatch,

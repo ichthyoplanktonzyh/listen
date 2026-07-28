@@ -115,6 +115,13 @@ application use cases and provider/repository boundaries.
   persist `PracticeAttempt`, write failed lexical anchors as `LexicalObservation`,
   optionally create `ReviewItem`, append `LearningEvent`, complete intensive
   sessions, and derive session summaries from events/attempts/review items.
+- `application::evaluator` owns the deterministic issue #98 baseline: it uses
+  the track/profile learning language, the shared language tokenizer, global
+  edit-distance alignment, and optional provider-backed single-token lemma
+  equivalence. Its versioned `heuristic_proxy` trace records language, policy,
+  configured provider versions, and equivalent matches. Configured provider
+  failures abort before learner evidence is written; open-ended semantic
+  judgment remains outside this baseline.
 - Due-review queries derive an application-owned `ReviewCard` read model from
   durable `ReviewItem` source/anchors. Card kind and cue/answer presentation are
   not persisted, so historical review rows remain compatible as card UX evolves.

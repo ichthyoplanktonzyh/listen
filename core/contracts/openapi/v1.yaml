@@ -5106,7 +5106,7 @@ components:
     PracticeResult:
       enum: [correct, partial, incorrect, completed, skipped]
     PracticeTokenResult:
-      enum: [correct, missing, extra, mismatch]
+      enum: [correct, equivalent, missing, extra, mismatch]
     ReviewSourceKind:
       enum: [lexical_entry, practice_failure, listening_inbox, chunk, sentence, connected_speech, speaking_attempt]
     ReviewItemStatus:

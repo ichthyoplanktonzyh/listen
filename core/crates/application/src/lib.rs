@@ -25,10 +25,10 @@ use domain::{
     ObservationOrigin, ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId,
     PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId,
     PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
-    PracticeAttempt, PracticeAttemptId, PracticeEvaluation, PracticeItem, PracticeItemId,
-    PracticeKind, PracticeMode, PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget,
-    PracticeTargetKind, PracticeTokenEvaluation, PracticeTokenResult, ProductionCorpusDocument,
-    ProductionCorpusEntry, ProductionCorpusHit, PronunciationProviderInfo, ReadingPosition,
+    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeKind, PracticeMode,
+    PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget, PracticeTargetKind,
+    ProductionCorpusDocument, ProductionCorpusEntry, ProductionCorpusHit,
+    PronunciationProviderInfo, ReadingPosition,
     RealtimeConversationSession as DomainRealtimeConversationSession,
     RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
     RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecognitionEvidenceId,
@@ -61,6 +61,7 @@ mod diagnosis;
 mod dictionary;
 mod dto;
 mod error;
+mod evaluator;
 mod hunting;
 mod learner_profile;
 mod lexical;
@@ -100,6 +101,7 @@ pub use coach_dashboard::{
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;
 pub use error::ApplicationError;
+pub use evaluator::PracticeAnswerEvaluator;
 pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;

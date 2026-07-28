@@ -88,6 +88,31 @@ fn openapi_version_snapshot_and_path_count() {
     }
 }
 
+#[test]
+fn practice_token_result_openapi_values_match_domain() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+    let documented = openapi
+        .split("    PracticeTokenResult:\n")
+        .nth(1)
+        .and_then(|section| section.lines().next())
+        .expect("PracticeTokenResult enum follows its schema heading")
+        .trim();
+    let serialized = [
+        domain::PracticeTokenResult::Correct,
+        domain::PracticeTokenResult::Equivalent,
+        domain::PracticeTokenResult::Missing,
+        domain::PracticeTokenResult::Extra,
+        domain::PracticeTokenResult::Mismatch,
+    ]
+    .map(|value| serde_json::to_value(value).unwrap());
+    let values = serialized
+        .iter()
+        .map(|value| value.as_str().unwrap())
+        .collect::<Vec<_>>()
+        .join(", ");
+    assert_eq!(documented, format!("enum: [{values}]"));
+}
+
 fn openapi_v1_paths(openapi: &str) -> BTreeSet<String> {
     openapi
         .lines()

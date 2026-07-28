@@ -36,7 +36,7 @@
 | `subtitle-core` | SRT/VTT 解析、token 化、时间轴查询（空隙/重叠/边界） |
 | `diagnosis-core` | 词义障碍、声音识别障碍、信息不足、其他因素 |
 | `speech-analysis` | 100 句发音基线、OOV fallback-v2 stress、information-structure prior、Reference B text/syntax provenance 与未资格 fallback、syntax-aware SenseGroup clause/PP/subordinator boundary、phrase/标点保护、min/max + 3–5 教学粒度、低 coverage 精确 fallback、provider-neutral dependency candidate matcher、RhythmFrame bridge、chunk 分区 |
-| `application` | AppServices 用例逻辑、chunk 检测、SyntacticAnalysisProvider fake/finalization seam、共享 consumer 单 batch/artifact ID、坏句隔离、timeout 精确 fallback；LLM batch 的账号级 semaphore、启动速率、排队取消、Retry-After 与 1000 请求容量 |
+| `application` | AppServices 用例逻辑、chunk 检测、practice answer 全局序列对齐、严格听写/provider lemma 等价、多语言 tokenizer 与 normalizer 故障零 evidence；SyntacticAnalysisProvider fake/finalization seam、共享 consumer 单 batch/artifact ID、坏句隔离、timeout 精确 fallback；LLM batch 的账号级 semaphore、启动速率、排队取消、Retry-After 与 1000 请求容量 |
 | `syntactic-provider` | Stanza/spaCy 同构 neutral contract、缺模型 capability、畸形 stdout、timeout 闭合失败 |
 | `dictionary-provider` | Provider 查询、缓存逻辑 |
 | `persistence-sqlite` | CRUD 操作、幂等、唯一约束、事务 |

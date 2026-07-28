@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use domain::ReviewCardState;
 
+use crate::evaluator::{PracticeAnswerEvaluator, practice_result, practice_score};
 use crate::{
     AppServices, ApplicationError, CompleteListeningSessionInput, CorpusIndexRepository,
     CreatePracticeItem, CreatePracticeSession, CreateReviewItem, DifficultyRepository,
@@ -10,14 +11,13 @@ use crate::{
     HuntingRepository, HuntingTarget, HuntingTargetId, HuntingTargetStatus, LearningEvent,
     LearningEventId, LearningEventKind, LearningEventRepository, LearningEventSubject,
     LearningEventSubjectKind, LearningObservationRepository, LexicalEntryId,
-    LexicalLearningUseCases, LexicalObservation, LexicalObservationId,
-    ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
+    LexicalLearningUseCases, LexicalNormalizationProvider, LexicalObservation,
+    LexicalObservationId, ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
     ListeningInboxRepository, ListeningInboxStatus, MediaRepository, ObservationContext,
     ObservationOrigin, ObservationResult, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId,
-    PracticeEvaluation, PracticeItem, PracticeItemId, PracticeMode, PracticeRepository,
-    PracticeResult, PracticeSession, PracticeSessionId, PracticeTokenEvaluation,
-    PracticeTokenResult, RecognitionEvidence, RecognitionUpgradeRepository, ReviewAttempt,
-    ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewQueueEntry,
+    PracticeItem, PracticeItemId, PracticeMode, PracticeRepository, PracticeResult,
+    PracticeSession, PracticeSessionId, RecognitionEvidence, RecognitionUpgradeRepository,
+    ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus, ReviewQueueEntry,
     ReviewQueueRepository, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind,
     ReviewSubmission, SoundFitCalibration, SubmitPracticeAttempt, SubmitReviewAttempt,
     SubtitleSentenceId, SubtitleTrackRepository, UpgradeSuggestion, UpgradeSuggestionId,
@@ -47,6 +47,7 @@ pub struct PracticeUseCases {
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) media: Arc<dyn MediaRepository>,
+    pub(crate) lexical_normalizers: Arc<Vec<Arc<dyn LexicalNormalizationProvider>>>,
     lexical_learning: LexicalLearningUseCases,
 }
 
@@ -63,6 +64,7 @@ impl PracticeUseCases {
             subtitle_tracks: services.subtitle_tracks.clone(),
             corpus: services.corpus.clone(),
             media: services.media.clone(),
+            lexical_normalizers: services.lexical_normalizers.clone(),
             lexical_learning: LexicalLearningUseCases::from_services(services),
         }
     }
@@ -170,7 +172,12 @@ impl PracticeUseCases {
             .get("text")
             .and_then(|value| value.as_str())
             .ok_or(ApplicationError::Validation("practice expected answer"))?;
-        let evaluation = evaluate_text_answer(expected_text, &input.text_answer);
+        // Issue #98 baseline: use the authoritative learning language and
+        // abort before writing learner evidence if a configured normalizer
+        // fails.
+        let language = self.practice_item_language(&item)?;
+        let evaluator = PracticeAnswerEvaluator::new(self.lexical_normalizers.clone(), language);
+        let evaluation = evaluator.evaluate(item.kind, expected_text, &input.text_answer)?;
         let result = practice_result(&evaluation);
         let now = now_ms();
         let id = PracticeAttemptId::from_fingerprint(
@@ -302,6 +309,31 @@ impl PracticeUseCases {
             session_id: item.session_id,
         })?;
         Ok(saved)
+    }
+
+    fn practice_item_language(
+        &self,
+        item: &PracticeItem,
+    ) -> Result<domain::LanguageCode, ApplicationError> {
+        let sentence_ids = item.target.sentence_id.iter().chain(
+            item.anchors
+                .iter()
+                .filter_map(|anchor| anchor.sentence_id.as_ref()),
+        );
+        for sentence_id in sentence_ids {
+            if let Some(language) = self.subtitle_tracks.sentence_track_language(sentence_id)? {
+                return Ok(language);
+            }
+        }
+        if let Some(session_id) = item.session_id.as_ref()
+            && let Some(session) = self.practice.get_practice_session(session_id)?
+            && let Some(track_id) = session.track_id.as_ref()
+            && let Some(track) = self.subtitle_tracks.get_track(track_id)?
+            && let Some(language) = track.language
+        {
+            return Ok(language);
+        }
+        Ok(domain::LanguageCode::parse("en")?)
     }
 
     pub fn create_review_item(
@@ -1085,86 +1117,6 @@ fn add_schedule_count(
     }
 }
 
-fn evaluate_text_answer(expected: &str, actual: &str) -> PracticeEvaluation {
-    let expected_tokens = normalize_answer_tokens(expected);
-    let actual_tokens = normalize_answer_tokens(actual);
-    let max_len = expected_tokens.len().max(actual_tokens.len());
-    let mut token_results = Vec::with_capacity(max_len);
-    for index in 0..max_len {
-        let expected = expected_tokens.get(index).cloned();
-        let actual = actual_tokens.get(index).cloned();
-        let result = match (&expected, &actual) {
-            (Some(left), Some(right)) if left == right => PracticeTokenResult::Correct,
-            (Some(_), Some(_)) => PracticeTokenResult::Mismatch,
-            (Some(_), None) => PracticeTokenResult::Missing,
-            (None, Some(_)) => PracticeTokenResult::Extra,
-            (None, None) => continue,
-        };
-        token_results.push(PracticeTokenEvaluation {
-            expected,
-            actual,
-            result,
-        });
-    }
-    let correct = token_results
-        .iter()
-        .filter(|value| value.result == PracticeTokenResult::Correct)
-        .count();
-    PracticeEvaluation {
-        summary: format!("{correct}/{} tokens matched", expected_tokens.len()),
-        token_results,
-        extra: serde_json::json!({
-            "expected_token_count": expected_tokens.len(),
-            "actual_token_count": actual_tokens.len(),
-        }),
-    }
-}
-
-fn normalize_answer_tokens(value: &str) -> Vec<String> {
-    value
-        .split_whitespace()
-        .map(|token| {
-            token
-                .trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '\'')
-                .to_ascii_lowercase()
-        })
-        .filter(|token| !token.is_empty())
-        .collect()
-}
-
-fn practice_result(evaluation: &PracticeEvaluation) -> PracticeResult {
-    if evaluation.token_results.is_empty() {
-        return PracticeResult::Skipped;
-    }
-    if evaluation
-        .token_results
-        .iter()
-        .all(|value| value.result == PracticeTokenResult::Correct)
-    {
-        PracticeResult::Correct
-    } else if evaluation
-        .token_results
-        .iter()
-        .any(|value| value.result == PracticeTokenResult::Correct)
-    {
-        PracticeResult::Partial
-    } else {
-        PracticeResult::Incorrect
-    }
-}
-
-fn practice_score(evaluation: &PracticeEvaluation) -> Option<f32> {
-    if evaluation.token_results.is_empty() {
-        return None;
-    }
-    let correct = evaluation
-        .token_results
-        .iter()
-        .filter(|value| value.result == PracticeTokenResult::Correct)
-        .count();
-    Some(correct as f32 / evaluation.token_results.len() as f32)
-}
-
 impl PracticeRepository for DisabledLearningLoopRepository {
     fn create_practice_session(
         &self,
@@ -1477,19 +1429,35 @@ impl ListeningInboxRepository for DisabledLearningLoopRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::evaluator::PracticeAnswerEvaluator;
+    use domain::PracticeTokenResult;
 
     #[test]
     fn text_evaluation_marks_partial_answers() {
-        let evaluation = evaluate_text_answer("I want to go", "I wanna go");
-        assert_eq!(practice_result(&evaluation), PracticeResult::Partial);
-        assert_eq!(evaluation.token_results.len(), 4);
-        assert_eq!(
-            evaluation.token_results[0].result,
-            PracticeTokenResult::Correct
+        let evaluator = PracticeAnswerEvaluator::new(
+            Arc::new(Vec::new()),
+            domain::LanguageCode::parse("en").unwrap(),
         );
-        assert_eq!(
-            evaluation.token_results[1].result,
-            PracticeTokenResult::Mismatch
+        let evaluation = evaluator
+            .evaluate(
+                domain::PracticeKind::Dictation,
+                "I want to go",
+                "I wanna go",
+            )
+            .unwrap();
+        assert_eq!(practice_result(&evaluation), PracticeResult::Partial);
+        // The key invariant is that the trailing exact token remains aligned.
+        assert!(
+            evaluation
+                .token_results
+                .iter()
+                .any(|t| t.result == PracticeTokenResult::Correct)
+        );
+        assert!(
+            !evaluation
+                .token_results
+                .iter()
+                .all(|t| t.result == PracticeTokenResult::Mismatch)
         );
     }
 }
