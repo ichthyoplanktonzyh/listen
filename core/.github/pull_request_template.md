@@ -46,5 +46,6 @@ result
 - [ ] The diff contains one coherent change and no unrelated user changes.
 - [ ] I reviewed the final diff and staged file list.
 - [ ] Tests do not require live or paid model credentials.
-- [ ] Documentation and changelog are updated when required.
+- [ ] Documentation is updated when required; changelog is updated only for a
+      release PR.
 - [ ] Review threads are resolved and the branch is current with `origin/main`.

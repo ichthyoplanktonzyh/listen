@@ -10,7 +10,7 @@
 | `STATE.md` | 当前状态、active phase、下一步 | 每个有效工作切片 |
 | `MILESTONES.md` | 已完成阶段的链接索引 | phase/milestone 收口 |
 | `codebase/*` | 当前代码事实 | 架构或结构改变 |
-| `CHANGELOG.md` | 每次提交的事实历史 | 每个 commit-worthy change |
+| `CHANGELOG.md` | 已发布、人工整理的历史 | release 收口 |
 
 ## 维护规则
 
@@ -22,7 +22,9 @@
 - `codebase/` 从代码更新，不从旧 planning 猜测。
 - 完成的 phase 写 `CLOSEOUT.md` 后冻结；更正写入新 phase/context。
 - ADR 位于 `docs/decisions/`，既有 ADR 不重写；新决策追加编号并注明 supersedes。
-- 每个 commit-worthy change 在根 `CHANGELOG.md` 添加精确到分钟的时间戳。
+- 普通 feature、fix、refactor、planning、docs 分支不修改根 `CHANGELOG.md`。
+- 发布负责人在发布 contract/runtime/version 时，根据已合并 PR 一次性整理
+  `CHANGELOG.md`；重点记录兼容性、迁移、安全与运维相关变化。
 
 ## Phase 生命周期
 

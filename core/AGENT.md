@@ -165,10 +165,11 @@ The live `.planning` tree describes only facts owned by this repository.
 - `phases/`: active and completed backend phases
 - `archive/`: frozen imported monorepo history
 
-Follow `.planning/MAINTENANCE.md`. Every commit-worthy change adds an exact
-minute entry to `CHANGELOG.md`. Do not copy `listen-app` planning into this
-repository. Cross-repo status is recorded as a release/commit/issue/PR link,
-not duplicated plans.
+Follow `.planning/MAINTENANCE.md`. Root `CHANGELOG.md` is release-only: ordinary
+feature, fix, refactor, planning, and documentation branches do not edit it.
+The release owner curates it once from merged PRs when publishing a version. Do
+not copy `listen-app` planning into this repository. Cross-repo status is
+recorded as a release/commit/issue/PR link, not duplicated plans.
 
 ## Git and Pull Requests
 
@@ -202,7 +203,7 @@ Work is complete only when:
 - relevant tests and local quality gates pass;
 - contract/version impact is explicit;
 - planning/codebase docs match the new code fact;
-- `CHANGELOG.md` is updated;
+- release notes are updated only when this task publishes a version;
 - cross-repo handoff data is complete when applicable;
 - the branch is pushed and the PR accurately reports validation and residual
   risk.
