@@ -968,6 +968,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ),
           acquireAudioFocus: speakingActions.acquireRecordingFocus,
           onClose: () => Navigator.pop(routeContext),
+          // Realtime provider configuration lives in settings (#87); the
+          // conversation route covers the app bar, so it hands the learner
+          // back there instead of hosting the form itself.
+          onManageVoices: _openSettings,
         ),
       ),
     );

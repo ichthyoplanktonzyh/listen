@@ -9,6 +9,7 @@ import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
 import 'package:llplayer_next/widgets/panels/realtime_conversation_panel.dart';
+import 'package:llplayer_next/widgets/settings/realtime_provider_settings.dart';
 
 void main() {
   test('new realtime profiles use Qwen full-duplex as the baseline', () {
@@ -44,9 +45,10 @@ void main() {
     );
   });
 
-  testWidgets('provider dropdown ellipsizes long names without overflowing', (
+  testWidgets('the lobby offers a voice choice, not a configuration form', (
     tester,
   ) async {
+    var manageVoicesTaps = 0;
     final controller = RealtimeConversationController(audio: _FakeAudio());
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
@@ -87,14 +89,73 @@ void main() {
           ),
           acquireAudioFocus: () async {},
           onClose: () {},
+          onManageVoices: () async => manageVoicesTaps++,
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    // Voice, not model plumbing: the lobby asks only who speaks with you,
+    // and long names ellipsize instead of overflowing the row (#87).
     expect(tester.takeException(), isNull);
+    expect(find.text('Realtime provider · Tina'), findsOneWidget);
+    expect(find.text('Which voice speaks with you'), findsOneWidget);
+
+    // The endpoint/workspace/region/API-key form now lives in settings.
+    expect(find.text('Add provider'), findsNothing);
+    expect(find.widgetWithText(TextField, 'WebSocket endpoint'), findsNothing);
+    expect(find.widgetWithText(TextField, 'Workspace ID'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('realtime-manage-voices')));
+    await tester.pumpAndSettle();
+    expect(manageVoicesTaps, 1);
+
+    controller.dispose();
+  });
+
+  testWidgets('with no voice configured the lobby points at settings instead '
+      'of dead-ending', (tester) async {
+    final controller = RealtimeConversationController(audio: _FakeAudio());
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'token',
+      transport: (method, path, body) async {
+        if (method == 'GET' && path == '/v1/realtime/providers') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (method == 'GET' && path == '/v1/realtime/sessions') {
+          return (statusCode: 200, body: '[]');
+        }
+        throw StateError('Unexpected request: $method $path ${body ?? ''}');
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RealtimeConversationPanel(
+          controller: controller,
+          api: api,
+          launch: RealtimeConversationLaunch.free(
+            language: 'en',
+            modelId: 'asr-model',
+          ),
+          acquireAudioFocus: () async {},
+          onClose: () {},
+          onManageVoices: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
     expect(
-      find.text('Realtime provider · $qwenRealtimeBaselineModel'),
+      find.text(
+        'No realtime voice configured yet. '
+        'Add one in Settings › Realtime voice.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('realtime-manage-voices')),
       findsOneWidget,
     );
 
