@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-28 15:05 CST: 实时对话进场改为舞台态 shell（refs #83 · S6）。新增
+  `conversation_stage_shell.dart`：全屏暗场容器（底色压到 ground2 并在明暗两套主题下
+  都保持暗场）、门厅→舞台→结束页三段以 `ListenMotion.slow`/enter/exit 交叉淡入淡出、
+  reduce-motion 归零；进出动线用 `conversationStageRoute` 取代 `MaterialPageRoute`
+  （淡入亮起而非页面滑入）。门厅只保留话题/自由对话说明、声音选择与历史；舞台上只有一个
+  发光的形（复用共享 `AmbientBreath` 2.6s，禁 bounce）与结束/丢弃控件，你自己的话不上屏。
+  Esc 丢弃确认的 `PopScope` 动线原样保留；不联动 macOS 系统全屏（F 仍归播放器，#25 边界
+  未动）。房间归属由 controller phase 纯推导，后端判定与状态机零改动，provider 字幕=
+  引导、本地 Whisper=学习者产出的诚实分层保留。回声水面（S7）、余音字幕（S8）、结束页
+  三段（S9）在 shell 里各留挂载点。
+
 - 2026-07-28 10:35 CST: S4 词汇本详情分段（refs #82）：词条详情从一根 8 段 ListView 重排为
   **身份卡 + 五段锚点导航**（证据/切片/我的输出/义项/笔记，V4）。锚点非 tab——五段始终同时构建、
   同处一个滚动区，点锚点只滚动不隐藏其他段；活动锚点随滚动反映阅读位置，reduce-motion 下
