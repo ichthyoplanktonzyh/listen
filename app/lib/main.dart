@@ -85,6 +85,7 @@ import 'widgets/layout/player_overlays.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/shell_recede.dart';
 import 'widgets/layout/side_panel.dart';
+import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -947,7 +948,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     await Navigator.push<void>(
       context,
-      MaterialPageRoute<void>(
+      // The stage powers on instead of sliding in like a page of chrome
+      // (#83). It stays a window-sized dark room: F and macOS fullscreen
+      // remain the player's (#25 boundary untouched).
+      conversationStageRoute<void>(
+        reduceMotion: MediaQuery.disableAnimationsOf(context),
         builder: (routeContext) => RealtimeConversationPanel(
           controller: realtimeConversationController,
           api: service,
@@ -1646,41 +1651,39 @@ class _PlayerScreenState extends State<PlayerScreen>
         // map only supplies what each action *does*. The macOS Playback/Help
         // menus (#23) reuse it, so a table row has exactly one callback.
         final shortcutActions = <String, VoidCallback>{
-              'playPause': practiceActions.togglePracticePlayback,
-              'seekBack': () => unawaited(
-                playbackActions.seekBy(-PlaybackActionsCoordinator.seekStep),
-              ),
-              'seekForward': () => unawaited(
-                playbackActions.seekBy(PlaybackActionsCoordinator.seekStep),
-              ),
-              'volumeUp': () => unawaited(_keyboardVolumeBy(5)),
-              'volumeDown': () => unawaited(_keyboardVolumeBy(-5)),
-              'toggleMute': () => unawaited(playbackActions.toggleMute()),
-              'speedDown': () => unawaited(_keyboardRateBy(-0.25)),
-              'speedUp': () => unawaited(_keyboardRateBy(0.25)),
-              'toggleFullscreen': () => unawaited(immersiveMode.toggle()),
-              'exitFullscreen': () => unawaited(immersiveMode.exit()),
-              'previousSentence': () =>
-                  unawaited(practiceActions.navigatePracticeSentence(-1)),
-              'nextSentence': () =>
-                  unawaited(practiceActions.navigatePracticeSentence(1)),
-              'loopSentence': () =>
-                  subtitleController.setLoopCue(!subtitleController.loopCue),
-              'toggleSubtitles': () =>
-                  subtitleController.setVisible(!subtitleController.visible),
-              'captureInbox': () =>
-                  unawaited(inboxActions.captureListeningInbox()),
-              'toggleExtensiveListening': () =>
-                  unawaited(_toggleExtensiveListening()),
-              'hardInterrupt': () => unawaited(_hardInterruptListening()),
-              'markUnknown': () =>
-                  vocabularyActions.markFirstWord('unknown_meaning'),
-              'markKnownNotRecognized': () =>
-                  vocabularyActions.markFirstWord('known_not_recognized'),
-              'markKnownRecognized': () =>
-                  vocabularyActions.markFirstWord('known_recognized'),
-              'showCheatSheet': () =>
-                  unawaited(showShortcutCheatSheet(context)),
+          'playPause': practiceActions.togglePracticePlayback,
+          'seekBack': () => unawaited(
+            playbackActions.seekBy(-PlaybackActionsCoordinator.seekStep),
+          ),
+          'seekForward': () => unawaited(
+            playbackActions.seekBy(PlaybackActionsCoordinator.seekStep),
+          ),
+          'volumeUp': () => unawaited(_keyboardVolumeBy(5)),
+          'volumeDown': () => unawaited(_keyboardVolumeBy(-5)),
+          'toggleMute': () => unawaited(playbackActions.toggleMute()),
+          'speedDown': () => unawaited(_keyboardRateBy(-0.25)),
+          'speedUp': () => unawaited(_keyboardRateBy(0.25)),
+          'toggleFullscreen': () => unawaited(immersiveMode.toggle()),
+          'exitFullscreen': () => unawaited(immersiveMode.exit()),
+          'previousSentence': () =>
+              unawaited(practiceActions.navigatePracticeSentence(-1)),
+          'nextSentence': () =>
+              unawaited(practiceActions.navigatePracticeSentence(1)),
+          'loopSentence': () =>
+              subtitleController.setLoopCue(!subtitleController.loopCue),
+          'toggleSubtitles': () =>
+              subtitleController.setVisible(!subtitleController.visible),
+          'captureInbox': () => unawaited(inboxActions.captureListeningInbox()),
+          'toggleExtensiveListening': () =>
+              unawaited(_toggleExtensiveListening()),
+          'hardInterrupt': () => unawaited(_hardInterruptListening()),
+          'markUnknown': () =>
+              vocabularyActions.markFirstWord('unknown_meaning'),
+          'markKnownNotRecognized': () =>
+              vocabularyActions.markFirstWord('known_not_recognized'),
+          'markKnownRecognized': () =>
+              vocabularyActions.markFirstWord('known_recognized'),
+          'showCheatSheet': () => unawaited(showShortcutCheatSheet(context)),
         };
         return AppControllers(
           player: playerController,
@@ -1705,357 +1708,388 @@ class _PlayerScreenState extends State<PlayerScreen>
                 capabilities: capabilities,
                 shortcutActions: shortcutActions,
                 child: ShellRecede(
-              // Recede while media plays on the workbench — and always in the
-              // immersive state, where an idle pointer hides the controls
-              // even when playback is paused (#25-A player convention).
-              active:
-                  (_workbenchExpanded && playerController.playing) ||
-                  immersiveMode.immersive,
-              builder: (context, shellVisible) => Scaffold(
-                // Immersive drops the app bar entirely: the stage owns the
-                // whole screen, chrome returns only on exit.
-                appBar: immersiveMode.immersive
-                    ? null
-                    : ShellFadeAppBar(
-                        visible: shellVisible,
-                        child: PlayerAppBar(
-                          // The shared availability object built above (#24);
-                          // the macOS menu bar reads the same instance (#23).
-                          capabilities: capabilities,
-                          onOpenSubtitleResources: () =>
-                              unawaited(_openSubtitleResources()),
-                          onOpenVocabulary: _openVocabulary,
-                          onOpenReview: () => unawaited(_openReviewQueue()),
-                          onOpenMedia: mediaSession.openMedia,
-                          onOpenOnline: _openOnline,
-                          onImportPrimarySubtitle: () => unawaited(
-                            mediaSession.openSubtitle(secondary: false),
-                          ),
-                          onGeneratePrimarySubtitles: () =>
-                              unawaited(_generateSubtitles(secondary: false)),
-                          onSearchPrimarySubtitles: () =>
-                              unawaited(_searchOpenSubtitles(secondary: false)),
-                          onImportSecondarySubtitle: () => unawaited(
-                            mediaSession.openSubtitle(secondary: true),
-                          ),
-                          onGenerateSecondarySubtitles: () =>
-                              unawaited(_generateSubtitles(secondary: true)),
-                          onSearchSecondarySubtitles: () =>
-                              unawaited(_searchOpenSubtitles(secondary: true)),
-                          onImportEmbeddedSubtitle: () =>
-                              unawaited(_importEmbeddedSubtitle()),
-                          onOpenSettings: () => unawaited(_openSettings()),
-                          onExportLogs: () => unawaited(_exportLogs()),
-                          onExportVocabulary: () =>
-                              unawaited(playbackActions.exportVocabulary()),
-                          onImportVocabulary: () =>
-                              unawaited(playbackActions.importVocabulary()),
-                          onImportWordList: () => unawaited(_importWordList()),
-                          onArchiveMedia: () =>
-                              unawaited(playbackActions.archiveCurrentMedia()),
-                          onOpenTranscriptionCenter: () =>
-                              unawaited(_openTranscriptionCenter()),
-                          onOpenPhoneticAnalysisCenter: () =>
-                              unawaited(_openPhoneticAnalysisCenter()),
-                          onOpenLearningAssets: () =>
-                              unawaited(_openLearningAssets()),
-                          onOpenLearningResources: () =>
-                              unawaited(_openLearningResources()),
-                        ),
-                      ),
-                body: immersiveMode.immersive
-                    ? _immersiveBody(shellVisible)
-                    : DropTarget(
-                        onDragEntered: (_) => setState(() => dragging = true),
-                        onDragExited: (_) => setState(() => dragging = false),
-                        onDragDone: (details) {
-                          setState(() => dragging = false);
-                          unawaited(
-                            subtitleSources.handleDrop(
-                              details.files.map((file) => file.path).toList(),
+                  // Recede while media plays on the workbench — and always in the
+                  // immersive state, where an idle pointer hides the controls
+                  // even when playback is paused (#25-A player convention).
+                  active:
+                      (_workbenchExpanded && playerController.playing) ||
+                      immersiveMode.immersive,
+                  builder: (context, shellVisible) => Scaffold(
+                    // Immersive drops the app bar entirely: the stage owns the
+                    // whole screen, chrome returns only on exit.
+                    appBar: immersiveMode.immersive
+                        ? null
+                        : ShellFadeAppBar(
+                            visible: shellVisible,
+                            child: PlayerAppBar(
+                              // The shared availability object built above (#24);
+                              // the macOS menu bar reads the same instance (#23).
+                              capabilities: capabilities,
+                              onOpenSubtitleResources: () =>
+                                  unawaited(_openSubtitleResources()),
+                              onOpenVocabulary: _openVocabulary,
+                              onOpenReview: () => unawaited(_openReviewQueue()),
+                              onOpenMedia: mediaSession.openMedia,
+                              onOpenOnline: _openOnline,
+                              onImportPrimarySubtitle: () => unawaited(
+                                mediaSession.openSubtitle(secondary: false),
+                              ),
+                              onGeneratePrimarySubtitles: () => unawaited(
+                                _generateSubtitles(secondary: false),
+                              ),
+                              onSearchPrimarySubtitles: () => unawaited(
+                                _searchOpenSubtitles(secondary: false),
+                              ),
+                              onImportSecondarySubtitle: () => unawaited(
+                                mediaSession.openSubtitle(secondary: true),
+                              ),
+                              onGenerateSecondarySubtitles: () => unawaited(
+                                _generateSubtitles(secondary: true),
+                              ),
+                              onSearchSecondarySubtitles: () => unawaited(
+                                _searchOpenSubtitles(secondary: true),
+                              ),
+                              onImportEmbeddedSubtitle: () =>
+                                  unawaited(_importEmbeddedSubtitle()),
+                              onOpenSettings: () => unawaited(_openSettings()),
+                              onExportLogs: () => unawaited(_exportLogs()),
+                              onExportVocabulary: () =>
+                                  unawaited(playbackActions.exportVocabulary()),
+                              onImportVocabulary: () =>
+                                  unawaited(playbackActions.importVocabulary()),
+                              onImportWordList: () =>
+                                  unawaited(_importWordList()),
+                              onArchiveMedia: () => unawaited(
+                                playbackActions.archiveCurrentMedia(),
+                              ),
+                              onOpenTranscriptionCenter: () =>
+                                  unawaited(_openTranscriptionCenter()),
+                              onOpenPhoneticAnalysisCenter: () =>
+                                  unawaited(_openPhoneticAnalysisCenter()),
+                              onOpenLearningAssets: () =>
+                                  unawaited(_openLearningAssets()),
+                              onOpenLearningResources: () =>
+                                  unawaited(_openLearningResources()),
                             ),
-                          );
-                        },
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            border: dragging
-                                ? Border.all(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    width: 4,
-                                  )
-                                : null,
                           ),
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Stack(
-                                  children: [
-                                    ListeningHome(
-                                      onOpenMedia: mediaSession.openMedia,
-                                      onOpenOnline: _openOnline,
-                                      onContinue: () {
-                                        if (_workbenchExpanded ||
-                                            playerController.mediaPath !=
-                                                null) {
-                                          _expandWorkbench();
-                                        } else {
-                                          unawaited(
-                                            mediaLibraryActions
-                                                .continueRecentMedia(),
-                                          );
-                                        }
-                                      },
-                                      onOpenSubtitleResources: () =>
-                                          unawaited(_openSubtitleResources()),
-                                      onOpenVocabulary: _openVocabulary,
-                                      onOpenPersonalExpressions: () =>
-                                          unawaited(_openPersonalExpression()),
-                                      onOpenConversation: () =>
-                                          unawaited(_openFreeConversation()),
-                                      onOpenReview: () =>
-                                          unawaited(_openReviewQueue()),
-                                      onOpenCoach: () =>
-                                          unawaited(_openCoachDashboard()),
-                                      onOpenSettings: () =>
-                                          unawaited(_openSettings()),
-                                      mediaLibrary:
-                                          mediaLibraryActions.mediaLibrary,
-                                      familiarSupplyEnabled: settingsController
-                                          .familiarMaterialSuggestions,
-                                      onOpenLibraryEntry: (entry) => unawaited(
-                                        mediaLibraryActions.openLibraryEntry(
-                                          entry,
-                                        ),
-                                      ),
-                                      onStartExtensiveEntry: (entry) =>
-                                          unawaited(
-                                            mediaLibraryActions
-                                                .startExtensiveFromLibrary(
-                                                  entry,
-                                                ),
-                                          ),
-                                      onStartIntensiveEntry: (entry) =>
-                                          unawaited(
-                                            mediaLibraryActions
-                                                .startIntensiveFromLibrary(
-                                                  entry,
-                                                ),
-                                          ),
-                                      onSetLibraryIntent: (entry, intent) =>
-                                          unawaited(
-                                            mediaLibraryActions
-                                                .setLibraryTriageIntent(
-                                                  entry,
-                                                  intent,
-                                                ),
-                                          ),
-                                      onToggleFamiliarSupply: (enabled) =>
-                                          unawaited(
-                                            mediaLibraryActions
-                                                .toggleFamiliarSupply(enabled),
-                                          ),
-                                      recentMediaTitle:
-                                          settingsController
-                                              .lastMediaTitle
-                                              .isEmpty
-                                          ? null
-                                          : settingsController.lastMediaTitle,
-                                      recentMediaPath:
-                                          settingsController
-                                              .lastMediaPath
-                                              .isEmpty
-                                          ? null
-                                          : settingsController.lastMediaPath,
-                                      recentPosition: Duration(
-                                        milliseconds: settingsController
-                                            .lastMediaPositionMs,
-                                      ),
-                                      recentDuration: Duration(
-                                        milliseconds: settingsController
-                                            .lastMediaDurationMs,
-                                      ),
-                                      recentSubtitleCount: settingsController
-                                          .lastMediaSubtitleCount,
-                                      vocabularyCount:
-                                          mediaLibraryActions
-                                              .savedVocabulary
-                                              ?.total ??
-                                          0,
-                                      vocabularyCapped:
-                                          mediaLibraryActions
-                                              .savedVocabulary
-                                              ?.capped ??
-                                          false,
-                                      vocabularyKnown:
-                                          mediaLibraryActions.savedVocabulary !=
-                                          null,
-                                      listeningInboxCount:
-                                          extensiveListeningController
-                                              .activeItemCount,
-                                      coreStatusText:
-                                          playerController.statusIsPlayback
-                                          ? ''
-                                          : playerController.status,
-                                    ),
-                                    if (playerController.mediaPath != null)
-                                      SlideTransition(
-                                        position: _workbenchSlideAnimation,
-                                        child: MediaWorkbench(
-                                          mediaTitle: playerController
-                                              .mediaPath!
-                                              .split(Platform.pathSeparator)
-                                              .last,
-                                          playerStage: _playerStage(),
-                                          learningPanel: _sidePanel(),
-                                          selectedChannel:
-                                              contentChannels.selected,
-                                          channelAvailability: {
-                                            ContentChannel.listening:
-                                                const ContentChannelAvailability.available(),
-                                            ContentChannel.reading:
-                                                subtitleController
-                                                        .primaryTrack ==
-                                                    null
-                                                ? ContentChannelAvailability.unavailable(
-                                                    l.text(
-                                                      'channelNeedsTranscript',
-                                                    ),
-                                                  )
-                                                : const ContentChannelAvailability.available(),
-                                            ContentChannel.speaking:
-                                                subtitleController
-                                                        .primaryTrack ==
-                                                    null
-                                                ? ContentChannelAvailability.unavailable(
-                                                    l.text(
-                                                      'channelNeedsTranscript',
-                                                    ),
-                                                  )
-                                                : !Platform.isMacOS
-                                                ? ContentChannelAvailability.unavailable(
-                                                    l.text(
-                                                      'channelUnavailable',
-                                                    ),
-                                                  )
-                                                : const ContentChannelAvailability.available(),
-                                            ContentChannel.writing:
-                                                subtitleController
-                                                        .primaryTrack ==
-                                                    null
-                                                ? ContentChannelAvailability.unavailable(
-                                                    l.text(
-                                                      'channelNeedsTranscript',
-                                                    ),
-                                                  )
-                                                : const ContentChannelAvailability.available(),
-                                          },
-                                          onChannelSelected: (channel) =>
+                    body: immersiveMode.immersive
+                        ? _immersiveBody(shellVisible)
+                        : DropTarget(
+                            onDragEntered: (_) =>
+                                setState(() => dragging = true),
+                            onDragExited: (_) =>
+                                setState(() => dragging = false),
+                            onDragDone: (details) {
+                              setState(() => dragging = false);
+                              unawaited(
+                                subtitleSources.handleDrop(
+                                  details.files
+                                      .map((file) => file.path)
+                                      .toList(),
+                                ),
+                              );
+                            },
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: dragging
+                                    ? Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        width: 4,
+                                      )
+                                    : null,
+                              ),
+                              child: Column(
+                                children: [
+                                  Expanded(
+                                    child: Stack(
+                                      children: [
+                                        ListeningHome(
+                                          onOpenMedia: mediaSession.openMedia,
+                                          onOpenOnline: _openOnline,
+                                          onContinue: () {
+                                            if (_workbenchExpanded ||
+                                                playerController.mediaPath !=
+                                                    null) {
+                                              _expandWorkbench();
+                                            } else {
                                               unawaited(
-                                                contentChannels.select(channel),
-                                              ),
-                                          immersiveStage: switch (contentChannels
-                                              .selected) {
-                                            ContentChannel.writing =>
-                                              WritingChannelHost(
-                                                api: api!,
-                                                writingChannel: writingChannel,
-                                                writingTaskController:
-                                                    writingTaskController,
-                                              ),
-                                            ContentChannel.speaking =>
-                                              SpeakingChannelHost(
-                                                api: api!,
-                                                speakingChannel:
-                                                    speakingChannel,
-                                                speakingActions:
-                                                    speakingActions,
-                                                speakingTaskController:
-                                                    speakingTaskController,
-                                                readingTaskController:
-                                                    readingTaskController,
-                                              ),
-                                            ContentChannel.reading =>
-                                              ReadingChannelHost(
-                                                api: api!,
-                                                readingChannel: readingChannel,
-                                                readingController:
-                                                    readingController,
-                                                readingTaskController:
-                                                    readingTaskController,
-                                                readingDiffController:
-                                                    readingDiffController,
-                                                learningController:
-                                                    learningController,
-                                                settingsController:
-                                                    settingsController,
-                                                subtitleController:
-                                                    subtitleController,
-                                                playerController:
-                                                    playerController,
-                                                vocabularyActions:
-                                                    vocabularyActions,
-                                                onSaveSentencePattern:
-                                                    (source) =>
-                                                        _openPersonalExpression(
-                                                          source: source,
-                                                        ),
-                                                onOpenSlicePlayback:
-                                                    _openSlicePlayback,
-                                                onRecordReadingMark:
-                                                    _recordReadingMark,
-                                                onOpenListeningDictionary:
-                                                    _openListeningDictionaryEntry,
-                                                onPlayPronunciationAudio:
-                                                    _playPronunciationAudio,
-                                                onCorrectLemma: () => unawaited(
-                                                  _correctCurrentLemma(),
-                                                ),
-                                              ),
-                                            ContentChannel.listening => null,
+                                                mediaLibraryActions
+                                                    .continueRecentMedia(),
+                                              );
+                                            }
                                           },
-                                          mediaFraction: settingsController
-                                              .workbenchMediaFraction,
-                                          onMediaFractionChanged:
-                                              _setWorkbenchMediaFraction,
-                                          onCollapse: _collapseWorkbench,
+                                          onOpenSubtitleResources: () =>
+                                              unawaited(
+                                                _openSubtitleResources(),
+                                              ),
+                                          onOpenVocabulary: _openVocabulary,
+                                          onOpenPersonalExpressions: () =>
+                                              unawaited(
+                                                _openPersonalExpression(),
+                                              ),
+                                          onOpenConversation: () => unawaited(
+                                            _openFreeConversation(),
+                                          ),
+                                          onOpenReview: () =>
+                                              unawaited(_openReviewQueue()),
+                                          onOpenCoach: () =>
+                                              unawaited(_openCoachDashboard()),
+                                          onOpenSettings: () =>
+                                              unawaited(_openSettings()),
+                                          mediaLibrary:
+                                              mediaLibraryActions.mediaLibrary,
+                                          familiarSupplyEnabled:
+                                              settingsController
+                                                  .familiarMaterialSuggestions,
+                                          onOpenLibraryEntry: (entry) =>
+                                              unawaited(
+                                                mediaLibraryActions
+                                                    .openLibraryEntry(entry),
+                                              ),
+                                          onStartExtensiveEntry: (entry) =>
+                                              unawaited(
+                                                mediaLibraryActions
+                                                    .startExtensiveFromLibrary(
+                                                      entry,
+                                                    ),
+                                              ),
+                                          onStartIntensiveEntry: (entry) =>
+                                              unawaited(
+                                                mediaLibraryActions
+                                                    .startIntensiveFromLibrary(
+                                                      entry,
+                                                    ),
+                                              ),
+                                          onSetLibraryIntent: (entry, intent) =>
+                                              unawaited(
+                                                mediaLibraryActions
+                                                    .setLibraryTriageIntent(
+                                                      entry,
+                                                      intent,
+                                                    ),
+                                              ),
+                                          onToggleFamiliarSupply: (enabled) =>
+                                              unawaited(
+                                                mediaLibraryActions
+                                                    .toggleFamiliarSupply(
+                                                      enabled,
+                                                    ),
+                                              ),
+                                          recentMediaTitle:
+                                              settingsController
+                                                  .lastMediaTitle
+                                                  .isEmpty
+                                              ? null
+                                              : settingsController
+                                                    .lastMediaTitle,
+                                          recentMediaPath:
+                                              settingsController
+                                                  .lastMediaPath
+                                                  .isEmpty
+                                              ? null
+                                              : settingsController
+                                                    .lastMediaPath,
+                                          recentPosition: Duration(
+                                            milliseconds: settingsController
+                                                .lastMediaPositionMs,
+                                          ),
+                                          recentDuration: Duration(
+                                            milliseconds: settingsController
+                                                .lastMediaDurationMs,
+                                          ),
+                                          recentSubtitleCount:
+                                              settingsController
+                                                  .lastMediaSubtitleCount,
+                                          vocabularyCount:
+                                              mediaLibraryActions
+                                                  .savedVocabulary
+                                                  ?.total ??
+                                              0,
+                                          vocabularyCapped:
+                                              mediaLibraryActions
+                                                  .savedVocabulary
+                                                  ?.capped ??
+                                              false,
+                                          vocabularyKnown:
+                                              mediaLibraryActions
+                                                  .savedVocabulary !=
+                                              null,
+                                          listeningInboxCount:
+                                              extensiveListeningController
+                                                  .activeItemCount,
+                                          coreStatusText:
+                                              playerController.statusIsPlayback
+                                              ? ''
+                                              : playerController.status,
                                         ),
-                                      ),
-                                    PlayerOverlays(
-                                      api: api,
-                                      practiceController: practiceController,
-                                      slicePlayerController:
-                                          slicePlayerController,
-                                      huntingSessionController:
-                                          huntingSessionController,
-                                      subtitleController: subtitleController,
-                                      playerController: playerController,
-                                      practiceActions: practiceActions,
-                                      huntingActions: huntingActions,
-                                      onCloseSlicePlayback: _closeSlicePlayback,
+                                        if (playerController.mediaPath != null)
+                                          SlideTransition(
+                                            position: _workbenchSlideAnimation,
+                                            child: MediaWorkbench(
+                                              mediaTitle: playerController
+                                                  .mediaPath!
+                                                  .split(Platform.pathSeparator)
+                                                  .last,
+                                              playerStage: _playerStage(),
+                                              learningPanel: _sidePanel(),
+                                              selectedChannel:
+                                                  contentChannels.selected,
+                                              channelAvailability: {
+                                                ContentChannel.listening:
+                                                    const ContentChannelAvailability.available(),
+                                                ContentChannel.reading:
+                                                    subtitleController
+                                                            .primaryTrack ==
+                                                        null
+                                                    ? ContentChannelAvailability.unavailable(
+                                                        l.text(
+                                                          'channelNeedsTranscript',
+                                                        ),
+                                                      )
+                                                    : const ContentChannelAvailability.available(),
+                                                ContentChannel.speaking:
+                                                    subtitleController
+                                                            .primaryTrack ==
+                                                        null
+                                                    ? ContentChannelAvailability.unavailable(
+                                                        l.text(
+                                                          'channelNeedsTranscript',
+                                                        ),
+                                                      )
+                                                    : !Platform.isMacOS
+                                                    ? ContentChannelAvailability.unavailable(
+                                                        l.text(
+                                                          'channelUnavailable',
+                                                        ),
+                                                      )
+                                                    : const ContentChannelAvailability.available(),
+                                                ContentChannel.writing:
+                                                    subtitleController
+                                                            .primaryTrack ==
+                                                        null
+                                                    ? ContentChannelAvailability.unavailable(
+                                                        l.text(
+                                                          'channelNeedsTranscript',
+                                                        ),
+                                                      )
+                                                    : const ContentChannelAvailability.available(),
+                                              },
+                                              onChannelSelected: (channel) =>
+                                                  unawaited(
+                                                    contentChannels.select(
+                                                      channel,
+                                                    ),
+                                                  ),
+                                              immersiveStage: switch (contentChannels
+                                                  .selected) {
+                                                ContentChannel.writing =>
+                                                  WritingChannelHost(
+                                                    api: api!,
+                                                    writingChannel:
+                                                        writingChannel,
+                                                    writingTaskController:
+                                                        writingTaskController,
+                                                  ),
+                                                ContentChannel.speaking =>
+                                                  SpeakingChannelHost(
+                                                    api: api!,
+                                                    speakingChannel:
+                                                        speakingChannel,
+                                                    speakingActions:
+                                                        speakingActions,
+                                                    speakingTaskController:
+                                                        speakingTaskController,
+                                                    readingTaskController:
+                                                        readingTaskController,
+                                                  ),
+                                                ContentChannel.reading =>
+                                                  ReadingChannelHost(
+                                                    api: api!,
+                                                    readingChannel:
+                                                        readingChannel,
+                                                    readingController:
+                                                        readingController,
+                                                    readingTaskController:
+                                                        readingTaskController,
+                                                    readingDiffController:
+                                                        readingDiffController,
+                                                    learningController:
+                                                        learningController,
+                                                    settingsController:
+                                                        settingsController,
+                                                    subtitleController:
+                                                        subtitleController,
+                                                    playerController:
+                                                        playerController,
+                                                    vocabularyActions:
+                                                        vocabularyActions,
+                                                    onSaveSentencePattern:
+                                                        (source) =>
+                                                            _openPersonalExpression(
+                                                              source: source,
+                                                            ),
+                                                    onOpenSlicePlayback:
+                                                        _openSlicePlayback,
+                                                    onRecordReadingMark:
+                                                        _recordReadingMark,
+                                                    onOpenListeningDictionary:
+                                                        _openListeningDictionaryEntry,
+                                                    onPlayPronunciationAudio:
+                                                        _playPronunciationAudio,
+                                                    onCorrectLemma: () =>
+                                                        unawaited(
+                                                          _correctCurrentLemma(),
+                                                        ),
+                                                  ),
+                                                ContentChannel.listening =>
+                                                  null,
+                                              },
+                                              mediaFraction: settingsController
+                                                  .workbenchMediaFraction,
+                                              onMediaFractionChanged:
+                                                  _setWorkbenchMediaFraction,
+                                              onCollapse: _collapseWorkbench,
+                                            ),
+                                          ),
+                                        PlayerOverlays(
+                                          api: api,
+                                          practiceController:
+                                              practiceController,
+                                          slicePlayerController:
+                                              slicePlayerController,
+                                          huntingSessionController:
+                                              huntingSessionController,
+                                          subtitleController:
+                                              subtitleController,
+                                          playerController: playerController,
+                                          practiceActions: practiceActions,
+                                          huntingActions: huntingActions,
+                                          onCloseSlicePlayback:
+                                              _closeSlicePlayback,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  if (downloadController.snapshot != null)
+                                    _downloadStatusBar(
+                                      downloadController.snapshot!,
+                                    ),
+                                  ShellFade(
+                                    visible: shellVisible,
+                                    child: _controls(),
+                                  ),
+                                ],
                               ),
-                              if (downloadController.snapshot != null)
-                                _downloadStatusBar(
-                                  downloadController.snapshot!,
-                                ),
-                              ShellFade(
-                                visible: shellVisible,
-                                child: _controls(),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
+        );
       },
     );
   }

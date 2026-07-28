@@ -9,6 +9,7 @@ import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_loading.dart';
+import 'conversation_stage_shell.dart';
 
 String realtimeHistoryTitle(RealtimeConversationSessionView session) {
   final preview = session.conversationPreview?.trim();
@@ -50,6 +51,11 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   final ScrollController _scrollController = ScrollController();
   int _timelineSignature = 0;
   bool _closePromptOpen = false;
+
+  /// The debrief is a room the learner leaves, not a phase the backend
+  /// reports: once dismissed the shell falls back to the lobby without
+  /// touching controller state. S9 (#86) owns what the room contains.
+  bool _debriefDismissed = false;
 
   @override
   void initState() {
@@ -96,183 +102,260 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     listenable: widget.controller,
     builder: (context, _) {
       final state = widget.controller.state;
-      final canClose = state.canConfigure;
+      final segment = conversationStageSegmentOf(
+        state,
+        debriefDismissed: _debriefDismissed,
+      );
       return PopScope(
-        canPop: canClose,
+        canPop: state.canConfigure,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && state.canCancel) _requestClose();
         },
-        child: Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: Column(
-            children: [
-              ListTile(
-                leading: IconButton(
-                  onPressed: canClose || state.canCancel ? _requestClose : null,
-                  icon: const Icon(Icons.arrow_back),
-                ),
-                title: const Text('Realtime speech conversation'),
-                subtitle: const Text(
-                  'Provider captions are live guidance. Only the local Whisper transcript becomes learner output.',
+        child: ConversationStageShell(
+          segment: segment,
+          child: switch (segment) {
+            ConversationStageSegment.lobby => _lobby(context, state),
+            ConversationStageSegment.stage => _stage(context, state),
+            ConversationStageSegment.debrief => _debrief(context, state),
+          },
+        ),
+      );
+    },
+  );
+
+  /// 门厅: what the conversation will be about and who speaks with you —
+  /// the only decision left before the lights go down (#87 moved provider
+  /// configuration to settings).
+  Widget _lobby(
+    BuildContext context,
+    RealtimeConversationState state,
+  ) => SafeArea(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(ListenSpacing.gap12),
+          child: IconButton(
+            key: const ValueKey('realtime-close'),
+            tooltip: 'Leave conversation',
+            onPressed: _requestClose,
+            icon: const Icon(Icons.arrow_back),
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 620),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      widget.launch.mode == RealtimeConversationMode.free
+                          ? 'Free conversation'
+                          : 'Selected topic',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: ListenSpacing.gap6),
+                    Text(
+                      widget.launch.anchor?.text ??
+                          'Start without sending media or subtitle context.',
+                    ),
+                    const SizedBox(height: ListenSpacing.gap16),
+                    _LobbyVoiceChoice(
+                      profiles: state.profiles,
+                      selectedProfileId: state.selectedProfileId,
+                      enabled: state.canConfigure,
+                      onSelected: widget.controller.selectProfile,
+                      onManageVoices: widget.onManageVoices == null
+                          ? null
+                          : _manageVoices,
+                    ),
+                    const SizedBox(height: ListenSpacing.gap12),
+                    // Honest layering, stated before the lights go down:
+                    // the provider's live captions never become learner
+                    // output — only the local Whisper transcript does.
+                    Text(
+                      'Provider captions are live guidance. Only the local '
+                      'Whisper transcript becomes learner output.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap24),
+                    if (state.error != null)
+                      _notice(context, state.error!, true),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton.icon(
+                        key: const ValueKey('realtime-start'),
+                        onPressed: state.selectedProfileId == null
+                            ? null
+                            : _startConversation,
+                        icon: const Icon(Icons.mic),
+                        label: const Text('Start conversation'),
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap32),
+                    const Divider(),
+                    const SizedBox(height: ListenSpacing.gap12),
+                    Text(
+                      'Conversation history',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    if (state.historyError != null)
+                      _notice(context, state.historyError!, true),
+                    if (state.historyLoading) const LinearProgressIndicator(),
+                    if (!state.historyLoading && state.historySessions.isEmpty)
+                      const Text('Completed conversations will appear here.'),
+                    if (state.selectedHistorySessionId != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: widget.controller.closeHistorySession,
+                          icon: const Icon(Icons.arrow_back),
+                          label: const Text('All conversations'),
+                        ),
+                      ),
+                      for (final item in state.historyItems) ...[
+                        _ConversationTurnCard(item: item),
+                        const SizedBox(height: ListenSpacing.gap12),
+                      ],
+                    ] else
+                      for (final session in state.historySessions)
+                        _HistorySessionTile(
+                          session: session,
+                          onTap: () => widget.controller.openHistorySession(
+                            widget.api,
+                            session.id,
+                          ),
+                        ),
+                  ],
                 ),
               ),
-              const Divider(height: 1),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(24),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// 舞台: the room with the lights off. The transcript deliberately does not
+  /// appear here — 「你的话 live 中不上屏」 and the 余音字幕 arrive with S8
+  /// (#85); the shape in the middle is replaced by S7's 回声水面 (#84).
+  Widget _stage(BuildContext context, RealtimeConversationState state) =>
+      ConversationStageLayout(
+        exitAffordance: IconButton(
+          key: const ValueKey('realtime-close'),
+          tooltip: 'Leave conversation',
+          onPressed: _requestClose,
+          icon: const Icon(Icons.close),
+        ),
+        visualization: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConversationStagePresence(activity: state.activity),
+            const SizedBox(height: ListenSpacing.gap16),
+            Text(
+              key: const ValueKey('realtime-activity'),
+              _activityLabel(state.activity),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (state.error != null) ...[
+              const SizedBox(height: ListenSpacing.gap16),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: _notice(context, state.error!, true),
+              ),
+            ],
+          ],
+        ),
+        controls: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: ListenSpacing.gap12,
+          runSpacing: ListenSpacing.gap8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            if (state.phase == RealtimeConversationPhase.live)
+              FilledButton.icon(
+                key: const ValueKey('realtime-finish'),
+                onPressed: widget.controller.finish,
+                icon: const Icon(Icons.stop),
+                label: const Text('Finish and transcribe locally'),
+              ),
+            if (state.canCancel)
+              TextButton(
+                key: const ValueKey('realtime-cancel'),
+                onPressed: _cancelAndClose,
+                child: const Text('Cancel and discard'),
+              ),
+            if (state.isWorking) const ListenLoading(),
+          ],
+        ),
+      );
+
+  /// 结束页: the stage dims and the conversation becomes readable. S9 (#86)
+  /// replaces this body with the three-part 回流; S6 only guarantees the room
+  /// exists, is reachable, and can be left.
+  Widget _debrief(BuildContext context, RealtimeConversationState state) =>
+      SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(ListenSpacing.gap12),
+              child: TextButton.icon(
+                key: const ValueKey('realtime-debrief-back'),
+                onPressed: () => setState(() => _debriefDismissed = true),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Back to conversations'),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
+                    constraints: const BoxConstraints(maxWidth: 620),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          widget.launch.mode == RealtimeConversationMode.free
-                              ? 'Free conversation'
-                              : 'Selected topic',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: ListenSpacing.gap6),
-                        Text(
-                          widget.launch.anchor?.text ??
-                              'Start without sending media or subtitle context.',
-                        ),
-                        const SizedBox(height: ListenSpacing.gap16),
-                        _LobbyVoiceChoice(
-                          profiles: state.profiles,
-                          selectedProfileId: state.selectedProfileId,
-                          enabled: state.canConfigure,
-                          onSelected: widget.controller.selectProfile,
-                          onManageVoices: widget.onManageVoices == null
-                              ? null
-                              : _manageVoices,
-                        ),
-                        const SizedBox(height: ListenSpacing.gap24),
-                        if (state.phase == RealtimeConversationPhase.live) ...[
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Chip(
-                              key: const ValueKey('realtime-activity'),
-                              avatar: Icon(
-                                _activityIcon(state.activity),
-                                size: 18,
-                              ),
-                              label: Text(_activityLabel(state.activity)),
-                            ),
-                          ),
-                          const SizedBox(height: ListenSpacing.gap12),
-                        ],
                         if (state.error != null)
                           _notice(context, state.error!, true),
-                        if (state.items.isEmpty &&
-                            state.phase == RealtimeConversationPhase.live)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 20),
-                            child: Text(
-                              'Listening… Start speaking when ready.',
-                            ),
-                          ),
                         for (final item in state.items) ...[
                           _ConversationTurnCard(item: item),
                           const SizedBox(height: ListenSpacing.gap12),
                         ],
                         if (state.postProcessingCount > 0)
                           Text(
-                            '${state.postProcessingCount} learner turn(s) are being transcribed locally.',
+                            '${state.postProcessingCount} learner turn(s) are '
+                            'being transcribed locally.',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
-                        if (state.postProcessingCount > 0)
-                          const SizedBox(height: ListenSpacing.gap16),
-                        Wrap(
-                          spacing: 12,
-                          children: [
-                            if (state.canConfigure)
-                              FilledButton.icon(
-                                key: const ValueKey('realtime-start'),
-                                onPressed: state.selectedProfileId == null
-                                    ? null
-                                    : () => widget.controller.start(
-                                        widget.api,
-                                        widget.launch,
-                                        acquireAudioFocus:
-                                            widget.acquireAudioFocus,
-                                      ),
-                                icon: const Icon(Icons.mic),
-                                label: const Text('Start conversation'),
-                              ),
-                            if (state.phase == RealtimeConversationPhase.live)
-                              FilledButton.icon(
-                                key: const ValueKey('realtime-finish'),
-                                onPressed: widget.controller.finish,
-                                icon: const Icon(Icons.stop),
-                                label: const Text(
-                                  'Finish and transcribe locally',
-                                ),
-                              ),
-                            if (state.canCancel)
-                              TextButton(
-                                key: const ValueKey('realtime-cancel'),
-                                onPressed: _cancelAndClose,
-                                child: const Text('Cancel and discard'),
-                              ),
-                            if (state.isWorking)
-                              const Padding(
-                                padding: EdgeInsets.all(8),
-                                child: ListenLoading(),
-                              ),
-                          ],
-                        ),
-                        if (state.canConfigure) ...[
-                          const SizedBox(height: ListenSpacing.gap32),
-                          const Divider(),
-                          const SizedBox(height: ListenSpacing.gap12),
-                          Text(
-                            'Conversation history',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: ListenSpacing.gap8),
-                          if (state.historyError != null)
-                            _notice(context, state.historyError!, true),
-                          if (state.historyLoading)
-                            const LinearProgressIndicator(),
-                          if (!state.historyLoading &&
-                              state.historySessions.isEmpty)
-                            const Text(
-                              'Completed conversations will appear here.',
-                            ),
-                          if (state.selectedHistorySessionId != null) ...[
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                onPressed:
-                                    widget.controller.closeHistorySession,
-                                icon: const Icon(Icons.arrow_back),
-                                label: const Text('All conversations'),
-                              ),
-                            ),
-                            for (final item in state.historyItems) ...[
-                              _ConversationTurnCard(item: item),
-                              const SizedBox(height: ListenSpacing.gap12),
-                            ],
-                          ] else
-                            for (final session in state.historySessions)
-                              _HistorySessionTile(
-                                session: session,
-                                onTap: () => widget.controller
-                                    .openHistorySession(widget.api, session.id),
-                              ),
-                        ],
                       ],
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
-    },
-  );
+
+  void _startConversation() {
+    setState(() => _debriefDismissed = false);
+    widget.controller.start(
+      widget.api,
+      widget.launch,
+      acquireAudioFocus: widget.acquireAudioFocus,
+    );
+  }
 
   Future<void> _requestClose() async {
     final state = widget.controller.state;
@@ -322,15 +405,6 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
           'Assistant is speaking',
         RealtimeConversationActivity.listening => 'Listening',
         RealtimeConversationActivity.inactive => 'Preparing',
-      };
-
-  IconData _activityIcon(RealtimeConversationActivity activity) =>
-      switch (activity) {
-        RealtimeConversationActivity.learnerSpeaking => Icons.mic,
-        RealtimeConversationActivity.thinking => Icons.more_horiz,
-        RealtimeConversationActivity.assistantSpeaking => Icons.volume_up,
-        RealtimeConversationActivity.listening => Icons.hearing,
-        RealtimeConversationActivity.inactive => Icons.hourglass_top,
       };
 
   Widget _notice(BuildContext context, String text, bool error) => Container(
@@ -437,7 +511,6 @@ class _LobbyVoiceChoice extends StatelessWidget {
     );
   }
 }
-
 
 class _HistorySessionTile extends StatelessWidget {
   const _HistorySessionTile({required this.session, required this.onTap});

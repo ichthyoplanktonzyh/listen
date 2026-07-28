@@ -56,21 +56,28 @@ void main() {
         ),
       ),
     );
+    // The live stage breathes at the ambient tempo (#83 S6), so it never
+    // reaches a settled frame: pump fixed durations instead of settling.
     await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     expect(find.text('Discard this conversation?'), findsOneWidget);
 
     await tester.tap(find.text('Keep talking'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     expect(find.byType(RealtimeConversationPanel), findsOneWidget);
 
     await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
     await tester.tap(find.text('Discard and close'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byType(RealtimeConversationPanel), findsNothing);
     expect(controller.state.phase, RealtimeConversationPhase.idle);

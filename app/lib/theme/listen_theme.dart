@@ -97,6 +97,19 @@ abstract final class ListenColors {
   static const darkVerdictCovered = Color(0xff5cc389);
   static const darkVerdictPartial = Color(0xffefa05c);
 
+  /// The stage's compressed ground (#70 Phase 2 / S6; design-notes/
+  /// listen-live-conversation.html `--ground2`): half a stop darker than the
+  /// quiet room, so the shell reads as "lights off" and only the content
+  /// glows. Stage mode dims the room under *both* themes — it is
+  /// brightness-independent by design, like the overlay vocabulary — so it is
+  /// read directly instead of through [ListenSchemeShades].
+  static const stageGround = Color(0xff141d1a);
+
+  /// The faint vignette lifting the stage's centre out of [stageGround]
+  /// (稿 `.stage` radial gradient). Not a light source of its own: it only
+  /// keeps the dark field from reading as a dead rectangle.
+  static const stageGlow = Color(0xff22302a);
+
   /// True black behind video frames: letterbox bars are part of the picture,
   /// not chrome, so they stay black under both themes.
   static const videoBackdrop = Color(0xff000000);
