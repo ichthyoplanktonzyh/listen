@@ -72,6 +72,12 @@
 > 资产入口和学习效果可见性；冷启动不会通过伪造数据解锁，0.7.0 在 P1 清零或书面例外前不发布。
 > 同日进一步冻结新功能路线：3.19 未达到“保留旅程真正可用、好用 + 假需求/假 fallback 审计完成”
 > 前，不创建、规划或实现任何新功能 phase。删除和简化与修复同等重要；已有实现不是保留理由。
+> 2026-07-28 工程治理更新：在 Phase 3.19 下新增 3.19.3 Versioned Frontend / Core Repository
+> Separation。它不增加产品 surface，而是把现有 Flutter + bundled Rust sidecar 迁移为
+> `listen-app` / `listen-core` 两个独立源码仓库；canonical contract 归 core，通过不可变合约
+> artifact、checksummed runtime bundle 和 app assembly seam 协作。迁移先在旧仓证明外部 artifact
+> build path，再保留历史拆仓；禁止前端 CI 直接消费移动的后端 `main`。见 ADR 0031 与
+> `.planning/phases/3.19.3-repository-separation/3.19.3-PLAN.md`。
 > 完成报告见 `docs/release/milestone-1.md`。
 
 ## 1. 路线图目标

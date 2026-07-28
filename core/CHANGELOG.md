@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-07-28 15:04 CST: 建立 Phase 3.19.3 前端/Core 版本化拆仓计划。ADR 0031
+  确立 `listen-core` 为 canonical contract/runtime bundle owner，`listen-app` 为 Flutter、
+  `fvp` 与最终 macOS assembly/release owner；跨仓只暴露 immutable contract release、
+  checksummed runtime bundle、product assembly 三个 seam。前端通过 `backend.lock` 固定
+  core commit/version/hash，禁止可复现构建拉取移动的 `main`。ADR 0014 被部分取代：
+  timeline/SSE 等兼容解析继续手写，cross-repo wire client 先过 pinned codegen spike，
+  失败不阻塞拆仓。计划按 contract → runtime → standalone frontend → history-preserving split
+  → independent CI → dual-run cutover 推进，旧仓只在 owner gate 后另行归档。
+
 - 2026-07-28 20:10 CST: 对话结束页落地三段式回流（refs #86 · S9）。新增
   `conversation_debrief.dart`：**① 对话**——本地 Whisper 转写做主体（信号青左缘），
   未完成的轮次如实说「转写中/没拿到/被打断」，绝不拿 provider caption 顶替；
