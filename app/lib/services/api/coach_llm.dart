@@ -224,13 +224,19 @@ extension CoachLlmApi on LocalApi {
     );
   }
 
+  /// Source facts behind one metric. [limit] / [offset] page the same
+  /// endpoint the dashboard already used, so an inline drill-down can show a
+  /// first handful and fetch more without loading a period at once.
   Future<List<CoachEvidenceItem>> coachEvidence(
     String metric, {
     int days = 7,
+    int limit = 50,
+    int offset = 0,
   }) async =>
       ((await _request(
                 'GET',
-                '/v1/coach/evidence?metric=${Uri.encodeQueryComponent(metric)}&days=$days',
+                '/v1/coach/evidence?metric=${Uri.encodeQueryComponent(metric)}'
+                    '&days=$days&limit=$limit&offset=$offset',
               ))
               as List<dynamic>)
           .map(

@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
@@ -106,6 +108,36 @@ List<(double, double, String)> compassSegments(
 }
 
 double _radians(double degrees) => degrees * math.pi / 180;
+
+/// The compass center hotspot (S2 · #81): the gap-(c) figure, which navigates
+/// to the vocabulary gap pane instead of staying on the page.
+const compassGapTarget = 'gap';
+
+/// Pure hit test for the compass hotspots, exposed for tests: which target a
+/// tap at [position] inside a [size]-square compass lands on, or null for the
+/// inert middle ring / outside the circle.
+///
+/// The quadrants are hit as full 90° wedges (the painter's 8° seams are a
+/// visual detail, not a dead zone) from half the radius outward, so the
+/// center figure keeps a generous disc of its own. When the backend surfaced
+/// no gap count there is no center target and the disc is inert.
+String? compassHitTarget(
+  double size,
+  Offset position, {
+  required bool hasGapCenter,
+}) {
+  final radius = size / 2;
+  final delta = position - Offset(radius, radius);
+  final distance = delta.distance;
+  if (distance > radius) return null;
+  if (distance <= radius * 0.5) return hasGapCenter ? compassGapTarget : null;
+  // Degrees clockwise from 12 o'clock, matching `_quadrants`.
+  final degrees = (math.atan2(delta.dx, -delta.dy) * 180 / math.pi + 360) % 360;
+  if (degrees >= 270) return 'listening';
+  if (degrees < 90) return 'reading';
+  if (degrees < 180) return 'writing';
+  return 'speaking';
+}
 
 /// Three-state four-quadrant ring for a single entry: one solid arc per
 /// channel, colored by its effective assessment. Proportions are dropped at
@@ -211,20 +243,42 @@ class _RingPainter extends CustomPainter {
 /// Aggregate compass ring: per quadrant the arc splits by assessment share
 /// (thick lit teal, thick amber, thin dim for the unassessed stock), and the
 /// center carries the gap-(c) count when the backend surfaced one.
-class CapabilityCompass extends StatelessWidget {
+///
+/// With [onChannelTap] / [onGapTap] the ring becomes the dashboard's
+/// navigation (S2 · #81): a quadrant scrolls to that channel's evidence and
+/// the center figure leaves for the vocabulary gap pane. Hovering lights the
+/// target it would hit, so "the thing you look at" only becomes "the thing
+/// you press" when it says so.
+class CapabilityCompass extends StatefulWidget {
   const CapabilityCompass({
     super.key,
     required this.channels,
     this.gapCount,
     this.size = 200,
+    this.onChannelTap,
+    this.onGapTap,
   });
 
   final List<CoachChannelSummary> channels;
   final int? gapCount;
   final double size;
 
+  /// Called with a channel key when its quadrant is tapped.
+  final ValueChanged<String>? onChannelTap;
+
+  /// Called when the gap-(c) center figure is tapped. Only reachable while
+  /// [gapCount] is non-null — there is no honest destination without it.
+  final VoidCallback? onGapTap;
+
+  @override
+  State<CapabilityCompass> createState() => _CapabilityCompassState();
+}
+
+class _CapabilityCompassState extends State<CapabilityCompass> {
+  String? _hovered;
+
   CoachAssessmentSummary _counts(String channel) {
-    for (final summary in channels) {
+    for (final summary in widget.channels) {
       if (summary.channel == channel) return summary.effectiveAssessments;
     }
     return const CoachAssessmentSummary(
@@ -232,6 +286,30 @@ class CapabilityCompass extends StatelessWidget {
       notAcquired: 0,
       unassessed: 0,
     );
+  }
+
+  bool get _interactive =>
+      widget.onChannelTap != null || widget.onGapTap != null;
+
+  bool get _hasGapCenter => widget.gapCount != null && widget.onGapTap != null;
+
+  String? _target(Offset local) =>
+      compassHitTarget(widget.size, local, hasGapCenter: _hasGapCenter);
+
+  void _handleTap(TapUpDetails details) {
+    final target = _target(details.localPosition);
+    if (target == null) return;
+    if (target == compassGapTarget) {
+      widget.onGapTap?.call();
+      return;
+    }
+    widget.onChannelTap?.call(target);
+  }
+
+  void _handleHover(PointerHoverEvent event) {
+    final target = _target(event.localPosition);
+    if (target == _hovered) return;
+    setState(() => _hovered = target);
   }
 
   @override
@@ -247,55 +325,76 @@ class CapabilityCompass extends StatelessWidget {
               '${l.text('coachAssessmentUnassessed')} ${counts.unassessed}';
         })
         .join('\n');
+    final gapCount = widget.gapCount;
+    Widget compass = Stack(
+      alignment: Alignment.center,
+      children: [
+        CustomPaint(
+          size: Size.square(widget.size),
+          painter: _CompassPainter(
+            counts: {
+              for (final channel in _quadrants.keys) channel: _counts(channel),
+            },
+            colors: theme.colorScheme,
+            highlight: _hovered,
+          ),
+        ),
+        if (gapCount != null)
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$gapCount',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: theme.colorScheme.secondary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                l.text('capabilityGapCenterLabel'),
+                textAlign: TextAlign.center,
+                style: ListenType.caption.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+    if (_interactive) {
+      compass = MouseRegion(
+        cursor: _hovered == null ? MouseCursor.defer : SystemMouseCursors.click,
+        onHover: _handleHover,
+        onExit: (_) {
+          if (_hovered != null) setState(() => _hovered = null);
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapUp: _handleTap,
+          child: compass,
+        ),
+      );
+    }
     return Tooltip(
       message: tooltip,
-      child: SizedBox.square(
-        dimension: size,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            CustomPaint(
-              size: Size.square(size),
-              painter: _CompassPainter(
-                counts: {
-                  for (final channel in _quadrants.keys)
-                    channel: _counts(channel),
-                },
-                colors: theme.colorScheme,
-              ),
-            ),
-            if (gapCount != null)
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$gapCount',
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      color: theme.colorScheme.secondary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    l.text('capabilityGapCenterLabel'),
-                    textAlign: TextAlign.center,
-                    style: ListenType.caption.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
+      child: SizedBox.square(dimension: widget.size, child: compass),
     );
   }
 }
 
 class _CompassPainter extends CustomPainter {
-  const _CompassPainter({required this.counts, required this.colors});
+  const _CompassPainter({
+    required this.counts,
+    required this.colors,
+    this.highlight,
+  });
 
   final Map<String, CoachAssessmentSummary> counts;
   final ColorScheme colors;
+
+  /// The hovered hotspot (channel key or [compassGapTarget]): a faint halo,
+  /// no motion — an affordance, not an animation.
+  final String? highlight;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -303,6 +402,7 @@ class _CompassPainter extends CustomPainter {
     final rect =
         Offset(mainStroke / 2, mainStroke / 2) &
         Size.square(size.width - mainStroke);
+    _paintHighlight(canvas, size, rect, mainStroke);
     for (final entry in counts.entries) {
       final summary = entry.value;
       for (final (start, sweep, state) in compassSegments(
@@ -332,9 +432,37 @@ class _CompassPainter extends CustomPainter {
     }
   }
 
+  void _paintHighlight(Canvas canvas, Size size, Rect rect, double stroke) {
+    final target = highlight;
+    if (target == null) return;
+    final glow = Paint()..color = colors.primary.withValues(alpha: 0.12);
+    if (target == compassGapTarget) {
+      canvas.drawCircle(
+        Offset(size.width / 2, size.height / 2),
+        size.width * 0.25,
+        glow,
+      );
+      return;
+    }
+    final quadrant = _quadrants[target];
+    if (quadrant == null) return;
+    final (start, end, _) = quadrant;
+    canvas.drawArc(
+      rect,
+      _radians(start - 90),
+      _radians(end - start),
+      false,
+      glow
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke * 2.4,
+    );
+  }
+
   @override
   bool shouldRepaint(_CompassPainter oldDelegate) =>
-      oldDelegate.colors != colors || !mapEquals(oldDelegate.counts, counts);
+      oldDelegate.colors != colors ||
+      oldDelegate.highlight != highlight ||
+      !mapEquals(oldDelegate.counts, counts);
 }
 
 /// Echo bars: per modality column the reception channel grows up from the
@@ -347,10 +475,17 @@ class CapabilityEchoBars extends StatelessWidget {
     super.key,
     required this.channels,
     this.barHeight = 96,
+    this.onPairTap,
   });
 
   final List<CoachChannelSummary> channels;
   final double barHeight;
+
+  /// Called with the modality pair a column stands for — `sound`
+  /// (listening↔speaking) or `text` (reading↔writing) — so the dashboard can
+  /// open both channels' evidence and mark where the gap comes from
+  /// (S2 · #81). Null keeps the bars a pure read-out.
+  final ValueChanged<String>? onPairTap;
 
   CoachAssessmentSummary _counts(String channel) {
     for (final summary in channels) {
@@ -384,6 +519,7 @@ class CapabilityEchoBars extends StatelessWidget {
             barHeight: barHeight,
             gapLabelKey: 'capabilityEchoSound',
             ghostKey: const ValueKey('echo-ghost-sound'),
+            onTap: onPairTap == null ? null : () => onPairTap!('sound'),
           ),
         ),
         const SizedBox(width: ListenSpacing.gap24),
@@ -397,6 +533,7 @@ class CapabilityEchoBars extends StatelessWidget {
             barHeight: barHeight,
             gapLabelKey: 'capabilityEchoText',
             ghostKey: const ValueKey('echo-ghost-text'),
+            onTap: onPairTap == null ? null : () => onPairTap!('text'),
           ),
         ),
       ],
@@ -414,6 +551,7 @@ class _EchoColumn extends StatelessWidget {
     required this.barHeight,
     required this.gapLabelKey,
     required this.ghostKey,
+    this.onTap,
   });
 
   final String inChannel, outChannel, gapLabelKey;
@@ -421,6 +559,7 @@ class _EchoColumn extends StatelessWidget {
   final int unit;
   final double barHeight;
   final Key ghostKey;
+  final VoidCallback? onTap;
 
   double _height(int count) => unit == 0 ? 0 : barHeight * count / unit;
 
@@ -443,13 +582,31 @@ class _EchoColumn extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final ghostHeight = _height(inCounts.acquired);
     final caption = ListenType.caption.copyWith(color: colors.onSurfaceVariant);
+    final column = _column(l, colors, ghostHeight, caption);
     // The bars keep the design doc's deliberate width instead of stretching
     // across whatever the dashboard grants the column.
     return Align(
       alignment: Alignment.topLeft,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 200),
-        child: _column(l, colors, ghostHeight, caption),
+        child: onTap == null
+            ? column
+            : InkWell(
+                onTap: onTap,
+                borderRadius: ListenRadii.surfaceBorder,
+                // Keyboard and screen readers get the same door as the
+                // pointer: the pair reads as one button.
+                child: Semantics(
+                  button: true,
+                  label:
+                      '${l.text(_channelLabelKeys[inChannel]!)} · '
+                      '${l.text(_channelLabelKeys[outChannel]!)}',
+                  child: Padding(
+                    padding: const EdgeInsets.all(ListenSpacing.gap4),
+                    child: column,
+                  ),
+                ),
+              ),
       ),
     );
   }
@@ -569,15 +726,33 @@ class _DashedRectPainter extends CustomPainter {
 /// The dashboard's portrait section: compass overview beside the echo-bar
 /// channel detail, stacking on narrow layouts.
 class CapabilityPortrait extends StatelessWidget {
-  const CapabilityPortrait({super.key, required this.channels, this.gapCount});
+  const CapabilityPortrait({
+    super.key,
+    required this.channels,
+    this.gapCount,
+    this.onChannelTap,
+    this.onGapTap,
+    this.onPairTap,
+  });
 
   final List<CoachChannelSummary> channels;
   final int? gapCount;
 
+  /// The three hotspots (S2 · #81). All optional: without them the portrait
+  /// is the same read-only picture it was at #47.
+  final ValueChanged<String>? onChannelTap;
+  final VoidCallback? onGapTap;
+  final ValueChanged<String>? onPairTap;
+
   @override
   Widget build(BuildContext context) {
-    final compass = CapabilityCompass(channels: channels, gapCount: gapCount);
-    final bars = CapabilityEchoBars(channels: channels);
+    final compass = CapabilityCompass(
+      channels: channels,
+      gapCount: gapCount,
+      onChannelTap: onChannelTap,
+      onGapTap: onGapTap,
+    );
+    final bars = CapabilityEchoBars(channels: channels, onPairTap: onPairTap);
     return LayoutBuilder(
       builder: (context, constraints) =>
           constraints.maxWidth >= ListenBreakpoints.capabilityPortraitSideBySide

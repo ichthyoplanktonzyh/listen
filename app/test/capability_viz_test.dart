@@ -192,4 +192,86 @@ void main() {
     );
     expect(find.text('recognized · not yet produced'), findsNothing);
   });
+
+  group('compassHitTarget (S2 · #81 three hotspots)', () {
+    test('quadrants follow the shared 2x2 semantics', () {
+      // 200px compass, center (100,100): up-left is listening, up-right
+      // reading, down-right writing, down-left speaking.
+      String? at(double dx, double dy) =>
+          compassHitTarget(200, Offset(dx, dy), hasGapCenter: true);
+      expect(at(60, 20), 'listening');
+      expect(at(140, 20), 'reading');
+      expect(at(140, 180), 'writing');
+      expect(at(60, 180), 'speaking');
+    });
+
+    test('the center disc is the gap only when the backend gave a count', () {
+      expect(
+        compassHitTarget(200, const Offset(100, 100), hasGapCenter: true),
+        compassGapTarget,
+      );
+      expect(
+        compassHitTarget(200, const Offset(100, 100), hasGapCenter: false),
+        isNull,
+      );
+    });
+
+    test('taps outside the circle hit nothing', () {
+      expect(
+        compassHitTarget(200, const Offset(5, 5), hasGapCenter: true),
+        isNull,
+      );
+    });
+  });
+
+  testWidgets('the portrait is navigation: quadrant, center and echo bar', (
+    tester,
+  ) async {
+    final channelTaps = <String>[];
+    final pairTaps = <String>[];
+    var gapTaps = 0;
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(
+            channels: portraitChannels,
+            gapCount: 96,
+            onChannelTap: channelTaps.add,
+            onGapTap: () => gapTaps++,
+            onPairTap: pairTaps.add,
+          ),
+        ),
+      ),
+    );
+
+    final compass = find.byType(CapabilityCompass);
+    final origin = tester.getTopLeft(compass);
+    // The listening quadrant (up-left) on a 200px ring.
+    await tester.tapAt(origin + const Offset(60, 20));
+    await tester.pump();
+    expect(channelTaps, ['listening']);
+
+    // The center figure is the one hotspot that may leave the page.
+    await tester.tapAt(origin + const Offset(100, 100));
+    await tester.pump();
+    expect(gapTaps, 1);
+
+    await tester.tap(find.text('can hear 46 · can say 12'));
+    await tester.pump();
+    expect(pairTaps, ['sound']);
+  });
+
+  testWidgets('a read-only portrait stays read-only', (tester) async {
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(channels: portraitChannels, gapCount: 96),
+        ),
+      ),
+    );
+    expect(find.byType(InkWell), findsNothing);
+    expect(find.byType(GestureDetector), findsNothing);
+  });
 }
