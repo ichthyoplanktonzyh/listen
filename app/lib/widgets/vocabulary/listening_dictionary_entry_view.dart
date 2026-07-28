@@ -8,15 +8,19 @@ import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../models/production_corpus.dart';
 import '../../models/types.dart';
-import '../../theme/listen_theme.dart';
-import '../../theme/radii.dart';
+import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
-import '../../utils/format_duration.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
 import 'dictionary_inline_clip_player.dart';
+import 'entry_detail_parts.dart';
+import 'entry_section_anchors.dart';
 import 'pronunciation_button.dart';
 import '../../theme/typography.dart';
+
+/// The leaf widgets of this surface live in `entry_detail_parts.dart`; the
+/// corpus tile is re-exported so existing importers keep one entry point.
+export 'entry_detail_parts.dart' show CorpusResultTile;
 
 /// Estimated words-per-minute of one clip from its sentence snapshot and time
 /// window. A rough, whitespace-tokenized decoration — never a scored metric —
@@ -53,6 +57,8 @@ class ListeningDictionaryEntryView extends StatefulWidget {
     this.onPlayCorpus,
     this.onCollectCorpus,
     this.suggestions = const [],
+    this.suggestionsLoading = false,
+    this.pronunciationLoading = false,
     this.onConfirmSuggestion,
     this.onRejectSuggestion,
     this.onCapabilityOverride,
@@ -98,6 +104,16 @@ class ListeningDictionaryEntryView extends StatefulWidget {
 
   /// Pending listening upgrade suggestions for this entry.
   final List<UpgradeSuggestion> suggestions;
+
+  /// True while the suggestion probe is still in flight. Decoration data
+  /// announces its own waiting (#82 / V6) instead of holding the identity
+  /// card hostage — an empty list with this false is an honest "none".
+  final bool suggestionsLoading;
+
+  /// True while the dictionary provider lookup that yields
+  /// [pronunciationAudioUrl] is still in flight. Same rule as above: the
+  /// pronunciation control waits by itself, nothing else does.
+  final bool pronunciationLoading;
   final Future<void> Function(UpgradeSuggestion suggestion)?
   onConfirmSuggestion;
   final Future<void> Function(UpgradeSuggestion suggestion)? onRejectSuggestion;
@@ -184,6 +200,27 @@ class _ListeningDictionaryEntryViewState
   LexicalOccurrence? _activeOccurrence;
   final PageController _clipPageController = PageController();
 
+  /// The anchored sections scroll under a pinned identity card. One controller
+  /// so an anchor tap can scroll, and so scrolling can report back which
+  /// section is currently being read.
+  final ScrollController _sectionScroll = ScrollController();
+  final GlobalKey _scrollAreaKey = GlobalKey();
+
+  /// Section anchor keys live here, one per section id, so they survive
+  /// rebuilds. A global key rebuilt every frame would remount the section.
+  final Map<String, GlobalKey> _anchorKeys = {};
+
+  GlobalKey _anchorKey(String id) =>
+      _anchorKeys.putIfAbsent(id, () => GlobalKey(debugLabel: 'section-$id'));
+
+  /// The section whose top most recently passed the reading line. Null until
+  /// the first layout resolves it.
+  String? _activeSectionId;
+
+  /// Rebuilt every frame from the widget's inputs, so the scroll listener
+  /// always measures the sections that actually exist right now.
+  List<EntryDetailSection> _sections = const [];
+
   LexicalEntry get entry => widget.details.entry;
 
   @override
@@ -191,6 +228,7 @@ class _ListeningDictionaryEntryViewState
     super.initState();
     _definition = TextEditingController(text: entry.userDefinition ?? '');
     _note = TextEditingController(text: entry.personalNote ?? '');
+    _sectionScroll.addListener(_syncActiveSection);
   }
 
   @override
@@ -207,9 +245,52 @@ class _ListeningDictionaryEntryViewState
   @override
   void dispose() {
     _clipPageController.dispose();
+    _sectionScroll.removeListener(_syncActiveSection);
+    _sectionScroll.dispose();
     _definition.dispose();
     _note.dispose();
     super.dispose();
+  }
+
+  /// Scrolls [section] to the top of the reading area. An anchor, not a tab:
+  /// the other sections stay built and stay reachable by scrolling past.
+  void _goToSection(EntryDetailSection section) {
+    final target = section.anchorKey.currentContext;
+    if (target == null) return;
+    setState(() => _activeSectionId = section.id);
+    unawaited(
+      Scrollable.ensureVisible(
+        target,
+        // Reduce motion jumps instead of gliding (charter motion discipline).
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : ListenMotion.base,
+        curve: ListenMotion.move,
+        alignment: 0,
+      ),
+    );
+  }
+
+  /// Reports which section the reader is currently in, so the anchor bar is a
+  /// position readout rather than a click memory.
+  void _syncActiveSection() {
+    if (!mounted || _sections.isEmpty) return;
+    final viewport = _scrollAreaKey.currentContext?.findRenderObject();
+    if (viewport is! RenderBox || !viewport.attached) return;
+    // The reading line sits a quarter down the viewport: whatever section has
+    // crossed it is what the reader is looking at.
+    final readingLine = viewport.size.height * 0.25;
+    String? current;
+    for (final section in _sections) {
+      final target = section.anchorKey.currentContext?.findRenderObject();
+      if (target is! RenderBox || !target.attached) continue;
+      final top = target.localToGlobal(Offset.zero, ancestor: viewport).dy;
+      if (top <= readingLine) current = section.id;
+    }
+    current ??= _sections.first.id;
+    if (current != _activeSectionId) {
+      setState(() => _activeSectionId = current);
+    }
   }
 
   String _clipKey(LexicalOccurrence occurrence) =>
@@ -328,9 +409,9 @@ class _ListeningDictionaryEntryViewState
   };
 
   Future<void> _editSenseFolder([LexicalSenseFolder? existing]) async {
-    final result = await showDialog<_SenseFolderDraft>(
+    final result = await showDialog<SenseFolderDraft>(
       context: context,
-      builder: (context) => _SenseFolderDialog(existing: existing),
+      builder: (context) => SenseFolderDialog(existing: existing),
     );
     if (result == null) return;
     setState(() => _savingSenseFolder = true);
@@ -368,154 +449,270 @@ class _ListeningDictionaryEntryViewState
     final unassignedOccurrences = occurrences
         .where((occurrence) => !_assignedOccurrenceIds.contains(occurrence.id))
         .toList(growable: false);
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          entry.displayForm,
-          style: Theme.of(context).textTheme.headlineMedium,
+
+    // V4: the detail is an identity card plus five anchored sections, not one
+    // eight-part scroll. Absent capabilities drop their section rather than
+    // showing an empty anchor.
+    _sections = [
+      // Evidence is a fixed segment: the four-channel override lives here even
+      // when no history loader is wired, so the conclusion is always editable
+      // next to what it was drawn from.
+      EntryDetailSection(
+        id: 'evidence',
+        anchorKey: _anchorKey('evidence'),
+        label: l.text('dictionaryAnchorEvidence'),
+        child: _evidenceSection(l),
+      ),
+      EntryDetailSection(
+        id: 'clips',
+        anchorKey: _anchorKey('clips'),
+        label: l.text('dictionaryAnchorClips'),
+        count: occurrences.isEmpty ? null : occurrences.length,
+        child: _clipsSection(l, occurrences, unassignedOccurrences),
+      ),
+      if (widget.showProductionCorpus)
+        EntryDetailSection(
+          id: 'output',
+          anchorKey: _anchorKey('output'),
+          label: l.text('dictionaryAnchorOutput'),
+          child: _outputSection(l, productionDocuments),
         ),
-        const SizedBox(height: ListenSpacing.gap6),
-        Text(
-          entry.kind == 'phrase'
-              ? l.text('dictionaryPhrase')
-              : l.text('dictionaryWord'),
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+      if (widget.onCreateSenseFolder != null)
+        EntryDetailSection(
+          id: 'senses',
+          anchorKey: _anchorKey('senses'),
+          label: l.text('dictionaryAnchorSenses'),
+          count: widget.details.senseFolders.isEmpty
+              ? null
+              : widget.details.senseFolders.length,
+          child: _senseFolderSection(l),
+        ),
+      if (widget.onSaveContent != null)
+        EntryDetailSection(
+          id: 'notes',
+          anchorKey: _anchorKey('notes'),
+          label: l.text('dictionaryAnchorNotes'),
+          child: _contentEditor(l),
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // V6: the identity card is built from `details` alone, so it paints as
+        // soon as the entry lands. Nothing below can delay it.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: _identityCard(l),
+        ),
+        // The suggestion banner stays pinned above the anchors (V4) and waits
+        // for itself.
+        if (widget.suggestionsLoading || widget.suggestions.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, ListenSpacing.gap12, 20, 0),
+            child: _suggestionRegion(l),
+          ),
+        const SizedBox(height: ListenSpacing.gap8),
+        EntrySectionAnchorBar(
+          sections: _sections,
+          activeId: _activeSectionId ?? _sections.first.id,
+          onSelect: _goToSection,
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            key: _scrollAreaKey,
+            controller: _sectionScroll,
+            // Every section stays built (anchors, not tabs), so scrolling to
+            // the last one is always possible and evidence stays readable
+            // beside clips.
+            padding: const EdgeInsets.fromLTRB(20, ListenSpacing.gap12, 20, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final section in _sections)
+                  Padding(
+                    key: section.anchorKey,
+                    padding: const EdgeInsets.only(bottom: ListenSpacing.gap24),
+                    child: section.child,
+                  ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: ListenSpacing.gap16),
+      ],
+    );
+  }
+
+  /// Who this word is: the form, its kind, the four-channel ring. Built purely
+  /// from `details`, which is why it never waits (#82 / V6).
+  Widget _identityCard(AppLocalizations l) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      key: const Key('dictionary-identity-card'),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.displayForm,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: ListenSpacing.gap2),
+              Row(
+                children: [
+                  Text(
+                    entry.kind == 'phrase'
+                        ? l.text('dictionaryPhrase')
+                        : l.text('dictionaryWord'),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: ListenSpacing.gap8),
+                  _pronunciationControl(l),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: ListenSpacing.gap12),
+        CapabilityRing(
+          assessments: capabilityProfileAssessments(
+            widget.details.capabilityProfile,
+          ),
+          size: 40,
+          withTooltip: true,
+        ),
+      ],
+    );
+  }
+
+  /// The dictionary audio decoration: it announces its own wait rather than
+  /// holding the card, and degrades to synthetic speech or to nothing.
+  Widget _pronunciationControl(AppLocalizations l) {
+    if (widget.pronunciationLoading) {
+      return Tooltip(
+        message: l.text('dictionaryPronunciationLoading'),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: ListenSpacing.gap4),
+          child: ListenLoading.inline(size: 16),
+        ),
+      );
+    }
+    final audio = widget.pronunciationAudioUrl;
+    if (audio != null && widget.onPlayPronunciationAudio != null) {
+      return PronunciationButton(
+        tooltip: l.text('pronunciation'),
+        busy: widget.speechBusy,
+        onPressed: () => widget.onPlayPronunciationAudio!(audio),
+      );
+    }
+    if (audio == null && widget.onSpeakSynthetic != null) {
+      return PronunciationButton(
+        tooltip: l.text('dictionarySyntheticFallback'),
+        busy: widget.speechBusy,
+        synthetic: true,
+        onPressed: () => widget.onSpeakSynthetic!(
+          entry.displayForm,
+          'dictionary_pronunciation_fallback',
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
+  /// Pending upgrade suggestions, with their own waiting line.
+  Widget _suggestionRegion(AppLocalizations l) {
+    if (widget.suggestions.isEmpty) {
+      return Row(
+        key: const Key('dictionary-suggestions-loading'),
+        children: [
+          const ListenLoading.inline(size: 16),
+          const SizedBox(width: ListenSpacing.gap8),
+          Text(
+            l.text('dictionarySuggestionsLoading'),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
         for (final suggestion in widget.suggestions)
-          _SuggestionBanner(
+          EntrySuggestionBanner(
             suggestion: suggestion,
             onConfirm: widget.onConfirmSuggestion,
             onReject: widget.onRejectSuggestion,
           ),
-        _CapabilityEditor(
-          profile: widget.details.capabilityProfile,
-          onOverride: widget.onCapabilityOverride,
+      ],
+    );
+  }
+
+  /// Section 1 · evidence: what actually happened, and the user's override of
+  /// the conclusion drawn from it.
+  Widget _evidenceSection(AppLocalizations l) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (widget.onLoadEvidenceHistory != null) ...[
+        EntryEvidenceSection(
+          key: ValueKey('evidence-${widget.details.entry.id}'),
+          loader: widget.onLoadEvidenceHistory!,
         ),
-        // Evidence & history (issue #2) sits directly under the capability
-        // status it explains, but is its own layer: suggestions above say
-        // "what to do next", this says "what actually happened".
-        if (widget.onLoadEvidenceHistory != null) ...[
-          const SizedBox(height: ListenSpacing.gap12),
-          _EvidenceHistorySection(
-            key: ValueKey('evidence-${widget.details.entry.id}'),
-            loader: widget.onLoadEvidenceHistory!,
-          ),
-        ],
-        if (widget.onSaveContent != null) ...[
-          const SizedBox(height: ListenSpacing.gap12),
-          _contentEditor(l),
-        ],
-        if (widget.onCreateSenseFolder != null) ...[
-          const SizedBox(height: ListenSpacing.gap16),
-          _senseFolderSection(l),
-        ],
-        if (widget.showProductionCorpus) ...[
-          const SizedBox(height: ListenSpacing.gap16),
-          Text(
-            l.text('myOutput'),
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: ListenSpacing.gap4),
-          if (widget.productionHits == null && !widget.productionLoadFailed)
-            const LinearProgressIndicator()
-          else if (widget.productionLoadFailed)
-            Text(
-              l.text('myOutputUnavailable'),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            )
-          else if (widget.productionHits!.isEmpty)
-            Text(
-              l.text('myOutputEmpty'),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            )
-          else ...[
-            Text(
-              l
-                  .text(
-                    widget.productionHits!.length == 1
-                        ? 'myOutputCountOne'
-                        : 'myOutputCount',
-                  )
-                  .replaceAll('{count}', '${widget.productionHits!.length}'),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+        const SizedBox(height: ListenSpacing.gap12),
+      ],
+      EntryCapabilityEditor(
+        profile: widget.details.capabilityProfile,
+        onOverride: widget.onCapabilityOverride,
+      ),
+    ],
+  );
+
+  /// Section 2 · clips: the inline player, the keyboard-navigable rail and the
+  /// library search — inherited unchanged from the pre-anchor detail.
+  Widget _clipsSection(
+    AppLocalizations l,
+    List<LexicalOccurrence> occurrences,
+    List<LexicalOccurrence> unassignedOccurrences,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              l.text('dictionaryClips'),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
-            for (final hit in productionDocuments.values)
-              ListTile(
-                key: ValueKey('production-output-${hit.document.id}'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  hit.document.responseText,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
+          ),
+          if (occurrences.length > 1)
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: [
+                ButtonSegment(
+                  value: false,
+                  label: Text(l.text('dictionarySortDefault')),
                 ),
-                subtitle: Text(
-                  '${_assistanceLabel(l, hit.document.assistance)} · '
-                  '${l.text('revision')} ${hit.document.responseRevision}',
+                ButtonSegment(
+                  value: true,
+                  label: Text(l.text('dictionarySortByRate')),
                 ),
-                trailing: Wrap(
-                  spacing: 4,
-                  children: [
-                    if (widget.onSpeakSynthetic != null)
-                      PronunciationButton(
-                        key: ValueKey('production-speech-${hit.document.id}'),
-                        tooltip: l.text('readAloudSynthetic'),
-                        busy: widget.speechBusy,
-                        synthetic: true,
-                        onPressed: () => widget.onSpeakSynthetic!(
-                          hit.document.responseText,
-                          'production_corpus_readback',
-                        ),
-                      ),
-                    const Icon(Icons.open_in_new),
-                  ],
-                ),
-                onTap: widget.onOpenProductionAttempt == null
-                    ? null
-                    : () => widget.onOpenProductionAttempt!(hit),
-              ),
-          ],
-        ],
-        const SizedBox(height: ListenSpacing.gap16),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                l.text('dictionaryClips'),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              ],
+              selected: {_sortByRate},
+              onSelectionChanged: (value) =>
+                  setState(() => _sortByRate = value.first),
             ),
-            if (occurrences.length > 1)
-              SegmentedButton<bool>(
-                showSelectedIcon: false,
-                style: const ButtonStyle(visualDensity: VisualDensity.compact),
-                segments: [
-                  ButtonSegment(
-                    value: false,
-                    label: Text(l.text('dictionarySortDefault')),
-                  ),
-                  ButtonSegment(
-                    value: true,
-                    label: Text(l.text('dictionarySortByRate')),
-                  ),
-                ],
-                selected: {_sortByRate},
-                onSelectionChanged: (value) =>
-                    setState(() => _sortByRate = value.first),
-              ),
-          ],
-        ),
-        const SizedBox(height: ListenSpacing.gap4),
-        Text(
+        ],
+      ),
+      const SizedBox(height: ListenSpacing.gap4),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
           l
               .text('dictionaryCoverage')
               .replaceAll('{count}', '${occurrences.length}'),
@@ -523,196 +720,282 @@ class _ListeningDictionaryEntryViewState
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: ListenSpacing.gap8),
-        if (unassignedOccurrences.isNotEmpty)
-          Text(
+      ),
+      const SizedBox(height: ListenSpacing.gap8),
+      if (unassignedOccurrences.isNotEmpty)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
             l.text('dictionaryUnassignedClips'),
             style: Theme.of(context).textTheme.titleSmall,
           ),
-        if (_activeOccurrence != null && widget.slicePlayer != null)
-          DictionaryInlineClipPlayer(
-            controller: widget.slicePlayer!,
-            occurrence: _activeOccurrence!,
-            target: _activeOccurrence!.originalForm ?? entry.displayForm,
-            onShadowing: widget.onShadowing == null
-                ? null
-                : () => widget.onShadowing!(_activeOccurrence!),
-            onClose: () {
-              unawaited(widget.slicePlayer!.close());
-              setState(() => _activeOccurrence = null);
-            },
+        ),
+      if (_activeOccurrence != null && widget.slicePlayer != null)
+        DictionaryInlineClipPlayer(
+          controller: widget.slicePlayer!,
+          occurrence: _activeOccurrence!,
+          target: _activeOccurrence!.originalForm ?? entry.displayForm,
+          onShadowing: widget.onShadowing == null
+              ? null
+              : () => widget.onShadowing!(_activeOccurrence!),
+          onClose: () {
+            unawaited(widget.slicePlayer!.close());
+            setState(() => _activeOccurrence = null);
+          },
+        ),
+      if (occurrences.isNotEmpty) _clipRail(l, occurrences),
+      if (occurrences.isNotEmpty) const SizedBox(height: ListenSpacing.gap8),
+      if (occurrences.isEmpty)
+        EntryEmptyClips(entry: entry, external: _externalRow(l))
+      else if (unassignedOccurrences.isEmpty)
+        Text(
+          l.text('dictionaryNoClips'),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
-        if (occurrences.isNotEmpty)
-          Focus(
-            autofocus: _activeOccurrence != null,
-            onKeyEvent: (_, event) {
-              if (event is! KeyDownEvent) return KeyEventResult.ignored;
-              if (event.logicalKey == LogicalKeyboardKey.space) {
-                unawaited(widget.slicePlayer?.togglePlayback());
-                return KeyEventResult.handled;
-              }
-              final current = _activeOccurrence == null
+        ),
+      if (widget.onSearchLibrary != null) ..._librarySection(l),
+    ],
+  );
+
+  /// The clip rail: arrow keys move between clips, space toggles playback.
+  /// Behaviour is inherited verbatim — S4 only moved it into its section.
+  Widget _clipRail(
+    AppLocalizations l,
+    List<LexicalOccurrence> occurrences,
+  ) => Focus(
+    autofocus: _activeOccurrence != null,
+    onKeyEvent: (_, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.space) {
+        unawaited(widget.slicePlayer?.togglePlayback());
+        return KeyEventResult.handled;
+      }
+      final current = _activeOccurrence == null
+          ? 0
+          : occurrences.indexWhere((item) => item.id == _activeOccurrence!.id);
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        _selectClip(
+          occurrences,
+          current <= 0 ? occurrences.length - 1 : current - 1,
+        );
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        _selectClip(
+          occurrences,
+          current >= occurrences.length - 1 ? 0 : current + 1,
+        );
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    },
+    child: SizedBox(
+      key: const Key('dictionary-clip-rail'),
+      height: 112,
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => _selectClip(
+              occurrences,
+              _activeOccurrence == null
                   ? 0
-                  : occurrences.indexWhere(
-                      (item) => item.id == _activeOccurrence!.id,
-                    );
-              if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                _selectClip(
-                  occurrences,
-                  current <= 0 ? occurrences.length - 1 : current - 1,
+                  : (occurrences.indexWhere(
+                              (item) => item.id == _activeOccurrence!.id,
+                            ) -
+                            1) %
+                        occurrences.length,
+            ),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _clipPageController,
+              itemCount: occurrences.length,
+              onPageChanged: (index) => _play(occurrences[index]),
+              itemBuilder: (context, index) {
+                final occurrence = occurrences[index];
+                final selected = _activeOccurrence?.id == occurrence.id;
+                final key = _clipKey(occurrence);
+                final revealed = _revealed.contains(key);
+                final wpm = clipSpeechRateWpm(
+                  occurrence.sentenceTextSnapshot,
+                  occurrence.startMsSnapshot,
+                  occurrence.endMsSnapshot,
                 );
-                return KeyEventResult.handled;
-              }
-              if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                _selectClip(
-                  occurrences,
-                  current >= occurrences.length - 1 ? 0 : current + 1,
-                );
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
-            },
-            child: SizedBox(
-              key: const Key('dictionary-clip-rail'),
-              height: 112,
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => _selectClip(
-                      occurrences,
-                      _activeOccurrence == null
-                          ? 0
-                          : (occurrences.indexWhere(
-                                      (item) =>
-                                          item.id == _activeOccurrence!.id,
-                                    ) -
-                                    1) %
-                                occurrences.length,
-                    ),
-                    icon: const Icon(Icons.chevron_left),
-                  ),
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _clipPageController,
-                      itemCount: occurrences.length,
-                      onPageChanged: (index) => _play(occurrences[index]),
-                      itemBuilder: (context, index) {
-                        final occurrence = occurrences[index];
-                        final selected = _activeOccurrence?.id == occurrence.id;
-                        final key = _clipKey(occurrence);
-                        final revealed = _revealed.contains(key);
-                        final wpm = clipSpeechRateWpm(
-                          occurrence.sentenceTextSnapshot,
-                          occurrence.startMsSnapshot,
-                          occurrence.endMsSnapshot,
-                        );
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Card(
-                            color: selected
-                                ? Theme.of(context).colorScheme.primaryContainer
-                                : null,
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: InkWell(
-                                    onTap: () =>
-                                        _selectClip(occurrences, index),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            revealed
-                                                ? occurrence
-                                                      .sentenceTextSnapshot
-                                                : l.text(
-                                                    'dictionaryRevealSentence',
-                                                  ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(
-                                            height: ListenSpacing.gap4,
-                                          ),
-                                          Text(
-                                            '${wpm == null ? '' : l.text('dictionaryWpm').replaceAll('{wpm}', '$wpm')} · ${index + 1}/${occurrences.length}',
-                                            style: TextStyle(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Card(
+                    color: selected
+                        ? Theme.of(context).colorScheme.primaryContainer
+                        : null,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _selectClip(occurrences, index),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    revealed
+                                        ? occurrence.sentenceTextSnapshot
+                                        : l.text('dictionaryRevealSentence'),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: ListenSpacing.gap4),
+                                  Text(
+                                    '${wpm == null ? '' : l.text('dictionaryWpm').replaceAll('{wpm}', '$wpm')} · ${index + 1}/${occurrences.length}',
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                     ),
                                   ),
-                                ),
-                                IconButton(
-                                  tooltip: l.text('dictionaryRevealSentence'),
-                                  onPressed: () =>
-                                      setState(() => _revealed.add(key)),
-                                  icon: const Icon(Icons.visibility_outlined),
-                                ),
-                                if (widget.onReviewClip != null)
-                                  IconButton(
-                                    tooltip: l.text('dictionaryReviewClip'),
-                                    onPressed: () => unawaited(
-                                      widget.onReviewClip!(occurrence),
-                                    ),
-                                    icon: const Icon(
-                                      Icons.playlist_add_outlined,
-                                    ),
-                                  ),
-                                IconButton.filledTonal(
-                                  tooltip: l.text('dictionaryPlayClip'),
-                                  onPressed: () =>
-                                      _selectClip(occurrences, index),
-                                  icon: const Icon(Icons.headphones_outlined),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        );
-                      },
+                        ),
+                        IconButton(
+                          tooltip: l.text('dictionaryRevealSentence'),
+                          onPressed: () => setState(() => _revealed.add(key)),
+                          icon: const Icon(Icons.visibility_outlined),
+                        ),
+                        if (widget.onReviewClip != null)
+                          IconButton(
+                            tooltip: l.text('dictionaryReviewClip'),
+                            onPressed: () =>
+                                unawaited(widget.onReviewClip!(occurrence)),
+                            icon: const Icon(Icons.playlist_add_outlined),
+                          ),
+                        IconButton.filledTonal(
+                          tooltip: l.text('dictionaryPlayClip'),
+                          onPressed: () => _selectClip(occurrences, index),
+                          icon: const Icon(Icons.headphones_outlined),
+                        ),
+                      ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => _selectClip(
-                      occurrences,
-                      _activeOccurrence == null
-                          ? 0
-                          : (occurrences.indexWhere(
-                                      (item) =>
-                                          item.id == _activeOccurrence!.id,
-                                    ) +
-                                    1) %
-                                occurrences.length,
-                    ),
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                ],
+                );
+              },
+            ),
+          ),
+          IconButton(
+            onPressed: () => _selectClip(
+              occurrences,
+              _activeOccurrence == null
+                  ? 0
+                  : (occurrences.indexWhere(
+                              (item) => item.id == _activeOccurrence!.id,
+                            ) +
+                            1) %
+                        occurrences.length,
+            ),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  /// Section 3 · my output: what the learner has actually produced with this
+  /// word. `null` hits mean still loading; failure and emptiness stay
+  /// distinguishable (V6 — this section waits alone).
+  Widget _outputSection(
+    AppLocalizations l,
+    Map<String, ProductionCorpusHitView> productionDocuments,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(l.text('myOutput'), style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: ListenSpacing.gap4),
+      if (widget.productionHits == null && !widget.productionLoadFailed)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            key: const Key('dictionary-output-loading'),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListenLoading.inline(size: 16),
+              const SizedBox(width: ListenSpacing.gap8),
+              Text(
+                l.text('myOutputLoading'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
+            ],
           ),
-        if (occurrences.isNotEmpty) const SizedBox(height: ListenSpacing.gap8),
-        if (occurrences.isEmpty)
-          _EmptyClips(entry: entry, external: _externalRow(l))
-        else if (unassignedOccurrences.isEmpty)
-          Text(
-            l.text('dictionaryNoClips'),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+        )
+      else if (widget.productionLoadFailed)
+        Text(
+          l.text('myOutputUnavailable'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
-        if (widget.onSearchLibrary != null) ..._librarySection(l),
+        )
+      else if (widget.productionHits!.isEmpty)
+        Text(
+          l.text('myOutputEmpty'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        )
+      else ...[
+        Text(
+          l
+              .text(
+                widget.productionHits!.length == 1
+                    ? 'myOutputCountOne'
+                    : 'myOutputCount',
+              )
+              .replaceAll('{count}', '${widget.productionHits!.length}'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        for (final hit in productionDocuments.values)
+          ListTile(
+            key: ValueKey('production-output-${hit.document.id}'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              hit.document.responseText,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${_assistanceLabel(l, hit.document.assistance)} · '
+              '${l.text('revision')} ${hit.document.responseRevision}',
+            ),
+            trailing: Wrap(
+              spacing: 4,
+              children: [
+                if (widget.onSpeakSynthetic != null)
+                  PronunciationButton(
+                    key: ValueKey('production-speech-${hit.document.id}'),
+                    tooltip: l.text('readAloudSynthetic'),
+                    busy: widget.speechBusy,
+                    synthetic: true,
+                    onPressed: () => widget.onSpeakSynthetic!(
+                      hit.document.responseText,
+                      'production_corpus_readback',
+                    ),
+                  ),
+                const Icon(Icons.open_in_new),
+              ],
+            ),
+            onTap: widget.onOpenProductionAttempt == null
+                ? null
+                : () => widget.onOpenProductionAttempt!(hit),
+          ),
       ],
-    );
-  }
+    ],
+  );
 
   String _assistanceLabel(AppLocalizations l, String value) => switch (value) {
     'content_anchored' => l.text('productionAssistanceContent'),
@@ -858,7 +1141,7 @@ class _ListeningDictionaryEntryViewState
       occurrence.startMsSnapshot,
       occurrence.endMsSnapshot,
     );
-    return _ClipTile(
+    return EntryClipTile(
       occurrence: occurrence,
       target: occurrence.originalForm ?? entry.displayForm,
       wpmLabel: wpm == null
@@ -918,17 +1201,16 @@ class _ListeningDictionaryEntryViewState
     ],
   );
 
-  /// External references honour the copyright guardrail: links and dictionary
-  /// audio only, never downloaded or treated as local practice material.
+  /// External references honour the copyright guardrail: a link out only,
+  /// never downloaded or treated as local practice material.
+  ///
+  /// The pronunciation control moved to the identity card in S4 (#82) — it is
+  /// part of who the word is, and it must not be gated behind an empty-clip
+  /// state or a library search.
   Widget? _externalRow(AppLocalizations l) {
     final url = widget.externalLookupUrl;
-    final audio = widget.pronunciationAudioUrl;
     final openExternal = widget.onOpenExternal;
-    final hasLink = url != null && openExternal != null;
-    final canPlayAudio =
-        audio != null && widget.onPlayPronunciationAudio != null;
-    final canSynthesize = audio == null && widget.onSpeakSynthetic != null;
-    if (!hasLink && !canPlayAudio && !canSynthesize) return null;
+    if (url == null || openExternal == null) return null;
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: 8,
@@ -940,28 +1222,11 @@ class _ListeningDictionaryEntryViewState
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
-        if (canPlayAudio)
-          PronunciationButton(
-            tooltip: l.text('pronunciation'),
-            busy: widget.speechBusy,
-            onPressed: () => widget.onPlayPronunciationAudio!(audio),
-          )
-        else if (canSynthesize)
-          PronunciationButton(
-            tooltip: l.text('dictionarySyntheticFallback'),
-            busy: widget.speechBusy,
-            synthetic: true,
-            onPressed: () => widget.onSpeakSynthetic!(
-              entry.displayForm,
-              'dictionary_pronunciation_fallback',
-            ),
-          ),
-        if (hasLink)
-          OutlinedButton.icon(
-            onPressed: () => openExternal(url),
-            icon: const Icon(Icons.open_in_new, size: 16),
-            label: Text(l.text('dictionaryYouglish')),
-          ),
+        OutlinedButton.icon(
+          onPressed: () => openExternal(url),
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: Text(l.text('dictionaryYouglish')),
+        ),
       ],
     );
   }
@@ -1030,834 +1295,5 @@ class _ListeningDictionaryEntryViewState
           ),
       ],
     ];
-  }
-}
-
-/// One pending listening upgrade suggestion with its evidence count and the
-/// confirm/defer resolution actions (restored from the pre-dictionary detail
-/// dialog).
-/// Issue #2: the user-readable evidence trail. Strictly read-only — it renders
-/// what the append-only observation store says and never writes back.
-/// Collapsed by default so the capability summary stays the first read;
-/// expanding is the explicit "show me the evidence" act (the system's
-/// knowledge waits for the user to come look, it never pushes).
-class _EvidenceHistorySection extends StatefulWidget {
-  const _EvidenceHistorySection({super.key, required this.loader});
-
-  final Future<List<LearningObservationView>> Function({
-    String? capability,
-    int offset,
-  })
-  loader;
-
-  @override
-  State<_EvidenceHistorySection> createState() =>
-      _EvidenceHistorySectionState();
-}
-
-class _EvidenceHistorySectionState extends State<_EvidenceHistorySection> {
-  /// Mirrors the server's default page size; a full page means there may be
-  /// earlier evidence to fetch.
-  static const _pageSize = 50;
-
-  bool expanded = false;
-  bool loading = false;
-  bool loadFailed = false;
-
-  /// `null` selects all channels.
-  String? capability;
-
-  /// `null` while never loaded; an empty list is an honest no-evidence state.
-  List<LearningObservationView>? rows;
-  bool maybeMore = false;
-
-  Future<void> _load({required int offset}) async {
-    setState(() {
-      loading = true;
-      loadFailed = false;
-    });
-    try {
-      final page = await widget.loader(capability: capability, offset: offset);
-      if (!mounted) return;
-      setState(() {
-        loading = false;
-        rows = offset == 0 ? page : [...?rows, ...page];
-        maybeMore = page.length >= _pageSize;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        loading = false;
-        loadFailed = true;
-      });
-    }
-  }
-
-  void _toggle() {
-    setState(() => expanded = !expanded);
-    if (expanded && rows == null && !loading) unawaited(_load(offset: 0));
-  }
-
-  void _selectCapability(String? value) {
-    if (value == capability) return;
-    setState(() {
-      capability = value;
-      rows = null;
-      maybeMore = false;
-    });
-    unawaited(_load(offset: 0));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        InkWell(
-          onTap: _toggle,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.history_outlined,
-                  size: 18,
-                  color: colors.onSurfaceVariant,
-                ),
-                const SizedBox(width: ListenSpacing.gap8),
-                Text(
-                  l.text('evidenceHistoryTitle'),
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const Spacer(),
-                Icon(
-                  expanded ? Icons.expand_less : Icons.expand_more,
-                  color: colors.onSurfaceVariant,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (expanded) ...[
-          const SizedBox(height: ListenSpacing.gap8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final option in const [
-                (null, 'evidenceFilterAll'),
-                ('listening', 'capabilityListening'),
-                ('reading', 'capabilityReading'),
-                ('speaking', 'capabilitySpeaking'),
-                ('writing', 'capabilityWriting'),
-              ])
-                ChoiceChip(
-                  label: Text(l.text(option.$2)),
-                  selected: capability == option.$1,
-                  onSelected: (_) => _selectCapability(option.$1),
-                ),
-            ],
-          ),
-          const SizedBox(height: ListenSpacing.gap8),
-          if (loading && rows == null) const LinearProgressIndicator(),
-          if (loadFailed)
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    l.text('evidenceHistoryLoadFailed'),
-                    style: TextStyle(color: colors.error),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => unawaited(_load(offset: rows?.length ?? 0)),
-                  child: Text(l.text('retry')),
-                ),
-              ],
-            ),
-          if (rows != null && rows!.isEmpty && !loading && !loadFailed)
-            Text(
-              l.text('evidenceHistoryEmpty'),
-              style: TextStyle(color: colors.onSurfaceVariant),
-            ),
-          if (rows != null)
-            for (final row in rows!) _EvidenceRow(observation: row),
-          if (maybeMore && !loading && !loadFailed)
-            TextButton(
-              onPressed: () => unawaited(_load(offset: rows!.length)),
-              child: Text(l.text('evidenceHistoryLoadMore')),
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-class _EvidenceRow extends StatelessWidget {
-  const _EvidenceRow({required this.observation});
-
-  final LearningObservationView observation;
-
-  /// Localized label when the key is known; the raw wire value otherwise, so
-  /// a future kind degrades to honest snake_case instead of a wrong label.
-  static String _label(AppLocalizations l, String prefix, String value) {
-    final key =
-        '$prefix${value.split('_').map((part) => part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}').join()}';
-    final resolved = l.text(key);
-    return resolved == key ? value : resolved;
-  }
-
-  static String _formatTime(int milliseconds) {
-    final value = DateTime.fromMillisecondsSinceEpoch(milliseconds).toLocal();
-    String twoDigits(int part) => part.toString().padLeft(2, '0');
-    return '${value.year}-${twoDigits(value.month)}-${twoDigits(value.day)} '
-        '${twoDigits(value.hour)}:${twoDigits(value.minute)}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final colors = Theme.of(context).colorScheme;
-    final (outcomeIcon, outcomeColor) = switch (observation.outcome) {
-      'success' => (Icons.check_circle_outline, colors.primary),
-      'partial' => (Icons.remove_circle_outline, colors.onSurfaceVariant),
-      _ => (Icons.highlight_off, colors.error),
-    };
-    final channelIcon = switch (observation.capability) {
-      'listening' => Icons.hearing_outlined,
-      'reading' => Icons.menu_book_outlined,
-      'speaking' => Icons.record_voice_over_outlined,
-      _ => Icons.edit_outlined,
-    };
-    final detail = [
-      if (observation.surfaceForm != null &&
-          observation.surfaceForm!.isNotEmpty)
-        observation.surfaceForm!,
-      _label(l, 'obsAssistance', observation.assistance),
-      _label(l, 'obsOrigin', observation.origin),
-      _formatTime(observation.occurredAtMs),
-    ].join(' · ');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(channelIcon, size: 16, color: colors.onSurfaceVariant),
-          const SizedBox(width: ListenSpacing.gap8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        _label(l, 'obsTask', observation.taskType),
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: ListenSpacing.gap6),
-                    Icon(outcomeIcon, size: 15, color: outcomeColor),
-                    const SizedBox(width: ListenSpacing.gap2),
-                    Text(
-                      _label(l, 'obsOutcome', observation.outcome),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: outcomeColor),
-                    ),
-                  ],
-                ),
-                Text(
-                  detail,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SuggestionBanner extends StatelessWidget {
-  const _SuggestionBanner({
-    required this.suggestion,
-    required this.onConfirm,
-    required this.onReject,
-  });
-
-  final UpgradeSuggestion suggestion;
-  final Future<void> Function(UpgradeSuggestion suggestion)? onConfirm;
-  final Future<void> Function(UpgradeSuggestion suggestion)? onReject;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l
-                  .text('dictionaryUpgradeSuggestion')
-                  .replaceAll('{count}', '${suggestion.evidenceContextCount}'),
-            ),
-            const SizedBox(height: ListenSpacing.gap6),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (onReject != null)
-                  TextButton(
-                    onPressed: () => unawaited(onReject!(suggestion)),
-                    child: Text(l.text('deferUpgrade')),
-                  ),
-                if (onConfirm != null)
-                  FilledButton(
-                    onPressed: () => unawaited(onConfirm!(suggestion)),
-                    child: Text(l.text('confirmListeningAcquired')),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One local-corpus hit: playable through the slice window and savable as a
-/// durable source occurrence when its media link is still alive.
-class CorpusResultTile extends StatelessWidget {
-  const CorpusResultTile({
-    super.key,
-    required this.occurrence,
-    required this.target,
-    required this.onPlay,
-    required this.onCollect,
-    this.collected = false,
-    this.collecting = false,
-  });
-
-  final CorpusOccurrence occurrence;
-  final String target;
-  final VoidCallback? onPlay;
-  final VoidCallback? onCollect;
-  final bool collected;
-  final bool collecting;
-
-  String _kindKey() => switch (occurrence.kind) {
-    'chunk' => 'corpusKindChunk',
-    'lexical' => 'corpusKindWord',
-    _ => 'corpusKindSentence',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final linked = occurrence.mediaId != null;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
-        title: _HighlightedSentence(
-          sentence: occurrence.sourceSnapshot,
-          target: target,
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: Text(
-            [
-              l.text(_kindKey()),
-              formatDuration(Duration(milliseconds: occurrence.startMs)),
-              if (!linked) l.text('dictionaryClipNeedsSource'),
-            ].join(' · '),
-          ),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (collected)
-              const Padding(
-                padding: EdgeInsets.only(right: 4),
-                child: Icon(
-                  Icons.check_circle_outline,
-                  size: 20,
-                  color: ListenColors.learningRecognized,
-                ),
-              )
-            else if (onCollect != null)
-              IconButton(
-                tooltip: l.text('dictionaryCollect'),
-                onPressed: collecting ? null : onCollect,
-                icon: collecting
-                    ? const ListenLoading.inline(size: 16)
-                    : const Icon(Icons.bookmark_add_outlined),
-              ),
-            IconButton.filledTonal(
-              tooltip: l.text('dictionaryPlayClip'),
-              icon: Icon(linked ? Icons.headphones_outlined : Icons.link_off),
-              onPressed: onPlay,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyClips extends StatelessWidget {
-  const _EmptyClips({required this.entry, this.external});
-
-  final LexicalEntry entry;
-  final Widget? external;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: ListenRadii.surfaceBorder,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l.text('dictionaryNoClips'),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: ListenSpacing.gap6),
-            Text(
-              l
-                  .text('dictionaryNoClipsHint')
-                  .replaceAll('{word}', entry.displayForm),
-            ),
-            if (external != null) ...[
-              const SizedBox(height: ListenSpacing.gap12),
-              external!,
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SenseFolderDraft {
-  const _SenseFolderDraft({
-    required this.label,
-    this.definition,
-    this.gloss,
-    this.externalRef,
-  });
-
-  final String label;
-  final String? definition;
-  final String? gloss;
-  final String? externalRef;
-}
-
-class _SenseFolderDialog extends StatefulWidget {
-  const _SenseFolderDialog({this.existing});
-
-  final LexicalSenseFolder? existing;
-
-  @override
-  State<_SenseFolderDialog> createState() => _SenseFolderDialogState();
-}
-
-class _SenseFolderDialogState extends State<_SenseFolderDialog> {
-  late final TextEditingController _label;
-  late final TextEditingController _definition;
-  late final TextEditingController _gloss;
-  late final TextEditingController _externalRef;
-
-  @override
-  void initState() {
-    super.initState();
-    final value = widget.existing;
-    _label = TextEditingController(text: value?.label ?? '');
-    _definition = TextEditingController(text: value?.definition ?? '');
-    _gloss = TextEditingController(text: value?.gloss ?? '');
-    _externalRef = TextEditingController(text: value?.externalRef ?? '');
-  }
-
-  @override
-  void dispose() {
-    _label.dispose();
-    _definition.dispose();
-    _gloss.dispose();
-    _externalRef.dispose();
-    super.dispose();
-  }
-
-  String? _optional(TextEditingController controller) {
-    final value = controller.text.trim();
-    return value.isEmpty ? null : value;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return AlertDialog(
-      title: Text(
-        widget.existing == null
-            ? l.text('dictionaryAddSenseFolder')
-            : l.text('dictionaryEditSenseFolder'),
-      ),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              autofocus: true,
-              controller: _label,
-              decoration: InputDecoration(
-                labelText: l.text('dictionarySenseFolderLabel'),
-              ),
-            ),
-            TextField(
-              controller: _definition,
-              decoration: InputDecoration(
-                labelText: l.text('dictionarySenseFolderDefinition'),
-              ),
-            ),
-            TextField(
-              controller: _gloss,
-              decoration: InputDecoration(
-                labelText: l.text('dictionarySenseFolderGloss'),
-              ),
-            ),
-            TextField(
-              controller: _externalRef,
-              decoration: InputDecoration(
-                labelText: l.text('dictionarySenseFolderExternalRef'),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l.text('close')),
-        ),
-        FilledButton(
-          onPressed: () {
-            final label = _label.text.trim();
-            if (label.isEmpty) return;
-            Navigator.pop(
-              context,
-              _SenseFolderDraft(
-                label: label,
-                definition: _optional(_definition),
-                gloss: _optional(_gloss),
-                externalRef: _optional(_externalRef),
-              ),
-            );
-          },
-          child: Text(l.text('save')),
-        ),
-      ],
-    );
-  }
-}
-
-class _ClipTile extends StatelessWidget {
-  const _ClipTile({
-    required this.occurrence,
-    required this.target,
-    required this.wpmLabel,
-    required this.revealed,
-    required this.submitting,
-    required this.mark,
-    required this.onReveal,
-    required this.onPlay,
-    required this.onReview,
-    required this.onHeard,
-    required this.onNotHeard,
-  });
-
-  final LexicalOccurrence occurrence;
-  final String target;
-  final String? wpmLabel;
-  final bool revealed;
-  final bool submitting;
-  final bool? mark;
-  final VoidCallback onReveal;
-  final VoidCallback onPlay;
-  final VoidCallback? onReview;
-  final VoidCallback? onHeard;
-  final VoidCallback? onNotHeard;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final linked = occurrence.mediaId != null;
-    final status = linked
-        ? l.text('dictionaryClipReady')
-        : l.text('dictionaryClipNeedsSource');
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
-        title: revealed
-            ? _HighlightedSentence(
-                sentence: occurrence.sentenceTextSnapshot,
-                target: target,
-              )
-            : Text(l.text('dictionaryRevealSentence')),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                [
-                  occurrence.mediaTitleSnapshot,
-                  formatDuration(
-                    Duration(milliseconds: occurrence.startMsSnapshot),
-                  ),
-                  ?wpmLabel,
-                  status,
-                ].join(' · '),
-              ),
-              if (revealed) ...[
-                const SizedBox(height: ListenSpacing.gap8),
-                if (mark != null)
-                  Text(
-                    l.text(
-                      mark!
-                          ? 'dictionaryMarkedHeard'
-                          : 'dictionaryMarkedNotHeard',
-                    ),
-                    style: TextStyle(
-                      color: mark!
-                          ? ListenColors.learningRecognized
-                          : Theme.of(context).colorScheme.secondary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  )
-                else if (onHeard == null)
-                  Text(
-                    l.text('dictionaryMarkUnavailable'),
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: submitting ? null : onNotHeard,
-                        icon: const Icon(
-                          Icons.hearing_disabled_outlined,
-                          size: 17,
-                        ),
-                        label: Text(l.text('dictionaryNotHeard')),
-                      ),
-                      FilledButton.icon(
-                        onPressed: submitting ? null : onHeard,
-                        icon: submitting
-                            ? const ListenLoading.inline(size: 16)
-                            : const Icon(Icons.hearing_outlined, size: 17),
-                        label: Text(l.text('dictionaryHeard')),
-                      ),
-                    ],
-                  ),
-              ],
-            ],
-          ),
-        ),
-        onTap: revealed ? null : onReveal,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!revealed)
-              IconButton(
-                tooltip: l.text('dictionaryRevealSentence'),
-                icon: const Icon(Icons.visibility_outlined),
-                onPressed: onReveal,
-              ),
-            if (onReview != null)
-              IconButton(
-                tooltip: l.text('dictionaryReviewClip'),
-                icon: const Icon(Icons.playlist_add_outlined),
-                onPressed: onReview,
-              ),
-            IconButton.filledTonal(
-              tooltip: l.text('dictionaryPlayClip'),
-              icon: Icon(linked ? Icons.headphones_outlined : Icons.link_off),
-              // An unlinked snapshot can still be recovered through the shared
-              // resolver (current media fingerprint or a user-selected file).
-              onPressed: onPlay,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _HighlightedSentence extends StatelessWidget {
-  const _HighlightedSentence({required this.sentence, required this.target});
-
-  final String sentence;
-  final String target;
-
-  @override
-  Widget build(BuildContext context) {
-    final normalizedTarget = target.trim();
-    final start = normalizedTarget.isEmpty
-        ? -1
-        : sentence.toLowerCase().indexOf(normalizedTarget.toLowerCase());
-    if (start < 0) return Text(sentence);
-    final end = start + normalizedTarget.length;
-    return Text.rich(
-      TextSpan(
-        style: DefaultTextStyle.of(context).style,
-        children: [
-          TextSpan(text: sentence.substring(0, start)),
-          TextSpan(
-            text: sentence.substring(start, end),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          TextSpan(text: sentence.substring(end)),
-        ],
-      ),
-    );
-  }
-}
-
-/// The four-channel snapshot, editable in place when [onOverride] is wired:
-/// selecting a chip sets that channel's user override, re-selecting the
-/// active one clears it (mirroring the side-panel pattern).
-class _CapabilityEditor extends StatelessWidget {
-  const _CapabilityEditor({required this.profile, this.onOverride});
-
-  final LexicalCapabilityProfile? profile;
-  final Future<void> Function(String capability, String? conclusion)?
-  onOverride;
-
-  static const _channels = [
-    ('reading', 'capabilityReading', Icons.menu_book_outlined),
-    ('listening', 'capabilityListening', Icons.hearing_outlined),
-    ('speaking', 'capabilitySpeaking', Icons.record_voice_over_outlined),
-    ('writing', 'capabilityWriting', Icons.edit_outlined),
-  ];
-
-  CapabilityDimensionState? _dimension(String channel) {
-    final value = profile;
-    if (value == null) return null;
-    return switch (channel) {
-      'reading' => value.reading,
-      'listening' => value.listening,
-      'speaking' => value.speaking,
-      _ => value.writing,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // The entry-scale portrait ring (#47): same graphic language as the
-        // coach dashboard and the book list, ahead of the editable rows.
-        Padding(
-          padding: const EdgeInsets.only(bottom: ListenSpacing.gap8),
-          child: CapabilityRing(
-            assessments: capabilityProfileAssessments(profile),
-            size: 44,
-            withTooltip: true,
-          ),
-        ),
-        for (final (channel, label, icon) in _channels)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 17,
-                  color: capabilityAssessmentColor(
-                    Theme.of(context).colorScheme,
-                    _dimension(channel)?.effectiveAssessment ?? 'unassessed',
-                  ),
-                ),
-                const SizedBox(width: ListenSpacing.gap8),
-                SizedBox(
-                  width: 72,
-                  child: Text(l.text(label), style: ListenType.reading),
-                ),
-                for (final value in const ['acquired', 'not_acquired'])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: ChoiceChip(
-                      label: Text(l.text(value), style: ListenType.body),
-                      selected:
-                          _dimension(channel)?.effectiveAssessment == value,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: onOverride == null
-                          ? null
-                          : (_) => unawaited(
-                              onOverride!(
-                                channel,
-                                _dimension(channel)?.effectiveAssessment ==
-                                        value
-                                    ? null
-                                    : value,
-                              ),
-                            ),
-                    ),
-                  ),
-                if ((_dimension(channel)?.effectiveAssessment ??
-                        'unassessed') ==
-                    'unassessed')
-                  Text(
-                    l.text('unassessed'),
-                    style: ListenType.body.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                if (_dimension(channel)?.userOverride != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Tooltip(
-                      message: 'User override',
-                      child: Icon(
-                        Icons.person_outline,
-                        size: 14,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
-    );
   }
 }

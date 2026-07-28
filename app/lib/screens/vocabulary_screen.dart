@@ -19,9 +19,9 @@ import '../theme/breakpoints.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import '../widgets/common/listen_empty_state.dart';
-import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
+import '../widgets/vocabulary/semantic_search_dialog.dart';
 import '../widgets/vocabulary/listening_dictionary_entry_view.dart';
 import '../widgets/common/capability_viz.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
@@ -59,334 +59,6 @@ class VocabularyScreen extends StatefulWidget {
 
   @override
   State<VocabularyScreen> createState() => _VocabularyScreenState();
-}
-
-class _SemanticSearchDialog extends StatefulWidget {
-  const _SemanticSearchDialog({required this.api, required this.language});
-
-  final LocalApi api;
-  final String language;
-
-  @override
-  State<_SemanticSearchDialog> createState() => _SemanticSearchDialogState();
-}
-
-class _SemanticSearchDialogState extends State<_SemanticSearchDialog> {
-  final query = TextEditingController();
-  SemanticEmbeddingCapabilityView? capability;
-  List<SemanticSearchHitView> hits = const [];
-  bool busy = true;
-  String? busyLabel;
-  String? error;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadCapability());
-  }
-
-  @override
-  void dispose() {
-    query.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadCapability() async {
-    try {
-      final value = await widget.api.semanticEmbeddingCapability();
-      if (mounted) {
-        setState(() {
-          capability = value;
-          busy = false;
-          error = null;
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  Future<void> _install() async {
-    final l = AppLocalizations.of(context);
-    setState(() {
-      busy = true;
-      busyLabel = l.text('semanticSearchInstalling');
-      error = null;
-    });
-    try {
-      final value = await widget.api.installSemanticEmbedding();
-      if (mounted) {
-        setState(() {
-          capability = value;
-          busy = false;
-          busyLabel = null;
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          busyLabel = null;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  Future<void> _rebuild() async {
-    final l = AppLocalizations.of(context);
-    setState(() {
-      busy = true;
-      busyLabel = l.text('semanticSearchIndexing');
-      error = null;
-    });
-    try {
-      final value = await widget.api.rebuildSemanticEmbedding();
-      if (mounted) {
-        setState(() {
-          capability = value;
-          busy = false;
-          busyLabel = null;
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          busyLabel = null;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  Future<void> _disable() async {
-    setState(() => busy = true);
-    try {
-      final value = await widget.api.disableSemanticEmbedding();
-      if (mounted) {
-        setState(() {
-          capability = value;
-          busy = false;
-          hits = const [];
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  Future<void> _enable() async {
-    setState(() => busy = true);
-    try {
-      final value = await widget.api.enableSemanticEmbedding();
-      if (mounted) {
-        setState(() {
-          capability = value;
-          busy = false;
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  Future<void> _uninstall() async {
-    setState(() => busy = true);
-    try {
-      final value = await widget.api.uninstallSemanticEmbedding();
-      if (mounted) {
-        setState(() {
-          capability = value;
-          busy = false;
-          hits = const [];
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  Future<void> _search() async {
-    if (query.text.trim().isEmpty) return;
-    setState(() {
-      busy = true;
-      busyLabel = null;
-      error = null;
-    });
-    try {
-      final result = await widget.api.semanticSearch(
-        query: query.text,
-        language: widget.language,
-      );
-      if (mounted) {
-        setState(() {
-          capability = result.capability;
-          hits = result.hits;
-          busy = false;
-        });
-      }
-    } catch (failure) {
-      if (mounted) {
-        setState(() {
-          busy = false;
-          error = '$failure';
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final value = capability;
-    return AlertDialog(
-      title: Text(l.text('semanticSearchTitle')),
-      content: SizedBox(
-        width: 620,
-        height: 520,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (busy) ...[
-              const LinearProgressIndicator(),
-              if (busyLabel != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(busyLabel!),
-                ),
-            ],
-            if (error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: ListenErrorNotice(
-                  message: l
-                      .text('semanticSearchFailure')
-                      .replaceAll('{error}', error!),
-                ),
-              ),
-            if (value != null) ...[
-              Text(
-                '${value.status} · ${value.indexedSourceCount} sources'
-                '${value.descriptor == null ? '' : ' · ${value.descriptor!.dimension}d · ${value.descriptor!.modelFingerprint.substring(0, 8)}'}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: ListenSpacing.gap8),
-              if (value.status == 'not_installed')
-                FilledButton.tonalIcon(
-                  onPressed: busy ? null : _install,
-                  icon: const Icon(Icons.download_outlined),
-                  label: Text(l.text('semanticSearchInstall')),
-                )
-              else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (value.status == 'ready' || value.status == 'stale')
-                      FilledButton.tonalIcon(
-                        onPressed: busy ? null : _rebuild,
-                        icon: Icon(
-                          value.status == 'stale'
-                              ? Icons.refresh
-                              : Icons.account_tree_outlined,
-                        ),
-                        label: Text(l.text('semanticSearchRebuild')),
-                      ),
-                    if (value.status == 'ready' || value.status == 'stale')
-                      OutlinedButton(
-                        onPressed: busy ? null : _disable,
-                        child: Text(l.text('semanticSearchDisable')),
-                      ),
-                    if (value.status == 'disabled')
-                      OutlinedButton(
-                        onPressed: busy ? null : _enable,
-                        child: Text(l.text('semanticSearchEnable')),
-                      ),
-                    TextButton(
-                      onPressed: busy ? null : _uninstall,
-                      child: Text(l.text('semanticSearchUninstall')),
-                    ),
-                  ],
-                ),
-            ] else if (!busy)
-              Text(l.text('semanticSearchUnavailable')),
-            const SizedBox(height: ListenSpacing.gap12),
-            TextField(
-              controller: query,
-              enabled: !busy && (value?.canSearch ?? false),
-              decoration: InputDecoration(
-                hintText: l.text('semanticSearchHint'),
-                suffixIcon: IconButton(
-                  onPressed: !busy && (value?.canSearch ?? false)
-                      ? _search
-                      : null,
-                  icon: const Icon(Icons.search),
-                ),
-              ),
-              onSubmitted: (_) => _search(),
-            ),
-            const SizedBox(height: ListenSpacing.gap8),
-            Expanded(
-              child: hits.isEmpty
-                  ? ListenEmptyState(
-                      icon: Icons.search_off,
-                      message: l.text('semanticSearchNoHits'),
-                    )
-                  : ListView.separated(
-                      itemCount: hits.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, index) {
-                        final hit = hits[index];
-                        return ListTile(
-                          title: Text(
-                            hit.source.text,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            '${hit.source.kind}${hit.source.channel == null ? '' : ' · ${hit.source.channel}'}',
-                          ),
-                          trailing: Text(hit.similarity.toStringAsFixed(3)),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-        FilledButton(
-          onPressed: !busy && (value?.canSearch ?? false) ? _search : null,
-          child: Text(l.text('semanticSearchAction')),
-        ),
-      ],
-    );
-  }
 }
 
 class _VocabularyScreenState extends State<VocabularyScreen> {
@@ -431,10 +103,21 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   /// Pending listening upgrade suggestions and the dictionary-provider
   /// pronunciation audio for the open entry (both best-effort).
+  ///
+  /// S4 (#82 / V6): these are *decorations* of the open entry and each one
+  /// loads on its own clock. The identity card renders from `details` alone,
+  /// so a slow dictionary provider can no longer hold the whole detail pane.
   List<UpgradeSuggestion> suggestions = const [];
+  bool suggestionsLoading = false;
   String? pronunciationAudioUrl;
+  bool pronunciationLoading = false;
   List<ProductionCorpusHitView>? productionHits;
   bool productionLoadFailed = false;
+
+  /// Monotonic id of the newest detail request. A decoration that resolves
+  /// after the user moved to another entry is dropped instead of painting
+  /// the previous word's data onto the current one.
+  int detailRequest = 0;
 
   /// Corpus fallback when the vocabulary list has no match for [search].
   List<CorpusOccurrence>? homeResults;
@@ -529,26 +212,55 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     }
   }
 
+  /// Opens an entry's detail. The entry itself is awaited (it *is* the page);
+  /// its three decorations then load in parallel, each publishing on its own
+  /// (V6: serial waiting is what made the identity card hostage to the
+  /// slowest provider).
   Future<void> _openEntryById(String entryId) async {
+    final request = ++detailRequest;
     if (mounted) {
       setState(() {
+        suggestions = const [];
+        suggestionsLoading = true;
+        pronunciationAudioUrl = null;
+        pronunciationLoading = true;
         productionHits = null;
         productionLoadFailed = false;
       });
     }
     final value = await widget.api.lexicalEntryDetails(entryId);
-    // Suggestions and dictionary audio are decorations: each degrades to
-    // absence instead of failing the detail page.
+    if (!mounted || request != detailRequest) return;
+    // The identity card can paint now — nothing below is awaited here.
+    setState(() => details = value);
+    unawaited(_loadEntrySuggestions(entryId, request));
+    unawaited(_loadEntryPronunciation(value.entry, request));
+    unawaited(_loadEntryProduction(value.entry, request));
+  }
+
+  /// Whether a decoration that just resolved still belongs to the open entry.
+  bool _detailStillCurrent(int request) => mounted && request == detailRequest;
+
+  Future<void> _loadEntrySuggestions(String entryId, int request) async {
     List<UpgradeSuggestion> pending;
     try {
       pending = await widget.api.upgradeSuggestions(lexicalEntryId: entryId);
     } catch (_) {
+      // A missing suggestion source degrades to "no suggestions", never to a
+      // broken detail page.
       pending = const [];
     }
+    if (!_detailStillCurrent(request)) return;
+    setState(() {
+      suggestions = pending;
+      suggestionsLoading = false;
+    });
+  }
+
+  Future<void> _loadEntryPronunciation(LexicalEntry entry, int request) async {
     String? audio;
     try {
       final bundle = await widget.api.lookupDictionary(
-        value.entry.normalizedForm,
+        entry.normalizedForm,
         language: widget.language,
       );
       audio = bundle.results
@@ -564,26 +276,31 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (_) {
       audio = null;
     }
+    if (!_detailStillCurrent(request)) return;
+    setState(() {
+      pronunciationAudioUrl = audio;
+      pronunciationLoading = false;
+    });
+  }
+
+  Future<void> _loadEntryProduction(LexicalEntry entry, int request) async {
     List<ProductionCorpusHitView> output;
     var outputLoadFailed = false;
     try {
       output = await widget.api.searchProductionCorpus(
-        language: value.entry.language,
-        query: value.entry.normalizedForm,
+        language: entry.language,
+        query: entry.normalizedForm,
       );
     } catch (_) {
+      // "Unavailable" and "you have not produced this yet" stay distinct.
       output = const [];
       outputLoadFailed = true;
     }
-    if (mounted) {
-      setState(() {
-        details = value;
-        suggestions = pending;
-        pronunciationAudioUrl = audio;
-        productionHits = output;
-        productionLoadFailed = outputLoadFailed;
-      });
-    }
+    if (!_detailStillCurrent(request)) return;
+    setState(() {
+      productionHits = output;
+      productionLoadFailed = outputLoadFailed;
+    });
   }
 
   Future<void> _openDetails(LexicalEntryDetails value) async {
@@ -732,7 +449,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       showDialog<void>(
         context: context,
         builder: (_) =>
-            _SemanticSearchDialog(api: widget.api, language: widget.language),
+            SemanticSearchDialog(api: widget.api, language: widget.language),
       ),
     );
   }
@@ -1520,6 +1237,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               onCollectCorpus: (occurrence) =>
                   _collectCorpus(value.entry, occurrence),
               suggestions: suggestions,
+              suggestionsLoading: suggestionsLoading,
+              pronunciationLoading: pronunciationLoading,
               onConfirmSuggestion: (suggestion) =>
                   _confirmSuggestion(value.entry, suggestion),
               onRejectSuggestion: (suggestion) =>

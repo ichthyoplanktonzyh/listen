@@ -381,6 +381,10 @@ void main() {
 
       expect(find.text('Meaning folders'), findsOneWidget);
       expect(find.text('Unassigned clips'), findsOneWidget);
+      // Meanings is the fourth anchored section (#82 / V4), so it sits below
+      // the fold on a small surface — scroll to it the way an anchor would.
+      await tester.ensureVisible(find.byTooltip('Add meaning folder'));
+      await tester.pump();
       await tester.tap(find.byTooltip('Add meaning folder'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'physical running');
@@ -805,6 +809,12 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('This proposal is worth discussing.'), findsOneWidget);
+    // "My output" is the third anchored section (#82 / V4): built and findable,
+    // but below the fold until scrolled to.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('production-output-document-1')),
+    );
+    await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('production-output-document-1')),
     );
