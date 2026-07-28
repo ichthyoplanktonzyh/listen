@@ -12,4 +12,5 @@
 - Python scripts keep entrypoints small and deterministic logic testable.
 - Release JSON is canonicalized and archives are deterministic.
 - Tests use fixtures/fakes by default; live paid tests are ignored and opt-in.
-- Conventional Commits, exact-minute changelog, one coherent PR.
+- Conventional Commits and one coherent PR per task. Changelog updates are
+  release-only.

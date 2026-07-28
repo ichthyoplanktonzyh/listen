@@ -23,7 +23,8 @@ source with `scripts/build-macos-mvp.sh`.
 
 - Keep commits scoped to one behavior or planning change.
 - Use imperative commit subjects.
-- Record user-visible changes in `CHANGELOG.md`.
+- Do not update `CHANGELOG.md` in ordinary task branches. The release owner
+  curates it from merged pull requests when publishing a version.
 - Create an annotated semantic-version tag for each releasable milestone.
 - Do not commit secrets, user media, local databases, external tool binaries, or
   generated release archives.
