@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- 2026-07-28 10:35 CST: S4 词汇本详情分段（refs #82）：词条详情从一根 8 段 ListView 重排为
+  **身份卡 + 五段锚点导航**（证据/切片/我的输出/义项/笔记，V4）。锚点非 tab——五段始终同时构建、
+  同处一个滚动区，点锚点只滚动不隐藏其他段；活动锚点随滚动反映阅读位置，reduce-motion 下
+  滚动与着色降级为瞬时。加载诚实（V6）：`_openEntryById` 不再串行 await 建议/词典音频/产出，
+  词条一到就渲染身份卡，三类装饰各自并发加载、各自报 loading，并用请求序号丢弃过期结果；
+  发音控件上移进身份卡并有独立等待态。切片播放器与键盘导航（←/→/空格）原样继承。
+  顺带把 `_SemanticSearchDialog` 抽到 `widgets/vocabulary/semantic_search_dialog.dart`
+  （vocabulary_screen.dart 1942 → 1614 行）。新增 4 个测试（锚点五段、锚点跳转、
+  段内状态跨父级重建不丢、慢装饰不阻塞身份卡）；`flutter analyze` 零告警，`flutter test` 654 全绿。
+
 - 2026-07-28 10:20 CST: 实时对话的服务商配置迁入设置域（refs #87 · S10）。地址、区域、
   Workspace、模型与 API 密钥表单从对话面板移到「设置 › 实时语音」，可列出/添加/删除，
   删除需确认；密钥仍是只写、提交后即从输入框清除并由后端存入系统钥匙串，界面不回显。
@@ -17,6 +27,11 @@
   `equivalent` 同步 OpenAPI、Flutter 展示与 contract test，evaluation trace 记录版本、
   evidence class、语言、policy、provider 及等价匹配。移除未生效的 contraction/penalty
   声明，并将 PR 收窄为 `refs #98`，开放题 rubric/meaning-unit/LLM judgment 继续留在 issue。
+
+- 2026-07-28 09:40 CST: 机械拆分词条详情面（AGENT.md「单文件 >1500 行先拆模块」）：
+  `listening_dictionary_entry_view.dart` 1863 → 1034 行，证据段、建议横幅、切片卡、语料卡、
+  义项弹窗、四通道编辑器迁入新的 `widgets/vocabulary/entry_detail_parts.dart`；`CorpusResultTile`
+  经原文件 re-export 保持既有 import 路径。纯搬运，零行为改动（refs #82）。
 
 - 2026-07-27 11:59 CST: 补全 issue #96 LLM Sense Group 批处理验收：显式
   `batch_id` 状态/取消 API，排队与退避均可协作取消且取消批次不提交伪完整分析；账号作用域
