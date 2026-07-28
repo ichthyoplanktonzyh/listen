@@ -163,6 +163,10 @@ Do not require a sibling `listen-core` checkout for normal validation.
 GitHub Actions may be unavailable because of account billing; record exact
 local validation instead. Only the owner may authorize merge without CI.
 
+For complete app startup, pinned-release testing, unreleased local-core
+integration, manual smoke coverage, logs, and troubleshooting, follow
+`docs/development/full-app-local-testing.md`.
+
 ## Planning and Documentation
 
 The live `.planning` tree describes only frontend facts in this repository.

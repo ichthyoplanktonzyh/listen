@@ -8,6 +8,10 @@ checkout or moving backend branch is read during build.
 
 ## Run the complete app locally
 
+The complete setup, local-core workflow, smoke checklist, logs, and
+troubleshooting guide lives in
+[`docs/development/full-app-local-testing.md`](docs/development/full-app-local-testing.md).
+
 Run from the `listen-app` repository root so the app can find the pinned
 sidecar under `.backend/`.
 
