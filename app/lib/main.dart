@@ -983,6 +983,17 @@ class _PlayerScreenState extends State<PlayerScreen>
           onCaptionEnabledChanged: (value) => unawaited(
             settingsController.setRealtimeCaptionVisible(value),
           ),
+          // The debrief's 回流 is a door, not a claim (#86 · S9): the words
+          // this conversation handed to the speaking channel are in the
+          // vocabulary book, and an amber target goes straight into 我的表达.
+          onOpenVocabulary: _openVocabulary,
+          // `manual`, not a conversation source kind: the turn never became
+          // learner output, so what the learner keeps here is something they
+          // are writing down — the backend's production evidence is not
+          // allowed to gain a row from a turn the loop never closed.
+          onSaveExpression: (text) => _openPersonalExpression(
+            source: PersonalExpressionSourceView(kind: 'manual', text: text),
+          ),
         ),
       ),
     );

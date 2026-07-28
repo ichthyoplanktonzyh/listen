@@ -1089,3 +1089,121 @@ class EchoSurfacePainter extends CustomPainter {
       oldDelegate.signal != signal ||
       oldDelegate.moonlight != moonlight;
 }
+
+/// The 回声水面 frozen into a single static bar — the debrief's closing shape
+/// (#86 · S9).
+///
+/// Lineage, deliberately: [CapabilityEchoBars] draws one column per modality
+/// pair with the reception channel above a baseline and the production channel
+/// below it, and repeats the reception height below as a dashed ghost so the
+/// unlit part of the ghost *is* gap-(c). [ConversationEchoSurface] turns that
+/// same baseline into the live stage's waterline. When the conversation ends
+/// the water stops moving and收窄 back into the portrait's shape — one
+/// column, the 说 channel: the light that came in above the line, your echo
+/// below it.
+///
+/// Why this is a sibling of [CapabilityEchoBars] rather than a literal reuse:
+/// that widget reads [CoachChannelSummary] — *portrait* counts of acquired /
+/// not-acquired / unassessed words across the whole language. This bar counts
+/// *this conversation's* turns. Feeding turn counts into an assessment widget
+/// would dress conversation facts as portrait judgments, which is exactly the
+/// 呈现≠语义 line the C wave is not allowed to cross. So the form is shared
+/// and the semantics are not.
+///
+/// Static by construction: no controller, no ambient drift, nothing to reduce
+/// under reduce-motion. The stage's motion has ended; this is its residue.
+class ConversationEchoTally extends StatelessWidget {
+  const ConversationEchoTally({
+    super.key,
+    required this.moonTurns,
+    required this.learnerTurns,
+    required this.learnerOutputTurns,
+    this.barHeight = 64,
+  });
+
+  /// Turns the other voice took — 月白, the light that came in.
+  final int moonTurns;
+
+  /// Turns you took, whatever became of them. Drawn as the dashed ghost.
+  final int learnerTurns;
+
+  /// Of those, the ones that came back as learner output (a completed local
+  /// transcript). Drawn lit, in signal teal. The unlit remainder of the ghost
+  /// is what this conversation did not return — drawn, not computed away.
+  final int learnerOutputTurns;
+
+  final double barHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = math.max(moonTurns, learnerTurns);
+    double height(int count) => unit == 0 ? 0 : barHeight * count / unit;
+    return Semantics(
+      label:
+          'The other voice took $moonTurns turns; you took $learnerTurns, '
+          'and $learnerOutputTurns of yours came back as learner output.',
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 200),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              height: barHeight,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Container(
+                    key: const ValueKey('conversation-tally-moon'),
+                    height: height(moonTurns),
+                    color: ListenColors.moonWhite.withValues(alpha: 0.55),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Container(
+                height: 1.2,
+                color: ListenColors.moonWhite.withValues(alpha: 0.24),
+              ),
+            ),
+            SizedBox(
+              height: barHeight,
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                      Container(
+                        key: const ValueKey('conversation-tally-learner'),
+                        height: height(learnerOutputTurns),
+                        color: ListenColors.overlaySignal,
+                      ),
+                    ],
+                  ),
+                  if (height(learnerTurns) > 0)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: SizedBox(
+                        key: const ValueKey('conversation-tally-ghost'),
+                        height: height(learnerTurns),
+                        child: CustomPaint(
+                          painter: _DashedRectPainter(
+                            color: ListenColors.overlaySignal.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

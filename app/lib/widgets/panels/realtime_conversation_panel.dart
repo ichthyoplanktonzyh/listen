@@ -11,6 +11,7 @@ import '../../theme/spacing.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
 import 'conversation_afterglow_caption.dart';
+import 'conversation_debrief.dart';
 import 'conversation_stage_shell.dart';
 
 String realtimeHistoryTitle(RealtimeConversationSessionView session) {
@@ -33,6 +34,8 @@ class RealtimeConversationPanel extends StatefulWidget {
     this.onManageVoices,
     this.captionEnabled = false,
     this.onCaptionEnabledChanged,
+    this.onOpenVocabulary,
+    this.onSaveExpression,
   });
   final RealtimeConversationController controller;
   final LocalApi api;
@@ -54,6 +57,18 @@ class RealtimeConversationPanel extends StatefulWidget {
   /// needs a way out of the dead end, and this route covers the app bar.
   /// Null keeps the panel usable in tests and in hosts without settings.
   final Future<void> Function()? onManageVoices;
+
+  /// 词汇本 — where the words this conversation handed to the speaking channel
+  /// now live (#86 · S9). The debrief's 回流 section links there so the
+  /// read-out is a door, not a claim. Null keeps the panel usable in tests and
+  /// in hosts without the learning routes.
+  final Future<void> Function()? onOpenVocabulary;
+
+  /// 我的表达 — opens the "save an expression" flow prefilled with [text].
+  /// Used by the debrief's amber targets, whose turns never became learner
+  /// output: what gets saved is the learner writing something down, not the
+  /// portrait gaining evidence.
+  final Future<void> Function(String text)? onSaveExpression;
 
   @override
   State<RealtimeConversationPanel> createState() =>
@@ -336,54 +351,82 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
         ),
       );
 
-  /// 结束页: the stage dims and the conversation becomes readable. S9 (#86)
-  /// replaces this body with the three-part 回流; S6 only guarantees the room
-  /// exists, is reachable, and can be left.
-  Widget _debrief(BuildContext context, RealtimeConversationState state) =>
-      SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(ListenSpacing.gap12),
-              child: TextButton.icon(
-                key: const ValueKey('realtime-debrief-back'),
-                onPressed: () => setState(() => _debriefDismissed = true),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Back to conversations'),
-              ),
+  /// 结束页: the stage dims and the conversation becomes readable — the three
+  /// fixed sections of the 回流 (#86 · S9, fixes audit D6). S6 built the room;
+  /// this fills it.
+  ///
+  /// Read top to bottom it is one honest sentence: here is what you said (and
+  /// what is still being transcribed), here is where the loop stayed open, and
+  /// here is what reached your portrait.
+  Widget _debrief(BuildContext context, RealtimeConversationState state) {
+    final readout = conversationDebriefReadoutOf(state);
+    final targets = conversationDebriefTargetsOf(state);
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(ListenSpacing.gap12),
+            child: TextButton.icon(
+              key: const ValueKey('realtime-debrief-back'),
+              onPressed: () => setState(() => _debriefDismissed = true),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back to conversations'),
             ),
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 620),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (state.error != null)
-                          _notice(context, state.error!, true),
-                        for (final item in state.items) ...[
-                          _ConversationTurnCard(item: item),
-                          const SizedBox(height: ListenSpacing.gap12),
-                        ],
-                        if (state.postProcessingCount > 0)
-                          Text(
-                            '${state.postProcessingCount} learner turn(s) are '
-                            'being transcribed locally.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (state.error != null)
+                        _notice(context, state.error!, true),
+                      // P4, first thing on the page: while local Whisper is
+                      // still running the debrief says so instead of laying
+                      // out a finished-looking transcript.
+                      if (!readout.settled) ...[
+                        ConversationDebriefProgress(readout: readout),
+                        const SizedBox(height: ListenSpacing.gap16),
                       ],
-                    ),
+                      for (final item in state.items) ...[
+                        ConversationDebriefTurnCard(item: item),
+                        const SizedBox(height: ListenSpacing.gap12),
+                      ],
+                      const SizedBox(height: ListenSpacing.gap16),
+                      ConversationDebriefTargets(
+                        targets: targets,
+                        onSaveExpression: widget.onSaveExpression == null
+                            ? null
+                            : _saveExpression,
+                      ),
+                      const SizedBox(height: ListenSpacing.gap24),
+                      ConversationDebriefReflow(
+                        readout: readout,
+                        onOpenVocabulary: widget.onOpenVocabulary == null
+                            ? null
+                            : () => unawaited(widget.onOpenVocabulary!()),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Hands a target turn to 我的表达. Only the provider caption survives such
+  /// a turn, so that — clearly the guidance version — is what gets prefilled;
+  /// an empty prefill is fine, the learner writes the line themselves.
+  void _saveExpression(RealtimeConversationItem item) =>
+      unawaited(widget.onSaveExpression!(item.providerText.trim()));
 
   void _setCaptionEnabled(bool value) {
     setState(() => _captionEnabled = value);
