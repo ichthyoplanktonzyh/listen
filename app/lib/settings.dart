@@ -64,6 +64,7 @@ class AppSettings {
     this.learningLanguage = 'auto',
     this.familiarMaterialSuggestions = true,
     this.markKeysEnabled = true,
+    this.realtimeCaptionVisible = false,
   });
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
@@ -194,6 +195,8 @@ class AppSettings {
       familiarMaterialSuggestions:
           json['familiar_material_suggestions'] as bool? ?? true,
       markKeysEnabled: json['mark_keys_enabled'] as bool? ?? true,
+      realtimeCaptionVisible:
+          json['realtime_caption_visible'] as bool? ?? false,
     );
   }
 
@@ -277,6 +280,14 @@ class AppSettings {
   /// hit by accident, so they are the one part of the shortcut table users
   /// can switch off.
   final bool markKeysEnabled;
+
+  /// Whether the live conversation stage shows the one-line afterglow caption
+  /// of the other person (#85 · S8). Off by default per the owner decision
+  /// (`listen-live-conversation.html` · 拍板记录 2026-07-23): a conversation
+  /// starts as listening, and the learner who wants the safety net turns it on
+  /// in the lobby. Never gates the learner's own words — those are not shown
+  /// live at all.
+  final bool realtimeCaptionVisible;
 
   static String get _home => Platform.environment['HOME'] ?? '';
 
@@ -371,6 +382,7 @@ class AppSettings {
         'learning_language': learningLanguage,
         'familiar_material_suggestions': familiarMaterialSuggestions,
         'mark_keys_enabled': markKeysEnabled,
+        'realtime_caption_visible': realtimeCaptionVisible,
       }),
       flush: true,
     );
@@ -434,6 +446,7 @@ class AppSettings {
     String? learningLanguage,
     bool? familiarMaterialSuggestions,
     bool? markKeysEnabled,
+    bool? realtimeCaptionVisible,
   }) => AppSettings(
     version: version,
     rate: rate ?? this.rate,
@@ -508,6 +521,8 @@ class AppSettings {
     familiarMaterialSuggestions:
         familiarMaterialSuggestions ?? this.familiarMaterialSuggestions,
     markKeysEnabled: markKeysEnabled ?? this.markKeysEnabled,
+    realtimeCaptionVisible:
+        realtimeCaptionVisible ?? this.realtimeCaptionVisible,
   );
 
   static double _number(

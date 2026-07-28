@@ -69,7 +69,17 @@ class SettingsController extends ChangeNotifier {
 
   bool get familiarMaterialSuggestions => _settings.familiarMaterialSuggestions;
   bool get markKeysEnabled => _settings.markKeysEnabled;
+  bool get realtimeCaptionVisible => _settings.realtimeCaptionVisible;
   Color get primaryColor => Color(_settings.primaryColor);
+
+  /// Remembers the lobby's caption switch (#85 · S8). The choice is a habit,
+  /// not a per-conversation decision, so it survives the app restart.
+  Future<void> setRealtimeCaptionVisible(bool value) {
+    if (_settings.realtimeCaptionVisible == value) return Future.value();
+    _settings = _settings.copyWith(realtimeCaptionVisible: value);
+    notifyListeners();
+    return save();
+  }
   Color get secondaryColor => Color(_settings.secondaryColor);
 
   /// Load settings from disk and notify listeners.

@@ -42,6 +42,25 @@ void main() {
     );
   });
 
+  test('the conversation caption is off by default and the choice is '
+      'remembered', () {
+    // 字幕默认关 (#85 · S8, owner decision 2026-07-23): a conversation starts
+    // as listening. Settings files written before this slice must read as off
+    // rather than inheriting some other default.
+    expect(const AppSettings().realtimeCaptionVisible, isFalse);
+    expect(
+      AppSettings.fromJson({'version': 8}).realtimeCaptionVisible,
+      isFalse,
+    );
+    expect(
+      AppSettings.fromJson({
+        'version': 8,
+        'realtime_caption_visible': true,
+      }).realtimeCaptionVisible,
+      isTrue,
+    );
+  });
+
   test('loads versioned settings values', () {
     final settings = AppSettings.fromJson({
       'version': 2,

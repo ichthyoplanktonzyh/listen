@@ -10,6 +10,7 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
+import 'conversation_afterglow_caption.dart';
 import 'conversation_stage_shell.dart';
 
 String realtimeHistoryTitle(RealtimeConversationSessionView session) {
@@ -30,12 +31,23 @@ class RealtimeConversationPanel extends StatefulWidget {
     required this.acquireAudioFocus,
     required this.onClose,
     this.onManageVoices,
+    this.captionEnabled = false,
+    this.onCaptionEnabledChanged,
   });
   final RealtimeConversationController controller;
   final LocalApi api;
   final RealtimeConversationLaunch launch;
   final Future<void> Function() acquireAudioFocus;
   final VoidCallback onClose;
+
+  /// The remembered state of the lobby's caption switch (#85 · S8). Defaults
+  /// to off — the owner-decided default; the host passes the persisted value.
+  final bool captionEnabled;
+
+  /// Persists a change to that switch. Null keeps the panel usable in tests
+  /// and in hosts without settings: the switch still works for the session,
+  /// it just is not remembered.
+  final ValueChanged<bool>? onCaptionEnabledChanged;
 
   /// Opens the settings domain where realtime voices are configured (#87).
   /// The lobby only *chooses* a voice; when none exists the learner still
@@ -50,8 +62,11 @@ class RealtimeConversationPanel extends StatefulWidget {
 
 class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   final ScrollController _scrollController = ScrollController();
-  int _timelineSignature = 0;
   bool _closePromptOpen = false;
+
+  /// Live copy of the lobby's caption switch, seeded from the remembered
+  /// value so the panel keeps working when no host persists it.
+  late bool _captionEnabled = widget.captionEnabled;
 
   /// The debrief is a room the learner leaves, not a phase the backend
   /// reports: once dismissed the shell falls back to the lobby without
@@ -61,7 +76,6 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_followLiveTimeline);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.controller.loadProfiles(widget.api);
       widget.controller.loadHistory(widget.api);
@@ -70,32 +84,8 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
 
   @override
   void dispose() {
-    widget.controller.removeListener(_followLiveTimeline);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _followLiveTimeline() {
-    final state = widget.controller.state;
-    final signature = Object.hashAll([
-      for (final item in state.items)
-        Object.hash(item.sequence, item.status, item.displayText),
-    ]);
-    if (signature == _timelineSignature) return;
-    _timelineSignature = signature;
-    final shouldFollow =
-        !_scrollController.hasClients ||
-        _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 120;
-    if (!shouldFollow || state.phase != RealtimeConversationPhase.live) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
-    });
   }
 
   @override
@@ -175,12 +165,30 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                           : _manageVoices,
                     ),
                     const SizedBox(height: ListenSpacing.gap12),
+                    // 字幕默认关 (#85 · S8): the switch is here, in the lobby,
+                    // and the choice is remembered. It only ever governs the
+                    // other person's line — the learner's own words are not
+                    // on the stage to switch on.
+                    SwitchListTile.adaptive(
+                      key: const ValueKey('realtime-caption-toggle'),
+                      contentPadding: EdgeInsets.zero,
+                      value: _captionEnabled,
+                      onChanged: _setCaptionEnabled,
+                      title: const Text('Show what the other person says'),
+                      subtitle: const Text(
+                        'One dim line on stage, gone a few seconds after they '
+                        'finish. Off by default — listen first.',
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
                     // Honest layering, stated before the lights go down:
                     // the provider's live captions never become learner
                     // output — only the local Whisper transcript does.
                     Text(
-                      'Provider captions are live guidance. Only the local '
-                      'Whisper transcript becomes learner output.',
+                      'Provider captions are live guidance. Your own words '
+                      'never appear on stage: only the local Whisper '
+                      'transcript becomes learner output, in the summary '
+                      'afterwards.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -244,11 +252,17 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     ),
   );
 
-  /// 舞台: the room with the lights off. The transcript deliberately does not
-  /// appear here — 「你的话 live 中不上屏」 and the 余音字幕 arrive with S8
-  /// (#85); the shape in the middle is S7's 回声水面 (#84).
+  /// 舞台: the room with the lights off. There is no transcript here —
+  /// 「你的话 live 中不上屏」 — and at most one line of 余音字幕 for the other
+  /// person, only if the lobby switch is on. The shape in the middle is
+  /// replaced by S7's 回声水面 (#84).
   Widget _stage(BuildContext context, RealtimeConversationState state) =>
       ConversationStageLayout(
+        caption: _captionEnabled
+            ? ConversationAfterglowCaption(
+                line: conversationAfterglowLineOf(state),
+              )
+            : null,
         exitAffordance: IconButton(
           key: const ValueKey('realtime-close'),
           tooltip: 'Leave conversation',
@@ -370,6 +384,11 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
           ],
         ),
       );
+
+  void _setCaptionEnabled(bool value) {
+    setState(() => _captionEnabled = value);
+    widget.onCaptionEnabledChanged?.call(value);
+  }
 
   void _startConversation() {
     setState(() => _debriefDismissed = false);

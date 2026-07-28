@@ -977,6 +977,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           // conversation route covers the app bar, so it hands the learner
           // back there instead of hosting the form itself.
           onManageVoices: _openSettings,
+          // The lobby's caption switch is a habit, so it is remembered
+          // across conversations and restarts (#85 · S8).
+          captionEnabled: settingsController.realtimeCaptionVisible,
+          onCaptionEnabledChanged: (value) => unawaited(
+            settingsController.setRealtimeCaptionVisible(value),
+          ),
         ),
       ),
     );
