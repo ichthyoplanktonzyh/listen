@@ -4,15 +4,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 
-/// Pins the Phase 3.11 semantic DTOs to the committed gold fixture — the
-/// same file the Rust domain/persistence/HTTP contract tests consume, so a
-/// shape drift breaks both sides of the wire loudly (ADR 0014).
+/// Pins the Phase 3.11 semantic DTOs to the locked core gold fixture, so an
+/// explicit backend dependency update exposes incompatible wire drift.
 void main() {
   late Map<String, dynamic> fixture;
 
   setUpAll(() {
-    // flutter test runs with cwd = apps/desktop.
-    final file = File('../../testdata/semantic-task/gold-fixture-v1.json');
+    final file = File('test/fixtures/semantic-task/gold-fixture-v1.json');
     fixture = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
   });
 

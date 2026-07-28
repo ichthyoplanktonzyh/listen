@@ -127,9 +127,7 @@ class LocalApi {
           .asBroadcastStream();
       final line = await lines.first.timeout(const Duration(seconds: 10));
       final handshake = jsonDecode(line) as Map<String, dynamic>;
-      if (handshake['event'] != 'api.started') {
-        throw const FormatException('invalid local API handshake');
-      }
+      validateSidecarHandshake(handshake);
       final logs = Directory(
         '${Platform.environment['HOME']}/Library/Logs/listen',
       );
@@ -162,7 +160,6 @@ class LocalApi {
     final configured = Platform.environment['LLPLAYERNEXT_API_BINARY'];
     final executableDirectory = File(Platform.resolvedExecutable).parent;
     final candidates = <String>['${executableDirectory.path}/api-http'];
-    candidates.addAll(sidecarCandidatesFrom(executableDirectory));
     candidates.addAll(sidecarCandidatesFrom(Directory.current.absolute));
     if (configured != null) candidates.insert(0, configured);
     for (final path in candidates) {
@@ -281,15 +278,44 @@ class LocalApi {
   }
 }
 
-List<String> sidecarCandidatesFrom(Directory start) {
-  final candidates = <String>[];
-  var directory = start.absolute;
-  while (true) {
-    candidates.add('${directory.path}/target/debug/api-http');
-    candidates.add('${directory.path}/target/release/api-http');
-    final parent = directory.parent;
-    if (parent.path == directory.path) break;
-    directory = parent;
+const supportedApiVersion = 1;
+const supportedContractMajor = 1;
+
+void validateSidecarHandshake(Map<String, dynamic> handshake) {
+  if (handshake['event'] != 'api.started' ||
+      handshake['api_version'] != supportedApiVersion) {
+    throw const FormatException('invalid local API handshake');
   }
-  return candidates;
+  final contractVersion = handshake['contract_version'];
+  final runtimeVersion = handshake['runtime_version'];
+  if (contractVersion is! String ||
+      runtimeVersion is! String ||
+      !_isSemanticVersion(runtimeVersion)) {
+    throw const FormatException('local core did not report version metadata');
+  }
+  final contractMatch = _semanticVersionPattern.firstMatch(contractVersion);
+  if (contractMatch == null) {
+    throw const FormatException(
+      'local core reported an invalid contract version',
+    );
+  }
+  final contractMajor = int.parse(contractMatch.group(1)!);
+  if (contractMajor != supportedContractMajor) {
+    throw FormatException(
+      'incompatible local core contract $contractVersion; '
+      'this app supports $supportedContractMajor.x',
+    );
+  }
+}
+
+final RegExp _semanticVersionPattern = RegExp(
+  r'^([0-9]+)\.([0-9]+)\.([0-9]+)(?:[-+][0-9A-Za-z.-]+)?$',
+);
+
+bool _isSemanticVersion(String value) =>
+    _semanticVersionPattern.hasMatch(value);
+
+List<String> sidecarCandidatesFrom(Directory start) {
+  final root = start.absolute.path;
+  return ['$root/.backend/runtime/bin/api-http'];
 }

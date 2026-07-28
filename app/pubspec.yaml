@@ -42,7 +42,7 @@ dependencies:
   csv: ^6.0.0
   video_player: ^2.11.1
   fvp:
-    path: ../../third_party/flutter/fvp
+    path: third_party/fvp
 
 dev_dependencies:
   flutter_test:

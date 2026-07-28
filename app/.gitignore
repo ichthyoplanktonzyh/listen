@@ -32,6 +32,8 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+.backend/
+/test/fixtures/smoke/generated/
 
 # Symbolication related
 app.*.symbols

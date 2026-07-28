@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/timeline.dart';
 
 Map<String, dynamic> _loadFixture(String name) {
-  final file = File('../../testdata/rhythm-frame-qa/$name');
+  final file = File('test/fixtures/rhythm-frame/$name');
   return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
 }
 

@@ -5,12 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/models/backend_event.dart';
 
 /// Consumer side of the SSE payload contract. The committed golden envelopes
-/// in `contracts/events/examples.json` are produced by the Rust side
-/// (`cargo test -p api-http event_contract`); this test parses the same file
+/// are copied from the locked core contract artifact; this test parses them
 /// through `BackendEvent.fromJson`, so a producer payload change that breaks
-/// typed parsing fails here instead of silently degrading at runtime.
+/// typed parsing fails during an explicit backend dependency update.
 void main() {
-  final file = File('../../contracts/events/examples.json');
+  final file = File('test/fixtures/events/examples.json');
   final doc = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
   final examples = (doc['examples'] as List<dynamic>)
       .cast<Map<String, dynamic>>();
@@ -28,7 +27,7 @@ void main() {
         reason:
             'golden example "${entry.key}" fell through to '
             'UnknownBackendEvent; BackendEvent.fromJson and '
-            'contracts/events/examples.json disagree',
+            'locked events/examples.json and BackendEvent.fromJson disagree',
       );
     }
   });

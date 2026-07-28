@@ -216,7 +216,7 @@ packages:
   fvp:
     dependency: "direct main"
     description:
-      path: "../../third_party/flutter/fvp"
+      path: "third_party/fvp"
       relative: true
     source: path
     version: "0.37.2"

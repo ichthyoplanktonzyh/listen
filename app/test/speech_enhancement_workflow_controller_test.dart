@@ -63,7 +63,8 @@ void main() {
         final exported =
             jsonDecode(
                   File(
-                    '../../testdata/rhythm-frame-qa/fixture-no-phone-rhythm.lltimeline.json',
+                    'test/fixtures/rhythm-frame/'
+                    'fixture-no-phone-rhythm.lltimeline.json',
                   ).readAsStringSync(),
                 )
                 as Map<String, dynamic>;
