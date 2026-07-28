@@ -1,22 +1,18 @@
-# listen Desktop
+# listen-app
 
 Formal macOS Apple Silicon desktop client using Flutter and fvp/libmdk.
 
-During development, build the Rust sidecar first and run Flutter from
-`apps/desktop`. The client searches the current directory and development app
-executable ancestors for `target/debug/api-http`:
+The UI repository is independently versioned from `listen-core`. Its exact API
+contract and backend runtime are pinned in `backend.lock.json`; no sibling
+checkout or moving backend branch is read during build.
 
 ```sh
-export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.local/share/flutter/bin:$PATH"
-cargo build -p api-http
-cd apps/desktop
+python3 tool/backend_artifacts.py install
 flutter run -d macos
 ```
 
-This is also the standard functional-test fallback when macOS signing or AMFI
-prevents a newly built `.app` from launching. It does not replace packaged-app
-smoke verification. See
-`../../docs/development/macos-functional-testing.md`.
+For private core releases, provide a read token as `GITHUB_TOKEN`, or pass
+explicit local archives with `--contract-archive` and `--runtime-archive`.
 
 The player adapter, position events, subtitle cursor, seeking, offset, and
 sentence loop all run locally in the client. The loopback sidecar owns subtitle
@@ -44,7 +40,9 @@ deferred.
 Verification:
 
 ```sh
-flutter analyze
+flutter analyze --fatal-infos --fatal-warnings
 flutter test
-flutter build macos --release
+python3 -m unittest tool/test_backend_artifacts.py
+tool/build-macos-release.sh
+tool/verify-macos-release.sh
 ```

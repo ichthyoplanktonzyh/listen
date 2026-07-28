@@ -2,6 +2,13 @@
 
 All notable changes to the listen desktop app.
 
+## 2026-07-28 15:46 CST — Independent Repository
+
+- Materialized `listen-app` as an independent Flutter repository with preserved
+  relevant Git history.
+- Replaced monorepo path discovery with a checksummed `backend.lock.json`
+  artifact workflow and standalone CI, build, and packaged smoke commands.
+
 ## 2026-07-22 — Phase 3.19.1 Realtime Conversation
 
 - Realtime Conversation is now the single ordered multi-turn container for free and explicitly content-anchored
