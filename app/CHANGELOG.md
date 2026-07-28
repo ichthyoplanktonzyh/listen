@@ -2,6 +2,12 @@
 
 All notable changes to the listen desktop app.
 
+## 2026-07-28 16:05 CST — Pinned Core Baseline
+
+- Pinned contract `1.0.0` and macOS arm64 runtime `0.7.0` from immutable
+  `listen-core` release `v0.7.0-split.1`, including archive SHA-256 values and
+  exact source commit.
+
 ## 2026-07-28 15:46 CST — Independent Repository
 
 - Materialized `listen-app` as an independent Flutter repository with preserved

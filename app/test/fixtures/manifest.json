@@ -1,5 +1,5 @@
 {
-  "core_git_sha": "23481d034bc4de9e80af1f11c42c4bc01222337f",
+  "core_git_sha": "4f4bad8b97a651e1cb731bfccb8fd7e1c4645e0a",
   "files": {
     "test/fixtures/events/examples.json": "498783bb4344642e34d9d202916031282f947a1b18deb00f0c9d4b6550542bdc",
     "test/fixtures/rhythm-frame/fixture-no-phone-rhythm.lltimeline.json": "a1d9acf45ce33dc151b7f9109beba5c6aa3ebf66ff093c5c1d2c5e0352d3787d",
