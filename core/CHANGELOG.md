@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- 2026-07-28 17:40 CST: 对话舞台落地余音字幕与诚实分层（refs #85 · S8）。新增
+  `conversation_afterglow_caption.dart`：舞台上最多一行低亮度月白字幕，只显示对方
+  当前那一句 provider caption，说完静置一个 `ListenMotion.ambient`（2.6s）后以
+  slow/exit 淡出；不留历史、不滚动、不换行，槽位高度固定所以上方的形不会跳动，
+  reduce-motion 下淡入淡出归零。诚实分层写进纯函数 `conversationAfterglowLineOf`：
+  只有 `role == 'assistant'` 的条目有资格上屏——你自己的话（provider 实时转写=引导，
+  本地 Whisper=学习者产出）live 中一律不上屏，最终文本留到结束页（S9）以
+  learner output 身份出场。字幕**默认关**，门厅新增开关并记住选择：`AppSettings`
+  新增 `realtime_caption_visible`（默认 false，旧配置读作关），由
+  `SettingsController.setRealtimeCaptionVisible` 持久化。顺带清掉 live 期追随
+  转写流自动滚动的死代码（审计 D3：全文气泡堆积 + guidance/最终转写同权重）。
+  后端判定与 controller 状态机零改动，本刀只呈现。
+
 - 2026-07-28 17:20 CST: 对话舞台中央换成回声水面（refs #84 · S7）。`capability_viz.dart`
   新增 `EchoSurfaceLevels` / `ConversationEchoSurface` / `EchoSurfacePainter`：屏幕中线一条
   水面，上方月白（对方的声音）落下、下方信号青（你的回声）升起，血缘同 `CapabilityEchoBars`
