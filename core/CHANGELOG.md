@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-28 16:59 CST
+
+- Replaced the monorepo-era live planning view with an independent
+  `listen-core` governance, codebase map, cross-repository protocol, and Codex
+  backend ownership guide.
+- Preserved all previous planning material unchanged under
+  `.planning/archive/monorepo-baseline/`.
+
 ## 2026-07-28 15:46 CST
 
 - Materialized `listen-core` as the independent backend and contract authority
