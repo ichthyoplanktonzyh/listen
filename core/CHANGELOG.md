@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- 2026-07-28 20:10 CST: 对话结束页落地三段式回流（refs #86 · S9）。新增
+  `conversation_debrief.dart`：**① 对话**——本地 Whisper 转写做主体（信号青左缘），
+  未完成的轮次如实说「转写中/没拿到/被打断」，绝不拿 provider caption 顶替；
+  provider caption 默认折叠在「Guidance version」开关后，永远不与转写同权重
+  （诚实分层 · 审计 D3 在结束页的后半条）。**② 靶子**——琥珀只给
+  `conversationTurnIsTarget`：`role == 'learner'` 且 `failed`/`interrupted`
+  的轮次，即「没能成为你的产出」的地方；这是既有后端事实，前端不新造卡壳判定；
+  每条可一键进「我的表达」（以 `manual` 来源预填仅存的 guidance 文本，不给后端
+  产出证据加行）；无靶子时给出诚实空状态而不是硬凑。**③ 回流**——纯函数
+  `conversationDebriefReadoutOf` 数出对方轮次/你的轮次/成为 learner output 的轮次/
+  仍在转写/丢失，配 `ConversationEchoTally`（S7 水面定格收窄成静态回声条，说通道列，
+  月白在线上、信号青在线下、虚线幽灵画出没回来的部分），并一键进词汇本。P4：
+  转写未完时页首显示确定性进度条，回流读数自称 provisional，绝不假装完成。
+  `ConversationEchoTally` 与 `CapabilityEchoBars` 同形不同义（后者读画像的
+  acquired/not-acquired 计数，本刀数的是这场对话的轮次），故为兄弟而非直接复用，
+  避免把对话事实伪装成画像判定。后端判定与 controller 状态机零改动，本刀只呈现。
+
 - 2026-07-28 17:40 CST: 对话舞台落地余音字幕与诚实分层（refs #85 · S8）。新增
   `conversation_afterglow_caption.dart`：舞台上最多一行低亮度月白字幕，只显示对方
   当前那一句 provider caption，说完静置一个 `ListenMotion.ambient`（2.6s）后以
