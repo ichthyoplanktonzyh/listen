@@ -1764,6 +1764,14 @@ class AppLocalizations {
       'generateChunks': 'Generate chunks',
       'manualReview': 'Manual review',
       'manualReviewQueued': 'Manual review entry is ready for Phase 2.3.',
+      'expressionExportAction': 'Export expressions',
+      'expressionNewAction': 'New expression',
+      'expressionStarterTitle': 'Save a sentence pattern from subtitles',
+      'expressionStarterBody':
+          'While you watch, keep the sentences you want to be able to say. '
+          'Saved from a subtitle line, each one keeps its source so you can '
+          'hear it again.',
+      'expressionStarterCreate': 'Write one by hand',
 
       // Posture actions on the player's side panel (§3.7). The four used to be
       // `Understand? / Test? / Shadow? / Read?` — one question mark each,
@@ -3291,6 +3299,13 @@ class AppLocalizations {
       'generateChunks': '生成语块',
       'manualReview': '人工复核',
       'manualReviewQueued': '人工复核入口已就绪，完整编辑器将在 Phase 2.3 推进。',
+      'expressionExportAction': '导出个人表达',
+      'expressionNewAction': '新建个人表达',
+      'expressionStarterTitle': '从字幕里收藏一个句型',
+      'expressionStarterBody':
+          '看片时遇到想学会说的句子，就留下来。'
+          '从字幕收藏的句型会带着来源，之后还能回听原句。',
+      'expressionStarterCreate': '手动写一条',
 
       // 播放器右栏的四个姿态动作（§3.7）。原来是「听懂了吗？/ 测一下？/ 跟一下？/
       // 读一下？」——四个问号语气一致但信息量低，「跟一下」和「读一下」字面看不出
