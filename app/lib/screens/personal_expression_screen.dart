@@ -9,13 +9,21 @@ import '../localization.dart';
 import '../models/personal_expression.dart';
 import '../services/api_service.dart';
 import '../theme/breakpoints.dart';
+import '../theme/icon_size.dart';
 import '../theme/listen_theme.dart';
 import '../theme/motion.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
+import '../utils/learning_text_hygiene.dart';
 import '../widgets/common/listen_empty_state.dart';
 import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
+
+/// Below this many saved patterns the page ends with the starter guide instead
+/// of empty space. Three is where the list starts reading as a list: with one
+/// or two cards the column is ~85% blank, and blank space that follows content
+/// reads as "that's all there is" rather than "here is how you get more".
+const _starterGuideThreshold = 3;
 
 /// The scaffolding ladder — four assistance rungs, ordered most help → least.
 ///
@@ -229,10 +237,7 @@ class _AssistanceLadder extends StatelessWidget {
               child: AnimatedContainer(
                 duration: reduceMotion ? Duration.zero : ListenMotion.base,
                 curve: ListenMotion.move,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: ListenSpacing.gap12,
-                  vertical: ListenSpacing.gap8,
-                ),
+                padding: ListenPadding.row,
                 decoration: BoxDecoration(
                   borderRadius: ListenRadii.controlBorder,
                   color: rung.value == current
@@ -436,8 +441,14 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
         pattern?.source ??
         const PersonalExpressionSourceView(kind: 'manual', text: '');
     final name = TextEditingController(text: current?.name ?? '');
+    // A new pattern is seeded from the captured line, so it is seeded clean —
+    // otherwise every subtitle's `- ` is typed straight into stored data and
+    // display cleaning only hides it. The immutable source snapshot below
+    // keeps the raw line exactly as captured.
     final patternText = TextEditingController(
-      text: current?.patternText ?? effectiveSource.text,
+      text:
+          current?.patternText ??
+          cleanLearningText(effectiveSource.text, language: widget.language),
     );
     final slotNames = TextEditingController(
       text: current?.slots.map((slot) => slot.name).join(', ') ?? '',
@@ -581,67 +592,191 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
       appBar: AppBar(
         title: const Text('我的表达'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.download_outlined),
-            tooltip: '导出个人表达',
+          _ChromeAction(
+            icon: Icons.download_outlined,
+            label: l.text('expressionExportAction'),
             onPressed: () => unawaited(_export()),
           ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: '新建个人表达',
+          _ChromeAction(
+            icon: Icons.add,
+            label: l.text('expressionNewAction'),
             onPressed: () => unawaited(_edit()),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText: l.text('search'),
+      // One measurement basis for the whole page. The search field used to sit
+      // outside the column cap and stretched to the window (~950pt) while the
+      // cards below stopped at 780 — two rulers on one page, so the field read
+      // as chrome belonging to some other screen. The cap now wraps search,
+      // error and list together, which makes "same width" structural rather
+      // than a number repeated in three places (§1.3).
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.contentColumnMax,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: ListenPadding.pageCompact.copyWith(bottom: 0),
+                child: TextField(
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: ListenIconSize.control,
+                    ),
+                    hintText: l.text('search'),
+                  ),
+                  onChanged: (value) {
+                    _query = value;
+                    unawaited(_refresh());
+                  },
+                ),
               ),
-              onChanged: (value) {
-                _query = value;
-                unawaited(_refresh());
-              },
+              if (_error != null)
+                Padding(
+                  padding: ListenPadding.pageCompact.copyWith(bottom: 0),
+                  child: ListenErrorNotice(message: _error!),
+                ),
+              Expanded(child: _list(l)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _list(AppLocalizations l) {
+    if (_busy) return const Center(child: ListenLoading());
+    if (_patterns.isEmpty) {
+      return ListenEmptyState(
+        icon: Icons.edit_note,
+        message:
+            '${l.text('expressionStarterTitle')}\n'
+            '${l.text('expressionStarterBody')}',
+        action: TextButton.icon(
+          onPressed: () => unawaited(_edit()),
+          icon: const Icon(Icons.add, size: ListenIconSize.control),
+          label: Text(l.text('expressionStarterCreate')),
+        ),
+      );
+    }
+    // The guide is a tail item of the same list rather than a sibling below
+    // it, so a short list scrolls as one thing and the guide is never pinned
+    // to the bottom of a mostly empty page.
+    final showGuide = _patterns.length < _starterGuideThreshold;
+    return ListView.separated(
+      padding: ListenPadding.pageCompact.copyWith(top: ListenSpacing.gap16),
+      itemCount: _patterns.length + (showGuide ? 1 : 0),
+      separatorBuilder: (_, _) => const SizedBox(height: ListenSpacing.gap8),
+      itemBuilder: (context, index) {
+        if (index == _patterns.length) {
+          return _StarterGuide(onCreate: () => unawaited(_edit()));
+        }
+        final pattern = _patterns[index];
+        return _PatternCard(
+          pattern: pattern,
+          lastWritten: _lastWritten[pattern.id],
+          onTap: () => unawaited(_open(pattern)),
+        );
+      },
+    );
+  }
+}
+
+/// An `AppBar` action that says what it does. Two bare glyphs (download, `+`)
+/// with no label is the quietest possible chrome and also the least legible —
+/// Things 3's toolbar is quiet *and* named. So the name is always present:
+/// as visible text once the window has room ([ListenBreakpoints.appBarLabels],
+/// the same threshold the player app bar uses), and as a tooltip below it,
+/// which is also what a screen reader announces.
+class _ChromeAction extends StatelessWidget {
+  const _ChromeAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final labelled =
+        MediaQuery.sizeOf(context).width >= ListenBreakpoints.appBarLabels;
+    if (!labelled) {
+      return IconButton(
+        tooltip: label,
+        icon: Icon(icon, size: ListenIconSize.chrome),
+        onPressed: onPressed,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(right: ListenSpacing.gap4),
+      child: TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: ListenIconSize.chrome),
+        label: Text(label),
+      ),
+    );
+  }
+}
+
+/// What to do when there is almost nothing here yet.
+///
+/// One or two saved patterns leave the column ~85% empty, and that emptiness
+/// carries no information. The guide replaces it with the one thing a learner
+/// can act on — patterns come from subtitle lines you keep while watching —
+/// plus the only entry this page actually owns (writing one by hand). It stays
+/// muted and offers no reward, streak or nudge (charter P3).
+class _StarterGuide extends StatelessWidget {
+  const _StarterGuide({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: ListenSpacing.gap24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.subtitles_outlined,
+                size: ListenIconSize.control,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: ListenSpacing.gap8),
+              Text(
+                l.text('expressionStarterTitle'),
+                style: textTheme.titleSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: ListenSpacing.gap6),
+          Text(
+            l.text('expressionStarterBody'),
+            style: textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
           ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListenErrorNotice(message: _error!),
+          const SizedBox(height: ListenSpacing.gap8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: onCreate,
+              icon: const Icon(Icons.add, size: ListenIconSize.control),
+              label: Text(l.text('expressionStarterCreate')),
             ),
-          Expanded(
-            child: _busy
-                ? const Center(child: ListenLoading())
-                : _patterns.isEmpty
-                ? const ListenEmptyState(
-                    icon: Icons.edit_note,
-                    message: '还没有个人表达。可从阅读句子收藏，或在这里手动创建。',
-                  )
-                : Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: ListenBreakpoints.contentColumnMax,
-                      ),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _patterns.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: ListenSpacing.gap8),
-                        itemBuilder: (context, index) {
-                          final pattern = _patterns[index];
-                          return _PatternCard(
-                            pattern: pattern,
-                            lastWritten: _lastWritten[pattern.id],
-                            onTap: () => unawaited(_open(pattern)),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
           ),
         ],
       ),
@@ -652,6 +787,11 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
 /// E3 list card: the template text is the protagonist (large), the name is a
 /// small eyebrow, the source recedes to a footnote, and the last sentence the
 /// learner wrote appears in signal teal (你的语言=光).
+///
+/// Captured text passes through [cleanLearningText] on the way to the screen —
+/// the subtitle's `- ` and a stray fullwidth `。` are the file's formatting,
+/// not the learner's sentence. The learner's own writing (`你上次写`) is
+/// rendered exactly as written.
 class _PatternCard extends StatelessWidget {
   const _PatternCard({
     required this.pattern,
@@ -673,7 +813,7 @@ class _PatternCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: ListenPadding.card,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -689,7 +829,13 @@ class _PatternCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: ListenSpacing.gap4),
-                    Text(version.patternText, style: textTheme.titleMedium),
+                    Text(
+                      cleanLearningText(
+                        version.patternText,
+                        language: pattern.language,
+                      ),
+                      style: textTheme.titleMedium,
+                    ),
                     if (lastWritten != null) ...[
                       const SizedBox(height: ListenSpacing.gap6),
                       Text(
@@ -703,7 +849,8 @@ class _PatternCard extends StatelessWidget {
                     ],
                     const SizedBox(height: ListenSpacing.gap6),
                     Text(
-                      '来源：${pattern.source.text}',
+                      '来源：'
+                      '${cleanLearningText(pattern.source.text, language: pattern.language)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodySmall?.copyWith(
@@ -830,15 +977,23 @@ class _PatternDetailState extends State<_PatternDetail> {
             maxWidth: ListenBreakpoints.contentColumnMax,
           ),
           child: ListView(
-            padding: const EdgeInsets.all(24),
+            padding: ListenPadding.pageCompact,
             children: [
               Text(
-                widget.pattern.currentVersion.patternText,
-                style: textTheme.headlineSmall,
+                cleanLearningText(
+                  widget.pattern.currentVersion.patternText,
+                  language: widget.pattern.language,
+                ),
+                // The page title lives in the AppBar's name, so the pattern
+                // itself is this page's hero (titleLarge = ListenType.hero);
+                // `headlineSmall` was an unmapped Material slot at 24px w400,
+                // a size the ladder never defined.
+                style: textTheme.titleLarge,
               ),
               const SizedBox(height: ListenSpacing.gap8),
               Text(
-                '来源快照：${widget.pattern.source.text}',
+                '来源快照：'
+                '${cleanLearningText(widget.pattern.source.text, language: widget.pattern.language)}',
                 style: textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -889,10 +1044,11 @@ class _PatternDetailState extends State<_PatternDetail> {
                 ],
               ),
               const Divider(height: 40),
-              Text('使用历史', style: textTheme.titleLarge),
+              // A section title inside the page, not a second hero.
+              Text('使用历史', style: textTheme.titleMedium),
               if (attempts.isEmpty)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
+                  padding: EdgeInsets.symmetric(vertical: ListenSpacing.gap16),
                   child: Text('还没有使用记录。'),
                 ),
               for (final attempt in attempts)
@@ -904,7 +1060,12 @@ class _PatternDetailState extends State<_PatternDetail> {
                   for (final version in versions)
                     ListTile(
                       title: Text('v${version.version} · ${version.name}'),
-                      subtitle: Text(version.patternText),
+                      subtitle: Text(
+                        cleanLearningText(
+                          version.patternText,
+                          language: widget.pattern.language,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -1028,7 +1189,10 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
   }
 
   void _generateDraft() {
-    var draft = widget.pattern.currentVersion.patternText;
+    var draft = cleanLearningText(
+      widget.pattern.currentVersion.patternText,
+      language: widget.pattern.language,
+    );
     for (final entry in _slotValues.entries) {
       final value = entry.value.text.trim();
       if (value.isNotEmpty) {
@@ -1073,7 +1237,10 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              version.patternText,
+              cleanLearningText(
+                version.patternText,
+                language: widget.pattern.language,
+              ),
               style: textTheme.titleMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -1150,7 +1317,7 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
             maxWidth: ListenBreakpoints.contentColumnMax,
           ),
           child: ListView(
-            padding: const EdgeInsets.all(24),
+            padding: ListenPadding.pageCompact,
             children: [
               if (target != null)
                 Container(
