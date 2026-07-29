@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 
 enum DownloadStatusKind { downloading, completed, failed }
@@ -52,7 +53,7 @@ class DownloadStatusBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            const Icon(Icons.download, size: 18),
+            const Icon(Icons.download, size: ListenIconSize.control),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: LinearProgressIndicator(

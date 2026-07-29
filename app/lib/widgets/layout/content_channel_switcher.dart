@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/content_channel.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 class ContentChannelAvailability {
   const ContentChannelAvailability.available() : reason = null;
@@ -76,10 +78,10 @@ class ContentChannelSwitcher extends StatelessWidget {
         disabledForegroundColor: active
             ? colors.onPrimary
             : colors.onSurfaceVariant.withValues(alpha: 0.45),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: ListenPadding.row,
         shape: RoundedRectangleBorder(borderRadius: ListenRadii.controlBorder),
       ),
-      icon: Icon(icon, size: 18),
+      icon: Icon(icon, size: ListenIconSize.control),
       label: Text(label),
     );
     if (state.enabled) return button;

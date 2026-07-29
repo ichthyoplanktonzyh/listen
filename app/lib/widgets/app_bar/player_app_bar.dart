@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/spacing.dart';
 import '../listen_wordmark.dart';
@@ -348,7 +349,7 @@ class _ToolbarMenuButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 21, color: quiet),
+            Icon(icon, size: ListenIconSize.chrome, color: quiet),
             if (showLabel) ...[
               const SizedBox(width: ListenSpacing.gap6),
               Text(
@@ -362,7 +363,11 @@ class _ToolbarMenuButton extends StatelessWidget {
             const SizedBox(width: ListenSpacing.gap2),
             // Kept in the narrow form too: without it an icon-only button
             // reads as a plain action rather than something opening a menu.
-            Icon(Icons.arrow_drop_down, size: 18, color: quiet),
+            Icon(
+              Icons.arrow_drop_down,
+              size: ListenIconSize.control,
+              color: quiet,
+            ),
           ],
         ),
       ),
@@ -404,7 +409,7 @@ class _MenuRow extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 260),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: secondary),
+          Icon(icon, size: ListenIconSize.control, color: secondary),
           const SizedBox(width: ListenSpacing.gap12),
           Expanded(
             child: Column(

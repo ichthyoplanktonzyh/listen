@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/content_channel.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
+import '../../utils/media_title.dart';
 import '../common/content_settle.dart';
 import 'content_channel_switcher.dart';
 
@@ -211,7 +213,7 @@ class _SessionHeader extends StatelessWidget {
         border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: ListenPadding.row,
         child: Row(
           children: [
             if (onCollapse != null)
@@ -221,13 +223,21 @@ class _SessionHeader extends StatelessWidget {
                 icon: const Icon(Icons.home_outlined),
               ),
             Flexible(
-              child: Text(
-                mediaTitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              // The header reads the title, not the download artefact (§3.7):
+              // extension, provider id and trailing date are stripped for
+              // display. The raw file name stays one hover away, so nothing is
+              // hidden — a learner who needs the exact file still has it.
+              child: Tooltip(
+                message: mediaTitle,
+                child: Text(
+                  displayMediaTitle(mediaTitle),
+                  key: const Key('workbench-media-title'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
             const SizedBox(width: ListenSpacing.gap16),
@@ -311,12 +321,14 @@ class _MediaPane extends StatelessWidget {
           SizedBox(
             height: 56,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap16,
+              ),
               child: Row(
                 children: [
                   Icon(
                     Icons.play_circle_outline,
-                    size: 20,
+                    size: ListenIconSize.control,
                     color: colors.primary,
                   ),
                   const Spacer(),

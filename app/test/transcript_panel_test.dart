@@ -72,6 +72,45 @@ void main() {
     expect(find.text('回到当前句'), findsNothing);
     _expectCueVisible(tester, 'cue-4');
   });
+
+  testWidgets('back-to-current sits under the list and covers no sentence', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(72, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    await tester.pumpWidget(
+      _Harness(controller: controller, track: track, currentCue: cues[4]),
+    );
+    await tester.pumpAndSettle();
+
+    final listBefore = tester.getRect(find.byType(ListView));
+
+    await tester.drag(
+      find.byKey(const ValueKey('transcript-cue-cue-4')),
+      const Offset(0, -400),
+    );
+    await tester.pumpAndSettle();
+
+    final bar = tester.getRect(
+      find.byKey(const Key('transcript-back-to-current')),
+    );
+    final listAfter = tester.getRect(find.byType(ListView));
+
+    // The strip is laid out below the list rather than stacked over it, so no
+    // transcript row can be behind it (§3.7 item 2 / charter P2).
+    expect(bar.top, greaterThanOrEqualTo(listAfter.bottom - 0.5));
+
+    // It pays for its own space: the list gives up exactly the strip's height
+    // instead of keeping a row hidden underneath.
+    expect(listBefore.bottom - listAfter.bottom, closeTo(bar.height, 0.5));
+    expect(bar.height, greaterThan(0));
+  });
 }
 
 Cue _cue(int index) {

@@ -1776,6 +1776,19 @@ class AppLocalizations {
           'hear it again.',
       'expressionStarterCreate': 'Write one by hand',
 
+      // Posture actions on the player's side panel (§3.7). The four used to be
+      // `Understand? / Test? / Shadow? / Read?` — one question mark each,
+      // which made them sound alike and told nobody what Shadow does that Read
+      // does not. Each is now an action name plus one line saying what happens.
+      'postureUnderstandTitle': 'Break it down',
+      'postureUnderstandHint': 'Why this sentence was hard to catch',
+      'postureTestTitle': 'Test yourself',
+      'postureTestHint': 'Cloze, chunk or full-sentence dictation',
+      'postureShadowTitle': 'Shadow it',
+      'postureShadowHint': 'Speak along and record your own take',
+      'postureReadTitle': 'Read the transcript',
+      'postureReadHint': 'Leave listening and read the whole text',
+
       // ── Named failure states (#62) ─────────────────────────────────────
       // Every one of these replaces a sentence that had a caught exception
       // interpolated into it. They say what failed and stop there; the
@@ -3304,9 +3317,22 @@ class AppLocalizations {
       'expressionExportAction': '导出个人表达',
       'expressionNewAction': '新建个人表达',
       'expressionStarterTitle': '从字幕里收藏一个句型',
-      'expressionStarterBody': '看片时遇到想学会说的句子，就留下来。'
+      'expressionStarterBody':
+          '看片时遇到想学会说的句子，就留下来。'
           '从字幕收藏的句型会带着来源，之后还能回听原句。',
       'expressionStarterCreate': '手动写一条',
+
+      // 播放器右栏的四个姿态动作（§3.7）。原来是「听懂了吗？/ 测一下？/ 跟一下？/
+      // 读一下？」——四个问号语气一致但信息量低，「跟一下」和「读一下」字面看不出
+      // 区别。改为动作名 + 一行说明。
+      'postureUnderstandTitle': '拆解这句',
+      'postureUnderstandHint': '看这句为什么没听清',
+      'postureTestTitle': '测一下',
+      'postureTestHint': '填空、意群或整句听写',
+      'postureShadowTitle': '跟读',
+      'postureShadowHint': '跟着原声说一遍并录下来',
+      'postureReadTitle': '通读全文',
+      'postureReadHint': '离开听力姿态，整篇读一遍',
 
       // ── Named failure states (#62) ─────────────────────────────────────
       'statusTrackResourcesPartlyUnavailable': '这条字幕的部分时间轴资源读取失败',

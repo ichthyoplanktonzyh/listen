@@ -46,8 +46,51 @@ void main() {
 
     expect(find.byKey(const Key('media-stage')), findsOneWidget);
     expect(find.byKey(const Key('learning-panel')), findsOneWidget);
-    expect(find.text('CNN 10.mp4'), findsOneWidget);
+    // The header reads the title, not the file name (§3.7).
+    expect(find.text('CNN 10'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('session header shows the title and keeps the file name', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    const fileName =
+        'How a cell phone ban has transformed this Brooklyn middle '
+        'school｜June 9, 2026 [9FFSOYLiFxc].mp4';
+    await tester.pumpWidget(
+      localized(
+        const MediaWorkbench(
+          mediaTitle: fileName,
+          playerStage: ColoredBox(key: Key('media-stage'), color: Colors.black),
+          learningPanel: ColoredBox(
+            key: Key('learning-panel'),
+            color: Colors.white,
+          ),
+          mediaFraction: 0.42,
+          onMediaFractionChanged: _noopFraction,
+        ),
+      ),
+    );
+
+    final title = tester.widget<Text>(
+      find.byKey(const Key('workbench-media-title')),
+    );
+    expect(
+      title.data,
+      'How a cell phone ban has transformed this Brooklyn middle school',
+    );
+
+    // Nothing is hidden: the raw name is one hover away.
+    final tooltip = tester.widget<Tooltip>(
+      find.ancestor(
+        of: find.byKey(const Key('workbench-media-title')),
+        matching: find.byType(Tooltip),
+      ),
+    );
+    expect(tooltip.message, fileName);
   });
 
   testWidgets('wide workbench divider resizes media and transcript panes', (
