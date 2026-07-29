@@ -174,6 +174,16 @@ Only when the change to the picture *is* the change you are shipping.
 
 ### What a reviewer looks at
 
+When a golden fails, `flutter test` writes four PNGs to **`test/failures/`**
+(next to the test file, not next to the baseline — the directory is
+gitignored):
+
+| File | Use |
+| --- | --- |
+| `<name>_isolatedDiff.png` | Start here. Only the changed pixels, in colour, over a washed-out copy of the frame — it reads as "what moved". |
+| `<name>_maskedDiff.png` | The changed pixels over the master image. |
+| `<name>_masterImage.png` / `<name>_testImage.png` | Before and after, for flipping between. |
+
 A golden diff is a picture, so review it as one:
 
 1. **Is every changed baseline explained by the PR's stated intent?** A slice

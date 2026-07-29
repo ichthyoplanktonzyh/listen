@@ -32,10 +32,11 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
-# Golden diff output: `matchesGoldenFile` writes masterImage/testImage/isolated
-# diff PNGs here on failure. They are debugging aids for one run, never the
-# baseline — the baselines are the files directly under test/goldens/.
-/test/goldens/failures/
+# Golden diff output. On failure `matchesGoldenFile` writes master/test/diff
+# PNGs next to the *test file*, not next to the baseline — so this is
+# `test/failures/`, one level above `test/goldens/`. They are debugging aids
+# for one run and are what a reviewer looks at; they are never the baseline.
+/test/failures/
 /dist/
 .backend/
 /test/fixtures/smoke/generated/
