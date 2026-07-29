@@ -111,7 +111,10 @@ pub struct ApiState {
 impl ApiState {
     pub fn new<R>(services: AppServices, repository: Arc<R>, token: impl Into<Arc<str>>) -> Self
     where
-        R: application::TranscriptionRepository + application::PhoneticAnalysisRepository + 'static,
+        R: application::TranscriptionRepository
+            + application::PhoneticAnalysisRepository
+            + application::BackgroundJobStore
+            + 'static,
     {
         let (events, _) = broadcast::channel(128);
         let ecdict = Arc::new(EcdictProvider::new());
@@ -129,21 +132,22 @@ impl ApiState {
         let phonetic_analysis = Arc::new(
             PhoneticAnalysisCoordinator::new_with_test_provider(
                 services.clone(),
-                repository,
+                repository.clone(),
                 events.clone(),
             )
             .expect("phonetic analysis coordinator must initialize"),
         );
         #[cfg(not(test))]
         let phonetic_analysis = Arc::new(
-            PhoneticAnalysisCoordinator::new(services.clone(), repository, events.clone())
+            PhoneticAnalysisCoordinator::new(services.clone(), repository.clone(), events.clone())
                 .expect("phonetic analysis coordinator must initialize"),
         );
-        let speech_jobs = Arc::new(SpeechBatchCoordinator::new(
-            services.clone(),
-            events.clone(),
-        ));
-        let sound_line = SoundLineCoordinator::new(services.clone(), events.clone());
+        let speech_jobs =
+            SpeechBatchCoordinator::new(services.clone(), events.clone(), repository.clone())
+                .expect("speech batch coordinator must initialize");
+        let sound_line =
+            SoundLineCoordinator::new(services.clone(), events.clone(), repository.clone())
+                .expect("sound line coordinator must initialize");
         Self {
             application: ApplicationExecutor::new(services.clone()),
             analysis: AnalysisRuntime {
@@ -183,7 +187,8 @@ impl ApiState {
                         std::process::id()
                     )),
                 )),
-                llm_batches: application::batch_governor::LlmBatchCoordinator::default(),
+                llm_batches: application::batch_governor::LlmBatchCoordinator::new(repository)
+                    .expect("LLM batch coordinator must initialize"),
                 llm_runtime_factory: Arc::new(llm_provider::LlmSemanticRuntimeFactory::new()),
             },
             infrastructure: ApiInfrastructure {

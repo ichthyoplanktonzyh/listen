@@ -1,16 +1,20 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use api_events::{EventEnvelope, EventName};
-use application::{AppServices, ApplicationError, now_ms};
-use domain::{LanguageCode, SubtitleTrackId};
+use application::{
+    AppServices, ApplicationError, BackgroundJobStore, BackgroundJobTransition, now_ms,
+};
+use domain::{
+    BackgroundJob, BackgroundJobId, BackgroundJobKind, BackgroundJobStatus, LanguageCode,
+    SubtitleTrackId,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Semaphore, broadcast};
 
-use crate::process::{NeverCancelled, ProcessRunner, ProcessSpec, TokioProcessRunner};
+use crate::process::{CancellationProbe, ProcessRunner, ProcessSpec, TokioProcessRunner};
 use crate::runtime_support::{
     ffmpeg_wav_args, io_error, resolve_forced_align_sidecar, resolve_tool,
 };
@@ -49,6 +53,13 @@ pub struct CreateSoundLineJob {
     pub track_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SoundLinePayload {
+    track_id: String,
+    timeline_id: Option<String>,
+    acoustic_cue_count: usize,
+}
+
 #[derive(Default)]
 struct SoundLineOutcome {
     timeline_id: Option<String>,
@@ -59,29 +70,37 @@ struct SoundLineOutcome {
 pub struct SoundLineCoordinator {
     services: AppServices,
     events: broadcast::Sender<EventEnvelope>,
-    jobs: Arc<Mutex<HashMap<String, SoundLineJob>>>,
+    jobs: Arc<dyn BackgroundJobStore>,
+    enqueue_lock: Arc<Mutex<()>>,
     queue: Arc<Semaphore>,
     temp_dir: PathBuf,
     process_runner: Arc<dyn ProcessRunner>,
 }
 
 impl SoundLineCoordinator {
-    pub fn new(services: AppServices, events: broadcast::Sender<EventEnvelope>) -> Arc<Self> {
-        Self::new_with_process_runner(services, events, Arc::new(TokioProcessRunner))
+    pub fn new(
+        services: AppServices,
+        events: broadcast::Sender<EventEnvelope>,
+        jobs: Arc<dyn BackgroundJobStore>,
+    ) -> Result<Arc<Self>, ApplicationError> {
+        Self::new_with_process_runner(services, events, jobs, Arc::new(TokioProcessRunner))
     }
 
     pub fn new_with_process_runner(
         services: AppServices,
         events: broadcast::Sender<EventEnvelope>,
+        jobs: Arc<dyn BackgroundJobStore>,
         process_runner: Arc<dyn ProcessRunner>,
-    ) -> Arc<Self> {
+    ) -> Result<Arc<Self>, ApplicationError> {
         let temp_dir = std::env::temp_dir().join("LLPlayerNext/sound-line");
         // Best-effort cleanup of stale work dirs from a previous run.
         let _ = std::fs::remove_dir_all(&temp_dir);
+        let queued = jobs.recover_startup(BackgroundJobKind::SoundLine, now_ms())?;
         let coordinator = Arc::new(Self {
             services,
             events,
-            jobs: Arc::new(Mutex::new(HashMap::new())),
+            jobs,
+            enqueue_lock: Arc::default(),
             queue: Arc::new(Semaphore::new(1)),
             temp_dir,
             process_runner,
@@ -91,18 +110,24 @@ impl SoundLineCoordinator {
         // constructing outside a Tokio runtime never panics.
         if tokio::runtime::Handle::try_current().is_ok() {
             coordinator.clone().spawn_transcription_listener();
+            for job in queued {
+                coordinator.clone().start(job.id.as_str().to_owned());
+            }
         }
-        coordinator
+        Ok(coordinator)
     }
 
     pub fn list(&self) -> Result<Vec<SoundLineJob>, ApplicationError> {
-        let mut values = self.lock_jobs()?.values().cloned().collect::<Vec<_>>();
-        values.sort_by_key(|job| job.created_at_ms);
-        Ok(values)
+        self.jobs
+            .list(BackgroundJobKind::SoundLine)?
+            .into_iter()
+            .map(sound_line_job)
+            .collect()
     }
 
     pub fn get(&self, id: &str) -> Result<Option<SoundLineJob>, ApplicationError> {
-        Ok(self.lock_jobs()?.get(id).cloned())
+        let id = BackgroundJobId::parse(id)?;
+        self.jobs.get(&id)?.map(sound_line_job).transpose()
     }
 
     /// Enqueue a sound-line job for a track. Idempotent: if an active job for the
@@ -116,26 +141,35 @@ impl SoundLineCoordinator {
             .media_analysis()
             .read_subtitle_track(&track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
-        self.enqueue(track_id)
+        self.enqueue(track_id, None)
     }
 
     pub fn cancel(&self, id: &str) -> Result<SoundLineJob, ApplicationError> {
-        let job = {
-            let mut jobs = self.lock_jobs()?;
-            let job = jobs
-                .get_mut(id)
-                .ok_or(ApplicationError::NotFound("sound line job"))?;
-            if matches!(
-                job.status,
-                SoundLineStatus::Queued | SoundLineStatus::Running
+        let id = BackgroundJobId::parse(id)?;
+        let mut record = self
+            .jobs
+            .get(&id)?
+            .ok_or(ApplicationError::NotFound("sound line job"))?;
+        loop {
+            if !matches!(
+                record.status,
+                BackgroundJobStatus::Queued | BackgroundJobStatus::Running
             ) {
-                job.status = SoundLineStatus::Cancelled;
-                job.updated_at_ms = now_ms();
+                return sound_line_job(record);
             }
-            job.clone()
-        };
-        self.emit_changed(&job);
-        Ok(job)
+            let expected = record.status;
+            let mut cancelled = record.clone();
+            cancelled.status = BackgroundJobStatus::Cancelled;
+            cancelled.updated_at_ms = now_ms();
+            match self.jobs.transition(expected, &cancelled)? {
+                BackgroundJobTransition::Applied(cancelled) => {
+                    let job = sound_line_job(cancelled)?;
+                    self.emit_changed(&job);
+                    return Ok(job);
+                }
+                BackgroundJobTransition::Rejected(current) => record = current,
+            }
+        }
     }
 
     pub fn retry(self: &Arc<Self>, id: &str) -> Result<SoundLineJob, ApplicationError> {
@@ -148,49 +182,55 @@ impl SoundLineCoordinator {
         ) {
             return Err(ApplicationError::Conflict("sound line job is active"));
         }
-        let track_id = SubtitleTrackId::parse(old.track_id.clone())?;
-        let mut job = self.enqueue(track_id)?;
-        if job.retry_of_job_id.is_none() && job.id != old.id {
-            job.retry_of_job_id = Some(old.id.clone());
-            self.lock_jobs()?.insert(job.id.clone(), job.clone());
-        }
-        Ok(job)
+        let track_id = SubtitleTrackId::parse(old.track_id)?;
+        self.enqueue(track_id, Some(BackgroundJobId::parse(old.id)?))
     }
 
     fn enqueue(
         self: &Arc<Self>,
         track_id: SubtitleTrackId,
+        retry_of_job_id: Option<BackgroundJobId>,
     ) -> Result<SoundLineJob, ApplicationError> {
+        let enqueue_guard = self
+            .enqueue_lock
+            .lock()
+            .map_err(|_| ApplicationError::Repository("sound line enqueue lock poisoned".into()))?;
         let created_at_ms = now_ms();
-        let job = {
-            let mut jobs = self.lock_jobs()?;
-            if let Some(existing) = jobs.values().find(|job| {
+        if retry_of_job_id.is_none()
+            && let Some(existing) = self.list()?.into_iter().find(|job| {
                 job.track_id == track_id.as_str()
                     && matches!(
                         job.status,
                         SoundLineStatus::Queued | SoundLineStatus::Running
                     )
-            }) {
-                return Ok(existing.clone());
-            }
-            let job = SoundLineJob {
-                id: format!(
-                    "sound-line-{}-{}",
-                    created_at_ms,
-                    JOB_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-                ),
+            })
+        {
+            return Ok(existing);
+        }
+        let id = BackgroundJobId::parse(format!(
+            "sound-line-{}-{}",
+            created_at_ms,
+            JOB_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ))?;
+        let record = BackgroundJob {
+            id,
+            kind: BackgroundJobKind::SoundLine,
+            status: BackgroundJobStatus::Queued,
+            payload_json: serde_json::to_string(&SoundLinePayload {
                 track_id: track_id.as_str().into(),
-                status: SoundLineStatus::Queued,
                 timeline_id: None,
                 acoustic_cue_count: 0,
-                error: None,
-                retry_of_job_id: None,
-                created_at_ms,
-                updated_at_ms: created_at_ms,
-            };
-            jobs.insert(job.id.clone(), job.clone());
-            job
+            })
+            .map_err(|error| ApplicationError::Repository(error.to_string()))?,
+            completed_units: 0,
+            total_units: 1,
+            error: None,
+            retry_of_job_id,
+            created_at_ms,
+            updated_at_ms: created_at_ms,
         };
+        let job = sound_line_job(self.jobs.create(&record)?)?;
+        drop(enqueue_guard);
         self.emit_changed(&job);
         self.clone().start(job.id.clone());
         Ok(job)
@@ -201,7 +241,7 @@ impl SoundLineCoordinator {
     }
 
     async fn run(&self, id: &str) {
-        if self.set_running(id).is_err() {
+        if !matches!(self.set_running(id), Ok(true)) {
             return;
         }
         match self.execute(id).await {
@@ -243,7 +283,7 @@ impl SoundLineCoordinator {
             .map_err(io_error)?;
         let wav = job_dir.join("audio.wav");
         let outcome = self
-            .build(&track_id, media.path, track.language, &wav)
+            .build(id, &track_id, media.path, track.language, &wav)
             .await;
         let _ = tokio::fs::remove_dir_all(&job_dir).await;
         outcome
@@ -251,6 +291,7 @@ impl SoundLineCoordinator {
 
     async fn build(
         &self,
+        job_id: &str,
         track_id: &SubtitleTrackId,
         media_path: String,
         language: Option<LanguageCode>,
@@ -263,8 +304,17 @@ impl SoundLineCoordinator {
         // uses the default track — an acceptable degradation for enrichment.
         let args = ffmpeg_wav_args(media_path, None, wav);
         self.process_runner
-            .run(ProcessSpec::new(ffmpeg, args), Arc::new(NeverCancelled))
+            .run(
+                ProcessSpec::new(ffmpeg, args),
+                Arc::new(SoundLineCancellation {
+                    jobs: self.jobs.clone(),
+                    job_id: BackgroundJobId::parse(job_id)?,
+                }),
+            )
             .await?;
+        if self.is_cancelled(job_id)? {
+            return Ok(SoundLineOutcome::default());
+        }
         let language = language.as_ref().map(LanguageCode::as_str);
         // whisper JSON is intentionally empty: the sound line derives its word
         // baseline from the already-persisted active text timeline.
@@ -298,7 +348,7 @@ impl SoundLineCoordinator {
                             continue;
                         }
                         if let Some(track_id) = completed_track_id(&envelope.payload) {
-                            let _ = self.enqueue(track_id);
+                            let _ = self.enqueue(track_id, None);
                         }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -308,38 +358,53 @@ impl SoundLineCoordinator {
         });
     }
 
-    fn set_running(&self, id: &str) -> Result<(), ApplicationError> {
-        let job = {
-            let mut jobs = self.lock_jobs()?;
-            let job = jobs
-                .get_mut(id)
-                .ok_or(ApplicationError::NotFound("sound line job"))?;
-            if job.status == SoundLineStatus::Cancelled {
-                return Err(ApplicationError::Conflict("sound line job cancelled"));
-            }
-            job.status = SoundLineStatus::Running;
-            job.updated_at_ms = now_ms();
-            job.clone()
+    fn set_running(&self, id: &str) -> Result<bool, ApplicationError> {
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
+            .ok_or(ApplicationError::NotFound("sound line job"))?;
+        if record.status != BackgroundJobStatus::Queued {
+            return Ok(false);
+        }
+        let mut running = record;
+        running.status = BackgroundJobStatus::Running;
+        running.updated_at_ms = now_ms();
+        let BackgroundJobTransition::Applied(running) = self
+            .jobs
+            .transition(BackgroundJobStatus::Queued, &running)?
+        else {
+            return Ok(false);
         };
-        self.emit_changed(&job);
-        Ok(())
+        self.emit_changed(&sound_line_job(running)?);
+        Ok(true)
     }
 
     fn complete(&self, id: &str, outcome: SoundLineOutcome) -> Result<(), ApplicationError> {
-        let job = {
-            let mut jobs = self.lock_jobs()?;
-            let job = jobs
-                .get_mut(id)
-                .ok_or(ApplicationError::NotFound("sound line job"))?;
-            if job.status == SoundLineStatus::Cancelled {
-                return Ok(());
-            }
-            job.status = SoundLineStatus::Completed;
-            job.timeline_id = outcome.timeline_id.clone();
-            job.acoustic_cue_count = outcome.acoustic_cue_count;
-            job.updated_at_ms = now_ms();
-            job.clone()
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
+            .ok_or(ApplicationError::NotFound("sound line job"))?;
+        if record.status != BackgroundJobStatus::Running {
+            return Ok(());
+        }
+        let mut completed = record;
+        let mut payload = sound_line_payload(&completed)?;
+        payload.timeline_id = outcome.timeline_id;
+        payload.acoustic_cue_count = outcome.acoustic_cue_count;
+        completed.payload_json = serde_json::to_string(&payload)
+            .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+        completed.status = BackgroundJobStatus::Completed;
+        completed.completed_units = completed.total_units;
+        completed.updated_at_ms = now_ms();
+        let BackgroundJobTransition::Applied(completed) = self
+            .jobs
+            .transition(BackgroundJobStatus::Running, &completed)?
+        else {
+            return Ok(());
         };
+        let job = sound_line_job(completed)?;
         self.emit_changed(&job);
         let _ = self.events.send(
             crate::events::SoundLineCompletedPayload {
@@ -354,28 +419,33 @@ impl SoundLineCoordinator {
     }
 
     fn fail(&self, id: &str, error: String) -> Result<(), ApplicationError> {
-        let job = {
-            let mut jobs = self.lock_jobs()?;
-            let job = jobs
-                .get_mut(id)
-                .ok_or(ApplicationError::NotFound("sound line job"))?;
-            if job.status == SoundLineStatus::Cancelled {
-                return Ok(());
-            }
-            job.status = SoundLineStatus::Failed;
-            job.error = Some(error);
-            job.updated_at_ms = now_ms();
-            job.clone()
-        };
-        self.emit_changed(&job);
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
+            .ok_or(ApplicationError::NotFound("sound line job"))?;
+        if record.status != BackgroundJobStatus::Running {
+            return Ok(());
+        }
+        let mut failed = record;
+        failed.status = BackgroundJobStatus::Failed;
+        failed.error = Some(error);
+        failed.updated_at_ms = now_ms();
+        if let BackgroundJobTransition::Applied(failed) = self
+            .jobs
+            .transition(BackgroundJobStatus::Running, &failed)?
+        {
+            self.emit_changed(&sound_line_job(failed)?);
+        }
         Ok(())
     }
 
     fn is_cancelled(&self, id: &str) -> Result<bool, ApplicationError> {
+        let id = BackgroundJobId::parse(id)?;
         Ok(self
-            .lock_jobs()?
-            .get(id)
-            .is_some_and(|job| job.status == SoundLineStatus::Cancelled))
+            .jobs
+            .get(&id)?
+            .is_some_and(|job| job.status == BackgroundJobStatus::Cancelled))
     }
 
     fn emit_changed(&self, job: &SoundLineJob) {
@@ -384,14 +454,50 @@ impl SoundLineCoordinator {
             serde_json::to_value(job).expect("sound line job serializes"),
         ));
     }
+}
 
-    fn lock_jobs(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, HashMap<String, SoundLineJob>>, ApplicationError> {
-        self.jobs
-            .lock()
-            .map_err(|_| ApplicationError::Repository("sound line job lock poisoned".into()))
+struct SoundLineCancellation {
+    jobs: Arc<dyn BackgroundJobStore>,
+    job_id: BackgroundJobId,
+}
+
+impl CancellationProbe for SoundLineCancellation {
+    fn is_cancelled(&self) -> Result<bool, ApplicationError> {
+        Ok(self
+            .jobs
+            .get(&self.job_id)?
+            .is_some_and(|job| job.status == BackgroundJobStatus::Cancelled))
     }
+}
+
+fn sound_line_payload(job: &BackgroundJob) -> Result<SoundLinePayload, ApplicationError> {
+    serde_json::from_str(&job.payload_json)
+        .map_err(|error| ApplicationError::Repository(error.to_string()))
+}
+
+fn sound_line_job(job: BackgroundJob) -> Result<SoundLineJob, ApplicationError> {
+    let payload = sound_line_payload(&job)?;
+    Ok(SoundLineJob {
+        id: job.id.as_str().into(),
+        track_id: payload.track_id,
+        status: match job.status {
+            BackgroundJobStatus::Queued => SoundLineStatus::Queued,
+            BackgroundJobStatus::Running | BackgroundJobStatus::Cancelling => {
+                SoundLineStatus::Running
+            }
+            BackgroundJobStatus::Completed => SoundLineStatus::Completed,
+            BackgroundJobStatus::Cancelled => SoundLineStatus::Cancelled,
+            BackgroundJobStatus::Failed | BackgroundJobStatus::Interrupted => {
+                SoundLineStatus::Failed
+            }
+        },
+        timeline_id: payload.timeline_id,
+        acoustic_cue_count: payload.acoustic_cue_count,
+        error: job.error,
+        retry_of_job_id: job.retry_of_job_id.map(|id| id.as_str().into()),
+        created_at_ms: job.created_at_ms,
+        updated_at_ms: job.updated_at_ms,
+    })
 }
 
 fn completed_track_id(payload: &Value) -> Option<SubtitleTrackId> {

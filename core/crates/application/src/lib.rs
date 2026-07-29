@@ -51,6 +51,7 @@ use domain::{
 };
 use serde::Serialize;
 
+mod background_jobs;
 pub mod batch_governor;
 
 mod chunks;
@@ -93,6 +94,9 @@ mod util;
 mod vocabulary;
 mod word_timelines;
 
+pub use background_jobs::{
+    BackgroundJobStore, BackgroundJobTransition, InMemoryBackgroundJobStore,
+};
 pub use coach_dashboard::{
     CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,

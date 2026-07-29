@@ -1,4 +1,5 @@
 mod anki;
+mod background_jobs;
 mod coach_dashboard;
 mod connection;
 mod content_fit;

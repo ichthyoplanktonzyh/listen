@@ -627,6 +627,7 @@ impl DictionaryProvider for FakeChineseDictionary {
     }
 }
 
+mod background_jobs;
 mod content_fit;
 mod l1_diagnosis;
 mod learner_profile;

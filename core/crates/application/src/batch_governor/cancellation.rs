@@ -19,6 +19,7 @@ pub struct BatchCancellationToken {
     /// Number of sentences successfully completed before cancellation.
     completed_count: Arc<AtomicU64>,
     total_count: Arc<AtomicU64>,
+    progress_observer: Option<Arc<dyn Fn(u64, u64) + Send + Sync>>,
 }
 
 impl Default for BatchCancellationToken {
@@ -38,7 +39,14 @@ impl BatchCancellationToken {
             signal: Arc::new(watch::channel(false).0),
             completed_count: Arc::new(AtomicU64::new(0)),
             total_count: Arc::new(AtomicU64::new(0)),
+            progress_observer: None,
         }
+    }
+
+    pub(crate) fn with_progress_observer(observer: Arc<dyn Fn(u64, u64) + Send + Sync>) -> Self {
+        let mut token = Self::new();
+        token.progress_observer = Some(observer);
+        token
     }
 
     /// Signal cancellation. All workers checking `is_cancelled()` will observe
@@ -92,7 +100,10 @@ impl BatchCancellationToken {
 
     /// Record that one sentence completed successfully.
     pub fn record_completion(&self) {
-        self.completed_count.fetch_add(1, Ordering::Relaxed);
+        let completed = self.completed_count.fetch_add(1, Ordering::Relaxed) + 1;
+        if let Some(observer) = &self.progress_observer {
+            observer(completed, self.total_count());
+        }
     }
 
     /// Number of sentences completed so far (checkpoint progress).
@@ -102,6 +113,9 @@ impl BatchCancellationToken {
 
     pub fn set_total_count(&self, total: u64) {
         self.total_count.store(total, Ordering::Relaxed);
+        if let Some(observer) = &self.progress_observer {
+            observer(self.completed_count(), total);
+        }
     }
 
     pub fn total_count(&self) -> u64 {
