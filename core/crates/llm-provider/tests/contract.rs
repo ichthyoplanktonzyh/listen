@@ -541,11 +541,12 @@ async fn probe_measures_structured_output_support() {
 // Factory: a stored profile maps to the right adapter; both seams + probe work.
 // ---------------------------------------------------------------------------
 
+use application::SemanticLlmRuntimeFactory;
 use domain::{
     DataRetentionPreference, LlmAdapterKind, LlmProviderProfile, LlmUse, ProviderCapability,
     llm_provider_profile_id,
 };
-use llm_provider::BuiltSemanticProvider;
+use llm_provider::LlmSemanticRuntimeFactory;
 
 fn profile_for(protocol: Protocol, base_url: &str) -> LlmProviderProfile {
     let adapter_kind = match protocol {
@@ -581,18 +582,18 @@ async fn factory_builds_matching_adapter_for_each_profile() {
             output.clone(),
         ))
         .await;
-        let provider =
-            BuiltSemanticProvider::build(&profile_for(protocol, &base), Some("k".into()))
-                .expect("built");
+        let provider = LlmSemanticRuntimeFactory::new()
+            .build(&profile_for(protocol, &base), Some("k".into()))
+            .expect("built");
         // The chosen adapter kind matches the profile.
         let expected = match protocol {
             Protocol::OpenAi => LlmAdapterKind::OpenAiChatCompletions,
             Protocol::Anthropic => LlmAdapterKind::AnthropicMessages,
         };
-        assert_eq!(provider.as_judge().descriptor().adapter_kind, expected);
+        assert_eq!(provider.judge().descriptor().adapter_kind, expected);
         // The judge seam works through the factory-built provider.
         let draft = provider
-            .as_judge()
+            .judge()
             .judge(&judge_request())
             .await
             .expect("judgment");
@@ -609,8 +610,9 @@ async fn factory_probe_measures_capability() {
             serde_json::json!({ "ok": true }),
         ))
         .await;
-        let provider =
-            BuiltSemanticProvider::build(&profile_for(protocol, &base), None).expect("built");
+        let provider = LlmSemanticRuntimeFactory::new()
+            .build(&profile_for(protocol, &base), None)
+            .expect("built");
         let claim = provider.probe_structured_output().await.expect("probe");
         assert!(matches!(
             claim,

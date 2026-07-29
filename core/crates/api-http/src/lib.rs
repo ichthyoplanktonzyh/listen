@@ -87,6 +87,9 @@ pub struct GenerativeRuntime {
     /// Provider/account-scoped LLM batch governors plus explicit batch
     /// cancellation and progress lifecycle.
     pub llm_batches: application::batch_governor::LlmBatchCoordinator,
+    /// Builds protocol-neutral semantic runtimes from persisted profiles.
+    /// Concrete protocol selection stays in the adapter crate.
+    pub llm_runtime_factory: Arc<dyn application::SemanticLlmRuntimeFactory>,
 }
 
 #[derive(Clone)]
@@ -181,6 +184,7 @@ impl ApiState {
                     )),
                 )),
                 llm_batches: application::batch_governor::LlmBatchCoordinator::default(),
+                llm_runtime_factory: Arc::new(llm_provider::LlmSemanticRuntimeFactory::new()),
             },
             infrastructure: ApiInfrastructure {
                 token: token.into(),
@@ -193,6 +197,14 @@ impl ApiState {
     /// Injects the platform secret store (OS keychain in production).
     pub fn with_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
         self.infrastructure.secret_store = secret_store;
+        self
+    }
+
+    pub fn with_llm_runtime_factory(
+        mut self,
+        factory: Arc<dyn application::SemanticLlmRuntimeFactory>,
+    ) -> Self {
+        self.generative.llm_runtime_factory = factory;
         self
     }
 

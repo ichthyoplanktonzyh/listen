@@ -231,7 +231,7 @@ impl AppServices {
     }
 
     pub fn llm_providers(&self) -> LlmProviderUseCases {
-        LlmProviderUseCases::new(self.llm_provider_profiles.clone())
+        LlmProviderUseCases::from_services(self)
     }
 
     pub fn realtime_conversations(&self) -> RealtimeConversationUseCases {

@@ -19,7 +19,6 @@ use domain::{
     RubricPointImportance, SemanticJudgment, SemanticTaskAttemptId, SemanticTaskKind,
     SenseGroupAnalysis, SubtitleTrackId, TimelineStatus, llm_provider_profile_id,
 };
-use llm_provider::BuiltSemanticProvider;
 
 /// Client-facing view of a profile. Deliberately omits `auth_ref`: the settings
 /// UI needs to know a key *exists*, never the opaque reference itself.
@@ -199,11 +198,18 @@ pub(crate) async fn probe_llm_provider(
     State(state): State<ApiState>,
     Path(id): Path<String>,
 ) -> Result<Json<ProbeResult>, ApiError> {
-    let provider = build_provider(&state, &id).await?;
-    let claim = provider
-        .probe_structured_output()
-        .await
-        .map_err(ApplicationError::from)?;
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
+    let claim = state
+        .application
+        .execute_async("llm.probe_provider", move |services| async move {
+            services
+                .llm_providers()
+                .probe_structured_output(&id, secret_store.as_ref(), factory.as_ref())
+                .await
+        })
+        .await?;
     Ok(Json(ProbeResult {
         structured_output: claim,
     }))
@@ -225,15 +231,24 @@ pub(crate) async fn judge_via_llm_provider(
 ) -> Result<Json<SemanticJudgment>, ApiError> {
     let attempt_id =
         SemanticTaskAttemptId::parse(request.attempt_id).map_err(ApplicationError::from)?;
-    let provider = build_provider(&state, &id).await?;
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
     let response_revision = request.response_revision;
     let now = application::now_ms();
     let judgment = state
         .application
         .execute_async("llm.judge_attempt", move |services| async move {
             services
-                .semantic()
-                .judge_semantic_attempt(&attempt_id, response_revision, provider.as_judge(), now)
+                .llm_providers()
+                .judge_attempt(
+                    &id,
+                    &attempt_id,
+                    response_revision,
+                    now,
+                    secret_store.as_ref(),
+                    factory.as_ref(),
+                )
                 .await
         })
         .await?;
@@ -266,17 +281,21 @@ pub(crate) async fn feedback_via_llm_provider(
 ) -> Result<Json<OutputFeedbackView>, ApiError> {
     let attempt_id =
         SemanticTaskAttemptId::parse(request.attempt_id).map_err(ApplicationError::from)?;
-    let provider = build_provider(&state, &id).await?;
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
     let response_revision = request.response_revision;
     let draft = state
         .application
         .execute_async("llm.feedback_attempt", move |services| async move {
             services
-                .semantic()
-                .feedback_on_semantic_attempt(
+                .llm_providers()
+                .feedback_on_attempt(
+                    &id,
                     &attempt_id,
                     response_revision,
-                    provider.as_feedback(),
+                    secret_store.as_ref(),
+                    factory.as_ref(),
                 )
                 .await
         })
@@ -324,18 +343,24 @@ pub(crate) async fn generate_rubric_via_llm_provider(
     Path(id): Path<String>,
     Json(request): Json<ProviderRubricRequest>,
 ) -> Result<Json<RubricDraftView>, ApiError> {
-    let provider = build_provider(&state, &id).await?;
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
     let generation = RubricGenerationRequest {
         purpose: request.purpose,
         source_language: request.source_language,
         response_language: request.response_language,
         transcript_snapshot: request.transcript_snapshot,
     };
-    let draft = provider
-        .as_rubric()
-        .generate_rubric(&generation)
-        .await
-        .map_err(ApplicationError::from)?;
+    let draft = state
+        .application
+        .execute_async("llm.generate_rubric", move |services| async move {
+            services
+                .llm_providers()
+                .generate_rubric(&id, &generation, secret_store.as_ref(), factory.as_ref())
+                .await
+        })
+        .await?;
     Ok(Json(RubricDraftView {
         points: draft
             .points
@@ -369,61 +394,46 @@ pub(crate) async fn generate_sense_groups_via_llm_provider(
     Json(request): Json<ProviderSenseGroupRequest>,
 ) -> Result<Json<SenseGroupAnalysis>, ApiError> {
     let track_id = SubtitleTrackId::parse(request.track_id).map_err(ApplicationError::from)?;
-    let (provider, profile) = build_provider_with_profile(&state, &id).await?;
-    if !profile.allows(LlmUse::SenseGroupPartition) {
-        return Err(ApiError::from(ApplicationError::Invalid(
-            "LLM provider profile does not allow sense_group_partition".into(),
-        )));
-    }
+    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
     let batch_id = request.batch_id;
-    let account_scope = profile
-        .batch_policy
-        .account_scope
-        .as_deref()
-        .filter(|scope| !scope.trim().is_empty())
-        .unwrap_or_else(|| profile.id.as_str())
-        .to_string();
     let coordinator = state.generative.llm_batches.clone();
-    let (governor, cancellation) = coordinator.begin(
-        &batch_id,
-        &account_scope,
-        profile.batch_policy.max_in_flight as usize,
-        profile.batch_policy.start_rate_per_second,
-    )?;
-    let backoff = application::batch_governor::BackoffPolicy::new(500, 30_000, profile.max_retries);
-    let execution = application::batch_governor::LlmBatchExecution::new(
-        profile.id.as_str(),
-        governor,
-        cancellation,
-        backoff,
-    );
+    let secret_store = state.infrastructure.secret_store.clone();
+    let factory = state.generative.llm_runtime_factory.clone();
     let status = request.status;
-    let result = state
+    state
         .application
         .execute_async("llm.generate_sense_groups", move |services| async move {
             services
-                .media_analysis()
-                .generate_sense_group_analysis_via_llm(
+                .llm_providers()
+                .generate_sense_groups(
+                    &id,
+                    &batch_id,
                     &track_id,
                     status,
-                    provider.as_sense_groups(),
-                    &execution,
+                    &coordinator,
+                    secret_store.as_ref(),
+                    factory.as_ref(),
                 )
                 .await
         })
-        .await;
-    coordinator.finish(&batch_id, result.is_ok());
-    result.map(Json).map_err(ApiError::from)
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
 }
 
 pub(crate) async fn llm_batch_status(
     State(state): State<ApiState>,
     Path(batch_id): Path<String>,
 ) -> Result<Json<application::batch_governor::BatchProgress>, ApiError> {
+    let coordinator = state.generative.llm_batches.clone();
     state
-        .generative
-        .llm_batches
-        .status(&batch_id)
+        .application
+        .execute("llm.batch_status", move |services| {
+            Ok(services
+                .llm_providers()
+                .batch_status(&batch_id, &coordinator))
+        })
+        .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("LLM batch"))
 }
@@ -432,38 +442,15 @@ pub(crate) async fn cancel_llm_batch(
     State(state): State<ApiState>,
     Path(batch_id): Path<String>,
 ) -> Result<Json<application::batch_governor::BatchProgress>, ApiError> {
+    let coordinator = state.generative.llm_batches.clone();
     state
-        .generative
-        .llm_batches
-        .cancel(&batch_id)
+        .application
+        .execute("llm.cancel_batch", move |services| {
+            Ok(services
+                .llm_providers()
+                .cancel_batch(&batch_id, &coordinator))
+        })
+        .await?
         .map(Json)
         .ok_or_else(|| ApiError::not_found("LLM batch"))
-}
-
-/// Loads a profile, resolves its secret, and builds the concrete provider.
-async fn build_provider(state: &ApiState, id: &str) -> Result<BuiltSemanticProvider, ApiError> {
-    Ok(build_provider_with_profile(state, id).await?.0)
-}
-
-async fn build_provider_with_profile(
-    state: &ApiState,
-    id: &str,
-) -> Result<(BuiltSemanticProvider, LlmProviderProfile), ApiError> {
-    let id = LlmProviderProfileId::parse(id).map_err(ApplicationError::from)?;
-    let secret_store = state.infrastructure.secret_store.clone();
-    let (profile, secret) = state
-        .application
-        .execute("llm.build_provider", move |services| {
-            let module = services.llm_providers();
-            let profile = module
-                .llm_provider_profile(&id)?
-                .ok_or(ApplicationError::NotFound("llm provider profile"))?;
-            let secret = module.resolve_llm_provider_secret(&profile, secret_store.as_ref())?;
-            Ok((profile, secret))
-        })
-        .await?;
-    let provider = BuiltSemanticProvider::build(&profile, secret)
-        .map_err(ApplicationError::from)
-        .map_err(ApiError::from)?;
-    Ok((provider, profile))
 }

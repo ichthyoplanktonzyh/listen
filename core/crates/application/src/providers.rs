@@ -268,6 +268,33 @@ pub trait LlmChatAdapter: Send + Sync {
     async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
 }
 
+/// A configured semantic LLM runtime assembled by an adapter crate.
+///
+/// The application owns this interface so callers never need to know the
+/// concrete protocol family or provider implementation. The narrower semantic
+/// seams remain the test surfaces for their individual use cases.
+#[async_trait]
+pub trait SemanticLlmRuntime: Send + Sync {
+    fn rubric(&self) -> &dyn SemanticRubricProvider;
+    fn judge(&self) -> &dyn SemanticJudgeProvider;
+    fn feedback(&self) -> &dyn OutputFeedbackProvider;
+    fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider;
+    async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
+}
+
+/// Composition seam for turning a persisted provider profile and its
+/// dispatch-time credential into a protocol-neutral semantic runtime.
+///
+/// Implementations belong to adapter crates. Secrets are passed by value so
+/// they cannot be retained by the application layer after construction.
+pub trait SemanticLlmRuntimeFactory: Send + Sync {
+    fn build(
+        &self,
+        profile: &domain::LlmProviderProfile,
+        secret: Option<String>,
+    ) -> Result<Box<dyn SemanticLlmRuntime>, LlmProviderError>;
+}
+
 /// Neutral rubric-generation request. The provider proposes information points;
 /// the use case assigns identity, version, provenance, and snapshot hashes.
 #[derive(Debug, Clone, PartialEq)]

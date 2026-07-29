@@ -13,8 +13,9 @@
 use application::{
     JudgeRequest, JudgmentDraft, LlmChatAdapter, LlmProviderDescriptor, OutputFeedbackDraft,
     OutputFeedbackProvider, OutputFeedbackRequest, RubricDraft, RubricGenerationRequest,
-    RubricPointDraft, SemanticJudgeProvider, SemanticRubricProvider, SenseGroupPartitionDraft,
-    SenseGroupPartitionProvider, SenseGroupPartitionRequest, StructuredChatRequest,
+    RubricPointDraft, SemanticJudgeProvider, SemanticLlmRuntime, SemanticRubricProvider,
+    SenseGroupPartitionDraft, SenseGroupPartitionProvider, SenseGroupPartitionRequest,
+    StructuredChatRequest,
 };
 use async_trait::async_trait;
 use domain::{
@@ -42,6 +43,29 @@ impl<A: LlmChatAdapter> LlmSemanticProvider<A> {
 
     pub fn adapter(&self) -> &A {
         &self.adapter
+    }
+}
+
+#[async_trait]
+impl<A: LlmChatAdapter> SemanticLlmRuntime for LlmSemanticProvider<A> {
+    fn rubric(&self) -> &dyn SemanticRubricProvider {
+        self
+    }
+
+    fn judge(&self) -> &dyn SemanticJudgeProvider {
+        self
+    }
+
+    fn feedback(&self) -> &dyn OutputFeedbackProvider {
+        self
+    }
+
+    fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
+        self
+    }
+
+    async fn probe_structured_output(&self) -> Result<domain::CapabilityClaim, LlmProviderError> {
+        self.adapter.probe_structured_output().await
     }
 }
 
