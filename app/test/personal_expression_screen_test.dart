@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/personal_expression_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 
 const _asset = {
@@ -45,6 +47,29 @@ const _asset = {
   'updated_at_ms': 1,
 };
 
+/// A copy of [_asset] with the fields a layout/hygiene test needs to vary.
+Map<String, dynamic> _assetWith({
+  required String id,
+  String language = 'en',
+  String? name,
+  String? patternText,
+  String? sourceText,
+}) => {
+  ..._asset,
+  'id': id,
+  'language': language,
+  'source': {
+    ...(_asset['source'] as Map<String, dynamic>),
+    'text': ?sourceText,
+  },
+  'current_version': {
+    ...(_asset['current_version'] as Map<String, dynamic>),
+    'pattern_id': id,
+    'name': ?name,
+    'pattern_text': ?patternText,
+  },
+};
+
 Map<String, dynamic> _attempt({
   required String id,
   required String assistance,
@@ -70,16 +95,18 @@ Map<String, dynamic> _attempt({
 LocalApi _api({
   List<Map<String, dynamic>> attempts = const [],
   List<Map<String, dynamic>>? versions,
+  List<Map<String, dynamic>>? assets,
 }) {
   final versionList =
       versions ?? [_asset['current_version'] as Map<String, dynamic>];
+  final assetList = assets ?? [_asset];
   return LocalApi.withTransport(
     baseUrl: 'http://test',
     token: 'token',
     transport: (method, path, body) async {
       if (path.startsWith('/v1/personal-expression/patterns?') ||
           path == '/v1/personal-expression/patterns') {
-        return (statusCode: 200, body: jsonEncode([_asset]));
+        return (statusCode: 200, body: jsonEncode(assetList));
       }
       if (path.endsWith('/attempts')) {
         if (method == 'POST') {
@@ -109,6 +136,16 @@ Future<void> _pumpScreen(WidgetTester tester, LocalApi api) async {
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// Sizes the test window, so a layout claim ("the search field is capped at the
+/// content column") is made at a width where the uncapped form would be
+/// visibly wider — the ~950pt window of the audit screenshot.
+void _setWindow(WidgetTester tester, Size size) {
+  tester.view
+    ..physicalSize = size
+    ..devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
 }
 
 Future<void> _openWritingDesk(WidgetTester tester) async {
@@ -281,5 +318,135 @@ void main() {
     expect(find.textContaining('书面 · 看完整模板 · 基本表达出来'), findsOneWidget);
     expect(find.textContaining('template_visible'), findsNothing);
     expect(find.textContaining('partly_expressed'), findsNothing);
+  });
+
+  testWidgets('§3.6-1 搜索框与内容列同宽，且同锁在内容列宽内', (tester) async {
+    // 宽窗（截图 1 的量级）：未收口时搜索框会是满窗宽，内容列却停在 780。
+    _setWindow(tester, const Size(1000, 900));
+    await _pumpScreen(tester, _api());
+
+    final searchWidth = tester.getSize(find.byType(TextField)).width;
+    final cardWidth = tester.getSize(find.byType(Card).first).width;
+
+    expect(searchWidth, cardWidth);
+    expect(searchWidth, lessThan(1000));
+    expect(searchWidth, lessThanOrEqualTo(ListenBreakpoints.contentColumnMax));
+    // 两者左缘对齐——同一把尺子量出来的。
+    expect(
+      tester.getTopLeft(find.byType(TextField)).dx,
+      tester.getTopLeft(find.byType(Card).first).dx,
+    );
+  });
+
+  testWidgets('§3.6-2 AppBar 两个动作有名字：窄窗 tooltip，宽窗文字标签，图标收到 chrome 尺寸', (
+    tester,
+  ) async {
+    _setWindow(tester, const Size(700, 800));
+    await _pumpScreen(tester, _api());
+
+    // 窄窗：纯图标，但名字通过 tooltip（也是读屏播报的那一份）可达。
+    expect(find.byTooltip('Export expressions'), findsOneWidget);
+    expect(find.byTooltip('New expression'), findsOneWidget);
+    expect(find.text('Export expressions'), findsNothing);
+
+    for (final icon in [Icons.download_outlined, Icons.add]) {
+      final glyph = tester.widget<Icon>(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(icon),
+        ),
+      );
+      expect(glyph.size, ListenIconSize.chrome);
+    }
+
+    // 长按 tooltip 真的显形（可达性不是只写在代码里）。
+    await tester.longPress(find.byTooltip('Export expressions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Export expressions'), findsOneWidget);
+  });
+
+  testWidgets('§3.6-2 宽窗下 AppBar 动作直接显示文字标签', (tester) async {
+    _setWindow(tester, const Size(1200, 900));
+    await _pumpScreen(tester, _api());
+
+    expect(find.text('Export expressions'), findsOneWidget);
+    expect(find.text('New expression'), findsOneWidget);
+  });
+
+  testWidgets('§3.6-3 字幕残留清洗后才上屏：去前导 dash，按学习语言规范化标点', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      _api(
+        assets: [
+          _assetWith(
+            id: 'pattern-1',
+            patternText: '- I need to do something。',
+            sourceText: '- I need to wear this, yes.',
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('I need to do something.'), findsOneWidget);
+    expect(find.textContaining('来源：I need to wear this, yes.'), findsOneWidget);
+    // 脏形态一处都不许上屏。
+    expect(find.textContaining('- I need'), findsNothing);
+    expect(find.textContaining('。'), findsNothing);
+  });
+
+  testWidgets('§3.6-3 学习语言是中文时，全角标点是正字法，不被 UI 语言带偏', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      _api(
+        assets: [
+          _assetWith(
+            id: 'pattern-1',
+            language: 'zh',
+            patternText: '- 我最后还是{结果}。',
+            sourceText: '我最后还是去了。',
+          ),
+        ],
+      ),
+    );
+
+    expect(find.text('我最后还是{结果}。'), findsOneWidget);
+    expect(find.textContaining('来源：我最后还是去了。'), findsOneWidget);
+  });
+
+  testWidgets('§3.6-4 少于 3 条时下方接起步引导，不是留白', (tester) async {
+    await _pumpScreen(tester, _api());
+
+    expect(find.text('Save a sentence pattern from subtitles'), findsOneWidget);
+    expect(find.text('Write one by hand'), findsOneWidget);
+  });
+
+  testWidgets('§3.6-4 满 3 条后引导退场，列表自己就够了', (tester) async {
+    await _pumpScreen(
+      tester,
+      _api(
+        assets: [
+          _assetWith(id: 'pattern-1', name: 'One'),
+          _assetWith(id: 'pattern-2', name: 'Two'),
+          _assetWith(id: 'pattern-3', name: 'Three'),
+        ],
+      ),
+    );
+
+    expect(find.text('Three'), findsOneWidget);
+    expect(find.text('Save a sentence pattern from subtitles'), findsNothing);
+  });
+
+  testWidgets('§3.6-4 一条都没有时，空态自己带入口', (tester) async {
+    await _pumpScreen(tester, _api(assets: const []));
+
+    expect(
+      find.textContaining('Save a sentence pattern from subtitles'),
+      findsOneWidget,
+    );
+    expect(find.text('Write one by hand'), findsOneWidget);
   });
 }
