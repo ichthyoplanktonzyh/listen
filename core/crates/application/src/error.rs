@@ -32,6 +32,10 @@ pub enum ApplicationError {
     /// credential (Phase 3.12).
     #[error(transparent)]
     Provider(#[from] domain::LlmProviderError),
+    /// A native realtime provider failed through the provider-neutral
+    /// application seam. The taxonomy is secret-free by construction.
+    #[error(transparent)]
+    RealtimeProvider(#[from] domain::RealtimeProviderError),
     #[error(transparent)]
     SecretStore(#[from] crate::SecretStoreError),
 }

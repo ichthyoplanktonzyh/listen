@@ -6,7 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
-use application::{ApplicationError, ForcedAlignSidecar};
+use application::ApplicationError;
 use sha2::{Digest, Sha256};
 
 pub(crate) fn support_dir() -> PathBuf {
@@ -50,7 +50,7 @@ pub(crate) fn resolve_tool(env_name: &str, name: &str) -> Option<PathBuf> {
     resolve_bundled_tool(name, &executable, &std::env::current_dir().ok()?)
 }
 
-pub(crate) fn resolve_forced_align_sidecar() -> Option<ForcedAlignSidecar> {
+pub(crate) fn resolve_forced_align_command() -> Option<(PathBuf, PathBuf)> {
     let research_root = std::env::var_os("LLPLAYERNEXT_FA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
@@ -62,7 +62,7 @@ pub(crate) fn resolve_forced_align_sidecar() -> Option<ForcedAlignSidecar> {
         return None;
     }
     let script = resolve_forced_align_script()?;
-    Some(ForcedAlignSidecar { python, script })
+    Some((python, script))
 }
 
 fn resolve_forced_align_script() -> Option<PathBuf> {

@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use domain::{
     AssistanceLevel, ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId,
     HuntingCandidateId, HuntingCheckAnswer, HuntingTargetId, HuntingTargetSourceKind, LanguageCode,
@@ -134,16 +132,39 @@ pub struct CreateWordTimeline {
     pub words: Vec<WordTiming>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForcedAlignSidecar {
-    pub python: PathBuf,
-    pub script: PathBuf,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForcedAlignmentStatus {
+    NotConfigured,
+    Skipped,
+    Applied,
+    Degraded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignmentReport {
+    pub status: ForcedAlignmentStatus,
+    pub aligned_word_count: usize,
+    pub descriptor: Option<crate::ForcedAlignProviderDescriptor>,
+    pub failure: Option<crate::ForcedAlignFailure>,
+}
+
+impl ForcedAlignmentReport {
+    pub fn not_configured() -> Self {
+        Self {
+            status: ForcedAlignmentStatus::NotConfigured,
+            aligned_word_count: 0,
+            descriptor: None,
+            failure: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WordTimelinePipelineResult {
     pub extracted_word_count: usize,
     pub forced_aligned_word_count: usize,
+    pub forced_alignment: ForcedAlignmentReport,
     pub dtw_timeline_id: Option<WordTimelineId>,
     pub forced_aligned_timeline_id: Option<WordTimelineId>,
     pub final_timeline_id: Option<WordTimelineId>,

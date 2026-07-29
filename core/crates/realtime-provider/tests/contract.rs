@@ -1,12 +1,15 @@
 use application::{
-    RealtimeAudioFormat, RealtimeConversationAdapter, RealtimeEvent, RealtimeSessionRequest,
-    RealtimeTransportKind, RealtimeTurnDetection,
+    RealtimeAudioFormat, RealtimeConversationAdapter, RealtimeConversationAdapterFactory,
+    RealtimeEvent, RealtimeSessionRequest, RealtimeTransportKind, RealtimeTurnDetection,
 };
-use domain::LanguageCode;
+use domain::{
+    LanguageCode, RealtimeAdapterKind, RealtimeProviderProfile, SecretRef,
+    realtime_provider_profile_id,
+};
 use futures_util::{SinkExt, StreamExt};
 use realtime_provider::{
-    OpenAiRealtimeAdapter, OpenAiRealtimeCodec, QwenRealtimeAdapter, QwenRealtimeCodec,
-    RealtimeAdapterConfig, RealtimeProtocolCodec,
+    NativeRealtimeAdapterFactory, OpenAiRealtimeAdapter, OpenAiRealtimeCodec, QwenRealtimeAdapter,
+    QwenRealtimeCodec, RealtimeAdapterConfig, RealtimeProtocolCodec,
 };
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -405,4 +408,44 @@ fn adapters() -> Vec<Box<dyn RealtimeConversationAdapter>> {
         Box::new(OpenAiRealtimeAdapter::new(config.clone())),
         Box::new(QwenRealtimeAdapter::new(config)),
     ]
+}
+
+#[test]
+fn native_factory_maps_profiles_to_protocol_adapters_and_audio_capabilities() {
+    for (adapter_kind, expected_kind, expected_input) in [
+        (
+            RealtimeAdapterKind::OpenAiRealtime,
+            "openai_realtime",
+            RealtimeAudioFormat::Pcm16Mono24Khz,
+        ),
+        (
+            RealtimeAdapterKind::QwenOmniRealtime,
+            "qwen_omni_realtime",
+            RealtimeAudioFormat::Pcm16Mono16Khz,
+        ),
+    ] {
+        let base_url = "wss://example.invalid/realtime";
+        let model_id = "contract-model";
+        let profile = RealtimeProviderProfile {
+            id: realtime_provider_profile_id(adapter_kind, base_url, model_id),
+            display_name: "Contract".into(),
+            adapter_kind,
+            base_url: base_url.into(),
+            model_id: model_id.into(),
+            voice: "contract-voice".into(),
+            auth_ref: SecretRef::new("opaque://credential"),
+            timeout_ms: 2_000,
+            created_at_ms: 1,
+        };
+
+        let adapter = NativeRealtimeAdapterFactory::new().build(&profile, "credential".into());
+        let descriptor = adapter.descriptor();
+
+        assert_eq!(descriptor.adapter_kind, expected_kind);
+        assert_eq!(descriptor.capabilities.input_audio, expected_input);
+        assert_eq!(
+            descriptor.capabilities.output_audio,
+            RealtimeAudioFormat::Pcm16Mono24Khz
+        );
+    }
 }

@@ -9,7 +9,10 @@ use domain::{
     SyntacticValidationStatus, WordPronunciation, syntactic_analysis_fingerprint,
     syntactic_source_fingerprint, validate_syntactic_analysis,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+pub use speech_analysis::timing::AlignedWord as ForcedAlignedWord;
 
 #[async_trait]
 pub trait DictionaryProvider: Send + Sync {
@@ -56,6 +59,70 @@ pub trait PronunciationProvider: Send + Sync {
     fn rule_catalog(&self) -> serde_json::Value {
         serde_json::json!([])
     }
+}
+
+// ---------------------------------------------------------------------------
+// Forced-alignment seam.
+//
+// Application owns the request, typed outcome/failure, and provenance
+// contract. Process discovery and stdin/stdout protocols belong to adapters.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignProviderDescriptor {
+    pub provider_id: String,
+    pub model_revision: String,
+    pub protocol_version: String,
+    pub runtime: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignRequest {
+    pub audio_path: String,
+    pub segments: Vec<ForcedAlignSegment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignSegment {
+    pub index: u32,
+    pub text: String,
+    pub words: Vec<String>,
+    pub start_ms: u64,
+    pub end_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForcedAlignFailureKind {
+    Spawn,
+    RequestIo,
+    Exit,
+    InvalidResponse,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
+#[error("forced alignment {kind:?}: {detail}")]
+pub struct ForcedAlignFailure {
+    pub kind: ForcedAlignFailureKind,
+    pub detail: String,
+    pub descriptor: ForcedAlignProviderDescriptor,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForcedAlignOutcome {
+    pub timings: Vec<ForcedAlignedWord>,
+    pub descriptor: ForcedAlignProviderDescriptor,
+}
+
+#[async_trait]
+pub trait ForcedAlignProvider: Send + Sync {
+    fn descriptor(&self) -> ForcedAlignProviderDescriptor;
+    async fn align(
+        &self,
+        request: &ForcedAlignRequest,
+    ) -> Result<ForcedAlignOutcome, ForcedAlignFailure>;
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +360,17 @@ pub trait SemanticLlmRuntimeFactory: Send + Sync {
         profile: &domain::LlmProviderProfile,
         secret: Option<String>,
     ) -> Result<Box<dyn SemanticLlmRuntime>, LlmProviderError>;
+}
+
+/// Composition seam for assembling a provider-neutral realtime adapter from a
+/// persisted profile and its dispatch-time credential. Protocol selection and
+/// configuration policy belong to the adapter crate implementing this trait.
+pub trait RealtimeConversationAdapterFactory: Send + Sync {
+    fn build(
+        &self,
+        profile: &domain::RealtimeProviderProfile,
+        credential: String,
+    ) -> Box<dyn crate::RealtimeConversationAdapter>;
 }
 
 /// Neutral rubric-generation request. The provider proposes information points;

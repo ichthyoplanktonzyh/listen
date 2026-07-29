@@ -49,7 +49,6 @@ use domain::{
     observation_spec_for_speaking_production, observation_spec_for_upgrade_confirmation,
     projection_proposal_v1, validate_syntactic_analysis,
 };
-use serde::Serialize;
 
 mod background_jobs;
 pub mod batch_governor;
@@ -132,23 +131,6 @@ pub(crate) use util::{
     phrase_candidates, require_text,
 };
 pub(crate) use vocabulary::ObservationContext;
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ForcedAlignRequest {
-    pub(crate) audio_path: String,
-    pub(crate) segments: Vec<ForcedAlignSegment>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) language: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ForcedAlignSegment {
-    pub(crate) index: u32,
-    pub(crate) text: String,
-    pub(crate) words: Vec<String>,
-    pub(crate) start_ms: u64,
-    pub(crate) end_ms: u64,
-}
 
 #[derive(Clone)]
 pub struct AppServices {

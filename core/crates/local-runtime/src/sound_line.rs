@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use api_events::{EventEnvelope, EventName};
 use application::{
-    AppServices, ApplicationError, BackgroundJobStore, BackgroundJobTransition, now_ms,
+    AppServices, ApplicationError, BackgroundJobStore, BackgroundJobTransition,
+    ForcedAlignProvider, now_ms,
 };
 use domain::{
     BackgroundJob, BackgroundJobId, BackgroundJobKind, BackgroundJobStatus, LanguageCode,
@@ -15,9 +16,7 @@ use serde_json::Value;
 use tokio::sync::{Semaphore, broadcast};
 
 use crate::process::{CancellationProbe, ProcessRunner, ProcessSpec, TokioProcessRunner};
-use crate::runtime_support::{
-    ffmpeg_wav_args, io_error, resolve_forced_align_sidecar, resolve_tool,
-};
+use crate::runtime_support::{ffmpeg_wav_args, io_error, resolve_tool};
 
 static JOB_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -75,6 +74,7 @@ pub struct SoundLineCoordinator {
     queue: Arc<Semaphore>,
     temp_dir: PathBuf,
     process_runner: Arc<dyn ProcessRunner>,
+    forced_aligner: Option<Arc<dyn ForcedAlignProvider>>,
 }
 
 impl SoundLineCoordinator {
@@ -82,14 +82,22 @@ impl SoundLineCoordinator {
         services: AppServices,
         events: broadcast::Sender<EventEnvelope>,
         jobs: Arc<dyn BackgroundJobStore>,
+        forced_aligner: Option<Arc<dyn ForcedAlignProvider>>,
     ) -> Result<Arc<Self>, ApplicationError> {
-        Self::new_with_process_runner(services, events, jobs, Arc::new(TokioProcessRunner))
+        Self::new_with_process_runner(
+            services,
+            events,
+            jobs,
+            forced_aligner,
+            Arc::new(TokioProcessRunner),
+        )
     }
 
     pub fn new_with_process_runner(
         services: AppServices,
         events: broadcast::Sender<EventEnvelope>,
         jobs: Arc<dyn BackgroundJobStore>,
+        forced_aligner: Option<Arc<dyn ForcedAlignProvider>>,
         process_runner: Arc<dyn ProcessRunner>,
     ) -> Result<Arc<Self>, ApplicationError> {
         let temp_dir = std::env::temp_dir().join("LLPlayerNext/sound-line");
@@ -104,6 +112,7 @@ impl SoundLineCoordinator {
             queue: Arc::new(Semaphore::new(1)),
             temp_dir,
             process_runner,
+            forced_aligner,
         });
         // Auto-trigger: subscribe to transcription completions and enqueue a
         // sound-line job for the freshly generated track. Guarded so that
@@ -325,7 +334,7 @@ impl SoundLineCoordinator {
                 track_id,
                 b"",
                 wav,
-                resolve_forced_align_sidecar(),
+                self.forced_aligner.as_deref(),
                 language,
             )
             .await?;
