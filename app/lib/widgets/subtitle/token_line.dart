@@ -8,6 +8,7 @@ import '../../models/types.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/motion.dart';
 import '../../theme/radii.dart';
+import '../../theme/spacing.dart';
 
 /// Renders a subtitle [Cue] as a line of style-aware tokens,
 /// with clickable words and phrase underlines.
@@ -352,14 +353,28 @@ class _TokenLineState extends State<TokenLine> {
       // Content settling: the charter base tempo (#32).
       duration: ListenMotion.base,
       padding: EdgeInsets.symmetric(
-        horizontal: capsule ? 10 : 2,
-        vertical: capsule ? 4 : 1,
+        horizontal: capsule ? ListenSpacing.gap8 : ListenSpacing.gap2,
+        vertical: capsule ? ListenSpacing.gap4 : 1,
       ),
       decoration: BoxDecoration(
-        color: active
+        // The capsule's ink, never a light block (§3.7). A pale grey fill
+        // sitting on the video was the clearest case of the shell glowing over
+        // content (charter P2) — over a bright frame the chip out-shone the
+        // picture, and every word inside it came pre-highlighted. The surface
+        // is now the overlay's own darkening token in both states, so the
+        // capsule reads as a fold in the video rather than a sticker on it,
+        // and the only thing that lights up is the current word.
+        color: capsule
+            ? active
+                  // The chunk being spoken is content, so it may take a teal
+                  // wash — laid over the ink, not instead of it.
+                  ? Color.alphaBlend(
+                      primary.withValues(alpha: 0.16),
+                      ListenColors.overlaySurfaceSoft,
+                    )
+                  : ListenColors.overlaySurfaceSoft
+            : active
             ? primary.withValues(alpha: 0.18)
-            : capsule
-            ? ListenColors.overlayText.withValues(alpha: 0.08)
             : Colors.transparent,
         border: capsule
             ? Border.all(
