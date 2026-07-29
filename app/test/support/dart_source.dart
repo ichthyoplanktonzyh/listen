@@ -99,6 +99,76 @@ String maskNonCode(String source) {
   return out.toString();
 }
 
+/// The inverse of [maskNonCode]: keeps the contents of string literals and
+/// blanks everything else — code, comments, and the quotes themselves.
+///
+/// Same length and line structure as [source], for the same reason, so
+/// [lineNumberAt] and [lineAt] still work on a match offset.
+///
+/// The token gates ask "is this literal in the code?", so they mask literals
+/// away. `error_leak_discipline_test.dart` asks the opposite question — "does
+/// any *sentence* interpolate a caught exception?" — and the distinction is
+/// load-bearing there: a doc comment quoting `'$error'` while explaining the
+/// rule must not count, and a string literal containing it is the whole point.
+String stringLiteralsOnly(String source) {
+  final out = StringBuffer();
+  var i = 0;
+
+  void blank(int count) {
+    for (var n = 0; n < count; n++) {
+      out.write(source[i + n] == '\n' ? '\n' : ' ');
+    }
+    i += count;
+  }
+
+  bool startsWith(String text, int at) =>
+      at + text.length <= source.length && source.startsWith(text, at);
+
+  while (i < source.length) {
+    final char = source[i];
+
+    if (startsWith('//', i)) {
+      var end = source.indexOf('\n', i);
+      if (end < 0) end = source.length;
+      blank(end - i);
+      continue;
+    }
+
+    if (startsWith('/*', i)) {
+      var end = source.indexOf('*/', i + 2);
+      end = end < 0 ? source.length : end + 2;
+      blank(end - i);
+      continue;
+    }
+
+    if (char == "'" || char == '"') {
+      final raw =
+          i > 0 &&
+          source[i - 1] == 'r' &&
+          (i < 2 || !RegExp(r'[A-Za-z0-9_$]').hasMatch(source[i - 2]));
+      final quote = startsWith(char * 3, i) ? char * 3 : char;
+
+      blank(quote.length);
+      while (i < source.length) {
+        if (!raw && source[i] == r'\' && i + 1 < source.length) {
+          out.write(source.substring(i, i + 2));
+          i += 2;
+          continue;
+        }
+        if (startsWith(quote, i)) break;
+        out.write(source[i]);
+        i++;
+      }
+      if (i < source.length) blank(quote.length);
+      continue;
+    }
+
+    blank(1);
+  }
+
+  return out.toString();
+}
+
 /// The 1-based line number containing [offset].
 int lineNumberAt(String source, int offset) {
   var line = 1;
