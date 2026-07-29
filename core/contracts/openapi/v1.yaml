@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 1.0.0
+  version: 1.1.0
   description: Versioned loopback-only application-service adapter. Playback control is excluded.
 servers:
   - url: http://127.0.0.1:{port}
@@ -2115,7 +2115,7 @@ paths:
                 items: { $ref: "#/components/schemas/RealtimeProviderProfileView" }
     post:
       operationId: registerRealtimeProvider
-      description: The credential is write-only and stored in the OS keychain.
+      description: Credentials are write-only and stored in the OS keychain. A new remote profile requires one; a local cascade profile is keyless, and an update may omit it to preserve the current credential.
       requestBody:
         required: true
         content:
@@ -5617,7 +5617,7 @@ components:
       properties:
         id: { type: string }
         display_name: { type: string }
-        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime] }
+        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime, local_cascade_realtime] }
         base_url: { type: string }
         model_id: { type: string }
         voice: { type: string }
@@ -5625,10 +5625,10 @@ components:
         timeout_ms: { type: integer, minimum: 1000 }
     RegisterRealtimeProvider:
       type: object
-      required: [display_name, adapter_kind, base_url, model_id, voice, secret]
+      required: [display_name, adapter_kind, base_url, model_id, voice]
       properties:
         display_name: { type: string }
-        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime] }
+        adapter_kind: { enum: [open_ai_realtime, qwen_omni_realtime, local_cascade_realtime] }
         base_url: { type: string }
         model_id: { type: string }
         voice: { type: string }

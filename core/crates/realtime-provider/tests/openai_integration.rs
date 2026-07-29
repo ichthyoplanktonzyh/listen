@@ -30,8 +30,9 @@ async fn gpt_realtime_2_1_accepts_the_baseline_session_contract() {
     let adapter = OpenAiRealtimeAdapter::new(RealtimeAdapterConfig {
         base_url: "wss://api.openai.com/v1/realtime".into(),
         model_id: "gpt-realtime-2.1".into(),
-        credential,
+        credential: Some(credential),
         timeout: Duration::from_secs(15),
+        require_loopback: false,
     });
     let descriptor = adapter.descriptor();
     assert_eq!(descriptor.model_id, "gpt-realtime-2.1");

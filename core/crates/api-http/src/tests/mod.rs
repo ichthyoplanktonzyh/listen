@@ -357,6 +357,63 @@ async fn realtime_provider_registration_is_write_only_and_listable() {
 }
 
 #[tokio::test]
+async fn local_realtime_provider_registration_is_keyless() {
+    let app = test_app();
+    let response = app
+        .oneshot(
+            Request::post("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "display_name":"Local cascade",
+                        "adapter_kind":"local_cascade_realtime",
+                        "base_url":"ws://127.0.0.1:8765/v1/realtime",
+                        "model_id":"hf-speech-to-speech-ora",
+                        "voice":"local"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["adapter_kind"], "local_cascade_realtime");
+    assert_eq!(body["has_credential"], false);
+    assert!(body.get("auth_ref").is_none());
+}
+
+#[tokio::test]
+async fn new_remote_realtime_provider_still_requires_a_credential() {
+    let app = test_app();
+    let response = app
+        .oneshot(
+            Request::post("/v1/realtime/providers")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "display_name":"Remote without secret",
+                        "adapter_kind":"open_ai_realtime",
+                        "base_url":"wss://api.openai.com/v1/realtime",
+                        "model_id":"gpt-realtime",
+                        "voice":"marin"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn realtime_history_lists_sessions_and_ordered_turns() {
     let app = test_app();
     let profile_response = app

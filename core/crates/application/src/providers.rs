@@ -396,8 +396,8 @@ pub trait RealtimeConversationAdapterFactory: Send + Sync {
     fn build(
         &self,
         profile: &domain::RealtimeProviderProfile,
-        credential: String,
-    ) -> Box<dyn crate::RealtimeConversationAdapter>;
+        credential: Option<String>,
+    ) -> Result<Box<dyn crate::RealtimeConversationAdapter>, domain::RealtimeProviderError>;
 }
 
 /// Neutral rubric-generation request. The provider proposes information points;

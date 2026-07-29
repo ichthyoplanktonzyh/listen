@@ -34,7 +34,7 @@ fn upsert_profile(
                 profile.base_url,
                 profile.model_id,
                 profile.voice,
-                profile.auth_ref.as_str(),
+                profile.auth_ref.as_ref().map(SecretRef::as_str),
                 profile.created_at_ms,
                 json(profile)?
             ],
@@ -95,6 +95,29 @@ impl RealtimeConversationRepository for SqliteRepository {
         Ok(())
     }
 
+    fn upsert_realtime_profile_preserving_credential(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        let mut connection = self.connection.lock();
+        let transaction = connection.transaction().map_err(repo)?;
+        let mut saved = profile.clone();
+        let existing_auth_ref = transaction
+            .query_row(
+                "SELECT auth_ref FROM realtime_provider_profiles WHERE id=?1",
+                [profile.id.as_str()],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(repo)?;
+        if let Some(existing_auth_ref) = existing_auth_ref {
+            saved.auth_ref = existing_auth_ref.map(SecretRef::new);
+        }
+        upsert_profile(&transaction, &saved)?;
+        transaction.commit().map_err(repo)?;
+        Ok(saved)
+    }
+
     fn upsert_realtime_profile_and_schedule_cleanup(
         &self,
         profile: &RealtimeProviderProfile,
@@ -105,21 +128,24 @@ impl RealtimeConversationRepository for SqliteRepository {
             .query_row(
                 "SELECT auth_ref FROM realtime_provider_profiles WHERE id=?1",
                 [profile.id.as_str()],
-                |row| row.get::<_, String>(0),
+                |row| row.get::<_, Option<String>>(0),
             )
             .optional()
             .map_err(repo)?
+            .flatten()
             .map(SecretRef::new);
         upsert_profile(&transaction, profile)?;
-        transaction
-            .execute(
-                "DELETE FROM pending_secret_cleanups WHERE auth_ref=?1",
-                [profile.auth_ref.as_str()],
-            )
-            .map_err(repo)?;
+        if let Some(active_auth_ref) = profile.auth_ref.as_ref() {
+            transaction
+                .execute(
+                    "DELETE FROM pending_secret_cleanups WHERE auth_ref=?1",
+                    [active_auth_ref.as_str()],
+                )
+                .map_err(repo)?;
+        }
         if let Some(auth_ref) = stale_auth_ref
             .as_ref()
-            .filter(|stale| *stale != &profile.auth_ref)
+            .filter(|stale| Some(*stale) != profile.auth_ref.as_ref())
         {
             transaction
                 .execute(
@@ -144,10 +170,11 @@ impl RealtimeConversationRepository for SqliteRepository {
             .query_row(
                 "SELECT auth_ref FROM realtime_provider_profiles WHERE id=?1",
                 [id.as_str()],
-                |row| row.get::<_, String>(0),
+                |row| row.get::<_, Option<String>>(0),
             )
             .optional()
             .map_err(repo)?
+            .flatten()
             .map(SecretRef::new);
         transaction
             .execute(

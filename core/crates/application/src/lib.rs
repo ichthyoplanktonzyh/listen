@@ -824,6 +824,12 @@ impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
     ) -> Result<(), ApplicationError> {
         Ok(())
     }
+    fn upsert_realtime_profile_preserving_credential(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        self.upsert_realtime_profile(profile)
+    }
     fn upsert_realtime_profile_and_schedule_cleanup(
         &self,
         profile: &RealtimeProviderProfile,

@@ -4,7 +4,7 @@
 
 Repository separation baseline 已建立：
 
-- canonical contract `1.0.0`;
+- published canonical contract `1.0.0`;
 - runtime `0.7.0`;
 - API generation `1`;
 - initial split release `v0.7.0-split.1`;
@@ -20,5 +20,10 @@ Repository separation baseline 已建立：
 
 ## Product Work
 
-后端产品 phase 由 owner 决定优先级。任何跨仓 feature 必须先有 app 侧 user
+当前 active slice 是未发布的 contract `1.1.0` local realtime cascade：
+credential-free loopback profile、独立协议 codec、SQLite v53 与 opt-in managed
+sidecar 已进入 core；后续是 review/release、app lock/DTO handoff，以及经显式授权的
+Apple Silicon 实机短音频 smoke。
+
+其他后端产品 phase 由 owner 决定优先级。任何跨仓 feature 必须先有 app 侧 user
 journey/contract request，再进入 core contract 和实现 phase。纯 UI phase 不进入此 roadmap。
