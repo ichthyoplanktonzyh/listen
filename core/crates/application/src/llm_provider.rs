@@ -17,9 +17,38 @@ use domain::{
 use crate::batch_governor::{BackoffPolicy, BatchProgress, LlmBatchCoordinator, LlmBatchExecution};
 use crate::{
     AppServices, ApplicationError, LlmProviderProfileRepository, MediaAnalysisUseCases,
-    OutputFeedbackDraft, RubricDraft, RubricGenerationRequest, SecretStore, SemanticLlmRuntime,
-    SemanticLlmRuntimeFactory, SemanticUseCases,
+    OutputFeedbackDraft, RubricDraft, RubricGenerationRequest, SecretCleanupRepository,
+    SecretStore, SemanticLlmRuntime, SemanticLlmRuntimeFactory, SemanticUseCases,
 };
+
+fn retry_secret_cleanups(
+    repository: &(impl SecretCleanupRepository + ?Sized),
+    secret_store: &dyn SecretStore,
+) -> Result<usize, ApplicationError> {
+    let mut completed = 0;
+    let mut first_error = None;
+    for auth_ref in repository.pending_secret_cleanups()? {
+        match secret_store
+            .delete(&auth_ref)
+            .map_err(ApplicationError::from)
+        {
+            Ok(()) => match repository.complete_secret_cleanup(&auth_ref) {
+                Ok(()) => completed += 1,
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            },
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        };
+    }
+    if let Some(error) = first_error {
+        Err(error)
+    } else {
+        Ok(completed)
+    }
+}
 
 fn register_profile_with_secret(
     profiles: &dyn LlmProviderProfileRepository,
@@ -27,55 +56,40 @@ fn register_profile_with_secret(
     secret: &str,
     secret_store: &dyn SecretStore,
 ) -> Result<LlmProviderProfile, ApplicationError> {
-    // Read the previous reference before creating anything so a repository
-    // failure cannot leave a newly allocated credential behind.
-    let previous_auth_ref = profiles
-        .get_provider_profile(&profile.id)?
-        .and_then(|previous| previous.auth_ref);
-    let new_auth_ref: LlmAuthRef = secret_store.store(secret)?;
+    let new_auth_ref: LlmAuthRef = secret_store.reserve()?;
+    // Record the cleanup intent before the external keychain write. A crash
+    // from this point until profile activation leaves a discoverable entry.
+    profiles.reserve_secret_cleanup(&new_auth_ref)?;
+    if let Err(error) = secret_store.store_reserved(&new_auth_ref, secret) {
+        profiles.schedule_secret_cleanup(&new_auth_ref)?;
+        let _pending_cleanup_result = retry_secret_cleanups(profiles, secret_store);
+        return Err(error.into());
+    }
     profile.auth_ref = Some(new_auth_ref.clone());
 
-    let saved = match profiles.upsert_provider_profile(&profile) {
+    let saved = match profiles.upsert_provider_profile_and_schedule_cleanup(&profile) {
         Ok(saved) => saved,
         Err(persist_error) => {
-            if secret_store.delete(&new_auth_ref).is_err() {
-                return Err(crate::SecretStoreError(
-                    "credential cleanup failed after provider profile persistence failed".into(),
-                )
-                .into());
-            }
+            profiles.schedule_secret_cleanup(&new_auth_ref)?;
+            let _pending_cleanup_result = retry_secret_cleanups(profiles, secret_store);
             return Err(persist_error);
         }
     };
 
-    // The durable profile already points at the new credential. Only now is it
-    // safe to remove the old one; deleting it sooner could leave a live profile
-    // pointing at a missing secret if the upsert failed.
-    if let Some(previous_auth_ref) = previous_auth_ref
-        && previous_auth_ref != new_auth_ref
-        && secret_store.delete(&previous_auth_ref).is_err()
-    {
-        return Err(crate::SecretStoreError(
-            "old credential cleanup failed after provider profile rotation".into(),
-        )
-        .into());
-    }
+    // Cleanup failure does not make the committed rotation look unsuccessful:
+    // the opaque reference remains in the durable outbox for startup/retry.
+    let _pending_cleanup_result = retry_secret_cleanups(profiles, secret_store);
     Ok(saved)
 }
 
 fn save_profile_preserving_credential(
     profiles: &dyn LlmProviderProfileRepository,
-    mut profile: LlmProviderProfile,
+    profile: LlmProviderProfile,
 ) -> Result<LlmProviderProfile, ApplicationError> {
     // A settings update without a write-only secret means "keep the current
     // credential", not "drop its opaque reference". Explicit credential
     // removal needs a separate compensated operation.
-    if profile.auth_ref.is_none() {
-        profile.auth_ref = profiles
-            .get_provider_profile(&profile.id)?
-            .and_then(|previous| previous.auth_ref);
-    }
-    profiles.upsert_provider_profile(&profile)
+    profiles.upsert_provider_profile_preserving_credential(&profile)
 }
 
 fn delete_profile_then_secret(
@@ -83,16 +97,8 @@ fn delete_profile_then_secret(
     id: &LlmProviderProfileId,
     secret_store: &dyn SecretStore,
 ) -> Result<(), ApplicationError> {
-    let auth_ref = profiles
-        .get_provider_profile(id)?
-        .and_then(|profile| profile.auth_ref);
-
-    // Delete the durable reference first. If this fails, the credential must
-    // remain resolvable by the still-live profile.
-    profiles.delete_provider_profile(id)?;
-    if let Some(auth_ref) = auth_ref {
-        secret_store.delete(&auth_ref)?;
-    }
+    profiles.delete_provider_profile_and_schedule_cleanup(id)?;
+    let _pending_cleanup_result = retry_secret_cleanups(profiles, secret_store);
     Ok(())
 }
 
@@ -123,11 +129,10 @@ impl LlmProviderUseCases {
 
     /// Registers or rotates a profile credential.
     ///
-    /// A failed profile upsert compensates by deleting the newly stored
-    /// credential. A successful upsert then removes the previous credential.
-    /// If that final cleanup fails, this returns an error but leaves the
-    /// durable profile pointing at the valid new credential; the only residual
-    /// state is an orphaned old credential.
+    /// The new reference is reserved durably before the keychain write. Profile
+    /// activation and stale-reference scheduling are one repository
+    /// transaction. A later keychain cleanup failure leaves retryable outbox
+    /// work and does not make the committed rotation appear unsuccessful.
     pub fn register_llm_provider(
         &self,
         profile: LlmProviderProfile,
@@ -148,13 +153,28 @@ impl LlmProviderUseCases {
         self.profiles.list_provider_profiles()
     }
 
-    /// Deletes a profile before removing its referenced credential.
-    ///
-    /// This order guarantees a repository failure leaves the credential
-    /// available to the still-live profile. If later credential cleanup fails,
-    /// this returns an error with the profile already absent, leaving an orphan
-    /// rather than a dangling durable reference. Deleting an unknown profile is
-    /// an idempotent success.
+    /// Retries cleanup work already marked ready. In-progress reservations are
+    /// deliberately excluded so concurrent rotations cannot delete each
+    /// other's credentials.
+    pub fn retry_pending_secret_cleanups(
+        &self,
+        secret_store: &dyn SecretStore,
+    ) -> Result<usize, ApplicationError> {
+        retry_secret_cleanups(self.profiles.as_ref(), secret_store)
+    }
+
+    /// Promotes reservations left by a previous process to cleanup work, then
+    /// drains it. Call once before accepting profile mutations.
+    pub fn recover_pending_secret_cleanups(
+        &self,
+        secret_store: &dyn SecretStore,
+    ) -> Result<usize, ApplicationError> {
+        self.profiles.recover_secret_cleanup_reservations()?;
+        retry_secret_cleanups(self.profiles.as_ref(), secret_store)
+    }
+
+    /// Atomically deletes a profile and schedules its referenced credential for
+    /// retryable cleanup. Deleting an unknown profile is idempotent.
     pub fn delete_llm_provider(
         &self,
         id: &LlmProviderProfileId,
@@ -341,7 +361,7 @@ impl LlmProviderUseCases {
                 &execution,
             )
             .await;
-        batches.finish(batch_id, result.is_ok());
+        batches.finish(batch_id, result.is_ok())?;
         result
     }
 
@@ -349,7 +369,7 @@ impl LlmProviderUseCases {
         &self,
         batch_id: &str,
         batches: &LlmBatchCoordinator,
-    ) -> Option<BatchProgress> {
+    ) -> Result<Option<BatchProgress>, ApplicationError> {
         batches.status(batch_id)
     }
 
@@ -357,7 +377,7 @@ impl LlmProviderUseCases {
         &self,
         batch_id: &str,
         batches: &LlmBatchCoordinator,
-    ) -> Option<BatchProgress> {
+    ) -> Result<Option<BatchProgress>, ApplicationError> {
         batches.cancel(batch_id)
     }
 }
@@ -377,8 +397,71 @@ mod credential_compensation_tests {
     #[derive(Default)]
     struct FaultingProfiles {
         profile: Mutex<Option<LlmProviderProfile>>,
+        reserved_cleanups: Mutex<HashSet<String>>,
+        pending_cleanups: Mutex<HashSet<String>>,
         fail_upsert: AtomicBool,
         fail_delete: AtomicBool,
+    }
+
+    impl crate::SecretCleanupRepository for FaultingProfiles {
+        fn reserve_secret_cleanup(
+            &self,
+            auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            self.reserved_cleanups
+                .lock()
+                .unwrap()
+                .insert(auth_ref.as_str().to_owned());
+            Ok(())
+        }
+
+        fn schedule_secret_cleanup(
+            &self,
+            auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            self.pending_cleanups
+                .lock()
+                .unwrap()
+                .insert(auth_ref.as_str().to_owned());
+            self.reserved_cleanups
+                .lock()
+                .unwrap()
+                .remove(auth_ref.as_str());
+            Ok(())
+        }
+
+        fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError> {
+            let reserved = std::mem::take(&mut *self.reserved_cleanups.lock().unwrap());
+            let count = reserved.len();
+            self.pending_cleanups.lock().unwrap().extend(reserved);
+            Ok(count)
+        }
+
+        fn pending_secret_cleanups(&self) -> Result<Vec<domain::SecretRef>, ApplicationError> {
+            Ok(self
+                .pending_cleanups
+                .lock()
+                .unwrap()
+                .iter()
+                .cloned()
+                .map(domain::SecretRef::new)
+                .collect())
+        }
+
+        fn complete_secret_cleanup(
+            &self,
+            auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            self.pending_cleanups
+                .lock()
+                .unwrap()
+                .remove(auth_ref.as_str());
+            self.reserved_cleanups
+                .lock()
+                .unwrap()
+                .remove(auth_ref.as_str());
+            Ok(())
+        }
     }
 
     impl LlmProviderProfileRepository for FaultingProfiles {
@@ -423,6 +506,76 @@ mod credential_compensation_tests {
             *self.profile.lock().unwrap() = None;
             Ok(())
         }
+
+        fn upsert_provider_profile_preserving_credential(
+            &self,
+            profile: &LlmProviderProfile,
+        ) -> Result<LlmProviderProfile, ApplicationError> {
+            if self.fail_upsert.load(Ordering::SeqCst) {
+                return Err(ApplicationError::Repository(
+                    "injected profile upsert failure".into(),
+                ));
+            }
+            let mut saved = profile.clone();
+            let mut current = self.profile.lock().unwrap();
+            if current.is_some() {
+                saved.auth_ref = current
+                    .as_ref()
+                    .and_then(|profile| profile.auth_ref.clone());
+            }
+            *current = Some(saved.clone());
+            Ok(saved)
+        }
+
+        fn upsert_provider_profile_and_schedule_cleanup(
+            &self,
+            profile: &LlmProviderProfile,
+        ) -> Result<LlmProviderProfile, ApplicationError> {
+            if self.fail_upsert.load(Ordering::SeqCst) {
+                return Err(ApplicationError::Repository(
+                    "injected profile upsert failure".into(),
+                ));
+            }
+            let stale_auth_ref = {
+                let mut current = self.profile.lock().unwrap();
+                let stale = current
+                    .as_ref()
+                    .and_then(|profile| profile.auth_ref.clone());
+                *current = Some(profile.clone());
+                stale
+            };
+            if let Some(active_auth_ref) = profile.auth_ref.as_ref() {
+                self.complete_secret_cleanup(active_auth_ref)?;
+            }
+            if let Some(auth_ref) = stale_auth_ref
+                .as_ref()
+                .filter(|stale| Some(*stale) != profile.auth_ref.as_ref())
+            {
+                self.schedule_secret_cleanup(auth_ref)?;
+            }
+            Ok(profile.clone())
+        }
+
+        fn delete_provider_profile_and_schedule_cleanup(
+            &self,
+            _id: &LlmProviderProfileId,
+        ) -> Result<(), ApplicationError> {
+            if self.fail_delete.load(Ordering::SeqCst) {
+                return Err(ApplicationError::Repository(
+                    "injected profile delete failure".into(),
+                ));
+            }
+            let stale_auth_ref = self
+                .profile
+                .lock()
+                .unwrap()
+                .take()
+                .and_then(|profile| profile.auth_ref);
+            if let Some(auth_ref) = stale_auth_ref.as_ref() {
+                self.schedule_secret_cleanup(auth_ref)?;
+            }
+            Ok(())
+        }
     }
 
     #[derive(Default)]
@@ -431,6 +584,7 @@ mod credential_compensation_tests {
         active: Mutex<HashSet<String>>,
         delete_calls: AtomicU64,
         fail_delete: AtomicBool,
+        fail_refs: Mutex<HashSet<String>>,
     }
 
     impl TrackingSecretStore {
@@ -447,11 +601,18 @@ mod credential_compensation_tests {
     }
 
     impl SecretStore for TrackingSecretStore {
-        fn store(&self, _secret: &str) -> Result<LlmAuthRef, SecretStoreError> {
+        fn reserve(&self) -> Result<LlmAuthRef, SecretStoreError> {
             let sequence = self.next.fetch_add(1, Ordering::SeqCst);
-            let auth_ref = LlmAuthRef::new(format!("test-secret-ref://{sequence}"));
-            self.seed(&auth_ref);
-            Ok(auth_ref)
+            Ok(LlmAuthRef::new(format!("test-secret-ref://{sequence}")))
+        }
+
+        fn store_reserved(
+            &self,
+            auth_ref: &LlmAuthRef,
+            _secret: &str,
+        ) -> Result<(), SecretStoreError> {
+            self.seed(auth_ref);
+            Ok(())
         }
 
         fn resolve(&self, auth_ref: &LlmAuthRef) -> Result<Option<String>, SecretStoreError> {
@@ -465,7 +626,9 @@ mod credential_compensation_tests {
 
         fn delete(&self, auth_ref: &LlmAuthRef) -> Result<(), SecretStoreError> {
             self.delete_calls.fetch_add(1, Ordering::SeqCst);
-            if self.fail_delete.load(Ordering::SeqCst) {
+            if self.fail_delete.load(Ordering::SeqCst)
+                || self.fail_refs.lock().unwrap().contains(auth_ref.as_str())
+            {
                 return Err(SecretStoreError("injected secret delete failure".into()));
             }
             self.active.lock().unwrap().remove(auth_ref.as_str());
@@ -508,6 +671,44 @@ mod credential_compensation_tests {
         assert!(matches!(result, Err(ApplicationError::Repository(_))));
         assert_eq!(secrets.active_count(), 0);
         assert_eq!(secrets.delete_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn crash_window_before_profile_activation_remains_discoverable() {
+        let profiles = FaultingProfiles::default();
+        let secrets = TrackingSecretStore::default();
+        let auth_ref = secrets.reserve().unwrap();
+        profiles.reserve_secret_cleanup(&auth_ref).unwrap();
+        secrets.store_reserved(&auth_ref, "not-observed").unwrap();
+
+        assert!(secrets.resolve(&auth_ref).unwrap().is_some());
+        assert_eq!(retry_secret_cleanups(&profiles, &secrets).unwrap(), 0);
+        assert_eq!(profiles.recover_secret_cleanup_reservations().unwrap(), 1);
+        assert_eq!(retry_secret_cleanups(&profiles, &secrets).unwrap(), 1);
+        assert!(secrets.resolve(&auth_ref).unwrap().is_none());
+        assert!(profiles.pending_secret_cleanups().unwrap().is_empty());
+    }
+
+    #[test]
+    fn one_cleanup_failure_does_not_starve_later_entries() {
+        let profiles = FaultingProfiles::default();
+        let secrets = TrackingSecretStore::default();
+        let blocked = LlmAuthRef::new("test-secret-ref://blocked");
+        let removable = LlmAuthRef::new("test-secret-ref://removable");
+        for auth_ref in [&blocked, &removable] {
+            profiles.schedule_secret_cleanup(auth_ref).unwrap();
+            secrets.seed(auth_ref);
+        }
+        secrets
+            .fail_refs
+            .lock()
+            .unwrap()
+            .insert(blocked.as_str().to_owned());
+
+        assert!(retry_secret_cleanups(&profiles, &secrets).is_err());
+        assert!(secrets.resolve(&blocked).unwrap().is_some());
+        assert!(secrets.resolve(&removable).unwrap().is_none());
+        assert_eq!(profiles.pending_secret_cleanups().unwrap(), vec![blocked]);
     }
 
     #[test]
@@ -570,7 +771,7 @@ mod credential_compensation_tests {
     }
 
     #[test]
-    fn failed_old_secret_cleanup_reports_rotation_as_partial_but_keeps_new_profile_valid() {
+    fn failed_old_secret_cleanup_keeps_rotation_successful_and_durable_for_retry() {
         let old_auth_ref = LlmAuthRef::new("test-secret-ref://old");
         let profiles = FaultingProfiles {
             profile: Mutex::new(Some(profile(Some(old_auth_ref.clone())))),
@@ -580,10 +781,10 @@ mod credential_compensation_tests {
         secrets.seed(&old_auth_ref);
         secrets.fail_delete.store(true, Ordering::SeqCst);
 
-        let result =
+        let saved =
             register_profile_with_secret(&profiles, profile(None), "not-observed", &secrets);
 
-        assert!(matches!(result, Err(ApplicationError::SecretStore(_))));
+        assert!(saved.is_ok());
         let persisted = profiles
             .get_provider_profile(&profile(None).id)
             .unwrap()
@@ -596,10 +797,19 @@ mod credential_compensation_tests {
                 .is_some()
         );
         assert!(secrets.resolve(&old_auth_ref).unwrap().is_some());
+        assert_eq!(
+            profiles.pending_secret_cleanups().unwrap(),
+            vec![old_auth_ref.clone()]
+        );
+
+        secrets.fail_delete.store(false, Ordering::SeqCst);
+        assert_eq!(retry_secret_cleanups(&profiles, &secrets).unwrap(), 1);
+        assert!(profiles.pending_secret_cleanups().unwrap().is_empty());
+        assert!(secrets.resolve(&old_auth_ref).unwrap().is_none());
     }
 
     #[test]
-    fn failed_secret_cleanup_after_delete_never_restores_a_dangling_profile() {
+    fn failed_secret_cleanup_after_delete_is_retryable_without_restoring_profile() {
         let auth_ref = LlmAuthRef::new("test-secret-ref://existing");
         let profiles = FaultingProfiles {
             profile: Mutex::new(Some(profile(Some(auth_ref.clone())))),
@@ -611,7 +821,7 @@ mod credential_compensation_tests {
 
         let result = delete_profile_then_secret(&profiles, &profile(None).id, &secrets);
 
-        assert!(matches!(result, Err(ApplicationError::SecretStore(_))));
+        assert!(result.is_ok());
         assert!(
             profiles
                 .get_provider_profile(&profile(None).id)
@@ -619,5 +829,9 @@ mod credential_compensation_tests {
                 .is_none()
         );
         assert!(secrets.resolve(&auth_ref).unwrap().is_some());
+        assert_eq!(
+            profiles.pending_secret_cleanups().unwrap(),
+            vec![auth_ref.clone()]
+        );
     }
 }

@@ -19,15 +19,15 @@ use domain::{
     RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
     RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
     RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
-    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
-    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
-    SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord, SoundFitCalibration,
-    SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
-    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus,
-    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
-    WritingFindingDisposition, WritingFindingDispositionId,
+    ReviewSchedule, SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
+    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord,
+    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    TranscriptionJobStatus, TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
+    WordTimeline, WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding,
+    WritingFeedbackFindingId, WritingFindingDisposition, WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -1098,7 +1098,18 @@ pub trait SemanticTaskRepository: Send + Sync {
 /// Phase 3.12 provider profiles. Unlike append-only semantic facts, a provider
 /// configuration is mutable: it may be edited or removed. Only routing metadata
 /// and an opaque `auth_ref` are stored; secrets live in the OS keychain.
-pub trait LlmProviderProfileRepository: Send + Sync {
+/// Durable outbox for removing opaque secret-store references. Profile
+/// mutations enqueue cleanup in the same database transaction; deletion from
+/// the OS keychain is retried until this outbox entry can be acknowledged.
+pub trait SecretCleanupRepository: Send + Sync {
+    fn reserve_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+    fn schedule_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+    fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError>;
+    fn pending_secret_cleanups(&self) -> Result<Vec<SecretRef>, ApplicationError>;
+    fn complete_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+}
+
+pub trait LlmProviderProfileRepository: SecretCleanupRepository {
     fn upsert_provider_profile(
         &self,
         profile: &LlmProviderProfile,
@@ -1109,12 +1120,28 @@ pub trait LlmProviderProfileRepository: Send + Sync {
     ) -> Result<Option<LlmProviderProfile>, ApplicationError>;
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError>;
     fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError>;
+    fn upsert_provider_profile_preserving_credential(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError>;
+    /// Atomically commits the profile mutation and any stale credential's
+    /// durable cleanup-outbox entry.
+    fn upsert_provider_profile_and_schedule_cleanup(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError>;
+    /// Atomically removes the profile and records its credential for retryable
+    /// cleanup.
+    fn delete_provider_profile_and_schedule_cleanup(
+        &self,
+        id: &LlmProviderProfileId,
+    ) -> Result<(), ApplicationError>;
 }
 
 /// Realtime provider config plus local session/turn facts. Provider events may
 /// update live transcript fields, but finalized local learner transcripts are
 /// immutable and repository implementations must reject divergent rewrites.
-pub trait RealtimeConversationRepository: Send + Sync {
+pub trait RealtimeConversationRepository: SecretCleanupRepository {
     fn upsert_realtime_profile(
         &self,
         profile: &RealtimeProviderProfile,
@@ -1125,6 +1152,18 @@ pub trait RealtimeConversationRepository: Send + Sync {
     ) -> Result<Option<RealtimeProviderProfile>, ApplicationError>;
     fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError>;
     fn delete_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError>;
+    /// Atomically commits the profile mutation and any stale credential's
+    /// durable cleanup-outbox entry.
+    fn upsert_realtime_profile_and_schedule_cleanup(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError>;
+    /// Atomically removes the profile and records its credential for retryable
+    /// cleanup.
+    fn delete_realtime_profile_and_schedule_cleanup(
         &self,
         id: &RealtimeProviderProfileId,
     ) -> Result<(), ApplicationError>;

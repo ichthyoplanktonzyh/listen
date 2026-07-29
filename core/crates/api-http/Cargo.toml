@@ -36,6 +36,7 @@ tracing-subscriber.workspace = true
 # is already in the dependency tree; the macOS keychain path is cfg-gated.
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
+security-framework-sys = "2"
 
 # `getppid` for the orphan watchdog in main.rs; `kill` for the test that
 # exercises it (integration tests do not inherit the crate's dependencies).

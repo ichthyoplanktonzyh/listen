@@ -26,8 +26,16 @@ pub struct SecretStoreError(pub String);
 /// the secret through any path other than [`SecretStore::resolve`], and must
 /// never log it.
 pub trait SecretStore: Send + Sync {
-    /// Persist a secret and return the opaque reference to store on a profile.
-    fn store(&self, secret: &str) -> Result<LlmAuthRef, SecretStoreError>;
+    /// Reserve an opaque reference without creating a secret-store entry.
+    fn reserve(&self) -> Result<LlmAuthRef, SecretStoreError>;
+    /// Persist a secret at a previously reserved reference.
+    fn store_reserved(&self, auth_ref: &LlmAuthRef, secret: &str) -> Result<(), SecretStoreError>;
+    /// Convenience for non-transactional test/setup callers.
+    fn store(&self, secret: &str) -> Result<LlmAuthRef, SecretStoreError> {
+        let auth_ref = self.reserve()?;
+        self.store_reserved(&auth_ref, secret)?;
+        Ok(auth_ref)
+    }
     /// Resolve a reference to its secret, or `None` if the reference is unknown
     /// (e.g. the key was deleted out of band — the caller degrades honestly).
     fn resolve(&self, auth_ref: &LlmAuthRef) -> Result<Option<String>, SecretStoreError>;
@@ -50,14 +58,17 @@ impl InMemorySecretStore {
 }
 
 impl SecretStore for InMemorySecretStore {
-    fn store(&self, secret: &str) -> Result<LlmAuthRef, SecretStoreError> {
+    fn reserve(&self) -> Result<LlmAuthRef, SecretStoreError> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        let reference = format!("mem://{id}");
+        Ok(LlmAuthRef::new(format!("mem://{id}")))
+    }
+
+    fn store_reserved(&self, auth_ref: &LlmAuthRef, secret: &str) -> Result<(), SecretStoreError> {
         self.secrets
             .lock()
             .map_err(|_| SecretStoreError("poisoned".into()))?
-            .insert(reference.clone(), secret.to_string());
-        Ok(LlmAuthRef::new(reference))
+            .insert(auth_ref.as_str().to_owned(), secret.to_string());
+        Ok(())
     }
 
     fn resolve(&self, auth_ref: &LlmAuthRef) -> Result<Option<String>, SecretStoreError> {

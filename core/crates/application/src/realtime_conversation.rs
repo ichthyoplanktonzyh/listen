@@ -15,12 +15,41 @@ use domain::{
 
 use crate::{
     ApplicationError, RealtimeConversationAdapterFactory, RealtimeConversationRepository,
-    SecretStore,
+    SecretCleanupRepository, SecretStore,
 };
 use serde::{Deserialize, Serialize};
 
 pub struct RealtimeConversationUseCases {
     repository: Arc<dyn RealtimeConversationRepository>,
+}
+
+fn retry_secret_cleanups(
+    repository: &(impl SecretCleanupRepository + ?Sized),
+    secret_store: &dyn SecretStore,
+) -> Result<usize, ApplicationError> {
+    let mut completed = 0;
+    let mut first_error = None;
+    for auth_ref in repository.pending_secret_cleanups()? {
+        match secret_store
+            .delete(&auth_ref)
+            .map_err(ApplicationError::from)
+        {
+            Ok(()) => match repository.complete_secret_cleanup(&auth_ref) {
+                Ok(()) => completed += 1,
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            },
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        };
+    }
+    if let Some(error) = first_error {
+        Err(error)
+    } else {
+        Ok(completed)
+    }
 }
 
 impl RealtimeConversationUseCases {
@@ -34,34 +63,28 @@ impl RealtimeConversationUseCases {
         secret: &str,
         secret_store: &dyn SecretStore,
     ) -> Result<RealtimeProviderProfile, ApplicationError> {
-        let previous_auth_ref = self
-            .repository
-            .get_realtime_profile(&profile.id)?
-            .map(|previous| previous.auth_ref);
-        let new_auth_ref = secret_store.store(secret)?;
+        let new_auth_ref = secret_store.reserve()?;
+        self.repository.reserve_secret_cleanup(&new_auth_ref)?;
+        if let Err(error) = secret_store.store_reserved(&new_auth_ref, secret) {
+            self.repository.schedule_secret_cleanup(&new_auth_ref)?;
+            let _pending_cleanup_result =
+                retry_secret_cleanups(self.repository.as_ref(), secret_store);
+            return Err(error.into());
+        }
         profile.auth_ref = new_auth_ref.clone();
-        let saved = match self.repository.upsert_realtime_profile(&profile) {
+        let saved = match self
+            .repository
+            .upsert_realtime_profile_and_schedule_cleanup(&profile)
+        {
             Ok(saved) => saved,
             Err(error) => {
-                if secret_store.delete(&new_auth_ref).is_err() {
-                    return Err(crate::SecretStoreError(
-                        "credential cleanup failed after realtime profile persistence failed"
-                            .into(),
-                    )
-                    .into());
-                }
+                self.repository.schedule_secret_cleanup(&new_auth_ref)?;
+                let _pending_cleanup_result =
+                    retry_secret_cleanups(self.repository.as_ref(), secret_store);
                 return Err(error);
             }
         };
-        if let Some(previous_auth_ref) = previous_auth_ref
-            && previous_auth_ref != new_auth_ref
-            && secret_store.delete(&previous_auth_ref).is_err()
-        {
-            return Err(crate::SecretStoreError(
-                "old credential cleanup failed after realtime profile rotation".into(),
-            )
-            .into());
-        }
+        let _pending_cleanup_result = retry_secret_cleanups(self.repository.as_ref(), secret_store);
         Ok(saved)
     }
 
@@ -89,15 +112,25 @@ impl RealtimeConversationUseCases {
         id: &RealtimeProviderProfileId,
         secret_store: &dyn SecretStore,
     ) -> Result<(), ApplicationError> {
-        let auth_ref = self
-            .repository
-            .get_realtime_profile(id)?
-            .map(|profile| profile.auth_ref);
-        self.repository.delete_realtime_profile(id)?;
-        if let Some(auth_ref) = auth_ref {
-            secret_store.delete(&auth_ref)?;
-        }
+        self.repository
+            .delete_realtime_profile_and_schedule_cleanup(id)?;
+        let _pending_cleanup_result = retry_secret_cleanups(self.repository.as_ref(), secret_store);
         Ok(())
+    }
+
+    pub fn retry_pending_secret_cleanups(
+        &self,
+        secret_store: &dyn SecretStore,
+    ) -> Result<usize, ApplicationError> {
+        retry_secret_cleanups(self.repository.as_ref(), secret_store)
+    }
+
+    pub fn recover_pending_secret_cleanups(
+        &self,
+        secret_store: &dyn SecretStore,
+    ) -> Result<usize, ApplicationError> {
+        self.repository.recover_secret_cleanup_reservations()?;
+        retry_secret_cleanups(self.repository.as_ref(), secret_store)
     }
 
     pub fn save_session(
@@ -374,6 +407,37 @@ mod connection_tests {
         profile: Mutex<Option<RealtimeProviderProfile>>,
     }
 
+    impl crate::SecretCleanupRepository for ProfileRepository {
+        fn reserve_secret_cleanup(
+            &self,
+            _auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            Ok(())
+        }
+
+        fn schedule_secret_cleanup(
+            &self,
+            _auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            Ok(())
+        }
+
+        fn pending_secret_cleanups(&self) -> Result<Vec<domain::SecretRef>, ApplicationError> {
+            Ok(Vec::new())
+        }
+
+        fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError> {
+            Ok(0)
+        }
+
+        fn complete_secret_cleanup(
+            &self,
+            _auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            Ok(())
+        }
+    }
+
     impl RealtimeConversationRepository for ProfileRepository {
         fn upsert_realtime_profile(
             &self,
@@ -404,6 +468,42 @@ mod connection_tests {
             _id: &RealtimeProviderProfileId,
         ) -> Result<(), ApplicationError> {
             *self.profile.lock().unwrap() = None;
+            Ok(())
+        }
+
+        fn upsert_realtime_profile_and_schedule_cleanup(
+            &self,
+            profile: &RealtimeProviderProfile,
+        ) -> Result<RealtimeProviderProfile, ApplicationError> {
+            let stale_auth_ref = {
+                let mut current = self.profile.lock().unwrap();
+                let stale = current.as_ref().map(|profile| profile.auth_ref.clone());
+                *current = Some(profile.clone());
+                stale
+            };
+            self.complete_secret_cleanup(&profile.auth_ref)?;
+            if let Some(auth_ref) = stale_auth_ref
+                .as_ref()
+                .filter(|stale| *stale != &profile.auth_ref)
+            {
+                self.schedule_secret_cleanup(auth_ref)?;
+            }
+            Ok(profile.clone())
+        }
+
+        fn delete_realtime_profile_and_schedule_cleanup(
+            &self,
+            _id: &RealtimeProviderProfileId,
+        ) -> Result<(), ApplicationError> {
+            let stale_auth_ref = self
+                .profile
+                .lock()
+                .unwrap()
+                .take()
+                .map(|profile| profile.auth_ref);
+            if let Some(auth_ref) = stale_auth_ref.as_ref() {
+                self.schedule_secret_cleanup(auth_ref)?;
+            }
             Ok(())
         }
 
