@@ -179,28 +179,20 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       // echo bars move focus inside the page, the gap figure is the one
       // hotspot that leaves — to the vocabulary gap pane, via the existing
       // cross_modal_review destination.
+      //
+      // The three hotspots carry their own affordances (hover highlight, click
+      // cursor, button semantics), so there is no caption explaining how to
+      // use the picture: a graphic that needs a manual is a failed graphic.
       Card(
         margin: const EdgeInsets.only(bottom: ListenSpacing.gap12),
         child: Padding(
           padding: const EdgeInsets.all(ListenSpacing.gap16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CapabilityPortrait(
-                channels: dashboard.channels,
-                gapCount: gapCount,
-                onChannelTap: (channel) => _focusChannels([channel]),
-                onPairTap: _focusPair,
-                onGapTap: gapCount == null ? null : _openGap,
-              ),
-              const SizedBox(height: ListenSpacing.gap12),
-              Text(
-                l.text('coachPortraitHint'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+          child: CapabilityPortrait(
+            channels: dashboard.channels,
+            gapCount: gapCount,
+            onChannelTap: (channel) => _focusChannels([channel]),
+            onPairTap: _focusPair,
+            onGapTap: gapCount == null ? null : _openGap,
           ),
         ),
       ),

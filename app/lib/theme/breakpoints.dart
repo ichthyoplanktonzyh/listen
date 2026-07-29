@@ -106,10 +106,20 @@ abstract final class ListenBreakpoints {
   /// hard-coded 680 (audit C4).
   static const cardColumnMax = 680.0;
 
-  /// A column of decisions rather than reading: the one heading, the one
-  /// primary action, and the settings folded under them. Narrower than a card
-  /// on purpose — a column this width reads as *one thing to do*, while a
-  /// wider one starts reading as a form. Used by the conversation lobby, whose
-  /// whole job is to get the learner talking rather than to be filled in.
+  /// A column of decisions rather than reading — the conversation lobby, the
+  /// provider forms: one heading, one primary action, and whatever settings
+  /// fold under them.
+  ///
+  /// Narrower than a reading column for two reasons that point the same way. A
+  /// form row is not continuous text but a label↔control pair, and once the
+  /// row gets long the eye loses which control belongs to which label on the
+  /// way across. And a column this width reads as *one thing to do*, while a
+  /// wider one starts reading as a form to be filled in — which is the wrong
+  /// invitation for a surface whose whole job is to get the learner talking.
   static const formColumnMax = 560.0;
+
+  /// Wide content that is two columns or carries media — the home surface, the
+  /// media library. Not a reading measure: the cap here only stops the layout
+  /// from sprawling once the window is much wider than the content needs.
+  static const wideColumnMax = 960.0;
 }

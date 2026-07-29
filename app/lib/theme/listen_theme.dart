@@ -418,8 +418,11 @@ abstract final class ListenTheme {
   /// pins the bundled families ([ListenFonts.sans], SC fallback for mixed
   /// 中英 runs), so `Theme.of(context).textTheme` sites and the constants
   /// agree. Slots beyond the ladder (display/headline) keep Material's
-  /// geometry — nothing in the app uses them yet, so they earn no bespoke
-  /// values.
+  /// geometry — 24/28px at w400, which sits outside the ladder entirely — and
+  /// are **not available to the app**: reading one is how a page quietly
+  /// acquires a size the type system never chose. A page title is
+  /// `titleLarge` (= [ListenType.hero], the one hero size);
+  /// `typography_slot_discipline_test.dart` holds that line.
   static TextTheme _textTheme(TextTheme base) => base
       .copyWith(
         labelSmall: base.labelSmall?.merge(ListenType.caption),

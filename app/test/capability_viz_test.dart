@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -59,39 +60,104 @@ Widget localized(Widget child) => MaterialApp(
 );
 
 void main() {
+  // The shared scale across every capability graphic: the largest assessed
+  // (acquired + not acquired) count, unassessed deliberately excluded.
+  final unit = capabilityAssessedUnit(
+    portraitChannels.map((c) => c.effectiveAssessments),
+  );
+
+  group('capabilityAssessedUnit', () {
+    test('scales by what was measured, never by the size of the library', () {
+      // reading is the best-assessed channel at 88 + 10; the 62 words nobody
+      // looked at do not enlarge the scale.
+      expect(unit, 98);
+      expect(
+        capabilityAssessedUnit([
+          const CoachAssessmentSummary(
+            acquired: 5,
+            notAcquired: 3,
+            unassessed: 200,
+          ),
+        ]),
+        8,
+      );
+    });
+
+    test('nothing assessed anywhere is a zero unit, not a tiny one', () {
+      expect(
+        capabilityAssessedUnit([
+          const CoachAssessmentSummary(
+            acquired: 0,
+            notAcquired: 0,
+            unassessed: 900,
+          ),
+        ]),
+        0,
+      );
+    });
+  });
+
   group('compassSegments', () {
     test('reception anchors the acquired light toward 12 o\'clock', () {
       // listening quadrant runs 274..356; anchored at the end means the
       // acquired segment must terminate exactly at 356.
-      final segments = compassSegments('listening', 46, 18, 96);
+      final segments = compassSegments('listening', 46, 18, unit);
       expect(segments.map((s) => s.$3), [
-        'unassessed',
+        capabilityUnmeasured,
         'not_acquired',
         'acquired',
       ]);
       final acquired = segments.last;
       expect(acquired.$1 + acquired.$2, closeTo(356, 0.001));
-      expect(acquired.$2, closeTo(82 * 46 / 160, 0.001));
+      // Scaled against the assessed unit (98), not the 160-word library.
+      expect(acquired.$2, closeTo(82 * 46 / 98, 0.001));
     });
 
     test('production anchors the acquired light toward 6 o\'clock', () {
       // speaking starts at 184 (just past 6 o'clock) with acquired first…
-      final speaking = compassSegments('speaking', 12, 30, 118);
+      final speaking = compassSegments('speaking', 12, 30, unit);
       expect(speaking.first.$3, 'acquired');
       expect(speaking.first.$1, 184);
       // …and writing ends at 176 (just before 6 o'clock) with acquired last.
-      final writing = compassSegments('writing', 8, 22, 130);
+      final writing = compassSegments('writing', 8, 22, unit);
       expect(writing.last.$3, 'acquired');
       expect(writing.last.$1 + writing.last.$2, closeTo(176, 0.001));
     });
 
-    test('zero counts honestly fill the quadrant as unassessed', () {
-      expect(compassSegments('reading', 0, 0, 0), [(4, 82, 'unassessed')]);
+    test('the unmeasured remainder is what is left of the shared unit', () {
+      // listening assessed 64 of the shared 98: the lit arcs cover 64/98 of
+      // the quadrant and the rest is the dashed track, never fill.
+      final segments = compassSegments('listening', 46, 18, unit);
+      final lit = segments
+          .where((s) => s.$3 != capabilityUnmeasured)
+          .fold(0.0, (sum, s) => sum + s.$2);
+      expect(lit, closeTo(82 * 64 / 98, 0.001));
+      expect(
+        segments.singleWhere((s) => s.$3 == capabilityUnmeasured).$2,
+        closeTo(82 * 34 / 98, 0.001),
+      );
+    });
+
+    test('a fully assessed channel leaves no unmeasured track', () {
+      final segments = compassSegments('reading', 5, 3, 8);
+      expect(segments.map((s) => s.$3), ['acquired', 'not_acquired']);
+      expect(segments.fold(0.0, (sum, s) => sum + s.$2), closeTo(82, 0.001));
+    });
+
+    test('zero counts honestly fill the quadrant as unmeasured', () {
+      expect(compassSegments('reading', 0, 0, 0), [
+        (4, 82, capabilityUnmeasured),
+      ]);
+      // A channel with a large unassessed stock but no assessments reads the
+      // same: the ring has nothing measured to draw for it.
+      expect(compassSegments('reading', 0, 0, 98), [
+        (4, 82, capabilityUnmeasured),
+      ]);
     });
 
     test('empty states are skipped instead of rendered as zero-sweep arcs', () {
-      final segments = compassSegments('reading', 5, 0, 15);
-      expect(segments.map((s) => s.$3), ['acquired', 'unassessed']);
+      final segments = compassSegments('reading', 5, 0, 20);
+      expect(segments.map((s) => s.$3), ['acquired', capabilityUnmeasured]);
     });
   });
 
@@ -160,15 +226,21 @@ void main() {
       ),
     );
     // The ghost under the sound column repeats listening's acquired height:
-    // 46 of the 160-word shared scale on a 96px bar.
+    // 46 of the 98-word assessed scale on a 96px bar.
     final ghost = tester.getSize(
       find.byKey(const ValueKey('echo-ghost-sound')),
     );
-    expect(ghost.height, closeTo(96 * 46 / 160, 0.01));
+    expect(ghost.height, closeTo(96 * 46 / 98, 0.01));
     expect(find.byKey(const ValueKey('echo-ghost-text')), findsOneWidget);
     // Gap captions juxtapose the two existing counts — no frontend arithmetic.
     expect(find.text('can hear 46 · can say 12'), findsOneWidget);
     expect(find.text('can read 88 · can write 8'), findsOneWidget);
+    // The unassessed stock left the graphic, so it is stated beside the gauge
+    // instead: no information is lost with the ink.
+    expect(find.text('Listening · 46'), findsOneWidget);
+    expect(find.text('Unassessed 96'), findsOneWidget);
+    expect(find.text('Speaking · 12'), findsOneWidget);
+    expect(find.text('Unassessed 118'), findsOneWidget);
     // Hovering a bar reveals the honest three-state numbers.
     expect(
       find.byTooltip(
@@ -176,6 +248,177 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('bar height is the assessed count, not the library size', (
+    tester,
+  ) async {
+    // A realistic beginner: 8 words looked at, 200 nobody has touched.
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 600,
+          child: CapabilityEchoBars(
+            channels: [
+              channel('listening', acquired: 5, notAcquired: 3, unassessed: 200),
+              channel('reading', unassessed: 200),
+              channel('speaking', unassessed: 200),
+              channel('writing', unassessed: 200),
+            ],
+          ),
+        ),
+      ),
+    );
+    final colors = Theme.of(
+      tester.element(find.byType(CapabilityEchoBars)),
+    ).colorScheme;
+
+    double heightOf(Color color) => tester
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byType(CapabilityEchoBars),
+            matching: find.byType(Container),
+          ),
+        )
+        .where((container) => container.color == color)
+        .fold(0.0, (sum, c) => sum + (c.constraints?.maxHeight ?? 0));
+
+    // The shared unit is 8, so listening's two assessed segments fill the
+    // whole 96pt bar: 60pt acquired above 36pt not-acquired.
+    expect(heightOf(colors.primary), closeTo(96 * 5 / 8, 0.01));
+    expect(heightOf(colors.secondary), closeTo(96 * 3 / 8, 0.01));
+    // Nothing in the graphic is proportional to the 200 unassessed words —
+    // only the 1.2pt mirror baselines carry the hairline color.
+    final hairlines = tester
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byType(CapabilityEchoBars),
+            matching: find.byType(Container),
+          ),
+        )
+        .where((container) => container.color == colors.outlineVariant);
+    expect(hairlines, isNotEmpty);
+    expect(
+      hairlines.map((c) => c.constraints?.maxHeight),
+      everyElement(lessThan(2.0)),
+    );
+  });
+
+  testWidgets('a bar is a narrow gauge, not a field of color', (tester) async {
+    // The pathology this guards: a bar that stretches to whatever width the
+    // dashboard grants turns eight integers into hundreds of square points of
+    // saturated fill. The gauge stays narrow no matter how wide the column is.
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 1200,
+          child: CapabilityEchoBars(channels: portraitChannels),
+        ),
+      ),
+    );
+    final colors = Theme.of(
+      tester.element(find.byType(CapabilityEchoBars)),
+    ).colorScheme;
+
+    final fills = tester
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byType(CapabilityEchoBars),
+            matching: find.byType(Container),
+          ),
+        )
+        .where(
+          (container) =>
+              container.color == colors.primary ||
+              container.color == colors.secondary,
+        );
+    expect(fills, isNotEmpty);
+    for (final fill in fills) {
+      expect(tester.getSize(find.byWidget(fill)).width, 28);
+    }
+    // Total saturated area stays in the low thousands of square points for
+    // the whole four-channel read-out.
+    final ink = fills.fold<double>(0, (sum, fill) {
+      final size = tester.getSize(find.byWidget(fill));
+      return sum + size.width * size.height;
+    });
+    expect(ink, lessThan(8000));
+  });
+
+  testWidgets('the portrait states how much of the library was assessed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(channels: portraitChannels),
+        ),
+      ),
+    );
+    // The shapes are drawn from 98 assessed words out of a 160-word library:
+    // the graphic answers shape, this line answers how much.
+    expect(find.text('Assessed 98 of 160'), findsOneWidget);
+
+    // An early user whose ring looks well-filled still reads honestly here.
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(
+            channels: [
+              channel('listening', acquired: 5, notAcquired: 3, unassessed: 200),
+              channel('reading', acquired: 6, notAcquired: 2, unassessed: 200),
+              channel('speaking', acquired: 1, notAcquired: 4, unassessed: 200),
+              channel('writing', notAcquired: 2, unassessed: 200),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Assessed 8 of 208'), findsOneWidget);
+  });
+
+  test('the library size is a max across channels, never a sum', () {
+    // Every channel reports on the same words; summing would invent a library
+    // four times the real one.
+    expect(
+      capabilityLibrarySize(
+        portraitChannels.map((c) => c.effectiveAssessments),
+      ),
+      160,
+    );
+  });
+
+  testWidgets('with nothing assessed the bars give way to an honest line', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 600,
+          child: CapabilityEchoBars(
+            channels: [
+              channel('listening', unassessed: 200),
+              channel('reading', unassessed: 200),
+              channel('speaking', unassessed: 200),
+              channel('writing', unassessed: 200),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('echo-bars-empty')), findsOneWidget);
+    expect(
+      find.text(
+        'No assessment data yet. The bars appear once a channel has been '
+        'assessed.',
+      ),
+      findsOneWidget,
+    );
+    // No empty bars pretending to be a reading.
+    expect(find.byKey(const ValueKey('echo-ghost-sound')), findsNothing);
+    expect(find.byKey(const ValueKey('echo-ghost-text')), findsNothing);
   });
 
   testWidgets('the compass center carries the gap count only when real', (
@@ -260,6 +503,73 @@ void main() {
     await tester.tap(find.text('can hear 46 · can say 12'));
     await tester.pump();
     expect(pairTaps, ['sound']);
+  });
+
+  testWidgets('the echo bar carries its own affordance instead of a caption', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(
+            channels: portraitChannels,
+            onPairTap: (_) {},
+          ),
+        ),
+      ),
+    );
+    Iterable<Color?> tints() => tester
+        .widgetList<AnimatedContainer>(
+          find.descendant(
+            of: find.byType(CapabilityEchoBars),
+            matching: find.byType(AnimatedContainer),
+          ),
+        )
+        .map((c) => (c.decoration as BoxDecoration?)?.color);
+
+    expect(tints(), everyElement(isNotNull));
+    expect(tints().map((c) => c!.a), everyElement(0.0));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    await mouse.moveTo(
+      tester.getCenter(find.text('can hear 46 · can say 12')),
+    );
+    await tester.pumpAndSettle();
+
+    // Exactly the hovered pair lights up — the picture says where the door is.
+    expect(tints().where((c) => c!.a > 0), hasLength(1));
+  });
+
+  testWidgets('hover on the pair snaps under reduce motion', (tester) async {
+    await tester.pumpWidget(
+      localized(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: SizedBox(
+            width: 900,
+            child: CapabilityPortrait(
+              channels: portraitChannels,
+              onPairTap: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(
+      tester
+          .widgetList<AnimatedContainer>(
+            find.descendant(
+              of: find.byType(CapabilityEchoBars),
+              matching: find.byType(AnimatedContainer),
+            ),
+          )
+          .map((c) => c.duration),
+      everyElement(Duration.zero),
+    );
   });
 
   testWidgets('a read-only portrait stays read-only', (tester) async {

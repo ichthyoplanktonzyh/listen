@@ -7,6 +7,7 @@ import '../../localization.dart';
 import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/capability_viz.dart';
@@ -752,7 +753,7 @@ class _LobbyVoiceChoiceState extends State<_LobbyVoiceChoice> {
                   ),
                   Icon(
                     _open ? Icons.expand_less : Icons.expand_more,
-                    size: 18,
+                    size: ListenIconSize.control,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ],
@@ -860,7 +861,7 @@ class _LobbyCaptionChoiceState extends State<_LobbyCaptionChoice> {
                 ),
                 Icon(
                   _open ? Icons.expand_less : Icons.expand_more,
-                  size: 18,
+                  size: ListenIconSize.control,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ],
