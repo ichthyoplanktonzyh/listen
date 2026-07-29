@@ -6,10 +6,42 @@ from __future__ import annotations
 import ast
 import re
 import sys
+import tomllib
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Temporary, exact debt only. Routes stay listed until their public
+# request/response types and workflow calls move behind application-owned ports.
+# Provider crates are intentionally ineligible for this allowlist.
+HTTP_ROUTE_RUNTIME_DEBT: dict[str, dict[str, str]] = {
+    "crates/api-http/src/routes/learning_resources.rs": {
+        "local_runtime": "maps legacy resource download/status errors",
+    },
+    "crates/api-http/src/routes/sound_line.rs": {
+        "local_runtime": "exposes legacy sound-line job DTOs",
+    },
+    "crates/api-http/src/routes/speech.rs": {
+        "local_runtime": "exposes legacy speech-batch job DTOs",
+    },
+    "crates/api-http/src/routes/pronunciation.rs": {
+        "local_runtime": "selects the legacy pronunciation batch workflow",
+    },
+    "crates/api-http/src/routes/subtitle_search.rs": {
+        "local_runtime": "uses legacy subtitle-search workflow types",
+    },
+    "crates/api-http/src/routes/tts.rs": {
+        "local_runtime": "uses legacy speech-synthesis workflow DTOs",
+    },
+    "crates/api-http/src/routes/transcription.rs": {
+        "local_runtime": "accepts a legacy transcription request DTO",
+    },
+    "crates/api-http/src/routes/phonetic_analysis.rs": {
+        "local_runtime": "uses the legacy finding-id parser",
+    },
+}
 
 
 def fail(message: str) -> None:
@@ -24,6 +56,160 @@ def guard_dependency_direction() -> None:
     manifest = (ROOT / "crates/api-http/Cargo.toml").read_text(encoding="utf-8")
     if re.search(r"(?m)^speech-analysis\s*=", manifest):
         fail("api-http must not depend directly on speech-analysis")
+
+
+def api_http_runtime_dependencies(root: Path) -> dict[str, dict[str, Any]]:
+    """Provider/runtime dependencies declared by the HTTP adapter.
+
+    The manifest is the source of truth for aliases: a dependency may rename
+    its package, so suffix matching source text alone is not sufficient.
+    """
+    manifest_path = root / "crates/api-http/Cargo.toml"
+    manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
+    dependency_tables = [manifest.get("dependencies", {})]
+    dependency_tables.extend(
+        target.get("dependencies", {})
+        for target in manifest.get("target", {}).values()
+        if isinstance(target, dict)
+    )
+    runtime_dependencies: dict[str, dict[str, Any]] = {}
+    for dependencies in dependency_tables:
+        for alias, raw_spec in dependencies.items():
+            spec = raw_spec if isinstance(raw_spec, dict) else {}
+            package = spec.get("package", alias)
+            if package == "local-runtime" or package.endswith("-provider"):
+                runtime_dependencies[alias.replace("-", "_")] = {
+                    "package": package,
+                    **spec,
+                }
+    return runtime_dependencies
+
+
+def rust_code_without_comments_or_strings(source: str) -> str:
+    """Remove common Rust non-code regions before cheap token scans."""
+    non_code = re.compile(
+        r"""
+        /\*.*?\*/
+        |//[^\n]*
+        |b?r(?P<hashes>\#{0,8})".*?"(?P=hashes)
+        |b?"(?:\\.|[^"\\])*"
+        """,
+        re.DOTALL | re.VERBOSE,
+    )
+    return non_code.sub(" ", source)
+
+
+def concrete_adapter_types(
+    root: Path, dependencies: dict[str, dict[str, Any]]
+) -> set[str]:
+    """Public concrete provider types reachable from direct dependencies.
+
+    This closes the re-export loophole where a route imports a provider type
+    through `crate::...` instead of naming the provider crate directly.
+    """
+    concrete_suffix = re.compile(
+        r"(?:Provider|Adapter|Client|Factory|Manager|Coordinator|Runtime)$"
+    )
+    public_type = re.compile(
+        r"\bpub(?:\s*\([^)]*\))?\s+(?:struct|enum|type)\s+([A-Z][A-Za-z0-9_]*)"
+    )
+    names: set[str] = set()
+    manifest_dir = root / "crates/api-http"
+    for spec in dependencies.values():
+        if not str(spec["package"]).endswith("-provider"):
+            continue
+        dependency_path = spec.get("path")
+        if not isinstance(dependency_path, str):
+            continue
+        source_root = (manifest_dir / dependency_path / "src").resolve()
+        if not source_root.is_dir():
+            continue
+        for path in rust_sources(source_root):
+            source = rust_code_without_comments_or_strings(
+                path.read_text(encoding="utf-8")
+            )
+            names.update(
+                name
+                for name in public_type.findall(source)
+                if concrete_suffix.search(name)
+            )
+    return names
+
+
+def guard_http_adapter_boundaries(
+    root: Path = ROOT,
+    runtime_debt: dict[str, dict[str, str]] | None = None,
+) -> None:
+    """Routes adapt transport only; concrete adapters are composed in lib.rs.
+
+    `api-http` may declare provider/local-runtime dependencies because its
+    composition root wires concrete implementations. Route modules may not
+    import those crates, construct their concrete types through a re-export, or
+    call local-runtime workflows directly.
+    """
+    dependencies = api_http_runtime_dependencies(root)
+    runtime_debt = HTTP_ROUTE_RUNTIME_DEBT if runtime_debt is None else runtime_debt
+    forbidden_modules = set(dependencies)
+    # Also catch an undeclared/new provider module before the manifest parser is
+    # updated; the manifest-derived aliases handle renamed dependencies.
+    provider_module = re.compile(r"\b[a-z][a-z0-9_]*_provider\s*::")
+    concrete_types = concrete_adapter_types(root, dependencies)
+    constructed_type = (
+        re.compile(
+            rf"\b(?:{'|'.join(map(re.escape, sorted(concrete_types)))})"
+            r"\s*(?:::\s*[a-z_][a-z0-9_]*\b|\{|\()"
+        )
+        if concrete_types
+        else None
+    )
+
+    observed_debt: set[tuple[str, str]] = set()
+    for path in rust_sources(root / "crates/api-http/src/routes"):
+        relative = path.relative_to(root).as_posix()
+        source = rust_code_without_comments_or_strings(
+            path.read_text(encoding="utf-8")
+        )
+        direct = {
+            module
+            for module in forbidden_modules
+            if re.search(rf"\b{re.escape(module)}\s*::", source)
+        }
+        suffix_match = provider_module.search(source)
+        provider_direct = sorted(
+            module
+            for module in direct
+            if str(dependencies[module]["package"]).endswith("-provider")
+        )
+        if provider_direct or suffix_match:
+            modules = provider_direct or [
+                suffix_match.group(0).replace("::", "").strip()
+            ]
+            fail(
+                f"{relative} imports concrete provider crates: "
+                f"{modules}; inject an application-owned port from the composition root"
+            )
+        allowed_runtime = runtime_debt.get(relative, {})
+        unapproved_runtime = sorted(direct - set(allowed_runtime))
+        if unapproved_runtime:
+            fail(
+                f"{relative} imports concrete runtime crates: {unapproved_runtime}; "
+                "inject an application-owned port or add exact, reviewed debt"
+            )
+        observed_debt.update((relative, module) for module in direct)
+        if constructed_type and (match := constructed_type.search(source)):
+            fail(
+                f"{relative} constructs concrete provider type "
+                f"{match.group(0).strip()}; construction belongs in api-http/src/lib.rs"
+            )
+
+    stale_debt = sorted(
+        (relative, module)
+        for relative, modules in runtime_debt.items()
+        for module in modules
+        if (relative, module) not in observed_debt
+    )
+    if stale_debt:
+        fail(f"remove migrated HTTP runtime debt entries: {stale_debt}")
 
 
 def guard_application_public_interface() -> None:
@@ -173,6 +359,7 @@ def guard_pipeline_entrypoint() -> None:
 
 def main() -> int:
     guard_dependency_direction()
+    guard_http_adapter_boundaries()
     guard_application_public_interface()
     guard_production_rust_wildcards()
     guard_http_runtime_ownership()

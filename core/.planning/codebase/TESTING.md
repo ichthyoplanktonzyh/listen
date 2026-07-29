@@ -5,6 +5,7 @@
 ```sh
 ./scripts/test.sh --rust --strict
 ./scripts/validate-contracts.sh
+cargo deny check
 python3 -m unittest scripts/test_release_artifacts.py
 ```
 
@@ -15,6 +16,7 @@ python3 -m unittest scripts/test_release_artifacts.py
 - OpenAPI method+path parity and structural validation;
 - committed schema/example/fixture validation;
 - deterministic Python unit/contract tests;
+- architecture debt regression tests and dependency policy checks;
 - release archive safety, reproducibility, manifest, and SHA checks;
 - runtime smoke outside the source tree.
 
