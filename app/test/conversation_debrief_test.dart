@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
@@ -171,6 +172,136 @@ void main() {
     controller.dispose();
   });
 
+  // ── The regression this whole slice exists to prevent ──
+  //
+  // A failed learner turn used to render the caught exception in the body
+  // position of its card, so the learner's own voice read:
+  //
+  //   Could not process learner turn: HttpException: {"code":
+  //   "validation_error","message":"recording metadata must not be empty",
+  //   "correlation_id":"api-853","retryable":false}, uri =
+  //   http://127.0.0.1:62645/v1/recordings
+  //
+  // Nothing in that string may appear anywhere on the debrief again.
+  testWidgets('a failed turn shows a named state — never the exception, the '
+      'error code, the correlation id or the sidecar URI', (tester) async {
+    final controller = _controller(_stateWithTransportFailure());
+    await _pumpDebrief(tester, controller);
+
+    for (final leak in const [
+      'HttpException',
+      'correlation_id',
+      'api-853',
+      '127.0.0.1',
+      'validation_error',
+      'recording metadata must not be empty',
+      '/v1/recordings',
+      'retryable',
+      'Could not process learner turn',
+      'Exception',
+    ]) {
+      expect(
+        find.textContaining(leak, findRichText: true),
+        findsNothing,
+        reason: '"$leak" is transport detail and must never be on screen by '
+            'default — least of all where the learner\'s words go.',
+      );
+    }
+
+    // What the turn does say is a sentence about the turn.
+    expect(
+      find.text('The local transcript did not come back.'),
+      findsOneWidget,
+    );
+
+    controller.dispose();
+  });
+
+  testWidgets('the diagnostics survive behind a closed disclosure, and the '
+      'raw transport text still never appears', (tester) async {
+    final controller = _controller(_stateWithTransportFailure());
+    await _pumpDebrief(tester, controller);
+
+    final disclosure = find.byKey(
+      const ValueKey('conversation-turn-failure-details'),
+    );
+    // The turn card and the amber target card each carry one — a failed
+    // learner turn is both. Opening either is enough.
+    expect(disclosure, findsWidgets);
+    await tester.ensureVisible(disclosure.first);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(disclosure.first);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Opened on purpose: the operator-facing fields are readable, because a
+    // bug report needs them.
+    expect(
+      find.textContaining('api-853', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('validation_error', findRichText: true),
+      findsOneWidget,
+    );
+    // The raw body and the sidecar URI stay out even here: a localhost port
+    // and an internal route tell the learner nothing.
+    expect(find.textContaining('127.0.0.1'), findsNothing);
+    expect(find.textContaining('HttpException'), findsNothing);
+
+    controller.dispose();
+  });
+
+  testWidgets('a failure the backend did not call retryable offers no retry', (
+    tester,
+  ) async {
+    final controller = _controller(_stateWithTransportFailure());
+    await _pumpDebrief(tester, controller);
+
+    // The observed payload says `"retryable": false`, and the UI now reads it
+    // instead of ignoring it.
+    expect(
+      find.byKey(const ValueKey('conversation-turn-retry')),
+      findsNothing,
+    );
+    controller.dispose();
+  });
+
+  testWidgets('a retryable failure offers the rerun, and only then', (
+    tester,
+  ) async {
+    final controller = _controller(
+      _stateWithTransportFailure(retryable: true),
+    );
+    await _pumpDebrief(tester, controller);
+
+    expect(
+      find.byKey(const ValueKey('conversation-turn-retry')),
+      findsWidgets,
+    );
+    expect(find.text('Retry transcription'), findsWidgets);
+    // Still no transport text, retryable or not.
+    expect(find.textContaining('HttpException'), findsNothing);
+    expect(find.textContaining('127.0.0.1'), findsNothing);
+
+    controller.dispose();
+  });
+
+  test('a missing or non-boolean retryable field is not a yes', () {
+    expect(
+      ApiFailure.parse('{"code":"x","retryable":false}').isRetryable,
+      isFalse,
+    );
+    expect(ApiFailure.parse('{"code":"x"}').isRetryable, isFalse);
+    expect(ApiFailure.parse('{"retryable":"true"}').isRetryable, isFalse);
+    expect(ApiFailure.parse('{"retryable":true}').isRetryable, isTrue);
+    // A body this client cannot type keeps only the raw text, and reports
+    // that it recognised nothing rather than inventing fields.
+    final opaque = ApiFailure.parse('<html>502 Bad Gateway</html>');
+    expect(opaque.isStructured, isFalse);
+    expect(opaque.raw, '<html>502 Bad Gateway</html>');
+    expect(opaque.isRetryable, isFalse);
+  });
+
   testWidgets('the closing bar draws the turns that never came back rather '
       'than dropping them', (tester) async {
     await tester.pumpWidget(
@@ -235,7 +366,7 @@ RealtimeConversationState _state() => const RealtimeConversationState(
       status: 'failed',
       startedAtMs: 4,
       providerText: 'provider guess at turn 4',
-      error: 'Could not process learner turn',
+      failure: RealtimeTurnFailure(kind: 'local_post_processing_failed'),
     ),
     RealtimeConversationItem(
       sequence: 5,
@@ -243,13 +374,36 @@ RealtimeConversationState _state() => const RealtimeConversationState(
       status: 'interrupted',
       startedAtMs: 5,
       providerText: 'cut off mid sentence',
-      error: 'learner_barge_in',
+      failure: RealtimeTurnFailure(kind: 'learner_barge_in'),
     ),
     RealtimeConversationItem(
       sequence: 6,
       role: 'learner',
       status: 'interrupted',
       startedAtMs: 6,
+    ),
+  ],
+);
+
+/// The exact failure the field reported: the backend's error envelope, as the
+/// client boundary now types it.
+RealtimeConversationState _stateWithTransportFailure({
+  bool retryable = false,
+}) => RealtimeConversationState(
+  phase: RealtimeConversationPhase.done,
+  items: [
+    RealtimeConversationItem(
+      sequence: 1,
+      role: 'learner',
+      status: 'failed',
+      startedAtMs: 1,
+      failure: RealtimeTurnFailure(
+        kind: 'local_post_processing_failed',
+        detail: ApiFailure.parse(
+          '{"code":"validation_error","message":"recording metadata must not '
+          'be empty","correlation_id":"api-853","retryable":$retryable}',
+        ),
+      ),
     ),
   ],
 );
