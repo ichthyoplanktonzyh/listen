@@ -1,8 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 
-/// `ListenTheme._textTheme` maps the [ListenType] ladder onto eight Material
+import 'support/dart_source.dart';
+
+/// `ListenTheme._textTheme` maps the `ListenType` ladder onto eight Material
 /// `textTheme` slots (labelSmall … titleLarge). The display/headline slots are
 /// deliberately left unmapped, so reading one hands the widget Material's own
 /// geometry — 24/28px at w400 — which is nowhere on the ladder
@@ -13,25 +13,27 @@ import 'package:flutter_test/flutter_test.dart';
 /// A page title is `titleLarge` (= `ListenType.hero`). If a page genuinely
 /// needs a size above 22, the fix is a new rung on the ladder plus a mapping
 /// in `_textTheme`, not a raw Material slot.
+///
+/// Matching runs over the whole file, with comments and string literals
+/// blanked, so a slot read that `dart format` wrapped onto its own line
+/// (`)\n    .textTheme\n    .headlineMedium`) still counts.
 final _pattern = RegExp(
-  r'textTheme\.(headline|display)(Small|Medium|Large)\b',
+  r'textTheme\s*\.\s*(?:headline|display)(?:Small|Medium|Large)\b',
 );
 
 /// Files under `lib/` reading an unmapped slot, mapped to their
 /// `path:line → source` records.
 Map<String, List<String>> _offences() {
   final byFile = <String, List<String>>{};
-  for (final entity in Directory('lib').listSync(recursive: true)) {
-    if (entity is! File || !entity.path.endsWith('.dart')) continue;
+  for (final file in libDartFiles()) {
     // The mapping itself, and the doc that explains the rule, live here.
-    if (entity.path.endsWith('theme/listen_theme.dart')) continue;
-    final lines = entity.readAsLinesSync();
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.startsWith('//')) continue;
-      if (_pattern.hasMatch(line)) {
-        (byFile[entity.path] ??= []).add('${entity.path}:${i + 1} → $line');
-      }
+    if (file.path.endsWith('theme/listen_theme.dart')) continue;
+    final source = file.readAsStringSync();
+    for (final match in _pattern.allMatches(maskNonCode(source))) {
+      final line = lineNumberAt(source, match.start);
+      (byFile[file.path] ??= []).add(
+        '${file.path}:$line → ${lineAt(source, line)}',
+      );
     }
   }
   return byFile;
@@ -57,9 +59,8 @@ void main() {
   };
 
   test('text styles come from mapped textTheme slots, not display/headline', () {
-    final offences = _offences();
     final offenders = [
-      for (final entry in offences.entries)
+      for (final entry in _offences().entries)
         if (!knownOffenders.any(entry.key.endsWith)) ...entry.value,
     ];
 

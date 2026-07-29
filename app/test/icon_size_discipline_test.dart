@@ -1,6 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/dart_source.dart';
 
 /// Icon sizes live in `lib/theme/icon_size.dart` as four steps pinned to the
 /// type ladder (inline 14 · control 18 · chrome 22 · illustration 48), so an
@@ -8,34 +8,48 @@ import 'package:flutter_test/flutter_test.dart';
 /// instead of the 14 `Icon(size:)` values and 7 `iconSize:` values the app had
 /// picked site by site.
 ///
-/// The regex is deliberately narrow: only a single-line `Icon(… size: <n>)`
-/// or a literal `iconSize: <n>` counts. A `size:` argument that sits alone on
-/// its own line is left alone, because there it is indistinguishable from
-/// `ListenLoading.inline(size:)` and other non-icon sizes. A missed offender
-/// is cheap; a false one turns the gate into noise.
+/// Matching runs over the whole file rather than line by line. An earlier
+/// line-based version exempted every `Icon(` that `dart format` had wrapped,
+/// which is not a harmless edge: wrapping is triggered by argument count, so
+/// the exemption landed squarely on the busiest call sites — 34 wrapped icons
+/// escaped, about a quarter of the total.
 ///
-/// `Icon(` only — `IconButton(` and `ImageIcon(` do not match, and the
-/// lookbehind keeps any other `…Icon(` suffix out.
+/// Anchoring on `Icon(` and walking a paren-balanced argument list is what
+/// makes the whole-file scan safe. `ListenLoading.inline(size: 22)` shares the
+/// `size:` argument name and is indistinguishable from an icon when a bare
+/// `size:` line is read on its own — but it can never match here, because the
+/// scan only ever looks inside an argument list that began at `Icon(`.
+/// `IconButton(` and `ImageIcon(` are excluded by the lookbehind and the
+/// literal `(`.
+///
+/// Known limits, so nobody reads this gate as total coverage: a `size:` whose
+/// value is not a numeric literal is not counted; an icon nested more than two
+/// paren levels deep before its `size:` argument is missed; and a size passed
+/// through a variable is invisible to any textual gate.
 final _pattern = RegExp(
-  r'(?<![A-Za-z0-9_$])Icon\([^)]*\bsize:\s*[0-9]|\biconSize:\s*[0-9]',
+  // `Icon(… size: <n>)`, arguments allowed to wrap.
+  r'(?<![A-Za-z0-9_$])Icon\('
+  '$balancedArgUnit*?'
+  r'\bsize:\s*[0-9]'
+  // …or an `iconSize:` literal, which is specific enough to stand alone.
+  r'|\biconSize:\s*[0-9]',
 );
 
 /// Files under `lib/` holding at least one bare icon-size literal, mapped to
 /// the offending `path:line → source` records.
 Map<String, List<String>> _offences() {
   final byFile = <String, List<String>>{};
-  for (final entity in Directory('lib').listSync(recursive: true)) {
-    if (entity is! File || !entity.path.endsWith('.dart')) continue;
+  for (final file in libDartFiles()) {
     // The steps themselves are defined here.
-    if (entity.path.endsWith('theme/icon_size.dart')) continue;
-    final lines = entity.readAsLinesSync();
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      // Docs may quote the forbidden form while explaining it.
-      if (line.startsWith('//')) continue;
-      if (_pattern.hasMatch(line)) {
-        (byFile[entity.path] ??= []).add('${entity.path}:${i + 1} → $line');
-      }
+    if (file.path.endsWith('theme/icon_size.dart')) continue;
+    final source = file.readAsStringSync();
+    // Comments and string literals are blanked, so docs may quote the
+    // forbidden form while explaining it.
+    for (final match in _pattern.allMatches(maskNonCode(source))) {
+      final line = lineNumberAt(source, match.start);
+      (byFile[file.path] ??= []).add(
+        '${file.path}:$line → ${lineAt(source, line)}',
+      );
     }
   }
   return byFile;
@@ -52,11 +66,14 @@ void main() {
     'lib/screens/review_queue_screen.dart',
     'lib/screens/vocabulary_screen.dart',
     'lib/widgets/app_bar/player_app_bar.dart',
+    'lib/widgets/common/listen_empty_state.dart',
     'lib/widgets/common/listen_error_state.dart',
     'lib/widgets/flows/media_import_flows.dart',
     'lib/widgets/home/listening_home.dart',
     'lib/widgets/home/media_library_section.dart',
     'lib/widgets/layout/content_channel_switcher.dart',
+    'lib/widgets/layout/media_workbench.dart',
+    'lib/widgets/layout/playback_bar.dart',
     'lib/widgets/layout/player_stage.dart',
     'lib/widgets/layout/side_panel.dart',
     'lib/widgets/panels/cold_start_marking_sheet.dart',
@@ -83,15 +100,16 @@ void main() {
     'lib/widgets/settings/llm_provider_settings.dart',
     'lib/widgets/settings/realtime_provider_settings.dart',
     'lib/widgets/settings/settings_dialog.dart',
+    'lib/widgets/settings/syntax_capability_settings.dart',
     'lib/widgets/subtitle/following_structure_viewport.dart',
+    'lib/widgets/vocabulary/dictionary_inline_clip_player.dart',
     'lib/widgets/vocabulary/entry_detail_parts.dart',
     'lib/widgets/vocabulary/listening_dictionary_entry_view.dart',
   };
 
   test('icon glyphs use ListenIconSize steps, not bare literals', () {
-    final offences = _offences();
     final offenders = [
-      for (final entry in offences.entries)
+      for (final entry in _offences().entries)
         if (!knownOffenders.any(entry.key.endsWith)) ...entry.value,
     ];
 

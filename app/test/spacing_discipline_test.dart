@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/dart_source.dart';
+
 /// Spacer gaps live in `lib/theme/spacing.dart` as named steps of one ladder
 /// (2·4·6·8·12·16·24·32) so the app breathes at one rhythm instead of 25
 /// site-by-site values (see #26 / #32).
@@ -22,13 +24,18 @@ import 'package:flutter_test/flutter_test.dart';
 /// is off the system entirely.
 final _spacingLadder = <double>{0, 2, 4, 6, 8, 12, 16, 24, 32};
 
-/// Single-line `EdgeInsets` constructor calls with no nested parentheses. The
-/// narrowness is deliberate: a call split across lines, or one wrapping
-/// another call, cannot be read reliably line by line, and a false offender
-/// would turn the gate into noise faster than a missed one costs.
+/// An `EdgeInsets` constructor call and its argument list, read over the whole
+/// file so a wrapped call counts like an inline one. An earlier line-based
+/// version missed 19 calls for no better reason than `dart format` having
+/// broken them across lines — and since wrapping follows argument count, those
+/// were the elaborate insets most likely to be off-ladder.
+///
+/// The argument list is walked with [balancedArgUnit], which cannot cross the
+/// call's own closing paren, so one `EdgeInsets` never absorbs the next.
 final _edgeInsets = RegExp(
   r'\bEdgeInsets(?:Directional)?\.(?:all|symmetric|only|fromLTRB)\('
-  r'([^()]*)\)',
+  '($balancedArgUnit*)'
+  r'\)',
 );
 
 /// Identifiers are stripped before numbers are read, so `ListenSpacing.gap12`
@@ -38,27 +45,27 @@ final _identifier = RegExp(r'[A-Za-z_$][A-Za-z0-9_$]*');
 final _number = RegExp(r'[0-9]+(?:\.[0-9]+)?');
 
 /// Files under `lib/` with an off-ladder `EdgeInsets`, mapped to their
-/// `path:line → source` records. `EdgeInsets.zero` and fully symbolic forms
-/// match nothing and never appear here.
+/// `path:line → source` records, reported at the line the call starts on.
+///
+/// `EdgeInsets.zero` is not a constructor call and never matches; an inset
+/// built entirely from named constants matches but yields no numbers, so it
+/// never offends. Comments and string literals are blanked before matching.
 Map<String, List<String>> _paddingOffences() {
   final byFile = <String, List<String>>{};
-  for (final entity in Directory('lib').listSync(recursive: true)) {
-    if (entity is! File || !entity.path.endsWith('.dart')) continue;
+  for (final file in libDartFiles()) {
     // The roles themselves are defined here.
-    if (entity.path.endsWith('theme/spacing.dart')) continue;
-    final lines = entity.readAsLinesSync();
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.startsWith('//')) continue;
-      for (final match in _edgeInsets.allMatches(line)) {
-        final args = match.group(1)!.replaceAll(_identifier, '');
-        final values = _number
-            .allMatches(args)
-            .map((m) => double.parse(m.group(0)!));
-        if (values.any((value) => !_spacingLadder.contains(value))) {
-          (byFile[entity.path] ??= []).add('${entity.path}:${i + 1} → $line');
-          break;
-        }
+    if (file.path.endsWith('theme/spacing.dart')) continue;
+    final source = file.readAsStringSync();
+    for (final match in _edgeInsets.allMatches(maskNonCode(source))) {
+      final args = match.group(1)!.replaceAll(_identifier, '');
+      final values = _number
+          .allMatches(args)
+          .map((m) => double.parse(m.group(0)!));
+      if (values.any((value) => !_spacingLadder.contains(value))) {
+        final line = lineNumberAt(source, match.start);
+        (byFile[file.path] ??= []).add(
+          '${file.path}:$line → ${lineAt(source, line)}',
+        );
       }
     }
   }

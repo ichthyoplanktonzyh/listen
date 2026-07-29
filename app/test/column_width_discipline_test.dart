@@ -1,7 +1,7 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
+
+import 'support/dart_source.dart';
 
 /// Content-column caps live in `lib/theme/breakpoints.dart` as a named
 /// vocabulary (form 560 · card 680 · content 780 · wide 960), because "how
@@ -13,23 +13,25 @@ import 'package:llplayer_next/theme/breakpoints.dart';
 /// Only `maxWidth` is policed. `maxHeight` is not a column measure — it is
 /// almost always a viewport or overlay budget — and `minWidth` is a floor,
 /// which is element geometry.
+///
+/// Matching runs over the whole file, with comments and string literals
+/// blanked, so a constraint whose value `dart format` wrapped onto the next
+/// line still counts.
 final _pattern = RegExp(r'\bmaxWidth:\s*[0-9]');
 
 /// Files under `lib/` with a hard-coded `maxWidth`, mapped to their
 /// `path:line → source` records.
 Map<String, List<String>> _offences() {
   final byFile = <String, List<String>>{};
-  for (final entity in Directory('lib').listSync(recursive: true)) {
-    if (entity is! File || !entity.path.endsWith('.dart')) continue;
+  for (final file in libDartFiles()) {
     // The column vocabulary itself is defined here.
-    if (entity.path.endsWith('theme/breakpoints.dart')) continue;
-    final lines = entity.readAsLinesSync();
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.startsWith('//')) continue;
-      if (_pattern.hasMatch(line)) {
-        (byFile[entity.path] ??= []).add('${entity.path}:${i + 1} → $line');
-      }
+    if (file.path.endsWith('theme/breakpoints.dart')) continue;
+    final source = file.readAsStringSync();
+    for (final match in _pattern.allMatches(maskNonCode(source))) {
+      final line = lineNumberAt(source, match.start);
+      (byFile[file.path] ??= []).add(
+        '${file.path}:$line → ${lineAt(source, line)}',
+      );
     }
   }
   return byFile;
@@ -60,9 +62,8 @@ void main() {
   };
 
   test('column caps use ListenBreakpoints widths, not maxWidth literals', () {
-    final offences = _offences();
     final offenders = [
-      for (final entry in offences.entries)
+      for (final entry in _offences().entries)
         if (!knownOffenders.any(entry.key.endsWith)) ...entry.value,
     ];
 
