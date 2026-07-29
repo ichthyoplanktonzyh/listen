@@ -29,6 +29,13 @@ fn has_table(path: &Path, name: &str) -> bool {
         > 0
 }
 
+fn marker(path: &Path) -> String {
+    Connection::open(path)
+        .expect("open db file")
+        .query_row("SELECT value FROM _recovery_marker", [], |row| row.get(0))
+        .expect("read recovery marker")
+}
+
 /// Mirror of the production `backup_path` in `connection.rs`.
 fn backup_of(path: &Path) -> PathBuf {
     let mut raw = path.as_os_str().to_owned();
@@ -164,6 +171,30 @@ fn reopening_a_current_database_is_idempotent_and_makes_no_backup() {
 }
 
 #[test]
+fn an_existing_legacy_backup_is_never_replaced() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("legacy-backup.sqlite");
+    let backup = backup_of(&path);
+    {
+        let conn = Connection::open(&backup).expect("create existing backup");
+        conn.execute_batch(
+            "CREATE TABLE _recovery_marker (value TEXT NOT NULL);
+             INSERT INTO _recovery_marker VALUES ('original');",
+        )
+        .expect("seed existing backup");
+    }
+    {
+        let conn = Connection::open(&path).expect("create live db");
+        conn.execute_batch("CREATE TABLE media_items (id TEXT);")
+            .expect("seed migration collision");
+    }
+
+    assert!(SqliteRepository::open(&path).is_err());
+    assert_eq!(marker(&backup), "original");
+    assert_eq!(user_version(&backup), 0);
+}
+
+#[test]
 fn migration_failure_preserves_the_pre_migration_backup() {
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().join("corrupt.sqlite");
@@ -196,5 +227,56 @@ fn migration_failure_preserves_the_pre_migration_backup() {
         user_version(&path),
         0,
         "a failed migration leaves the version unadvanced"
+    );
+}
+
+#[test]
+fn retry_after_a_late_migration_failure_does_not_overwrite_the_first_backup() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("late-failure.sqlite");
+
+    // Migration 1 can commit, while this deliberately incompatible v2 table
+    // makes migration 2 fail. This models a real late migration failure where
+    // the live database is left partially advanced between startup attempts.
+    {
+        let conn = Connection::open(&path).expect("create db");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE _recovery_marker (value TEXT NOT NULL);
+            INSERT INTO _recovery_marker VALUES ('original');
+            CREATE TABLE subtitle_tracks (collision TEXT);
+            "#,
+        )
+        .expect("seed late migration collision");
+    }
+
+    assert!(SqliteRepository::open(&path).is_err());
+    assert_eq!(
+        user_version(&path),
+        1,
+        "migration 1 committed before v2 failed"
+    );
+    let backup = backup_of(&path);
+    assert_eq!(user_version(&backup), 0);
+    assert_eq!(marker(&backup), "original");
+
+    // Distinguish the now-partially-migrated live file from the original
+    // recovery point before retrying startup.
+    Connection::open(&path)
+        .expect("open partial db")
+        .execute("UPDATE _recovery_marker SET value = 'partial'", [])
+        .expect("mark partial state");
+
+    assert!(SqliteRepository::open(&path).is_err());
+    assert_eq!(marker(&path), "partial");
+    assert_eq!(
+        marker(&backup),
+        "original",
+        "a second startup must preserve the first recoverable copy"
+    );
+    assert_eq!(
+        user_version(&backup),
+        0,
+        "the backup remains the true pre-upgrade schema"
     );
 }
