@@ -14,8 +14,7 @@ import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
-import '../../theme/breakpoints.dart';
-import '../../theme/radii.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
@@ -23,6 +22,8 @@ import '../panels/listening_inbox_panel.dart';
 import '../panels/subtitle_resource_manager_panel.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/word_learning_panel.dart';
+import 'posture_actions.dart';
+import 'side_panel_tabs.dart';
 
 /// The right-hand side panel: transcript, subtitle resources, word learning,
 /// and diagnosis views behind a segmented selector. Extracted from the
@@ -204,7 +205,21 @@ class _SidePanelState extends State<SidePanel> {
         // Posture actions belong to the current sentence; hide them on the
         // resource manager and inbox tabs so they are contextual, not a
         // permanent button wall.
-        if (_showsPostureActions) _postureActions(),
+        if (_showsPostureActions)
+          PostureActions(
+            hasCue: subtitleController.currentPrimaryCue != null,
+            canCloze: _canCloze,
+            canChunkDictation: _canChunkDictation,
+            canRead: subtitleController.primaryTrack != null,
+            onDiagnose: () => unawaited(_openDiagnosisView()),
+            onCloze: () => unawaited(widget.onStartClozePractice()),
+            onChunkDictation: () =>
+                unawaited(widget.onStartChunkDictationPractice()),
+            onSentenceDictation: () =>
+                unawaited(widget.onStartSentenceDictationPractice()),
+            onShadow: () => unawaited(widget.onStartShadowingPractice()),
+            onRead: widget.onOpenReading,
+          ),
         // Content fit is a media-level "should I watch this, and how" signal, so
         // it belongs on the transcript tab (the browse/decide surface) rather
         // than buried in the technical subtitle-resources panel. Showing the
@@ -284,50 +299,23 @@ class _SidePanelState extends State<SidePanel> {
     ),
   );
 
-  Widget _panelNavigation() {
-    final colors = Theme.of(context).colorScheme;
-    final destinations = [
-      (Icons.subtitles_outlined, l.text('transcript')),
-      (Icons.inventory_2_outlined, l.text('subtitleResources')),
-      (Icons.menu_book_outlined, l.text('wordLearning')),
-      (Icons.analytics_outlined, l.text('understandPosture')),
-      (Icons.inbox_outlined, l.text('listeningInbox')),
-    ];
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final showLabels =
-              constraints.maxWidth >= ListenBreakpoints.sidePanelTabLabels;
-          return SizedBox(
-            height: showLabels ? 58 : 52,
-            child: Row(
-              children: [
-                for (var index = 0; index < destinations.length; index++)
-                  Expanded(
-                    child: _PanelTab(
-                      icon: destinations[index].$1,
-                      label: destinations[index].$2,
-                      selected: learningController.sidePanel == index,
-                      showLabel: showLabels,
-                      onTap: () {
-                        if (index == 3) {
-                          unawaited(_openDiagnosisView());
-                        } else {
-                          learningController.selectSidePanel(index);
-                        }
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
+  Widget _panelNavigation() => SidePanelTabs(
+    destinations: [
+      (icon: Icons.subtitles_outlined, label: l.text('transcript')),
+      (icon: Icons.inventory_2_outlined, label: l.text('subtitleResources')),
+      (icon: Icons.menu_book_outlined, label: l.text('wordLearning')),
+      (icon: Icons.analytics_outlined, label: l.text('diagnosis')),
+      (icon: Icons.inbox_outlined, label: l.text('listeningInbox')),
+    ],
+    selectedIndex: learningController.sidePanel,
+    onSelected: (index) {
+      if (index == 3) {
+        unawaited(_openDiagnosisView());
+      } else {
+        learningController.selectSidePanel(index);
+      }
+    },
+  );
 
   Widget _transcript() => TranscriptPanel(
     track: subtitleController.primaryTrack,
@@ -453,218 +441,6 @@ class _SidePanelState extends State<SidePanel> {
           : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
     ),
   );
-
-  Widget _postureActions() {
-    final hasCue = subtitleController.currentPrimaryCue != null;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 8,
-        runSpacing: 6,
-        children: [
-          OutlinedButton.icon(
-            onPressed: hasCue ? () => unawaited(_openDiagnosisView()) : null,
-            icon: const Icon(Icons.analytics_outlined),
-            label: Text(l.text('understandPosture')),
-          ),
-          PopupMenuButton<String>(
-            enabled: hasCue,
-            tooltip: l.text('testPosture'),
-            onSelected: (value) {
-              switch (value) {
-                case 'cloze':
-                  unawaited(widget.onStartClozePractice());
-                case 'chunk':
-                  unawaited(widget.onStartChunkDictationPractice());
-                case 'sentence':
-                  unawaited(widget.onStartSentenceDictationPractice());
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'cloze',
-                enabled: _canCloze,
-                child: ListTile(
-                  leading: const Icon(Icons.text_fields),
-                  title: Text(l.text('clozePractice')),
-                  subtitle: Text(
-                    _canCloze
-                        ? l.text('practiceClozeTooltip')
-                        : l.text('practiceClozeUnavailable'),
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'chunk',
-                child: ListTile(
-                  leading: const Icon(Icons.segment),
-                  title: Text(l.text('chunkDictation')),
-                  subtitle: Text(
-                    _canChunkDictation
-                        ? l.text('practiceChunkTooltip')
-                        : l.text('practiceChunkFallbackTooltip'),
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'sentence',
-                child: ListTile(
-                  leading: const Icon(Icons.short_text),
-                  title: Text(l.text('sentenceDictation')),
-                ),
-              ),
-            ],
-            child: _MenuTriggerButton(
-              icon: Icons.fact_check_outlined,
-              label: l.text('testPosture'),
-              enabled: hasCue,
-            ),
-          ),
-          Tooltip(
-            message: l.text('shadowingReadyTooltip'),
-            child: OutlinedButton.icon(
-              onPressed: hasCue
-                  ? () => unawaited(widget.onStartShadowingPractice())
-                  : null,
-              icon: const Icon(Icons.mic_none),
-              label: Text(l.text('shadowPosture')),
-            ),
-          ),
-          if (widget.onOpenReading != null)
-            OutlinedButton.icon(
-              onPressed: subtitleController.primaryTrack == null
-                  ? null
-                  : widget.onOpenReading,
-              icon: const Icon(Icons.chrome_reader_mode_outlined),
-              label: Text(l.text('readPosture')),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Outlined dropdown trigger styled to match the sibling [OutlinedButton]
-/// posture actions, so the Test menu no longer reads as a stray chip. The
-/// button itself stays inert; the enclosing [PopupMenuButton] opens the menu.
-class _MenuTriggerButton extends StatelessWidget {
-  const _MenuTriggerButton({
-    required this.icon,
-    required this.label,
-    required this.enabled,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final foreground = enabled
-        ? colors.primary
-        : Theme.of(context).disabledColor;
-    return Container(
-      height: 40,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        borderRadius: ListenRadii.panelBorder,
-        border: Border.all(
-          color: enabled ? colors.outline : colors.outlineVariant,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: foreground),
-          const SizedBox(width: ListenSpacing.gap8),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          Icon(Icons.arrow_drop_down, size: 20, color: foreground),
-        ],
-      ),
-    );
-  }
-}
-
-class _PanelTab extends StatelessWidget {
-  const _PanelTab({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.showLabel,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final bool showLabel;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: label,
-      child: InkWell(
-        onTap: onTap,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            // Shell recedes (#30): the teal underline and glyph carry the
-            // selection alone — a filled block made the chrome itself glow.
-            color: Colors.transparent,
-            border: Border(
-              bottom: BorderSide(
-                color: selected ? colors.primary : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Center(
-            child: showLabel
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        size: 20,
-                        color: selected
-                            ? colors.primary
-                            : colors.onSurfaceVariant,
-                      ),
-                      const SizedBox(height: ListenSpacing.gap2),
-                      Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: selected
-                              ? colors.primary
-                              : colors.onSurfaceVariant,
-                          fontWeight: selected
-                              ? FontWeight.w800
-                              : FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  )
-                : Icon(
-                    icon,
-                    size: 21,
-                    color: selected ? colors.primary : colors.onSurfaceVariant,
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _PanelEmptyState extends StatelessWidget {
@@ -687,13 +463,17 @@ class _PanelEmptyState extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: ListenPadding.pageCompact,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 34, color: colors.primary),
+              Icon(
+                icon,
+                size: ListenIconSize.illustration,
+                color: colors.primary,
+              ),
               const SizedBox(height: ListenSpacing.gap12),
               Text(
                 title,

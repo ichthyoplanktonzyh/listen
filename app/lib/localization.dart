@@ -1764,6 +1764,19 @@ class AppLocalizations {
       'generateChunks': 'Generate chunks',
       'manualReview': 'Manual review',
       'manualReviewQueued': 'Manual review entry is ready for Phase 2.3.',
+
+      // Posture actions on the player's side panel (§3.7). The four used to be
+      // `Understand? / Test? / Shadow? / Read?` — one question mark each,
+      // which made them sound alike and told nobody what Shadow does that Read
+      // does not. Each is now an action name plus one line saying what happens.
+      'postureUnderstandTitle': 'Break it down',
+      'postureUnderstandHint': 'Why this sentence was hard to catch',
+      'postureTestTitle': 'Test yourself',
+      'postureTestHint': 'Cloze, chunk or full-sentence dictation',
+      'postureShadowTitle': 'Shadow it',
+      'postureShadowHint': 'Speak along and record your own take',
+      'postureReadTitle': 'Read the transcript',
+      'postureReadHint': 'Leave listening and read the whole text',
     },
     'zh': {
       'reviewTitle': '声音复习',
@@ -3278,6 +3291,18 @@ class AppLocalizations {
       'generateChunks': '生成语块',
       'manualReview': '人工复核',
       'manualReviewQueued': '人工复核入口已就绪，完整编辑器将在 Phase 2.3 推进。',
+
+      // 播放器右栏的四个姿态动作（§3.7）。原来是「听懂了吗？/ 测一下？/ 跟一下？/
+      // 读一下？」——四个问号语气一致但信息量低，「跟一下」和「读一下」字面看不出
+      // 区别。改为动作名 + 一行说明。
+      'postureUnderstandTitle': '拆解这句',
+      'postureUnderstandHint': '看这句为什么没听清',
+      'postureTestTitle': '测一下',
+      'postureTestHint': '填空、意群或整句听写',
+      'postureShadowTitle': '跟读',
+      'postureShadowHint': '跟着原声说一遍并录下来',
+      'postureReadTitle': '通读全文',
+      'postureReadHint': '离开听力姿态，整篇读一遍',
     },
   };
 }
