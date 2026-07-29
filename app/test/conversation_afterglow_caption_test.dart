@@ -124,9 +124,8 @@ void main() {
       await tester.pump();
     }
 
-    double opacity() => tester
-        .widget<AnimatedOpacity>(find.byType(AnimatedOpacity))
-        .opacity;
+    double opacity() =>
+        tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
 
     await show(
       const ConversationCaptionLine(text: 'That sounds fun', settled: false),
@@ -229,13 +228,8 @@ void main() {
     // rather than in front of the start button. The row states the current
     // value without being opened.
     expect(find.text('What the other person says · not shown'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('realtime-caption-toggle')),
-      findsNothing,
-    );
-    await tester.tap(
-      find.byKey(const ValueKey('realtime-caption-disclosure')),
-    );
+    expect(find.byKey(const ValueKey('realtime-caption-toggle')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('realtime-caption-disclosure')));
     await tester.pump();
 
     final toggle = find.byKey(const ValueKey('realtime-caption-toggle'));

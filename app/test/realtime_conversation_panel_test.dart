@@ -23,26 +23,27 @@ void main() {
 
   test('a history row is named by when it happened, how long it ran and how '
       'many turns it took — never by what was said first', () {
-    final session = _session(
-      status: 'completed',
-      startedAtMs: DateTime(2026, 7, 28, 14, 43).millisecondsSinceEpoch,
-      endedAtMs: DateTime(2026, 7, 28, 14, 46).millisecondsSinceEpoch,
-    ).withTurns([
-      const RealtimeConversationItem(
-        sequence: 1,
-        role: 'learner',
-        status: 'finalized',
-        startedAtMs: 1,
-        localText: 'Hello',
-      ),
-      const RealtimeConversationItem(
-        sequence: 2,
-        role: 'assistant',
-        status: 'finalized',
-        startedAtMs: 2,
-        providerText: 'Hello! How are you doing today?',
-      ),
-    ]);
+    final session =
+        _session(
+          status: 'completed',
+          startedAtMs: DateTime(2026, 7, 28, 14, 43).millisecondsSinceEpoch,
+          endedAtMs: DateTime(2026, 7, 28, 14, 46).millisecondsSinceEpoch,
+        ).withTurns([
+          const RealtimeConversationItem(
+            sequence: 1,
+            role: 'learner',
+            status: 'finalized',
+            startedAtMs: 1,
+            localText: 'Hello',
+          ),
+          const RealtimeConversationItem(
+            sequence: 2,
+            role: 'assistant',
+            status: 'finalized',
+            startedAtMs: 2,
+            providerText: 'Hello! How are you doing today?',
+          ),
+        ]);
 
     final title = realtimeHistoryTitle(session, _en);
     expect(title, '7/28 14:43 · 3 min · 2 turns');
@@ -77,10 +78,7 @@ void main() {
     }
     // An outcome this build has never heard of contributes nothing rather
     // than leaking the token.
-    expect(
-      realtimeHistoryStatusText('some_new_backend_status', _en),
-      isNull,
-    );
+    expect(realtimeHistoryStatusText('some_new_backend_status', _en), isNull);
   });
 
   test('a session that recorded nothing says so instead of claiming a '
@@ -167,13 +165,19 @@ void main() {
     expect(find.text('Ready when you are'), findsOneWidget);
     final start = find.byKey(const ValueKey('realtime-start'));
     expect(start, findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Start conversation'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Start conversation'),
+      findsOneWidget,
+    );
     // The one primary action is the biggest control on the screen.
     expect(tester.getSize(start).height, greaterThanOrEqualTo(56));
 
     // The voice is a line of text you may tap, not a dropdown demanding a
     // decision before you are allowed to speak.
-    expect(find.text('In the voice of Realtime provider · Tina'), findsOneWidget);
+    expect(
+      find.text('In the voice of Realtime provider · Tina'),
+      findsOneWidget,
+    );
     expect(find.byType(DropdownButtonFormField<String>), findsNothing);
     // The picker (and the way to settings) only exist once asked for.
     expect(find.byKey(const ValueKey('realtime-manage-voices')), findsNothing);

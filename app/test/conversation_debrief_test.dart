@@ -203,7 +203,8 @@ void main() {
       expect(
         find.textContaining(leak, findRichText: true),
         findsNothing,
-        reason: '"$leak" is transport detail and must never be on screen by '
+        reason:
+            '"$leak" is transport detail and must never be on screen by '
             'default — least of all where the learner\'s words go.',
       );
     }
@@ -235,10 +236,7 @@ void main() {
 
     // Opened on purpose: the operator-facing fields are readable, because a
     // bug report needs them.
-    expect(
-      find.textContaining('api-853', findRichText: true),
-      findsOneWidget,
-    );
+    expect(find.textContaining('api-853', findRichText: true), findsOneWidget);
     expect(
       find.textContaining('validation_error', findRichText: true),
       findsOneWidget,
@@ -259,25 +257,17 @@ void main() {
 
     // The observed payload says `"retryable": false`, and the UI now reads it
     // instead of ignoring it.
-    expect(
-      find.byKey(const ValueKey('conversation-turn-retry')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('conversation-turn-retry')), findsNothing);
     controller.dispose();
   });
 
   testWidgets('a retryable failure offers the rerun, and only then', (
     tester,
   ) async {
-    final controller = _controller(
-      _stateWithTransportFailure(retryable: true),
-    );
+    final controller = _controller(_stateWithTransportFailure(retryable: true));
     await _pumpDebrief(tester, controller);
 
-    expect(
-      find.byKey(const ValueKey('conversation-turn-retry')),
-      findsWidgets,
-    );
+    expect(find.byKey(const ValueKey('conversation-turn-retry')), findsWidgets);
     expect(find.text('Retry transcription'), findsWidgets);
     // Still no transport text, retryable or not.
     expect(find.textContaining('HttpException'), findsNothing);
@@ -318,9 +308,8 @@ void main() {
     );
     await tester.pump();
 
-    double heightOf(String key) => tester
-        .getSize(find.byKey(ValueKey(key)))
-        .height;
+    double heightOf(String key) =>
+        tester.getSize(find.byKey(ValueKey(key))).height;
 
     // Your four turns are the tallest thing on the bar; the one that came
     // back is lit, and the unlit rest of the dashed ghost is what this

@@ -420,7 +420,11 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
             key: const ValueKey('conversation-echo-surface'),
             levels: conversationEchoLevelsOf(state.activity),
           ),
-          const SizedBox(height: ListenSpacing.gap16),
+          // The label sits under the water rather than against it: a 16pt gap
+          // read as a caption stuck to the shape. `gap32` is the top of the
+          // spacing ladder and the nearest step to the ~48pt the design note
+          // asked for — the ladder is the constraint, not a suggestion.
+          const SizedBox(height: ListenSpacing.gap32),
           // The surface carries the state; this line stays as the screen
           // reader's and the label-reader's version of the same thing —
           // never the only place the state exists (D2).
