@@ -6,8 +6,8 @@ use application::{
     LexicalEntryRepository, ListeningInboxRepository, MediaRepository, PhoneTimelineRepository,
     PhoneticAnalysisRepository, PracticeRepository, PronunciationRepository,
     RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository, SenseGroupRepository,
-    SubtitleTrackRepository, TranscriptionRepository, UpsertLexicalEntry,
-    VocabularyAssetRepository, WordTimelineRepository,
+    SubtitleTrackRepository, TranscriptionJobTransition, TranscriptionRepository,
+    UpsertLexicalEntry, VocabularyAssetRepository, WordTimelineRepository,
 };
 
 #[test]

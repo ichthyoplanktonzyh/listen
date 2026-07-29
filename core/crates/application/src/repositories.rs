@@ -23,7 +23,7 @@ use domain::{
     SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
     SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord, SoundFitCalibration,
     SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
-    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus,
     TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
     UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
     WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
@@ -1160,6 +1160,16 @@ pub trait PlaybackProgressRepository: Send + Sync {
     fn save(&self, media_id: &MediaId, position: TimeMs) -> Result<(), ApplicationError>;
 }
 
+/// Result of an atomic transcription job state transition.
+///
+/// `Rejected` returns the current durable job so callers can stop stale work
+/// without performing a separate, racy read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranscriptionJobTransition {
+    Applied(TranscriptionJob),
+    Rejected(TranscriptionJob),
+}
+
 pub trait TranscriptionRepository: Send + Sync {
     fn upsert_model(
         &self,
@@ -1172,7 +1182,15 @@ pub trait TranscriptionRepository: Send + Sync {
     ) -> Result<Option<TranscriptionModelDescriptor>, ApplicationError>;
     fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError>;
     fn create_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError>;
-    fn update_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError>;
+    /// Atomically replaces a job only while its durable status still equals
+    /// `expected_status`. This is the sole update interface for transcription
+    /// jobs: a stale worker must never overwrite cancellation or another
+    /// terminal transition.
+    fn transition_job(
+        &self,
+        expected_status: TranscriptionJobStatus,
+        job: &TranscriptionJob,
+    ) -> Result<TranscriptionJobTransition, ApplicationError>;
     fn get_job(
         &self,
         id: &TranscriptionJobId,

@@ -1,4 +1,4 @@
-use application::{ApplicationError, TranscriptionRepository};
+use application::{ApplicationError, TranscriptionJobTransition, TranscriptionRepository};
 use domain::{
     SubtitleTrackProvenance, TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus,
     TranscriptionModelDescriptor, TranscriptionModelId,
@@ -89,20 +89,39 @@ impl TranscriptionRepository for SqliteRepository {
         Ok(job.clone())
     }
 
-    fn update_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError> {
-        self.connection
-            .lock()
+    fn transition_job(
+        &self,
+        expected_status: TranscriptionJobStatus,
+        job: &TranscriptionJob,
+    ) -> Result<TranscriptionJobTransition, ApplicationError> {
+        let conn = self.connection.lock();
+        let updated = conn
             .execute(
-                "UPDATE transcription_jobs SET status=?2,job_json=?3,updated_at_ms=?4 WHERE id=?1",
+                "UPDATE transcription_jobs
+                 SET status=?3,job_json=?4,updated_at_ms=?5
+                 WHERE id=?1 AND status=?2",
                 params![
                     job.id.as_str(),
+                    json(&expected_status)?,
                     json(&job.status)?,
                     json(job)?,
                     job.updated_at_ms
                 ],
             )
             .map_err(repo)?;
-        Ok(job.clone())
+        if updated == 1 {
+            return Ok(TranscriptionJobTransition::Applied(job.clone()));
+        }
+        let current = conn
+            .query_row(
+                "SELECT job_json FROM transcription_jobs WHERE id=?1",
+                [job.id.as_str()],
+                |row| from_json(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)?
+            .ok_or(ApplicationError::NotFound("transcription job"))?;
+        Ok(TranscriptionJobTransition::Rejected(current))
     }
 
     fn get_job(
