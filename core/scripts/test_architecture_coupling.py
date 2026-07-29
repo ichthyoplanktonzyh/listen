@@ -85,7 +85,15 @@ realtime = { package = "realtime-provider", path = "../realtime-provider" }
             "fn route() { let _ = VendorRealtimeAdapter::with_vendor_defaults(); }\n",
             "pub use realtime_provider::VendorRealtimeAdapter;\n",
         )
-        self.assert_guard_fails(root, "constructs concrete provider type")
+        self.assert_guard_fails(root, "references concrete provider type")
+
+    def test_rejects_concrete_provider_type_annotation_hidden_behind_reexport(self) -> None:
+        root = self.fixture(
+            "use crate::VendorRealtimeAdapter;\n"
+            "fn route() { let _adapter: VendorRealtimeAdapter = Default::default(); }\n",
+            "pub use realtime_provider::VendorRealtimeAdapter;\n",
+        )
+        self.assert_guard_fails(root, "references concrete provider type")
 
     def test_allows_concrete_construction_in_composition_root(self) -> None:
         root = self.fixture(

@@ -48,6 +48,27 @@ fn background_job_cas_preserves_cancellation_against_stale_completion() {
 }
 
 #[test]
+fn background_job_progress_is_monotonic_under_concurrent_callbacks() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let mut newest = job(
+        "llm-progress",
+        BackgroundJobKind::LlmBatch,
+        BackgroundJobStatus::Running,
+    );
+    newest.completed_units = 2;
+    repo.create(&newest).unwrap();
+
+    let mut stale = newest.clone();
+    stale.completed_units = 1;
+    stale.updated_at_ms += 1;
+    assert_eq!(
+        repo.transition(BackgroundJobStatus::Running, &stale)
+            .unwrap(),
+        BackgroundJobTransition::Rejected(newest)
+    );
+}
+
+#[test]
 fn startup_recovery_resumes_queued_and_marks_running_interrupted() {
     let repo = SqliteRepository::in_memory().unwrap();
     let queued = repo
@@ -96,7 +117,7 @@ fn background_jobs_survive_repository_reopen() {
         BackgroundJobStore::get(&repo, &created.id).unwrap(),
         Some(created)
     );
-    assert_eq!(repo.schema_version().unwrap(), 51);
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
 }
 
 #[test]
@@ -108,7 +129,7 @@ fn v50_database_migrates_to_the_durable_background_job_store() {
     drop(connection);
 
     let repo = SqliteRepository::open(&path).unwrap();
-    assert_eq!(repo.schema_version().unwrap(), 51);
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
     let created = repo
         .create(&job(
             "migrated-job",

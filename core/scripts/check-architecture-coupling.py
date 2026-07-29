@@ -154,11 +154,8 @@ def guard_http_adapter_boundaries(
     # updated; the manifest-derived aliases handle renamed dependencies.
     provider_module = re.compile(r"\b[a-z][a-z0-9_]*_provider\s*::")
     concrete_types = concrete_adapter_types(root, dependencies)
-    constructed_type = (
-        re.compile(
-            rf"\b(?:{'|'.join(map(re.escape, sorted(concrete_types)))})"
-            r"\s*(?:::\s*[a-z_][a-z0-9_]*\b|\{|\()"
-        )
+    concrete_type_reference = (
+        re.compile(rf"\b(?:{'|'.join(map(re.escape, sorted(concrete_types)))})\b")
         if concrete_types
         else None
     )
@@ -196,9 +193,9 @@ def guard_http_adapter_boundaries(
                 "inject an application-owned port or add exact, reviewed debt"
             )
         observed_debt.update((relative, module) for module in direct)
-        if constructed_type and (match := constructed_type.search(source)):
+        if concrete_type_reference and (match := concrete_type_reference.search(source)):
             fail(
-                f"{relative} constructs concrete provider type "
+                f"{relative} references concrete provider type "
                 f"{match.group(0).strip()}; construction belongs in api-http/src/lib.rs"
             )
 

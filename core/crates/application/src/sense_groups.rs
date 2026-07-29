@@ -173,7 +173,7 @@ impl MediaAnalysisUseCases {
             ));
         }
 
-        cancellation.set_total_count(prepared.len() as u64);
+        cancellation.set_total_count(prepared.len() as u64)?;
         let task_concurrency = LLM_TASK_CONCURRENCY.max(1).min(prepared.len().max(1));
         let config_ref = &config;
         let governor_ref = governor;
@@ -197,14 +197,14 @@ impl MediaAnalysisUseCases {
                         metrics_ref.record_cancelled();
                         return (
                             sentence_order,
-                            LlmSentenceOutcome {
+                            Ok(LlmSentenceOutcome {
                                 sentence,
                                 spans: fallback,
                                 used_llm: false,
                                 retry_count: 0,
                                 prompt_version: None,
                                 reported_model: None,
-                            },
+                            }),
                         );
                     }
                     let outcome = partition_sentence_via_llm_governed(
@@ -250,6 +250,7 @@ impl MediaAnalysisUseCases {
         let mut prompt_versions = std::collections::BTreeSet::new();
         let mut reported_models = std::collections::BTreeSet::new();
         for (_, outcome) in outcomes {
+            let outcome = outcome?;
             if outcome.used_llm {
                 llm_sentence_count += 1;
             } else {
@@ -506,7 +507,7 @@ async fn partition_sentence_via_llm_governed(
     cache: &SentenceCache,
     metrics: &Arc<BatchMetrics>,
     fingerprint: String,
-) -> LlmSentenceOutcome {
+) -> Result<LlmSentenceOutcome, ApplicationError> {
     // Check sentence cache first (idempotency for resumed batches).
     if let Some(cached) = cache.get(&fingerprint) {
         metrics.record_cache_hit();
@@ -516,15 +517,15 @@ async fn partition_sentence_via_llm_governed(
             &cached.boundary_after_token_indices,
             config,
         ) {
-            cancellation.record_completion();
-            return LlmSentenceOutcome {
+            cancellation.record_completion()?;
+            return Ok(LlmSentenceOutcome {
                 sentence,
                 spans,
                 used_llm: true,
                 retry_count: 0,
                 prompt_version: cached.prompt_version,
                 reported_model: cached.model_id,
-            };
+            });
         }
         // Cached result failed validation (stale); fall through to live call.
     }
@@ -570,15 +571,15 @@ async fn partition_sentence_via_llm_governed(
                                 prompt_version: prompt_version.clone(),
                             },
                         );
-                        cancellation.record_completion();
-                        return LlmSentenceOutcome {
+                        cancellation.record_completion()?;
+                        return Ok(LlmSentenceOutcome {
                             sentence,
                             spans,
                             used_llm: true,
                             retry_count: attempt as u64,
                             prompt_version,
                             reported_model,
-                        };
+                        });
                     }
                     Err(_) if backoff.should_retry(attempt) => {
                         let delay = backoff.delay_for_attempt(attempt, None);
@@ -622,14 +623,14 @@ async fn partition_sentence_via_llm_governed(
     if !cancellation.is_cancelled() {
         metrics.record_fallback();
     }
-    LlmSentenceOutcome {
+    Ok(LlmSentenceOutcome {
         sentence,
         spans: fallback,
         used_llm: false,
         retry_count: attempt as u64,
         prompt_version,
         reported_model,
-    }
+    })
 }
 
 async fn sleep_or_cancel(

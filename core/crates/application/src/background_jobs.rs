@@ -91,6 +91,9 @@ impl BackgroundJobStore for InMemoryBackgroundJobStore {
         if current.status != expected {
             return Ok(BackgroundJobTransition::Rejected(current));
         }
+        if job.completed_units < current.completed_units || job.total_units < current.total_units {
+            return Ok(BackgroundJobTransition::Rejected(current));
+        }
         jobs.insert(job.id.clone(), job.clone());
         Ok(BackgroundJobTransition::Applied(job.clone()))
     }
@@ -185,6 +188,24 @@ mod tests {
                 .unwrap()
                 .status,
             BackgroundJobStatus::Interrupted
+        );
+    }
+
+    #[test]
+    fn progress_cannot_move_backwards_within_one_status() {
+        let store = InMemoryBackgroundJobStore::default();
+        let mut current = job("progress", BackgroundJobStatus::Running);
+        current.completed_units = 2;
+        current.total_units = 3;
+        store.create(&current).unwrap();
+
+        let mut stale = current.clone();
+        stale.completed_units = 1;
+        assert_eq!(
+            store
+                .transition(BackgroundJobStatus::Running, &stale)
+                .unwrap(),
+            BackgroundJobTransition::Rejected(current)
         );
     }
 }

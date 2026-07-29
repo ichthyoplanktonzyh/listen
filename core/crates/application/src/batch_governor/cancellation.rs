@@ -9,6 +9,10 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use tokio::sync::watch;
 
+use crate::ApplicationError;
+
+type ProgressObserver = dyn Fn(u64, u64) -> Result<(), ApplicationError> + Send + Sync;
+
 /// A lightweight cancellation token for batch LLM operations.
 ///
 /// Clone is cheap (Arc). All workers share the same cancellation state.
@@ -19,7 +23,7 @@ pub struct BatchCancellationToken {
     /// Number of sentences successfully completed before cancellation.
     completed_count: Arc<AtomicU64>,
     total_count: Arc<AtomicU64>,
-    progress_observer: Option<Arc<dyn Fn(u64, u64) + Send + Sync>>,
+    progress_observer: Option<Arc<ProgressObserver>>,
 }
 
 impl Default for BatchCancellationToken {
@@ -43,7 +47,7 @@ impl BatchCancellationToken {
         }
     }
 
-    pub(crate) fn with_progress_observer(observer: Arc<dyn Fn(u64, u64) + Send + Sync>) -> Self {
+    pub(crate) fn with_progress_observer(observer: Arc<ProgressObserver>) -> Self {
         let mut token = Self::new();
         token.progress_observer = Some(observer);
         token
@@ -99,11 +103,12 @@ impl BatchCancellationToken {
     }
 
     /// Record that one sentence completed successfully.
-    pub fn record_completion(&self) {
+    pub fn record_completion(&self) -> Result<(), ApplicationError> {
         let completed = self.completed_count.fetch_add(1, Ordering::Relaxed) + 1;
         if let Some(observer) = &self.progress_observer {
-            observer(completed, self.total_count());
+            observer(completed, self.total_count())?;
         }
+        Ok(())
     }
 
     /// Number of sentences completed so far (checkpoint progress).
@@ -111,11 +116,12 @@ impl BatchCancellationToken {
         self.completed_count.load(Ordering::Relaxed)
     }
 
-    pub fn set_total_count(&self, total: u64) {
+    pub fn set_total_count(&self, total: u64) -> Result<(), ApplicationError> {
         self.total_count.store(total, Ordering::Relaxed);
         if let Some(observer) = &self.progress_observer {
-            observer(self.completed_count(), total);
+            observer(self.completed_count(), total)?;
         }
+        Ok(())
     }
 
     pub fn total_count(&self) -> u64 {
@@ -145,8 +151,8 @@ mod tests {
     #[test]
     fn completion_count_tracks_progress() {
         let token = BatchCancellationToken::new();
-        token.record_completion();
-        token.record_completion();
+        token.record_completion().unwrap();
+        token.record_completion().unwrap();
         assert_eq!(token.completed_count(), 2);
     }
 

@@ -100,6 +100,7 @@ pub enum ForcedAlignFailureKind {
     RequestIo,
     Exit,
     InvalidResponse,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
@@ -116,12 +117,38 @@ pub struct ForcedAlignOutcome {
     pub descriptor: ForcedAlignProviderDescriptor,
 }
 
+pub trait ForcedAlignCancellation: Send + Sync {
+    fn is_cancelled(&self) -> bool;
+
+    /// Serialize a persistent side effect with cancellation acceptance. The
+    /// default is suitable for immutable/test tokens; durable job adapters
+    /// override it with the same lock used by their cancel transition.
+    fn commit_if_active(&self, commit: &mut dyn FnMut()) -> bool {
+        if self.is_cancelled() {
+            false
+        } else {
+            commit();
+            true
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct NeverCancelForcedAlignment;
+
+impl ForcedAlignCancellation for NeverCancelForcedAlignment {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
 #[async_trait]
 pub trait ForcedAlignProvider: Send + Sync {
     fn descriptor(&self) -> ForcedAlignProviderDescriptor;
     async fn align(
         &self,
         request: &ForcedAlignRequest,
+        cancellation: &dyn ForcedAlignCancellation,
     ) -> Result<ForcedAlignOutcome, ForcedAlignFailure>;
 }
 

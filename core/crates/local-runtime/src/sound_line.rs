@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use api_events::{EventEnvelope, EventName};
 use application::{
     AppServices, ApplicationError, BackgroundJobStore, BackgroundJobTransition,
-    ForcedAlignProvider, now_ms,
+    ForcedAlignCancellation, ForcedAlignProvider, now_ms,
 };
 use domain::{
     BackgroundJob, BackgroundJobId, BackgroundJobKind, BackgroundJobStatus, LanguageCode,
@@ -71,6 +71,7 @@ pub struct SoundLineCoordinator {
     events: broadcast::Sender<EventEnvelope>,
     jobs: Arc<dyn BackgroundJobStore>,
     enqueue_lock: Arc<Mutex<()>>,
+    commit_lock: Arc<Mutex<()>>,
     queue: Arc<Semaphore>,
     temp_dir: PathBuf,
     process_runner: Arc<dyn ProcessRunner>,
@@ -109,6 +110,7 @@ impl SoundLineCoordinator {
             events,
             jobs,
             enqueue_lock: Arc::default(),
+            commit_lock: Arc::default(),
             queue: Arc::new(Semaphore::new(1)),
             temp_dir,
             process_runner,
@@ -136,7 +138,10 @@ impl SoundLineCoordinator {
 
     pub fn get(&self, id: &str) -> Result<Option<SoundLineJob>, ApplicationError> {
         let id = BackgroundJobId::parse(id)?;
-        self.jobs.get(&id)?.map(sound_line_job).transpose()
+        match self.jobs.get(&id)? {
+            Some(job) if job.kind == BackgroundJobKind::SoundLine => sound_line_job(job).map(Some),
+            _ => Ok(None),
+        }
     }
 
     /// Enqueue a sound-line job for a track. Idempotent: if an active job for the
@@ -154,11 +159,18 @@ impl SoundLineCoordinator {
     }
 
     pub fn cancel(&self, id: &str) -> Result<SoundLineJob, ApplicationError> {
+        let _commit_guard = self
+            .commit_lock
+            .lock()
+            .map_err(|_| ApplicationError::Repository("sound line commit lock poisoned".into()))?;
         let id = BackgroundJobId::parse(id)?;
         let mut record = self
             .jobs
             .get(&id)?
             .ok_or(ApplicationError::NotFound("sound line job"))?;
+        if record.kind != BackgroundJobKind::SoundLine {
+            return Err(ApplicationError::NotFound("sound line job"));
+        }
         loop {
             if !matches!(
                 record.status,
@@ -312,13 +324,15 @@ impl SoundLineCoordinator {
         // work dir. It has no record of the original audio track index, so it
         // uses the default track — an acceptable degradation for enrichment.
         let args = ffmpeg_wav_args(media_path, None, wav);
+        let cancellation = SoundLineCancellation {
+            jobs: self.jobs.clone(),
+            job_id: BackgroundJobId::parse(job_id)?,
+            commit_lock: self.commit_lock.clone(),
+        };
         self.process_runner
             .run(
                 ProcessSpec::new(ffmpeg, args),
-                Arc::new(SoundLineCancellation {
-                    jobs: self.jobs.clone(),
-                    job_id: BackgroundJobId::parse(job_id)?,
-                }),
+                Arc::new(cancellation.clone()),
             )
             .await?;
         if self.is_cancelled(job_id)? {
@@ -330,11 +344,12 @@ impl SoundLineCoordinator {
         let result = self
             .services
             .media_analysis()
-            .build_transcription_sound_line_resources(
+            .build_transcription_sound_line_resources_cancellable(
                 track_id,
                 b"",
                 wav,
                 self.forced_aligner.as_deref(),
+                Some(&cancellation),
                 language,
             )
             .await?;
@@ -465,17 +480,42 @@ impl SoundLineCoordinator {
     }
 }
 
+#[derive(Clone)]
 struct SoundLineCancellation {
     jobs: Arc<dyn BackgroundJobStore>,
     job_id: BackgroundJobId,
+    commit_lock: Arc<Mutex<()>>,
 }
 
-impl CancellationProbe for SoundLineCancellation {
-    fn is_cancelled(&self) -> Result<bool, ApplicationError> {
+impl SoundLineCancellation {
+    fn durable_cancelled(&self) -> Result<bool, ApplicationError> {
         Ok(self
             .jobs
             .get(&self.job_id)?
             .is_some_and(|job| job.status == BackgroundJobStatus::Cancelled))
+    }
+}
+
+impl CancellationProbe for SoundLineCancellation {
+    fn is_cancelled(&self) -> Result<bool, ApplicationError> {
+        self.durable_cancelled()
+    }
+}
+
+impl ForcedAlignCancellation for SoundLineCancellation {
+    fn is_cancelled(&self) -> bool {
+        self.durable_cancelled().unwrap_or(true)
+    }
+
+    fn commit_if_active(&self, commit: &mut dyn FnMut()) -> bool {
+        let Ok(_guard) = self.commit_lock.lock() else {
+            return false;
+        };
+        if self.durable_cancelled().unwrap_or(true) {
+            return false;
+        }
+        commit();
+        true
     }
 }
 
@@ -485,6 +525,9 @@ fn sound_line_payload(job: &BackgroundJob) -> Result<SoundLinePayload, Applicati
 }
 
 fn sound_line_job(job: BackgroundJob) -> Result<SoundLineJob, ApplicationError> {
+    if job.kind != BackgroundJobKind::SoundLine {
+        return Err(ApplicationError::NotFound("sound line job"));
+    }
     let payload = sound_line_payload(&job)?;
     Ok(SoundLineJob {
         id: job.id.as_str().into(),
@@ -528,6 +571,9 @@ fn completed_track_id(payload: &Value) -> Option<SubtitleTrackId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc;
+    use std::thread;
 
     #[test]
     fn fresh_transcription_completion_exposes_track_id() {
@@ -552,5 +598,89 @@ mod tests {
         });
 
         assert!(completed_track_id(&payload).is_none());
+    }
+
+    #[test]
+    fn another_job_kind_cannot_be_deserialized_as_sound_line() {
+        let mut job = BackgroundJob {
+            id: BackgroundJobId::parse("speech-id").unwrap(),
+            kind: BackgroundJobKind::SpeechBatch,
+            status: BackgroundJobStatus::Running,
+            payload_json: "{}".into(),
+            completed_units: 0,
+            total_units: 0,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        assert!(matches!(
+            sound_line_job(job.clone()),
+            Err(ApplicationError::NotFound("sound line job"))
+        ));
+        job.kind = BackgroundJobKind::LlmBatch;
+        assert!(sound_line_job(job).is_err());
+    }
+
+    #[test]
+    fn cancellation_waits_for_an_in_flight_commit_and_blocks_later_writes() {
+        let jobs = Arc::new(application::InMemoryBackgroundJobStore::default());
+        let id = BackgroundJobId::parse("sound-line-race").unwrap();
+        let running = BackgroundJob {
+            id: id.clone(),
+            kind: BackgroundJobKind::SoundLine,
+            status: BackgroundJobStatus::Running,
+            payload_json: r#"{"track_id":"track-1","timeline_id":null,"acoustic_cue_count":0}"#
+                .into(),
+            completed_units: 0,
+            total_units: 1,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        jobs.create(&running).unwrap();
+        let commit_lock = Arc::new(Mutex::new(()));
+        let cancellation = Arc::new(SoundLineCancellation {
+            jobs: jobs.clone(),
+            job_id: id,
+            commit_lock: commit_lock.clone(),
+        });
+        let writes = Arc::new(AtomicUsize::new(0));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let committing = {
+            let cancellation = cancellation.clone();
+            let writes = writes.clone();
+            thread::spawn(move || {
+                cancellation.commit_if_active(&mut || {
+                    entered_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    writes.fetch_add(1, Ordering::SeqCst);
+                })
+            })
+        };
+        entered_rx.recv().unwrap();
+
+        let (cancelled_tx, cancelled_rx) = mpsc::channel();
+        let cancelling = thread::spawn(move || {
+            let _guard = commit_lock.lock().unwrap();
+            let mut cancelled = running;
+            cancelled.status = BackgroundJobStatus::Cancelled;
+            jobs.transition(BackgroundJobStatus::Running, &cancelled)
+                .unwrap();
+            cancelled_tx.send(()).unwrap();
+        });
+        assert!(cancelled_rx.try_recv().is_err());
+        release_tx.send(()).unwrap();
+        assert!(committing.join().unwrap());
+        cancelled_rx.recv().unwrap();
+        cancelling.join().unwrap();
+
+        assert_eq!(writes.load(Ordering::SeqCst), 1);
+        assert!(!cancellation.commit_if_active(&mut || {
+            writes.fetch_add(1, Ordering::SeqCst);
+        }));
+        assert_eq!(writes.load(Ordering::SeqCst), 1);
     }
 }

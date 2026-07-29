@@ -93,7 +93,10 @@ impl SpeechBatchCoordinator {
 
     pub fn get(&self, id: &str) -> Result<Option<SpeechBatchJob>, ApplicationError> {
         let id = BackgroundJobId::parse(id)?;
-        self.jobs.get(&id)?.map(speech_job).transpose()
+        match self.jobs.get(&id)? {
+            Some(job) if job.kind == BackgroundJobKind::SpeechBatch => speech_job(job).map(Some),
+            _ => Ok(None),
+        }
     }
 
     pub fn create(
@@ -150,6 +153,9 @@ impl SpeechBatchCoordinator {
             .jobs
             .get(&id)?
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
+        if record.kind != BackgroundJobKind::SpeechBatch {
+            return Err(ApplicationError::NotFound("speech batch job"));
+        }
         loop {
             if !matches!(
                 record.status,
@@ -420,6 +426,9 @@ fn speech_payload(job: &BackgroundJob) -> Result<SpeechBatchPayload, Application
 }
 
 fn speech_job(job: BackgroundJob) -> Result<SpeechBatchJob, ApplicationError> {
+    if job.kind != BackgroundJobKind::SpeechBatch {
+        return Err(ApplicationError::NotFound("speech batch job"));
+    }
     let payload = speech_payload(&job)?;
     Ok(SpeechBatchJob {
         id: job.id.as_str().into(),
@@ -444,4 +453,29 @@ fn speech_job(job: BackgroundJob) -> Result<SpeechBatchJob, ApplicationError> {
         created_at_ms: job.created_at_ms,
         updated_at_ms: job.updated_at_ms,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn another_job_kind_cannot_be_deserialized_as_speech_batch() {
+        let job = BackgroundJob {
+            id: BackgroundJobId::parse("sound-id").unwrap(),
+            kind: BackgroundJobKind::SoundLine,
+            status: BackgroundJobStatus::Running,
+            payload_json: "{}".into(),
+            completed_units: 0,
+            total_units: 0,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        assert!(matches!(
+            speech_job(job),
+            Err(ApplicationError::NotFound("speech batch job"))
+        ));
+    }
 }

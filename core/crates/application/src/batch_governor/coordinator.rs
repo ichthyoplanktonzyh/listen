@@ -131,16 +131,21 @@ impl LlmBatchCoordinator {
         let progress_id = id.clone();
         let token = BatchCancellationToken::with_progress_observer(Arc::new(
             move |completed_units, total_units| {
-                let Ok(Some(mut job)) = progress_jobs.get(&progress_id) else {
-                    return;
+                let Some(mut job) = progress_jobs.get(&progress_id)? else {
+                    return Err(ApplicationError::NotFound("LLM batch"));
                 };
+                if job.kind != BackgroundJobKind::LlmBatch {
+                    return Err(ApplicationError::NotFound("LLM batch"));
+                }
                 if job.status != BackgroundJobStatus::Running {
-                    return;
+                    return Ok(());
                 }
                 job.completed_units = completed_units;
                 job.total_units = total_units;
                 job.updated_at_ms = now_ms();
-                let _ = progress_jobs.transition(BackgroundJobStatus::Running, &job);
+                progress_jobs
+                    .transition(BackgroundJobStatus::Running, &job)
+                    .map(|_| ())
             },
         ));
         let mut batches = self.batches.lock().unwrap();
@@ -176,9 +181,14 @@ impl LlmBatchCoordinator {
         Ok((governor, token))
     }
 
-    pub fn cancel(&self, batch_id: &str) -> Option<BatchProgress> {
-        let id = BackgroundJobId::parse(batch_id).ok()?;
-        let mut job = self.jobs.get(&id).ok()??;
+    pub fn cancel(&self, batch_id: &str) -> Result<Option<BatchProgress>, ApplicationError> {
+        let id = BackgroundJobId::parse(batch_id)?;
+        let Some(mut job) = self.jobs.get(&id)? else {
+            return Ok(None);
+        };
+        if job.kind != BackgroundJobKind::LlmBatch {
+            return Ok(None);
+        }
         let token = self
             .batches
             .lock()
@@ -186,30 +196,43 @@ impl LlmBatchCoordinator {
             .get(batch_id)
             .map(|record| record.token.clone());
         let Some(token) = token else {
-            return Some(progress(&job, None));
+            return Ok(Some(progress(&job, None)));
         };
         if job.status == BackgroundJobStatus::Running && token.cancel() {
             job.status = BackgroundJobStatus::Cancelling;
             job.completed_units = token.completed_count();
             job.total_units = token.total_count();
             job.updated_at_ms = now_ms();
-            job = match self
-                .jobs
-                .transition(BackgroundJobStatus::Running, &job)
-                .ok()?
-            {
+            job = match self.jobs.transition(BackgroundJobStatus::Running, &job)? {
                 BackgroundJobTransition::Applied(job) | BackgroundJobTransition::Rejected(job) => {
                     job
                 }
             };
         }
-        Some(progress(&job, Some(&token)))
+        Ok(Some(progress(&job, Some(&token))))
     }
 
-    pub fn finish(&self, batch_id: &str, succeeded: bool) -> Option<BatchProgress> {
-        let id = BackgroundJobId::parse(batch_id).ok()?;
-        let token = self.batches.lock().unwrap().get(batch_id)?.token.clone();
-        let mut job = self.jobs.get(&id).ok()??;
+    pub fn finish(
+        &self,
+        batch_id: &str,
+        succeeded: bool,
+    ) -> Result<Option<BatchProgress>, ApplicationError> {
+        let id = BackgroundJobId::parse(batch_id)?;
+        let token = self
+            .batches
+            .lock()
+            .unwrap()
+            .get(batch_id)
+            .map(|record| record.token.clone());
+        let Some(mut job) = self.jobs.get(&id)? else {
+            return Ok(None);
+        };
+        if job.kind != BackgroundJobKind::LlmBatch {
+            return Ok(None);
+        }
+        let Some(token) = token else {
+            return Ok(Some(progress(&job, None)));
+        };
         loop {
             if !matches!(
                 job.status,
@@ -228,7 +251,7 @@ impl LlmBatchCoordinator {
             job.completed_units = token.completed_count();
             job.total_units = token.total_count();
             job.updated_at_ms = now_ms();
-            match self.jobs.transition(expected, &job).ok()? {
+            match self.jobs.transition(expected, &job)? {
                 BackgroundJobTransition::Applied(updated) => {
                     job = updated;
                     break;
@@ -237,19 +260,24 @@ impl LlmBatchCoordinator {
             }
         }
         self.batches.lock().unwrap().remove(batch_id);
-        Some(progress(&job, Some(&token)))
+        Ok(Some(progress(&job, Some(&token))))
     }
 
-    pub fn status(&self, batch_id: &str) -> Option<BatchProgress> {
-        let id = BackgroundJobId::parse(batch_id).ok()?;
-        let job = self.jobs.get(&id).ok()??;
+    pub fn status(&self, batch_id: &str) -> Result<Option<BatchProgress>, ApplicationError> {
+        let id = BackgroundJobId::parse(batch_id)?;
+        let Some(job) = self.jobs.get(&id)? else {
+            return Ok(None);
+        };
+        if job.kind != BackgroundJobKind::LlmBatch {
+            return Ok(None);
+        }
         let token = self
             .batches
             .lock()
             .unwrap()
             .get(batch_id)
             .map(|record| record.token.clone());
-        Some(progress(&job, token.as_ref()))
+        Ok(Some(progress(&job, token.as_ref())))
     }
 }
 
@@ -280,14 +308,50 @@ fn progress(job: &BackgroundJob, token: Option<&BatchCancellationToken>) -> Batc
 mod tests {
     use super::*;
 
+    struct FailingTransitionStore {
+        inner: InMemoryBackgroundJobStore,
+    }
+
+    impl BackgroundJobStore for FailingTransitionStore {
+        fn create(&self, job: &BackgroundJob) -> Result<BackgroundJob, ApplicationError> {
+            self.inner.create(job)
+        }
+
+        fn get(&self, id: &BackgroundJobId) -> Result<Option<BackgroundJob>, ApplicationError> {
+            self.inner.get(id)
+        }
+
+        fn list(&self, kind: BackgroundJobKind) -> Result<Vec<BackgroundJob>, ApplicationError> {
+            self.inner.list(kind)
+        }
+
+        fn transition(
+            &self,
+            _expected: BackgroundJobStatus,
+            _job: &BackgroundJob,
+        ) -> Result<BackgroundJobTransition, ApplicationError> {
+            Err(ApplicationError::Repository(
+                "injected background job write failure".into(),
+            ))
+        }
+
+        fn recover_startup(
+            &self,
+            kind: BackgroundJobKind,
+            now_ms: u64,
+        ) -> Result<Vec<BackgroundJob>, ApplicationError> {
+            self.inner.recover_startup(kind, now_ms)
+        }
+    }
+
     #[test]
     fn account_scope_reuses_one_governor_and_allows_idle_reconfiguration() {
         let coordinator = LlmBatchCoordinator::default();
         let (first, _) = coordinator.begin("a", "account", 4, Some(10)).unwrap();
-        coordinator.finish("a", true);
+        coordinator.finish("a", true).unwrap();
         let (second, _) = coordinator.begin("b", "account", 4, Some(10)).unwrap();
         assert_eq!(first.capacity(), second.capacity());
-        coordinator.finish("b", true);
+        coordinator.finish("b", true).unwrap();
         let (reconfigured, _) = coordinator.begin("c", "account", 8, Some(10)).unwrap();
         assert_eq!(reconfigured.capacity(), 8);
     }
@@ -307,13 +371,13 @@ mod tests {
     fn cancellation_is_visible_in_status() {
         let coordinator = LlmBatchCoordinator::default();
         let (_, token) = coordinator.begin("batch", "account", 1, None).unwrap();
-        token.set_total_count(3);
-        token.record_completion();
-        let progress = coordinator.cancel("batch").unwrap();
+        token.set_total_count(3).unwrap();
+        token.record_completion().unwrap();
+        let progress = coordinator.cancel("batch").unwrap().unwrap();
         assert_eq!(progress.state, BatchExecutionState::Cancelling);
         assert_eq!(progress.completed_sentences, 1);
         assert_eq!(progress.total_sentences, 3);
-        let progress = coordinator.finish("batch", false).unwrap();
+        let progress = coordinator.finish("batch", false).unwrap().unwrap();
         assert_eq!(progress.state, BatchExecutionState::Cancelled);
     }
 
@@ -322,14 +386,59 @@ mod tests {
         let jobs = Arc::new(InMemoryBackgroundJobStore::default());
         let coordinator = LlmBatchCoordinator::new(jobs.clone()).unwrap();
         let (_, token) = coordinator.begin("batch", "account", 1, None).unwrap();
-        token.set_total_count(3);
-        token.record_completion();
+        token.set_total_count(3).unwrap();
+        token.record_completion().unwrap();
         drop(coordinator);
 
         let restarted = LlmBatchCoordinator::new(jobs).unwrap();
-        let progress = restarted.status("batch").unwrap();
+        let progress = restarted.status("batch").unwrap().unwrap();
         assert_eq!(progress.state, BatchExecutionState::Failed);
         assert_eq!(progress.completed_sentences, 1);
         assert_eq!(progress.total_sentences, 3);
+    }
+
+    #[test]
+    fn rejects_an_identifier_owned_by_another_job_kind() {
+        let jobs = Arc::new(InMemoryBackgroundJobStore::default());
+        let coordinator = LlmBatchCoordinator::new(jobs.clone()).unwrap();
+        jobs.create(&BackgroundJob {
+            id: BackgroundJobId::parse("speech-job").unwrap(),
+            kind: BackgroundJobKind::SpeechBatch,
+            status: BackgroundJobStatus::Running,
+            payload_json: "{}".into(),
+            completed_units: 0,
+            total_units: 1,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        })
+        .unwrap();
+
+        assert!(coordinator.status("speech-job").unwrap().is_none());
+        assert!(coordinator.cancel("speech-job").unwrap().is_none());
+        assert!(coordinator.finish("speech-job", true).unwrap().is_none());
+    }
+
+    #[test]
+    fn durable_progress_and_terminal_write_failures_are_propagated() {
+        let jobs = Arc::new(FailingTransitionStore {
+            inner: InMemoryBackgroundJobStore::default(),
+        });
+        let coordinator = LlmBatchCoordinator::new(jobs).unwrap();
+        let (_, token) = coordinator.begin("batch", "account", 1, None).unwrap();
+
+        assert!(matches!(
+            token.record_completion(),
+            Err(ApplicationError::Repository(_))
+        ));
+        assert!(matches!(
+            coordinator.cancel("batch"),
+            Err(ApplicationError::Repository(_))
+        ));
+        assert!(matches!(
+            coordinator.finish("batch", true),
+            Err(ApplicationError::Repository(_))
+        ));
     }
 }

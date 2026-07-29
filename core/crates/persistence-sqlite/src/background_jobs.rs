@@ -64,13 +64,17 @@ impl BackgroundJobStore for SqliteRepository {
             .execute(
                 "UPDATE background_jobs
                  SET status=?3,job_json=?4,updated_at_ms=?5
-                 WHERE id=?1 AND status=?2",
+                 WHERE id=?1 AND status=?2
+                   AND CAST(json_extract(job_json,'$.completed_units') AS INTEGER) <= ?6
+                   AND CAST(json_extract(job_json,'$.total_units') AS INTEGER) <= ?7",
                 params![
                     job.id.as_str(),
                     json(&expected)?,
                     json(&job.status)?,
                     json(job)?,
                     job.updated_at_ms,
+                    job.completed_units,
+                    job.total_units,
                 ],
             )
             .map_err(repo)?;

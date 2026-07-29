@@ -429,9 +429,9 @@ pub(crate) async fn llm_batch_status(
     state
         .application
         .execute("llm.batch_status", move |services| {
-            Ok(services
+            services
                 .llm_providers()
-                .batch_status(&batch_id, &coordinator))
+                .batch_status(&batch_id, &coordinator)
         })
         .await?
         .map(Json)
@@ -446,9 +446,9 @@ pub(crate) async fn cancel_llm_batch(
     state
         .application
         .execute("llm.cancel_batch", move |services| {
-            Ok(services
+            services
                 .llm_providers()
-                .cancel_batch(&batch_id, &coordinator))
+                .cancel_batch(&batch_id, &coordinator)
         })
         .await?
         .map(Json)

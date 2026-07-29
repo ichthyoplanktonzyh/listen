@@ -1,4 +1,6 @@
 use super::*;
+use application::BackgroundJobStore;
+use domain::{BackgroundJob, BackgroundJobId, BackgroundJobKind, BackgroundJobStatus};
 
 #[tokio::test]
 async fn speech_batch_job_queues_ten_thousand_sentences_and_can_cancel_and_retry() {
@@ -120,6 +122,45 @@ async fn speech_batch_job_queues_ten_thousand_sentences_and_can_cancel_and_retry
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn durable_job_ids_cannot_cross_speech_and_sound_line_routes() {
+    let (state, repo) = test_state_with_repository();
+    for (id, kind) in [
+        ("foreign-sound-job", BackgroundJobKind::SoundLine),
+        ("foreign-speech-job", BackgroundJobKind::SpeechBatch),
+    ] {
+        repo.create(&BackgroundJob {
+            id: BackgroundJobId::parse(id).unwrap(),
+            kind,
+            status: BackgroundJobStatus::Running,
+            payload_json: "{}".into(),
+            completed_units: 0,
+            total_units: 1,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        })
+        .unwrap();
+    }
+    let app = router(state);
+    for (method, path) in [
+        ("GET", "/v1/speech/jobs/foreign-sound-job"),
+        ("POST", "/v1/speech/jobs/foreign-sound-job/cancel"),
+        ("GET", "/v1/sound-line/jobs/foreign-speech-job"),
+        ("POST", "/v1/sound-line/jobs/foreign-speech-job/cancel"),
+    ] {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
+    }
 }
 
 #[tokio::test]
