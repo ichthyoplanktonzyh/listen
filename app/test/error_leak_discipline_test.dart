@@ -141,19 +141,7 @@ void main() {
   // edit, so a line-level list would cost more to maintain than the debt it
   // tracks. Same shape as the token gates in `icon_size_discipline_test.dart`.
   const knownOffenders = <String>{
-    'lib/controllers/auxiliary_audio_controller.dart',
-    'lib/controllers/coach_dashboard_controller.dart',
     'lib/controllers/download_controller.dart',
-    'lib/controllers/extensive_listening_controller.dart',
-    'lib/controllers/hunting_controller.dart',
-    'lib/controllers/hunting_session_controller.dart',
-    'lib/controllers/practice_controller.dart',
-    'lib/controllers/reading_diff_controller.dart',
-    'lib/controllers/reading_task_controller.dart',
-    'lib/controllers/review_controller.dart',
-    'lib/controllers/slice_player_controller.dart',
-    'lib/controllers/speaking_task_controller.dart',
-    'lib/controllers/writing_task_controller.dart',
     'lib/main.dart',
     'lib/phonetic_analysis_ui.dart',
     'lib/player_adapter.dart',

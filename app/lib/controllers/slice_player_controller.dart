@@ -208,7 +208,7 @@ class SlicePlayerController extends ChangeNotifier {
           (state) => state.copyWith(
             loading: false,
             playing: false,
-            error: 'Could not load source clip: $error',
+            error: 'Could not load source clip',
           ),
         );
       }

@@ -54,10 +54,8 @@ class HuntingController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not load hunting list: $error',
-        ),
+        (state) =>
+            state.copyWith(busy: false, error: 'Could not load hunting list'),
       );
       return false;
     }
@@ -102,10 +100,8 @@ class HuntingController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not update hunting list: $error',
-        ),
+        (state) =>
+            state.copyWith(busy: false, error: 'Could not update hunting list'),
       );
       return false;
     }
@@ -127,10 +123,8 @@ class HuntingController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not update hunting list: $error',
-        ),
+        (state) =>
+            state.copyWith(busy: false, error: 'Could not update hunting list'),
       );
       return false;
     }

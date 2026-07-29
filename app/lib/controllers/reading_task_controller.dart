@@ -209,7 +209,11 @@ class ReadingTaskController extends ChangeNotifier {
       await _resolveProviders(api);
     } catch (error) {
       _store.update(
-        (s) => s.copyWith(phase: 'idle', busy: false, error: '$error'),
+        (s) => s.copyWith(
+          phase: 'idle',
+          busy: false,
+          error: 'This reading task could not be opened',
+        ),
       );
     }
   }
@@ -272,7 +276,10 @@ class ReadingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) =>
+            s.copyWith(busy: false, error: 'The rubric could not be generated'),
+      );
     }
   }
 
@@ -388,7 +395,12 @@ class ReadingTaskController extends ChangeNotifier {
       );
       _answerDrafts.remove(_draftKey(source, purpose));
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'Your answer could not be submitted',
+        ),
+      );
     }
   }
 
@@ -441,7 +453,12 @@ class ReadingTaskController extends ChangeNotifier {
         (s) => s.copyWith(phase: 'done', judgment: judgment, busy: false),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'Your self-assessment could not be saved',
+        ),
+      );
     }
   }
 
@@ -472,7 +489,12 @@ class ReadingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'This adjudication could not be saved',
+        ),
+      );
     }
   }
 
@@ -501,7 +523,12 @@ class ReadingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'The assistive judgment could not be generated',
+        ),
+      );
     }
   }
 
@@ -533,7 +560,12 @@ class ReadingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'This adjudication could not be saved',
+        ),
+      );
     }
   }
 

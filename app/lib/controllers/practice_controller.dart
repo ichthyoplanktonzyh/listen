@@ -693,7 +693,7 @@ class PracticeController extends ChangeNotifier {
       );
       return true;
     } catch (error) {
-      _setError('Could not start recording: $error');
+      _setError('Could not start recording');
       return false;
     }
   }
@@ -770,7 +770,7 @@ class PracticeController extends ChangeNotifier {
           (s) => s.copyWith(
             busy: false,
             comparisonWarning:
-                'Recording saved, but objective comparison is unavailable: $error',
+                'Recording saved, but objective comparison is unavailable',
           ),
         );
       }
@@ -779,7 +779,7 @@ class PracticeController extends ChangeNotifier {
         (s) => s.copyWith(
           recordingActive: false,
           busy: false,
-          error: 'Could not save recording: $error',
+          error: 'Could not save recording',
         ),
       );
     }
@@ -807,9 +807,10 @@ class PracticeController extends ChangeNotifier {
       final file = File(asset.filePath);
       try {
         if (await file.exists()) await file.delete();
-      } on FileSystemException catch (error) {
+      } on FileSystemException {
         cleanupWarning =
-            'Recording metadata was deleted, but the local file could not be removed: $error';
+            'Recording metadata was deleted, but the local file could not be '
+            'removed';
       }
       _store.update(
         (s) => s.copyWith(
@@ -821,7 +822,7 @@ class PracticeController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _setError('Could not delete recording: $error');
+      _setError('Could not delete recording');
     }
   }
 
@@ -843,7 +844,7 @@ class PracticeController extends ChangeNotifier {
       );
       _store.update((s) => s.copyWith(attempt: value, busy: false));
     } catch (error) {
-      _setError('Practice submission failed: $error');
+      _setError('Practice submission failed');
     }
   }
 
@@ -884,7 +885,7 @@ class PracticeController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _setError('Could not save review item: $error');
+      _setError('Could not save review item');
     }
   }
 
@@ -927,7 +928,7 @@ class PracticeController extends ChangeNotifier {
       );
     } catch (error) {
       if (generation == _generation) {
-        _setError('Could not start practice: $error');
+        _setError('Could not start practice');
       }
     }
   }
