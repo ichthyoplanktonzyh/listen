@@ -8,8 +8,9 @@ use domain::{
 };
 use futures_util::{SinkExt, StreamExt};
 use realtime_provider::{
-    NativeRealtimeAdapterFactory, OpenAiRealtimeAdapter, OpenAiRealtimeCodec, QwenRealtimeAdapter,
-    QwenRealtimeCodec, RealtimeAdapterConfig, RealtimeProtocolCodec,
+    LocalCascadeRealtimeAdapter, LocalCascadeRealtimeCodec, NativeRealtimeAdapterFactory,
+    OpenAiRealtimeAdapter, OpenAiRealtimeCodec, QwenRealtimeAdapter, QwenRealtimeCodec,
+    RealtimeAdapterConfig, RealtimeProtocolCodec,
 };
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -52,7 +53,10 @@ fn descriptors_report_implemented_capabilities_instead_of_vendor_promises() {
             RealtimeAudioFormat::Pcm16Mono24Khz
         );
         assert!(capabilities.supports_server_vad);
-        assert!(capabilities.supports_manual_turns);
+        assert_eq!(
+            capabilities.supports_manual_turns,
+            descriptor.adapter_kind != "local_cascade_realtime"
+        );
         assert!(capabilities.supports_provider_input_transcript);
         assert!(capabilities.supports_assistant_transcript);
         assert!(capabilities.supports_response_cancel);
@@ -129,6 +133,77 @@ fn openai_baseline_uses_the_current_ga_audio_session_shape() {
             "language": "en",
         })
     );
+}
+
+#[test]
+fn local_cascade_uses_server_vad_and_treats_live_transcripts_as_snapshots() {
+    let codec = LocalCascadeRealtimeCodec::default();
+    let session = codec.session_update(&request());
+    assert_eq!(
+        session["session"]["audio"]["input"]["turn_detection"],
+        serde_json::json!({
+            "type": "server_vad",
+            "interrupt_response": true,
+        })
+    );
+    assert!(!codec.supports_manual_turns());
+
+    let first = codec
+        .decode(&serde_json::json!({
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "learner-1",
+            "delta": "hel"
+        }))
+        .unwrap()
+        .unwrap();
+    let second = codec
+        .decode(&serde_json::json!({
+            "type": "conversation.item.input_audio_transcription.delta",
+            "item_id": "learner-1",
+            "delta": "hello"
+        }))
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        first,
+        RealtimeEvent::ProviderTranscriptPreview { text, .. } if text == "hel"
+    ));
+    assert!(matches!(
+        second,
+        RealtimeEvent::ProviderTranscriptPreview { text, .. } if text == "hello"
+    ));
+}
+
+#[test]
+fn local_cascade_merges_chunk_done_events_into_one_final_transcript() {
+    let codec = LocalCascadeRealtimeCodec::default();
+    for (chunk, expected) in [("Hello", "Hello"), (" there.", " there.")] {
+        let events = codec
+            .decode_many(&serde_json::json!({
+                "type": "response.output_audio_transcript.done",
+                "response_id": "response-1",
+                "item_id": "assistant-1",
+                "transcript": chunk
+            }))
+            .unwrap();
+        assert!(matches!(
+            events.as_slice(),
+            [RealtimeEvent::AssistantTranscriptDelta { delta, .. }] if delta == expected
+        ));
+    }
+    let events = codec
+        .decode_many(&serde_json::json!({
+            "type": "response.done",
+            "response": {"id": "response-1"}
+        }))
+        .unwrap();
+    assert!(matches!(
+        events.as_slice(),
+        [
+            RealtimeEvent::AssistantTranscriptFinal { transcript, .. },
+            RealtimeEvent::ResponseDone { .. }
+        ] if transcript == "Hello there."
+    ));
 }
 
 #[test]
@@ -302,8 +377,9 @@ async fn both_adapters_cross_a_real_websocket_transport_without_leaking_protocol
         let config = RealtimeAdapterConfig {
             base_url: format!("ws://{address}/realtime"),
             model_id: "contract-model".into(),
-            credential: "contract-secret".into(),
+            credential: Some("contract-secret".into()),
             timeout: Duration::from_secs(2),
+            require_loopback: false,
         };
         let adapter: Box<dyn RealtimeConversationAdapter> = match kind {
             "openai" => Box::new(OpenAiRealtimeAdapter::new(config)),
@@ -329,8 +405,9 @@ async fn invalid_configuration_degrades_before_opening_a_socket() {
     let base = RealtimeAdapterConfig {
         base_url: "https://not-a-websocket.example/realtime".into(),
         model_id: "model".into(),
-        credential: "secret".into(),
+        credential: Some("secret".into()),
         timeout: Duration::from_millis(10),
+        require_loopback: false,
     };
     let adapter = OpenAiRealtimeAdapter::new(base.clone());
     assert!(matches!(
@@ -339,13 +416,29 @@ async fn invalid_configuration_degrades_before_opening_a_socket() {
     ));
 
     let adapter = QwenRealtimeAdapter::new(RealtimeAdapterConfig {
-        credential: String::new(),
+        credential: Some(String::new()),
         base_url: "ws://127.0.0.1:9/realtime".into(),
         ..base
     });
     assert!(matches!(
         adapter.connect(&request()).await,
         Err(domain::RealtimeProviderError::Auth)
+    ));
+}
+
+#[tokio::test]
+async fn local_cascade_is_keyless_but_rejects_non_loopback_endpoints() {
+    let adapter = LocalCascadeRealtimeAdapter::new(RealtimeAdapterConfig {
+        base_url: "ws://example.com/v1/realtime".into(),
+        model_id: "local".into(),
+        credential: None,
+        timeout: Duration::from_millis(10),
+        require_loopback: true,
+    });
+    assert!(matches!(
+        adapter.connect(&request()).await,
+        Err(domain::RealtimeProviderError::Protocol { detail })
+            if detail.contains("loopback")
     ));
 }
 
@@ -368,8 +461,9 @@ async fn provider_close_reason_is_preserved_instead_of_becoming_bare_disconnect(
     let adapter = QwenRealtimeAdapter::new(RealtimeAdapterConfig {
         base_url: format!("ws://{address}/realtime"),
         model_id: "contract-model".into(),
-        credential: "contract-secret".into(),
+        credential: Some("contract-secret".into()),
         timeout: Duration::from_secs(2),
+        require_loopback: false,
     });
     let mut session = adapter.connect(&qwen_request()).await.unwrap();
 
@@ -401,12 +495,20 @@ fn adapters() -> Vec<Box<dyn RealtimeConversationAdapter>> {
     let config = RealtimeAdapterConfig {
         base_url: "wss://example.invalid/realtime".into(),
         model_id: "contract-model".into(),
-        credential: "contract-secret".into(),
+        credential: Some("contract-secret".into()),
         timeout: Duration::from_secs(2),
+        require_loopback: false,
     };
     vec![
         Box::new(OpenAiRealtimeAdapter::new(config.clone())),
         Box::new(QwenRealtimeAdapter::new(config)),
+        Box::new(LocalCascadeRealtimeAdapter::new(RealtimeAdapterConfig {
+            base_url: "ws://127.0.0.1:8765/v1/realtime".into(),
+            model_id: "local".into(),
+            credential: None,
+            timeout: Duration::from_secs(2),
+            require_loopback: true,
+        })),
     ]
 }
 
@@ -423,6 +525,11 @@ fn native_factory_maps_profiles_to_protocol_adapters_and_audio_capabilities() {
             "qwen_omni_realtime",
             RealtimeAudioFormat::Pcm16Mono16Khz,
         ),
+        (
+            RealtimeAdapterKind::LocalCascadeRealtime,
+            "local_cascade_realtime",
+            RealtimeAudioFormat::Pcm16Mono24Khz,
+        ),
     ] {
         let base_url = "wss://example.invalid/realtime";
         let model_id = "contract-model";
@@ -433,12 +540,17 @@ fn native_factory_maps_profiles_to_protocol_adapters_and_audio_capabilities() {
             base_url: base_url.into(),
             model_id: model_id.into(),
             voice: "contract-voice".into(),
-            auth_ref: SecretRef::new("opaque://credential"),
+            auth_ref: (adapter_kind != RealtimeAdapterKind::LocalCascadeRealtime)
+                .then(|| SecretRef::new("opaque://credential")),
             timeout_ms: 2_000,
             created_at_ms: 1,
         };
 
-        let adapter = NativeRealtimeAdapterFactory::new().build(&profile, "credential".into());
+        let credential = (adapter_kind != RealtimeAdapterKind::LocalCascadeRealtime)
+            .then(|| "credential".into());
+        let adapter = NativeRealtimeAdapterFactory::new()
+            .build(&profile, credential)
+            .unwrap();
         let descriptor = adapter.descriptor();
 
         assert_eq!(descriptor.adapter_kind, expected_kind);

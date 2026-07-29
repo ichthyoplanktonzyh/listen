@@ -23,6 +23,8 @@
 - CORE-ARCH-003: persistence 实现 repository seam，不定义产品政策。
 - CORE-ARCH-004: secrets 不进入日志、read DTO 或普通持久化字段。
 - CORE-ARCH-005: durable learning history 不因可替换 media/resource 被级联删除。
+- CORE-ARCH-006: credential-free local realtime provider 必须限制为 loopback，
+  并由 runtime seam 负责 sidecar readiness、终止与回收。
 
 ## Quality
 
@@ -31,3 +33,4 @@
 - CORE-QA-003: Rust change 必须运行 focused tests；review 前运行 strict gate 或说明例外。
 - CORE-QA-004: artifact change 必须运行 unit、verify 和对应 smoke。
 - CORE-QA-005: 代码事实变化必须同步 live planning/codebase 文档。
+- CORE-QA-006: 正常 local realtime 测试不得下载模型；真实 cascade smoke 必须显式授权。

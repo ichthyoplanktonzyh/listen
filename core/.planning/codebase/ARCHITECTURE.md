@@ -53,6 +53,18 @@ removing that reservation and enqueuing any stale credential. Reservations
 abandoned by a crashed process are promoted at startup. Cleanup is idempotent
 and retryable, so an unavailable keychain cannot make an already committed
 profile mutation appear to have failed or permanently lose the stale reference.
+Realtime profiles may also be honestly keyless. The
+`local_cascade_realtime` adapter accepts only loopback WebSocket endpoints and
+does not reserve a keychain reference; remote realtime factories still reject a
+missing credential.
+
+An optional local ASR → LLM → TTS sidecar is supervised by `local-runtime`.
+The composition root enables it only through explicit environment
+configuration. Runtime policy appends realtime-mode and loopback-bind
+arguments, waits until `/v1/pool` reports an available initialized pipeline,
+captures only a bounded stderr tail, and terminates/reaps the process group on
+shutdown. Realtime routes see only the application adapter seam and never child
+process details.
 
 Before a schema upgrade, SQLite publishes a source-schema-versioned recovery
 copy only after a same-directory temporary copy is synced. Hard-link

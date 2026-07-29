@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::VecDeque, time::Duration};
 
 use application::{
     RealtimeAudioFormat, RealtimeConversationAdapter, RealtimeConversationSession, RealtimeEvent,
@@ -17,24 +17,37 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async,
     tungstenite::{Message, client::IntoClientRequest},
 };
-use url::Url;
+use url::{Host, Url};
 
-use crate::{OpenAiRealtimeCodec, QwenRealtimeCodec, RealtimeProtocolCodec};
+use crate::{
+    LocalCascadeRealtimeCodec, OpenAiRealtimeCodec, QwenRealtimeCodec, RealtimeProtocolCodec,
+};
 
 #[derive(Debug, Clone)]
 pub struct RealtimeAdapterConfig {
     pub base_url: String,
     pub model_id: String,
-    pub credential: String,
+    pub credential: Option<String>,
     pub timeout: Duration,
+    pub require_loopback: bool,
 }
 
 type Wire = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+fn is_loopback(url: &Url) -> bool {
+    match url.host() {
+        Some(Host::Ipv4(address)) => address.is_loopback(),
+        Some(Host::Ipv6(address)) => address.is_loopback(),
+        Some(Host::Domain(domain)) => domain == "localhost",
+        None => false,
+    }
+}
 
 struct WireSession<C> {
     codec: C,
     sink: SplitSink<Wire, Message>,
     stream: SplitStream<Wire>,
+    pending_events: VecDeque<RealtimeEvent>,
 }
 
 impl<C: RealtimeProtocolCodec> WireSession<C> {
@@ -52,12 +65,20 @@ impl<C: RealtimeProtocolCodec> RealtimeConversationSession for WireSession<C> {
         self.send_json(self.codec.audio_append(pcm)).await
     }
     async fn commit_turn(&mut self) -> Result<(), RealtimeProviderError> {
+        if !self.codec.supports_manual_turns() {
+            return Err(RealtimeProviderError::UnsupportedCapability {
+                capability: "manual turns".into(),
+            });
+        }
         self.send_json(self.codec.commit_turn()).await
     }
     async fn cancel_response(&mut self) -> Result<(), RealtimeProviderError> {
         self.send_json(self.codec.cancel_response()).await
     }
     async fn next_event(&mut self) -> Result<Option<RealtimeEvent>, RealtimeProviderError> {
+        if let Some(event) = self.pending_events.pop_front() {
+            return Ok(Some(event));
+        }
         loop {
             match self.stream.next().await {
                 Some(Ok(Message::Text(text))) => {
@@ -66,7 +87,8 @@ impl<C: RealtimeProtocolCodec> RealtimeConversationSession for WireSession<C> {
                             detail: "provider sent invalid JSON".into(),
                         }
                     })?;
-                    if let Some(event) = self.codec.decode(&value)? {
+                    self.pending_events.extend(self.codec.decode_many(&value)?);
+                    if let Some(event) = self.pending_events.pop_front() {
                         return Ok(Some(event));
                     }
                 }
@@ -106,7 +128,11 @@ async fn connect<C: RealtimeProtocolCodec>(
     config: &RealtimeAdapterConfig,
     request: &RealtimeSessionRequest,
 ) -> Result<Box<dyn RealtimeConversationSession>, RealtimeProviderError> {
-    if config.credential.trim().is_empty() {
+    if config
+        .credential
+        .as_ref()
+        .is_some_and(|credential| credential.trim().is_empty())
+    {
         return Err(RealtimeProviderError::Auth);
     }
     if config.model_id.trim().is_empty() {
@@ -122,6 +148,11 @@ async fn connect<C: RealtimeProtocolCodec>(
             detail: "provider URL must use ws or wss".into(),
         });
     }
+    if config.require_loopback && !is_loopback(&url) {
+        return Err(RealtimeProviderError::Protocol {
+            detail: "local realtime provider URL must use a loopback host".into(),
+        });
+    }
     url.query_pairs_mut().append_pair("model", &config.model_id);
     let mut handshake: Request<()> =
         url.as_str()
@@ -129,9 +160,11 @@ async fn connect<C: RealtimeProtocolCodec>(
             .map_err(|_| RealtimeProviderError::Protocol {
                 detail: "invalid provider WebSocket URL".into(),
             })?;
-    let auth = HeaderValue::from_str(&format!("Bearer {}", config.credential))
-        .map_err(|_| RealtimeProviderError::Auth)?;
-    handshake.headers_mut().insert("authorization", auth);
+    if let Some(credential) = &config.credential {
+        let auth = HeaderValue::from_str(&format!("Bearer {credential}"))
+            .map_err(|_| RealtimeProviderError::Auth)?;
+        handshake.headers_mut().insert("authorization", auth);
+    }
     let (wire, _) = tokio::time::timeout(config.timeout, connect_async(handshake))
         .await
         .map_err(|_| RealtimeProviderError::Timeout)?
@@ -157,13 +190,14 @@ async fn connect<C: RealtimeProtocolCodec>(
         codec,
         sink,
         stream,
+        pending_events: VecDeque::new(),
     };
     session.send_json(session_update).await?;
     Ok(Box::new(session))
 }
 
 macro_rules! adapter {
-    ($name:ident, $codec:ty, $kind:literal, $input_audio:expr) => {
+    ($name:ident, $codec:ty, $kind:literal, $input_audio:expr, $manual_turns:expr) => {
         pub struct $name {
             config: RealtimeAdapterConfig,
         }
@@ -185,7 +219,7 @@ macro_rules! adapter {
                         input_audio: $input_audio,
                         output_audio: RealtimeAudioFormat::Pcm16Mono24Khz,
                         supports_server_vad: true,
-                        supports_manual_turns: true,
+                        supports_manual_turns: $manual_turns,
                         supports_provider_input_transcript: true,
                         supports_assistant_transcript: true,
                         supports_response_cancel: true,
@@ -211,11 +245,20 @@ adapter!(
     OpenAiRealtimeAdapter,
     OpenAiRealtimeCodec,
     "openai_realtime",
-    RealtimeAudioFormat::Pcm16Mono24Khz
+    RealtimeAudioFormat::Pcm16Mono24Khz,
+    true
 );
 adapter!(
     QwenRealtimeAdapter,
     QwenRealtimeCodec,
     "qwen_omni_realtime",
-    RealtimeAudioFormat::Pcm16Mono16Khz
+    RealtimeAudioFormat::Pcm16Mono16Khz,
+    true
+);
+adapter!(
+    LocalCascadeRealtimeAdapter,
+    LocalCascadeRealtimeCodec,
+    "local_cascade_realtime",
+    RealtimeAudioFormat::Pcm16Mono24Khz,
+    false
 );

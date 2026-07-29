@@ -55,8 +55,9 @@ async fn qwen_realtime_smoke_test() {
     let config = RealtimeAdapterConfig {
         base_url: format!("wss://{workspace_id}.{region_host}/api-ws/v1/realtime"),
         model_id: "qwen3.5-omni-plus-realtime".into(),
-        credential: api_key,
+        credential: Some(api_key),
         timeout: Duration::from_secs(15),
+        require_loopback: false,
     };
     let adapter = QwenRealtimeAdapter::new(config);
     let mut session = adapter

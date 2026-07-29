@@ -51,7 +51,7 @@ pub use secret_store_keychain::KeychainSecretStore;
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub const API_VERSION: u16 = 1;
-pub const CONTRACT_VERSION: &str = "1.0.0";
+pub const CONTRACT_VERSION: &str = "1.1.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))

@@ -31,7 +31,7 @@ fn only_local_finalized_learner_turn_projects_into_spoken_corpus() {
     let services = services(&repo);
     let profile = services
         .realtime_conversations()
-        .register_profile(profile(), "secret", &store)
+        .register_profile(profile(), Some("secret"), &store)
         .unwrap();
     let session = RealtimeConversationSession {
         id: RealtimeConversationSessionId::parse("session-spoken").unwrap(),
@@ -146,7 +146,7 @@ fn profile() -> RealtimeProviderProfile {
         base_url: "wss://api.example/realtime".into(),
         model_id: "realtime-model".into(),
         voice: "voice".into(),
-        auth_ref: SecretRef::new("pending"),
+        auth_ref: Some(SecretRef::new("pending")),
         timeout_ms: 30_000,
         created_at_ms: 1,
     }
@@ -159,7 +159,7 @@ fn credential_never_enters_realtime_profile_storage() {
     let secret = "realtime-secret-must-not-persist";
     let saved = services(&repo)
         .realtime_conversations()
-        .register_profile(profile(), secret, &store)
+        .register_profile(profile(), Some(secret), &store)
         .unwrap();
     let row: String = repo
         .connection
@@ -171,14 +171,176 @@ fn credential_never_enters_realtime_profile_storage() {
         )
         .unwrap();
     assert!(!row.contains(secret));
-    assert!(row.contains(saved.auth_ref.as_str()));
+    assert!(row.contains(saved.auth_ref.as_ref().unwrap().as_str()));
+}
+
+#[test]
+fn keyless_realtime_profile_round_trips_with_sql_null_and_no_cleanup() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let mut stored = profile();
+    stored.adapter_kind = RealtimeAdapterKind::LocalCascadeRealtime;
+    stored.id =
+        realtime_provider_profile_id(stored.adapter_kind, &stored.base_url, &stored.model_id);
+    stored.auth_ref = None;
+
+    let saved = repo.upsert_realtime_profile(&stored).unwrap();
+    assert_eq!(saved.auth_ref, None);
+    assert_eq!(
+        repo.get_realtime_profile(&stored.id)
+            .unwrap()
+            .unwrap()
+            .auth_ref,
+        None
+    );
+    let persisted_ref: Option<String> = repo
+        .connection
+        .lock()
+        .query_row(
+            "SELECT auth_ref FROM realtime_provider_profiles WHERE id=?1",
+            [stored.id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(persisted_ref, None);
+
+    repo.delete_realtime_profile_and_schedule_cleanup(&stored.id)
+        .unwrap();
+    assert!(repo.pending_secret_cleanups().unwrap().is_empty());
+}
+
+#[test]
+fn settings_upsert_without_secret_preserves_existing_credential() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let stored = profile();
+    let active_ref = stored.auth_ref.clone();
+    repo.upsert_realtime_profile(&stored).unwrap();
+
+    let mut edited = stored.clone();
+    edited.display_name = "Renamed realtime".into();
+    edited.auth_ref = None;
+    let saved = repo
+        .upsert_realtime_profile_preserving_credential(&edited)
+        .unwrap();
+
+    assert_eq!(saved.display_name, "Renamed realtime");
+    assert_eq!(saved.auth_ref, active_ref);
+    assert!(repo.pending_secret_cleanups().unwrap().is_empty());
+}
+
+#[test]
+fn v53_migration_makes_auth_ref_nullable_and_preserves_realtime_history() {
+    let connection = rusqlite::Connection::open_in_memory().unwrap();
+    connection
+        .execute_batch(include_str!(
+            "../../migrations/0040_realtime_conversations.sql"
+        ))
+        .unwrap();
+    connection
+        .execute_batch(include_str!(
+            "../../migrations/0052_pending_secret_cleanups.sql"
+        ))
+        .unwrap();
+
+    let stored = profile();
+    connection
+        .execute(
+            "INSERT INTO realtime_provider_profiles
+             (id,display_name,adapter_kind,base_url,model_id,voice,auth_ref,created_at_ms,profile_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            rusqlite::params![
+                stored.id.as_str(),
+                stored.display_name,
+                stored.adapter_kind.as_str(),
+                stored.base_url,
+                stored.model_id,
+                stored.voice,
+                stored.auth_ref.as_ref().map(SecretRef::as_str),
+                stored.created_at_ms,
+                serde_json::to_string(&stored).unwrap(),
+            ],
+        )
+        .unwrap();
+    let session = RealtimeConversationSession {
+        id: RealtimeConversationSessionId::parse("migration-session").unwrap(),
+        profile_id: stored.id.clone(),
+        language: LanguageCode::parse("en").unwrap(),
+        context: None,
+        status: RealtimeSessionStatus::Active,
+        started_at_ms: 10,
+        ended_at_ms: None,
+        failure_kind: None,
+    };
+    connection
+        .execute(
+            "INSERT INTO realtime_conversation_sessions
+             (id,profile_id,language,status,started_at_ms,ended_at_ms,session_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![
+                session.id.as_str(),
+                session.profile_id.as_str(),
+                session.language.as_str(),
+                "active",
+                session.started_at_ms,
+                session.ended_at_ms,
+                serde_json::to_string(&session).unwrap(),
+            ],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 52).unwrap();
+
+    migrate(&connection).unwrap();
+
+    let auth_ref_not_null: u32 = connection
+        .query_row(
+            "SELECT \"notnull\" FROM pragma_table_info('realtime_provider_profiles')
+             WHERE name='auth_ref'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(auth_ref_not_null, 0);
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM realtime_provider_profiles WHERE id=?1",
+                [stored.id.as_str()],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM realtime_conversation_sessions WHERE id=?1",
+                [session.id.as_str()],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        1
+    );
+    let mut foreign_key_check = connection.prepare("PRAGMA foreign_key_check").unwrap();
+    assert!(
+        foreign_key_check
+            .query([])
+            .unwrap()
+            .next()
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
 }
 
 #[test]
 fn realtime_profile_delete_enqueues_credential_cleanup_atomically() {
     let repo = SqliteRepository::in_memory().unwrap();
     let stored = profile();
-    let auth_ref = stored.auth_ref.clone();
+    let auth_ref = stored.auth_ref.clone().unwrap();
     repo.upsert_realtime_profile(&stored).unwrap();
 
     repo.delete_realtime_profile_and_schedule_cleanup(&stored.id)
@@ -192,7 +354,7 @@ fn realtime_profile_delete_enqueues_credential_cleanup_atomically() {
 fn concurrent_realtime_rotations_schedule_the_losing_reference() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let old = profile();
-    let old_ref = old.auth_ref.clone();
+    let old_ref = old.auth_ref.clone().unwrap();
     repo.upsert_realtime_profile(&old).unwrap();
     let first_ref = SecretRef::new("keychain:realtime-a");
     let second_ref = SecretRef::new("keychain:realtime-b");
@@ -204,7 +366,7 @@ fn concurrent_realtime_rotations_schedule_the_losing_reference() {
         let repo = repo.clone();
         let barrier = barrier.clone();
         let mut replacement = old.clone();
-        replacement.auth_ref = auth_ref;
+        replacement.auth_ref = Some(auth_ref);
         workers.push(thread::spawn(move || {
             barrier.wait();
             repo.upsert_realtime_profile_and_schedule_cleanup(&replacement)
@@ -223,12 +385,16 @@ fn concurrent_realtime_rotations_schedule_the_losing_reference() {
         .auth_ref;
     let pending = repo.pending_secret_cleanups().unwrap();
     assert!(pending.contains(&old_ref));
-    assert!(pending.contains(if active == first_ref {
+    assert!(pending.contains(if active.as_ref() == Some(&first_ref) {
         &second_ref
     } else {
         &first_ref
     }));
-    assert!(!pending.contains(&active));
+    assert!(
+        !active
+            .as_ref()
+            .is_some_and(|active| pending.contains(active))
+    );
 }
 
 #[test]
@@ -236,7 +402,9 @@ fn terminal_turn_is_immutable_and_content_anchor_is_optional() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let store = InMemorySecretStore::new();
     let api = services(&repo).realtime_conversations();
-    let saved_profile = api.register_profile(profile(), "secret", &store).unwrap();
+    let saved_profile = api
+        .register_profile(profile(), Some("secret"), &store)
+        .unwrap();
     let session = RealtimeConversationSession {
         id: RealtimeConversationSessionId::parse("session-open-chat").unwrap(),
         profile_id: saved_profile.id,

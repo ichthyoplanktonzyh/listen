@@ -2,7 +2,7 @@ use application::{PreparedRealtimeConnection, RealtimeConnectionOptions, Realtim
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use domain::{
     LanguageCode, RealtimeAdapterKind, RealtimeConversationSession, RealtimeConversationTurn,
-    RealtimeProviderProfile, RealtimeProviderProfileId, SecretRef, realtime_provider_profile_id,
+    RealtimeProviderProfile, RealtimeProviderProfileId, realtime_provider_profile_id,
 };
 use futures_util::{SinkExt, StreamExt};
 
@@ -29,7 +29,7 @@ impl From<&RealtimeProviderProfile> for RealtimeProfileView {
             base_url: profile.base_url.clone(),
             model_id: profile.model_id.clone(),
             voice: profile.voice.clone(),
-            has_credential: true,
+            has_credential: profile.auth_ref.is_some(),
             timeout_ms: profile.timeout_ms,
         }
     }
@@ -42,7 +42,8 @@ pub(crate) struct RegisterRealtimeProfileRequest {
     base_url: String,
     model_id: String,
     voice: String,
-    secret: String,
+    #[serde(default)]
+    secret: Option<String>,
     #[serde(default = "default_timeout")]
     timeout_ms: u64,
 }
@@ -69,14 +70,6 @@ pub(crate) async fn register_profile(
     State(state): State<ApiState>,
     Json(request): Json<RegisterRealtimeProfileRequest>,
 ) -> Result<Json<RealtimeProfileView>, ApiError> {
-    if request.secret.trim().is_empty() {
-        return Err(ApiError::new(
-            axum::http::StatusCode::BAD_REQUEST,
-            "invalid_realtime_profile",
-            "realtime provider credential is required",
-            false,
-        ));
-    }
     let profile = RealtimeProviderProfile {
         id: realtime_provider_profile_id(
             request.adapter_kind,
@@ -88,18 +81,18 @@ pub(crate) async fn register_profile(
         base_url: request.base_url,
         model_id: request.model_id,
         voice: request.voice,
-        auth_ref: SecretRef::new("pending://write-only"),
+        auth_ref: None,
         timeout_ms: request.timeout_ms,
         created_at_ms: application::now_ms(),
     };
-    let secret = request.secret;
+    let secret = request.secret.filter(|value| !value.trim().is_empty());
     let secret_store = state.infrastructure.secret_store.clone();
     let saved = state
         .application
         .execute("realtime.register_profile", move |services| {
             services.realtime_conversations().register_profile(
                 profile,
-                &secret,
+                secret.as_deref(),
                 secret_store.as_ref(),
             )
         })

@@ -18,6 +18,7 @@ use crate::{
 pub enum RealtimeAdapterKind {
     OpenAiRealtime,
     QwenOmniRealtime,
+    LocalCascadeRealtime,
 }
 
 impl RealtimeAdapterKind {
@@ -25,6 +26,7 @@ impl RealtimeAdapterKind {
         match self {
             Self::OpenAiRealtime => "openai_realtime",
             Self::QwenOmniRealtime => "qwen_omni_realtime",
+            Self::LocalCascadeRealtime => "local_cascade_realtime",
         }
     }
 }
@@ -56,7 +58,9 @@ pub struct RealtimeProviderProfile {
     pub base_url: String,
     pub model_id: String,
     pub voice: String,
-    pub auth_ref: RealtimeAuthRef,
+    /// Opaque keychain handle for remote providers. Local loopback adapters
+    /// deliberately have no credential to reserve, persist, or clean up.
+    pub auth_ref: Option<RealtimeAuthRef>,
     pub timeout_ms: u64,
     pub created_at_ms: u64,
 }

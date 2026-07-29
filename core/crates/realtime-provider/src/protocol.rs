@@ -21,10 +21,19 @@ pub trait RealtimeProtocolCodec: Send + Sync + 'static {
     fn cancel_response(&self) -> serde_json::Value {
         serde_json::json!({"type": "response.cancel"})
     }
+    fn supports_manual_turns(&self) -> bool {
+        true
+    }
     fn decode(
         &self,
         value: &serde_json::Value,
     ) -> Result<Option<RealtimeEvent>, RealtimeProviderError>;
+    fn decode_many(
+        &self,
+        value: &serde_json::Value,
+    ) -> Result<Vec<RealtimeEvent>, RealtimeProviderError> {
+        Ok(self.decode(value)?.into_iter().collect())
+    }
 }
 
 fn require_openai_pcm(format: RealtimeAudioFormat) -> serde_json::Value {
@@ -305,5 +314,108 @@ impl RealtimeProtocolCodec for QwenRealtimeCodec {
             }),
             _ => None,
         })
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct LocalCascadeRealtimeCodec {
+    assistant_transcripts: Mutex<HashMap<String, (Option<String>, String)>>,
+}
+
+impl RealtimeProtocolCodec for LocalCascadeRealtimeCodec {
+    fn adapter_kind(&self) -> &'static str {
+        "local_cascade_realtime"
+    }
+
+    fn protocol_version(&self) -> &'static str {
+        "hf-speech-to-speech-ora-cc37fe84fe08710e888ecc2eb5b468e41df74bca"
+    }
+
+    fn session_update(&self, request: &RealtimeSessionRequest) -> serde_json::Value {
+        let mut update = OpenAiRealtimeCodec::default().session_update(request);
+        if let Some(turn_detection) = update.pointer_mut("/session/audio/input/turn_detection")
+            && !turn_detection.is_null()
+        {
+            turn_detection["interrupt_response"] = serde_json::Value::Bool(true);
+        }
+        update
+    }
+
+    fn supports_manual_turns(&self) -> bool {
+        false
+    }
+
+    fn decode(
+        &self,
+        value: &serde_json::Value,
+    ) -> Result<Option<RealtimeEvent>, RealtimeProviderError> {
+        Ok(self.decode_many(value)?.into_iter().next())
+    }
+
+    fn decode_many(
+        &self,
+        value: &serde_json::Value,
+    ) -> Result<Vec<RealtimeEvent>, RealtimeProviderError> {
+        let kind = value
+            .get("type")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let item_id = || string(value, &["item_id"]);
+        match kind {
+            // HF progressive transcription sends the complete current
+            // snapshot in `delta`, rather than an append-only fragment.
+            "conversation.item.input_audio_transcription.delta" => {
+                Ok(vec![RealtimeEvent::ProviderTranscriptPreview {
+                    provider_item_id: item_id(),
+                    text: string(value, &["delta"]).unwrap_or_default(),
+                }])
+            }
+            // HF emits one transcript "done" event for every streamed LLM
+            // text chunk. Preserve those as deltas and publish exactly one
+            // final transcript immediately before response.done.
+            "response.output_audio_transcript.done" => {
+                let response_id = string(value, &["response_id"]).unwrap_or_default();
+                let chunk = string(value, &["transcript"]).unwrap_or_default();
+                let provider_item_id = item_id();
+                let mut transcripts = self.assistant_transcripts.lock().map_err(|_| {
+                    RealtimeProviderError::Protocol {
+                        detail: "local assistant transcript state was unavailable".into(),
+                    }
+                })?;
+                let (_, text) = transcripts
+                    .entry(response_id)
+                    .or_insert_with(|| (provider_item_id.clone(), String::new()));
+                text.push_str(&chunk);
+                Ok(vec![RealtimeEvent::AssistantTranscriptDelta {
+                    provider_item_id,
+                    delta: chunk,
+                }])
+            }
+            "response.done" => {
+                let response_id = string(value, &["response", "id"]).unwrap_or_default();
+                let completed = self
+                    .assistant_transcripts
+                    .lock()
+                    .map_err(|_| RealtimeProviderError::Protocol {
+                        detail: "local assistant transcript state was unavailable".into(),
+                    })?
+                    .remove(&response_id);
+                let mut events = Vec::with_capacity(2);
+                if let Some((provider_item_id, transcript)) = completed {
+                    events.push(RealtimeEvent::AssistantTranscriptFinal {
+                        provider_item_id,
+                        transcript,
+                    });
+                }
+                events.push(RealtimeEvent::ResponseDone {
+                    provider_response_id: (!response_id.is_empty()).then_some(response_id),
+                });
+                Ok(events)
+            }
+            _ => Ok(OpenAiRealtimeCodec::default()
+                .decode(value)?
+                .into_iter()
+                .collect()),
+        }
     }
 }

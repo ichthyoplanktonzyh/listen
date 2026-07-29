@@ -60,9 +60,26 @@ impl RealtimeConversationUseCases {
     pub fn register_profile(
         &self,
         mut profile: RealtimeProviderProfile,
-        secret: &str,
+        secret: Option<&str>,
         secret_store: &dyn SecretStore,
     ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        let Some(secret) = secret.filter(|value| !value.trim().is_empty()) else {
+            let existing_credential = self
+                .repository
+                .get_realtime_profile(&profile.id)?
+                .and_then(|saved| saved.auth_ref);
+            if profile.adapter_kind != domain::RealtimeAdapterKind::LocalCascadeRealtime
+                && existing_credential.is_none()
+            {
+                return Err(ApplicationError::Invalid(
+                    "a credential is required for a remote realtime provider".into(),
+                ));
+            }
+            profile.auth_ref = None;
+            return self
+                .repository
+                .upsert_realtime_profile_preserving_credential(&profile);
+        };
         let new_auth_ref = secret_store.reserve()?;
         self.repository.reserve_secret_cleanup(&new_auth_ref)?;
         if let Err(error) = secret_store.store_reserved(&new_auth_ref, secret) {
@@ -71,7 +88,7 @@ impl RealtimeConversationUseCases {
                 retry_secret_cleanups(self.repository.as_ref(), secret_store);
             return Err(error.into());
         }
-        profile.auth_ref = new_auth_ref.clone();
+        profile.auth_ref = Some(new_auth_ref.clone());
         let saved = match self
             .repository
             .upsert_realtime_profile_and_schedule_cleanup(&profile)
@@ -104,7 +121,13 @@ impl RealtimeConversationUseCases {
         profile: &RealtimeProviderProfile,
         secret_store: &dyn SecretStore,
     ) -> Result<Option<String>, ApplicationError> {
-        Ok(secret_store.resolve(&profile.auth_ref)?)
+        profile
+            .auth_ref
+            .as_ref()
+            .map(|auth_ref| secret_store.resolve(auth_ref))
+            .transpose()
+            .map(|secret| secret.flatten())
+            .map_err(ApplicationError::from)
     }
 
     pub fn delete_profile(
@@ -203,10 +226,8 @@ impl RealtimeConversationUseCases {
         let profile = self
             .profile(id)?
             .ok_or(ApplicationError::NotFound("realtime provider profile"))?;
-        let credential = self
-            .resolve_secret(&profile, secret_store)?
-            .ok_or(RealtimeProviderError::Auth)?;
-        let adapter = factory.build(&profile, credential);
+        let credential = self.resolve_secret(&profile, secret_store)?;
+        let adapter = factory.build(&profile, credential)?;
         let descriptor = adapter.descriptor();
         if descriptor.adapter_kind != profile.adapter_kind.as_str() {
             return Err(RealtimeProviderError::Protocol {
@@ -477,18 +498,37 @@ mod connection_tests {
         ) -> Result<RealtimeProviderProfile, ApplicationError> {
             let stale_auth_ref = {
                 let mut current = self.profile.lock().unwrap();
-                let stale = current.as_ref().map(|profile| profile.auth_ref.clone());
+                let stale = current
+                    .as_ref()
+                    .and_then(|profile| profile.auth_ref.clone());
                 *current = Some(profile.clone());
                 stale
             };
-            self.complete_secret_cleanup(&profile.auth_ref)?;
+            if let Some(auth_ref) = &profile.auth_ref {
+                self.complete_secret_cleanup(auth_ref)?;
+            }
             if let Some(auth_ref) = stale_auth_ref
                 .as_ref()
-                .filter(|stale| *stale != &profile.auth_ref)
+                .filter(|stale| Some(*stale) != profile.auth_ref.as_ref())
             {
                 self.schedule_secret_cleanup(auth_ref)?;
             }
             Ok(profile.clone())
+        }
+
+        fn upsert_realtime_profile_preserving_credential(
+            &self,
+            profile: &RealtimeProviderProfile,
+        ) -> Result<RealtimeProviderProfile, ApplicationError> {
+            let mut saved = profile.clone();
+            let mut current = self.profile.lock().unwrap();
+            if saved.auth_ref.is_none() {
+                saved.auth_ref = current
+                    .as_ref()
+                    .and_then(|profile| profile.auth_ref.clone());
+            }
+            *current = Some(saved.clone());
+            Ok(saved)
         }
 
         fn delete_realtime_profile_and_schedule_cleanup(
@@ -500,7 +540,7 @@ mod connection_tests {
                 .lock()
                 .unwrap()
                 .take()
-                .map(|profile| profile.auth_ref);
+                .and_then(|profile| profile.auth_ref);
             if let Some(auth_ref) = stale_auth_ref.as_ref() {
                 self.schedule_secret_cleanup(auth_ref)?;
             }
@@ -604,14 +644,14 @@ mod connection_tests {
         fn build(
             &self,
             _profile: &RealtimeProviderProfile,
-            credential: String,
-        ) -> Box<dyn RealtimeConversationAdapter> {
+            credential: Option<String>,
+        ) -> Result<Box<dyn RealtimeConversationAdapter>, RealtimeProviderError> {
             self.received_credential
-                .store(!credential.is_empty(), Ordering::SeqCst);
-            Box::new(FakeAdapter {
+                .store(credential.is_some(), Ordering::SeqCst);
+            Ok(Box::new(FakeAdapter {
                 descriptor: self.descriptor.clone(),
                 connect_error: self.connect_error.clone(),
-            })
+            }))
         }
     }
 
@@ -647,7 +687,24 @@ mod connection_tests {
             base_url: base_url.into(),
             model_id: model_id.into(),
             voice: "test-voice".into(),
-            auth_ref,
+            auth_ref: Some(auth_ref),
+            timeout_ms: 1_000,
+            created_at_ms: 1,
+        }
+    }
+
+    fn keyless_profile() -> RealtimeProviderProfile {
+        let adapter_kind = RealtimeAdapterKind::LocalCascadeRealtime;
+        let base_url = "ws://127.0.0.1:8765/v1/realtime";
+        let model_id = "hf-speech-to-speech-ora";
+        RealtimeProviderProfile {
+            id: realtime_provider_profile_id(adapter_kind, base_url, model_id),
+            display_name: "Local cascade".into(),
+            adapter_kind,
+            base_url: base_url.into(),
+            model_id: model_id.into(),
+            voice: "local".into(),
+            auth_ref: None,
             timeout_ms: 1_000,
             created_at_ms: 1,
         }
@@ -738,6 +795,38 @@ mod connection_tests {
             error,
             ApplicationError::RealtimeProvider(RealtimeProviderError::UnsupportedCapability { .. })
         ));
+    }
+
+    #[test]
+    fn keyless_local_profile_reaches_the_factory_without_a_credential() {
+        let descriptor = RealtimeProviderDescriptor {
+            adapter_kind: "local_cascade_realtime".into(),
+            model_id: "hf-speech-to-speech-ora".into(),
+            protocol_version: "fake-local-v1".into(),
+            capabilities: capabilities(RealtimeAudioFormat::Pcm16Mono24Khz, false),
+        };
+        let profile = keyless_profile();
+        let id = profile.id.clone();
+        let repository = Arc::new(ProfileRepository {
+            profile: Mutex::new(Some(profile)),
+        });
+        let use_cases = RealtimeConversationUseCases::new(repository);
+        let received_credential = Arc::new(AtomicBool::new(true));
+        let factory = FakeFactory {
+            descriptor,
+            connect_error: None,
+            received_credential: received_credential.clone(),
+        };
+
+        let prepared = use_cases
+            .prepare_connection(&id, options(false), &InMemorySecretStore::new(), &factory)
+            .unwrap();
+
+        assert!(!received_credential.load(Ordering::SeqCst));
+        assert_eq!(
+            prepared.request.turn_detection,
+            RealtimeTurnDetection::ServerVad
+        );
     }
 
     #[tokio::test]

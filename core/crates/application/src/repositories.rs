@@ -1155,6 +1155,14 @@ pub trait RealtimeConversationRepository: SecretCleanupRepository {
         &self,
         id: &RealtimeProviderProfileId,
     ) -> Result<(), ApplicationError>;
+    /// Persists profile settings without changing an existing credential.
+    ///
+    /// A missing write-only secret means "keep the current credential" for an
+    /// existing profile and "create a keyless profile" for a new profile.
+    fn upsert_realtime_profile_preserving_credential(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError>;
     /// Atomically commits the profile mutation and any stale credential's
     /// durable cleanup-outbox entry.
     fn upsert_realtime_profile_and_schedule_cleanup(

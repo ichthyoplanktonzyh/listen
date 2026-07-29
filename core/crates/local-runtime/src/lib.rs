@@ -11,6 +11,7 @@ mod forced_align;
 mod learning_resources;
 mod phonetic_analysis;
 mod process;
+mod realtime_cascade;
 mod runtime_support;
 mod sound_line;
 mod speech_jobs;
@@ -28,6 +29,9 @@ pub use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinato
 pub use process::{
     CancellationProbe, FakeProcessRunner, IgnoreProcessOutput, NeverCancelled,
     ProcessOutputObserver, ProcessRunner, ProcessSpec, TokioProcessRunner,
+};
+pub use realtime_cascade::{
+    LocalRealtimeCascadeConfig, LocalRealtimeCascadeError, LocalRealtimeCascadeRuntime,
 };
 pub use sound_line::{CreateSoundLineJob, SoundLineCoordinator, SoundLineJob, SoundLineStatus};
 pub use speech_jobs::{

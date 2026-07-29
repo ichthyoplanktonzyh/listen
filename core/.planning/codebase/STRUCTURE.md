@@ -32,6 +32,9 @@ Notable runtime seams:
   concrete provider selection out of HTTP route modules.
 - `ForcedAlignProvider` keeps sidecar process and wire protocol details in
   `local-runtime`.
+- `LocalRealtimeCascadeRuntime` owns opt-in local speech-cascade spawn,
+  pool-readiness, bounded diagnostics, and process-group shutdown; the
+  `local_cascade_realtime` codec remains in `realtime-provider`.
 - `SubtitleTrackRepository::save_track_and_replace_corpus` is the atomic
   subtitle/corpus unit of work.
 
