@@ -1,3 +1,5 @@
+import 'package:flutter/painting.dart';
+
 /// Gap sizes for spacer `SizedBox`es (#26 / #32).
 ///
 /// Before this scale existed, `SizedBox(height:/width:)` spacers used 25
@@ -40,4 +42,57 @@ abstract final class ListenSpacing {
 
   /// Page-level breathing room (empty states, hero headers).
   static const gap32 = 32.0;
+}
+
+/// Container padding — the inset between a surface's edge and its content.
+///
+/// [ListenSpacing] and this class answer two different questions, and treating
+/// them as one is exactly how the drift happened. A gap says *how far apart
+/// two siblings sit*; padding says *how much air a container keeps inside its
+/// own border*. Because padding also has to absorb the border, the shadow and
+/// the hit area, it does not want the gap ladder's fine 2pt bottom end — and
+/// once every call site started composing its own `EdgeInsets` out of gap-like
+/// numbers, 10, 14, 18 and 20 spread across 143 of the app's 340 `EdgeInsets`
+/// and no two panels inset alike.
+///
+/// So padding is not a scale of numbers to pick from; it is five named
+/// container roles, each a whole `EdgeInsets`:
+///
+///     tight · row · card · pageCompact · page
+///
+/// Pick by what the container *is*, not by which number looks close. Off-scale
+/// insets migrate the same way: 4/5 → [tight], 8/10 → [row], 14/16/18 →
+/// [card], 20/22/24/28 → [pageCompact], 32+ → [page].
+///
+/// The horizontal step is wider than the vertical one at the dense end
+/// because this is a desktop tool: rows are short and numerous, so vertical
+/// padding is the scarce budget while horizontal padding is what keeps text
+/// off the border.
+///
+/// Scope: the padding of a **container**. A one-off asymmetric inset that
+/// exists to align with a specific neighbour (nudging a label under an icon
+/// column) is geometry, not a container role, and stays a literal.
+abstract final class ListenPadding {
+  /// Inside a dense control: chips, badges, inline buttons, table cells —
+  /// anything whose own height is the constraint.
+  static const tight = EdgeInsets.symmetric(horizontal: 8, vertical: 4);
+
+  /// One row of a list or panel: the repeating unit a user scans down.
+  static const row = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+
+  /// A card, dialog body or grouped container — a surface that reads as its
+  /// own object. Symmetric on purpose: a card with unequal insets looks
+  /// misprinted.
+  static const card = EdgeInsets.all(16);
+
+  /// A full page or sheet at a narrow window, where [page] would eat too much
+  /// of the content column.
+  static const pageCompact = EdgeInsets.symmetric(
+    horizontal: 24,
+    vertical: 24,
+  );
+
+  /// A full page or sheet at a comfortable window: the outermost breathing
+  /// room, matching [ListenSpacing.gap32].
+  static const page = EdgeInsets.symmetric(horizontal: 32, vertical: 32);
 }
