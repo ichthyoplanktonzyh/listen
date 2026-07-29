@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/spacing.dart';
 
@@ -126,7 +127,7 @@ class _FollowingStructureViewportState
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-        iconSize: 17,
+        iconSize: ListenIconSize.control,
         color: ListenColors.overlayTextMuted,
       ),
     );

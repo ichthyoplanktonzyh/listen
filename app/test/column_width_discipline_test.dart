@@ -58,7 +58,6 @@ void main() {
     'lib/widgets/panels/speaking_task_studio.dart',
     'lib/widgets/panels/transcript_panel.dart',
     'lib/widgets/panels/writing_task_studio.dart',
-    'lib/widgets/player/playback_controls.dart',
   };
 
   test('column caps use ListenBreakpoints widths, not maxWidth literals', () {

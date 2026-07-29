@@ -12,6 +12,7 @@ import '../../localization.dart';
 import '../../models/task_status.dart';
 import '../../models/timeline.dart';
 import '../../player_adapter.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../player/playback_controls.dart';
 
@@ -218,12 +219,14 @@ class _PlaybackBarState extends State<PlaybackBar> {
         child: SizedBox(
           height: 72,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ListenSpacing.gap16,
+            ),
             child: Row(
               children: [
                 Icon(
                   Icons.headset_outlined,
-                  size: 20,
+                  size: ListenIconSize.control,
                   color: colors.onSurfaceVariant,
                 ),
                 const SizedBox(width: ListenSpacing.gap12),

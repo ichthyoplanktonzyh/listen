@@ -12,6 +12,7 @@ import '../../models/capability_readiness.dart'
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../player_adapter.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/subtitle_style.dart';
@@ -200,11 +201,11 @@ class _PlayerStageState extends State<PlayerStage> {
                       child: Padding(
                         padding: EdgeInsets.symmetric(
                           horizontal: subtitleController.preset == 'compact'
-                              ? 10
-                              : 18,
+                              ? ListenSpacing.gap8
+                              : ListenSpacing.gap16,
                           vertical: subtitleController.preset == 'compact'
-                              ? 6
-                              : 12,
+                              ? ListenSpacing.gap6
+                              : ListenSpacing.gap12,
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -755,7 +756,7 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
         borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: ListenPadding.row,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -784,7 +785,10 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
               children: [
                 FilledButton.tonalIcon(
                   onPressed: onLoadSentence,
-                  icon: const Icon(Icons.graphic_eq, size: 16),
+                  icon: const Icon(
+                    Icons.graphic_eq,
+                    size: ListenIconSize.control,
+                  ),
                   label: Text(l.text('loadCurrentSentence')),
                   style: FilledButton.styleFrom(
                     visualDensity: VisualDensity.compact,
@@ -792,7 +796,10 @@ class _SoundReferenceLoadPrompt extends StatelessWidget {
                 ),
                 OutlinedButton.icon(
                   onPressed: onLoadTrack,
-                  icon: const Icon(Icons.library_music_outlined, size: 16),
+                  icon: const Icon(
+                    Icons.library_music_outlined,
+                    size: ListenIconSize.control,
+                  ),
                   label: Text(l.text('loadWholeTrack')),
                   style: OutlinedButton.styleFrom(
                     visualDensity: VisualDensity.compact,
