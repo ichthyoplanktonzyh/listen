@@ -28,7 +28,10 @@ composition root through application-owned factories. Forced alignment uses an
 application-owned provider interface with its Python process/JSON protocol
 implemented by `local-runtime`; typed degradation and provider/model/protocol
 provenance remain visible to the pipeline without making the main transcription
-workflow fail.
+workflow fail. Cancellation is carried through that interface, kills and reaps
+an active sidecar process, and is rechecked before each timeline, cue, or corpus
+write. The descriptor fingerprints the sidecar and records the protocol,
+torchaudio version, model bundle, and model asset.
 
 ## Runtime Boundary
 
@@ -43,6 +46,19 @@ state, progress, cancellation, retry lineage, interruption, and queued-job
 recovery survive a service restart. Transcription jobs use their own
 domain-specific SQLite compare-and-swap transitions because their import stage
 is an explicit irreversible commit point.
+
+Provider credential creation first persists a reserved cleanup reference,
+writes the OS keychain, then atomically activates the profile reference while
+removing that reservation and enqueuing any stale credential. Reservations
+abandoned by a crashed process are promoted at startup. Cleanup is idempotent
+and retryable, so an unavailable keychain cannot make an already committed
+profile mutation appear to have failed or permanently lose the stale reference.
+
+Before a schema upgrade, SQLite publishes a source-schema-versioned recovery
+copy only after a same-directory temporary copy is synced. Hard-link
+no-replace publication plus parent-directory sync prevents a partial copy from
+being accepted as a valid backup, while later source versions receive their own
+subtitle-preserving recovery point.
 
 Subtitle import and language retokenization cross one repository unit-of-work
 interface that atomically persists the authoritative track/sentences and

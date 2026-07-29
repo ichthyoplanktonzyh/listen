@@ -14,11 +14,14 @@
 
 ## Current Work
 
-The backend hardening slice is active on
+The backend hardening slice is implemented on
 `codex/backend-review-refactor`. It restores backend-only quality gates,
 introduces durable background-job state, makes transcription cancellation and
 subtitle projection updates atomic, and moves LLM, realtime, and forced-align
-protocol construction behind application-owned interfaces.
+protocol construction behind application-owned interfaces. Migration backups
+are source-versioned and crash-safe; provider credential cleanup uses a durable
+outbox; forced-align cancellation terminates the sidecar before any later
+persistent side effect.
 
 ## Established Boundaries
 
@@ -36,8 +39,7 @@ not code evidence.
 
 ## Next
 
-1. Run the complete local Rust, contract, release-artifact, architecture, and
-   supply-chain gates for the hardening branch.
+1. Review and merge the fully validated backend hardening branch.
 2. Design durable storage for recording transcription only after transcript,
    provenance, and recording-fact ownership is explicit.
 3. Remove the exact `local-runtime` HTTP route debt allowlist one route module

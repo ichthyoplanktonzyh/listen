@@ -13,6 +13,8 @@ python3 -m unittest scripts/test_release_artifacts.py
 
 - crate unit tests for domain/application/provider logic;
 - integration tests for SQLite, HTTP routes, lifecycle, and jobs;
+- failure-injection tests for background-job writes, credential cleanup retry,
+  migration-backup publication, and sidecar cancellation;
 - OpenAPI method+path parity and structural validation;
 - committed schema/example/fixture validation;
 - deterministic Python unit/contract tests;

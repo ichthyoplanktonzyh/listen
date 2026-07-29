@@ -26,6 +26,8 @@ Notable runtime seams:
 
 - `application::BackgroundJobStore` owns durable generic job lifecycle
   semantics; `persistence-sqlite` supplies the production adapter.
+- `SecretCleanupRepository` and atomic profile-mutation methods own the durable
+  provider-credential cleanup outbox.
 - `SemanticLlmRuntimeFactory` and `RealtimeConversationAdapterFactory` keep
   concrete provider selection out of HTTP route modules.
 - `ForcedAlignProvider` keeps sidecar process and wire protocol details in
