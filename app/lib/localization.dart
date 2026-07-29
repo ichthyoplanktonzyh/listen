@@ -460,6 +460,7 @@ class AppLocalizations {
       'capabilityEchoUnassessed':
           'No assessment data yet. The bars appear once a channel has been '
           'assessed.',
+      'capabilityAssessedScale': 'Assessed {n} of {total}',
       'coachGeneratedAt': 'Refreshed {time} · live from durable facts',
       'coachChannel_listening': 'Listening',
       'coachChannel_reading': 'Reading',
@@ -2017,6 +2018,7 @@ class AppLocalizations {
       'capabilityEchoSound': '听得懂 {inN} · 说得出 {outN}',
       'capabilityEchoText': '读得懂 {inN} · 写得出 {outN}',
       'capabilityEchoUnassessed': '还没有评估数据。任一通道有评估后，回声条就会出现。',
+      'capabilityAssessedScale': '已评估 {n} / {total}',
       'coachGeneratedAt': '刷新于 {time} · 直接读取持久事实',
       'coachChannel_listening': '听力',
       'coachChannel_reading': '阅读',

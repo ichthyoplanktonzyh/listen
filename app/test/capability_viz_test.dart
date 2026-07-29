@@ -235,10 +235,12 @@ void main() {
     // Gap captions juxtapose the two existing counts — no frontend arithmetic.
     expect(find.text('can hear 46 · can say 12'), findsOneWidget);
     expect(find.text('can read 88 · can write 8'), findsOneWidget);
-    // The unassessed stock left the graphic, so it is stated in the caption
+    // The unassessed stock left the graphic, so it is stated beside the gauge
     // instead: no information is lost with the ink.
-    expect(find.text('Listening · 46 · Unassessed 96'), findsOneWidget);
-    expect(find.text('Speaking · 12 · Unassessed 118'), findsOneWidget);
+    expect(find.text('Listening · 46'), findsOneWidget);
+    expect(find.text('Unassessed 96'), findsOneWidget);
+    expect(find.text('Speaking · 12'), findsOneWidget);
+    expect(find.text('Unassessed 118'), findsOneWidget);
     // Hovering a bar reveals the honest three-state numbers.
     expect(
       find.byTooltip(
@@ -299,6 +301,92 @@ void main() {
     expect(
       hairlines.map((c) => c.constraints?.maxHeight),
       everyElement(lessThan(2.0)),
+    );
+  });
+
+  testWidgets('a bar is a narrow gauge, not a field of color', (tester) async {
+    // The pathology this guards: a bar that stretches to whatever width the
+    // dashboard grants turns eight integers into hundreds of square points of
+    // saturated fill. The gauge stays narrow no matter how wide the column is.
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 1200,
+          child: CapabilityEchoBars(channels: portraitChannels),
+        ),
+      ),
+    );
+    final colors = Theme.of(
+      tester.element(find.byType(CapabilityEchoBars)),
+    ).colorScheme;
+
+    final fills = tester
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byType(CapabilityEchoBars),
+            matching: find.byType(Container),
+          ),
+        )
+        .where(
+          (container) =>
+              container.color == colors.primary ||
+              container.color == colors.secondary,
+        );
+    expect(fills, isNotEmpty);
+    for (final fill in fills) {
+      expect(tester.getSize(find.byWidget(fill)).width, 28);
+    }
+    // Total saturated area stays in the low thousands of square points for
+    // the whole four-channel read-out.
+    final ink = fills.fold<double>(0, (sum, fill) {
+      final size = tester.getSize(find.byWidget(fill));
+      return sum + size.width * size.height;
+    });
+    expect(ink, lessThan(8000));
+  });
+
+  testWidgets('the portrait states how much of the library was assessed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(channels: portraitChannels),
+        ),
+      ),
+    );
+    // The shapes are drawn from 98 assessed words out of a 160-word library:
+    // the graphic answers shape, this line answers how much.
+    expect(find.text('Assessed 98 of 160'), findsOneWidget);
+
+    // An early user whose ring looks well-filled still reads honestly here.
+    await tester.pumpWidget(
+      localized(
+        SizedBox(
+          width: 900,
+          child: CapabilityPortrait(
+            channels: [
+              channel('listening', acquired: 5, notAcquired: 3, unassessed: 200),
+              channel('reading', acquired: 6, notAcquired: 2, unassessed: 200),
+              channel('speaking', acquired: 1, notAcquired: 4, unassessed: 200),
+              channel('writing', notAcquired: 2, unassessed: 200),
+            ],
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Assessed 8 of 208'), findsOneWidget);
+  });
+
+  test('the library size is a max across channels, never a sum', () {
+    // Every channel reports on the same words; summing would invent a library
+    // four times the real one.
+    expect(
+      capabilityLibrarySize(
+        portraitChannels.map((c) => c.effectiveAssessments),
+      ),
+      160,
     );
   });
 
