@@ -79,10 +79,8 @@ class ReviewController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not load review queue: $error',
-        ),
+        (state) =>
+            state.copyWith(busy: false, error: 'Could not load review queue'),
       );
       return false;
     }
@@ -115,10 +113,8 @@ class ReviewController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not save review result: $error',
-        ),
+        (state) =>
+            state.copyWith(busy: false, error: 'Could not save review result'),
       );
       return false;
     }
@@ -150,7 +146,7 @@ class ReviewController extends ChangeNotifier {
       _store.update(
         (state) => state.copyWith(
           busy: false,
-          error: 'Could not update recognition status: $error',
+          error: 'Could not update recognition status',
         ),
       );
       return false;

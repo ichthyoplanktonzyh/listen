@@ -81,7 +81,12 @@ class ReadingDiffController extends ChangeNotifier {
         ReadingDiffState(loading: false, read: read, listen: listen),
       );
     } catch (error) {
-      _store.replace(ReadingDiffState(loading: false, error: '$error'));
+      _store.replace(
+        const ReadingDiffState(
+          loading: false,
+          error: 'This comparison could not be built',
+        ),
+      );
     }
   }
 

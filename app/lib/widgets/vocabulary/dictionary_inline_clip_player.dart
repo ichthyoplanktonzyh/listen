@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
@@ -97,8 +98,11 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                     height: 88,
                     child: Center(
                       child: Icon(
+                        // Audio-only clip: the icon stands in for the missing
+                        // picture rather than labelling a control, so it is
+                        // the illustration step.
                         Icons.graphic_eq,
-                        size: 36,
+                        size: ListenIconSize.illustration,
                         color: Theme.of(context).colorScheme.secondary,
                       ),
                     ),

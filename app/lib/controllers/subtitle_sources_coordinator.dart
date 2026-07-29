@@ -152,7 +152,7 @@ class SubtitleSourcesCoordinator {
             targetId: track.id,
           ),
         );
-        showSnackBar('Audio analysis failed: $error');
+        showSnackBar(_t('statusAudioAnalysisFailed'));
       }
     }
   }

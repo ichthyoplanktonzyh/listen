@@ -188,8 +188,9 @@ class MediaLibraryCoordinator {
       requestRebuild();
     } catch (error) {
       player.setStatus(
-        '${text('statusTriageIntentFailed')}: $error',
+        text('statusTriageIntentFailed'),
         error: true,
+        failure: describeApiFailure(error),
       );
     }
   }

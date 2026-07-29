@@ -30,7 +30,9 @@ class CoachDashboardController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      store.replace(CoachDashboardState(error: '$error'));
+      store.replace(
+        const CoachDashboardState(error: 'Your coach view could not be loaded'),
+      );
     }
   }
 

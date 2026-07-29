@@ -282,7 +282,12 @@ class SpeakingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'This speaking task could not be opened',
+        ),
+      );
     }
   }
 
@@ -323,7 +328,9 @@ class SpeakingTaskController extends ChangeNotifier {
       );
       return true;
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(busy: false, error: 'Recording could not be started'),
+      );
       return false;
     }
   }
@@ -406,7 +413,7 @@ class SpeakingTaskController extends ChangeNotifier {
           phase: 'listening',
           recordingActive: false,
           busy: false,
-          error: 'Could not save or transcribe recording: $error',
+          error: 'Could not save or transcribe recording',
         ),
       );
     }
@@ -441,9 +448,7 @@ class SpeakingTaskController extends ChangeNotifier {
       );
     } catch (error) {
       final generation = ++_pollGeneration;
-      _store.update(
-        (s) => s.copyWith(error: 'Could not cancel transcription: $error'),
-      );
+      _store.update((s) => s.copyWith(error: 'Could not cancel transcription'));
       unawaited(_pollTranscription(api, job.id, generation));
     }
   }
@@ -507,7 +512,12 @@ class SpeakingTaskController extends ChangeNotifier {
         _store.update((s) => s.copyWith(feedbackProviderId: providerId));
       }
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'This transcript could not be accepted',
+        ),
+      );
     }
   }
 
@@ -541,7 +551,12 @@ class SpeakingTaskController extends ChangeNotifier {
       );
       _store.update((s) => s.copyWith(llmFeedback: feedback, busy: false));
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'Feedback for this attempt could not be generated',
+        ),
+      );
     }
   }
 
@@ -605,7 +620,12 @@ class SpeakingTaskController extends ChangeNotifier {
             s.copyWith(delayedReviewItemId: item.id, busy: false, error: null),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'The delayed retelling could not be scheduled',
+        ),
+      );
     }
   }
 
@@ -626,7 +646,12 @@ class SpeakingTaskController extends ChangeNotifier {
             s.copyWith(delayedReviewCompleted: true, busy: false, error: null),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'The delayed review could not be recorded',
+        ),
+      );
     }
   }
 
@@ -660,7 +685,12 @@ class SpeakingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'The speaking target could not be confirmed',
+        ),
+      );
     }
   }
 
@@ -765,7 +795,7 @@ class SpeakingTaskController extends ChangeNotifier {
         _store.update(
           (s) => s.copyWith(
             phase: 'listening',
-            error: 'Could not read transcription status: $error',
+            error: 'Could not read transcription status',
           ),
         );
         return;

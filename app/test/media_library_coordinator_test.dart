@@ -196,7 +196,11 @@ void main() {
 
     await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
 
-    expect(w.player.status, startsWith('statusTriageIntentFailed:'));
+    // The named state is the whole message (#62). What the backend answered
+    // with lives on the typed detail instead of being appended to the line.
+    expect(w.player.status, 'statusTriageIntentFailed');
+    expect(w.player.status, isNot(contains('HttpException')));
+    expect(w.player.statusFailure?.raw, contains('boom'));
   });
 
   test('continueRecentMedia falls back to the picker without a path', () async {

@@ -137,7 +137,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       _beginPlayedTracking();
       return true;
     } catch (error) {
-      return _fail('Could not start extensive listening: $error');
+      return _fail('Could not start extensive listening');
     }
   }
 
@@ -171,7 +171,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       );
       return true;
     } catch (error) {
-      return _fail('Could not finish extensive listening: $error');
+      return _fail('Could not finish extensive listening');
     }
   }
 
@@ -182,7 +182,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       _store.update((s) => s.copyWith(items: items, error: null));
       return true;
     } catch (error) {
-      return _fail('Could not load Listening Inbox: $error');
+      return _fail('Could not load Listening Inbox');
     }
   }
 
@@ -258,7 +258,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       if (!wasActive) _beginPlayedTracking();
       return true;
     } catch (error) {
-      return _fail('Could not capture Listening Inbox item: $error');
+      return _fail('Could not capture Listening Inbox item');
     }
   }
 
@@ -283,7 +283,7 @@ class ExtensiveListeningController extends ChangeNotifier {
       _store.update((s) => s.copyWith(items: nextItems, busy: false));
       return processed;
     } catch (error) {
-      _fail('Could not process Listening Inbox item: $error');
+      _fail('Could not process Listening Inbox item');
       return null;
     }
   }

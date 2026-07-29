@@ -30,7 +30,7 @@ class HuntingListPanel extends StatelessWidget {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
+            padding: const EdgeInsets.fromLTRB(24, 16, 12, 8),
             child: Row(
               children: [
                 Expanded(
@@ -67,7 +67,7 @@ class HuntingListPanel extends StatelessWidget {
           if (state.busy) const LinearProgressIndicator(minHeight: 2),
           if (state.error != null)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               child: Text(
                 state.error!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),

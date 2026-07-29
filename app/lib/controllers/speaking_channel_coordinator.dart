@@ -165,8 +165,9 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
         );
       } catch (error) {
         player.setStatus(
-          '${_t('statusPersonalExpressionSaveFailed')}: $error',
+          _t('statusPersonalExpressionSaveFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }

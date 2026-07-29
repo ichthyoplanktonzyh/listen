@@ -129,8 +129,7 @@ class AppLocalizations {
       'statusLLTimelineImportCancelled': 'LLTimeline import cancelled',
       'statusLLTimelineImportFailed': 'LLTimeline import failed',
       'statusPlayingFile': 'Playing {name}',
-      'statusPlayingCoreUnavailable':
-          'Playing locally; local core unavailable: {error}',
+      'statusPlayingCoreUnavailable': 'Playing locally; local core unavailable',
       'statusSecondarySubtitleLoaded': 'Loaded secondary subtitle: {name}',
       'statusSpeechEnhancementsPartial':
           'Speech enhancements partially unavailable',
@@ -303,7 +302,7 @@ class AppLocalizations {
       'corpusKindChunk': 'Chunk',
       'dictionaryReindex': 'Rebuild library index',
       'dictionaryReindexDone': 'Reindexed {count} subtitle tracks',
-      'dictionaryReindexFailed': 'Could not rebuild the index: {error}',
+      'dictionaryReindexFailed': 'Could not rebuild the index',
       'dictionaryAddToReview': 'Add to review',
       'dictionaryReviewQueued': 'Added to sound review',
       'dictionaryReviewFailed': 'Could not add to review: {error}',
@@ -382,6 +381,10 @@ class AppLocalizations {
       'vocabGapStripAction': 'View gaps →',
       'vocabToolsMenu': 'Tools',
       'vocabToolsSemanticIndex': 'Semantic index',
+      // S7 · vocabulary density and status
+      'vocabStatusFirstSeen': 'First seen',
+      'vocabDetailSourceUnknown': 'No source clip yet',
+      'capabilityUserOverride': 'Your own call',
       'huntingAddCurrent': 'Add to Hunting List',
       'huntingStartMode': 'Start Hunting Mode',
       'huntingStopMode': 'Stop Hunting Mode',
@@ -1785,6 +1788,14 @@ class AppLocalizations {
       'postureShadowHint': 'Speak along and record your own take',
       'postureReadTitle': 'Read the transcript',
       'postureReadHint': 'Leave listening and read the whole text',
+
+      // ── Named failure states (#62) ─────────────────────────────────────
+      // Every one of these replaces a sentence that had a caught exception
+      // interpolated into it. They say what failed and stop there; the
+      // exception's own detail travels beside them as an ApiFailure.
+      'statusTrackResourcesPartlyUnavailable':
+          'Some of this track\'s timeline resources could not be read',
+      'statusAudioAnalysisFailed': 'Audio analysis failed',
     },
     'zh': {
       'reviewTitle': '声音复习',
@@ -1854,7 +1865,7 @@ class AppLocalizations {
       'statusLLTimelineImportCancelled': '已取消 LLTimeline 导入',
       'statusLLTimelineImportFailed': 'LLTimeline 导入失败',
       'statusPlayingFile': '正在播放 {name}',
-      'statusPlayingCoreUnavailable': '正在本地播放；本地内核不可用：{error}',
+      'statusPlayingCoreUnavailable': '正在本地播放；本地内核不可用',
       'statusSecondarySubtitleLoaded': '已加载第二字幕：{name}',
       'statusSpeechEnhancementsPartial': '语音增强部分不可用',
       'statusTimelineResourceRefreshed': 'Timeline 资源已刷新',
@@ -2025,7 +2036,7 @@ class AppLocalizations {
       'corpusKindChunk': '语块',
       'dictionaryReindex': '重建媒体库语料索引',
       'dictionaryReindexDone': '已重建 {count} 条字幕轨的语料索引',
-      'dictionaryReindexFailed': '重建语料索引失败：{error}',
+      'dictionaryReindexFailed': '重建语料索引失败',
       'dictionaryAddToReview': '加入复习',
       'dictionaryReviewQueued': '已加入声音复习',
       'dictionaryReviewFailed': '加入复习失败：{error}',
@@ -2090,6 +2101,10 @@ class AppLocalizations {
       'vocabGapStripAction': '看差距 →',
       'vocabToolsMenu': '工具',
       'vocabToolsSemanticIndex': '语义索引管理',
+      // S7 · 词汇本密度与状态
+      'vocabStatusFirstSeen': '首见',
+      'vocabDetailSourceUnknown': '还没有来源片段',
+      'capabilityUserOverride': '你自己的判定',
       'huntingAddCurrent': '加入猎词单',
       'huntingStartMode': '开始狩猎模式',
       'huntingStopMode': '结束狩猎模式',
@@ -3318,6 +3333,10 @@ class AppLocalizations {
       'postureShadowHint': '跟着原声说一遍并录下来',
       'postureReadTitle': '通读全文',
       'postureReadHint': '离开听力姿态，整篇读一遍',
+
+      // ── Named failure states (#62) ─────────────────────────────────────
+      'statusTrackResourcesPartlyUnavailable': '这条字幕的部分时间轴资源读取失败',
+      'statusAudioAnalysisFailed': '音频分析失败',
     },
   };
 }

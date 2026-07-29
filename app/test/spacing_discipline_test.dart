@@ -140,11 +140,6 @@ void main() {
     'lib/widgets/subtitle/phoneme_ribbon.dart',
     'lib/widgets/subtitle/rhythm_frame_ribbon.dart',
     'lib/widgets/subtitle/token_line.dart',
-    'lib/widgets/vocabulary/entry_detail_parts.dart',
-    'lib/widgets/vocabulary/entry_section_anchors.dart',
-    'lib/widgets/vocabulary/hunting_list_panel.dart',
-    'lib/widgets/vocabulary/listening_dictionary_entry_view.dart',
-    'lib/widgets/vocabulary/vocabulary_book_view.dart',
   };
 
   test('container padding uses ListenPadding roles, not off-ladder insets', () {
