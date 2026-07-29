@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -5,10 +7,13 @@ import '../../localization.dart';
 import '../../models/task_status.dart';
 import '../../player_adapter.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
+import '../../theme/motion.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
-import '../../utils/format_duration.dart';
 import '../../theme/typography.dart';
+import '../../utils/format_duration.dart';
+import '../../utils/media_title.dart';
 
 /// One receded look for both transport progress bars (#30): a thin track that
 /// nearly sinks into the bar, where only the played portion and the handle
@@ -266,7 +271,12 @@ class PlaybackControls extends StatelessWidget {
                 SizedBox(
                   height: 76,
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(narrow ? 12 : 20, 4, 8, 8),
+                    padding: EdgeInsets.fromLTRB(
+                      narrow ? ListenSpacing.gap12 : ListenSpacing.gap16,
+                      ListenSpacing.gap4,
+                      ListenSpacing.gap8,
+                      ListenSpacing.gap8,
+                    ),
                     child: Row(
                       children: [
                         Expanded(
@@ -287,7 +297,7 @@ class PlaybackControls extends StatelessWidget {
                                     playing
                                         ? Icons.equalizer_rounded
                                         : Icons.music_note_rounded,
-                                    size: 23,
+                                    size: ListenIconSize.chrome,
                                     color: colors.onPrimaryContainer,
                                   ),
                                 ),
@@ -298,16 +308,25 @@ class PlaybackControls extends StatelessWidget {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        mediaTitle ?? '',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                                      // Same demotion as the workbench header
+                                      // (§3.7): the mini player shows the
+                                      // title, the tooltip keeps the file name.
+                                      Tooltip(
+                                        message: mediaTitle ?? '',
+                                        child: Text(
+                                          displayMediaTitle(mediaTitle ?? ''),
+                                          key: const Key(
+                                            'compact-player-media-title',
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                        ),
                                       ),
                                       const SizedBox(
                                         height: ListenSpacing.gap2,
@@ -337,7 +356,7 @@ class PlaybackControls extends StatelessWidget {
                         IconButton(
                           tooltip: l.text('previousSentence'),
                           onPressed: onSeekToPreviousCue,
-                          iconSize: 24,
+                          iconSize: ListenIconSize.chrome,
                           color: colors.onSurfaceVariant,
                           icon: const Icon(Icons.skip_previous_rounded),
                         ),
@@ -348,7 +367,7 @@ class PlaybackControls extends StatelessWidget {
                             key: const Key('compact-player-play-pause'),
                             tooltip: l.text('playPause'),
                             onPressed: onPlayPause,
-                            iconSize: 28,
+                            iconSize: ListenIconSize.chrome,
                             padding: EdgeInsets.zero,
                             icon: Icon(
                               playing
@@ -360,7 +379,7 @@ class PlaybackControls extends StatelessWidget {
                         IconButton(
                           tooltip: l.text('nextSentence'),
                           onPressed: onSeekToNextCue,
-                          iconSize: 24,
+                          iconSize: ListenIconSize.chrome,
                           color: colors.onSurfaceVariant,
                           icon: const Icon(Icons.skip_next_rounded),
                         ),
@@ -379,7 +398,7 @@ class PlaybackControls extends StatelessWidget {
                                 IconButton(
                                   tooltip: muted ? 'Unmute' : 'Mute',
                                   onPressed: onMuteToggle,
-                                  iconSize: 21,
+                                  iconSize: ListenIconSize.chrome,
                                   icon: Icon(
                                     muted
                                         ? Icons.volume_off_outlined
@@ -390,7 +409,7 @@ class PlaybackControls extends StatelessWidget {
                                 IconButton(
                                   tooltip: l.text('expandWorkbench'),
                                   onPressed: onExpand,
-                                  iconSize: 22,
+                                  iconSize: ListenIconSize.chrome,
                                   icon: Icon(
                                     Icons.keyboard_arrow_up_rounded,
                                     color: colors.onSurfaceVariant,
@@ -404,7 +423,7 @@ class PlaybackControls extends StatelessWidget {
                           IconButton(
                             tooltip: l.text('expandWorkbench'),
                             onPressed: onExpand,
-                            iconSize: 22,
+                            iconSize: ListenIconSize.chrome,
                             icon: Icon(
                               Icons.keyboard_arrow_up_rounded,
                               color: colors.onSurfaceVariant,
@@ -437,13 +456,19 @@ class PlaybackControls extends StatelessWidget {
           builder: (context, constraints) {
             final roomy =
                 constraints.maxWidth >= ListenBreakpoints.playbackControlsRoomy;
-            return Column(
+            final persistentMeta =
+                sourceLoopStart != null ||
+                taskStatuses.isNotEmpty ||
+                statusIsError;
+            final bar = Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
                   height: 38,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: ListenSpacing.gap16,
+                    ),
                     child: ValueListenableBuilder<Duration>(
                       valueListenable: position,
                       builder: (context, positionValue, _) => Row(
@@ -496,17 +521,28 @@ class PlaybackControls extends StatelessWidget {
                 SizedBox(
                   height: 58,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: ListenSpacing.gap12,
+                    ),
                     child: _fullControlRow(context, l, roomy),
                   ),
                 ),
-                if (sourceLoopStart != null ||
-                    taskStatuses.isNotEmpty ||
-                    status.isNotEmpty)
+                // The meta row belongs to signals that are still true when the
+                // user next looks: an active loop, running tasks, a failure
+                // waiting to be dealt with. A plain "Timeline resources
+                // refreshed" is not one of those, and it used to hold this
+                // whole row open under the transport for the rest of the
+                // session (§3.7 item 5).
+                if (persistentMeta)
                   SizedBox(
                     height: 28,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 6),
+                      padding: const EdgeInsets.fromLTRB(
+                        ListenSpacing.gap16,
+                        0,
+                        ListenSpacing.gap16,
+                        ListenSpacing.gap6,
+                      ),
                       child: Row(
                         children: [
                           if (sourceLoopStart != null)
@@ -527,36 +563,31 @@ class PlaybackControls extends StatelessWidget {
                                 ],
                               ),
                             ),
-                          if (taskStatuses.isNotEmpty && status.isNotEmpty)
+                          if (taskStatuses.isNotEmpty && statusIsError)
                             const SizedBox(width: ListenSpacing.gap8),
-                          if (status.isNotEmpty)
+                          if (statusIsError)
                             Flexible(
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  if (statusIsError) ...[
-                                    Icon(
-                                      Icons.error_outline,
-                                      size: 13,
-                                      color: colors.error,
-                                    ),
-                                    const SizedBox(width: ListenSpacing.gap4),
-                                  ],
+                                  Icon(
+                                    Icons.error_outline,
+                                    size: ListenIconSize.inline,
+                                    color: colors.error,
+                                  ),
+                                  const SizedBox(width: ListenSpacing.gap4),
                                   Flexible(
                                     child: Text(
                                       status,
+                                      key: const Key('playback-error-status'),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       textAlign: TextAlign.end,
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall
-                                          ?.copyWith(
-                                            color: statusIsError
-                                                ? colors.error
-                                                : colors.onSurfaceVariant,
-                                          ),
+                                          ?.copyWith(color: colors.error),
                                     ),
                                   ),
                                 ],
@@ -566,6 +597,30 @@ class PlaybackControls extends StatelessWidget {
                       ),
                     ),
                   ),
+              ],
+            );
+
+            if (statusIsError || status.isEmpty) return bar;
+
+            // Info feedback rises briefly above the bar and takes no layout
+            // with it: the transport keeps exactly the height it had, so a
+            // one-off "done" never costs the transcript a row (§3.8's info
+            // tier, without touching how setStatus is called).
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                bar,
+                Positioned(
+                  left: 18,
+                  right: 18,
+                  top: -40,
+                  child: IgnorePointer(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [_TransientStatusToast(message: status)],
+                    ),
+                  ),
+                ),
               ],
             );
           },
@@ -607,7 +662,10 @@ class PlaybackControls extends StatelessWidget {
                 borderRadius: ListenRadii.tightBorder,
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: ListenSpacing.gap6,
+                  vertical: ListenSpacing.gap2,
+                ),
                 child: Text(
                   l.text('shortcutSpacePracticeHint'),
                   style: ListenType.caption.copyWith(
@@ -1030,7 +1088,10 @@ class PlaybackControls extends StatelessWidget {
         builder: (context, setDialogState) => AlertDialog(
           title: Text(l.text('playbackSettings')),
           content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 620),
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.formColumnMax,
+              maxHeight: 620,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1183,9 +1244,13 @@ class _PlaybackMenuButton extends StatelessWidget {
               ? colors.primary
               : colors.onSurfaceVariant
         : colors.onSurfaceVariant.withValues(alpha: 0.55);
-    final iconWidget = Icon(icon, size: 18, color: foreground);
+    final iconWidget = Icon(
+      icon,
+      size: ListenIconSize.control,
+      color: foreground,
+    );
     return Padding(
-      padding: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.only(left: ListenSpacing.gap6),
       child: PopupMenuButton<String>(
         tooltip: tooltip,
         enabled: enabled,
@@ -1200,7 +1265,7 @@ class _PlaybackMenuButton extends StatelessWidget {
             border: Border.all(color: colors.outlineVariant),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding: ListenPadding.row,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1218,7 +1283,11 @@ class _PlaybackMenuButton extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: ListenSpacing.gap2),
-                Icon(Icons.arrow_drop_down, size: 18, color: foreground),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: ListenIconSize.control,
+                  color: foreground,
+                ),
               ],
             ),
           ),
@@ -1248,7 +1317,11 @@ class _PlaybackMenuRow extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 250),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: colors.onSurfaceVariant),
+          Icon(
+            icon,
+            size: ListenIconSize.control,
+            color: colors.onSurfaceVariant,
+          ),
           const SizedBox(width: ListenSpacing.gap12),
           Expanded(
             child: Column(
@@ -1399,13 +1472,13 @@ class _SourceLoopChip extends StatelessWidget {
         borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.only(left: 7),
+        padding: const EdgeInsets.only(left: ListenSpacing.gap6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.loop,
-              size: 13,
+              size: ListenIconSize.inline,
               color: Theme.of(context).colorScheme.secondary,
             ),
             const SizedBox(width: ListenSpacing.gap4),
@@ -1421,7 +1494,7 @@ class _SourceLoopChip extends StatelessWidget {
               child: IconButton(
                 onPressed: onStop,
                 padding: EdgeInsets.zero,
-                iconSize: 14,
+                iconSize: ListenIconSize.inline,
                 icon: Icon(
                   Icons.close,
                   color: Theme.of(context).colorScheme.secondary,
@@ -1430,6 +1503,91 @@ class _SourceLoopChip extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Info-level feedback, shown just above the transport and gone on its own.
+///
+/// The bar used to hand every `setStatus` string the same permanent row, so
+/// "Timeline resources refreshed" sat under the transport until something else
+/// replaced it — a sentence about a moment that had passed, holding layout
+/// open (§3.7 item 5). This is only the info tier of §3.8: errors keep the
+/// persistent row above, and how `setStatus` is called is left alone (that
+/// split is S5's).
+///
+/// It floats rather than reserving a row on purpose. Reserving one would mean
+/// the transcript above loses 28px every time the app says "done" and gets it
+/// back 2.4s later, which is more disruptive than the message is worth.
+class _TransientStatusToast extends StatefulWidget {
+  const _TransientStatusToast({required this.message});
+
+  final String message;
+
+  /// Long enough to read one line, short enough that nobody waits for it.
+  static const visibleFor = Duration(milliseconds: 2400);
+
+  @override
+  State<_TransientStatusToast> createState() => _TransientStatusToastState();
+}
+
+class _TransientStatusToastState extends State<_TransientStatusToast> {
+  Timer? _timer;
+  bool _visible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _restart();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TransientStatusToast oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A new message is a new event, even if the previous one had already
+    // faded: the countdown starts again rather than inheriting the old one.
+    if (oldWidget.message != widget.message) _restart();
+  }
+
+  void _restart() {
+    _timer?.cancel();
+    _visible = true;
+    _timer = Timer(_TransientStatusToast.visibleFor, () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedOpacity(
+      opacity: _visible ? 1 : 0,
+      duration: ListenMotion.base,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: ListenRadii.controlBorder,
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: ListenPadding.tight,
+          child: Text(
+            widget.message,
+            key: const Key('playback-info-status'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
         ),
       ),
     );
@@ -1451,7 +1609,10 @@ class _TaskStatusChip extends StatelessWidget {
         borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        padding: const EdgeInsets.symmetric(
+          horizontal: ListenSpacing.gap6,
+          vertical: ListenSpacing.gap2,
+        ),
         child: Text(
           '${l.text(status.titleKey)} · ${status.progress.clamp(0, 100)}%',
           maxLines: 1,
