@@ -105,4 +105,15 @@ abstract final class ListenBreakpoints {
   /// which reads narrower than a full text column. Replaces the review card's
   /// hard-coded 680 (audit C4).
   static const cardColumnMax = 680.0;
+
+  /// A dense form or single-column settings list — the conversation lobby, the
+  /// provider forms. Narrower than a reading column on purpose: a form row is
+  /// not continuous text but a label↔control pair, and once the row gets long
+  /// the eye loses which control belongs to which label on the way across.
+  static const formColumnMax = 560.0;
+
+  /// Wide content that is two columns or carries media — the home surface, the
+  /// media library. Not a reading measure: the cap here only stops the layout
+  /// from sprawling once the window is much wider than the content needs.
+  static const wideColumnMax = 960.0;
 }
