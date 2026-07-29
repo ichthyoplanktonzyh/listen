@@ -119,8 +119,9 @@ class MediaSessionCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${text('statusPlaybackFailed')}: $error',
+          text('statusPlaybackFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
       return;
@@ -157,17 +158,21 @@ class MediaSessionCoordinator {
               ? text(
                   'statusPlayingFile',
                 ).replaceAll('{name}', path.split(Platform.pathSeparator).last)
-              : text(
-                  'statusPlayingCoreUnavailable',
-                ).replaceAll('{error}', '$coreError'),
+              : text('statusPlayingCoreUnavailable'),
           playback: coreError == null,
+          // The file is playing; only the core round-trip failed. The sentence
+          // says that much, and the exception behind it — which was being
+          // interpolated into the status line one `catch` away from where it
+          // was raised — stays typed.
+          failure: coreError == null ? null : describeApiFailure(coreError),
         );
       }
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${text('statusPlaybackFailed')}: $error',
+          text('statusPlaybackFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -211,8 +216,9 @@ class MediaSessionCoordinator {
       await resourceActions.loadSubtitleResources(updateStatus: false);
     } catch (error) {
       player.setStatus(
-        '${text('statusSubtitleImportFailed')}: $error',
+        text('statusSubtitleImportFailed'),
         error: true,
+        failure: describeApiFailure(error),
       );
     }
   }
@@ -274,8 +280,9 @@ class MediaSessionCoordinator {
       learning.selectSidePanel(1);
     } catch (error) {
       player.setStatus(
-        '${text('statusLLTimelineImportFailed')}: $error',
+        text('statusLLTimelineImportFailed'),
         error: true,
+        failure: describeApiFailure(error),
       );
     }
   }

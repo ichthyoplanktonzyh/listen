@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../models/api_failure.dart';
 import '../player_adapter.dart';
 import '../state/store.dart';
 
@@ -16,6 +17,7 @@ class PlayerState {
     this.status = 'Starting local core...',
     this.statusIsError = false,
     this.statusIsPlayback = false,
+    this.statusFailure,
     this.duration = Duration.zero,
     this.playing = false,
     this.muted = false,
@@ -45,6 +47,17 @@ class PlayerState {
   /// chatter says nothing about the core. Never match on the text to decide
   /// this — [status] is localized.
   final bool statusIsPlayback;
+
+  /// The transport detail behind an error [status], when the failure came from
+  /// the backend.
+  ///
+  /// Kept beside the sentence rather than inside it. [status] used to be built
+  /// as `'${text('statusX')}: $error'`, which put an internal error code, a
+  /// `correlation_id` and the sidecar's loopback URI on the status line; the
+  /// sentence is now the whole message, and everything the exception carried
+  /// lives here as a typed value a diagnostics disclosure can read.
+  /// `ApiFailure.raw` is not rendered even then.
+  final ApiFailure? statusFailure;
   final Duration duration;
   final bool playing;
   final bool muted;
@@ -66,6 +79,7 @@ class PlayerState {
     String? status,
     bool? statusIsError,
     bool? statusIsPlayback,
+    Object? statusFailure = _unset,
     Duration? duration,
     bool? playing,
     bool? muted,
@@ -92,6 +106,9 @@ class PlayerState {
     status: status ?? this.status,
     statusIsError: statusIsError ?? this.statusIsError,
     statusIsPlayback: statusIsPlayback ?? this.statusIsPlayback,
+    statusFailure: identical(statusFailure, _unset)
+        ? this.statusFailure
+        : statusFailure as ApiFailure?,
     duration: duration ?? this.duration,
     playing: playing ?? this.playing,
     muted: muted ?? this.muted,
@@ -151,6 +168,7 @@ class PlayerController extends ChangeNotifier {
   String get status => _store.state.status;
   bool get statusIsError => _store.state.statusIsError;
   bool get statusIsPlayback => _store.state.statusIsPlayback;
+  ApiFailure? get statusFailure => _store.state.statusFailure;
   bool get playing => _store.state.playing;
   bool get muted => _store.state.muted;
   Duration get position => _position.value;
@@ -220,14 +238,25 @@ class PlayerController extends ChangeNotifier {
   /// style the line and surface a SnackBar; plain progress updates clear the
   /// error flag. Pass [playback] for "now playing" notices so health
   /// indicators can skip them without matching on localized text.
-  void setStatus(String status, {bool error = false, bool playback = false}) =>
-      _store.update(
-        (s) => s.copyWith(
-          status: status,
-          statusIsError: error,
-          statusIsPlayback: playback,
-        ),
-      );
+  ///
+  /// [status] is the whole message. Pass [failure] — from `describeApiFailure`
+  /// — instead of appending the exception to it: the detail then reaches
+  /// [PlayerState.statusFailure] as a typed value rather than the status line
+  /// as prose. Every call replaces the previous detail, so a later success
+  /// cannot leave a stale failure attached to a healthy status.
+  void setStatus(
+    String status, {
+    bool error = false,
+    bool playback = false,
+    ApiFailure? failure,
+  }) => _store.update(
+    (s) => s.copyWith(
+      status: status,
+      statusIsError: error,
+      statusIsPlayback: playback,
+      statusFailure: failure,
+    ),
+  );
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
       _store.update((s) => s.copyWith(audioTracks: tracks));

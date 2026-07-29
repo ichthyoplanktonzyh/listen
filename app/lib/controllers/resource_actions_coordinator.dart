@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 
+import '../models/api_failure.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
@@ -153,8 +154,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted() && updateStatus) {
         player.setStatus(
-          '${_t('statusSubtitleResourcesUnavailable')}: $error',
+          _t('statusSubtitleResourcesUnavailable'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -167,21 +169,18 @@ class ResourceActionsCoordinator {
   ) async {
     final entries = await Future.wait(
       tracks.map((track) async {
-        final errors = <String>[];
+        final failures = <ApiFailure>[];
         final wordTimings = await _loadOptionalResourceCapability(
           () => service.trackWordTimings(track.id),
-          'word',
-          errors,
+          failures,
         );
         final phoneSummaries = await _loadOptionalResourceCapability(
           () => service.trackPhoneTimelineSummaries(track.id),
-          'phone timeline',
-          errors,
+          failures,
         );
         final chunkSummaries = await _loadOptionalResourceCapability(
           () => service.trackChunkTimelineSummaries(track.id),
-          'chunk timeline',
-          errors,
+          failures,
         );
         return MapEntry(
           track.id,
@@ -196,7 +195,12 @@ class ResourceActionsCoordinator {
               0,
               (total, summary) => total + summary.phoneCount,
             ),
-            error: errors.isEmpty ? null : errors.join('; '),
+            // The tooltip says only that some of this track's timeline
+            // resources could not be read. Which loader failed, and what it
+            // failed with, are in [failures] — diagnostics, not a tooltip.
+            error: failures.isEmpty
+                ? null
+                : _t('statusTrackResourcesPartlyUnavailable'),
           ),
         );
       }),
@@ -204,15 +208,18 @@ class ResourceActionsCoordinator {
     return Map<String, SubtitleResourceCapabilities>.fromEntries(entries);
   }
 
+  /// Runs one optional capability loader, recording the failure as a typed
+  /// [ApiFailure] rather than as a sentence. A missing capability is a normal
+  /// state for a track that has not been enhanced yet, so the caller degrades
+  /// to an empty list either way.
   Future<List<T>> _loadOptionalResourceCapability<T>(
     Future<List<T>> Function() loader,
-    String label,
-    List<String> errors,
+    List<ApiFailure> failures,
   ) async {
     try {
       return await loader();
     } catch (error) {
-      errors.add('$label: $error');
+      failures.add(describeApiFailure(error));
       return const [];
     }
   }
@@ -234,8 +241,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusSubtitleActivationFailed')}: $error',
+          _t('statusSubtitleActivationFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -257,8 +265,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusSubtitleArchiveFailed')}: $error',
+          _t('statusSubtitleArchiveFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -277,8 +286,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusSubtitleRestoreFailed')}: $error',
+          _t('statusSubtitleRestoreFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -300,8 +310,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusSubtitleDeleteFailed')}: $error',
+          _t('statusSubtitleDeleteFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -331,8 +342,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusSubtitleExportFailed')}: $error',
+          _t('statusSubtitleExportFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -357,8 +369,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusLLTimelineExportFailed')}: $error',
+          _t('statusLLTimelineExportFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -390,8 +403,9 @@ class ResourceActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusLanguageUpdateFailed')}: $error',
+          _t('statusLanguageUpdateFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -501,7 +515,11 @@ class ResourceActionsCoordinator {
       if (isMounted()) player.setStatus(doneStatus);
     } catch (error) {
       if (isMounted()) {
-        player.setStatus('$failurePrefix: $error', error: true);
+        player.setStatus(
+          failurePrefix,
+          error: true,
+          failure: describeApiFailure(error),
+        );
       }
     }
   }

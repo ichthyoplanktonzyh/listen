@@ -94,7 +94,9 @@ class HuntingActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          text('dictionaryReindexFailed').replaceAll('{error}', '$error'),
+          text('dictionaryReindexFailed'),
+          error: true,
+          failure: describeApiFailure(error),
         );
       }
     }

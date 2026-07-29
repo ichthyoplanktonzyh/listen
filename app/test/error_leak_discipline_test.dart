@@ -56,19 +56,31 @@ import 'support/dart_source.dart';
 /// Form 1, matched against the *contents of string literals only*
 /// ([stringLiteralsOnly]).
 ///
-/// The spelled-out catch names match on any use, because `${error.message}` is
-/// as much of a leak as `$error`. The one-letter `e` is narrower — it is also
-/// the conventional name for a map entry or an element, and
-/// `'${e.key}=${e.value}'` is not a failure at all — so it counts only when
-/// interpolated whole, or via its own `toString()`.
+/// Any identifier *ending* in error/exception/failure counts, on any use:
+/// `${error.message}` leaks as much as `$error`, and the first thing found
+/// when this rule was widened was `'{error}', '$coreError'` — the same
+/// exception, laundered through a differently named local one `catch` block
+/// away. `err` is spelled out because it does not end in one of those words.
+///
+/// The one-letter `e` is narrower — it is also the conventional name for a map
+/// entry or an element, and `'${e.key}=${e.value}'` is not a failure at all —
+/// so it counts only when interpolated whole, or via its own `toString()`.
+const _caught = r'(?:\w*(?:[Ee]rror|[Ee]xception|[Ff]ailure)|err)';
+
+/// Form 1, matched against the *contents of string literals only*
+/// ([stringLiteralsOnly]).
 final _interpolated = RegExp(
-  r'\$\{?(?:error|err|exception|failure)\b'
+  r'\$\{?'
+  '$_caught'
+  r'\b'
   r'|\$\{?e(?![A-Za-z0-9_$])(?!\.(?!toString\(\)))',
 );
 
 /// Form 2, matched against code with comments and literals blanked out.
 final _stringified = RegExp(
-  r'\b(?:error|err|exception|failure|e)\.toString\(\)',
+  r'\b(?:'
+  '$_caught'
+  r'|e)\.toString\(\)',
 );
 
 /// Statements that are allowed to carry exception text, because none of them
@@ -130,27 +142,18 @@ void main() {
   // tracks. Same shape as the token gates in `icon_size_discipline_test.dart`.
   const knownOffenders = <String>{
     'lib/controllers/auxiliary_audio_controller.dart',
-    'lib/controllers/backend_event_coordinator.dart',
     'lib/controllers/coach_dashboard_controller.dart',
     'lib/controllers/download_controller.dart',
     'lib/controllers/extensive_listening_controller.dart',
-    'lib/controllers/hunting_actions_coordinator.dart',
     'lib/controllers/hunting_controller.dart',
     'lib/controllers/hunting_session_controller.dart',
-    'lib/controllers/media_library_coordinator.dart',
-    'lib/controllers/media_session_coordinator.dart',
-    'lib/controllers/playback_actions_coordinator.dart',
     'lib/controllers/practice_controller.dart',
     'lib/controllers/reading_diff_controller.dart',
     'lib/controllers/reading_task_controller.dart',
-    'lib/controllers/resource_actions_coordinator.dart',
     'lib/controllers/review_controller.dart',
     'lib/controllers/slice_player_controller.dart',
-    'lib/controllers/speaking_channel_coordinator.dart',
     'lib/controllers/speaking_task_controller.dart',
     'lib/controllers/speech_enhancement_workflow_controller.dart',
-    'lib/controllers/subtitle_sources_coordinator.dart',
-    'lib/controllers/vocabulary_actions_coordinator.dart',
     'lib/controllers/writing_task_controller.dart',
     'lib/main.dart',
     'lib/phonetic_analysis_ui.dart',

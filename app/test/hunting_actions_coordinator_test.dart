@@ -16,7 +16,7 @@ String _text(String key) => switch (key) {
   'huntingStarted' => 'started {count}',
   'huntingAnswerSaved' => 'answer-saved',
   'dictionaryReindexDone' => 'reindexed {count}',
-  'dictionaryReindexFailed' => 'reindex-failed {error}',
+  'dictionaryReindexFailed' => 'reindex-failed',
   _ => key,
 };
 

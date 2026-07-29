@@ -282,6 +282,9 @@ void main() {
 
     expect(w.taskStatuses, hasLength(1));
     expect(w.taskStatuses.single.state, UserTaskState.error);
-    expect(w.snackBars.single, startsWith('Audio analysis failed:'));
+    // Was `'Audio analysis failed: $error'` — a hard-coded English sentence
+    // with a StateError glued to it. Now one named, localizable state (#62).
+    expect(w.snackBars.single, 'statusAudioAnalysisFailed');
+    expect(w.snackBars.single, isNot(contains('StateError')));
   });
 }
