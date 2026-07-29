@@ -58,6 +58,17 @@ pub trait MediaRepository: Send + Sync {
 
 pub trait SubtitleTrackRepository: Send + Sync {
     fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError>;
+    /// Atomically persists the authoritative subtitle track and replaces its
+    /// complete rebuildable corpus projection.
+    ///
+    /// Import and language retokenization must use this unit-of-work boundary:
+    /// callers must never observe new subtitle sentences with an old or
+    /// missing corpus projection.
+    fn save_track_and_replace_corpus(
+        &self,
+        track: &SubtitleTrack,
+        occurrences: &[CorpusOccurrence],
+    ) -> Result<(), ApplicationError>;
     fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError>;
     fn list_tracks_for_media(
         &self,
@@ -67,11 +78,6 @@ pub trait SubtitleTrackRepository: Send + Sync {
         &self,
         id: &SubtitleTrackId,
         status: SubtitleTrackStatus,
-    ) -> Result<SubtitleTrack, ApplicationError>;
-    fn set_track_language(
-        &self,
-        id: &SubtitleTrackId,
-        language: &LanguageCode,
     ) -> Result<SubtitleTrack, ApplicationError>;
     fn delete_track(&self, id: &SubtitleTrackId)
     -> Result<Option<SubtitleTrack>, ApplicationError>;

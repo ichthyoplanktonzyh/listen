@@ -175,6 +175,7 @@ async fn language_routes_track_patch_and_terminal_job_clear_are_typed() {
     assert_eq!(profile["word_timeline"], "supported");
 
     let track = setup_phonetic_track(&app, "language-patch").await;
+    let original_sentence = track["sentences"][0].clone();
     let response = app
         .clone()
         .oneshot(
@@ -195,6 +196,19 @@ async fn language_routes_track_patch_and_terminal_job_clear_are_typed() {
     let updated: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(updated["language"], "zh-hant");
+    assert_eq!(updated["sentences"][0]["id"], original_sentence["id"]);
+    assert_eq!(
+        updated["sentences"][0]["original_text"],
+        original_sentence["original_text"]
+    );
+    assert_eq!(
+        updated["sentences"][0]["display_text"],
+        original_sentence["display_text"]
+    );
+    assert_ne!(
+        updated["sentences"][0]["tokens"], original_sentence["tokens"],
+        "language patch must rerun the target language tokenizer"
+    );
 
     let response = app
         .oneshot(

@@ -30,6 +30,103 @@ async fn media_registration_is_idempotent_over_http() {
 }
 
 #[tokio::test]
+async fn subtitle_file_reader_enforces_the_exact_byte_boundary() {
+    let base = std::env::temp_dir().join(format!(
+        "listen-subtitle-size-boundary-{}",
+        application::now_ms()
+    ));
+    let exact = base.with_extension("exact.srt");
+    let over = base.with_extension("over.srt");
+    std::fs::File::create(&exact)
+        .unwrap()
+        .set_len(crate::routes::media::MAX_SUBTITLE_FILE_BYTES)
+        .unwrap();
+    std::fs::File::create(&over)
+        .unwrap()
+        .set_len(crate::routes::media::MAX_SUBTITLE_FILE_BYTES + 1)
+        .unwrap();
+
+    let exact_content = crate::routes::media::read_subtitle_file(exact.to_str().unwrap())
+        .await
+        .unwrap();
+    let over_error = crate::routes::media::read_subtitle_file(over.to_str().unwrap())
+        .await
+        .unwrap_err();
+
+    let _ = std::fs::remove_file(exact);
+    let _ = std::fs::remove_file(over);
+    assert_eq!(
+        exact_content.len() as u64,
+        crate::routes::media::MAX_SUBTITLE_FILE_BYTES
+    );
+    assert_eq!(
+        over_error.into_response().status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+}
+
+#[tokio::test]
+async fn oversized_subtitle_import_returns_typed_413() {
+    let app = test_app();
+    let media_response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "path": "/tmp/oversized-subtitle.mp4",
+                        "fingerprint": "oversized-subtitle-media",
+                        "title": "Oversized subtitle",
+                        "kind": "video"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let media: serde_json::Value = serde_json::from_slice(
+        &to_bytes(media_response.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let path = std::env::temp_dir().join(format!(
+        "listen-oversized-subtitle-{}.srt",
+        application::now_ms()
+    ));
+    std::fs::File::create(&path)
+        .unwrap()
+        .set_len(crate::routes::media::MAX_SUBTITLE_FILE_BYTES + 1)
+        .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::post(format!(
+                "/v1/media/{}/subtitles",
+                media["id"].as_str().unwrap()
+            ))
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({"path": path, "language": "en"}).to_string(),
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let _ = std::fs::remove_file(path);
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body: serde_json::Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(body["code"], "subtitle_file_too_large");
+    assert_eq!(body["retryable"], false);
+}
+
+#[tokio::test]
 async fn imports_and_reads_complete_subtitle_timeline() {
     let app = test_app();
     let media = serde_json::json!({
