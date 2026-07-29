@@ -225,7 +225,12 @@ class WritingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'This writing task could not be opened',
+        ),
+      );
     }
   }
 
@@ -287,7 +292,10 @@ class WritingTaskController extends ChangeNotifier {
         _store.update((s) => s.copyWith(feedbackProviderId: providerId));
       }
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) =>
+            s.copyWith(busy: false, error: 'Your draft could not be submitted'),
+      );
     }
   }
 
@@ -310,7 +318,12 @@ class WritingTaskController extends ChangeNotifier {
       );
       _store.update((s) => s.copyWith(llmFeedback: feedback, busy: false));
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'Feedback for this draft could not be generated',
+        ),
+      );
     }
   }
 
@@ -329,7 +342,12 @@ class WritingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'Local feedback for this draft is unavailable',
+        ),
+      );
     }
   }
 
@@ -400,7 +418,12 @@ class WritingTaskController extends ChangeNotifier {
         ),
       );
     } catch (error) {
-      _store.update((s) => s.copyWith(busy: false, error: '$error'));
+      _store.update(
+        (s) => s.copyWith(
+          busy: false,
+          error: 'Your revision could not be submitted',
+        ),
+      );
     }
   }
 

@@ -310,8 +310,9 @@ class PlaybackActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${_t('statusAudioFindingFeedbackFailed')}: $error',
+          _t('statusAudioFindingFeedbackFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }

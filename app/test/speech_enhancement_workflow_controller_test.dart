@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -14,11 +15,17 @@ void main() {
   group('SpeechEnhancementWorkflowController.loadTimelineResource', () {
     test('reports unavailable when all four sub-resources fail', () async {
       final controller = SpeechEnhancementWorkflowController();
+      // The body and address the field actually reported (#62), so the
+      // exception's own `toString` carries the sidecar URI.
       final api = LocalApi.withTransport(
-        baseUrl: 'http://test',
+        baseUrl: 'http://127.0.0.1:62645',
         token: 'tok',
-        transport: (method, path, body) async =>
-            (statusCode: 500, body: 'boom'),
+        transport: (method, path, body) async => (
+          statusCode: 500,
+          body:
+              '{"code":"validation_error","message":"recording metadata must '
+              'not be empty","correlation_id":"api-853","retryable":false}',
+        ),
       );
 
       final result = await controller.loadTimelineResource(
@@ -28,7 +35,24 @@ void main() {
       );
 
       expect(result.unavailable, isTrue);
-      expect(result.error, contains('Timeline resource unavailable'));
+      // Was `'Timeline resource unavailable: ${errors.join('; ')}'` — four
+      // loaders, four exceptions, four loopback URIs, one resource panel.
+      expect(result.error, 'Timeline resource unavailable');
+      for (final leak in const [
+        'HttpException',
+        'correlation_id',
+        'api-853',
+        '127.0.0.1',
+        '62645',
+        'validation_error',
+        'uri =',
+        '/v1/',
+      ]) {
+        expect(result.error, isNot(contains(leak)));
+      }
+      // Typed and kept, one per failed loader.
+      expect(result.failures, hasLength(4));
+      expect(result.failures.first.correlationId, 'api-853');
       expect(result.wordSummaries, isEmpty);
       expect(result.phoneSummaries, isEmpty);
       expect(result.chunkSummaries, isEmpty);
@@ -52,8 +76,10 @@ void main() {
 
       expect(result.unavailable, isFalse);
       expect(result.wordSummaries, isEmpty);
-      expect(result.error, isNotNull);
-      expect(result.error, contains('warning'));
+      // One named warning, not the warning plus a decode exception.
+      expect(result.error, 'Timeline resource refresh warning');
+      expect(result.error, isNot(contains('TypeError')));
+      expect(result.failures, hasLength(1));
     });
 
     test(
@@ -185,12 +211,13 @@ void main() {
       final second = await _loadSpeechEnhancements(controller, api);
 
       expect(first.senseGroupsBySentence, isEmpty);
+      // The failure is recorded as a typed ApiFailure, not as
+      // `'sense group fallback: $error'` (#62). The body the backend sent is
+      // still available for diagnostics; it is simply not a sentence any more.
       expect(
         first.errors,
         contains(
-          predicate<String>(
-            (error) => error.startsWith('sense group fallback:'),
-          ),
+          predicate<ApiFailure>((failure) => failure.raw == 'no groups'),
         ),
       );
       expect(second.senseGroupsBySentence, isEmpty);

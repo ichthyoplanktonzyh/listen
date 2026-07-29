@@ -103,7 +103,10 @@ class BackendEventCoordinator {
       if (event.mediaId != currentMediaId()) return;
       await loadGeneratedTrack(track, event.destination == 'secondary');
     } catch (error) {
-      setStatus('${_t('statusGeneratedSubtitleUnavailable')}: $error');
+      // The host's status hook takes a sentence and nothing else — this
+      // coordinator has no PlayerController to hang an ApiFailure on — so the
+      // exception is dropped rather than printed on a status line.
+      setStatus(_t('statusGeneratedSubtitleUnavailable'));
     }
   }
 

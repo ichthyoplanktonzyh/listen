@@ -152,7 +152,7 @@ class HuntingSessionController extends ChangeNotifier {
         (state) => state.copyWith(
           loaded: true,
           busy: false,
-          error: 'Could not locate hunting targets: $error',
+          error: 'Could not locate hunting targets',
         ),
       );
       return false;
@@ -246,10 +246,8 @@ class HuntingSessionController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) => state.copyWith(
-          busy: false,
-          error: 'Could not save hunting answer: $error',
-        ),
+        (state) =>
+            state.copyWith(busy: false, error: 'Could not save hunting answer'),
       );
       return false;
     }

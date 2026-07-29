@@ -93,7 +93,7 @@ class AuxiliaryAudioController extends ChangeNotifier {
       return played && generation == _generation ? asset : null;
     } catch (error) {
       if (generation == _generation) {
-        _error = error.toString();
+        _error = 'This audio could not be loaded';
         notifyListeners();
       }
       return null;
@@ -133,7 +133,7 @@ class AuxiliaryAudioController extends ChangeNotifier {
       return true;
     } catch (error) {
       if (currentGeneration == _generation) {
-        _error = error.toString();
+        _error = 'This audio could not be loaded';
         notifyListeners();
       }
       return false;

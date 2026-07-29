@@ -127,8 +127,9 @@ class VocabularyActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${text('statusDictionaryUnavailable')}: $error',
+          text('statusDictionaryUnavailable'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -159,8 +160,9 @@ class VocabularyActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${text('statusWordUpdateFailed')}: $error',
+          text('statusWordUpdateFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -184,8 +186,9 @@ class VocabularyActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${text('statusCapabilityUpdateFailed')}: $error',
+          text('statusCapabilityUpdateFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -222,8 +225,9 @@ class VocabularyActionsCoordinator {
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
-          '${text('statusRecordSourceFailed')}: $error',
+          text('statusRecordSourceFailed'),
           error: true,
+          failure: describeApiFailure(error),
         );
       }
     }

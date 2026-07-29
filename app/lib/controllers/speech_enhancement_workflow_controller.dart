@@ -1,3 +1,4 @@
+import '../models/api_failure.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
@@ -23,6 +24,7 @@ class TimelineResourceLoadResult {
     this.chunkSummaries = const [],
     this.document,
     this.error,
+    this.failures = const [],
     this.unavailable = false,
   });
 
@@ -30,7 +32,14 @@ class TimelineResourceLoadResult {
   final List<PhoneTimelineSummary> phoneSummaries;
   final List<ChunkTimelineSummary> chunkSummaries;
   final LLTimelineDocument? document;
+
+  /// The named state, or null when nothing failed. One sentence — the four
+  /// loaders' exceptions used to be joined into it with semicolons, which put
+  /// up to four loopback URIs on a resource panel.
   final String? error;
+
+  /// What each failed loader answered with, kept typed and off screen.
+  final List<ApiFailure> failures;
   final bool unavailable;
 }
 
@@ -53,7 +62,11 @@ class SpeechEnhancementLoadResult {
   final Map<String, PronunciationAnalysis> pronunciationBySentence;
   final List<PronunciationProvider> pronunciationProviders;
   final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
-  final List<String> errors;
+
+  /// Every optional loader that failed, as a typed failure rather than as a
+  /// sentence. Callers report *that* some enhancements are missing; what the
+  /// backend said about each one stays here.
+  final List<ApiFailure> errors;
 }
 
 class SpeechEnhancementWorkflowController {
@@ -69,15 +82,13 @@ class SpeechEnhancementWorkflowController {
       trackId: trackId,
       previous: previousTimeline,
     );
-    final errors = <String>[];
+    final errors = <ApiFailure>[];
     final timings = await _loadOptionalResourceCapability(
       () => service.trackWordTimings(trackId),
-      'word timing',
       errors,
     );
     final providers = await _loadOptionalResourceCapability(
       service.pronunciationProviders,
-      'pronunciation provider',
       errors,
     );
     final soundPatterns = await _loadSoundPatternAnalyses(
@@ -117,7 +128,7 @@ class SpeechEnhancementWorkflowController {
     required String trackId,
     required ExistingTimelineResourceState previous,
   }) async {
-    final errors = <String>[];
+    final errors = <ApiFailure>[];
     late List<WordTimelineSummary> summaries;
     late List<PhoneTimelineSummary> phoneSummaries;
     late List<ChunkTimelineSummary> chunkSummaries;
@@ -126,21 +137,21 @@ class SpeechEnhancementWorkflowController {
     try {
       summaries = await service.trackWordTimelineSummaries(trackId);
     } catch (error) {
-      errors.add('summary: $error');
+      errors.add(describeApiFailure(error));
       summaries = previous.wordSummaries;
     }
 
     try {
       phoneSummaries = await service.trackPhoneTimelineSummaries(trackId);
     } catch (error) {
-      errors.add('phone summary: $error');
+      errors.add(describeApiFailure(error));
       phoneSummaries = previous.phoneSummaries;
     }
 
     try {
       chunkSummaries = await service.trackChunkTimelineSummaries(trackId);
     } catch (error) {
-      errors.add('chunk summary: $error');
+      errors.add(describeApiFailure(error));
       chunkSummaries = previous.chunkSummaries;
     }
 
@@ -165,7 +176,7 @@ class SpeechEnhancementWorkflowController {
             )
           : exportedDocument;
     } catch (error) {
-      errors.add('export: $error');
+      errors.add(describeApiFailure(error));
       document = previous.document;
     }
 
@@ -180,7 +191,8 @@ class SpeechEnhancementWorkflowController {
         phoneSummaries: phoneSummaries,
         chunkSummaries: chunkSummaries,
         document: document,
-        error: 'Timeline resource unavailable: ${errors.join('; ')}',
+        error: 'Timeline resource unavailable',
+        failures: errors,
         unavailable: true,
       );
     }
@@ -189,9 +201,8 @@ class SpeechEnhancementWorkflowController {
       phoneSummaries: phoneSummaries,
       chunkSummaries: chunkSummaries,
       document: document,
-      error: errors.isEmpty
-          ? null
-          : 'Timeline resource refresh warning: ${errors.join('; ')}',
+      error: errors.isEmpty ? null : 'Timeline resource refresh warning',
+      failures: errors,
     );
   }
 
@@ -199,7 +210,7 @@ class SpeechEnhancementWorkflowController {
     LocalApi service,
     String trackId,
     List<PhoneTimelineSummary> phoneSummaries,
-    List<String> errors,
+    List<ApiFailure> errors,
   ) async {
     final active = phoneSummaries
         .where((summary) => summary.isActive)
@@ -216,12 +227,11 @@ class SpeechEnhancementWorkflowController {
           };
         }
       } catch (error) {
-        errors.add('phone timeline: $error');
+        errors.add(describeApiFailure(error));
       }
     }
     final phoneticAnalyses = await _loadOptionalResourceCapability(
       () => service.trackPhoneticAnalyses(trackId),
-      'phone',
       errors,
     );
     final latest = <String, PhoneticAnalysis>{};
@@ -235,12 +245,12 @@ class SpeechEnhancementWorkflowController {
   Future<List<PronunciationAnalysis>> _loadPronunciationEnhancements(
     LocalApi service,
     String trackId,
-    List<String> errors,
+    List<ApiFailure> errors,
   ) async {
     try {
       return await service.trackPronunciation(trackId);
     } catch (error) {
-      errors.add('pronunciation: $error');
+      errors.add(describeApiFailure(error));
       return const [];
     }
   }
@@ -249,7 +259,7 @@ class SpeechEnhancementWorkflowController {
     LocalApi service,
     String trackId,
     List<ChunkTimelineSummary> chunkSummaries,
-    List<String> errors,
+    List<ApiFailure> errors,
   ) async {
     final active = chunkSummaries
         .where((summary) => summary.isActive)
@@ -260,12 +270,11 @@ class SpeechEnhancementWorkflowController {
           await service.chunkTimeline(active.id),
         );
       } catch (error) {
-        errors.add('chunk timeline: $error');
+        errors.add(describeApiFailure(error));
       }
     }
     final partitions = await _loadOptionalResourceCapability(
       () => service.trackChunkPartitions(trackId),
-      'chunk',
       errors,
     );
     return {
@@ -276,13 +285,13 @@ class SpeechEnhancementWorkflowController {
   Future<Map<String, List<SenseGroup>>> _loadSenseGroups(
     LocalApi service,
     String trackId,
-    List<String> errors,
+    List<ApiFailure> errors,
   ) async {
     late List<SenseGroupAnalysis> analyses;
     try {
       analyses = await service.trackSenseGroupAnalyses(trackId);
     } catch (error) {
-      errors.add('sense groups: $error');
+      errors.add(describeApiFailure(error));
       return const {};
     }
 
@@ -299,7 +308,7 @@ class SpeechEnhancementWorkflowController {
         await service.trackSenseGroupAnalyses(trackId),
       );
     } catch (error) {
-      errors.add('sense group fallback: $error');
+      errors.add(describeApiFailure(error));
       return const {};
     }
   }
@@ -318,13 +327,12 @@ class SpeechEnhancementWorkflowController {
 
   Future<List<T>> _loadOptionalResourceCapability<T>(
     Future<List<T>> Function() loader,
-    String label,
-    List<String> errors,
+    List<ApiFailure> errors,
   ) async {
     try {
       return await loader();
     } catch (error) {
-      errors.add('$label: $error');
+      errors.add(describeApiFailure(error));
       return const [];
     }
   }
