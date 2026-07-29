@@ -382,6 +382,10 @@ class AppLocalizations {
       'vocabGapStripAction': 'View gaps →',
       'vocabToolsMenu': 'Tools',
       'vocabToolsSemanticIndex': 'Semantic index',
+      // S7 · vocabulary density and status
+      'vocabStatusFirstSeen': 'First seen',
+      'vocabDetailSourceUnknown': 'No source clip yet',
+      'capabilityUserOverride': 'Your own call',
       'huntingAddCurrent': 'Add to Hunting List',
       'huntingStartMode': 'Start Hunting Mode',
       'huntingStopMode': 'Stop Hunting Mode',
@@ -2069,6 +2073,10 @@ class AppLocalizations {
       'vocabGapStripAction': '看差距 →',
       'vocabToolsMenu': '工具',
       'vocabToolsSemanticIndex': '语义索引管理',
+      // S7 · 词汇本密度与状态
+      'vocabStatusFirstSeen': '首见',
+      'vocabDetailSourceUnknown': '还没有来源片段',
+      'capabilityUserOverride': '你自己的判定',
       'huntingAddCurrent': '加入猎词单',
       'huntingStartMode': '开始狩猎模式',
       'huntingStopMode': '结束狩猎模式',

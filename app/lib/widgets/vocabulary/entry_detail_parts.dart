@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -99,7 +100,7 @@ class _EntryEvidenceSectionState extends State<EntryEvidenceSection> {
               children: [
                 Icon(
                   Icons.history_outlined,
-                  size: 18,
+                  size: ListenIconSize.control,
                   color: colors.onSurfaceVariant,
                 ),
                 const SizedBox(width: ListenSpacing.gap8),
@@ -220,7 +221,11 @@ class _EvidenceRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(channelIcon, size: 16, color: colors.onSurfaceVariant),
+          Icon(
+            channelIcon,
+            size: ListenIconSize.control,
+            color: colors.onSurfaceVariant,
+          ),
           const SizedBox(width: ListenSpacing.gap8),
           Expanded(
             child: Column(
@@ -236,7 +241,11 @@ class _EvidenceRow extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: ListenSpacing.gap6),
-                    Icon(outcomeIcon, size: 15, color: outcomeColor),
+                    Icon(
+                      outcomeIcon,
+                      size: ListenIconSize.inline,
+                      color: outcomeColor,
+                    ),
                     const SizedBox(width: ListenSpacing.gap2),
                     Text(
                       _label(l, 'obsOutcome', observation.outcome),
@@ -346,16 +355,16 @@ class CorpusResultTile extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final linked = occurrence.mediaId != null;
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: ListenSpacing.gap8),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+        contentPadding: ListenPadding.row,
         title: _HighlightedSentence(
           sentence: occurrence.sourceSnapshot,
           target: target,
         ),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding: const EdgeInsets.only(top: ListenSpacing.gap4),
           child: Text(
             [
               l.text(_kindKey()),
@@ -372,7 +381,7 @@ class CorpusResultTile extends StatelessWidget {
                 padding: EdgeInsets.only(right: 4),
                 child: Icon(
                   Icons.check_circle_outline,
-                  size: 20,
+                  size: ListenIconSize.control,
                   color: ListenColors.learningRecognized,
                 ),
               )
@@ -593,10 +602,10 @@ class EntryClipTile extends StatelessWidget {
         ? l.text('dictionaryClipReady')
         : l.text('dictionaryClipNeedsSource');
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: ListenSpacing.gap8),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
-        contentPadding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+        contentPadding: ListenPadding.row,
         title: revealed
             ? _HighlightedSentence(
                 sentence: occurrence.sentenceTextSnapshot,
@@ -604,7 +613,7 @@ class EntryClipTile extends StatelessWidget {
               )
             : Text(l.text('dictionaryRevealSentence')),
         subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding: const EdgeInsets.only(top: ListenSpacing.gap4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -643,14 +652,14 @@ class EntryClipTile extends StatelessWidget {
                   )
                 else
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
+                    spacing: ListenSpacing.gap8,
+                    runSpacing: ListenSpacing.gap4,
                     children: [
                       OutlinedButton.icon(
                         onPressed: submitting ? null : onNotHeard,
                         icon: const Icon(
                           Icons.hearing_disabled_outlined,
-                          size: 17,
+                          size: ListenIconSize.control,
                         ),
                         label: Text(l.text('dictionaryNotHeard')),
                       ),
@@ -658,7 +667,10 @@ class EntryClipTile extends StatelessWidget {
                         onPressed: submitting ? null : onHeard,
                         icon: submitting
                             ? const ListenLoading.inline(size: 16)
-                            : const Icon(Icons.hearing_outlined, size: 17),
+                            : const Icon(
+                                Icons.hearing_outlined,
+                                size: ListenIconSize.control,
+                              ),
                         label: Text(l.text('dictionaryHeard')),
                       ),
                     ],
@@ -731,8 +743,15 @@ class _HighlightedSentence extends StatelessWidget {
 }
 
 /// The four-channel snapshot, editable in place when [onOverride] is wired:
-/// selecting a chip sets that channel's user override, re-selecting the
-/// active one clears it (mirroring the side-panel pattern).
+/// picking a side sets that channel's user override, pressing the active side
+/// again clears it (mirroring the side-panel pattern).
+///
+/// The four rows used to be eight identically weighted chips. Read down the
+/// column they looked like eight independent choices, when they are one 4×2
+/// table: four channels, each holding a single either/or. A segmented control
+/// per row says that in its shape — the two sides share one track, so exactly
+/// one of them can be lit, and a row with neither side lit is visibly an
+/// unanswered question rather than two unpressed buttons.
 class EntryCapabilityEditor extends StatelessWidget {
   const EntryCapabilityEditor({
     super.key,
@@ -780,66 +799,81 @@ class EntryCapabilityEditor extends StatelessWidget {
         ),
         for (final (channel, label, icon) in _channels)
           Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 17,
-                  color: capabilityAssessmentColor(
-                    Theme.of(context).colorScheme,
-                    _dimension(channel)?.effectiveAssessment ?? 'unassessed',
+            padding: const EdgeInsets.only(bottom: ListenSpacing.gap4),
+            child: _channelRow(context, l, channel, label, icon),
+          ),
+      ],
+    );
+  }
+
+  Widget _channelRow(
+    BuildContext context,
+    AppLocalizations l,
+    String channel,
+    String label,
+    IconData icon,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    final assessment =
+        _dimension(channel)?.effectiveAssessment ?? 'unassessed';
+    final assessed = assessment == 'acquired' || assessment == 'not_acquired';
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: ListenIconSize.control,
+          color: capabilityAssessmentColor(colors, assessment),
+        ),
+        const SizedBox(width: ListenSpacing.gap8),
+        SizedBox(
+          width: 72,
+          child: Text(l.text(label), style: ListenType.reading),
+        ),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          // An unanswered channel is a legitimate resting state, and it is
+          // also how the user takes a verdict back: pressing the lit side
+          // again empties the selection, which clears the override.
+          emptySelectionAllowed: true,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: [
+            for (final value in const ['acquired', 'not_acquired'])
+              ButtonSegment<String>(
+                value: value,
+                label: Text(l.text(value), style: ListenType.body),
+              ),
+          ],
+          selected: assessed ? {assessment} : const <String>{},
+          onSelectionChanged: onOverride == null
+              ? null
+              : (selection) => unawaited(
+                  onOverride!(
+                    channel,
+                    selection.isEmpty ? null : selection.first,
                   ),
                 ),
-                const SizedBox(width: ListenSpacing.gap8),
-                SizedBox(
-                  width: 72,
-                  child: Text(l.text(label), style: ListenType.reading),
-                ),
-                for (final value in const ['acquired', 'not_acquired'])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: ChoiceChip(
-                      label: Text(l.text(value), style: ListenType.body),
-                      selected:
-                          _dimension(channel)?.effectiveAssessment == value,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: onOverride == null
-                          ? null
-                          : (_) => unawaited(
-                              onOverride!(
-                                channel,
-                                _dimension(channel)?.effectiveAssessment ==
-                                        value
-                                    ? null
-                                    : value,
-                              ),
-                            ),
-                    ),
-                  ),
-                if ((_dimension(channel)?.effectiveAssessment ??
-                        'unassessed') ==
-                    'unassessed')
-                  Text(
-                    l.text('unassessed'),
-                    style: ListenType.body.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                if (_dimension(channel)?.userOverride != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: Tooltip(
-                      message: 'User override',
-                      child: Icon(
-                        Icons.person_outline,
-                        size: 14,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                    ),
-                  ),
-              ],
+        ),
+        if (!assessed) ...[
+          const SizedBox(width: ListenSpacing.gap8),
+          Flexible(
+            child: Text(
+              l.text('unassessed'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ListenType.body.copyWith(color: colors.outline),
+            ),
+          ),
+        ],
+        if (_dimension(channel)?.userOverride != null)
+          Padding(
+            padding: const EdgeInsets.only(left: ListenSpacing.gap4),
+            child: Tooltip(
+              message: l.text('capabilityUserOverride'),
+              child: Icon(
+                Icons.person_outline,
+                size: ListenIconSize.inline,
+                color: colors.outline,
+              ),
             ),
           ),
       ],

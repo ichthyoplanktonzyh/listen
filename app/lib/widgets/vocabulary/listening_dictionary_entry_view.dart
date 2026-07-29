@@ -8,6 +8,7 @@ import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../models/production_corpus.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/motion.dart';
 import '../../theme/spacing.dart';
 import '../common/capability_viz.dart';
@@ -502,14 +503,19 @@ class _ListeningDictionaryEntryViewState
         // V6: the identity card is built from `details` alone, so it paints as
         // soon as the entry lands. Nothing below can delay it.
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
           child: _identityCard(l),
         ),
         // The suggestion banner stays pinned above the anchors (V4) and waits
         // for itself.
         if (widget.suggestionsLoading || widget.suggestions.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, ListenSpacing.gap12, 20, 0),
+            padding: const EdgeInsets.fromLTRB(
+              24,
+              ListenSpacing.gap12,
+              24,
+              0,
+            ),
             child: _suggestionRegion(l),
           ),
         const SizedBox(height: ListenSpacing.gap8),
@@ -525,7 +531,12 @@ class _ListeningDictionaryEntryViewState
             // Every section stays built (anchors, not tabs), so scrolling to
             // the last one is always possible and evidence stays readable
             // beside clips.
-            padding: const EdgeInsets.fromLTRB(20, ListenSpacing.gap12, 20, 32),
+            padding: const EdgeInsets.fromLTRB(
+              24,
+              ListenSpacing.gap12,
+              24,
+              32,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -557,7 +568,11 @@ class _ListeningDictionaryEntryViewState
             children: [
               Text(
                 entry.displayForm,
-                style: Theme.of(context).textTheme.headlineMedium,
+                // The one hero size on the ladder (22). It used to read
+                // `headlineMedium`, an unmapped Material slot at 28/w400 —
+                // two sizes above anything the type scale defines, which is
+                // what made the word head shout at the source line beside it.
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: ListenSpacing.gap2),
               Row(
@@ -824,7 +839,9 @@ class _ListeningDictionaryEntryViewState
                   occurrence.endMsSnapshot,
                 );
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: ListenSpacing.gap4,
+                  ),
                   child: Card(
                     color: selected
                         ? Theme.of(context).colorScheme.primaryContainer
@@ -1061,7 +1078,10 @@ class _ListeningDictionaryEntryViewState
                   onPressed: _savingSenseFolder
                       ? null
                       : () => unawaited(_editSenseFolder(details.folder)),
-                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: ListenIconSize.control,
+                  ),
                 ),
                 IconButton(
                   tooltip: l.text('delete'),
@@ -1071,14 +1091,17 @@ class _ListeningDictionaryEntryViewState
                       : () => unawaited(
                           widget.onDeleteSenseFolder!(details.folder.id),
                         ),
-                  icon: const Icon(Icons.delete_outline, size: 18),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: ListenIconSize.control,
+                  ),
                 ),
               ],
             ),
             children: [
               if (details.occurrences.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: ListenSpacing.gap8),
                   child: Text(l.text('dictionarySenseFolderEmpty')),
                 )
               else
@@ -1122,7 +1145,10 @@ class _ListeningDictionaryEntryViewState
             ],
             child: TextButton.icon(
               onPressed: null,
-              icon: const Icon(Icons.folder_outlined, size: 16),
+              icon: const Icon(
+                Icons.folder_outlined,
+                size: ListenIconSize.control,
+              ),
               label: Text(
                 assignedSenseId == null
                     ? l.text('dictionaryAssignSenseFolder')
@@ -1224,7 +1250,10 @@ class _ListeningDictionaryEntryViewState
         ),
         OutlinedButton.icon(
           onPressed: () => openExternal(url),
-          icon: const Icon(Icons.open_in_new, size: 16),
+          icon: const Icon(
+            Icons.open_in_new,
+            size: ListenIconSize.control,
+          ),
           label: Text(l.text('dictionaryYouglish')),
         ),
       ],
@@ -1250,7 +1279,10 @@ class _ListeningDictionaryEntryViewState
                 : () => unawaited(_searchLibrary()),
             icon: _searchingLibrary
                 ? const ListenLoading.inline(size: 16)
-                : const Icon(Icons.travel_explore_outlined, size: 18),
+                : const Icon(
+                    Icons.travel_explore_outlined,
+                    size: ListenIconSize.control,
+                  ),
             label: Text(l.text('dictionaryFindMore')),
           ),
         )

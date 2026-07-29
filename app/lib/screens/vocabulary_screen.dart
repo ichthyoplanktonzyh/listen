@@ -16,6 +16,7 @@ import '../models/semantic_embedding.dart';
 import '../models/types.dart';
 import '../services/api_service.dart';
 import '../theme/breakpoints.dart';
+import '../theme/icon_size.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 import '../widgets/common/listen_empty_state.dart';
@@ -1164,7 +1165,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   Widget _toolsItem(IconData icon, String label) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, size: 18),
+      Icon(icon, size: ListenIconSize.control),
       const SizedBox(width: ListenSpacing.gap12),
       Text(label),
     ],
@@ -1298,6 +1299,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   /// The detail pane's own action bar. These used to hijack the app bar (V5);
   /// they now travel with the detail so the shell never transforms.
+  ///
+  /// Its left slot used to repeat the display form, directly above the
+  /// identity card's own word head — the same word twice, 12pt apart, and the
+  /// small one carried nothing the big one did not. It now carries the thing
+  /// the header could not say: which source the word was met in.
   Widget _detailActionsHeader(LexicalEntryDetails value) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
@@ -1306,16 +1312,13 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 0),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              value.entry.displayForm,
-              style: ListenType.emphasis,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          Expanded(child: _detailSourceLabel(value)),
           TextButton.icon(
             onPressed: () => unawaited(_addToReview(value.entry)),
-            icon: const Icon(Icons.queue_music_outlined, size: 18),
+            icon: const Icon(
+              Icons.queue_music_outlined,
+              size: ListenIconSize.control,
+            ),
             label: Text(l.text('dictionaryAddToReview')),
           ),
           IconButton(
@@ -1334,6 +1337,48 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             tooltip: l.text('projectionReviewTitle'),
             onPressed: () => unawaited(_openProjectionReview(value.entry.id)),
             icon: const Icon(Icons.fact_check_outlined),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Where this word was met: the durable media title of its first source
+  /// clip, quiet enough to stay context rather than compete with the word
+  /// head below it. When the entry has several sources the extra titles are
+  /// in the tooltip — the bar has room for one, and the clips section is
+  /// where the full list belongs.
+  Widget _detailSourceLabel(LexicalEntryDetails value) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final titles = <String>{
+      for (final occurrence in value.occurrences)
+        if (occurrence.mediaTitleSnapshot.trim().isNotEmpty)
+          occurrence.mediaTitleSnapshot.trim(),
+    };
+    final label = titles.isEmpty
+        ? l.text('vocabDetailSourceUnknown')
+        : titles.first;
+    return Tooltip(
+      message: titles.length > 1 ? titles.join('\n') : label,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.movie_outlined,
+            size: ListenIconSize.inline,
+            color: colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: ListenSpacing.gap6),
+          Flexible(
+            child: Text(
+              label,
+              style: ListenType.caption.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1425,6 +1470,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             for (final cap in capabilities)
               ChoiceChip(
                 label: Text(l.text(_capabilityLabelKey(cap))),
+                visualDensity: VisualDensity.compact,
                 selected: capability == cap,
                 onSelected: (_) {
                   setState(() => capability = cap);
@@ -1513,7 +1559,11 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
-            Icon(Icons.hub_outlined, size: 18, color: colors.secondary),
+            Icon(
+              Icons.hub_outlined,
+              size: ListenIconSize.control,
+              color: colors.secondary,
+            ),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(
@@ -1548,7 +1598,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               : () => unawaited(_searchHomeCorpus()),
           icon: homeSearching
               ? const ListenLoading.inline(size: 16)
-              : const Icon(Icons.travel_explore_outlined, size: 18),
+              : const Icon(
+                  Icons.travel_explore_outlined,
+                  size: ListenIconSize.control,
+                ),
           label: Text(l.text('dictionaryFindMore')),
         ),
       );
@@ -1564,7 +1617,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               const SizedBox(height: ListenSpacing.gap12),
               OutlinedButton.icon(
                 onPressed: () => _openExternal(externalUrl),
-                icon: const Icon(Icons.open_in_new, size: 16),
+                icon: const Icon(
+                  Icons.open_in_new,
+                  size: ListenIconSize.control,
+                ),
                 label: Text(l.text('dictionaryYouglish')),
               ),
             ],
@@ -1588,14 +1644,22 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     );
   }
 
-  Widget _filterRow({required List<Widget> children}) => SizedBox(
-    height: 44,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      itemCount: children.length,
-      separatorBuilder: (_, _) => const SizedBox(width: ListenSpacing.gap8),
-      itemBuilder: (_, index) => Center(child: children[index]),
+  /// A lens row wraps; it never scrolls sideways.
+  ///
+  /// In the two-pane form this column is a fixed 340pt, and a horizontal list
+  /// put the assessment filters half off the column edge with nothing to say
+  /// more existed — a filter you cannot see is one you cannot tell is off,
+  /// which is the opposite of an honest instrument (P4). Wrapping costs one
+  /// extra line at the narrowest column and keeps every option on screen.
+  Widget _filterRow({required List<Widget> children}) => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: ListenSpacing.gap12,
+      vertical: ListenSpacing.gap4,
+    ),
+    child: Wrap(
+      spacing: ListenSpacing.gap8,
+      runSpacing: ListenSpacing.gap4,
+      children: children,
     ),
   );
 
@@ -1605,6 +1669,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
             ? null
             : CircleAvatar(backgroundColor: color, radius: 5),
         label: Text(label),
+        visualDensity: VisualDensity.compact,
         selected: assessment == value,
         onSelected: (_) {
           setState(() => assessment = value);

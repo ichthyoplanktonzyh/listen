@@ -64,7 +64,6 @@ void main() {
   const knownOffenders = <String>{
     'lib/phonetic_analysis_ui.dart',
     'lib/screens/review_queue_screen.dart',
-    'lib/screens/vocabulary_screen.dart',
     'lib/widgets/app_bar/player_app_bar.dart',
     'lib/widgets/common/listen_empty_state.dart',
     'lib/widgets/common/listen_error_state.dart',
@@ -102,9 +101,6 @@ void main() {
     'lib/widgets/settings/settings_dialog.dart',
     'lib/widgets/settings/syntax_capability_settings.dart',
     'lib/widgets/subtitle/following_structure_viewport.dart',
-    'lib/widgets/vocabulary/dictionary_inline_clip_player.dart',
-    'lib/widgets/vocabulary/entry_detail_parts.dart',
-    'lib/widgets/vocabulary/listening_dictionary_entry_view.dart',
   };
 
   test('icon glyphs use ListenIconSize steps, not bare literals', () {
