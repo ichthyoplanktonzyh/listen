@@ -25,13 +25,13 @@ fn fixture_case(case_id: &str) -> Value {
 fn real_stanza_sentence(case_id: &str) -> (SubtitleSentence, SyntacticSentenceAnalysis) {
     let fixture = fixture_case(case_id);
     let report: Value = serde_json::from_str(
-        &std::fs::read_to_string(root().join(
-            ".planning/phases/3.9.1-shared-syntactic-analysis-provider/evaluation/stanza-development-v1.json",
-        ))
+        &std::fs::read_to_string(
+            root().join("testdata/syntactic-analysis/stanza-sense-group-regression-v1.json"),
+        )
         .unwrap(),
     )
     .unwrap();
-    let reported = report["quality"]["cases"]
+    let reported = report["cases"]
         .as_array()
         .unwrap()
         .iter()
