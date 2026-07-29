@@ -389,10 +389,14 @@ class MediaSessionCoordinator {
           settings.settings.soundPatternRibbonVisible,
     );
     if (result.errors.isNotEmpty && isMounted()) {
+      // This one was invisible to the source gate: the exceptions reached the
+      // status line as `result.errors`, six loaders and one `join('; ')` away
+      // from the `catch` that raised them. They are typed now, so only the
+      // named state is left to print.
       player.setStatus(
-        '${text('statusSpeechEnhancementsPartial')}: '
-        '${result.errors.join('; ')}',
+        text('statusSpeechEnhancementsPartial'),
         error: true,
+        failure: result.errors.first,
       );
     }
     return result;

@@ -153,7 +153,6 @@ void main() {
     'lib/controllers/review_controller.dart',
     'lib/controllers/slice_player_controller.dart',
     'lib/controllers/speaking_task_controller.dart',
-    'lib/controllers/speech_enhancement_workflow_controller.dart',
     'lib/controllers/writing_task_controller.dart',
     'lib/main.dart',
     'lib/phonetic_analysis_ui.dart',
