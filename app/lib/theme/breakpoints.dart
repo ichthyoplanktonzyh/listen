@@ -106,10 +106,16 @@ abstract final class ListenBreakpoints {
   /// hard-coded 680 (audit C4).
   static const cardColumnMax = 680.0;
 
-  /// A dense form or single-column settings list — the conversation lobby, the
-  /// provider forms. Narrower than a reading column on purpose: a form row is
-  /// not continuous text but a label↔control pair, and once the row gets long
-  /// the eye loses which control belongs to which label on the way across.
+  /// A column of decisions rather than reading — the conversation lobby, the
+  /// provider forms: one heading, one primary action, and whatever settings
+  /// fold under them.
+  ///
+  /// Narrower than a reading column for two reasons that point the same way. A
+  /// form row is not continuous text but a label↔control pair, and once the
+  /// row gets long the eye loses which control belongs to which label on the
+  /// way across. And a column this width reads as *one thing to do*, while a
+  /// wider one starts reading as a form to be filled in — which is the wrong
+  /// invitation for a surface whose whole job is to get the learner talking.
   static const formColumnMax = 560.0;
 
   /// Wide content that is two columns or carries media — the home surface, the

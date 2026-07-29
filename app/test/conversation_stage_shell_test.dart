@@ -150,11 +150,98 @@ void main() {
     );
     expect(find.byKey(const ValueKey('realtime-finish')), findsOneWidget);
     expect(find.byKey(const ValueKey('realtime-voice-choice')), findsNothing);
-    expect(find.text('Conversation history'), findsNothing);
+    expect(find.text('Recent conversations'), findsNothing);
     expect(find.byKey(const ValueKey('realtime-start')), findsNothing);
 
     controller.dispose();
   });
+
+  testWidgets('the stage keeps one light source: the controls do not compete '
+      'with the water', (tester) async {
+    final controller = _liveController();
+    await _pumpStage(tester, controller);
+
+    // 「唯一光源」(charter · 舞台态 2). A FilledButton here was the second
+    // brightest thing on screen; the teal belongs to the surface. The
+    // destructive way out stays plain text, as it already was.
+    expect(
+      tester.widget(find.byKey(const ValueKey('realtime-finish'))),
+      isA<OutlinedButton>(),
+    );
+    expect(find.byType(FilledButton), findsNothing);
+    expect(
+      tester.widget(find.byKey(const ValueKey('realtime-cancel'))),
+      isA<TextButton>(),
+    );
+
+    controller.dispose();
+  });
+
+  testWidgets('the live composition sits near the vertical centre, whether or '
+      'not the caption is on', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    for (final captionEnabled in [false, true]) {
+      final controller = _liveController();
+      await _pumpStage(tester, controller, captionEnabled: captionEnabled);
+
+      final surface = tester.getRect(
+        find.byKey(const ValueKey('conversation-echo-surface')),
+      );
+      final label = tester.getRect(
+        find.byKey(const ValueKey('realtime-activity')),
+      );
+      // The水面 is the subject, so its centre — not the centre of the whole
+      // text block — is what has to land near the middle of the room.
+      expect(
+        surface.center.dy / 900,
+        inInclusiveRange(0.42, 0.52),
+        reason: 'caption=$captionEnabled left the water off-centre',
+      );
+      // The label follows the shape rather than clinging to it.
+      expect(label.top - surface.bottom, greaterThanOrEqualTo(24));
+
+      controller.dispose();
+    }
+  });
+}
+
+RealtimeConversationController _liveController() {
+  final controller = RealtimeConversationController(audio: _FakeAudio());
+  controller.state = const RealtimeConversationState(
+    phase: RealtimeConversationPhase.live,
+    activity: RealtimeConversationActivity.listening,
+    selectedProfileId: 'profile-1',
+  );
+  return controller;
+}
+
+/// The stage breathes at the ambient tempo, so every pump here is a timed
+/// one — `pumpAndSettle` would never return.
+Future<void> _pumpStage(
+  WidgetTester tester,
+  RealtimeConversationController controller, {
+  bool captionEnabled = false,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: RealtimeConversationPanel(
+        controller: controller,
+        api: _api(),
+        launch: RealtimeConversationLaunch.free(
+          language: 'en',
+          modelId: 'asr-model',
+        ),
+        acquireAudioFocus: () async {},
+        onClose: () {},
+        captionEnabled: captionEnabled,
+      ),
+    ),
+  );
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
 }
 
 LocalApi _api() => LocalApi.withTransport(

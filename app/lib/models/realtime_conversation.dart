@@ -1,3 +1,5 @@
+import 'api_failure.dart';
+
 class RealtimeProviderProfileView {
   const RealtimeProviderProfileView({
     required this.id,
@@ -74,6 +76,12 @@ class RealtimeConversationSessionView {
   final String? conversationPreview;
   final int? turnCount;
 
+  /// How long the conversation lasted, or null when the backend never recorded
+  /// an end — an unfinished session has no honest duration to state.
+  Duration? get duration => endedAtMs == null
+      ? null
+      : Duration(milliseconds: endedAtMs! - startedAtMs);
+
   RealtimeConversationSessionView withTurns(
     List<RealtimeConversationItem> turns,
   ) {
@@ -95,6 +103,67 @@ class RealtimeConversationSessionView {
   }
 }
 
+/// Why a turn did not close its loop.
+///
+/// Replaces the free-text `error` string a turn used to carry. That string was
+/// built by interpolating whatever was caught (`'Could not process learner
+/// turn: $error'`), so a transport exception — internal error code,
+/// `correlation_id`, sidecar URI and route — travelled all the way into the
+/// card that shows what the learner said. Charter P4: an honest instrument,
+/// not debug output.
+///
+/// The split is the point. [kind] is a *named state* the UI maps to a sentence
+/// of its own; [detail] is diagnostics, which have real value and so are kept,
+/// but never rendered as part of the content flow and never visible by
+/// default.
+class RealtimeTurnFailure {
+  const RealtimeTurnFailure({required this.kind, this.detail});
+
+  /// Wire-faithful failure kind — the same vocabulary as the turn's
+  /// `failure_kind` field (`local_transcription_failed`, `learner_barge_in`,
+  /// `user_cancelled`, …). Never rendered raw: a raw enum on screen is the
+  /// thing this type exists to prevent.
+  final String kind;
+
+  /// The transport diagnostics behind this failure, when the failure came
+  /// from a request. Null for failures the client decided locally, and for
+  /// turns replayed from history (the backend stores the kind, not the
+  /// exchange that produced it).
+  final ApiFailure? detail;
+
+  /// True only when the backend explicitly said the request may be retried.
+  /// A missing signal is not a yes — no retry affordance is offered on a
+  /// guess.
+  bool get retryable => detail?.isRetryable ?? false;
+}
+
+/// Something that went wrong with the *conversation*, rather than with one
+/// turn inside it — loading the voices, opening a past session, reaching the
+/// provider, finishing cleanly.
+///
+/// The sibling of [RealtimeTurnFailure], and it exists for the same reason.
+/// Plugging the turn card's leak while the notice bar still rendered
+/// `'Realtime connection failed: $error'` would only have moved the exception
+/// a few hundred pixels up the same screen: the learner would still read an
+/// `HttpException`, a `correlation_id` and a localhost port, just in a red
+/// strip instead of a card.
+///
+/// So a notice is a [kind] the UI turns into a sentence, plus optional typed
+/// [detail]. The notice bar is a single strip with no room for a disclosure,
+/// so it shows at most the reference id — enough to make a bug report
+/// actionable, and nothing a learner has to decode.
+class RealtimeConversationNotice {
+  const RealtimeConversationNotice({required this.kind, this.detail});
+
+  /// Named state: `providers_not_loaded`, `connection_failed`, … Never
+  /// rendered raw.
+  final String kind;
+
+  /// Transport diagnostics, when the notice came from a request. Null for the
+  /// ones the client decides locally (no voice picked, no topic chosen).
+  final ApiFailure? detail;
+}
+
 class RealtimeConversationItem {
   const RealtimeConversationItem({
     required this.sequence,
@@ -105,12 +174,13 @@ class RealtimeConversationItem {
     this.providerItemId,
     this.providerText = '',
     this.localText = '',
-    this.error,
+    this.failure,
   });
 
   factory RealtimeConversationItem.fromJson(Map<String, dynamic> json) {
     final provider = json['provider_transcript'] as Map<String, dynamic>?;
     final local = json['local_transcript'] as Map<String, dynamic>?;
+    final failureKind = json['failure_kind'] as String?;
     return RealtimeConversationItem(
       sequence: (json['sequence'] as num).toInt(),
       role: json['role'] as String,
@@ -120,7 +190,9 @@ class RealtimeConversationItem {
       providerItemId: provider?['provider_item_id'] as String?,
       providerText: provider?['text'] as String? ?? '',
       localText: local?['text'] as String? ?? '',
-      error: json['failure_kind'] as String?,
+      failure: failureKind == null
+          ? null
+          : RealtimeTurnFailure(kind: failureKind),
     );
   }
 
@@ -132,7 +204,10 @@ class RealtimeConversationItem {
   final String? providerItemId;
   final String providerText;
   final String localText;
-  final String? error;
+
+  /// Named failure state plus its default-hidden diagnostics. Null means the
+  /// turn has nothing to explain.
+  final RealtimeTurnFailure? failure;
 
   String get displayText => localText.isNotEmpty ? localText : providerText;
 
@@ -142,7 +217,7 @@ class RealtimeConversationItem {
     Object? providerItemId = _realtimeUnset,
     String? providerText,
     String? localText,
-    Object? error = _realtimeUnset,
+    Object? failure = _realtimeUnset,
   }) => RealtimeConversationItem(
     sequence: sequence,
     role: role,
@@ -154,7 +229,9 @@ class RealtimeConversationItem {
         : providerItemId as String?,
     providerText: providerText ?? this.providerText,
     localText: localText ?? this.localText,
-    error: identical(error, _realtimeUnset) ? this.error : error as String?,
+    failure: identical(failure, _realtimeUnset)
+        ? this.failure
+        : failure as RealtimeTurnFailure?,
   );
 }
 

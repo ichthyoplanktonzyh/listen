@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/api_failure.dart';
 import '../models/practice.dart';
 import '../models/realtime_conversation.dart';
 import '../services/api_service.dart';
@@ -102,6 +103,29 @@ class RealtimeConversationAnchor {
   final int endMs;
 }
 
+/// Everything one learner turn's post-processing needs, captured at the moment
+/// the turn closed.
+///
+/// Held by value rather than read off the controller's active-session fields
+/// so a rerun stays possible after the conversation has ended — the debrief,
+/// where a failed turn is actually looked at, is shown once those fields have
+/// already been released.
+class _LearnerTurnJob {
+  const _LearnerTurnJob({
+    required this.api,
+    required this.launch,
+    required this.sessionId,
+    required this.captured,
+    required this.endedAt,
+  });
+
+  final LocalApi api;
+  final RealtimeConversationLaunch launch;
+  final String sessionId;
+  final CapturedRecording captured;
+  final int endedAt;
+}
+
 enum RealtimeConversationPhase {
   idle,
   connecting,
@@ -148,8 +172,13 @@ class RealtimeConversationState {
   final List<RealtimeConversationItem> historyItems;
   final String? selectedHistorySessionId;
   final bool historyLoading;
-  final String? historyError;
-  final String? error;
+
+  /// Why the history list or a replayed session could not be read. A named
+  /// notice, never an interpolated exception.
+  final RealtimeConversationNotice? historyError;
+
+  /// Why the conversation itself could not start, run or finish.
+  final RealtimeConversationNotice? error;
 
   bool get canConfigure =>
       phase == RealtimeConversationPhase.idle ||
@@ -215,8 +244,10 @@ class RealtimeConversationState {
     historyLoading: historyLoading ?? this.historyLoading,
     historyError: identical(historyError, _unset)
         ? this.historyError
-        : historyError as String?,
-    error: identical(error, _unset) ? this.error : error as String?,
+        : historyError as RealtimeConversationNotice?,
+    error: identical(error, _unset)
+        ? this.error
+        : error as RealtimeConversationNotice?,
   );
 }
 
@@ -255,6 +286,13 @@ class RealtimeConversationController extends ChangeNotifier {
   final List<Future<void>> _postProcessing = [];
   final Map<int, String> _recordingAssetIds = {};
 
+  /// Learner turns whose post-processing failed with a failure the backend
+  /// itself marked retryable, held with everything a rerun needs. Populated
+  /// only on an explicit `retryable: true`; a turn that is not in here has no
+  /// retry affordance, which is why the button never promises a rerun the
+  /// client cannot perform.
+  final Map<int, _LearnerTurnJob> _retryableTurns = {};
+
   Future<void> loadProfiles(LocalApi api) async {
     try {
       final profiles = await api.realtimeProfiles();
@@ -267,7 +305,10 @@ class RealtimeConversationController extends ChangeNotifier {
       );
     } catch (error) {
       state = state.copyWith(
-        error: 'Could not load realtime providers: $error',
+        error: RealtimeConversationNotice(
+          kind: 'providers_not_loaded',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -295,7 +336,10 @@ class RealtimeConversationController extends ChangeNotifier {
     } catch (error) {
       state = state.copyWith(
         historyLoading: false,
-        historyError: 'Could not load conversation history: $error',
+        historyError: RealtimeConversationNotice(
+          kind: 'history_not_loaded',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -319,7 +363,10 @@ class RealtimeConversationController extends ChangeNotifier {
     } catch (error) {
       state = state.copyWith(
         historyLoading: false,
-        historyError: 'Could not load conversation turns: $error',
+        historyError: RealtimeConversationNotice(
+          kind: 'turns_not_loaded',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -373,14 +420,16 @@ class RealtimeConversationController extends ChangeNotifier {
     final profileId = state.selectedProfileId;
     if (profileId == null) {
       state = state.copyWith(
-        error: 'Add and select a realtime provider first.',
+        error: const RealtimeConversationNotice(kind: 'no_voice_selected'),
       );
       notifyListeners();
       return;
     }
     if (launch.mode == RealtimeConversationMode.topicAnchored &&
         launch.anchor == null) {
-      state = state.copyWith(error: 'Choose a topic before starting.');
+      state = state.copyWith(
+        error: const RealtimeConversationNotice(kind: 'no_topic_selected'),
+      );
       notifyListeners();
       return;
     }
@@ -423,12 +472,23 @@ class RealtimeConversationController extends ChangeNotifier {
       _connectionSubscription = connection.messages.listen(
         _onConnectionMessage,
         onError: (Object error) {
-          unawaited(_failAndCleanup('Realtime connection failed: $error'));
+          unawaited(
+            _failAndCleanup(
+              RealtimeConversationNotice(
+                kind: 'connection_failed',
+                detail: describeApiFailure(error),
+              ),
+            ),
+          );
         },
         onDone: () {
           if (state.phase == RealtimeConversationPhase.live ||
               state.phase == RealtimeConversationPhase.draining) {
-            unawaited(_failAndCleanup('Realtime provider disconnected.'));
+            unawaited(
+              _failAndCleanup(
+                const RealtimeConversationNotice(kind: 'provider_disconnected'),
+              ),
+            );
           }
         },
       );
@@ -460,7 +520,10 @@ class RealtimeConversationController extends ChangeNotifier {
       state = state.copyWith(
         phase: RealtimeConversationPhase.failed,
         activity: RealtimeConversationActivity.inactive,
-        error: 'Could not start realtime conversation: $error',
+        error: RealtimeConversationNotice(
+          kind: 'start_failed',
+          detail: describeApiFailure(error),
+        ),
       );
       notifyListeners();
     }
@@ -535,10 +598,28 @@ class RealtimeConversationController extends ChangeNotifier {
           );
           if (_responseDone?.isCompleted == false) _responseDone!.complete();
         case 'provider_error' || 'connection_failed':
-          unawaited(_failAndCleanup(value['error'].toString()));
+          // The provider's own words. They were being shown verbatim, which
+          // is the same mistake in a different costume — they get the same
+          // treatment: a named state, with whatever the parser can type kept
+          // as diagnostics.
+          unawaited(
+            _failAndCleanup(
+              RealtimeConversationNotice(
+                kind: 'provider_error',
+                detail: ApiFailure.parse(value['error'].toString()),
+              ),
+            ),
+          );
       }
     } catch (error) {
-      unawaited(_failAndCleanup('Invalid realtime provider event: $error'));
+      unawaited(
+        _failAndCleanup(
+          RealtimeConversationNotice(
+            kind: 'provider_event_invalid',
+            detail: describeApiFailure(error),
+          ),
+        ),
+      );
     }
     notifyListeners();
   }
@@ -577,7 +658,13 @@ class RealtimeConversationController extends ChangeNotifier {
     } catch (error) {
       _replaceItem(
         sequence,
-        (item) => item.copyWith(status: 'failed', error: '$error'),
+        (item) => item.copyWith(
+          status: 'failed',
+          failure: RealtimeTurnFailure(
+            kind: 'learner_audio_capture_failed',
+            detail: describeApiFailure(error),
+          ),
+        ),
       );
       _turns.activeLearnerSequence = null;
     }
@@ -598,23 +685,19 @@ class RealtimeConversationController extends ChangeNotifier {
           endedAtMs: endedAt,
         ),
       );
-      final generation = _generation;
-      final work = _processLearnerTurn(sequence, captured, endedAt, generation);
-      _postProcessing.add(work);
-      state = state.copyWith(
-        postProcessingCount: state.postProcessingCount + 1,
-      );
-      unawaited(
-        work.whenComplete(() {
-          _postProcessing.remove(work);
-          if (generation != _generation) return;
-          state = state.copyWith(
-            postProcessingCount: state.postProcessingCount > 0
-                ? state.postProcessingCount - 1
-                : 0,
-          );
-          notifyListeners();
-        }),
+      final api = _activeApi;
+      final launch = _launch;
+      final sessionId = _sessionId;
+      if (api == null || launch == null || sessionId == null) return;
+      _track(
+        _LearnerTurnJob(
+          api: api,
+          launch: launch,
+          sessionId: sessionId,
+          captured: captured,
+          endedAt: endedAt,
+        ),
+        sequence,
       );
     } catch (error) {
       _replaceItem(
@@ -622,23 +705,74 @@ class RealtimeConversationController extends ChangeNotifier {
         (item) => item.copyWith(
           status: 'failed',
           endedAtMs: _nowMs(),
-          error: 'Could not close learner audio: $error',
+          failure: RealtimeTurnFailure(
+            kind: 'learner_audio_capture_failed',
+            detail: describeApiFailure(error),
+          ),
         ),
       );
     }
     notifyListeners();
   }
 
+  /// Runs one learner turn's post-processing and keeps the pending count in
+  /// step with it. Shared by the first attempt and by
+  /// [retryLearnerTranscription], so a retry is accounted for exactly like the
+  /// original run — the debrief goes back to "still transcribing" instead of
+  /// showing a settled tally over work that is running again.
+  void _track(_LearnerTurnJob job, int sequence) {
+    final generation = _generation;
+    final work = _processLearnerTurn(sequence, job, generation);
+    _postProcessing.add(work);
+    state = state.copyWith(postProcessingCount: state.postProcessingCount + 1);
+    unawaited(
+      work.whenComplete(() {
+        _postProcessing.remove(work);
+        if (generation != _generation) return;
+        state = state.copyWith(
+          postProcessingCount: state.postProcessingCount > 0
+              ? state.postProcessingCount - 1
+              : 0,
+        );
+        notifyListeners();
+      }),
+    );
+  }
+
+  /// Runs a failed learner turn's local transcription again.
+  ///
+  /// Only reachable for a turn the backend itself called retryable: the job is
+  /// stored in [_retryableTurns] exclusively when [ApiFailure.isRetryable] was
+  /// true, so calling this for anything else is a no-op rather than a second
+  /// doomed round trip. The turn's whole context (api, launch, session id,
+  /// captured audio) is held with the job, because a conversation that has
+  /// already finished has released the controller's active-session fields.
+  ///
+  /// This adds an operation; it does not change the phase/activity state
+  /// machine. The turn simply re-enters `local_transcription_pending` and
+  /// takes the same path it took the first time.
+  Future<void> retryLearnerTranscription(int sequence) async {
+    final job = _retryableTurns.remove(sequence);
+    if (job == null) return;
+    _replaceItem(
+      sequence,
+      (item) =>
+          item.copyWith(status: 'local_transcription_pending', failure: null),
+    );
+    _track(job, sequence);
+    notifyListeners();
+  }
+
   Future<void> _processLearnerTurn(
     int sequence,
-    CapturedRecording captured,
-    int endedAt,
+    _LearnerTurnJob job,
     int generation,
   ) async {
-    final api = _activeApi;
-    final launch = _launch;
-    final sessionId = _sessionId;
-    if (api == null || launch == null || sessionId == null) return;
+    final api = job.api;
+    final launch = job.launch;
+    final sessionId = job.sessionId;
+    final captured = job.captured;
+    final endedAt = job.endedAt;
     RecordingAsset? asset;
     try {
       final anchor = launch.anchor;
@@ -695,22 +829,22 @@ class RealtimeConversationController extends ChangeNotifier {
         ),
       );
       if (generation != _generation) return;
-      var job = await api.createRecordingTranscription(
+      var transcription = await api.createRecordingTranscription(
         recordingId: asset.id,
         modelId: launch.modelId,
         language: launch.language,
       );
-      while (job.status != 'completed' &&
-          job.status != 'failed' &&
-          job.status != 'cancelled' &&
+      while (transcription.status != 'completed' &&
+          transcription.status != 'failed' &&
+          transcription.status != 'cancelled' &&
           generation == _generation) {
         await _delay(const Duration(milliseconds: 150));
         if (generation != _generation) return;
-        job = await api.recordingTranscriptionJob(job.id);
+        transcription = await api.recordingTranscriptionJob(transcription.id);
       }
       if (generation != _generation) return;
-      final local = job.status == 'completed'
-          ? (job.rawTranscript?.trim() ?? '')
+      final local = transcription.status == 'completed'
+          ? (transcription.rawTranscript?.trim() ?? '')
           : '';
       if (local.isEmpty) {
         await api.saveRealtimeTurn(
@@ -727,9 +861,18 @@ class RealtimeConversationController extends ChangeNotifier {
           sequence,
           (item) => item.copyWith(
             status: 'failed',
-            error:
-                job.errorMessage ??
-                'Local transcription produced no learner text.',
+            // The transcription job answered; it just answered with nothing.
+            // Its own message is an operator-facing diagnostic, so it goes
+            // where diagnostics go rather than into the turn's body.
+            failure: RealtimeTurnFailure(
+              kind: 'local_transcription_failed',
+              detail: transcription.errorMessage == null
+                  ? null
+                  : ApiFailure(
+                      raw: transcription.errorMessage!,
+                      message: transcription.errorMessage,
+                    ),
+            ),
           ),
         );
         return;
@@ -743,7 +886,7 @@ class RealtimeConversationController extends ChangeNotifier {
           recordingAssetId: asset.id,
           endedAt: endedAt,
           localTranscript: local,
-          transcriptionJobId: job.id,
+          transcriptionJobId: transcription.id,
           completedAt: completedAt,
         ),
       );
@@ -767,11 +910,26 @@ class RealtimeConversationController extends ChangeNotifier {
           );
         } catch (_) {}
       }
+      // The turn keeps a *named* state; the exception becomes typed
+      // diagnostics hanging off it. Nothing here is ever interpolated into a
+      // sentence — the string this used to build (`'Could not process learner
+      // turn: $error'`) is exactly what leaked an error code, a
+      // correlation id, a sidecar URI and an internal route into the card
+      // that shows what the learner said.
+      final detail = describeApiFailure(error);
+      // Only the backend may authorise a retry, and only by saying so.
+      // Holding the job here is what makes the affordance real rather than a
+      // button that reruns nothing: a conversation that already finished has
+      // released the controller's active-session fields.
+      if (detail.isRetryable) _retryableTurns[sequence] = job;
       _replaceItem(
         sequence,
         (item) => item.copyWith(
           status: 'failed',
-          error: 'Could not process learner turn: $error',
+          failure: RealtimeTurnFailure(
+            kind: 'local_post_processing_failed',
+            detail: detail,
+          ),
         ),
       );
     }
@@ -880,7 +1038,10 @@ class RealtimeConversationController extends ChangeNotifier {
         sequence,
         (current) => current.copyWith(
           status: 'failed',
-          error: 'Could not save assistant turn: $error',
+          failure: RealtimeTurnFailure(
+            kind: 'assistant_history_not_saved',
+            detail: describeApiFailure(error),
+          ),
         ),
       );
     }
@@ -965,7 +1126,10 @@ class RealtimeConversationController extends ChangeNotifier {
       state = state.copyWith(
         phase: RealtimeConversationPhase.failed,
         activity: RealtimeConversationActivity.inactive,
-        error: 'Could not finish realtime conversation: $error',
+        error: RealtimeConversationNotice(
+          kind: 'finish_failed',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -1060,8 +1224,12 @@ class RealtimeConversationController extends ChangeNotifier {
     } catch (error) {
       _replaceItem(
         item.sequence,
-        (current) =>
-            current.copyWith(error: 'Could not save interrupted turn: $error'),
+        (current) => current.copyWith(
+          failure: RealtimeTurnFailure(
+            kind: 'interrupted_turn_not_saved',
+            detail: describeApiFailure(error),
+          ),
+        ),
       );
     }
   }
@@ -1144,7 +1312,7 @@ class RealtimeConversationController extends ChangeNotifier {
     _connection = null;
   }
 
-  Future<void> _failAndCleanup(String message) async {
+  Future<void> _failAndCleanup(RealtimeConversationNotice notice) async {
     await _cleanup(discard: true);
     await _persistTerminalSession(
       status: 'failed',
@@ -1154,7 +1322,7 @@ class RealtimeConversationController extends ChangeNotifier {
     state = state.copyWith(
       phase: RealtimeConversationPhase.failed,
       activity: RealtimeConversationActivity.inactive,
-      error: message,
+      error: notice,
     );
     notifyListeners();
   }
@@ -1184,6 +1352,7 @@ class RealtimeConversationController extends ChangeNotifier {
     _responseDone = null;
     _postProcessing.clear();
     _recordingAssetIds.clear();
+    _retryableTurns.clear();
   }
 
   @override
