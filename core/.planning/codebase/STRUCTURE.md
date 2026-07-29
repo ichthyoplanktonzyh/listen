@@ -22,5 +22,16 @@
 | `docs/decisions` | append-only ADRs |
 | `.planning` | current core project memory |
 
+Notable runtime seams:
+
+- `application::BackgroundJobStore` owns durable generic job lifecycle
+  semantics; `persistence-sqlite` supplies the production adapter.
+- `SemanticLlmRuntimeFactory` and `RealtimeConversationAdapterFactory` keep
+  concrete provider selection out of HTTP route modules.
+- `ForcedAlignProvider` keeps sidecar process and wire protocol details in
+  `local-runtime`.
+- `SubtitleTrackRepository::save_track_and_replace_corpus` is the atomic
+  subtitle/corpus unit of work.
+
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.
