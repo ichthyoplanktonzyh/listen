@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/localization.dart';
@@ -197,6 +198,77 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('realtime-manage-voices')));
     await tester.pumpAndSettle();
     expect(manageVoicesTaps, 1);
+
+    controller.dispose();
+  });
+
+  testWidgets('under a Chinese UI the lobby is Chinese — no mixed-language '
+      'screen', (tester) async {
+    final controller = RealtimeConversationController(audio: _FakeAudio());
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'token',
+      transport: (method, path, body) async {
+        if (method == 'GET' && path == '/v1/realtime/providers') {
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'id': 'profile-1',
+                'display_name': 'test',
+                'adapter_kind': 'qwen_omni_realtime',
+                'base_url': 'wss://example.com/api-ws/v1/realtime',
+                'model_id': qwenRealtimeBaselineModel,
+                'voice': 'marin',
+                'has_credential': true,
+                'timeout_ms': 30000,
+              },
+            ]),
+          );
+        }
+        if (method == 'GET' && path == '/v1/realtime/sessions') {
+          return (statusCode: 200, body: '[]');
+        }
+        throw StateError('Unexpected request: $method $path ${body ?? ''}');
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: RealtimeConversationPanel(
+          controller: controller,
+          api: api,
+          launch: RealtimeConversationLaunch.free(
+            language: 'en',
+            modelId: 'asr-model',
+          ),
+          acquireAudioFocus: () async {},
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('准备好了就说话'), findsOneWidget);
+    expect(find.text('用 test · marin 的声音'), findsOneWidget);
+    expect(find.text('开始对话'), findsOneWidget);
+    expect(find.text('最近的对话'), findsOneWidget);
+    expect(find.text('对方说的话 · 不显示'), findsOneWidget);
+    // The English that used to sit on the same screen as the Chinese.
+    for (final english in const [
+      'Free conversation',
+      'Show what the other person says',
+      'Start conversation',
+      'Conversation history',
+    ]) {
+      expect(find.text(english), findsNothing);
+    }
 
     controller.dispose();
   });
