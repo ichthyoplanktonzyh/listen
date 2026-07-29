@@ -5,6 +5,7 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/models/production_corpus.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/common/capability_viz.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
@@ -133,7 +134,66 @@ void main() {
     expect(selected, same(word));
   });
 
-  testWidgets('vocabulary book shows a four-channel snapshot and phrase badge', (
+  test('a row status collapses the four channels into one answer', () {
+    LexicalCapabilityProfile profile(Map<String, String> conclusions) =>
+        LexicalCapabilityProfile.fromJson({
+          'lexical_entry_id': 'e1',
+          for (final channel in const [
+            'reading',
+            'listening',
+            'speaking',
+            'writing',
+          ])
+            channel: conclusions[channel] == null
+                ? <String, dynamic>{}
+                : <String, dynamic>{
+                    'user_override': {
+                      'conclusion': conclusions[channel],
+                      'source': 'user',
+                      'updated_at_ms': 1,
+                    },
+                  },
+        });
+
+    // Nothing measured anywhere: the word is in the book but no evidence has
+    // been recorded about it — "first seen", not "assessed as unknown".
+    expect(
+      vocabularyRowStatus(null, 'listening'),
+      VocabularyRowStatus.firstSeen,
+    );
+    expect(
+      vocabularyRowStatus(profile(const {}), 'listening'),
+      VocabularyRowStatus.firstSeen,
+    );
+    // Under a lens the row reports that channel, so the picker recolours the
+    // whole list.
+    final mixed = profile(const {
+      'listening': 'acquired',
+      'speaking': 'not_acquired',
+    });
+    expect(
+      vocabularyRowStatus(mixed, 'listening'),
+      VocabularyRowStatus.acquired,
+    );
+    expect(
+      vocabularyRowStatus(mixed, 'speaking'),
+      VocabularyRowStatus.notAcquired,
+    );
+    // Measured elsewhere but not here: distinct from "first seen".
+    expect(
+      vocabularyRowStatus(mixed, 'writing'),
+      VocabularyRowStatus.unassessed,
+    );
+    // No lens: a channel still to practise outranks one already acquired,
+    // because that is the one the user can act on.
+    expect(vocabularyRowStatus(mixed, null), VocabularyRowStatus.notAcquired);
+    expect(
+      vocabularyRowStatus(profile(const {'listening': 'acquired'}), null),
+      VocabularyRowStatus.acquired,
+    );
+  });
+
+  testWidgets('vocabulary book leads each row with a status bar, not a ring', (
     tester,
   ) async {
     final word = vocabularyDetails(
@@ -148,30 +208,105 @@ void main() {
       }),
     );
     await tester.pumpWidget(
-      localized(VocabularyBookView(words: [word], onWord: (_) {})),
+      localized(
+        VocabularyBookView(
+          words: [word],
+          onWord: (_) {},
+          focusCapability: 'listening',
+        ),
+      ),
     );
     expect(find.text('take care of'), findsOneWidget);
     // Phrases are surfaced with a kind badge (the book is no longer word-only).
     expect(find.text('Phrase'), findsOneWidget);
-    // The four-channel snapshot is the portrait ring (#47): one widget,
-    // always shown even when fully unassessed, with the per-channel states
-    // spelled out for hover and assistive tech.
-    final ring = tester.widget<CapabilityRing>(find.byType(CapabilityRing));
-    expect(ring.assessments, {
-      'listening': 'unassessed',
-      'reading': 'unassessed',
-      'speaking': 'unassessed',
-      'writing': 'unassessed',
-    });
-    expect(
-      find.byTooltip(
-        'Listening: Not yet assessed\n'
-        'Reading: Not yet assessed\n'
-        'Writing: Not yet assessed\n'
-        'Speaking: Not yet assessed',
-      ),
-      findsOneWidget,
+    // The ring is gone from the list: at an inline size its four 2pt arcs were
+    // not separable, so a row now carries a single colour bar instead. The
+    // ring survives where it has room to mean something — the entry detail.
+    expect(find.byType(CapabilityRing), findsNothing);
+
+    final decorated = tester.widget<DecoratedBox>(
+      find.byKey(const ValueKey('vocabulary-row-status-entry-take care of')),
     );
+    final border = (decorated.decoration as BoxDecoration).border! as Border;
+    // Nothing measured on any channel: 月蓝, the charter's "first seen" colour.
+    expect(border.left.color, ListenColors.moonBlue);
+    expect(border.left.width, 3);
+    // Colour is the only visual encoding, so the state keeps a name in text.
+    expect(find.byTooltip('First seen'), findsOneWidget);
+  });
+
+  testWidgets('the status bar follows the lens channel', (tester) async {
+    final word = vocabularyDetails(
+      displayForm: 'rather',
+      capabilityProfile: LexicalCapabilityProfile.fromJson(const {
+        'lexical_entry_id': 'e1',
+        'reading': <String, dynamic>{},
+        'listening': {
+          'user_override': {
+            'conclusion': 'acquired',
+            'source': 'user',
+            'updated_at_ms': 1,
+          },
+        },
+        'speaking': {
+          'user_override': {
+            'conclusion': 'not_acquired',
+            'source': 'user',
+            'updated_at_ms': 1,
+          },
+        },
+        'writing': <String, dynamic>{},
+      }),
+    );
+    Color barColor() {
+      final decorated = tester.widget<DecoratedBox>(
+        find.byKey(const ValueKey('vocabulary-row-status-entry-rather')),
+      );
+      return ((decorated.decoration as BoxDecoration).border! as Border)
+          .left
+          .color;
+    }
+
+    await tester.pumpWidget(
+      localized(
+        VocabularyBookView(
+          words: [word],
+          onWord: (_) {},
+          focusCapability: 'listening',
+        ),
+      ),
+    );
+    final colors = Theme.of(
+      tester.element(find.text('rather')),
+    ).colorScheme;
+    expect(barColor(), capabilityAssessmentColor(colors, 'acquired'));
+    expect(find.byTooltip('Listening: Acquired'), findsOneWidget);
+
+    await tester.pumpWidget(
+      localized(
+        VocabularyBookView(
+          words: [word],
+          onWord: (_) {},
+          focusCapability: 'speaking',
+        ),
+      ),
+    );
+    expect(barColor(), capabilityAssessmentColor(colors, 'not_acquired'));
+    expect(find.byTooltip('Speaking: Not acquired'), findsOneWidget);
+
+    // A channel with no verdict of its own, on a word that has been measured
+    // elsewhere, reads dimmed rather than "first seen".
+    await tester.pumpWidget(
+      localized(
+        VocabularyBookView(
+          words: [word],
+          onWord: (_) {},
+          focusCapability: 'writing',
+        ),
+      ),
+    );
+    expect(barColor(), capabilityAssessmentColor(colors, 'unassessed'));
+    expect(find.byTooltip('Writing: Not yet assessed'), findsOneWidget);
   });
 
   testWidgets('empty vocabulary book has an explicit state', (tester) async {
@@ -571,12 +706,11 @@ void main() {
     expect(confirmed, same(suggestion));
   });
 
-  testWidgets('capability chips edit the channel override in place', (
-    tester,
-  ) async {
-    final records = <(String, String?)>[];
-    await tester.pumpWidget(
-      localized(
+  testWidgets(
+    'each channel is one segmented either/or, unanswered until it is answered',
+    (tester) async {
+      final records = <(String, String?)>[];
+      Widget view(LexicalCapabilityProfile profile) => localized(
         ListeningDictionaryEntryView(
           details: LexicalEntryDetails(
             entry: const LexicalEntry(
@@ -586,26 +720,68 @@ void main() {
               kind: 'word',
               language: 'en',
             ),
-            capabilityProfile: LexicalCapabilityProfile.fromJson(const {
-              'lexical_entry_id': 'hello',
-              'reading': <String, dynamic>{},
-              'listening': <String, dynamic>{},
-              'speaking': <String, dynamic>{},
-              'writing': <String, dynamic>{},
-            }),
+            capabilityProfile: profile,
           ),
           onPlay: _ignoreOccurrence,
           onMark: _ignoreMark,
           onCapabilityOverride: (capability, conclusion) async =>
               records.add((capability, conclusion)),
         ),
-      ),
-    );
-    // Four channels render an editable acquired / not-acquired pair each.
-    expect(find.text('Acquired'), findsNWidgets(4));
-    await tester.tap(find.text('Acquired').first);
-    expect(records, [('reading', 'acquired')]);
-  });
+      );
+      LexicalCapabilityProfile profile(String? readingConclusion) =>
+          LexicalCapabilityProfile.fromJson({
+            'lexical_entry_id': 'hello',
+            'reading': readingConclusion == null
+                ? <String, dynamic>{}
+                : <String, dynamic>{
+                    'user_override': {
+                      'conclusion': readingConclusion,
+                      'source': 'user',
+                      'updated_at_ms': 1,
+                    },
+                  },
+            'listening': <String, dynamic>{},
+            'speaking': <String, dynamic>{},
+            'writing': <String, dynamic>{},
+          });
+
+      await tester.pumpWidget(view(profile(null)));
+
+      // One two-sided control per channel — not eight equally weighted
+      // buttons on a 4x2 grid.
+      expect(find.byType(SegmentedButton<String>), findsNWidgets(4));
+      expect(find.text('Acquired'), findsNWidgets(4));
+      expect(find.text('Not acquired'), findsNWidgets(4));
+      // State 1 · unanswered: neither side is lit and the row says so in
+      // words rather than leaving two unpressed buttons to be read as "no".
+      for (final button
+          in tester.widgetList<SegmentedButton<String>>(
+            find.byType(SegmentedButton<String>),
+          )) {
+        expect(button.selected, isEmpty);
+      }
+      expect(find.text('Not yet assessed'), findsNWidgets(4));
+
+      await tester.tap(find.text('Acquired').first);
+      expect(records, [('reading', 'acquired')]);
+
+      // State 2 · answered: exactly one side is lit, the note is gone, and
+      // the verdict is marked as the user's own.
+      await tester.pumpWidget(view(profile('acquired')));
+      final reading = tester.widgetList<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      ).first;
+      expect(reading.selected, {'acquired'});
+      expect(find.text('Not yet assessed'), findsNWidgets(3));
+      expect(find.byTooltip('Your own call'), findsOneWidget);
+
+      // State 3 · taking it back: pressing the lit side empties the
+      // selection, which clears the override.
+      records.clear();
+      await tester.tap(find.text('Acquired').first);
+      expect(records, [('reading', null)]);
+    },
+  );
 
   testWidgets('zero-clip state offers external references only as reference', (
     tester,

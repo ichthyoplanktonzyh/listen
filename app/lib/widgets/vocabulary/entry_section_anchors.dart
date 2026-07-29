@@ -63,8 +63,8 @@ class EntrySectionAnchorBar extends StatelessWidget {
       child: ListView(
         key: const Key('entry-section-anchors'),
         scrollDirection: Axis.horizontal,
-        // Aligned with the detail body's own 20pt gutter.
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        // Aligned with the detail body's own gutter.
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         children: [
           for (final section in sections)
             Padding(

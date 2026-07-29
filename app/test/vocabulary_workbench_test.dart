@@ -9,12 +9,13 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/vocabulary_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/common/capability_viz.dart';
+import 'package:llplayer_next/widgets/vocabulary/listening_dictionary_entry_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_gap_panel.dart';
 
 // ── Wire fixtures ──
 
-Map<String, dynamic> _entry(String id, String form) => {
+Map<String, dynamic> _entry(String id, String form, {String? mediaTitle}) => {
   'entry': {
     'id': id,
     'normalized_form': form.toLowerCase(),
@@ -23,7 +24,19 @@ Map<String, dynamic> _entry(String id, String form) => {
     'language': 'en',
   },
   'history': <dynamic>[],
-  'occurrences': <dynamic>[],
+  'occurrences': <dynamic>[
+    if (mediaTitle != null)
+      {
+        'media_title_snapshot': mediaTitle,
+        'media_fingerprint_snapshot': 'sha256:fixture',
+        'sentence_text_snapshot': 'A durable source sentence.',
+        'start_ms_snapshot': 0,
+        'end_ms_snapshot': 1000,
+        'encounter_count': 1,
+        'media_id': 'media-1',
+        'sentence_id': 'sentence-1',
+      },
+  ],
   'sense_folders': <dynamic>[],
 };
 
@@ -203,11 +216,45 @@ void main() {
     },
   );
 
+  testWidgets('every filter chip stays inside the list column', (tester) async {
+    // The two-pane form gives the lens a fixed 340pt column — the width the
+    // horizontal filter rows used to be cut off at, leaving half an
+    // assessment chip hanging past the column edge with nothing to say more
+    // existed. Wrapping is the fix, and this is what proves it: every chip
+    // fully drawn, inside the column, at the narrowest place they live.
+    await setSize(tester, const Size(1200, 900));
+    final fixture = _Fixture();
+    final api = fixture.build(words: [_entry('entry-endedup', 'ended up')]);
+    await tester.pumpWidget(_host(api: api, tester: tester));
+    await tester.pumpAndSettle();
+
+    final columnWidth = tester.getTopLeft(find.byType(VerticalDivider)).dx;
+    expect(columnWidth, 340);
+
+    // Four channels plus All / Acquired / Not acquired / Not yet assessed:
+    // all eight are built, not lazily skipped past the viewport edge.
+    final chips = find.byType(ChoiceChip);
+    expect(chips, findsNWidgets(8));
+    for (var index = 0; index < 8; index++) {
+      final rect = tester.getRect(chips.at(index));
+      expect(
+        rect.left,
+        greaterThanOrEqualTo(0.0),
+        reason: 'chip $index starts before the column',
+      );
+      expect(
+        rect.right,
+        lessThanOrEqualTo(columnWidth),
+        reason: 'chip $index is cut off by the column edge',
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'channel chip always responds but never re-queries under the All filter',
     (tester) async {
-      // Narrow so the four capability chips share one full-width row and are
-      // all laid out (the 340px two-pane list scrolls them lazily).
+      // Narrow so the four capability chips share one full-width row.
       await setSize(tester, const Size(700, 900));
       final fixture = _Fixture();
       final api = fixture.build(
@@ -233,6 +280,56 @@ void main() {
       expect(fixture.vocabularyHits, hitsAfterLoad);
     },
   );
+
+  testWidgets(
+    'the detail header carries the source, not a second copy of the word',
+    (tester) async {
+      await setSize(tester, const Size(1200, 900));
+      final fixture = _Fixture();
+      final api = fixture.build(
+        words: [
+          _entry('entry-endedup', 'ended up', mediaTitle: 'Brooklyn classroom'),
+        ],
+      );
+      await tester.pumpWidget(_host(api: api, tester: tester));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('ended up'));
+      await tester.pumpAndSettle();
+
+      // The word head is the identity card's alone. The action bar above it
+      // used to repeat the same word 12pt higher in a smaller size, saying
+      // nothing the head below did not.
+      expect(
+        find.descendant(
+          of: find.byType(ListeningDictionaryEntryView),
+          matching: find.text('ended up'),
+        ),
+        findsOneWidget,
+      );
+      // Once on the left in the list, once as the head. Not three times.
+      expect(find.text('ended up'), findsNWidgets(2));
+      // The freed slot carries the context the head could not: where the
+      // word was met.
+      expect(find.text('Brooklyn classroom'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a word with no clip yet says so instead of naming a source', (
+    tester,
+  ) async {
+    await setSize(tester, const Size(1200, 900));
+    final fixture = _Fixture();
+    final api = fixture.build(words: [_entry('entry-endedup', 'ended up')]);
+    await tester.pumpWidget(_host(api: api, tester: tester));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('ended up'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No source clip yet'), findsOneWidget);
+    expect(find.text('ended up'), findsNWidgets(2));
+  });
 
   testWidgets('narrow window degrades to a single column', (tester) async {
     await setSize(tester, const Size(700, 900));
