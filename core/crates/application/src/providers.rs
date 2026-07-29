@@ -9,7 +9,10 @@ use domain::{
     SyntacticValidationStatus, WordPronunciation, syntactic_analysis_fingerprint,
     syntactic_source_fingerprint, validate_syntactic_analysis,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+pub use speech_analysis::timing::AlignedWord as ForcedAlignedWord;
 
 #[async_trait]
 pub trait DictionaryProvider: Send + Sync {
@@ -56,6 +59,97 @@ pub trait PronunciationProvider: Send + Sync {
     fn rule_catalog(&self) -> serde_json::Value {
         serde_json::json!([])
     }
+}
+
+// ---------------------------------------------------------------------------
+// Forced-alignment seam.
+//
+// Application owns the request, typed outcome/failure, and provenance
+// contract. Process discovery and stdin/stdout protocols belong to adapters.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignProviderDescriptor {
+    pub provider_id: String,
+    pub model_revision: String,
+    pub protocol_version: String,
+    pub runtime: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignRequest {
+    pub audio_path: String,
+    pub segments: Vec<ForcedAlignSegment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForcedAlignSegment {
+    pub index: u32,
+    pub text: String,
+    pub words: Vec<String>,
+    pub start_ms: u64,
+    pub end_ms: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForcedAlignFailureKind {
+    Spawn,
+    RequestIo,
+    Exit,
+    InvalidResponse,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
+#[error("forced alignment {kind:?}: {detail}")]
+pub struct ForcedAlignFailure {
+    pub kind: ForcedAlignFailureKind,
+    pub detail: String,
+    pub descriptor: ForcedAlignProviderDescriptor,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForcedAlignOutcome {
+    pub timings: Vec<ForcedAlignedWord>,
+    pub descriptor: ForcedAlignProviderDescriptor,
+}
+
+pub trait ForcedAlignCancellation: Send + Sync {
+    fn is_cancelled(&self) -> bool;
+
+    /// Serialize a persistent side effect with cancellation acceptance. The
+    /// default is suitable for immutable/test tokens; durable job adapters
+    /// override it with the same lock used by their cancel transition.
+    fn commit_if_active(&self, commit: &mut dyn FnMut()) -> bool {
+        if self.is_cancelled() {
+            false
+        } else {
+            commit();
+            true
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct NeverCancelForcedAlignment;
+
+impl ForcedAlignCancellation for NeverCancelForcedAlignment {
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
+#[async_trait]
+pub trait ForcedAlignProvider: Send + Sync {
+    fn descriptor(&self) -> ForcedAlignProviderDescriptor;
+    async fn align(
+        &self,
+        request: &ForcedAlignRequest,
+        cancellation: &dyn ForcedAlignCancellation,
+    ) -> Result<ForcedAlignOutcome, ForcedAlignFailure>;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +360,44 @@ pub trait LlmChatAdapter: Send + Sync {
     /// trap: protocol compatibility is not capability equivalence). Returns a
     /// measured [`CapabilityClaim::Probed`].
     async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
+}
+
+/// A configured semantic LLM runtime assembled by an adapter crate.
+///
+/// The application owns this interface so callers never need to know the
+/// concrete protocol family or provider implementation. The narrower semantic
+/// seams remain the test surfaces for their individual use cases.
+#[async_trait]
+pub trait SemanticLlmRuntime: Send + Sync {
+    fn rubric(&self) -> &dyn SemanticRubricProvider;
+    fn judge(&self) -> &dyn SemanticJudgeProvider;
+    fn feedback(&self) -> &dyn OutputFeedbackProvider;
+    fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider;
+    async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError>;
+}
+
+/// Composition seam for turning a persisted provider profile and its
+/// dispatch-time credential into a protocol-neutral semantic runtime.
+///
+/// Implementations belong to adapter crates. Secrets are passed by value so
+/// they cannot be retained by the application layer after construction.
+pub trait SemanticLlmRuntimeFactory: Send + Sync {
+    fn build(
+        &self,
+        profile: &domain::LlmProviderProfile,
+        secret: Option<String>,
+    ) -> Result<Box<dyn SemanticLlmRuntime>, LlmProviderError>;
+}
+
+/// Composition seam for assembling a provider-neutral realtime adapter from a
+/// persisted profile and its dispatch-time credential. Protocol selection and
+/// configuration policy belong to the adapter crate implementing this trait.
+pub trait RealtimeConversationAdapterFactory: Send + Sync {
+    fn build(
+        &self,
+        profile: &domain::RealtimeProviderProfile,
+        credential: String,
+    ) -> Box<dyn crate::RealtimeConversationAdapter>;
 }
 
 /// Neutral rubric-generation request. The provider proposes information points;

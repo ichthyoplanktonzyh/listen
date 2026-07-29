@@ -6,8 +6,8 @@ use application::{
     LexicalEntryRepository, ListeningInboxRepository, MediaRepository, PhoneTimelineRepository,
     PhoneticAnalysisRepository, PracticeRepository, PronunciationRepository,
     RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository, SenseGroupRepository,
-    SubtitleTrackRepository, TranscriptionRepository, UpsertLexicalEntry,
-    VocabularyAssetRepository, WordTimelineRepository,
+    SubtitleTrackRepository, TranscriptionJobTransition, TranscriptionRepository,
+    UpsertLexicalEntry, VocabularyAssetRepository, WordTimelineRepository,
 };
 
 #[test]
@@ -627,6 +627,7 @@ impl DictionaryProvider for FakeChineseDictionary {
     }
 }
 
+mod background_jobs;
 mod content_fit;
 mod l1_diagnosis;
 mod learner_profile;

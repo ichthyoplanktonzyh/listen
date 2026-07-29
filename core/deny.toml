@@ -30,6 +30,10 @@ ignore = true
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# All workspace members inherit `publish = false`. Permit versionless local
+# path edges only for those private crates while keeping registry and public
+# package wildcards denied.
+allow-wildcard-paths = true
 highlight = "simplest-path"
 
 [sources]

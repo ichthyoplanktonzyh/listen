@@ -14,7 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEV = ROOT / "testdata/syntactic-analysis/ambiguity-dev-v2.jsonl"
 VALIDATION = ROOT / "testdata/syntactic-analysis/ambiguity-validation-v2.jsonl"
-PREREG = ROOT / ".planning/phases/3.9.2-syntax-provider-product-activation/3.9.2-EVALUATION-PREREGISTRATION.md"
+LOCK_PATH = ROOT / "testdata/syntactic-analysis/locked-fixtures-v1.json"
 ALLOWED_EVIDENCE = {"gold", "manual_product_qa", "coverage", "heuristic_proxy"}
 ALLOWED_ROLES = {"attachment_gold", "product_policy", "surface_coverage"}
 REQUIRED_TARGETS = {"b.future_going_to", "b.habitual_used_to", "b.have_to", "b.want_to"}
@@ -86,9 +86,21 @@ def main() -> int:
     if dev_targets != REQUIRED_TARGETS or val_targets != REQUIRED_TARGETS:
         raise ValueError("each split must cover every product target")
     digest = hashlib.sha256(VALIDATION.read_bytes()).hexdigest()
-    prereg = PREREG.read_text()
-    if digest not in prereg:
-        raise ValueError("v2 preregistration digest mismatch")
+    lock_document = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+    lock = lock_document.get("fixtures", {}).get(VALIDATION.name)
+    if not isinstance(lock, dict):
+        raise ValueError(f"{LOCK_PATH}: missing lock for {VALIDATION.name}")
+    expected = lock.get("sha256")
+    if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise ValueError(f"{LOCK_PATH}: invalid SHA-256 lock for {VALIDATION.name}")
+    if not isinstance(lock.get("provenance"), str) or not lock["provenance"].strip():
+        raise ValueError(f"{LOCK_PATH}: missing provenance for {VALIDATION.name}")
+    if not isinstance(lock.get("historical_source_path"), str) or not lock[
+        "historical_source_path"
+    ].strip():
+        raise ValueError(f"{LOCK_PATH}: missing historical source path for {VALIDATION.name}")
+    if digest != expected:
+        raise ValueError("v2 locked fixture digest mismatch")
     print(json.dumps({"status": "ok", "development_cases": len(load(DEV)), "validation_cases": len(load(VALIDATION)), "validation_sha256": digest}, sort_keys=True))
     return 0
 

@@ -18,7 +18,11 @@ fn archived_transcription_jobs_are_hidden_from_list_and_reuse() {
 
     job.archived_at_ms = Some(20);
     job.updated_at_ms = 20;
-    repo.update_job(&job).unwrap();
+    assert!(matches!(
+        repo.transition_job(TranscriptionJobStatus::Completed, &job)
+            .unwrap(),
+        TranscriptionJobTransition::Applied(_)
+    ));
 
     assert!(repo.list_jobs().unwrap().is_empty());
     assert!(repo.find_completed_job("same-input").unwrap().is_none());
@@ -28,6 +32,120 @@ fn archived_transcription_jobs_are_hidden_from_list_and_reuse() {
             .expect("archive should not delete job")
             .archived_at_ms,
         Some(20)
+    );
+}
+
+#[test]
+fn cancellation_wins_over_a_stale_worker_phase_transition() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let mut worker = transcription_job(
+        "job-cancel-phase",
+        "phase-race",
+        TranscriptionJobStatus::Queued,
+        10,
+    );
+    worker.phase_progress = 0;
+    worker.completed_at_ms = None;
+    worker.generated_track_id = None;
+    repo.create_job(&worker).unwrap();
+
+    let mut cancelled = worker.clone();
+    cancelled.status = TranscriptionJobStatus::Cancelled;
+    cancelled.completed_at_ms = Some(11);
+    cancelled.updated_at_ms = 11;
+    assert!(matches!(
+        repo.transition_job(TranscriptionJobStatus::Queued, &cancelled)
+            .unwrap(),
+        TranscriptionJobTransition::Applied(_)
+    ));
+
+    worker.status = TranscriptionJobStatus::Extracting;
+    worker.phase_progress = 5;
+    worker.updated_at_ms = 12;
+    assert_eq!(
+        repo.transition_job(TranscriptionJobStatus::Queued, &worker)
+            .unwrap(),
+        TranscriptionJobTransition::Rejected(cancelled.clone())
+    );
+    assert_eq!(
+        repo.get_job(&worker.id).unwrap().unwrap().status,
+        TranscriptionJobStatus::Cancelled
+    );
+}
+
+#[test]
+fn cancellation_before_import_rejects_the_workers_import_claim() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let mut worker = transcription_job(
+        "job-cancel-import",
+        "import-race",
+        TranscriptionJobStatus::Transcribing,
+        20,
+    );
+    worker.phase_progress = 35;
+    worker.completed_at_ms = None;
+    worker.generated_track_id = None;
+    repo.create_job(&worker).unwrap();
+
+    let mut cancelled = worker.clone();
+    cancelled.status = TranscriptionJobStatus::Cancelled;
+    cancelled.completed_at_ms = Some(21);
+    cancelled.updated_at_ms = 21;
+    assert!(matches!(
+        repo.transition_job(TranscriptionJobStatus::Transcribing, &cancelled)
+            .unwrap(),
+        TranscriptionJobTransition::Applied(_)
+    ));
+
+    worker.status = TranscriptionJobStatus::Importing;
+    worker.phase_progress = 90;
+    worker.updated_at_ms = 22;
+    assert_eq!(
+        repo.transition_job(TranscriptionJobStatus::Transcribing, &worker)
+            .unwrap(),
+        TranscriptionJobTransition::Rejected(cancelled)
+    );
+    assert_eq!(
+        repo.get_job(&worker.id).unwrap().unwrap().status,
+        TranscriptionJobStatus::Cancelled
+    );
+}
+
+#[test]
+fn importing_is_the_irreversible_commit_point_for_cancellation() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let mut job = transcription_job(
+        "job-import-commit",
+        "import-commit",
+        TranscriptionJobStatus::Transcribing,
+        30,
+    );
+    job.phase_progress = 35;
+    job.completed_at_ms = None;
+    job.generated_track_id = None;
+    repo.create_job(&job).unwrap();
+
+    let mut importing = job.clone();
+    importing.status = TranscriptionJobStatus::Importing;
+    importing.phase_progress = 90;
+    importing.updated_at_ms = 31;
+    assert!(matches!(
+        repo.transition_job(TranscriptionJobStatus::Transcribing, &importing)
+            .unwrap(),
+        TranscriptionJobTransition::Applied(_)
+    ));
+
+    let mut stale_cancel = job;
+    stale_cancel.status = TranscriptionJobStatus::Cancelled;
+    stale_cancel.completed_at_ms = Some(32);
+    stale_cancel.updated_at_ms = 32;
+    assert_eq!(
+        repo.transition_job(TranscriptionJobStatus::Transcribing, &stale_cancel)
+            .unwrap(),
+        TranscriptionJobTransition::Rejected(importing)
     );
 }
 

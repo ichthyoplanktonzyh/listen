@@ -33,9 +33,9 @@ impl io::Write for CapturedWriter {
     }
 }
 
-fn test_state() -> ApiState {
+fn test_state_with_repository() -> (ApiState, Arc<SqliteRepository>) {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    ApiState::new(
+    let state = ApiState::new(
         AppServices::new(
             repo.clone(),
             repo.clone(),
@@ -57,9 +57,14 @@ fn test_state() -> ApiState {
         .with_llm_provider_profile_repository(repo.clone())
         .with_realtime_conversation_repository(repo.clone())
         .with_reading_position_repository(repo.clone()),
-        repo,
+        repo.clone(),
         "secret",
-    )
+    );
+    (state, repo)
+}
+
+fn test_state() -> ApiState {
+    test_state_with_repository().0
 }
 
 fn test_app() -> Router {

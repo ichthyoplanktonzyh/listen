@@ -3,8 +3,15 @@
 //! endpoint, so the whole path runs offline.
 
 use super::*;
+use application::{
+    LlmChatAdapter, LlmProviderDescriptor, SemanticLlmRuntime, SemanticLlmRuntimeFactory,
+    StructuredChatRequest, StructuredChatResponse,
+};
+use async_trait::async_trait;
 use axum::routing::post;
+use domain::{CapabilityClaim, LlmAdapterKind, LlmProviderProfile};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::net::TcpListener;
 
@@ -202,6 +209,90 @@ async fn register_lists_and_probes_provider_without_leaking_secret() {
     assert_eq!(probe["structured_output"]["supported"], true);
 }
 
+struct InjectedProbeAdapter {
+    descriptor: LlmProviderDescriptor,
+}
+
+#[async_trait]
+impl LlmChatAdapter for InjectedProbeAdapter {
+    fn adapter_kind(&self) -> LlmAdapterKind {
+        self.descriptor.adapter_kind
+    }
+
+    fn descriptor(&self) -> LlmProviderDescriptor {
+        self.descriptor.clone()
+    }
+
+    async fn complete_structured(
+        &self,
+        _request: &StructuredChatRequest,
+    ) -> Result<StructuredChatResponse, domain::LlmProviderError> {
+        Err(domain::LlmProviderError::Offline)
+    }
+
+    async fn probe_structured_output(&self) -> Result<CapabilityClaim, domain::LlmProviderError> {
+        Ok(CapabilityClaim::Probed {
+            supported: false,
+            probed_at_ms: 42,
+        })
+    }
+}
+
+struct InjectedRuntimeFactory {
+    resolved_secret: Arc<Mutex<Option<String>>>,
+}
+
+impl SemanticLlmRuntimeFactory for InjectedRuntimeFactory {
+    fn build(
+        &self,
+        profile: &LlmProviderProfile,
+        secret: Option<String>,
+    ) -> Result<Box<dyn SemanticLlmRuntime>, domain::LlmProviderError> {
+        *self.resolved_secret.lock().unwrap() = secret;
+        Ok(Box::new(llm_provider::LlmSemanticProvider::new(
+            InjectedProbeAdapter {
+                descriptor: LlmProviderDescriptor {
+                    adapter_kind: profile.adapter_kind,
+                    model_id: profile.model_id.clone(),
+                    capability: profile.capability,
+                },
+            },
+        )))
+    }
+}
+
+#[tokio::test]
+async fn probe_dispatches_through_the_injected_application_factory_seam() {
+    let resolved_secret = Arc::new(Mutex::new(None));
+    let app = router(
+        test_state().with_llm_runtime_factory(Arc::new(InjectedRuntimeFactory {
+            resolved_secret: resolved_secret.clone(),
+        })),
+    );
+    let (status, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body("http://127.0.0.1:1", Some("seam-secret")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+
+    let (status, probe) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{}/probe", view["id"].as_str().unwrap()),
+        serde_json::Value::Null,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{probe}");
+    assert_eq!(probe["structured_output"]["supported"], false);
+    assert_eq!(probe["structured_output"]["probed_at_ms"], 42);
+    assert_eq!(
+        resolved_secret.lock().unwrap().as_deref(),
+        Some("seam-secret")
+    );
+}
+
 #[tokio::test]
 async fn delete_removes_provider() {
     let base = spawn_fake_openai(openai_content_envelope("{\"ok\": true}")).await;
@@ -257,12 +348,9 @@ async fn generate_rubric_returns_a_draft_without_persisting() {
     .to_string();
     let base = spawn_fake_openai(openai_content_envelope(&rubric_json)).await;
     let app = test_app();
-    let (_, view) = post_json(
-        &app,
-        "/v1/llm/providers",
-        register_body(&base, Some("sk-x")),
-    )
-    .await;
+    let mut provider_body = register_body(&base, Some("sk-x"));
+    provider_body["allowed_uses"] = serde_json::json!(["rubric_generation"]);
+    let (_, view) = post_json(&app, "/v1/llm/providers", provider_body).await;
     let id = view["id"].as_str().unwrap().to_string();
 
     let (status, draft) = post_json(
@@ -285,6 +373,30 @@ async fn generate_rubric_returns_a_draft_without_persisting() {
     // Draft only: no rubric identity/version/source is minted by the provider.
     assert!(draft.get("id").is_none());
     assert!(draft.get("version").is_none());
+}
+
+#[tokio::test]
+async fn rubric_dispatch_rejects_a_profile_without_the_allowed_use() {
+    let app = test_app();
+    let (_, view) = post_json(
+        &app,
+        "/v1/llm/providers",
+        register_body("http://127.0.0.1:1", None),
+    )
+    .await;
+    let (status, body) = post_json(
+        &app,
+        &format!("/v1/llm/providers/{}/rubric", view["id"].as_str().unwrap()),
+        serde_json::json!({
+            "purpose": "reading_comprehension",
+            "source_language": "en",
+            "response_language": "zh",
+            "transcript_snapshot": "Source"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid_input");
 }
 
 #[tokio::test]

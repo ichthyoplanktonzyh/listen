@@ -49,15 +49,19 @@ impl Default for KeychainSecretStore {
 
 #[cfg(target_os = "macos")]
 impl SecretStore for KeychainSecretStore {
-    fn store(&self, secret: &str) -> Result<LlmAuthRef, SecretStoreError> {
-        let account = new_account_id();
+    fn reserve(&self) -> Result<LlmAuthRef, SecretStoreError> {
+        Ok(auth_ref_for(&new_account_id()))
+    }
+
+    fn store_reserved(&self, auth_ref: &LlmAuthRef, secret: &str) -> Result<(), SecretStoreError> {
+        let account = account_of(auth_ref)
+            .ok_or_else(|| SecretStoreError("invalid keychain auth reference".into()))?;
         security_framework::passwords::set_generic_password(
             KEYCHAIN_SERVICE,
-            &account,
+            account,
             secret.as_bytes(),
         )
-        .map_err(|error| SecretStoreError(error.to_string()))?;
-        Ok(auth_ref_for(&account))
+        .map_err(|error| SecretStoreError(error.to_string()))
     }
 
     fn resolve(&self, auth_ref: &LlmAuthRef) -> Result<Option<String>, SecretStoreError> {
@@ -70,17 +74,21 @@ impl SecretStore for KeychainSecretStore {
                     .map_err(|_| SecretStoreError("stored secret was not utf-8".into()))?;
                 Ok(Some(secret))
             }
-            // A missing item is honest degradation (the key was removed out of
-            // band), not a hard failure.
-            Err(_) => Ok(None),
+            Err(error) if error.code() == security_framework_sys::base::errSecItemNotFound => {
+                Ok(None)
+            }
+            Err(error) => Err(SecretStoreError(error.to_string())),
         }
     }
 
     fn delete(&self, auth_ref: &LlmAuthRef) -> Result<(), SecretStoreError> {
         if let Some(account) = account_of(auth_ref) {
-            // Deleting a non-existent item is fine; ignore not-found.
-            let _ =
-                security_framework::passwords::delete_generic_password(KEYCHAIN_SERVICE, account);
+            match security_framework::passwords::delete_generic_password(KEYCHAIN_SERVICE, account)
+            {
+                Ok(()) => {}
+                Err(error) if error.code() == security_framework_sys::base::errSecItemNotFound => {}
+                Err(error) => return Err(SecretStoreError(error.to_string())),
+            }
         }
         Ok(())
     }
@@ -107,7 +115,17 @@ impl Default for KeychainSecretStore {
 
 #[cfg(not(target_os = "macos"))]
 impl SecretStore for KeychainSecretStore {
-    fn store(&self, _secret: &str) -> Result<LlmAuthRef, SecretStoreError> {
+    fn reserve(&self) -> Result<LlmAuthRef, SecretStoreError> {
+        Err(SecretStoreError(
+            "no OS keychain available on this platform".into(),
+        ))
+    }
+
+    fn store_reserved(
+        &self,
+        _auth_ref: &LlmAuthRef,
+        _secret: &str,
+    ) -> Result<(), SecretStoreError> {
         Err(SecretStoreError(
             "no OS keychain available on this platform".into(),
         ))

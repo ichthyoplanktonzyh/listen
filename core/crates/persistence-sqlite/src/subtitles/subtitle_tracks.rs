@@ -1,75 +1,44 @@
 use application::{ApplicationError, SubtitleTrackRepository};
 use domain::{
-    LanguageCode, MediaId, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
-    SubtitleTrackStatus, TimeMs,
+    CorpusOccurrence, LanguageCode, MediaId, SubtitleSentence, SubtitleSentenceId, SubtitleTrack,
+    SubtitleTrackId, SubtitleTrackStatus, TimeMs,
 };
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, Transaction, params};
+use std::collections::HashSet;
 
-use crate::{SqliteRepository, domain_sql, from_json, json, repo};
+use crate::{SqliteRepository, corpus::insert_occurrence, domain_sql, from_json, json, repo};
 
 impl SubtitleTrackRepository for SqliteRepository {
     fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError> {
         let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
+        save_track_in_transaction(&tx, track)?;
+        tx.commit().map_err(repo)
+    }
+
+    fn save_track_and_replace_corpus(
+        &self,
+        track: &SubtitleTrack,
+        occurrences: &[CorpusOccurrence],
+    ) -> Result<(), ApplicationError> {
+        if occurrences
+            .iter()
+            .any(|occurrence| occurrence.track_id.as_ref() != Some(&track.id))
+        {
+            return Err(ApplicationError::Invalid(
+                "corpus occurrence does not belong to subtitle track".into(),
+            ));
+        }
+        let mut conn = self.connection.lock();
+        let tx = conn.transaction().map_err(repo)?;
+        save_track_in_transaction(&tx, track)?;
         tx.execute(
-            "INSERT INTO subtitle_tracks(id, media_id, fingerprint, language, source, status)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(media_id, fingerprint) DO UPDATE SET
-               language=excluded.language, source=excluded.source, status=excluded.status",
-            params![
-                track.id.as_str(),
-                track.media_id.as_str(),
-                track.fingerprint,
-                track.language.as_ref().map(LanguageCode::as_str),
-                track.source,
-                json(&track.status)?
-            ],
-        )
-        .map_err(repo)?;
-        tx.execute(
-            "DELETE FROM subtitle_sentences WHERE track_id=?1",
+            "DELETE FROM corpus_occurrences WHERE track_id=?1",
             [track.id.as_str()],
         )
         .map_err(repo)?;
-        for sentence in &track.sentences {
-            tx.execute(
-                "INSERT INTO subtitle_sentences
-                 (id, track_id, cue_index, start_ms, end_ms, original_text, display_text, tokens_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    sentence.id.as_str(),
-                    track.id.as_str(),
-                    sentence.index,
-                    sentence.start.get(),
-                    sentence.end.get(),
-                    sentence.original_text,
-                    sentence.display_text,
-                    json(&sentence.tokens)?
-                ],
-            )
-            .map_err(repo)?;
-            tx.execute(
-                "UPDATE lexical_occurrences SET sentence_id=?1
-                 WHERE sentence_id IS NULL
-                   AND media_id=?2
-                   AND start_ms_snapshot=?3
-                   AND end_ms_snapshot=?4
-                   AND sentence_text_snapshot=?5",
-                params![
-                    sentence.id.as_str(),
-                    track.media_id.as_str(),
-                    sentence.start.get(),
-                    sentence.end.get(),
-                    sentence.display_text
-                ],
-            )
-            .map_err(repo)?;
-            tx.execute(
-                "UPDATE lexical_observations SET sentence_id=?1
-                 WHERE sentence_id IS NULL AND sentence_id_snapshot=?1",
-                [sentence.id.as_str()],
-            )
-            .map_err(repo)?;
+        for occurrence in occurrences {
+            insert_occurrence(&tx, occurrence)?;
         }
         tx.commit().map_err(repo)
     }
@@ -159,26 +128,6 @@ impl SubtitleTrackRepository for SqliteRepository {
             .execute(
                 "UPDATE subtitle_tracks SET status=?2 WHERE id=?1",
                 params![id.as_str(), json(&status)?],
-            )
-            .map_err(repo)?;
-        if updated == 0 {
-            return Err(ApplicationError::NotFound("subtitle track"));
-        }
-        self.get_track(id)?
-            .ok_or(ApplicationError::NotFound("subtitle track"))
-    }
-
-    fn set_track_language(
-        &self,
-        id: &SubtitleTrackId,
-        language: &LanguageCode,
-    ) -> Result<SubtitleTrack, ApplicationError> {
-        let updated = self
-            .connection
-            .lock()
-            .execute(
-                "UPDATE subtitle_tracks SET language=?2 WHERE id=?1",
-                params![id.as_str(), language.as_str()],
             )
             .map_err(repo)?;
         if updated == 0 {
@@ -299,4 +248,101 @@ impl SubtitleTrackRepository for SqliteRepository {
             .transpose()
             .map_err(ApplicationError::from)
     }
+}
+
+fn save_track_in_transaction(
+    tx: &Transaction<'_>,
+    track: &SubtitleTrack,
+) -> Result<(), ApplicationError> {
+    tx.execute(
+        "INSERT INTO subtitle_tracks(id, media_id, fingerprint, language, source, status)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(media_id, fingerprint) DO UPDATE SET
+           language=excluded.language, source=excluded.source, status=excluded.status",
+        params![
+            track.id.as_str(),
+            track.media_id.as_str(),
+            track.fingerprint,
+            track.language.as_ref().map(LanguageCode::as_str),
+            track.source,
+            json(&track.status)?
+        ],
+    )
+    .map_err(repo)?;
+    // Stable sentence IDs are updated in place so language retokenization
+    // preserves every dependent FK row. Only sentences genuinely absent from
+    // the new authoritative track are removed; if a durable dependent forbids
+    // removal, the transaction fails instead of silently discarding it.
+    let incoming_ids = track
+        .sentences
+        .iter()
+        .map(|sentence| sentence.id.as_str())
+        .collect::<HashSet<_>>();
+    let existing_ids = {
+        let mut statement = tx
+            .prepare("SELECT id FROM subtitle_sentences WHERE track_id=?1")
+            .map_err(repo)?;
+        let rows = statement
+            .query_map([track.id.as_str()], |row| row.get::<_, String>(0))
+            .map_err(repo)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(repo)?
+    };
+    for existing_id in existing_ids {
+        if !incoming_ids.contains(existing_id.as_str()) {
+            tx.execute(
+                "DELETE FROM subtitle_sentences WHERE id=?1",
+                [existing_id.as_str()],
+            )
+            .map_err(repo)?;
+        }
+    }
+    for sentence in &track.sentences {
+        tx.execute(
+            "INSERT INTO subtitle_sentences
+             (id, track_id, cue_index, start_ms, end_ms, original_text, display_text, tokens_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(id) DO UPDATE SET
+               track_id=excluded.track_id,
+               cue_index=excluded.cue_index,
+               start_ms=excluded.start_ms,
+               end_ms=excluded.end_ms,
+               original_text=excluded.original_text,
+               display_text=excluded.display_text,
+               tokens_json=excluded.tokens_json",
+            params![
+                sentence.id.as_str(),
+                track.id.as_str(),
+                sentence.index,
+                sentence.start.get(),
+                sentence.end.get(),
+                sentence.original_text,
+                sentence.display_text,
+                json(&sentence.tokens)?
+            ],
+        )
+        .map_err(repo)?;
+        tx.execute(
+            "UPDATE lexical_occurrences SET sentence_id=?1
+             WHERE sentence_id IS NULL
+               AND media_id=?2
+               AND start_ms_snapshot=?3
+               AND end_ms_snapshot=?4
+               AND sentence_text_snapshot=?5",
+            params![
+                sentence.id.as_str(),
+                track.media_id.as_str(),
+                sentence.start.get(),
+                sentence.end.get(),
+                sentence.display_text
+            ],
+        )
+        .map_err(repo)?;
+        tx.execute(
+            "UPDATE lexical_observations SET sentence_id=?1
+             WHERE sentence_id IS NULL AND sentence_id_snapshot=?1",
+            [sentence.id.as_str()],
+        )
+        .map_err(repo)?;
+    }
+    Ok(())
 }

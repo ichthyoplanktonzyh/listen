@@ -16,11 +16,7 @@ FIXTURE_DIR = ROOT / "testdata" / "syntactic-analysis"
 DEV_PATH = FIXTURE_DIR / "ambiguity-dev-v1.jsonl"
 VALIDATION_PATH = FIXTURE_DIR / "ambiguity-validation-v1.jsonl"
 MAPPING_PATH = FIXTURE_DIR / "mapping-contract-v1.json"
-PREREG_PATH = (
-    ROOT
-    / ".planning/phases/3.9.1-shared-syntactic-analysis-provider"
-    / "3.9.1-EVALUATION-PREREGISTRATION.md"
-)
+LOCK_PATH = FIXTURE_DIR / "locked-fixtures-v1.json"
 
 REQUIRED_PHENOMENA = {
     "future_going_to",
@@ -203,12 +199,21 @@ def validate_mapping_contract() -> None:
 
 def validate_locked_digest() -> str:
     digest = hashlib.sha256(VALIDATION_PATH.read_bytes()).hexdigest()
-    prereg = PREREG_PATH.read_text(encoding="utf-8")
-    match = re.search(r"`ambiguity-validation-v1\.jsonl` SHA-256:\s*\n`([0-9a-f]{64})`", prereg)
-    if not match:
-        fail("preregistration is missing a locked validation SHA-256")
-    if match.group(1) != digest:
-        fail(f"validation fixture digest mismatch: expected {match.group(1)}, got {digest}")
+    lock_document = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+    lock = lock_document.get("fixtures", {}).get(VALIDATION_PATH.name)
+    if not isinstance(lock, dict):
+        fail(f"{LOCK_PATH}: missing lock for {VALIDATION_PATH.name}")
+    expected = lock.get("sha256")
+    if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+        fail(f"{LOCK_PATH}: invalid SHA-256 lock for {VALIDATION_PATH.name}")
+    if not isinstance(lock.get("provenance"), str) or not lock["provenance"].strip():
+        fail(f"{LOCK_PATH}: missing provenance for {VALIDATION_PATH.name}")
+    if not isinstance(lock.get("historical_source_path"), str) or not lock[
+        "historical_source_path"
+    ].strip():
+        fail(f"{LOCK_PATH}: missing historical source path for {VALIDATION_PATH.name}")
+    if expected != digest:
+        fail(f"validation fixture digest mismatch: expected {expected}, got {digest}")
     return digest
 
 

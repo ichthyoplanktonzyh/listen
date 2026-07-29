@@ -1,16 +1,10 @@
-use std::time::Duration;
-
-use application::{
-    RealtimeAudioFormat, RealtimeConversationAdapter, RealtimeEvent, RealtimeSessionRequest,
-    RealtimeTurnDetection,
-};
+use application::{PreparedRealtimeConnection, RealtimeConnectionOptions, RealtimeEvent};
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use domain::{
     LanguageCode, RealtimeAdapterKind, RealtimeConversationSession, RealtimeConversationTurn,
     RealtimeProviderProfile, RealtimeProviderProfileId, SecretRef, realtime_provider_profile_id,
 };
 use futures_util::{SinkExt, StreamExt};
-use realtime_provider::{OpenAiRealtimeAdapter, QwenRealtimeAdapter, RealtimeAdapterConfig};
 
 use crate::{ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Serialize, State};
 
@@ -209,76 +203,31 @@ pub(crate) async fn connect(
     axum::extract::Query(query): axum::extract::Query<ConnectQuery>,
 ) -> Result<axum::response::Response, ApiError> {
     let id = RealtimeProviderProfileId::parse(query.profile_id).map_err(ApplicationError::from)?;
+    let language = LanguageCode::parse(query.language).map_err(ApplicationError::from)?;
     let secret_store = state.infrastructure.secret_store.clone();
-    let (profile, credential) = state
+    let factory = state.generative.realtime_adapter_factory.clone();
+    let options = RealtimeConnectionOptions {
+        language,
+        instructions: query.instructions,
+        manual_turns: query.manual_turns,
+    };
+    let prepared = state
         .application
         .execute("realtime.connect_profile", move |services| {
-            let profile = services.realtime_conversations().profile(&id)?.ok_or(
-                application::ApplicationError::NotFound("realtime provider profile"),
-            )?;
-            let credential = services
-                .realtime_conversations()
-                .resolve_secret(&profile, secret_store.as_ref())?;
-            Ok((profile, credential))
+            services.realtime_conversations().prepare_connection(
+                &id,
+                options,
+                secret_store.as_ref(),
+                factory.as_ref(),
+            )
         })
         .await?;
-    let credential = credential.ok_or_else(|| {
-        ApiError::new(
-            axum::http::StatusCode::BAD_REQUEST,
-            "realtime_credential_missing",
-            "realtime provider credential is missing",
-            false,
-        )
-    })?;
-    let language = LanguageCode::parse(query.language).map_err(ApplicationError::from)?;
-    Ok(ws.on_upgrade(move |socket| {
-        run_socket(
-            socket,
-            profile,
-            credential,
-            language,
-            query.instructions,
-            query.manual_turns,
-        )
-    }))
+    Ok(ws.on_upgrade(move |socket| run_socket(socket, prepared)))
 }
 
-async fn run_socket(
-    socket: WebSocket,
-    profile: RealtimeProviderProfile,
-    credential: String,
-    language: LanguageCode,
-    instructions: String,
-    manual_turns: bool,
-) {
-    let config = RealtimeAdapterConfig {
-        base_url: profile.base_url,
-        model_id: profile.model_id,
-        credential,
-        timeout: Duration::from_millis(profile.timeout_ms.clamp(1_000, 120_000)),
-    };
-    let adapter: Box<dyn RealtimeConversationAdapter> = match profile.adapter_kind {
-        RealtimeAdapterKind::OpenAiRealtime => Box::new(OpenAiRealtimeAdapter::new(config)),
-        RealtimeAdapterKind::QwenOmniRealtime => Box::new(QwenRealtimeAdapter::new(config)),
-    };
-    let input_audio = match profile.adapter_kind {
-        RealtimeAdapterKind::OpenAiRealtime => RealtimeAudioFormat::Pcm16Mono24Khz,
-        RealtimeAdapterKind::QwenOmniRealtime => RealtimeAudioFormat::Pcm16Mono16Khz,
-    };
-    let request = RealtimeSessionRequest {
-        instructions,
-        language,
-        voice: profile.voice,
-        input_audio,
-        output_audio: RealtimeAudioFormat::Pcm16Mono24Khz,
-        turn_detection: if manual_turns {
-            RealtimeTurnDetection::Manual
-        } else {
-            RealtimeTurnDetection::ServerVad
-        },
-    };
+async fn run_socket(socket: WebSocket, prepared: PreparedRealtimeConnection) {
     let (mut client_tx, mut client_rx) = socket.split();
-    let mut provider = match adapter.connect(&request).await {
+    let mut provider = match prepared.connect().await {
         Ok(provider) => provider,
         Err(error) => {
             let _ = client_tx

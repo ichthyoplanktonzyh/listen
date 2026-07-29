@@ -37,6 +37,260 @@ fn subtitle_save_is_transactional_and_round_trips() {
 }
 
 #[test]
+fn subtitle_and_corpus_unit_of_work_rolls_back_on_projection_failure() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let media = MediaItem {
+        id: MediaId::from_fingerprint("media", "atomic-subtitle"),
+        path: "/tmp/atomic-subtitle.mp4".into(),
+        fingerprint: "atomic-subtitle".into(),
+        title: "atomic subtitle".into(),
+        kind: MediaKind::Video,
+        duration: None,
+        availability: MediaAvailability::Available,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    MediaRepository::upsert(&repo, &media).unwrap();
+    let track = SubtitleTrack {
+        id: SubtitleTrackId::from_fingerprint("track", "atomic-subtitle"),
+        media_id: media.id.clone(),
+        fingerprint: "atomic-subtitle".into(),
+        language: Some(LanguageCode::parse("en").unwrap()),
+        source: "atomic.srt".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: vec![SubtitleSentence {
+            id: SubtitleSentenceId::from_fingerprint("sentence", "atomic-subtitle"),
+            index: 0,
+            start: TimeMs::new(1_000),
+            end: TimeMs::new(2_000),
+            original_text: "Hello".into(),
+            display_text: "Hello".into(),
+            tokens: Vec::new(),
+        }],
+    };
+    let invalid_occurrence = CorpusOccurrence {
+        id: CorpusOccurrenceId::from_fingerprint("corpus", "invalid-sentence"),
+        language: LanguageCode::parse("en").unwrap(),
+        kind: CorpusOccurrenceKind::Lexical,
+        normalized_key: Some("hello".into()),
+        display_text: "Hello".into(),
+        media_id: Some(media.id),
+        track_id: Some(track.id.clone()),
+        sentence_id: Some(SubtitleSentenceId::parse("missing-sentence").unwrap()),
+        start_ms: 1_000,
+        end_ms: 2_000,
+        source_snapshot: "Hello".into(),
+    };
+
+    assert!(
+        repo.save_track_and_replace_corpus(&track, &[invalid_occurrence])
+            .is_err()
+    );
+    assert_eq!(repo.get_track(&track.id).unwrap(), None);
+    let occurrence_count: u32 = repo
+        .connection
+        .lock()
+        .query_row("SELECT COUNT(*) FROM corpus_occurrences", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(occurrence_count, 0);
+}
+
+#[test]
+fn retrying_existing_subtitle_repairs_a_missing_corpus_projection() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    let media = services
+        .media_analysis()
+        .register_media(RegisterMedia {
+            path: "/tmp/retry-corpus.mp4".into(),
+            fingerprint: "retry-corpus-media".into(),
+            title: "Retry corpus".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    let input = ImportSubtitle {
+        media_id: media.id,
+        source_name: "retry.srt".into(),
+        content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
+        language: Some("en".into()),
+        identity_salt: None,
+    };
+    let partial_track = services
+        .media_analysis()
+        .import_subtitle(input.clone())
+        .unwrap();
+    repo.connection
+        .lock()
+        .execute(
+            "DELETE FROM corpus_occurrences WHERE track_id=?1",
+            [partial_track.id.as_str()],
+        )
+        .unwrap();
+    assert!(
+        services
+            .media_analysis()
+            .search_corpus("en", "care", 10, 0)
+            .unwrap()
+            .is_empty()
+    );
+
+    let retried = services.media_analysis().import_subtitle(input).unwrap();
+
+    assert_eq!(retried, partial_track);
+    assert_eq!(
+        services
+            .media_analysis()
+            .search_corpus("en", "care", 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn changing_track_language_retokenizes_sentences_and_replaces_corpus_atomically() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    let media = services
+        .media_analysis()
+        .register_media(RegisterMedia {
+            path: "/tmp/retokenize.mp4".into(),
+            fingerprint: "retokenize-media".into(),
+            title: "Retokenize".into(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+        })
+        .unwrap();
+    let english_track = services
+        .media_analysis()
+        .import_subtitle(ImportSubtitle {
+            media_id: media.id,
+            source_name: "retokenize.srt".into(),
+            content: "1\n00:00:01,000 --> 00:00:03,000\n我想喝咖啡\n"
+                .as_bytes()
+                .to_vec(),
+            language: Some("en".into()),
+            identity_salt: None,
+        })
+        .unwrap();
+    let english_words = english_track.sentences[0]
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .count();
+    assert_eq!(english_words, 1);
+    let original_sentence = english_track.sentences[0].clone();
+    {
+        let conn = repo.connection.lock();
+        conn.execute(
+            "INSERT INTO word_timings
+             (sentence_id,timing_source,provider_id,provider_version,timings_json,updated_at_ms)
+             VALUES (?1,'\"subtitle\"','test','1','[]',1)",
+            [original_sentence.id.as_str()],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO phonetic_analysis_jobs
+             (id,media_id,track_id,sentence_id,input_fingerprint,status,job_json,updated_at_ms)
+             VALUES ('retokenize-job',?1,?2,?3,'input','\"completed\"','{}',1)",
+            rusqlite::params![
+                english_track.media_id.as_str(),
+                english_track.id.as_str(),
+                original_sentence.id.as_str()
+            ],
+        )
+        .unwrap();
+    }
+
+    let chinese = LanguageCode::parse("zh").unwrap();
+    let updated = services
+        .media_analysis()
+        .update_track_language(&english_track.id, &chinese)
+        .unwrap();
+
+    let chinese_words = updated.sentences[0]
+        .tokens
+        .iter()
+        .filter(|token| token.kind == SubtitleTokenKind::Word)
+        .count();
+    assert!(chinese_words > 1);
+    let projected_chinese_key = updated.sentences[0]
+        .tokens
+        .iter()
+        .find(|token| token.kind == SubtitleTokenKind::Word)
+        .and_then(|token| token.normalized.clone())
+        .unwrap();
+    assert_eq!(updated.sentences[0].id, original_sentence.id);
+    assert_eq!(
+        updated.sentences[0].original_text,
+        original_sentence.original_text
+    );
+    assert_eq!(
+        updated.sentences[0].display_text,
+        original_sentence.display_text
+    );
+    assert_eq!(updated.sentences[0].start, original_sentence.start);
+    assert_eq!(updated.sentences[0].end, original_sentence.end);
+    assert_eq!(repo.get_track(&updated.id).unwrap(), Some(updated.clone()));
+    let conn = repo.connection.lock();
+    let retained_word_timings: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM word_timings WHERE sentence_id=?1",
+            [original_sentence.id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let retained_phonetic_jobs: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM phonetic_analysis_jobs WHERE sentence_id=?1",
+            [original_sentence.id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    drop(conn);
+    assert_eq!(retained_word_timings, 1);
+    assert_eq!(retained_phonetic_jobs, 1);
+    assert!(
+        services
+            .media_analysis()
+            .search_corpus("en", "我想喝咖啡", 10, 0)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        services
+            .media_analysis()
+            .search_corpus("zh", &projected_chinese_key, 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
@@ -410,8 +664,8 @@ fn deleting_a_track_keeps_corpus_search_coherent() {
 #[test]
 fn rebuild_corpus_index_backfills_preexisting_tracks() {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
-    // Import through services without a corpus repository, modelling a library
-    // created before the projection existed (schema < v28).
+    // Persist source rows without the atomic projection boundary, modelling a
+    // library created before the corpus projection existed (schema < v28).
     let without_corpus = AppServices::new(
         repo.clone(),
         repo.clone(),
@@ -432,16 +686,31 @@ fn rebuild_corpus_index_backfills_preexisting_tracks() {
             duration_ms: Some(10_000),
         })
         .unwrap();
-    without_corpus
-        .media_analysis()
-        .import_subtitle(ImportSubtitle {
-            media_id: media.id,
-            source_name: "corpus-rebuild.srt".into(),
-            content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
-            language: Some("en".into()),
-            identity_salt: None,
-        })
-        .unwrap();
+    let pre_projection_track = SubtitleTrack {
+        id: SubtitleTrackId::from_fingerprint("track", "corpus-rebuild"),
+        media_id: media.id,
+        fingerprint: "corpus-rebuild".into(),
+        language: Some(LanguageCode::parse("en").unwrap()),
+        source: "corpus-rebuild.srt".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: vec![SubtitleSentence {
+            id: SubtitleSentenceId::from_fingerprint("sentence", "corpus-rebuild"),
+            index: 0,
+            start: TimeMs::new(1_000),
+            end: TimeMs::new(3_000),
+            original_text: "Take care of yourself.".into(),
+            display_text: "Take care of yourself.".into(),
+            tokens: vec![SubtitleToken {
+                index: 0,
+                kind: SubtitleTokenKind::Word,
+                text: "care".into(),
+                normalized: Some("care".into()),
+                start_char: 5,
+                end_char: 9,
+            }],
+        }],
+    };
+    repo.save_track(&pre_projection_track).unwrap();
 
     let services = AppServices::new(
         repo.clone(),

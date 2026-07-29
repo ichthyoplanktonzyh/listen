@@ -7,8 +7,8 @@
 use std::time::Duration;
 
 use application::{
-    OutputFeedbackProvider, SemanticJudgeProvider, SemanticRubricProvider,
-    SenseGroupPartitionProvider,
+    OutputFeedbackProvider, SemanticJudgeProvider, SemanticLlmRuntime, SemanticLlmRuntimeFactory,
+    SemanticRubricProvider, SenseGroupPartitionProvider,
 };
 use domain::{CapabilityClaim, LlmAdapterKind, LlmProviderError, LlmProviderProfile};
 
@@ -16,7 +16,7 @@ use crate::{AnthropicMessagesAdapter, LlmSemanticProvider, OpenAiChatAdapter};
 
 /// A built provider, keyed by protocol. Exposes both application seams plus the
 /// capability probe over one constructed adapter.
-pub enum BuiltSemanticProvider {
+enum BuiltSemanticProvider {
     OpenAi(LlmSemanticProvider<OpenAiChatAdapter>),
     Anthropic(LlmSemanticProvider<AnthropicMessagesAdapter>),
 }
@@ -24,7 +24,7 @@ pub enum BuiltSemanticProvider {
 impl BuiltSemanticProvider {
     /// Constructs the provider for `profile`, injecting the already-resolved
     /// `api_key` (from the secure store). `None` is a keyless/local endpoint.
-    pub fn build(
+    fn build(
         profile: &LlmProviderProfile,
         api_key: Option<String>,
     ) -> Result<Self, LlmProviderError> {
@@ -56,28 +56,28 @@ impl BuiltSemanticProvider {
         }
     }
 
-    pub fn as_judge(&self) -> &dyn SemanticJudgeProvider {
+    fn as_judge(&self) -> &dyn SemanticJudgeProvider {
         match self {
             Self::OpenAi(provider) => provider,
             Self::Anthropic(provider) => provider,
         }
     }
 
-    pub fn as_rubric(&self) -> &dyn SemanticRubricProvider {
+    fn as_rubric(&self) -> &dyn SemanticRubricProvider {
         match self {
             Self::OpenAi(provider) => provider,
             Self::Anthropic(provider) => provider,
         }
     }
 
-    pub fn as_feedback(&self) -> &dyn OutputFeedbackProvider {
+    fn as_feedback(&self) -> &dyn OutputFeedbackProvider {
         match self {
             Self::OpenAi(provider) => provider,
             Self::Anthropic(provider) => provider,
         }
     }
 
-    pub fn as_sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
+    fn as_sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
         match self {
             Self::OpenAi(provider) => provider,
             Self::Anthropic(provider) => provider,
@@ -85,11 +85,55 @@ impl BuiltSemanticProvider {
     }
 
     /// Measures real structured-output support against the endpoint.
-    pub async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError> {
+    async fn probe(&self) -> Result<CapabilityClaim, LlmProviderError> {
         use application::LlmChatAdapter;
         match self {
             Self::OpenAi(provider) => provider.adapter().probe_structured_output().await,
             Self::Anthropic(provider) => provider.adapter().probe_structured_output().await,
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl SemanticLlmRuntime for BuiltSemanticProvider {
+    fn rubric(&self) -> &dyn SemanticRubricProvider {
+        self.as_rubric()
+    }
+
+    fn judge(&self) -> &dyn SemanticJudgeProvider {
+        self.as_judge()
+    }
+
+    fn feedback(&self) -> &dyn OutputFeedbackProvider {
+        self.as_feedback()
+    }
+
+    fn sense_groups(&self) -> &dyn SenseGroupPartitionProvider {
+        self.as_sense_groups()
+    }
+
+    async fn probe_structured_output(&self) -> Result<CapabilityClaim, LlmProviderError> {
+        self.probe().await
+    }
+}
+
+/// Adapter-crate implementation of the application-owned runtime factory.
+#[derive(Debug, Default)]
+pub struct LlmSemanticRuntimeFactory;
+
+impl LlmSemanticRuntimeFactory {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl SemanticLlmRuntimeFactory for LlmSemanticRuntimeFactory {
+    fn build(
+        &self,
+        profile: &LlmProviderProfile,
+        secret: Option<String>,
+    ) -> Result<Box<dyn SemanticLlmRuntime>, LlmProviderError> {
+        BuiltSemanticProvider::build(profile, secret)
+            .map(|runtime| Box::new(runtime) as Box<dyn SemanticLlmRuntime>)
     }
 }

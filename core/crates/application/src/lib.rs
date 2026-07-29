@@ -34,23 +34,23 @@ use domain::{
     RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecognitionEvidenceId,
     RecognitionEvidenceSourceKind, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId,
     ReviewItemStatus, ReviewRating, ReviewSchedule, ReviewSource, ReviewSourceKind, RhythmFrameId,
-    SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis, SentencePronunciation,
-    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleToken, SubtitleTokenKind,
-    SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, SyntacticAnalysis, TimeMs,
-    TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UpgradeSuggestion,
-    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
-    WordTimeline, WordTimelineId, WordTimelineLifecycleStage, WordTimelineSummary, WordTiming,
-    WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
-    WritingFindingDispositionId, learning_observation_id, normalize_lemma,
-    observation_spec_for_marking, observation_spec_for_practice,
-    observation_spec_for_reading_marking, observation_spec_for_review,
-    observation_spec_for_speaking_production, observation_spec_for_upgrade_confirmation,
-    projection_proposal_v1, validate_syntactic_analysis,
+    SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
+    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroup, SenseGroupAnalysis,
+    SenseGroupAnalysisId, SenseGroupAnalysisSummary, SenseGroupId, SentenceDiagnosis,
+    SentencePronunciation, SoundFitCalibration, SubtitleSentence, SubtitleSentenceId,
+    SubtitleToken, SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus,
+    SyntacticAnalysis, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource,
+    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTimelineLifecycleStage,
+    WordTimelineSummary, WordTiming, WritingDraft, WritingFeedbackFinding,
+    WritingFeedbackFindingId, WritingFindingDisposition, WritingFindingDispositionId,
+    learning_observation_id, normalize_lemma, observation_spec_for_marking,
+    observation_spec_for_practice, observation_spec_for_reading_marking,
+    observation_spec_for_review, observation_spec_for_speaking_production,
+    observation_spec_for_upgrade_confirmation, projection_proposal_v1, validate_syntactic_analysis,
 };
-use serde::Serialize;
 
+mod background_jobs;
 pub mod batch_governor;
 
 mod chunks;
@@ -93,6 +93,9 @@ mod util;
 mod vocabulary;
 mod word_timelines;
 
+pub use background_jobs::{
+    BackgroundJobStore, BackgroundJobTransition, InMemoryBackgroundJobStore,
+};
 pub use coach_dashboard::{
     CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
@@ -128,23 +131,6 @@ pub(crate) use util::{
     phrase_candidates, require_text,
 };
 pub(crate) use vocabulary::ObservationContext;
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ForcedAlignRequest {
-    pub(crate) audio_path: String,
-    pub(crate) segments: Vec<ForcedAlignSegment>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) language: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ForcedAlignSegment {
-    pub(crate) index: u32,
-    pub(crate) text: String,
-    pub(crate) words: Vec<String>,
-    pub(crate) start_ms: u64,
-    pub(crate) end_ms: u64,
-}
 
 #[derive(Clone)]
 pub struct AppServices {
@@ -231,7 +217,7 @@ impl AppServices {
     }
 
     pub fn llm_providers(&self) -> LlmProviderUseCases {
-        LlmProviderUseCases::new(self.llm_provider_profiles.clone())
+        LlmProviderUseCases::from_services(self)
     }
 
     pub fn realtime_conversations(&self) -> RealtimeConversationUseCases {
@@ -708,6 +694,26 @@ impl DisabledSemanticTaskRepository {
 /// return empty and writes error, so no config is silently lost.
 struct DisabledLlmProviderProfileRepository;
 
+impl SecretCleanupRepository for DisabledLlmProviderProfileRepository {
+    fn reserve_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "llm provider profile repository is not configured".into(),
+        ))
+    }
+    fn schedule_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+    fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError> {
+        Ok(0)
+    }
+    fn pending_secret_cleanups(&self) -> Result<Vec<SecretRef>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn complete_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+}
+
 impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
     fn upsert_provider_profile(
         &self,
@@ -732,9 +738,67 @@ impl LlmProviderProfileRepository for DisabledLlmProviderProfileRepository {
     fn delete_provider_profile(&self, _id: &LlmProviderProfileId) -> Result<(), ApplicationError> {
         Ok(())
     }
+    fn upsert_provider_profile_preserving_credential(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError> {
+        self.upsert_provider_profile(profile)
+    }
+    fn upsert_provider_profile_and_schedule_cleanup(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError> {
+        self.upsert_provider_profile(profile)
+    }
+    fn delete_provider_profile_and_schedule_cleanup(
+        &self,
+        id: &LlmProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        self.delete_provider_profile(id)
+    }
 }
 
 struct DisabledRealtimeConversationRepository;
+
+impl SecretCleanupRepository for DisabledRealtimeConversationRepository {
+    fn reserve_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "realtime conversation repository is not configured".into(),
+        ))
+    }
+    fn schedule_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+    fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError> {
+        Ok(0)
+    }
+    fn pending_secret_cleanups(&self) -> Result<Vec<SecretRef>, ApplicationError> {
+        Ok(Vec::new())
+    }
+    fn complete_secret_cleanup(&self, _auth_ref: &SecretRef) -> Result<(), ApplicationError> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod disabled_provider_repository_tests {
+    use super::*;
+
+    #[test]
+    fn disabled_repositories_fail_before_an_external_secret_write() {
+        let auth_ref = SecretRef::new("reserved-test-reference");
+        assert!(
+            DisabledLlmProviderProfileRepository
+                .reserve_secret_cleanup(&auth_ref)
+                .is_err()
+        );
+        assert!(
+            DisabledRealtimeConversationRepository
+                .reserve_secret_cleanup(&auth_ref)
+                .is_err()
+        );
+    }
+}
 
 impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
     fn upsert_realtime_profile(
@@ -759,6 +823,18 @@ impl RealtimeConversationRepository for DisabledRealtimeConversationRepository {
         _id: &RealtimeProviderProfileId,
     ) -> Result<(), ApplicationError> {
         Ok(())
+    }
+    fn upsert_realtime_profile_and_schedule_cleanup(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        self.upsert_realtime_profile(profile)
+    }
+    fn delete_realtime_profile_and_schedule_cleanup(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        self.delete_realtime_profile(id)
     }
     fn save_realtime_session(
         &self,

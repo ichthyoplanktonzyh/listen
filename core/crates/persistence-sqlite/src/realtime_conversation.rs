@@ -1,9 +1,9 @@
 use application::{ApplicationError, RealtimeConversationRepository};
 use domain::{
     RealtimeConversationSession, RealtimeConversationSessionId, RealtimeConversationTurn,
-    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId,
+    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId, SecretRef,
 };
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{SqliteRepository, from_json, json, repo};
 
@@ -15,22 +15,40 @@ fn enum_value<T: serde::Serialize>(value: &T) -> Result<String, ApplicationError
         .ok_or_else(|| ApplicationError::Repository("expected enum string".into()))
 }
 
+fn upsert_profile(
+    connection: &Connection,
+    profile: &RealtimeProviderProfile,
+) -> Result<(), ApplicationError> {
+    connection
+        .execute(
+            "INSERT INTO realtime_provider_profiles
+         (id,display_name,adapter_kind,base_url,model_id,voice,auth_ref,created_at_ms,profile_json)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+         ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,
+         adapter_kind=excluded.adapter_kind,base_url=excluded.base_url,model_id=excluded.model_id,
+         voice=excluded.voice,auth_ref=excluded.auth_ref,profile_json=excluded.profile_json",
+            params![
+                profile.id.as_str(),
+                profile.display_name,
+                profile.adapter_kind.as_str(),
+                profile.base_url,
+                profile.model_id,
+                profile.voice,
+                profile.auth_ref.as_str(),
+                profile.created_at_ms,
+                json(profile)?
+            ],
+        )
+        .map_err(repo)?;
+    Ok(())
+}
+
 impl RealtimeConversationRepository for SqliteRepository {
     fn upsert_realtime_profile(
         &self,
         profile: &RealtimeProviderProfile,
     ) -> Result<RealtimeProviderProfile, ApplicationError> {
-        self.connection.lock().execute(
-            "INSERT INTO realtime_provider_profiles
-             (id,display_name,adapter_kind,base_url,model_id,voice,auth_ref,created_at_ms,profile_json)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
-             ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,
-             adapter_kind=excluded.adapter_kind,base_url=excluded.base_url,model_id=excluded.model_id,
-             voice=excluded.voice,auth_ref=excluded.auth_ref,profile_json=excluded.profile_json",
-            params![profile.id.as_str(), profile.display_name, profile.adapter_kind.as_str(),
-                profile.base_url, profile.model_id, profile.voice, profile.auth_ref.as_str(),
-                profile.created_at_ms, json(profile)?],
-        ).map_err(repo)?;
+        upsert_profile(&self.connection.lock(), profile)?;
         Ok(profile.clone())
     }
 
@@ -74,6 +92,80 @@ impl RealtimeConversationRepository for SqliteRepository {
                 params![id.as_str()],
             )
             .map_err(repo)?;
+        Ok(())
+    }
+
+    fn upsert_realtime_profile_and_schedule_cleanup(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError> {
+        let mut connection = self.connection.lock();
+        let transaction = connection.transaction().map_err(repo)?;
+        let stale_auth_ref = transaction
+            .query_row(
+                "SELECT auth_ref FROM realtime_provider_profiles WHERE id=?1",
+                [profile.id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .map(SecretRef::new);
+        upsert_profile(&transaction, profile)?;
+        transaction
+            .execute(
+                "DELETE FROM pending_secret_cleanups WHERE auth_ref=?1",
+                [profile.auth_ref.as_str()],
+            )
+            .map_err(repo)?;
+        if let Some(auth_ref) = stale_auth_ref
+            .as_ref()
+            .filter(|stale| *stale != &profile.auth_ref)
+        {
+            transaction
+                .execute(
+                    "INSERT INTO pending_secret_cleanups (auth_ref,queued_at_ms,state)
+                     VALUES (?1,?2,'ready')
+                     ON CONFLICT(auth_ref) DO UPDATE SET state='ready'",
+                    params![auth_ref.as_str(), application::now_ms()],
+                )
+                .map_err(repo)?;
+        }
+        transaction.commit().map_err(repo)?;
+        Ok(profile.clone())
+    }
+
+    fn delete_realtime_profile_and_schedule_cleanup(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError> {
+        let mut connection = self.connection.lock();
+        let transaction = connection.transaction().map_err(repo)?;
+        let stale_auth_ref = transaction
+            .query_row(
+                "SELECT auth_ref FROM realtime_provider_profiles WHERE id=?1",
+                [id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .map(SecretRef::new);
+        transaction
+            .execute(
+                "DELETE FROM realtime_provider_profiles WHERE id=?1",
+                [id.as_str()],
+            )
+            .map_err(repo)?;
+        if let Some(auth_ref) = stale_auth_ref.as_ref() {
+            transaction
+                .execute(
+                    "INSERT INTO pending_secret_cleanups (auth_ref,queued_at_ms,state)
+                     VALUES (?1,?2,'ready')
+                     ON CONFLICT(auth_ref) DO UPDATE SET state='ready'",
+                    params![auth_ref.as_str(), application::now_ms()],
+                )
+                .map_err(repo)?;
+        }
+        transaction.commit().map_err(repo)?;
         Ok(())
     }
 

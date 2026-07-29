@@ -940,7 +940,7 @@ paths:
     get:
       operationId: speechBatchJobs
       responses:
-        "200": { description: In-memory speech enhancement batch jobs }
+        "200": { description: Durable speech enhancement batch jobs with queued-work recovery and interrupted-work reporting after restart }
     post:
       operationId: createSpeechBatchJob
       responses:
@@ -970,7 +970,7 @@ paths:
     get:
       operationId: soundLineJobs
       responses:
-        "200": { description: In-memory sound-line (listening structure) jobs }
+        "200": { description: Durable sound-line (listening structure) jobs with queued-work recovery and interrupted-work reporting after restart }
     post:
       operationId: createSoundLineJob
       responses:

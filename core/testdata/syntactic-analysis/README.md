@@ -1,8 +1,10 @@
 # Syntactic Analysis Slice 0 Fixtures
 
-These fixtures preregister the text and token-alignment risks for Phase 3.9.1.
-They do not contain output from Stanza, spaCy, or any other provider, and they do
-not qualify a parser.
+These fixtures preserve the text and token-alignment risks originally
+preregistered for the syntactic-analysis provider work.
+The ambiguity and mapping fixtures do not contain provider output or qualify a
+parser. The explicitly named Stanza regression fixture contains only the
+provider-output cases required by the Rust regression tests.
 
 ## Files
 
@@ -12,6 +14,12 @@ not qualify a parser.
   fixes may be developed against these rows.
 - `ambiguity-validation-v1.jsonl`: locked holdout rows. Do not tune adapter
   exceptions or B rules against their labels.
+- `locked-fixtures-v1.json`: immutable SHA-256 locks for the v1 and v2
+  validation sets, including the historical preregistration provenance.
+- `stanza-sense-group-regression-v1.json`: the minimal provider-output subset
+  used by the Rust sense-group regression tests, with source report, model, and
+  fixture provenance. It is regression evidence, not a current provider
+  qualification report.
 
 Both ambiguity files mix short real-caption excerpts with controlled minimal
 pairs. Real-caption rows are `manual_product_qa`, not full dependency-tree gold.
@@ -31,6 +39,7 @@ Run:
 python3 scripts/validate-syntactic-fixtures.py
 ```
 
-The validator checks fixture structure, split isolation, required phenomenon
+The validators check fixture structure, split isolation, required phenomenon
 coverage, mapping span/index invariants, explicit non-exact statuses, and the
-locked validation-file digest from the preregistration.
+locked validation-file digests. Test execution depends only on immutable
+artifacts in this directory, not on active or archived planning documents.

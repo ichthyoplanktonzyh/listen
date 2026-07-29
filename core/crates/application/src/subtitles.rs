@@ -24,10 +24,15 @@ impl MediaAnalysisUseCases {
             .subtitle_tracks
             .get_by_media_fingerprint(&track.media_id, &track.fingerprint)?
         {
+            // A previous version could commit the source track before corpus
+            // indexing failed. Existing identity is therefore a recovery
+            // signal, not permission to skip projection repair.
+            self.reindex_subtitle_track(&existing)?;
             return Ok(existing);
         }
-        self.subtitle_tracks.save_track(&track)?;
-        self.reindex_subtitle_track(&track)?;
+        let occurrences = self.build_subtitle_corpus_occurrences(&track)?;
+        self.subtitle_tracks
+            .save_track_and_replace_corpus(&track, &occurrences)?;
         Ok(track)
     }
 
@@ -36,10 +41,17 @@ impl MediaAnalysisUseCases {
         track_id: &SubtitleTrackId,
         language: &LanguageCode,
     ) -> Result<SubtitleTrack, ApplicationError> {
-        let track = self
+        let mut track = self
             .subtitle_tracks
-            .set_track_language(track_id, language)?;
-        self.reindex_subtitle_track(&track)?;
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        track.language = Some(language.clone());
+        for sentence in &mut track.sentences {
+            sentence.tokens = subtitle_core::tokenize(Some(language), &sentence.display_text);
+        }
+        let occurrences = self.build_subtitle_corpus_occurrences(&track)?;
+        self.subtitle_tracks
+            .save_track_and_replace_corpus(&track, &occurrences)?;
         Ok(track)
     }
 

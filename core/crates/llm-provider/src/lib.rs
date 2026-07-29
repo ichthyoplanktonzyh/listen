@@ -25,7 +25,7 @@ mod semantic;
 mod wire;
 
 pub use anthropic_messages::AnthropicMessagesAdapter;
-pub use factory::BuiltSemanticProvider;
+pub use factory::LlmSemanticRuntimeFactory;
 pub use openai_chat::OpenAiChatAdapter;
 pub use semantic::LlmSemanticProvider;
 

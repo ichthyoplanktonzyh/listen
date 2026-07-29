@@ -1,6 +1,9 @@
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
+use std::thread;
 
-use application::{AppServices, InMemorySecretStore};
+use application::{
+    AppServices, InMemorySecretStore, RealtimeConversationRepository, SecretCleanupRepository,
+};
 use domain::*;
 
 use super::*;
@@ -169,6 +172,63 @@ fn credential_never_enters_realtime_profile_storage() {
         .unwrap();
     assert!(!row.contains(secret));
     assert!(row.contains(saved.auth_ref.as_str()));
+}
+
+#[test]
+fn realtime_profile_delete_enqueues_credential_cleanup_atomically() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let stored = profile();
+    let auth_ref = stored.auth_ref.clone();
+    repo.upsert_realtime_profile(&stored).unwrap();
+
+    repo.delete_realtime_profile_and_schedule_cleanup(&stored.id)
+        .unwrap();
+
+    assert!(repo.get_realtime_profile(&stored.id).unwrap().is_none());
+    assert_eq!(repo.pending_secret_cleanups().unwrap(), vec![auth_ref]);
+}
+
+#[test]
+fn concurrent_realtime_rotations_schedule_the_losing_reference() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let old = profile();
+    let old_ref = old.auth_ref.clone();
+    repo.upsert_realtime_profile(&old).unwrap();
+    let first_ref = SecretRef::new("keychain:realtime-a");
+    let second_ref = SecretRef::new("keychain:realtime-b");
+    repo.reserve_secret_cleanup(&first_ref).unwrap();
+    repo.reserve_secret_cleanup(&second_ref).unwrap();
+    let barrier = Arc::new(Barrier::new(3));
+    let mut workers = Vec::new();
+    for auth_ref in [first_ref.clone(), second_ref.clone()] {
+        let repo = repo.clone();
+        let barrier = barrier.clone();
+        let mut replacement = old.clone();
+        replacement.auth_ref = auth_ref;
+        workers.push(thread::spawn(move || {
+            barrier.wait();
+            repo.upsert_realtime_profile_and_schedule_cleanup(&replacement)
+                .unwrap();
+        }));
+    }
+    barrier.wait();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+
+    let active = repo
+        .get_realtime_profile(&old.id)
+        .unwrap()
+        .unwrap()
+        .auth_ref;
+    let pending = repo.pending_secret_cleanups().unwrap();
+    assert!(pending.contains(&old_ref));
+    assert!(pending.contains(if active == first_ref {
+        &second_ref
+    } else {
+        &first_ref
+    }));
+    assert!(!pending.contains(&active));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-07-28 17:16 CST
+> Updated: 2026-07-29 CST
 
 ## Position
 
@@ -14,9 +14,14 @@
 
 ## Current Work
 
-Independent backend governance is merged. The current maintenance slice moves
-frontend design assets to `listen-app`, preserves the local runtime interface as
-a core ADR, and adopts release-only changelog maintenance.
+The backend hardening slice is implemented on
+`codex/backend-review-refactor`. It restores backend-only quality gates,
+introduces durable background-job state, makes transcription cancellation and
+subtitle projection updates atomic, and moves LLM, realtime, and forced-align
+protocol construction behind application-owned interfaces. Migration backups
+are source-versioned and crash-safe; provider credential cleanup uses a durable
+outbox; forced-align cancellation terminates the sidecar before any later
+persistent side effect.
 
 ## Established Boundaries
 
@@ -34,6 +39,9 @@ not code evidence.
 
 ## Next
 
-1. Audit remaining core scripts/docs that still assume the old monorepo.
-2. Use `.planning/CROSS_REPO.md` for the next app-driven contract request.
-3. Publish new contract/runtime artifacts only when backend behavior changes.
+1. Review and merge the fully validated backend hardening branch.
+2. Design durable storage for recording transcription only after transcript,
+   provenance, and recording-fact ownership is explicit.
+3. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+   at a time.
+4. Publish new contract/runtime artifacts only after review and owner approval.

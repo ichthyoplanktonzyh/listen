@@ -3,6 +3,12 @@ use crate::{
     LanguageCode, MediaId, MediaKind, MediaTriageIntent, Path, Query, RegisterMedia, Response,
     State, StatusCode, SubtitleTrackId,
 };
+use tokio::io::AsyncReadExt;
+
+/// Local subtitle imports are intentionally bounded. Eight MiB comfortably
+/// covers feature-length SRT/VTT files while preventing a path request from
+/// turning into an unbounded allocation.
+pub(crate) const MAX_SUBTITLE_FILE_BYTES: u64 = 8 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct RegisterMediaRequest {
@@ -105,14 +111,7 @@ pub(crate) async fn import_subtitle(
     Json(request): Json<ImportSubtitleRequest>,
 ) -> Result<Json<domain::SubtitleTrack>, ApiError> {
     let media_id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
-    let content = tokio::fs::read(&request.path).await.map_err(|error| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "subtitle_read_error",
-            error.to_string(),
-            false,
-        )
-    })?;
+    let content = read_subtitle_file(&request.path).await?;
     let source_name = std::path::Path::new(&request.path)
         .file_name()
         .and_then(|name| name.to_str())
@@ -133,6 +132,48 @@ pub(crate) async fn import_subtitle(
         .await
         .map(Json)
         .map_err(ApiError::from)
+}
+
+pub(crate) async fn read_subtitle_file(path: &str) -> Result<Vec<u8>, ApiError> {
+    let file = tokio::fs::File::open(path)
+        .await
+        .map_err(subtitle_read_error)?;
+    let metadata = file.metadata().await.map_err(subtitle_read_error)?;
+    if metadata.len() > MAX_SUBTITLE_FILE_BYTES {
+        return Err(subtitle_file_too_large());
+    }
+
+    // Metadata is only an early rejection. The read itself is capped at
+    // limit+1 so a file replaced or extended after metadata cannot bypass the
+    // bound (TOCTOU-safe allocation and response semantics).
+    let mut content = Vec::with_capacity(metadata.len().min(MAX_SUBTITLE_FILE_BYTES) as usize);
+    let mut limited = file.take(MAX_SUBTITLE_FILE_BYTES + 1);
+    limited
+        .read_to_end(&mut content)
+        .await
+        .map_err(subtitle_read_error)?;
+    if content.len() as u64 > MAX_SUBTITLE_FILE_BYTES {
+        return Err(subtitle_file_too_large());
+    }
+    Ok(content)
+}
+
+fn subtitle_read_error(error: std::io::Error) -> ApiError {
+    ApiError::new(
+        StatusCode::BAD_REQUEST,
+        "subtitle_read_error",
+        error.to_string(),
+        false,
+    )
+}
+
+fn subtitle_file_too_large() -> ApiError {
+    ApiError::new(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "subtitle_file_too_large",
+        format!("subtitle file exceeds {MAX_SUBTITLE_FILE_BYTES} bytes"),
+        false,
+    )
 }
 
 #[derive(Debug, Deserialize)]

@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use api_events::{EventEnvelope, EventName};
-use application::{AppServices, ApplicationError, ImportSubtitle, TranscriptionRepository, now_ms};
+use application::{
+    AppServices, ApplicationError, ImportSubtitle, TranscriptionJobTransition,
+    TranscriptionRepository, now_ms,
+};
 use domain::{
     MediaId, RecordingTranscriptProvenance, RecordingTranscriptionJob, RecordingTranscriptionJobId,
     RecordingTranscriptionStatus, SubtitleTrackProvenance, TranscriptionDestination,
@@ -428,6 +431,14 @@ impl TranscriptionCoordinator {
         self: Arc<Self>,
         request: CreateJobRequest,
     ) -> Result<TranscriptionJob, ApplicationError> {
+        self.create_job_with_retry(request, None)
+    }
+
+    fn create_job_with_retry(
+        self: Arc<Self>,
+        request: CreateJobRequest,
+        retry_of_job_id: Option<TranscriptionJobId>,
+    ) -> Result<TranscriptionJob, ApplicationError> {
         let media_id = MediaId::parse(request.media_id)?;
         let media = self
             .services
@@ -502,7 +513,7 @@ impl TranscriptionCoordinator {
             phase_progress: 0,
             error_code: None,
             error_message: None,
-            retry_of_job_id: None,
+            retry_of_job_id,
             generated_track_id: None,
             created_at_ms,
             started_at_ms: None,
@@ -526,14 +537,28 @@ impl TranscriptionCoordinator {
             .repository
             .get_job(id)?
             .ok_or(ApplicationError::NotFound("transcription job"))?;
-        if job.status != TranscriptionJobStatus::Completed {
-            job.status = TranscriptionJobStatus::Cancelled;
-            job.completed_at_ms = Some(now_ms());
-            job.updated_at_ms = now_ms();
-            self.repository.update_job(&job)?;
-            self.emit(EventName::TranscriptionJobChanged, &job);
+        loop {
+            if !matches!(
+                job.status,
+                TranscriptionJobStatus::Queued
+                    | TranscriptionJobStatus::Extracting
+                    | TranscriptionJobStatus::Transcribing
+            ) {
+                return Ok(job);
+            }
+            let mut cancelled = job.clone();
+            let cancelled_at_ms = now_ms();
+            cancelled.status = TranscriptionJobStatus::Cancelled;
+            cancelled.completed_at_ms = Some(cancelled_at_ms);
+            cancelled.updated_at_ms = cancelled_at_ms;
+            match self.repository.transition_job(job.status, &cancelled)? {
+                TranscriptionJobTransition::Applied(job) => {
+                    self.emit(EventName::TranscriptionJobChanged, &job);
+                    return Ok(job);
+                }
+                TranscriptionJobTransition::Rejected(current) => job = current,
+            }
         }
-        Ok(job)
     }
 
     pub fn retry_job(
@@ -544,22 +569,18 @@ impl TranscriptionCoordinator {
             .repository
             .get_job(id)?
             .ok_or(ApplicationError::NotFound("transcription job"))?;
-        let mut job = self.clone().create_job(CreateJobRequest {
-            media_id: old.media_id.as_str().into(),
-            model_id: old.model_id.as_str().into(),
-            destination: old.destination,
-            purpose: old.purpose,
-            language: old.requested_language,
-            audio_track: old.audio_track,
-            force: true,
-        })?;
-        if job.id != old.id && job.status == TranscriptionJobStatus::Queued {
-            job.retry_of_job_id = Some(old.id);
-            job.updated_at_ms = now_ms();
-            self.repository.update_job(&job)?;
-            self.emit(EventName::TranscriptionJobChanged, &job);
-        }
-        Ok(job)
+        self.clone().create_job_with_retry(
+            CreateJobRequest {
+                media_id: old.media_id.as_str().into(),
+                model_id: old.model_id.as_str().into(),
+                destination: old.destination,
+                purpose: old.purpose,
+                language: old.requested_language,
+                audio_track: old.audio_track,
+                force: true,
+            },
+            Some(old.id),
+        )
     }
 
     pub fn archive_job(
@@ -581,11 +602,16 @@ impl TranscriptionCoordinator {
                 "active transcription job cannot be archived",
             ));
         }
+        let expected_status = job.status;
         job.archived_at_ms = Some(now_ms());
         job.updated_at_ms = now_ms();
-        self.repository.update_job(&job)?;
-        self.emit(EventName::TranscriptionJobChanged, &job);
-        Ok(job)
+        match self.repository.transition_job(expected_status, &job)? {
+            TranscriptionJobTransition::Applied(job) => {
+                self.emit(EventName::TranscriptionJobChanged, &job);
+                Ok(job)
+            }
+            TranscriptionJobTransition::Rejected(current) => Ok(current),
+        }
     }
 
     async fn run_job(self: Arc<Self>, id: TranscriptionJobId) {
@@ -596,16 +622,27 @@ impl TranscriptionCoordinator {
         let result = self.execute_job(&id).await;
         let _ = tokio::fs::remove_dir_all(self.temp_dir.join(id.as_str())).await;
         if let Err(error) = result
-            && let Ok(Some(mut job)) = self.repository.get_job(&id)
-            && job.status != TranscriptionJobStatus::Cancelled
+            && let Ok(Some(job)) = self.repository.get_job(&id)
+            && matches!(
+                job.status,
+                TranscriptionJobStatus::Queued
+                    | TranscriptionJobStatus::Extracting
+                    | TranscriptionJobStatus::Transcribing
+                    | TranscriptionJobStatus::Importing
+            )
         {
-            job.status = TranscriptionJobStatus::Failed;
-            job.error_code = Some("transcription_failed".into());
-            job.error_message = Some(error.to_string());
-            job.completed_at_ms = Some(now_ms());
-            job.updated_at_ms = now_ms();
-            let _ = self.repository.update_job(&job);
-            self.emit(EventName::TranscriptionJobChanged, &job);
+            let expected_status = job.status;
+            let mut failed = job;
+            failed.status = TranscriptionJobStatus::Failed;
+            failed.error_code = Some("transcription_failed".into());
+            failed.error_message = Some(error.to_string());
+            failed.completed_at_ms = Some(now_ms());
+            failed.updated_at_ms = now_ms();
+            if let Ok(TranscriptionJobTransition::Applied(failed)) =
+                self.repository.transition_job(expected_status, &failed)
+            {
+                self.emit(EventName::TranscriptionJobChanged, &failed);
+            }
         }
     }
 
@@ -735,11 +772,13 @@ impl TranscriptionCoordinator {
             .repository
             .get_job(id)?
             .ok_or(ApplicationError::NotFound("transcription job"))?;
-        if job.status == TranscriptionJobStatus::Cancelled {
+        if job.status != TranscriptionJobStatus::Queued {
             return Ok(());
         }
         job.started_at_ms = Some(now_ms());
-        self.transition(&mut job, TranscriptionJobStatus::Extracting, 5)?;
+        if !self.transition(&mut job, TranscriptionJobStatus::Extracting, 5)? {
+            return Ok(());
+        }
         let media = self
             .services
             .media_analysis()
@@ -762,7 +801,9 @@ impl TranscriptionCoordinator {
         let wav = work.join("audio.wav");
         let ffmpeg_args = ffmpeg_wav_args(media.path, job.audio_track, &wav);
         self.run_command(&job.id, &ffmpeg, &ffmpeg_args).await?;
-        self.transition(&mut job, TranscriptionJobStatus::Transcribing, 35)?;
+        if !self.transition(&mut job, TranscriptionJobStatus::Transcribing, 35)? {
+            return Ok(());
+        }
         let output = work.join("result");
         let mut whisper_args = vec![
             "-m".into(),
@@ -799,7 +840,12 @@ impl TranscriptionCoordinator {
                     .map(str::to_owned)
             })
             .or_else(|| job.requested_language.clone());
-        self.transition(&mut job, TranscriptionJobStatus::Importing, 90)?;
+        // Entering Importing is the irreversible commit point. Cancellation is
+        // accepted only before this CAS succeeds, so a durable Cancelled state
+        // proves that subtitle import never began.
+        if !self.transition(&mut job, TranscriptionJobStatus::Importing, 90)? {
+            return Ok(());
+        }
         let srt = tokio::fs::read(output.with_extension("srt"))
             .await
             .map_err(io_error)?;
@@ -862,12 +908,9 @@ impl TranscriptionCoordinator {
             created_at_ms: now_ms(),
         })?;
         job.generated_track_id = Some(track.id);
-        job.status = TranscriptionJobStatus::Completed;
-        job.phase_progress = 100;
-        job.completed_at_ms = Some(now_ms());
-        job.updated_at_ms = now_ms();
-        self.repository.update_job(&job)?;
-        self.emit(EventName::TranscriptionJobChanged, &job);
+        if !self.transition(&mut job, TranscriptionJobStatus::Completed, 100)? {
+            return Ok(());
+        }
         let _ = tokio::fs::remove_dir_all(work).await;
         Ok(())
     }
@@ -894,16 +937,29 @@ impl TranscriptionCoordinator {
         job: &mut TranscriptionJob,
         status: TranscriptionJobStatus,
         progress: u8,
-    ) -> Result<(), ApplicationError> {
-        if job.status == TranscriptionJobStatus::Cancelled {
-            return Err(ApplicationError::Repository("job cancelled".into()));
+    ) -> Result<bool, ApplicationError> {
+        let expected_status = job.status;
+        let mut candidate = job.clone();
+        candidate.status = status;
+        candidate.phase_progress = progress;
+        candidate.updated_at_ms = now_ms();
+        if status == TranscriptionJobStatus::Completed {
+            candidate.completed_at_ms = Some(candidate.updated_at_ms);
         }
-        job.status = status;
-        job.phase_progress = progress;
-        job.updated_at_ms = now_ms();
-        self.repository.update_job(job)?;
-        self.emit(EventName::TranscriptionJobChanged, job);
-        Ok(())
+        match self
+            .repository
+            .transition_job(expected_status, &candidate)?
+        {
+            TranscriptionJobTransition::Applied(updated) => {
+                *job = updated;
+                self.emit(EventName::TranscriptionJobChanged, job);
+                Ok(true)
+            }
+            TranscriptionJobTransition::Rejected(current) => {
+                *job = current;
+                Ok(false)
+            }
+        }
     }
 
     fn emit<T: serde::Serialize>(&self, event: EventName, value: &T) {

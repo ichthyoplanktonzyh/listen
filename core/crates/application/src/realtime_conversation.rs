@@ -13,11 +13,43 @@ use domain::{
     RealtimeProviderProfile, RealtimeProviderProfileId,
 };
 
-use crate::{ApplicationError, RealtimeConversationRepository, SecretStore};
+use crate::{
+    ApplicationError, RealtimeConversationAdapterFactory, RealtimeConversationRepository,
+    SecretCleanupRepository, SecretStore,
+};
 use serde::{Deserialize, Serialize};
 
 pub struct RealtimeConversationUseCases {
     repository: Arc<dyn RealtimeConversationRepository>,
+}
+
+fn retry_secret_cleanups(
+    repository: &(impl SecretCleanupRepository + ?Sized),
+    secret_store: &dyn SecretStore,
+) -> Result<usize, ApplicationError> {
+    let mut completed = 0;
+    let mut first_error = None;
+    for auth_ref in repository.pending_secret_cleanups()? {
+        match secret_store
+            .delete(&auth_ref)
+            .map_err(ApplicationError::from)
+        {
+            Ok(()) => match repository.complete_secret_cleanup(&auth_ref) {
+                Ok(()) => completed += 1,
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            },
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        };
+    }
+    if let Some(error) = first_error {
+        Err(error)
+    } else {
+        Ok(completed)
+    }
 }
 
 impl RealtimeConversationUseCases {
@@ -31,8 +63,29 @@ impl RealtimeConversationUseCases {
         secret: &str,
         secret_store: &dyn SecretStore,
     ) -> Result<RealtimeProviderProfile, ApplicationError> {
-        profile.auth_ref = secret_store.store(secret)?;
-        self.repository.upsert_realtime_profile(&profile)
+        let new_auth_ref = secret_store.reserve()?;
+        self.repository.reserve_secret_cleanup(&new_auth_ref)?;
+        if let Err(error) = secret_store.store_reserved(&new_auth_ref, secret) {
+            self.repository.schedule_secret_cleanup(&new_auth_ref)?;
+            let _pending_cleanup_result =
+                retry_secret_cleanups(self.repository.as_ref(), secret_store);
+            return Err(error.into());
+        }
+        profile.auth_ref = new_auth_ref.clone();
+        let saved = match self
+            .repository
+            .upsert_realtime_profile_and_schedule_cleanup(&profile)
+        {
+            Ok(saved) => saved,
+            Err(error) => {
+                self.repository.schedule_secret_cleanup(&new_auth_ref)?;
+                let _pending_cleanup_result =
+                    retry_secret_cleanups(self.repository.as_ref(), secret_store);
+                return Err(error);
+            }
+        };
+        let _pending_cleanup_result = retry_secret_cleanups(self.repository.as_ref(), secret_store);
+        Ok(saved)
     }
 
     pub fn list_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError> {
@@ -59,10 +112,25 @@ impl RealtimeConversationUseCases {
         id: &RealtimeProviderProfileId,
         secret_store: &dyn SecretStore,
     ) -> Result<(), ApplicationError> {
-        if let Some(profile) = self.repository.get_realtime_profile(id)? {
-            secret_store.delete(&profile.auth_ref)?;
-        }
-        self.repository.delete_realtime_profile(id)
+        self.repository
+            .delete_realtime_profile_and_schedule_cleanup(id)?;
+        let _pending_cleanup_result = retry_secret_cleanups(self.repository.as_ref(), secret_store);
+        Ok(())
+    }
+
+    pub fn retry_pending_secret_cleanups(
+        &self,
+        secret_store: &dyn SecretStore,
+    ) -> Result<usize, ApplicationError> {
+        retry_secret_cleanups(self.repository.as_ref(), secret_store)
+    }
+
+    pub fn recover_pending_secret_cleanups(
+        &self,
+        secret_store: &dyn SecretStore,
+    ) -> Result<usize, ApplicationError> {
+        self.repository.recover_secret_cleanup_reservations()?;
+        retry_secret_cleanups(self.repository.as_ref(), secret_store)
     }
 
     pub fn save_session(
@@ -119,6 +187,84 @@ impl RealtimeConversationUseCases {
         session_id: &RealtimeConversationSessionId,
     ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError> {
         self.repository.list_realtime_turns(session_id)
+    }
+
+    /// Resolves a profile and credential, asks the injected adapter factory to
+    /// assemble the protocol implementation, validates the requested turn
+    /// mode against implemented capabilities, and derives provider-specific
+    /// audio formats from the neutral descriptor.
+    pub fn prepare_connection(
+        &self,
+        id: &RealtimeProviderProfileId,
+        options: RealtimeConnectionOptions,
+        secret_store: &dyn SecretStore,
+        factory: &dyn RealtimeConversationAdapterFactory,
+    ) -> Result<PreparedRealtimeConnection, ApplicationError> {
+        let profile = self
+            .profile(id)?
+            .ok_or(ApplicationError::NotFound("realtime provider profile"))?;
+        let credential = self
+            .resolve_secret(&profile, secret_store)?
+            .ok_or(RealtimeProviderError::Auth)?;
+        let adapter = factory.build(&profile, credential);
+        let descriptor = adapter.descriptor();
+        if descriptor.adapter_kind != profile.adapter_kind.as_str() {
+            return Err(RealtimeProviderError::Protocol {
+                detail: "realtime adapter kind did not match the configured profile".into(),
+            }
+            .into());
+        }
+        let turn_detection = if options.manual_turns {
+            if !descriptor.capabilities.supports_manual_turns {
+                return Err(RealtimeProviderError::UnsupportedCapability {
+                    capability: "manual turns".into(),
+                }
+                .into());
+            }
+            RealtimeTurnDetection::Manual
+        } else {
+            if !descriptor.capabilities.supports_server_vad {
+                return Err(RealtimeProviderError::UnsupportedCapability {
+                    capability: "server VAD".into(),
+                }
+                .into());
+            }
+            RealtimeTurnDetection::ServerVad
+        };
+        Ok(PreparedRealtimeConnection {
+            adapter,
+            request: RealtimeSessionRequest {
+                instructions: options.instructions,
+                language: options.language,
+                voice: profile.voice,
+                input_audio: descriptor.capabilities.input_audio,
+                output_audio: descriptor.capabilities.output_audio,
+                turn_detection,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RealtimeConnectionOptions {
+    pub language: LanguageCode,
+    pub instructions: String,
+    pub manual_turns: bool,
+}
+
+/// A provider-neutral connection plan. HTTP owns only the client WebSocket
+/// framing; this module owns provider selection, capability policy and the
+/// semantic session request.
+pub struct PreparedRealtimeConnection {
+    adapter: Box<dyn RealtimeConversationAdapter>,
+    request: RealtimeSessionRequest,
+}
+
+impl PreparedRealtimeConnection {
+    pub async fn connect(
+        self,
+    ) -> Result<Box<dyn RealtimeConversationSession>, RealtimeProviderError> {
+        self.adapter.connect(&self.request).await
     }
 }
 
@@ -230,7 +376,7 @@ pub enum RealtimeEvent {
 
 #[async_trait]
 pub trait RealtimeConversationSession: Send {
-    async fn send_audio(&mut self, pcm16_mono_24khz: &[u8]) -> Result<(), RealtimeProviderError>;
+    async fn send_audio(&mut self, pcm16_mono: &[u8]) -> Result<(), RealtimeProviderError>;
     async fn commit_turn(&mut self) -> Result<(), RealtimeProviderError>;
     async fn cancel_response(&mut self) -> Result<(), RealtimeProviderError>;
     async fn next_event(&mut self) -> Result<Option<RealtimeEvent>, RealtimeProviderError>;
@@ -244,4 +390,373 @@ pub trait RealtimeConversationAdapter: Send + Sync {
         &self,
         request: &RealtimeSessionRequest,
     ) -> Result<Box<dyn RealtimeConversationSession>, RealtimeProviderError>;
+}
+
+#[cfg(test)]
+mod connection_tests {
+    use super::*;
+    use crate::{InMemorySecretStore, RealtimeConversationAdapterFactory};
+    use domain::{
+        RealtimeAdapterKind, RealtimeConversationTurnId, RealtimeProviderProfile, SecretRef,
+        realtime_provider_profile_id,
+    };
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    struct ProfileRepository {
+        profile: Mutex<Option<RealtimeProviderProfile>>,
+    }
+
+    impl crate::SecretCleanupRepository for ProfileRepository {
+        fn reserve_secret_cleanup(
+            &self,
+            _auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            Ok(())
+        }
+
+        fn schedule_secret_cleanup(
+            &self,
+            _auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            Ok(())
+        }
+
+        fn pending_secret_cleanups(&self) -> Result<Vec<domain::SecretRef>, ApplicationError> {
+            Ok(Vec::new())
+        }
+
+        fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError> {
+            Ok(0)
+        }
+
+        fn complete_secret_cleanup(
+            &self,
+            _auth_ref: &domain::SecretRef,
+        ) -> Result<(), ApplicationError> {
+            Ok(())
+        }
+    }
+
+    impl RealtimeConversationRepository for ProfileRepository {
+        fn upsert_realtime_profile(
+            &self,
+            profile: &RealtimeProviderProfile,
+        ) -> Result<RealtimeProviderProfile, ApplicationError> {
+            *self.profile.lock().unwrap() = Some(profile.clone());
+            Ok(profile.clone())
+        }
+
+        fn get_realtime_profile(
+            &self,
+            id: &RealtimeProviderProfileId,
+        ) -> Result<Option<RealtimeProviderProfile>, ApplicationError> {
+            Ok(self
+                .profile
+                .lock()
+                .unwrap()
+                .clone()
+                .filter(|profile| &profile.id == id))
+        }
+
+        fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError> {
+            Ok(self.profile.lock().unwrap().clone().into_iter().collect())
+        }
+
+        fn delete_realtime_profile(
+            &self,
+            _id: &RealtimeProviderProfileId,
+        ) -> Result<(), ApplicationError> {
+            *self.profile.lock().unwrap() = None;
+            Ok(())
+        }
+
+        fn upsert_realtime_profile_and_schedule_cleanup(
+            &self,
+            profile: &RealtimeProviderProfile,
+        ) -> Result<RealtimeProviderProfile, ApplicationError> {
+            let stale_auth_ref = {
+                let mut current = self.profile.lock().unwrap();
+                let stale = current.as_ref().map(|profile| profile.auth_ref.clone());
+                *current = Some(profile.clone());
+                stale
+            };
+            self.complete_secret_cleanup(&profile.auth_ref)?;
+            if let Some(auth_ref) = stale_auth_ref
+                .as_ref()
+                .filter(|stale| *stale != &profile.auth_ref)
+            {
+                self.schedule_secret_cleanup(auth_ref)?;
+            }
+            Ok(profile.clone())
+        }
+
+        fn delete_realtime_profile_and_schedule_cleanup(
+            &self,
+            _id: &RealtimeProviderProfileId,
+        ) -> Result<(), ApplicationError> {
+            let stale_auth_ref = self
+                .profile
+                .lock()
+                .unwrap()
+                .take()
+                .map(|profile| profile.auth_ref);
+            if let Some(auth_ref) = stale_auth_ref.as_ref() {
+                self.schedule_secret_cleanup(auth_ref)?;
+            }
+            Ok(())
+        }
+
+        fn save_realtime_session(
+            &self,
+            session: &ConversationSession,
+        ) -> Result<ConversationSession, ApplicationError> {
+            Ok(session.clone())
+        }
+
+        fn get_realtime_session(
+            &self,
+            _id: &RealtimeConversationSessionId,
+        ) -> Result<Option<ConversationSession>, ApplicationError> {
+            Ok(None)
+        }
+
+        fn list_realtime_sessions(&self) -> Result<Vec<ConversationSession>, ApplicationError> {
+            Ok(Vec::new())
+        }
+
+        fn save_realtime_turn(
+            &self,
+            turn: &RealtimeConversationTurn,
+        ) -> Result<RealtimeConversationTurn, ApplicationError> {
+            Ok(turn.clone())
+        }
+
+        fn get_realtime_turn(
+            &self,
+            _id: &RealtimeConversationTurnId,
+        ) -> Result<Option<RealtimeConversationTurn>, ApplicationError> {
+            Ok(None)
+        }
+
+        fn list_realtime_turns(
+            &self,
+            _session_id: &RealtimeConversationSessionId,
+        ) -> Result<Vec<RealtimeConversationTurn>, ApplicationError> {
+            Ok(Vec::new())
+        }
+    }
+
+    struct FakeSession;
+
+    #[async_trait]
+    impl RealtimeConversationSession for FakeSession {
+        async fn send_audio(&mut self, _pcm16_mono: &[u8]) -> Result<(), RealtimeProviderError> {
+            Ok(())
+        }
+
+        async fn commit_turn(&mut self) -> Result<(), RealtimeProviderError> {
+            Ok(())
+        }
+
+        async fn cancel_response(&mut self) -> Result<(), RealtimeProviderError> {
+            Ok(())
+        }
+
+        async fn next_event(&mut self) -> Result<Option<RealtimeEvent>, RealtimeProviderError> {
+            Ok(None)
+        }
+
+        async fn close(&mut self) -> Result<(), RealtimeProviderError> {
+            Ok(())
+        }
+    }
+
+    struct FakeAdapter {
+        descriptor: RealtimeProviderDescriptor,
+        connect_error: Option<RealtimeProviderError>,
+    }
+
+    #[async_trait]
+    impl RealtimeConversationAdapter for FakeAdapter {
+        fn descriptor(&self) -> RealtimeProviderDescriptor {
+            self.descriptor.clone()
+        }
+
+        async fn connect(
+            &self,
+            _request: &RealtimeSessionRequest,
+        ) -> Result<Box<dyn RealtimeConversationSession>, RealtimeProviderError> {
+            match &self.connect_error {
+                Some(error) => Err(error.clone()),
+                None => Ok(Box::new(FakeSession)),
+            }
+        }
+    }
+
+    struct FakeFactory {
+        descriptor: RealtimeProviderDescriptor,
+        connect_error: Option<RealtimeProviderError>,
+        received_credential: Arc<AtomicBool>,
+    }
+
+    impl RealtimeConversationAdapterFactory for FakeFactory {
+        fn build(
+            &self,
+            _profile: &RealtimeProviderProfile,
+            credential: String,
+        ) -> Box<dyn RealtimeConversationAdapter> {
+            self.received_credential
+                .store(!credential.is_empty(), Ordering::SeqCst);
+            Box::new(FakeAdapter {
+                descriptor: self.descriptor.clone(),
+                connect_error: self.connect_error.clone(),
+            })
+        }
+    }
+
+    fn capabilities(
+        input_audio: RealtimeAudioFormat,
+        supports_manual_turns: bool,
+    ) -> RealtimeProviderCapabilities {
+        RealtimeProviderCapabilities {
+            transport: RealtimeTransportKind::WebSocket,
+            input_audio,
+            output_audio: RealtimeAudioFormat::Pcm16Mono24Khz,
+            supports_server_vad: true,
+            supports_manual_turns,
+            supports_provider_input_transcript: true,
+            supports_assistant_transcript: true,
+            supports_response_cancel: true,
+            supports_output_audio_clear: false,
+            supports_conversation_truncate: false,
+            supports_function_calls: false,
+            supports_image_input: false,
+            supports_session_resume: false,
+        }
+    }
+
+    fn profile(auth_ref: SecretRef) -> RealtimeProviderProfile {
+        let adapter_kind = RealtimeAdapterKind::QwenOmniRealtime;
+        let base_url = "wss://provider.invalid/realtime";
+        let model_id = "test-model";
+        RealtimeProviderProfile {
+            id: realtime_provider_profile_id(adapter_kind, base_url, model_id),
+            display_name: "Test".into(),
+            adapter_kind,
+            base_url: base_url.into(),
+            model_id: model_id.into(),
+            voice: "test-voice".into(),
+            auth_ref,
+            timeout_ms: 1_000,
+            created_at_ms: 1,
+        }
+    }
+
+    fn options(manual_turns: bool) -> RealtimeConnectionOptions {
+        RealtimeConnectionOptions {
+            language: LanguageCode::parse("en").unwrap(),
+            instructions: "Discuss the source.".into(),
+            manual_turns,
+        }
+    }
+
+    fn setup(
+        descriptor: RealtimeProviderDescriptor,
+        connect_error: Option<RealtimeProviderError>,
+    ) -> (
+        RealtimeConversationUseCases,
+        InMemorySecretStore,
+        FakeFactory,
+        RealtimeProviderProfileId,
+    ) {
+        let secrets = InMemorySecretStore::new();
+        let auth_ref = secrets.store("not-observed").unwrap();
+        let profile = profile(auth_ref);
+        let id = profile.id.clone();
+        let repository = Arc::new(ProfileRepository {
+            profile: Mutex::new(Some(profile)),
+        });
+        let received_credential = Arc::new(AtomicBool::new(false));
+        (
+            RealtimeConversationUseCases::new(repository),
+            secrets,
+            FakeFactory {
+                descriptor,
+                connect_error,
+                received_credential,
+            },
+            id,
+        )
+    }
+
+    #[test]
+    fn injected_factory_drives_audio_and_turn_policy_without_vendor_branching() {
+        let descriptor = RealtimeProviderDescriptor {
+            adapter_kind: "qwen_omni_realtime".into(),
+            model_id: "test-model".into(),
+            protocol_version: "fake-v1".into(),
+            capabilities: capabilities(RealtimeAudioFormat::Pcm16Mono16Khz, true),
+        };
+        let (use_cases, secrets, factory, id) = setup(descriptor, None);
+
+        let prepared = use_cases
+            .prepare_connection(&id, options(true), &secrets, &factory)
+            .unwrap();
+
+        assert!(factory.received_credential.load(Ordering::SeqCst));
+        assert_eq!(
+            prepared.request.input_audio,
+            RealtimeAudioFormat::Pcm16Mono16Khz
+        );
+        assert_eq!(
+            prepared.request.output_audio,
+            RealtimeAudioFormat::Pcm16Mono24Khz
+        );
+        assert_eq!(
+            prepared.request.turn_detection,
+            RealtimeTurnDetection::Manual
+        );
+    }
+
+    #[test]
+    fn unsupported_manual_turns_fail_before_provider_connection() {
+        let descriptor = RealtimeProviderDescriptor {
+            adapter_kind: "qwen_omni_realtime".into(),
+            model_id: "test-model".into(),
+            protocol_version: "fake-v1".into(),
+            capabilities: capabilities(RealtimeAudioFormat::Pcm16Mono16Khz, false),
+        };
+        let (use_cases, secrets, factory, id) = setup(descriptor, None);
+
+        let error = use_cases
+            .prepare_connection(&id, options(true), &secrets, &factory)
+            .err()
+            .expect("manual turns rejected");
+
+        assert!(matches!(
+            error,
+            ApplicationError::RealtimeProvider(RealtimeProviderError::UnsupportedCapability { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn provider_connect_errors_keep_the_neutral_taxonomy() {
+        let descriptor = RealtimeProviderDescriptor {
+            adapter_kind: "qwen_omni_realtime".into(),
+            model_id: "test-model".into(),
+            protocol_version: "fake-v1".into(),
+            capabilities: capabilities(RealtimeAudioFormat::Pcm16Mono16Khz, true),
+        };
+        let (use_cases, secrets, factory, id) =
+            setup(descriptor, Some(RealtimeProviderError::Auth));
+        let prepared = use_cases
+            .prepare_connection(&id, options(false), &secrets, &factory)
+            .unwrap();
+
+        assert_eq!(
+            prepared.connect().await.err(),
+            Some(RealtimeProviderError::Auth)
+        );
+    }
 }

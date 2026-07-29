@@ -17,10 +17,10 @@ impl MediaAnalysisUseCases {
     /// provider lemma → baseline), the same path lexical entries use, so an
     /// entry-driven or free-text lemma query matches inflected tokens. Tracks
     /// indexed before this rule need one manual rebuild to gain lemma keys.
-    pub(crate) fn reindex_subtitle_track(
+    pub(crate) fn build_subtitle_corpus_occurrences(
         &self,
         track: &SubtitleTrack,
-    ) -> Result<(), ApplicationError> {
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
         let language = track.language.clone().unwrap_or(LanguageCode::parse("en")?);
         // One provider round per distinct surface per track; provider failure
         // degrades to the tokenizer's baseline key instead of failing import.
@@ -103,6 +103,14 @@ impl MediaAnalysisUseCases {
             }
         }
         self.append_family_occurrences(track, &language, &mut occurrences);
+        Ok(occurrences)
+    }
+
+    pub(crate) fn reindex_subtitle_track(
+        &self,
+        track: &SubtitleTrack,
+    ) -> Result<(), ApplicationError> {
+        let occurrences = self.build_subtitle_corpus_occurrences(track)?;
         self.corpus
             .replace_corpus_occurrences_for_track(&track.id, &occurrences)
     }

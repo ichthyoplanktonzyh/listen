@@ -315,7 +315,7 @@ fn occurrence_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CorpusOccurr
     })
 }
 
-fn insert_occurrence(
+pub(crate) fn insert_occurrence(
     conn: &rusqlite::Connection,
     occurrence: &CorpusOccurrence,
 ) -> Result<(), ApplicationError> {

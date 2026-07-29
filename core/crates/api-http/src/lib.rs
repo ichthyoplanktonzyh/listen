@@ -87,6 +87,12 @@ pub struct GenerativeRuntime {
     /// Provider/account-scoped LLM batch governors plus explicit batch
     /// cancellation and progress lifecycle.
     pub llm_batches: application::batch_governor::LlmBatchCoordinator,
+    /// Builds protocol-neutral semantic runtimes from persisted profiles.
+    /// Concrete protocol selection stays in the adapter crate.
+    pub llm_runtime_factory: Arc<dyn application::SemanticLlmRuntimeFactory>,
+    /// Assembles native realtime protocol adapters behind the
+    /// application-owned provider-neutral seam.
+    pub realtime_adapter_factory: Arc<dyn application::RealtimeConversationAdapterFactory>,
 }
 
 #[derive(Clone)]
@@ -108,7 +114,10 @@ pub struct ApiState {
 impl ApiState {
     pub fn new<R>(services: AppServices, repository: Arc<R>, token: impl Into<Arc<str>>) -> Self
     where
-        R: application::TranscriptionRepository + application::PhoneticAnalysisRepository + 'static,
+        R: application::TranscriptionRepository
+            + application::PhoneticAnalysisRepository
+            + application::BackgroundJobStore
+            + 'static,
     {
         let (events, _) = broadcast::channel(128);
         let ecdict = Arc::new(EcdictProvider::new());
@@ -126,21 +135,26 @@ impl ApiState {
         let phonetic_analysis = Arc::new(
             PhoneticAnalysisCoordinator::new_with_test_provider(
                 services.clone(),
-                repository,
+                repository.clone(),
                 events.clone(),
             )
             .expect("phonetic analysis coordinator must initialize"),
         );
         #[cfg(not(test))]
         let phonetic_analysis = Arc::new(
-            PhoneticAnalysisCoordinator::new(services.clone(), repository, events.clone())
+            PhoneticAnalysisCoordinator::new(services.clone(), repository.clone(), events.clone())
                 .expect("phonetic analysis coordinator must initialize"),
         );
-        let speech_jobs = Arc::new(SpeechBatchCoordinator::new(
+        let speech_jobs =
+            SpeechBatchCoordinator::new(services.clone(), events.clone(), repository.clone())
+                .expect("speech batch coordinator must initialize");
+        let sound_line = SoundLineCoordinator::new(
             services.clone(),
             events.clone(),
-        ));
-        let sound_line = SoundLineCoordinator::new(services.clone(), events.clone());
+            repository.clone(),
+            local_runtime::resolved_forced_align_provider(),
+        )
+        .expect("sound line coordinator must initialize");
         Self {
             application: ApplicationExecutor::new(services.clone()),
             analysis: AnalysisRuntime {
@@ -180,7 +194,12 @@ impl ApiState {
                         std::process::id()
                     )),
                 )),
-                llm_batches: application::batch_governor::LlmBatchCoordinator::default(),
+                llm_batches: application::batch_governor::LlmBatchCoordinator::new(repository)
+                    .expect("LLM batch coordinator must initialize"),
+                llm_runtime_factory: Arc::new(llm_provider::LlmSemanticRuntimeFactory::new()),
+                realtime_adapter_factory: Arc::new(
+                    realtime_provider::NativeRealtimeAdapterFactory::new(),
+                ),
             },
             infrastructure: ApiInfrastructure {
                 token: token.into(),
@@ -193,6 +212,22 @@ impl ApiState {
     /// Injects the platform secret store (OS keychain in production).
     pub fn with_secret_store(mut self, secret_store: Arc<dyn SecretStore>) -> Self {
         self.infrastructure.secret_store = secret_store;
+        self
+    }
+
+    pub fn with_llm_runtime_factory(
+        mut self,
+        factory: Arc<dyn application::SemanticLlmRuntimeFactory>,
+    ) -> Self {
+        self.generative.llm_runtime_factory = factory;
+        self
+    }
+
+    pub fn with_realtime_adapter_factory(
+        mut self,
+        factory: Arc<dyn application::RealtimeConversationAdapterFactory>,
+    ) -> Self {
+        self.generative.realtime_adapter_factory = factory;
         self
     }
 
@@ -449,6 +484,31 @@ impl From<ApplicationError> for ApiError {
                     _ => (StatusCode::BAD_GATEWAY, false),
                 };
                 Self::new(status, "llm_provider_error", error.to_string(), retryable)
+            }
+            ApplicationError::RealtimeProvider(error) => {
+                use domain::RealtimeProviderError as E;
+                if matches!(error, E::Auth) {
+                    Self::new(
+                        StatusCode::BAD_REQUEST,
+                        "realtime_credential_missing",
+                        "realtime provider credential is missing",
+                        false,
+                    )
+                } else {
+                    let (status, retryable) = match &error {
+                        E::RateLimit { .. } => (StatusCode::TOO_MANY_REQUESTS, true),
+                        E::Timeout => (StatusCode::GATEWAY_TIMEOUT, true),
+                        E::Offline | E::Disconnected => (StatusCode::BAD_GATEWAY, true),
+                        E::UnsupportedCapability { .. } => (StatusCode::BAD_REQUEST, false),
+                        E::Protocol { .. } | E::Auth => (StatusCode::BAD_GATEWAY, false),
+                    };
+                    Self::new(
+                        status,
+                        "realtime_provider_error",
+                        error.to_string(),
+                        retryable,
+                    )
+                }
             }
             ApplicationError::SecretStore(error) => Self::internal(
                 StatusCode::INTERNAL_SERVER_ERROR,

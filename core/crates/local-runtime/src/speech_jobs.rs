@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 
 use api_events::{EventEnvelope, EventName};
-use application::{AppServices, ApplicationError, now_ms};
-use domain::SubtitleTrackId;
+use application::{
+    AppServices, ApplicationError, BackgroundJobStore, BackgroundJobTransition, now_ms,
+};
+use domain::{
+    BackgroundJob, BackgroundJobId, BackgroundJobKind, BackgroundJobStatus, SubtitleTrackId,
+};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 
@@ -48,35 +51,65 @@ pub struct CreateSpeechBatchJob {
     pub kind: SpeechBatchKind,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SpeechBatchPayload {
+    track_id: String,
+    kind: SpeechBatchKind,
+    result_count: usize,
+}
+
 #[derive(Clone)]
 pub struct SpeechBatchCoordinator {
     services: AppServices,
     events: broadcast::Sender<EventEnvelope>,
-    jobs: Arc<Mutex<HashMap<String, SpeechBatchJob>>>,
+    jobs: Arc<dyn BackgroundJobStore>,
 }
 
 impl SpeechBatchCoordinator {
-    pub fn new(services: AppServices, events: broadcast::Sender<EventEnvelope>) -> Self {
-        Self {
+    pub fn new(
+        services: AppServices,
+        events: broadcast::Sender<EventEnvelope>,
+        jobs: Arc<dyn BackgroundJobStore>,
+    ) -> Result<Arc<Self>, ApplicationError> {
+        let queued = jobs.recover_startup(BackgroundJobKind::SpeechBatch, now_ms())?;
+        let coordinator = Arc::new(Self {
             services,
             events,
-            jobs: Arc::new(Mutex::new(HashMap::new())),
+            jobs,
+        });
+        for job in queued {
+            coordinator.clone().start(job.id.as_str().to_owned());
         }
+        Ok(coordinator)
     }
 
     pub fn list(&self) -> Result<Vec<SpeechBatchJob>, ApplicationError> {
-        let mut values = self.lock_jobs()?.values().cloned().collect::<Vec<_>>();
-        values.sort_by_key(|job| job.created_at_ms);
-        Ok(values)
+        self.jobs
+            .list(BackgroundJobKind::SpeechBatch)?
+            .into_iter()
+            .map(speech_job)
+            .collect()
     }
 
     pub fn get(&self, id: &str) -> Result<Option<SpeechBatchJob>, ApplicationError> {
-        Ok(self.lock_jobs()?.get(id).cloned())
+        let id = BackgroundJobId::parse(id)?;
+        match self.jobs.get(&id)? {
+            Some(job) if job.kind == BackgroundJobKind::SpeechBatch => speech_job(job).map(Some),
+            _ => Ok(None),
+        }
     }
 
     pub fn create(
         self: Arc<Self>,
         request: CreateSpeechBatchJob,
+    ) -> Result<SpeechBatchJob, ApplicationError> {
+        self.create_with_retry(request, None)
+    }
+
+    fn create_with_retry(
+        self: Arc<Self>,
+        request: CreateSpeechBatchJob,
+        retry_of_job_id: Option<BackgroundJobId>,
     ) -> Result<SpeechBatchJob, ApplicationError> {
         let track_id = SubtitleTrackId::parse(request.track_id)?;
         let total = self
@@ -87,41 +120,58 @@ impl SpeechBatchCoordinator {
             .sentences
             .len();
         let created_at_ms = now_ms();
-        let job = SpeechBatchJob {
-            id: format!(
-                "speech-job-{}-{}",
-                created_at_ms,
-                JOB_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-            ),
-            track_id: track_id.as_str().into(),
-            kind: request.kind,
-            status: SpeechBatchStatus::Queued,
-            processed: 0,
-            total,
-            result_count: 0,
+        let id = BackgroundJobId::parse(format!(
+            "speech-job-{}-{}",
+            created_at_ms,
+            JOB_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ))?;
+        let record = BackgroundJob {
+            id,
+            kind: BackgroundJobKind::SpeechBatch,
+            status: BackgroundJobStatus::Queued,
+            payload_json: serde_json::to_string(&SpeechBatchPayload {
+                track_id: track_id.as_str().into(),
+                kind: request.kind,
+                result_count: 0,
+            })
+            .map_err(|error| ApplicationError::Repository(error.to_string()))?,
+            completed_units: 0,
+            total_units: total as u64,
             error: None,
-            retry_of_job_id: None,
+            retry_of_job_id,
             created_at_ms,
             updated_at_ms: created_at_ms,
         };
-        self.lock_jobs()?.insert(job.id.clone(), job.clone());
+        let job = speech_job(self.jobs.create(&record)?)?;
         self.start(job.id.clone());
         Ok(job)
     }
 
     pub fn cancel(&self, id: &str) -> Result<SpeechBatchJob, ApplicationError> {
-        let mut jobs = self.lock_jobs()?;
-        let job = jobs
-            .get_mut(id)
+        let id = BackgroundJobId::parse(id)?;
+        let mut record = self
+            .jobs
+            .get(&id)?
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
-        if matches!(
-            job.status,
-            SpeechBatchStatus::Queued | SpeechBatchStatus::Running
-        ) {
-            job.status = SpeechBatchStatus::Cancelled;
-            job.updated_at_ms = now_ms();
+        if record.kind != BackgroundJobKind::SpeechBatch {
+            return Err(ApplicationError::NotFound("speech batch job"));
         }
-        Ok(job.clone())
+        loop {
+            if !matches!(
+                record.status,
+                BackgroundJobStatus::Queued | BackgroundJobStatus::Running
+            ) {
+                return speech_job(record);
+            }
+            let expected = record.status;
+            let mut cancelled = record.clone();
+            cancelled.status = BackgroundJobStatus::Cancelled;
+            cancelled.updated_at_ms = now_ms();
+            match self.jobs.transition(expected, &cancelled)? {
+                BackgroundJobTransition::Applied(job) => return speech_job(job),
+                BackgroundJobTransition::Rejected(current) => record = current,
+            }
+        }
     }
 
     pub fn retry(self: Arc<Self>, id: &str) -> Result<SpeechBatchJob, ApplicationError> {
@@ -134,13 +184,14 @@ impl SpeechBatchCoordinator {
         ) {
             return Err(ApplicationError::Conflict("speech batch job is active"));
         }
-        let mut job = self.clone().create(CreateSpeechBatchJob {
-            track_id: old.track_id,
-            kind: old.kind,
-        })?;
-        job.retry_of_job_id = Some(old.id);
-        self.lock_jobs()?.insert(job.id.clone(), job.clone());
-        Ok(job)
+        let retry_of = BackgroundJobId::parse(old.id)?;
+        self.clone().create_with_retry(
+            CreateSpeechBatchJob {
+                track_id: old.track_id,
+                kind: old.kind,
+            },
+            Some(retry_of),
+        )
     }
 
     fn start(self: &Arc<Self>, id: String) {
@@ -149,7 +200,7 @@ impl SpeechBatchCoordinator {
     }
 
     fn run(&self, id: &str) {
-        if self.set_running(id).is_err() {
+        if !matches!(self.set_running(id), Ok(true)) {
             return;
         }
         let result = self.execute(id);
@@ -208,17 +259,23 @@ impl SpeechBatchCoordinator {
         self.complete(id, result_count)
     }
 
-    fn set_running(&self, id: &str) -> Result<(), ApplicationError> {
-        let mut jobs = self.lock_jobs()?;
-        let job = jobs
-            .get_mut(id)
+    fn set_running(&self, id: &str) -> Result<bool, ApplicationError> {
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
-        if job.status == SpeechBatchStatus::Cancelled {
-            return Ok(());
+        if record.status != BackgroundJobStatus::Queued {
+            return Ok(false);
         }
-        job.status = SpeechBatchStatus::Running;
-        job.updated_at_ms = now_ms();
-        Ok(())
+        let mut running = record;
+        running.status = BackgroundJobStatus::Running;
+        running.updated_at_ms = now_ms();
+        Ok(matches!(
+            self.jobs
+                .transition(BackgroundJobStatus::Queued, &running)?,
+            BackgroundJobTransition::Applied(_)
+        ))
     }
 
     fn progress(
@@ -227,32 +284,58 @@ impl SpeechBatchCoordinator {
         processed: usize,
         result_count: usize,
     ) -> Result<(), ApplicationError> {
-        let mut jobs = self.lock_jobs()?;
-        let job = jobs
-            .get_mut(id)
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
-        job.processed = processed;
-        job.result_count = result_count;
-        job.updated_at_ms = now_ms();
-        if processed == job.total || processed.is_multiple_of(100) {
-            self.emit_progress(job);
+        if record.status != BackgroundJobStatus::Running {
+            return Ok(());
+        }
+        let mut updated = record;
+        let mut payload = speech_payload(&updated)?;
+        payload.result_count = result_count;
+        updated.payload_json = serde_json::to_string(&payload)
+            .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+        updated.completed_units = processed as u64;
+        updated.updated_at_ms = now_ms();
+        if let BackgroundJobTransition::Applied(updated) = self
+            .jobs
+            .transition(BackgroundJobStatus::Running, &updated)?
+        {
+            let job = speech_job(updated)?;
+            if processed == job.total || processed.is_multiple_of(100) {
+                self.emit_progress(&job);
+            }
         }
         Ok(())
     }
 
     fn complete(&self, id: &str, result_count: usize) -> Result<(), ApplicationError> {
-        let mut jobs = self.lock_jobs()?;
-        let job = jobs
-            .get_mut(id)
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
-        if job.status == SpeechBatchStatus::Cancelled {
+        if record.status != BackgroundJobStatus::Running {
             return Ok(());
         }
-        job.status = SpeechBatchStatus::Completed;
-        job.processed = job.total;
-        job.result_count = result_count;
-        job.updated_at_ms = now_ms();
-        self.emit_progress(job);
+        let mut completed = record;
+        let mut payload = speech_payload(&completed)?;
+        payload.result_count = result_count;
+        completed.payload_json = serde_json::to_string(&payload)
+            .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+        completed.status = BackgroundJobStatus::Completed;
+        completed.completed_units = completed.total_units;
+        completed.updated_at_ms = now_ms();
+        let BackgroundJobTransition::Applied(completed) = self
+            .jobs
+            .transition(BackgroundJobStatus::Running, &completed)?
+        else {
+            return Ok(());
+        };
+        let job = speech_job(completed)?;
+        self.emit_progress(&job);
         match job.kind {
             SpeechBatchKind::PronunciationAnalysis => {
                 let _ = self.events.send(
@@ -282,23 +365,30 @@ impl SpeechBatchCoordinator {
     }
 
     fn fail(&self, id: &str, error: String) -> Result<(), ApplicationError> {
-        let mut jobs = self.lock_jobs()?;
-        let job = jobs
-            .get_mut(id)
+        let id = BackgroundJobId::parse(id)?;
+        let record = self
+            .jobs
+            .get(&id)?
             .ok_or(ApplicationError::NotFound("speech batch job"))?;
-        if job.status != SpeechBatchStatus::Cancelled {
-            job.status = SpeechBatchStatus::Failed;
-            job.error = Some(error);
-            job.updated_at_ms = now_ms();
+        if record.status != BackgroundJobStatus::Running {
+            return Ok(());
         }
+        let mut failed = record;
+        failed.status = BackgroundJobStatus::Failed;
+        failed.error = Some(error);
+        failed.updated_at_ms = now_ms();
+        let _ = self
+            .jobs
+            .transition(BackgroundJobStatus::Running, &failed)?;
         Ok(())
     }
 
     fn is_cancelled(&self, id: &str) -> Result<bool, ApplicationError> {
+        let id = BackgroundJobId::parse(id)?;
         Ok(self
-            .lock_jobs()?
-            .get(id)
-            .is_some_and(|job| job.status == SpeechBatchStatus::Cancelled))
+            .jobs
+            .get(&id)?
+            .is_some_and(|job| job.status == BackgroundJobStatus::Cancelled))
     }
 
     fn emit_progress(&self, job: &SpeechBatchJob) {
@@ -328,12 +418,64 @@ impl SpeechBatchCoordinator {
             .envelope(),
         );
     }
+}
 
-    fn lock_jobs(
-        &self,
-    ) -> Result<std::sync::MutexGuard<'_, HashMap<String, SpeechBatchJob>>, ApplicationError> {
-        self.jobs
-            .lock()
-            .map_err(|_| ApplicationError::Repository("speech batch job lock poisoned".into()))
+fn speech_payload(job: &BackgroundJob) -> Result<SpeechBatchPayload, ApplicationError> {
+    serde_json::from_str(&job.payload_json)
+        .map_err(|error| ApplicationError::Repository(error.to_string()))
+}
+
+fn speech_job(job: BackgroundJob) -> Result<SpeechBatchJob, ApplicationError> {
+    if job.kind != BackgroundJobKind::SpeechBatch {
+        return Err(ApplicationError::NotFound("speech batch job"));
+    }
+    let payload = speech_payload(&job)?;
+    Ok(SpeechBatchJob {
+        id: job.id.as_str().into(),
+        track_id: payload.track_id,
+        kind: payload.kind,
+        status: match job.status {
+            BackgroundJobStatus::Queued => SpeechBatchStatus::Queued,
+            BackgroundJobStatus::Running | BackgroundJobStatus::Cancelling => {
+                SpeechBatchStatus::Running
+            }
+            BackgroundJobStatus::Completed => SpeechBatchStatus::Completed,
+            BackgroundJobStatus::Cancelled => SpeechBatchStatus::Cancelled,
+            BackgroundJobStatus::Failed | BackgroundJobStatus::Interrupted => {
+                SpeechBatchStatus::Failed
+            }
+        },
+        processed: job.completed_units as usize,
+        total: job.total_units as usize,
+        result_count: payload.result_count,
+        error: job.error,
+        retry_of_job_id: job.retry_of_job_id.map(|id| id.as_str().into()),
+        created_at_ms: job.created_at_ms,
+        updated_at_ms: job.updated_at_ms,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn another_job_kind_cannot_be_deserialized_as_speech_batch() {
+        let job = BackgroundJob {
+            id: BackgroundJobId::parse("sound-id").unwrap(),
+            kind: BackgroundJobKind::SoundLine,
+            status: BackgroundJobStatus::Running,
+            payload_json: "{}".into(),
+            completed_units: 0,
+            total_units: 0,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        assert!(matches!(
+            speech_job(job),
+            Err(ApplicationError::NotFound("speech batch job"))
+        ));
     }
 }

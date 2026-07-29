@@ -1,6 +1,10 @@
 use std::sync::Arc;
+use std::sync::Barrier;
+use std::thread;
 
-use application::{InMemorySecretStore, SecretStore};
+use application::{
+    InMemorySecretStore, LlmProviderProfileRepository, SecretCleanupRepository, SecretStore,
+};
 
 use super::*;
 
@@ -203,4 +207,95 @@ fn resolving_a_deleted_secret_degrades_to_none_not_error() {
             .unwrap(),
         None
     );
+}
+
+#[test]
+fn profile_rotation_and_secret_cleanup_are_durably_linked() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let old_ref = LlmAuthRef::new("kc://llm/old");
+    let mut old = sample_profile(Some(old_ref.clone()));
+    repo.upsert_provider_profile(&old).unwrap();
+    old.auth_ref = Some(LlmAuthRef::new("kc://llm/new"));
+    repo.reserve_secret_cleanup(old.auth_ref.as_ref().unwrap())
+        .unwrap();
+    assert!(repo.pending_secret_cleanups().unwrap().is_empty());
+
+    repo.upsert_provider_profile_and_schedule_cleanup(&old)
+        .unwrap();
+
+    assert_eq!(
+        repo.pending_secret_cleanups().unwrap(),
+        vec![old_ref.clone()]
+    );
+    assert_eq!(
+        repo.get_provider_profile(&old.id)
+            .unwrap()
+            .unwrap()
+            .auth_ref,
+        old.auth_ref
+    );
+    repo.complete_secret_cleanup(&old_ref).unwrap();
+    assert!(repo.pending_secret_cleanups().unwrap().is_empty());
+}
+
+#[test]
+fn abandoned_secret_reservation_becomes_cleanup_work_after_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("secret-reservation.sqlite");
+    let auth_ref = LlmAuthRef::new("kc://llm/abandoned");
+    {
+        let repo = SqliteRepository::open(&database).unwrap();
+        repo.reserve_secret_cleanup(&auth_ref).unwrap();
+        assert!(repo.pending_secret_cleanups().unwrap().is_empty());
+    }
+
+    let reopened = SqliteRepository::open(&database).unwrap();
+    assert_eq!(reopened.recover_secret_cleanup_reservations().unwrap(), 1);
+    assert_eq!(reopened.pending_secret_cleanups().unwrap(), vec![auth_ref]);
+}
+
+#[test]
+fn concurrent_rotations_and_settings_updates_leave_every_secret_reachable() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let old_ref = LlmAuthRef::new("kc://llm/old-concurrent");
+    repo.upsert_provider_profile(&sample_profile(Some(old_ref.clone())))
+        .unwrap();
+    let first_ref = LlmAuthRef::new("kc://llm/new-a");
+    let second_ref = LlmAuthRef::new("kc://llm/new-b");
+    repo.reserve_secret_cleanup(&first_ref).unwrap();
+    repo.reserve_secret_cleanup(&second_ref).unwrap();
+    let barrier = Arc::new(Barrier::new(3));
+    let mut workers = Vec::new();
+    for auth_ref in [first_ref.clone(), second_ref.clone()] {
+        let repo = repo.clone();
+        let barrier = barrier.clone();
+        workers.push(thread::spawn(move || {
+            let profile = sample_profile(Some(auth_ref));
+            barrier.wait();
+            repo.upsert_provider_profile_and_schedule_cleanup(&profile)
+                .unwrap();
+        }));
+    }
+    barrier.wait();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+
+    let mut settings = sample_profile(None);
+    settings.display_name = "Concurrent settings".into();
+    let saved = repo
+        .upsert_provider_profile_preserving_credential(&settings)
+        .unwrap();
+    let active_ref = saved.auth_ref.expect("rotation remains active");
+    assert!(active_ref == first_ref || active_ref == second_ref);
+
+    let pending = repo.pending_secret_cleanups().unwrap();
+    assert!(pending.contains(&old_ref));
+    let losing_ref = if active_ref == first_ref {
+        second_ref
+    } else {
+        first_ref
+    };
+    assert!(pending.contains(&losing_ref));
+    assert!(!pending.contains(&active_ref));
 }

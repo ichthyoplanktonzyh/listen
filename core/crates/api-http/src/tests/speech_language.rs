@@ -1,4 +1,6 @@
 use super::*;
+use application::BackgroundJobStore;
+use domain::{BackgroundJob, BackgroundJobId, BackgroundJobKind, BackgroundJobStatus};
 
 #[tokio::test]
 async fn speech_batch_job_queues_ten_thousand_sentences_and_can_cancel_and_retry() {
@@ -123,6 +125,45 @@ async fn speech_batch_job_queues_ten_thousand_sentences_and_can_cancel_and_retry
 }
 
 #[tokio::test]
+async fn durable_job_ids_cannot_cross_speech_and_sound_line_routes() {
+    let (state, repo) = test_state_with_repository();
+    for (id, kind) in [
+        ("foreign-sound-job", BackgroundJobKind::SoundLine),
+        ("foreign-speech-job", BackgroundJobKind::SpeechBatch),
+    ] {
+        repo.create(&BackgroundJob {
+            id: BackgroundJobId::parse(id).unwrap(),
+            kind,
+            status: BackgroundJobStatus::Running,
+            payload_json: "{}".into(),
+            completed_units: 0,
+            total_units: 1,
+            error: None,
+            retry_of_job_id: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        })
+        .unwrap();
+    }
+    let app = router(state);
+    for (method, path) in [
+        ("GET", "/v1/speech/jobs/foreign-sound-job"),
+        ("POST", "/v1/speech/jobs/foreign-sound-job/cancel"),
+        ("GET", "/v1/sound-line/jobs/foreign-speech-job"),
+        ("POST", "/v1/sound-line/jobs/foreign-speech-job/cancel"),
+    ] {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(AUTHORIZATION, "Bearer secret")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
+    }
+}
+
+#[tokio::test]
 async fn language_routes_track_patch_and_terminal_job_clear_are_typed() {
     let app = test_app();
     let response = app
@@ -175,6 +216,7 @@ async fn language_routes_track_patch_and_terminal_job_clear_are_typed() {
     assert_eq!(profile["word_timeline"], "supported");
 
     let track = setup_phonetic_track(&app, "language-patch").await;
+    let original_sentence = track["sentences"][0].clone();
     let response = app
         .clone()
         .oneshot(
@@ -195,6 +237,19 @@ async fn language_routes_track_patch_and_terminal_job_clear_are_typed() {
     let updated: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
     assert_eq!(updated["language"], "zh-hant");
+    assert_eq!(updated["sentences"][0]["id"], original_sentence["id"]);
+    assert_eq!(
+        updated["sentences"][0]["original_text"],
+        original_sentence["original_text"]
+    );
+    assert_eq!(
+        updated["sentences"][0]["display_text"],
+        original_sentence["display_text"]
+    );
+    assert_ne!(
+        updated["sentences"][0]["tokens"], original_sentence["tokens"],
+        "language patch must rerun the target language tokenizer"
+    );
 
     let response = app
         .oneshot(

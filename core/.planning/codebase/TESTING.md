@@ -5,6 +5,7 @@
 ```sh
 ./scripts/test.sh --rust --strict
 ./scripts/validate-contracts.sh
+cargo deny check
 python3 -m unittest scripts/test_release_artifacts.py
 ```
 
@@ -12,9 +13,12 @@ python3 -m unittest scripts/test_release_artifacts.py
 
 - crate unit tests for domain/application/provider logic;
 - integration tests for SQLite, HTTP routes, lifecycle, and jobs;
+- failure-injection tests for background-job writes, credential cleanup retry,
+  migration-backup publication, and sidecar cancellation;
 - OpenAPI method+path parity and structural validation;
 - committed schema/example/fixture validation;
 - deterministic Python unit/contract tests;
+- architecture debt regression tests and dependency policy checks;
 - release archive safety, reproducibility, manifest, and SHA checks;
 - runtime smoke outside the source tree.
 

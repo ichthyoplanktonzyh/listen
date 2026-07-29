@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
-# LLPlayerNext unified test runner
+# listen-core unified test runner
 #
 # Usage:
 #   ./scripts/test.sh                      # --full (default)
-#   ./scripts/test.sh --quick              # fmt + clippy + Rust lib tests + analyze
+#   ./scripts/test.sh --quick              # fmt + clippy + Rust lib tests
 #   ./scripts/test.sh --rust               # Rust checks + tests
-#   ./scripts/test.sh --flutter            # Flutter checks + tests
-#   ./scripts/test.sh --full               # Everything + contracts
+#   ./scripts/test.sh --full               # Rust checks + tests + contracts
 #
 # Flags:
 #   --json       Machine-readable JSON output
 #   --verbose    Stream raw output (no capture)
 #   --debug      Print test.sh internal execution steps
 #   --strict     Treat warnings as errors and require Cargo.lock
-#   --low-memory Limit build/test concurrency and avoid repeated Flutter pub get
+#   --low-memory Limit Rust build/test concurrency
 #
 # Pass-through:
 #   ./scripts/test.sh --rust -- --nocapture --test-threads=1
-#   (appends to cargo test and flutter test commands)
+#   (appends to cargo test)
 
 set -euo pipefail
 
@@ -38,11 +37,7 @@ if [[ -z "$cargo_bin" ]]; then
 fi
 export PATH="$(dirname "$cargo_bin"):$PATH"
 
-# Resolve flutter
-flutter_bin="${FLUTTER:-$(command -v flutter || true)}"
-if [[ -z "$flutter_bin" ]]; then
-  flutter_bin="$HOME/.local/share/flutter/bin/flutter"
-fi
+contract_validator="${CONTRACT_VALIDATOR:-$root/scripts/validate-contracts.sh}"
 
 # ── argument parsing ──────────────────────────────────────────────────────
 
@@ -58,7 +53,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --quick)   MODE="quick";   shift ;;
     --rust)    MODE="rust";    shift ;;
-    --flutter) MODE="flutter"; shift ;;
     --full)    MODE="full";    shift ;;
     --json)    JSON_OUTPUT=true; shift ;;
     --verbose) VERBOSE=true;   shift ;;
@@ -94,16 +88,14 @@ NOW=$(date +%s)
 
 # ── check registry ────────────────────────────────────────────────────────
 # Each check: "name|category|command_type"
-# category: rust, flutter, contracts (used for mode filtering)
-# command_type: fmt, clippy, test, analyze, flutter_test, contracts
+# category: rust, contracts (used for mode filtering)
+# command_type: fmt, clippy, test, quick_test, contracts
 
 CHECKS=(
   "cargo fmt|rust|fmt"
   "cargo clippy|rust|clippy"
   "cargo test (lib)|rust|quick_test"
   "cargo test|rust|test"
-  "flutter analyze|flutter|analyze"
-  "flutter test|flutter|flutter_test"
   "contracts|contracts|contracts"
 )
 
@@ -125,14 +117,6 @@ extract_errors() {
       # Extract failure lines and FAILED result summaries
       grep -E '^test .* \.\.\. FAILED$' "$log" 2>/dev/null || true
       grep -E '^test result: FAILED' "$log" 2>/dev/null || true
-      ;;
-    analyze)
-      # Flutter analyze output: `error •`, `warning •`
-      grep -n -E 'error •|warning •' "$log" 2>/dev/null | head -20 || true
-      ;;
-    flutter_test)
-      # Extract test failures
-      grep -n -E 'FAILED|✗|Expected:|Actual:' "$log" 2>/dev/null | head -20 || true
       ;;
     contracts)
       # Contract validation errors
@@ -162,9 +146,6 @@ extract_summary() {
       done < <(grep -E '^test result:' "$log" 2>/dev/null || true)
       echo "$passed passed, $failed failed"
       ;;
-    flutter_test)
-      grep -E '^[0-9]+:[0-9]+ \+[0-9]+: ' "$log" 2>/dev/null | tail -1 || echo "ok"
-      ;;
     contracts)
       grep -E '^Validated' "$log" 2>/dev/null | head -1 || echo "ok"
       ;;
@@ -191,7 +172,7 @@ run_check() {
   local run_dir="$root"
   case "$type" in
     fmt)
-      cmd=("$cargo_bin" "fmt" "--check")
+      cmd=("$cargo_bin" "fmt" "--all" "--" "--check")
       ;;
     clippy)
       cmd=("$cargo_bin" "clippy" "--workspace" "--all-targets")
@@ -207,19 +188,8 @@ run_check() {
       $STRICT && cmd+=("--locked")
       [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("--" "${PASSTHROUGH[@]}")
       ;;
-    analyze)
-      cmd=("$flutter_bin" "analyze")
-      $STRICT && cmd+=("--fatal-infos" "--fatal-warnings")
-      run_dir="$root/apps/desktop"
-      ;;
-    flutter_test)
-      cmd=("$flutter_bin" "test")
-      $LOW_MEMORY && cmd+=("--concurrency=1" "--no-pub")
-      [[ ${#PASSTHROUGH[@]} -gt 0 ]] && cmd+=("${PASSTHROUGH[@]}")
-      run_dir="$root/apps/desktop"
-      ;;
     contracts)
-      cmd=("$root/scripts/validate-contracts.sh")
+      cmd=("$contract_validator")
       ;;
   esac
 
@@ -282,9 +252,8 @@ $(tail -20 "$log" 2>/dev/null || true)"
 should_run() {
   local category="$1"
   case "$MODE" in
-    quick)   [[ "$category" == "rust" || "$category" == "flutter" ]] && [[ "$category" != "test" ]] || return 1 ;;
+    quick)   [[ "$category" == "rust" ]] || return 1 ;;
     rust)    [[ "$category" == "rust" ]] || return 1 ;;
-    flutter) [[ "$category" == "flutter" ]] || return 1 ;;
     full)    return 0 ;;
   esac
 }
@@ -297,9 +266,9 @@ should_run_check() {
   fi
   case "$MODE" in
     quick)
-      # Include quick_test (lib unit only), skip full test/flutter_test/contracts
+      # Include quick_test (lib unit only), skip the full test suite and contracts.
       [[ "$type" == "quick_test" ]] && return 0
-      [[ "$type" != "test" && "$type" != "flutter_test" && "$type" != "contracts" ]] || return 1
+      [[ "$type" != "test" && "$type" != "contracts" ]] || return 1
       ;;
   esac
   return 0

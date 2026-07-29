@@ -231,7 +231,17 @@ def main() -> int:
             )
         timings.extend(sorted(segment_timings, key=lambda row: row["word_index"]))
 
-    json.dump({"timings": timings}, sys.stdout)
+    json.dump(
+        {
+            "timings": timings,
+            "provenance": {
+                "torchaudio_version": torchaudio.__version__,
+                "model_bundle": "torchaudio.pipelines.MMS_FA",
+                "model_asset": getattr(_BUNDLE, "_path", "unknown"),
+            },
+        },
+        sys.stdout,
+    )
     sys.stdout.write("\n")
     return 0
 

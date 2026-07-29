@@ -19,15 +19,15 @@ use domain::{
     RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
     RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
     RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
-    ReviewSchedule, SemanticJudgment, SemanticJudgmentId, SemanticRubric, SemanticRubricId,
-    SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis,
-    SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord, SoundFitCalibration,
-    SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackProvenance,
-    SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
-    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
-    WritingFindingDisposition, WritingFindingDispositionId,
+    ReviewSchedule, SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
+    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord,
+    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackProvenance, SubtitleTrackStatus, TimeMs, TranscriptionJob, TranscriptionJobId,
+    TranscriptionJobStatus, TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion,
+    UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation,
+    WordTimeline, WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding,
+    WritingFeedbackFindingId, WritingFindingDisposition, WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -58,6 +58,17 @@ pub trait MediaRepository: Send + Sync {
 
 pub trait SubtitleTrackRepository: Send + Sync {
     fn save_track(&self, track: &SubtitleTrack) -> Result<(), ApplicationError>;
+    /// Atomically persists the authoritative subtitle track and replaces its
+    /// complete rebuildable corpus projection.
+    ///
+    /// Import and language retokenization must use this unit-of-work boundary:
+    /// callers must never observe new subtitle sentences with an old or
+    /// missing corpus projection.
+    fn save_track_and_replace_corpus(
+        &self,
+        track: &SubtitleTrack,
+        occurrences: &[CorpusOccurrence],
+    ) -> Result<(), ApplicationError>;
     fn get_track(&self, id: &SubtitleTrackId) -> Result<Option<SubtitleTrack>, ApplicationError>;
     fn list_tracks_for_media(
         &self,
@@ -67,11 +78,6 @@ pub trait SubtitleTrackRepository: Send + Sync {
         &self,
         id: &SubtitleTrackId,
         status: SubtitleTrackStatus,
-    ) -> Result<SubtitleTrack, ApplicationError>;
-    fn set_track_language(
-        &self,
-        id: &SubtitleTrackId,
-        language: &LanguageCode,
     ) -> Result<SubtitleTrack, ApplicationError>;
     fn delete_track(&self, id: &SubtitleTrackId)
     -> Result<Option<SubtitleTrack>, ApplicationError>;
@@ -1092,7 +1098,18 @@ pub trait SemanticTaskRepository: Send + Sync {
 /// Phase 3.12 provider profiles. Unlike append-only semantic facts, a provider
 /// configuration is mutable: it may be edited or removed. Only routing metadata
 /// and an opaque `auth_ref` are stored; secrets live in the OS keychain.
-pub trait LlmProviderProfileRepository: Send + Sync {
+/// Durable outbox for removing opaque secret-store references. Profile
+/// mutations enqueue cleanup in the same database transaction; deletion from
+/// the OS keychain is retried until this outbox entry can be acknowledged.
+pub trait SecretCleanupRepository: Send + Sync {
+    fn reserve_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+    fn schedule_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+    fn recover_secret_cleanup_reservations(&self) -> Result<usize, ApplicationError>;
+    fn pending_secret_cleanups(&self) -> Result<Vec<SecretRef>, ApplicationError>;
+    fn complete_secret_cleanup(&self, auth_ref: &SecretRef) -> Result<(), ApplicationError>;
+}
+
+pub trait LlmProviderProfileRepository: SecretCleanupRepository {
     fn upsert_provider_profile(
         &self,
         profile: &LlmProviderProfile,
@@ -1103,12 +1120,28 @@ pub trait LlmProviderProfileRepository: Send + Sync {
     ) -> Result<Option<LlmProviderProfile>, ApplicationError>;
     fn list_provider_profiles(&self) -> Result<Vec<LlmProviderProfile>, ApplicationError>;
     fn delete_provider_profile(&self, id: &LlmProviderProfileId) -> Result<(), ApplicationError>;
+    fn upsert_provider_profile_preserving_credential(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError>;
+    /// Atomically commits the profile mutation and any stale credential's
+    /// durable cleanup-outbox entry.
+    fn upsert_provider_profile_and_schedule_cleanup(
+        &self,
+        profile: &LlmProviderProfile,
+    ) -> Result<LlmProviderProfile, ApplicationError>;
+    /// Atomically removes the profile and records its credential for retryable
+    /// cleanup.
+    fn delete_provider_profile_and_schedule_cleanup(
+        &self,
+        id: &LlmProviderProfileId,
+    ) -> Result<(), ApplicationError>;
 }
 
 /// Realtime provider config plus local session/turn facts. Provider events may
 /// update live transcript fields, but finalized local learner transcripts are
 /// immutable and repository implementations must reject divergent rewrites.
-pub trait RealtimeConversationRepository: Send + Sync {
+pub trait RealtimeConversationRepository: SecretCleanupRepository {
     fn upsert_realtime_profile(
         &self,
         profile: &RealtimeProviderProfile,
@@ -1119,6 +1152,18 @@ pub trait RealtimeConversationRepository: Send + Sync {
     ) -> Result<Option<RealtimeProviderProfile>, ApplicationError>;
     fn list_realtime_profiles(&self) -> Result<Vec<RealtimeProviderProfile>, ApplicationError>;
     fn delete_realtime_profile(
+        &self,
+        id: &RealtimeProviderProfileId,
+    ) -> Result<(), ApplicationError>;
+    /// Atomically commits the profile mutation and any stale credential's
+    /// durable cleanup-outbox entry.
+    fn upsert_realtime_profile_and_schedule_cleanup(
+        &self,
+        profile: &RealtimeProviderProfile,
+    ) -> Result<RealtimeProviderProfile, ApplicationError>;
+    /// Atomically removes the profile and records its credential for retryable
+    /// cleanup.
+    fn delete_realtime_profile_and_schedule_cleanup(
         &self,
         id: &RealtimeProviderProfileId,
     ) -> Result<(), ApplicationError>;
@@ -1160,6 +1205,16 @@ pub trait PlaybackProgressRepository: Send + Sync {
     fn save(&self, media_id: &MediaId, position: TimeMs) -> Result<(), ApplicationError>;
 }
 
+/// Result of an atomic transcription job state transition.
+///
+/// `Rejected` returns the current durable job so callers can stop stale work
+/// without performing a separate, racy read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranscriptionJobTransition {
+    Applied(TranscriptionJob),
+    Rejected(TranscriptionJob),
+}
+
 pub trait TranscriptionRepository: Send + Sync {
     fn upsert_model(
         &self,
@@ -1172,7 +1227,15 @@ pub trait TranscriptionRepository: Send + Sync {
     ) -> Result<Option<TranscriptionModelDescriptor>, ApplicationError>;
     fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError>;
     fn create_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError>;
-    fn update_job(&self, job: &TranscriptionJob) -> Result<TranscriptionJob, ApplicationError>;
+    /// Atomically replaces a job only while its durable status still equals
+    /// `expected_status`. This is the sole update interface for transcription
+    /// jobs: a stale worker must never overwrite cancellation or another
+    /// terminal transition.
+    fn transition_job(
+        &self,
+        expected_status: TranscriptionJobStatus,
+        job: &TranscriptionJob,
+    ) -> Result<TranscriptionJobTransition, ApplicationError>;
     fn get_job(
         &self,
         id: &TranscriptionJobId,

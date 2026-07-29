@@ -7,6 +7,9 @@ pub use language_profile::{
     CapabilitySupport, LanguageLearningProfile, available_languages, profile_for,
 };
 
+mod background_job;
+pub use background_job::*;
+
 mod lexical_unit;
 pub use lexical_unit::{LexicalUnit, baseline_normalized_key};
 
@@ -133,6 +136,7 @@ macro_rules! string_id {
 }
 
 string_id!(MediaId);
+string_id!(BackgroundJobId);
 string_id!(SubtitleTrackId);
 string_id!(SubtitleSentenceId);
 string_id!(DictionaryEntryId);

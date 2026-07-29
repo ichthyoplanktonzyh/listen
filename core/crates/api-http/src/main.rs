@@ -62,8 +62,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_coach_dashboard_repository(repository.clone())
         .with_semantic_embedding(repository.clone(), semantic_embedding.clone());
     let token = env::var("LLPLAYERNEXT_API_TOKEN").unwrap_or_else(|_| random_token());
-    let mut state = ApiState::new(services, repository, token.clone())
-        .with_secret_store(Arc::new(KeychainSecretStore::new()));
+    let secret_store = Arc::new(KeychainSecretStore::new());
+    let llm_cleanup = services
+        .llm_providers()
+        .recover_pending_secret_cleanups(secret_store.as_ref());
+    let realtime_cleanup = services
+        .realtime_conversations()
+        .recover_pending_secret_cleanups(secret_store.as_ref());
+    if llm_cleanup.is_err() || realtime_cleanup.is_err() {
+        tracing::warn!(
+            event = "secret_cleanup.retry_deferred",
+            "pending provider credential cleanup will be retried later"
+        );
+    }
+    let mut state =
+        ApiState::new(services, repository, token.clone()).with_secret_store(secret_store);
     let syntax_root = syntax_capability_root();
     let install_dir = syntax_root.join("spacy-3.8.13-en_core_web_sm-3.8.0");
     let syntax_provider = Arc::new(PythonSyntacticProvider::new(

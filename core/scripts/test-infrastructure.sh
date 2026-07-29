@@ -66,29 +66,37 @@ cat >"$tmp/cargo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'cargo %s\n' "$*" >>"$TEST_INFRA_COMMAND_LOG"
+if [[ -n "${TEST_INFRA_ENV_LOG:-}" ]]; then
+  printf 'CARGO_BUILD_JOBS=%s RUST_TEST_THREADS=%s RAYON_NUM_THREADS=%s\n' \
+    "${CARGO_BUILD_JOBS:-}" "${RUST_TEST_THREADS:-}" "${RAYON_NUM_THREADS:-}" \
+    >>"$TEST_INFRA_ENV_LOG"
+fi
 if [[ "${1:-}" == "test" ]]; then
   echo "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
 fi
 EOF
-cat >"$tmp/flutter" <<'EOF'
+cat >"$tmp/contracts" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-printf 'flutter %s\n' "$*" >>"$TEST_INFRA_COMMAND_LOG"
+printf 'contracts %s\n' "$*" >>"$TEST_INFRA_COMMAND_LOG"
+echo "Validated test contracts"
 EOF
-chmod +x "$tmp/cargo" "$tmp/flutter"
+chmod +x "$tmp/cargo" "$tmp/contracts"
 
 export CARGO="$tmp/cargo"
-export FLUTTER="$tmp/flutter"
+export CONTRACT_VALIDATOR="$tmp/contracts"
 export TEST_INFRA_COMMAND_LOG="$tmp/commands.log"
+export TEST_INFRA_ENV_LOG="$tmp/environment.log"
 
 bash "$root/scripts/test.sh" --quick --strict --json >"$tmp/quick.json"
 node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$tmp/quick.json"
 grep -Fq 'cargo test --workspace --lib --locked' "$TEST_INFRA_COMMAND_LOG" ||
   fail "quick mode did not run the locked Rust lib-test subset"
-grep -Fq 'flutter analyze --fatal-infos --fatal-warnings' "$TEST_INFRA_COMMAND_LOG" ||
-  fail "strict mode did not make Flutter analysis warnings fatal"
 if grep -Fxq 'cargo test --workspace --locked' "$TEST_INFRA_COMMAND_LOG"; then
   fail "quick mode ran the full Rust test suite"
+fi
+if grep -Fq 'contracts ' "$TEST_INFRA_COMMAND_LOG"; then
+  fail "quick mode ran contract validation"
 fi
 
 : >"$TEST_INFRA_COMMAND_LOG"
@@ -103,8 +111,29 @@ fi
 : >"$TEST_INFRA_COMMAND_LOG"
 bash "$root/scripts/test.sh" --full --low-memory --json >"$tmp/low-memory.json"
 node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$tmp/low-memory.json"
-grep -Fxq 'flutter test --concurrency=1 --no-pub' "$TEST_INFRA_COMMAND_LOG" ||
-  fail "low-memory mode did not limit Flutter test concurrency and reuse dependencies"
+grep -Fxq 'cargo test --workspace' "$TEST_INFRA_COMMAND_LOG" ||
+  fail "full mode did not run the full Rust test suite"
+grep -Fxq 'contracts ' "$TEST_INFRA_COMMAND_LOG" ||
+  fail "full mode did not run contract validation"
+grep -Fq 'CARGO_BUILD_JOBS=1 RUST_TEST_THREADS=1 RAYON_NUM_THREADS=1' "$TEST_INFRA_ENV_LOG" ||
+  fail "low-memory mode did not limit Rust build/test concurrency"
+
+: >"$TEST_INFRA_COMMAND_LOG"
+bash "$root/scripts/test.sh" --json >"$tmp/default.json"
+node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$tmp/default.json"
+grep -Fxq 'cargo test --workspace' "$TEST_INFRA_COMMAND_LOG" ||
+  fail "default mode did not run the full Rust test suite"
+grep -Fxq 'contracts ' "$TEST_INFRA_COMMAND_LOG" ||
+  fail "default mode did not run contract validation"
+
+set +e
+bash "$root/scripts/test.sh" --flutter >"$tmp/removed-mode.out" 2>"$tmp/removed-mode.err"
+removed_mode_rc=$?
+set -e
+[[ $removed_mode_rc -eq 2 ]] ||
+  fail "removed Flutter mode did not fail as an unknown flag"
+grep -Fq 'Unknown flag: --flutter' "$tmp/removed-mode.err" ||
+  fail "removed Flutter mode did not explain that the flag is unsupported"
 
 : >"$TEST_INFRA_COMMAND_LOG"
 bash "$root/scripts/test.sh" --rust -- --nocapture --test-threads=1 >"$tmp/passthrough.out"
