@@ -105,4 +105,11 @@ abstract final class ListenBreakpoints {
   /// which reads narrower than a full text column. Replaces the review card's
   /// hard-coded 680 (audit C4).
   static const cardColumnMax = 680.0;
+
+  /// A column of decisions rather than reading: the one heading, the one
+  /// primary action, and the settings folded under them. Narrower than a card
+  /// on purpose — a column this width reads as *one thing to do*, while a
+  /// wider one starts reading as a form. Used by the conversation lobby, whose
+  /// whole job is to get the learner talking rather than to be filled in.
+  static const formColumnMax = 560.0;
 }

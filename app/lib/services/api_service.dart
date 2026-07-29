@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../models/api_failure.dart';
 import '../models/coach_dashboard.dart';
 import '../models/listening.dart';
 import '../models/llm_provider.dart';
@@ -78,6 +79,23 @@ class SavedVocabularyCount {
 
 /// Raw HTTP exchange result used by the [LocalApi] transport seam.
 typedef ApiResponse = ({int statusCode, String body});
+
+/// Turns whatever a failed [LocalApi] call threw into the typed
+/// [ApiFailure] view.
+///
+/// This is the seam that stops transport text from becoming UI text.
+/// [LocalApi._request] throws `HttpException(responseBody, uri: …)`, so
+/// `'$error'` carries the backend's error envelope *and* the sidecar's
+/// localhost URI. Callers that want to react to a failure — retry it, log it,
+/// offer a disclosure — go through this instead of interpolating the
+/// exception, and controllers hand the result on as a typed field rather than
+/// a message string.
+///
+/// Lives here rather than in `models/` because recognising `HttpException` is
+/// transport knowledge; [ApiFailure.parse] itself stays a pure body parser.
+ApiFailure describeApiFailure(Object error) => error is HttpException
+    ? ApiFailure.parse(error.message)
+    : ApiFailure(raw: '$error');
 
 /// The pluggable transport behind [LocalApi]. Production uses a `dart:io`
 /// [HttpClient]; tests inject a fake so the client can be exercised without a

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/realtime_conversation_controller.dart';
+import '../../localization.dart';
 import '../../models/realtime_conversation.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/capability_viz.dart';
+import 'conversation_turn_failure.dart';
 
 /// 结束页 — the third room of the conversation (#70 Phase 2 · S9, issue #86).
 ///
@@ -168,11 +170,15 @@ class ConversationDebriefReflow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
     return Column(
       key: const ValueKey('conversation-debrief-readout'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('What came back', style: theme.textTheme.titleMedium),
+        Text(
+          l.text('realtimeDebriefWhatCameBack'),
+          style: theme.textTheme.titleMedium,
+        ),
         const SizedBox(height: ListenSpacing.gap12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,18 +195,22 @@ class ConversationDebriefReflow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${readout.learnerOutputTurns} of your '
-                    '${readout.learnerTurns} turns came back as learner '
-                    'output. Their words now carry speaking-channel evidence '
-                    'in your portrait.',
+                    l
+                        .text('realtimeDebriefReflow')
+                        .replaceAll('{output}', '${readout.learnerOutputTurns}')
+                        .replaceAll('{total}', '${readout.learnerTurns}'),
                     style: theme.textTheme.bodyMedium,
                   ),
                   if (!readout.settled) ...[
                     const SizedBox(height: ListenSpacing.gap6),
                     Text(
                       key: const ValueKey('conversation-debrief-provisional'),
-                      'Not final yet — ${readout.transcribingTurns} more '
-                      'still being transcribed locally.',
+                      l
+                          .text('realtimeDebriefProvisional')
+                          .replaceAll(
+                            '{count}',
+                            '${readout.transcribingTurns}',
+                          ),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -216,7 +226,7 @@ class ConversationDebriefReflow extends StatelessWidget {
                         ),
                         onPressed: onOpenVocabulary,
                         icon: const Icon(Icons.menu_book_outlined),
-                        label: const Text('Open the vocabulary book'),
+                        label: Text(l.text('realtimeDebriefOpenVocabulary')),
                       ),
                     ),
                   ],
@@ -245,13 +255,16 @@ class ConversationDebriefProgress extends StatelessWidget {
   Widget build(BuildContext context) {
     final done = readout.learnerTurns - readout.transcribingTurns;
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
     return Column(
       key: const ValueKey('conversation-debrief-progress'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Transcribing locally · $done of ${readout.learnerTurns} of your '
-          'turns done',
+          l
+              .text('realtimeDebriefTranscribingProgress')
+              .replaceAll('{done}', '$done')
+              .replaceAll('{total}', '${readout.learnerTurns}'),
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: ListenSpacing.gap6),
@@ -273,6 +286,7 @@ class ConversationDebriefTargets extends StatelessWidget {
     super.key,
     required this.targets,
     this.onSaveExpression,
+    this.onRetryTranscription,
   });
 
   final List<RealtimeConversationItem> targets;
@@ -280,26 +294,37 @@ class ConversationDebriefTargets extends StatelessWidget {
   /// Opens 我的表达 with this turn's text. Null keeps the section a read-out.
   final ValueChanged<RealtimeConversationItem>? onSaveExpression;
 
+  /// Reruns a turn's local transcription. Only ever reachable for a failure
+  /// the backend itself marked retryable.
+  final ValueChanged<RealtimeConversationItem>? onRetryTranscription;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Where the loop stayed open', style: theme.textTheme.titleMedium),
+        Text(
+          l.text('realtimeDebriefTargetsTitle'),
+          style: theme.textTheme.titleMedium,
+        ),
         const SizedBox(height: ListenSpacing.gap8),
         if (targets.isEmpty)
           Text(
             key: const ValueKey('conversation-debrief-targets-empty'),
-            'Every turn you took came back as your own words. Nothing was '
-            'lost on the way.',
+            l.text('realtimeDebriefTargetsEmpty'),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           )
         else
           for (final item in targets) ...[
-            _TargetCard(item: item, onSaveExpression: onSaveExpression),
+            _TargetCard(
+              item: item,
+              onSaveExpression: onSaveExpression,
+              onRetryTranscription: onRetryTranscription,
+            ),
             const SizedBox(height: ListenSpacing.gap8),
           ],
       ],
@@ -308,17 +333,24 @@ class ConversationDebriefTargets extends StatelessWidget {
 }
 
 class _TargetCard extends StatelessWidget {
-  const _TargetCard({required this.item, required this.onSaveExpression});
+  const _TargetCard({
+    required this.item,
+    required this.onSaveExpression,
+    required this.onRetryTranscription,
+  });
 
   final RealtimeConversationItem item;
   final ValueChanged<RealtimeConversationItem>? onSaveExpression;
+  final ValueChanged<RealtimeConversationItem>? onRetryTranscription;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
     // The stage's amber, spent on the one thing it is reserved for.
     final amber = theme.colorScheme.secondary;
     final guidance = item.providerText.trim();
+    final failure = item.failure;
     return DecoratedBox(
       key: ValueKey('conversation-debrief-target-${item.sequence}'),
       decoration: BoxDecoration(
@@ -332,21 +364,12 @@ class _TargetCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              switch (item.status) {
-                'interrupted' => 'This turn ended before it was transcribed',
-                _ => 'The local transcript never came back',
-              },
+              l.text(switch (item.status) {
+                'interrupted' => 'realtimeDebriefTargetEndedEarly',
+                _ => 'realtimeDebriefTargetNoTranscript',
+              }),
               style: theme.textTheme.labelLarge?.copyWith(color: amber),
             ),
-            if (item.error != null) ...[
-              const SizedBox(height: ListenSpacing.gap4),
-              Text(
-                item.error!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
             if (guidance.isNotEmpty) ...[
               const SizedBox(height: ListenSpacing.gap8),
               // All that survives of this turn is the provider's live caption,
@@ -354,12 +377,23 @@ class _TargetCard extends StatelessWidget {
               // saving it is you writing something down, not the portrait
               // gaining evidence.
               Text(
-                'Live provider caption · guidance only: "$guidance"',
+                l
+                    .text('realtimeDebriefGuidanceQuote')
+                    .replaceAll('{text}', guidance),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
+            // Why the loop stayed open, as diagnostics — closed by default and
+            // never as the card's prose.
+            if (failure != null)
+              ConversationTurnFailureNotice(
+                failure: failure,
+                onRetry: onRetryTranscription == null
+                    ? null
+                    : () => onRetryTranscription!(item),
+              ),
             if (onSaveExpression != null) ...[
               const SizedBox(height: ListenSpacing.gap8),
               Align(
@@ -370,7 +404,7 @@ class _TargetCard extends StatelessWidget {
                   ),
                   onPressed: () => onSaveExpression!(item),
                   icon: const Icon(Icons.bookmark_add_outlined),
-                  label: const Text('Keep it in my expressions'),
+                  label: Text(l.text('realtimeDebriefSaveExpression')),
                 ),
               ),
             ],
@@ -383,9 +417,18 @@ class _TargetCard extends StatelessWidget {
 
 /// Section 1 · 对话 — one card per turn, the local transcript as the body.
 class ConversationDebriefTurnCard extends StatefulWidget {
-  const ConversationDebriefTurnCard({super.key, required this.item});
+  const ConversationDebriefTurnCard({
+    super.key,
+    required this.item,
+    this.onRetryTranscription,
+  });
 
   final RealtimeConversationItem item;
+
+  /// Reruns this turn's local transcription. Null in hosts that cannot rerun
+  /// it; the affordance additionally requires the backend to have called the
+  /// failure retryable.
+  final ValueChanged<RealtimeConversationItem>? onRetryTranscription;
 
   @override
   State<ConversationDebriefTurnCard> createState() =>
@@ -400,6 +443,7 @@ class _ConversationDebriefTurnCardState
   Widget build(BuildContext context) {
     final item = widget.item;
     final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
     final learner = item.role == 'learner';
     // 色的角色分配 (charter): your language is the signal teal, the other
     // person's is 月白. The same two lights the stage used, at rest.
@@ -410,9 +454,7 @@ class _ConversationDebriefTurnCardState
       key: ValueKey('conversation-debrief-turn-${item.sequence}'),
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: edge, width: 3)),
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.5,
-        ),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: ListenRadii.panelBorder,
       ),
       child: Padding(
@@ -421,7 +463,11 @@ class _ConversationDebriefTurnCardState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              learner ? 'You · local Whisper transcript' : 'The other voice',
+              l.text(
+                learner
+                    ? 'realtimeDebriefLearnerLabel'
+                    : 'realtimeTurnOtherVoice',
+              ),
               style: theme.textTheme.labelLarge?.copyWith(
                 color: edge.withValues(alpha: 0.9),
               ),
@@ -438,12 +484,11 @@ class _ConversationDebriefTurnCardState
                       key: ValueKey(
                         'conversation-debrief-pending-${item.sequence}',
                       ),
-                      switch (item.status) {
-                        'failed' => 'The local transcript did not come back.',
-                        'interrupted' =>
-                          'This turn ended before it was transcribed.',
-                        _ => 'Transcribing locally…',
-                      },
+                      l.text(switch (item.status) {
+                        'failed' => 'realtimeDebriefTurnNotTranscribed',
+                        'interrupted' => 'realtimeDebriefTurnEndedEarly',
+                        _ => 'realtimeTurnTranscribingLocally',
+                      }),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontStyle: FontStyle.italic,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -451,7 +496,7 @@ class _ConversationDebriefTurnCardState
                     )
             else
               SelectableText(
-                guidance.isEmpty ? 'No text for this turn.' : guidance,
+                guidance.isEmpty ? l.text('realtimeDebriefNoText') : guidance,
               ),
             if (learner && guidance.isNotEmpty) ...[
               const SizedBox(height: ListenSpacing.gap6),
@@ -467,9 +512,11 @@ class _ConversationDebriefTurnCardState
                   onPressed: () =>
                       setState(() => _guidanceOpen = !_guidanceOpen),
                   child: Text(
-                    _guidanceOpen
-                        ? 'Hide the guidance version'
-                        : 'Guidance version (live provider caption)',
+                    l.text(
+                      _guidanceOpen
+                          ? 'realtimeDebriefHideGuidance'
+                          : 'realtimeDebriefShowGuidance',
+                    ),
                   ),
                 ),
               ),
@@ -484,13 +531,20 @@ class _ConversationDebriefTurnCardState
                   ),
                 ),
             ],
-            if (item.error != null) ...[
-              const SizedBox(height: ListenSpacing.gap4),
-              Text(
-                item.error!,
-                style: TextStyle(color: theme.colorScheme.error),
+            // The failure is already stated as this turn's body ("the local
+            // transcript did not come back"). What is left is a rerun, when
+            // the backend allows one, and the diagnostics — which stay closed
+            // and never join the transcript they sit under. This is the line
+            // that used to print `Could not process learner turn:
+            // HttpException: {"code":…,"correlation_id":…}, uri = http://
+            // 127.0.0.1:…` in the learner's own voice.
+            if (item.failure != null)
+              ConversationTurnFailureNotice(
+                failure: item.failure!,
+                onRetry: widget.onRetryTranscription == null
+                    ? null
+                    : () => widget.onRetryTranscription!(item),
               ),
-            ],
           ],
         ),
       ),
