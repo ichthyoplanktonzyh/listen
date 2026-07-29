@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
-import '../../theme/radii.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../subtitle/token_line.dart';
@@ -100,65 +100,67 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                 onPointerSignal: (event) {
                   if (event is PointerScrollEvent) _pauseFollowing();
                 },
-                child: Stack(
+                // A column, not a stack: the resume-following control is a
+                // strip attached under the list instead of a pill floating on
+                // top of it. The floating form covered the very sentence the
+                // reader had scrolled to (§3.7 / charter P2 — chrome does not
+                // sit on content), and it covered a different sentence at
+                // every window height.
+                child: Column(
                   children: [
-                    ListView.builder(
-                      controller: widget.scrollController,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemCount: widget.track!.cues.length,
-                      itemBuilder: (context, index) {
-                        final cue = widget.track!.cues[index];
-                        final selected = cue.id == widget.currentCue?.id;
-                        return KeyedSubtree(
-                          key: _keyFor(cue),
-                          child: ListTile(
-                            key: ValueKey('transcript-cue-${cue.id}'),
-                            selected: selected,
-                            selectedTileColor: colors.primaryContainer
-                                .withValues(alpha: 0.5),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 8,
-                            ),
-                            leading: SizedBox(
-                              width: 58,
-                              child: Text(
-                                formatDuration(cue.start),
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(color: colors.onSurfaceVariant),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: widget.scrollController,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: ListenSpacing.gap8,
+                        ),
+                        itemCount: widget.track!.cues.length,
+                        itemBuilder: (context, index) {
+                          final cue = widget.track!.cues[index];
+                          final selected = cue.id == widget.currentCue?.id;
+                          return KeyedSubtree(
+                            key: _keyFor(cue),
+                            child: ListTile(
+                              key: ValueKey('transcript-cue-${cue.id}'),
+                              selected: selected,
+                              selectedTileColor: colors.primaryContainer
+                                  .withValues(alpha: 0.5),
+                              contentPadding: ListenPadding.row,
+                              leading: SizedBox(
+                                width: 58,
+                                child: Text(
+                                  formatDuration(cue.start),
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: colors.onSurfaceVariant,
+                                      ),
+                                ),
                               ),
+                              title: TokenLine(
+                                cue: cue,
+                                profiles: widget.wordEntries,
+                                capabilityProfiles: widget.capabilityProfiles,
+                                showStyles: widget.showStyles,
+                                baseColor: effectiveBaseColor,
+                                onWord: widget.onWord,
+                                groupingMode: widget.groupingMode,
+                                chunkDisplayStyle: widget.chunkDisplayStyle,
+                                chunkPartition:
+                                    widget.chunkPartitionsBySentence[cue.id],
+                                senseGroups:
+                                    widget.senseGroupsBySentence[cue.id] ??
+                                    const [],
+                              ),
+                              onTap: () => widget.onSeekCue(cue),
                             ),
-                            title: TokenLine(
-                              cue: cue,
-                              profiles: widget.wordEntries,
-                              capabilityProfiles: widget.capabilityProfiles,
-                              showStyles: widget.showStyles,
-                              baseColor: effectiveBaseColor,
-                              onWord: widget.onWord,
-                              groupingMode: widget.groupingMode,
-                              chunkDisplayStyle: widget.chunkDisplayStyle,
-                              chunkPartition:
-                                  widget.chunkPartitionsBySentence[cue.id],
-                              senseGroups:
-                                  widget.senseGroupsBySentence[cue.id] ??
-                                  const [],
-                            ),
-                            onTap: () => widget.onSeekCue(cue),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                     if (!_following && widget.currentCue != null)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 14,
-                        child: Center(
-                          child: _BackToCurrentButton(
-                            label: l.text('backToCurrentSentence'),
-                            onPressed: _resumeFollowing,
-                          ),
-                        ),
+                      _BackToCurrentBar(
+                        label: l.text('backToCurrentSentence'),
+                        onPressed: _resumeFollowing,
                       ),
                   ],
                 ),
@@ -230,8 +232,15 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
   }
 }
 
-class _BackToCurrentButton extends StatelessWidget {
-  const _BackToCurrentButton({required this.label, required this.onPressed});
+/// The strip that offers to resume following the current sentence.
+///
+/// It takes its own row at the bottom edge of the list rather than floating
+/// over it: the transcript is content, and a control that hides a line of it
+/// is exactly the "chrome glows over content" the charter's P2 forbids. Being
+/// laid out also makes it honest about its cost — the list gets shorter while
+/// the offer stands, and gets its height back the moment following resumes.
+class _BackToCurrentBar extends StatelessWidget {
+  const _BackToCurrentBar({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
@@ -240,31 +249,38 @@ class _BackToCurrentButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Material(
-      color: colors.primary,
-      elevation: 3,
-      borderRadius: ListenRadii.panelBorder,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.vertical_align_center,
-                size: 18,
-                color: colors.onPrimary,
-              ),
-              const SizedBox(width: ListenSpacing.gap6),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: colors.onPrimary,
-                  fontWeight: FontWeight.w700,
+      key: const Key('transcript-back-to-current'),
+      color: colors.surfaceContainerLowest,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          child: Padding(
+            padding: ListenPadding.row,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.vertical_align_center,
+                  size: ListenIconSize.control,
+                  color: colors.primary,
                 ),
-              ),
-            ],
+                const SizedBox(width: ListenSpacing.gap6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -283,13 +299,17 @@ class _TranscriptEmptyState extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: ListenPadding.pageCompact,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.subtitles_outlined, size: 34, color: colors.primary),
+              Icon(
+                Icons.subtitles_outlined,
+                size: ListenIconSize.illustration,
+                color: colors.primary,
+              ),
               const SizedBox(height: ListenSpacing.gap12),
               Text(
                 l.text('noTranscriptTitle'),
