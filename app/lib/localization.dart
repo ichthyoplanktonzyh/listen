@@ -457,6 +457,10 @@ class AppLocalizations {
       'capabilityGapCenterLabel': 'recognized · not yet produced',
       'capabilityEchoSound': 'can hear {inN} · can say {outN}',
       'capabilityEchoText': 'can read {inN} · can write {outN}',
+      'capabilityEchoUnassessed':
+          'No assessment data yet. The bars appear once a channel has been '
+          'assessed.',
+      'capabilityAssessedScale': 'Assessed {n} of {total}',
       'coachGeneratedAt': 'Refreshed {time} · live from durable facts',
       'coachChannel_listening': 'Listening',
       'coachChannel_reading': 'Reading',
@@ -549,9 +553,6 @@ class AppLocalizations {
       'coachEvidenceEmpty': 'No source facts in this period.',
       // ── Coach as navigation (#81 · S2) ──
       'coachChannelEvidence': 'Channel evidence',
-      'coachPortraitHint':
-          'Tap a quadrant for that channel’s evidence, an echo bar for '
-          'the pair, the center figure for the gap list.',
       'coachChannelNoEvidence': 'No evidence for {channel} in this period.',
       'coachGapSourceHint':
           'The unlit part of this channel’s echo is where the gap comes '
@@ -2016,6 +2017,8 @@ class AppLocalizations {
       'capabilityGapCenterLabel': '能认 · 还不能产出',
       'capabilityEchoSound': '听得懂 {inN} · 说得出 {outN}',
       'capabilityEchoText': '读得懂 {inN} · 写得出 {outN}',
+      'capabilityEchoUnassessed': '还没有评估数据。任一通道有评估后，回声条就会出现。',
+      'capabilityAssessedScale': '已评估 {n} / {total}',
       'coachGeneratedAt': '刷新于 {time} · 直接读取持久事实',
       'coachChannel_listening': '听力',
       'coachChannel_reading': '阅读',
@@ -2093,7 +2096,6 @@ class AppLocalizations {
       'coachEvidenceEmpty': '该周期内没有来源事实。',
       // ── 教练页即导航（#81 · S2）──
       'coachChannelEvidence': '通道证据',
-      'coachPortraitHint': '点象限看该通道证据，点回声条看这一对，点环心去差距清单。',
       'coachChannelNoEvidence': '这段时间{channel}还没有证据。',
       'coachGapSourceHint': '回声条上没亮起来的那截，缺口就来自这里。',
       'coachTools': '工具与状态',

@@ -45,6 +45,29 @@ const _channelLabelKeys = <String, String>{
   'writing': 'capabilityWriting',
 };
 
+const _zeroCounts = CoachAssessmentSummary(
+  acquired: 0,
+  notAcquired: 0,
+  unassessed: 0,
+);
+
+/// One channel's counts out of a dashboard's list. A channel the backend did
+/// not send reads all-zero rather than vanishing from the 2x2.
+CoachAssessmentSummary _summaryFor(
+  List<CoachChannelSummary> channels,
+  String channel,
+) {
+  for (final summary in channels) {
+    if (summary.channel == channel) return summary.effectiveAssessments;
+  }
+  return _zeroCounts;
+}
+
+/// The four quadrant channels' counts, in quadrant order.
+List<CoachAssessmentSummary> _quadrantCounts(
+  List<CoachChannelSummary> channels,
+) => [for (final key in _quadrants.keys) _summaryFor(channels, key)];
+
 /// Shared color for a capability channel's effective assessment. Acquired is
 /// the signal teal (owner decision: the portrait glows with the same light as
 /// content), the practice target is amber — a target, not a failure red — and
@@ -78,23 +101,45 @@ int? crossModalGapCount(CoachDashboard dashboard) {
   return null;
 }
 
+/// The state a segment carries when it stands for the part of the shared
+/// scale a channel has not been assessed on. It is drawn as a dashed empty
+/// track, never as fill: ink is reserved for what has actually been measured.
+const capabilityUnmeasured = 'unmeasured';
+
+/// The shared scale behind both the compass and the echo bars: the largest
+/// *assessed* count (acquired + not acquired) across the given channels.
+///
+/// Deliberately excludes `unassessed`. A user's library is mostly words
+/// nobody has looked at yet, so scaling by the three-state total made every
+/// graphic draw "what we do not know" at full size and squeezed the measured
+/// evidence into a hairline. Scaling by the assessed total means a lit shape
+/// says "this much has been measured, and this much of it is acquired".
+int capabilityAssessedUnit(Iterable<CoachAssessmentSummary> counts) => counts
+    .map((summary) => summary.acquired + summary.notAcquired)
+    .fold(0, math.max);
+
 /// Pure segment maths for the compass ring, exposed for tests: returns
-/// (startDeg, sweepDeg, assessment) triples inside the channel's quadrant.
-/// With zero counts the whole quadrant reads unassessed.
+/// (startDeg, sweepDeg, state) triples inside the channel's quadrant.
+///
+/// [unit] is the shared scale from [capabilityAssessedUnit]. The acquired and
+/// not-acquired sweeps are proportional to it, and whatever is left of the
+/// quadrant is one [capabilityUnmeasured] segment. With nothing assessed
+/// anywhere — or nothing assessed on this channel — the whole quadrant reads
+/// unmeasured.
 List<(double, double, String)> compassSegments(
   String channel,
   int acquired,
   int notAcquired,
-  int unassessed,
+  int unit,
 ) {
   final (start, end, anchorAtEnd) = _quadrants[channel]!;
   final span = end - start;
-  final total = acquired + notAcquired + unassessed;
-  if (total == 0) return [(start, span, 'unassessed')];
+  final assessed = acquired + notAcquired;
+  if (unit <= 0 || assessed == 0) return [(start, span, capabilityUnmeasured)];
   var states = [
     ('acquired', acquired),
     ('not_acquired', notAcquired),
-    ('unassessed', unassessed),
+    (capabilityUnmeasured, math.max(unit - assessed, 0)),
   ];
   // Along the arc the acquired segment sits at the anchor.
   if (anchorAtEnd) states = states.reversed.toList(growable: false);
@@ -102,7 +147,7 @@ List<(double, double, String)> compassSegments(
   var cursor = start;
   for (final (state, count) in states) {
     if (count == 0) continue;
-    final sweep = span * count / total;
+    final sweep = span * count / unit;
     segments.add((cursor, sweep, state));
     cursor += sweep;
   }
@@ -279,16 +324,8 @@ class CapabilityCompass extends StatefulWidget {
 class _CapabilityCompassState extends State<CapabilityCompass> {
   String? _hovered;
 
-  CoachAssessmentSummary _counts(String channel) {
-    for (final summary in widget.channels) {
-      if (summary.channel == channel) return summary.effectiveAssessments;
-    }
-    return const CoachAssessmentSummary(
-      acquired: 0,
-      notAcquired: 0,
-      unassessed: 0,
-    );
-  }
+  CoachAssessmentSummary _counts(String channel) =>
+      _summaryFor(widget.channels, channel);
 
   bool get _interactive =>
       widget.onChannelTap != null || widget.onGapTap != null;
@@ -405,30 +442,38 @@ class _CompassPainter extends CustomPainter {
         Offset(mainStroke / 2, mainStroke / 2) &
         Size.square(size.width - mainStroke);
     _paintHighlight(canvas, size, rect, mainStroke);
+    final unit = capabilityAssessedUnit(counts.values);
     for (final entry in counts.entries) {
       final summary = entry.value;
       for (final (start, sweep, state) in compassSegments(
         entry.key,
         summary.acquired,
         summary.notAcquired,
-        summary.unassessed,
+        unit,
       )) {
-        final dim = state == 'unassessed';
-        // At aggregate scale the unassessed stock is a large area, so it dims
-        // all the way to the hairline color — present, never competing with
-        // the light (the tooltip carries its exact number).
-        final paint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = dim ? mainStroke * 0.4 : mainStroke
-          ..color = dim
-              ? colors.outlineVariant
-              : capabilityAssessmentColor(colors, state);
+        if (state == capabilityUnmeasured) {
+          // The unmeasured remainder costs no ink: a dashed hairline track
+          // marks how far the shared scale reaches, and the tooltip carries
+          // the exact unassessed number.
+          _strokeDashed(
+            canvas,
+            Path()..addArc(rect, _radians(start - 90), _radians(sweep)),
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = mainStroke * 0.4
+              ..color = colors.outlineVariant,
+          );
+          continue;
+        }
         canvas.drawArc(
           rect,
           _radians(start - 90),
           _radians(sweep),
           false,
-          paint,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = mainStroke
+            ..color = capabilityAssessmentColor(colors, state),
         );
       }
     }
@@ -472,16 +517,32 @@ class _CompassPainter extends CustomPainter {
 /// in" and "your echo" mirror each other. The reception channel's acquired
 /// height is repeated below the baseline as a dashed ghost — the unlit part
 /// of the ghost is the gap, drawn rather than computed.
+///
+/// The bars are scaled by [capabilityAssessedUnit], so a full bar means "the
+/// most-assessed channel" rather than "the size of your library". The words
+/// nobody has assessed yet are the dashed trough behind the fill plus a
+/// number in the caption — they are stated, not drawn at full size.
+///
+/// A bar is a gauge, not a field of color: [barWidth] keeps it narrow so four
+/// channels' worth of eight integers costs a few hundred square points of ink
+/// instead of filling the panel. Reading the shape must not cost the eye more
+/// than reading the numbers would.
 class CapabilityEchoBars extends StatelessWidget {
   const CapabilityEchoBars({
     super.key,
     required this.channels,
     this.barHeight = 96,
+    this.barWidth = 28,
     this.onPairTap,
   });
 
   final List<CoachChannelSummary> channels;
   final double barHeight;
+
+  /// The gauge's width. Deliberately narrow: widening this trades legibility
+  /// for saturated area, which is the failure mode this widget exists to
+  /// avoid.
+  final double barWidth;
 
   /// Called with the modality pair a column stands for — `sound`
   /// (listening↔speaking) or `text` (reading↔writing) — so the dashboard can
@@ -489,26 +550,24 @@ class CapabilityEchoBars extends StatelessWidget {
   /// (S2 · #81). Null keeps the bars a pure read-out.
   final ValueChanged<String>? onPairTap;
 
-  CoachAssessmentSummary _counts(String channel) {
-    for (final summary in channels) {
-      if (summary.channel == channel) return summary.effectiveAssessments;
-    }
-    return const CoachAssessmentSummary(
-      acquired: 0,
-      notAcquired: 0,
-      unassessed: 0,
-    );
-  }
-
-  int _total(CoachAssessmentSummary counts) =>
-      counts.acquired + counts.notAcquired + counts.unassessed;
+  CoachAssessmentSummary _counts(String channel) =>
+      _summaryFor(channels, channel);
 
   @override
   Widget build(BuildContext context) {
-    // One shared scale across all four channels keeps the bars honest.
-    final unit = _quadrants.keys
-        .map((channel) => _total(_counts(channel)))
-        .fold(0, math.max);
+    // One shared scale across all four channels keeps the bars comparable,
+    // and it counts only what has been assessed — see [capabilityAssessedUnit].
+    final unit = capabilityAssessedUnit(_quadrantCounts(channels));
+    if (unit == 0) {
+      // Nothing has been assessed on any channel. A bar drawn here would be
+      // four empty troughs pretending to be a reading; say so instead.
+      final colors = Theme.of(context).colorScheme;
+      return Text(
+        AppLocalizations.of(context).text('capabilityEchoUnassessed'),
+        key: const ValueKey('echo-bars-empty'),
+        style: ListenType.body.copyWith(color: colors.onSurfaceVariant),
+      );
+    }
     return Row(
       children: [
         Expanded(
@@ -519,6 +578,7 @@ class CapabilityEchoBars extends StatelessWidget {
             outCounts: _counts('speaking'),
             unit: unit,
             barHeight: barHeight,
+            barWidth: barWidth,
             gapLabelKey: 'capabilityEchoSound',
             ghostKey: const ValueKey('echo-ghost-sound'),
             onTap: onPairTap == null ? null : () => onPairTap!('sound'),
@@ -533,6 +593,7 @@ class CapabilityEchoBars extends StatelessWidget {
             outCounts: _counts('writing'),
             unit: unit,
             barHeight: barHeight,
+            barWidth: barWidth,
             gapLabelKey: 'capabilityEchoText',
             ghostKey: const ValueKey('echo-ghost-text'),
             onTap: onPairTap == null ? null : () => onPairTap!('text'),
@@ -543,7 +604,7 @@ class CapabilityEchoBars extends StatelessWidget {
   }
 }
 
-class _EchoColumn extends StatelessWidget {
+class _EchoColumn extends StatefulWidget {
   const _EchoColumn({
     required this.inChannel,
     required this.outChannel,
@@ -551,6 +612,7 @@ class _EchoColumn extends StatelessWidget {
     required this.outCounts,
     required this.unit,
     required this.barHeight,
+    required this.barWidth,
     required this.gapLabelKey,
     required this.ghostKey,
     this.onTap,
@@ -559,14 +621,42 @@ class _EchoColumn extends StatelessWidget {
   final String inChannel, outChannel, gapLabelKey;
   final CoachAssessmentSummary inCounts, outCounts;
   final int unit;
-  final double barHeight;
+  final double barHeight, barWidth;
   final Key ghostKey;
   final VoidCallback? onTap;
 
-  double _height(int count) => unit == 0 ? 0 : barHeight * count / unit;
+  @override
+  State<_EchoColumn> createState() => _EchoColumnState();
+}
 
-  String _channelLine(AppLocalizations l, String channel, int acquired) =>
-      '${l.text(_channelLabelKeys[channel]!)} · $acquired';
+class _EchoColumnState extends State<_EchoColumn> {
+  /// The mirror's own furniture: the hairline baseline and the air around it.
+  /// Element geometry, not spacing between siblings.
+  static const _baselineThickness = 1.2;
+  static const _baselineInset = 2.0;
+
+  /// The column's own affordance: hovering lifts the whole pair so the door
+  /// announces itself instead of needing a caption to explain it.
+  bool _hovered = false;
+
+  double _height(int count) =>
+      widget.unit == 0 ? 0 : widget.barHeight * count / widget.unit;
+
+  /// Reception bar + baseline + production bar. Known up front so the labels
+  /// beside the gauge can align to the same mirror without an intrinsic pass.
+  double get _mirrorHeight =>
+      widget.barHeight * 2 + _baselineInset * 2 + _baselineThickness;
+
+  String _channelLine(
+    AppLocalizations l,
+    String channel,
+    CoachAssessmentSummary counts,
+  ) => '${l.text(_channelLabelKeys[channel]!)} · ${counts.acquired}';
+
+  /// The unassessed stock left the graphic; it comes back as a number so no
+  /// information is lost with the ink.
+  String _unassessedLine(AppLocalizations l, CoachAssessmentSummary counts) =>
+      '${l.text('coachAssessmentUnassessed')} ${counts.unassessed}';
 
   String _tooltip(
     AppLocalizations l,
@@ -582,9 +672,10 @@ class _EchoColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
-    final ghostHeight = _height(inCounts.acquired);
+    final ghostHeight = _height(widget.inCounts.acquired);
     final caption = ListenType.caption.copyWith(color: colors.onSurfaceVariant);
     final column = _column(l, colors, ghostHeight, caption);
+    final onTap = widget.onTap;
     // The bars keep the design doc's deliberate width instead of stretching
     // across whatever the dashboard grants the column.
     return Align(
@@ -595,16 +686,33 @@ class _EchoColumn extends StatelessWidget {
             ? column
             : InkWell(
                 onTap: onTap,
+                // InkWell already carries SystemMouseCursors.click; this adds
+                // the visible lift at the shared hover tempo.
+                onHover: (hovering) {
+                  if (hovering != _hovered) {
+                    setState(() => _hovered = hovering);
+                  }
+                },
                 borderRadius: ListenRadii.surfaceBorder,
                 // Keyboard and screen readers get the same door as the
                 // pointer: the pair reads as one button.
                 child: Semantics(
                   button: true,
                   label:
-                      '${l.text(_channelLabelKeys[inChannel]!)} · '
-                      '${l.text(_channelLabelKeys[outChannel]!)}',
-                  child: Padding(
+                      '${l.text(_channelLabelKeys[widget.inChannel]!)} · '
+                      '${l.text(_channelLabelKeys[widget.outChannel]!)}',
+                  child: AnimatedContainer(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : ListenMotion.hover,
+                    curve: ListenMotion.move,
                     padding: const EdgeInsets.all(ListenSpacing.gap4),
+                    decoration: BoxDecoration(
+                      borderRadius: ListenRadii.surfaceBorder,
+                      color: colors.primary.withValues(
+                        alpha: _hovered ? 0.1 : 0,
+                      ),
+                    ),
                     child: column,
                   ),
                 ),
@@ -622,80 +730,155 @@ class _EchoColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_channelLine(l, inChannel, inCounts.acquired), style: caption),
-        const SizedBox(height: ListenSpacing.gap4),
-        Tooltip(
-          message: _tooltip(l, inChannel, inCounts),
-          child: SizedBox(
-            height: barHeight,
-            width: double.infinity,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                _segment(colors, 'unassessed', inCounts.unassessed),
-                _segment(colors, 'not_acquired', inCounts.notAcquired),
-                _segment(colors, 'acquired', inCounts.acquired),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Container(height: 1.2, color: colors.outlineVariant),
-        ),
-        Tooltip(
-          message: _tooltip(l, outChannel, outCounts),
-          child: SizedBox(
-            height: barHeight,
-            width: double.infinity,
-            child: Stack(
-              children: [
-                Column(
+        // The gauge keeps the mirror; the labels stand beside it. Moving the
+        // captions out of the stack is what lets the bar be narrow without
+        // squeezing the text.
+        SizedBox(
+          height: _mirrorHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: widget.barWidth,
+                child: _mirror(l, colors, ghostHeight),
+              ),
+              const SizedBox(width: ListenSpacing.gap12),
+              Expanded(
+                child: Column(
+                  // Each channel's reading sits against its own half of the
+                  // mirror: reception up top, production down below.
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _segment(colors, 'acquired', outCounts.acquired),
-                    _segment(colors, 'not_acquired', outCounts.notAcquired),
-                    _segment(colors, 'unassessed', outCounts.unassessed),
+                    _readout(l, widget.inChannel, widget.inCounts, caption),
+                    _readout(l, widget.outChannel, widget.outCounts, caption),
                   ],
                 ),
-                if (ghostHeight > 0)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    child: SizedBox(
-                      key: ghostKey,
-                      height: ghostHeight,
-                      child: CustomPaint(
-                        painter: _DashedRectPainter(color: colors.secondary),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: ListenSpacing.gap4),
-        Text(_channelLine(l, outChannel, outCounts.acquired), style: caption),
-        const SizedBox(height: ListenSpacing.gap4),
+        const SizedBox(height: ListenSpacing.gap8),
         Text(
           l
-              .text(gapLabelKey)
-              .replaceFirst('{inN}', '${inCounts.acquired}')
-              .replaceFirst('{outN}', '${outCounts.acquired}'),
+              .text(widget.gapLabelKey)
+              .replaceFirst('{inN}', '${widget.inCounts.acquired}')
+              .replaceFirst('{outN}', '${widget.outCounts.acquired}'),
           style: ListenType.caption.copyWith(color: colors.secondary),
         ),
       ],
     );
   }
 
-  // Large-area unassessed segments dim to the hairline color (see the
-  // compass painter's note); lit states keep the shared assessment colors.
+  Widget _mirror(AppLocalizations l, ColorScheme colors, double ghostHeight) =>
+      Column(
+        children: [
+          Tooltip(
+            message: _tooltip(l, widget.inChannel, widget.inCounts),
+            child: _trough(
+              colors,
+              Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _segment(colors, 'not_acquired', widget.inCounts.notAcquired),
+                  _segment(colors, 'acquired', widget.inCounts.acquired),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: _baselineInset),
+            child: Container(
+              height: _baselineThickness,
+              color: colors.outlineVariant,
+            ),
+          ),
+          Tooltip(
+            message: _tooltip(l, widget.outChannel, widget.outCounts),
+            child: _trough(
+              colors,
+              Stack(
+                children: [
+                  Positioned.fill(
+                    child: Column(
+                      children: [
+                        _segment(colors, 'acquired', widget.outCounts.acquired),
+                        _segment(
+                          colors,
+                          'not_acquired',
+                          widget.outCounts.notAcquired,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (ghostHeight > 0)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: SizedBox(
+                        key: widget.ghostKey,
+                        height: ghostHeight,
+                        child: CustomPaint(
+                          painter: _DashedRectPainter(color: colors.secondary),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Widget _readout(
+    AppLocalizations l,
+    String channel,
+    CoachAssessmentSummary counts,
+    TextStyle caption,
+  ) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(_channelLine(l, channel, counts), style: caption),
+      Text(_unassessedLine(l, counts), style: caption),
+    ],
+  );
+
+  /// The bar's full extent on the shared scale, drawn as a dashed empty slot.
+  /// What has not been assessed is a boundary, not a filled area — the ink
+  /// inside it is exactly what has been measured.
+  Widget _trough(ColorScheme colors, Widget child) => SizedBox(
+    height: widget.barHeight,
+    width: double.infinity,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomPaint(painter: _DashedRectPainter(color: colors.outlineVariant)),
+        child,
+      ],
+    ),
+  );
+
+  // Only the two assessed states are drawn; they keep the shared assessment
+  // colors so a bar reads the same as a compass quadrant.
   Widget _segment(ColorScheme colors, String state, int count) => Container(
     height: _height(count),
-    color: state == 'unassessed'
-        ? colors.outlineVariant
-        : capabilityAssessmentColor(colors, state),
+    color: capabilityAssessmentColor(colors, state),
   );
+}
+
+/// Strokes [path] as a dashed line. The one dashing routine behind every
+/// "outlined, not filled" shape in this file — ghosts, troughs and the
+/// compass's unmeasured arcs all draw the same absence the same way.
+void _strokeDashed(Canvas canvas, Path path, Paint paint, {double dash = 4}) {
+  for (final metric in path.computeMetrics()) {
+    var distance = 0.0;
+    while (distance < metric.length) {
+      canvas.drawPath(metric.extractPath(distance, distance + dash), paint);
+      distance += dash * 2;
+    }
+  }
 }
 
 class _DashedRectPainter extends CustomPainter {
@@ -705,19 +888,14 @@ class _DashedRectPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = color;
-    const dash = 4.0;
-    final path = Path()..addRect(Offset.zero & size);
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        canvas.drawPath(metric.extractPath(distance, distance + dash), paint);
-        distance += dash * 2;
-      }
-    }
+    _strokeDashed(
+      canvas,
+      Path()..addRect(Offset.zero & size),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..color = color,
+    );
   }
 
   @override
@@ -725,8 +903,26 @@ class _DashedRectPainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
+/// The widest three-state total across the given channels — the lexical
+/// library the portrait is drawn against.
+///
+/// Every channel reports on the same words, so this is a max rather than a
+/// sum: adding the four channels' totals would invent a library four times
+/// the real one. Presentation reads existing counts; it never derives a new
+/// metric.
+int capabilityLibrarySize(Iterable<CoachAssessmentSummary> counts) => counts
+    .map((summary) => summary.acquired + summary.notAcquired + summary.unassessed)
+    .fold(0, math.max);
+
 /// The dashboard's portrait section: compass overview beside the echo-bar
 /// channel detail, stacking on narrow layouts.
+///
+/// Under both graphics sits one caption-sized readout of the shared scale
+/// ("Assessed 8 of 208"). The graphics answer *shape* — within what has been
+/// measured, this is how the four channels stand — and the line answers *how
+/// much has been measured*. Neither has to distort itself to carry the
+/// other's job: a nearly-full ring cannot read as "you are nearly done" while
+/// the line says only 8 of 208 words have been looked at.
 class CapabilityPortrait extends StatelessWidget {
   const CapabilityPortrait({
     super.key,
@@ -755,25 +951,53 @@ class CapabilityPortrait extends StatelessWidget {
       onGapTap: onGapTap,
     );
     final bars = CapabilityEchoBars(channels: channels, onPairTap: onPairTap);
-    return LayoutBuilder(
-      builder: (context, constraints) =>
-          constraints.maxWidth >= ListenBreakpoints.capabilityPortraitSideBySide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                compass,
-                const SizedBox(width: ListenSpacing.gap24),
-                Expanded(child: bars),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(child: compass),
-                const SizedBox(height: ListenSpacing.gap16),
-                bars,
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) =>
+              constraints.maxWidth >=
+                  ListenBreakpoints.capabilityPortraitSideBySide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    compass,
+                    const SizedBox(width: ListenSpacing.gap24),
+                    Expanded(child: bars),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(child: compass),
+                    const SizedBox(height: ListenSpacing.gap16),
+                    bars,
+                  ],
+                ),
+        ),
+        _scaleLine(context),
+      ],
+    );
+  }
+
+  /// How much of the library the shapes above were drawn from. Without it a
+  /// well-filled ring built on eight assessed words would read as progress.
+  Widget _scaleLine(BuildContext context) {
+    final counts = _quadrantCounts(channels);
+    final library = capabilityLibrarySize(counts);
+    if (library == 0) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: ListenSpacing.gap12),
+      child: Text(
+        AppLocalizations.of(context)
+            .text('capabilityAssessedScale')
+            .replaceFirst('{n}', '${capabilityAssessedUnit(counts)}')
+            .replaceFirst('{total}', '$library'),
+        style: ListenType.caption.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
     );
   }
 }
