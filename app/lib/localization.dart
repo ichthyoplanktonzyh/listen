@@ -1476,6 +1476,25 @@ class AppLocalizations {
       'realtimeFailureSurfaceDisposed':
           'The conversation closed before this turn finished.',
       'realtimeFailureUnknown': 'This turn did not finish.',
+      // ── Conversation-level notices ──
+      'realtimeNoticeProvidersNotLoaded':
+          'The realtime voices could not be loaded.',
+      'realtimeNoticeHistoryNotLoaded':
+          'Your past conversations could not be loaded.',
+      'realtimeNoticeTurnsNotLoaded': 'This conversation could not be opened.',
+      'realtimeNoticeNoVoiceSelected': 'Pick a voice before starting.',
+      'realtimeNoticeNoTopicSelected': 'Choose a topic before starting.',
+      'realtimeNoticeStartFailed': 'The conversation could not be started.',
+      'realtimeNoticeConnectionFailed':
+          'The connection to the voice service failed.',
+      'realtimeNoticeProviderDisconnected': 'The voice service disconnected.',
+      'realtimeNoticeProviderError':
+          'The voice service reported a problem with this conversation.',
+      'realtimeNoticeProviderEventInvalid':
+          'The voice service sent something this app could not read.',
+      'realtimeNoticeFinishFailed':
+          'This conversation could not be finished cleanly.',
+      'realtimeNoticeUnknown': 'Something went wrong in this conversation.',
       // ── Conversation debrief (结束页) ──
       'realtimeDebriefBack': 'Back to conversations',
       'realtimeDebriefWhatCameBack': 'What came back',
@@ -3021,6 +3040,19 @@ class AppLocalizations {
       'realtimeFailureDrainTimeout': '服务方没有在规定时间内说完这一轮。',
       'realtimeFailureSurfaceDisposed': '这一轮还没完成，对话就关闭了。',
       'realtimeFailureUnknown': '这一轮没有走完。',
+      // ── 对话级提示 ──
+      'realtimeNoticeProvidersNotLoaded': '没能加载实时语音。',
+      'realtimeNoticeHistoryNotLoaded': '没能加载你过往的对话。',
+      'realtimeNoticeTurnsNotLoaded': '这次对话没能打开。',
+      'realtimeNoticeNoVoiceSelected': '开始之前先选一个声音。',
+      'realtimeNoticeNoTopicSelected': '开始之前先选一个话题。',
+      'realtimeNoticeStartFailed': '这次对话没能开始。',
+      'realtimeNoticeConnectionFailed': '与语音服务的连接失败了。',
+      'realtimeNoticeProviderDisconnected': '语音服务断开了连接。',
+      'realtimeNoticeProviderError': '语音服务报告这次对话出了问题。',
+      'realtimeNoticeProviderEventInvalid': '语音服务发来了本应用读不懂的内容。',
+      'realtimeNoticeFinishFailed': '这次对话没能正常收尾。',
+      'realtimeNoticeUnknown': '这次对话出了点问题。',
       // ── 对话结束页 ──
       'realtimeDebriefBack': '回到对话列表',
       'realtimeDebriefWhatCameBack': '带回来了什么',

@@ -285,7 +285,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                       ],
                       const SizedBox(height: ListenSpacing.gap24),
                       if (state.error != null) ...[
-                        _notice(context, state.error!, true),
+                        ConversationNoticeBar(notice: state.error!),
                         const SizedBox(height: ListenSpacing.gap12),
                       ],
                       // The one action. Everything else on this screen is
@@ -341,7 +341,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
           ),
         ),
         if (state.historyError != null)
-          _notice(context, state.historyError!, true),
+          ConversationNoticeBar(notice: state.historyError!),
         if (state.historyLoading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: ListenSpacing.gap16),
@@ -364,7 +364,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
       ),
       const SizedBox(height: ListenSpacing.gap8),
       if (state.historyError != null)
-        _notice(context, state.historyError!, true),
+        ConversationNoticeBar(notice: state.historyError!),
       if (state.historyLoading)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: ListenSpacing.gap16),
@@ -455,7 +455,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
             const SizedBox(height: ListenSpacing.gap16),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
-              child: _notice(context, state.error!, true),
+              child: ConversationNoticeBar(notice: state.error!),
             ),
           ],
         ],
@@ -531,7 +531,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (state.error != null)
-                        _notice(context, state.error!, true),
+                        ConversationNoticeBar(notice: state.error!),
                       // P4, first thing on the page: while local Whisper is
                       // still running the debrief says so instead of laying
                       // out a finished-looking transcript.
@@ -650,17 +650,6 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
     RealtimeConversationActivity.listening => 'realtimeActivityListening',
     RealtimeConversationActivity.inactive => 'realtimeActivityPreparing',
   });
-
-  Widget _notice(BuildContext context, String text, bool error) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: error
-          ? Theme.of(context).colorScheme.errorContainer
-          : Theme.of(context).colorScheme.secondaryContainer,
-      borderRadius: ListenRadii.controlBorder,
-    ),
-    child: Text(text),
-  );
 
   /// Hands off to the settings domain and re-reads the voices on return, so a
   /// voice added there is selectable without leaving the conversation.

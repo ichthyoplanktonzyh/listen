@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/api_failure.dart';
 import '../../models/realtime_conversation.dart';
+import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 
 /// One sentence for a turn's failure kind — the *named state*, never the
@@ -27,6 +28,82 @@ String conversationTurnFailureText(String kind, AppLocalizations l) =>
       'surface_disposed' => 'realtimeFailureSurfaceDisposed',
       _ => 'realtimeFailureUnknown',
     });
+
+/// One sentence for a conversation-level notice — same rule as
+/// [conversationTurnFailureText], one level up.
+///
+/// These are the strings that used to be built by interpolation
+/// (`'Realtime connection failed: $error'`), so the notice bar showed the
+/// learner an `HttpException`, a `correlation_id` and a localhost port on the
+/// very screen the turn card had just been cleaned up.
+String conversationNoticeText(String kind, AppLocalizations l) =>
+    l.text(switch (kind) {
+      'providers_not_loaded' => 'realtimeNoticeProvidersNotLoaded',
+      'history_not_loaded' => 'realtimeNoticeHistoryNotLoaded',
+      'turns_not_loaded' => 'realtimeNoticeTurnsNotLoaded',
+      'no_voice_selected' => 'realtimeNoticeNoVoiceSelected',
+      'no_topic_selected' => 'realtimeNoticeNoTopicSelected',
+      'start_failed' => 'realtimeNoticeStartFailed',
+      'connection_failed' => 'realtimeNoticeConnectionFailed',
+      'provider_disconnected' => 'realtimeNoticeProviderDisconnected',
+      'provider_error' => 'realtimeNoticeProviderError',
+      'provider_event_invalid' => 'realtimeNoticeProviderEventInvalid',
+      'finish_failed' => 'realtimeNoticeFinishFailed',
+      _ => 'realtimeNoticeUnknown',
+    });
+
+/// The conversation's error strip: one sentence, plus the reference id when
+/// there is one.
+///
+/// Deliberately thinner than [ConversationTurnFailureNotice]. A strip has no
+/// room for a disclosure, and the notice cases are things the learner can
+/// mostly act on directly ("pick a voice", "the service disconnected") — so
+/// the only diagnostic it carries is the id that ties a bug report to a
+/// backend log line. The error code, the operator-facing message and
+/// [ApiFailure.raw] all stay off screen entirely.
+class ConversationNoticeBar extends StatelessWidget {
+  const ConversationNoticeBar({super.key, required this.notice});
+
+  final RealtimeConversationNotice notice;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final reference = notice.detail?.correlationId;
+    return Container(
+      key: const ValueKey('realtime-notice'),
+      padding: const EdgeInsets.all(ListenSpacing.gap12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer,
+        borderRadius: ListenRadii.controlBorder,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            conversationNoticeText(notice.kind, l),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onErrorContainer,
+            ),
+          ),
+          if (reference != null) ...[
+            const SizedBox(height: ListenSpacing.gap4),
+            SelectableText(
+              key: const ValueKey('realtime-notice-reference'),
+              l.text('realtimeFailureReference').replaceAll('{id}', reference),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer.withValues(
+                  alpha: 0.8,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 /// The two affordances a failed turn is allowed to grow, under the sentence
 /// its host already wrote: a retry, and a way to see what actually happened.

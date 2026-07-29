@@ -137,6 +137,33 @@ class RealtimeTurnFailure {
   bool get retryable => detail?.isRetryable ?? false;
 }
 
+/// Something that went wrong with the *conversation*, rather than with one
+/// turn inside it — loading the voices, opening a past session, reaching the
+/// provider, finishing cleanly.
+///
+/// The sibling of [RealtimeTurnFailure], and it exists for the same reason.
+/// Plugging the turn card's leak while the notice bar still rendered
+/// `'Realtime connection failed: $error'` would only have moved the exception
+/// a few hundred pixels up the same screen: the learner would still read an
+/// `HttpException`, a `correlation_id` and a localhost port, just in a red
+/// strip instead of a card.
+///
+/// So a notice is a [kind] the UI turns into a sentence, plus optional typed
+/// [detail]. The notice bar is a single strip with no room for a disclosure,
+/// so it shows at most the reference id — enough to make a bug report
+/// actionable, and nothing a learner has to decode.
+class RealtimeConversationNotice {
+  const RealtimeConversationNotice({required this.kind, this.detail});
+
+  /// Named state: `providers_not_loaded`, `connection_failed`, … Never
+  /// rendered raw.
+  final String kind;
+
+  /// Transport diagnostics, when the notice came from a request. Null for the
+  /// ones the client decides locally (no voice picked, no topic chosen).
+  final ApiFailure? detail;
+}
+
 class RealtimeConversationItem {
   const RealtimeConversationItem({
     required this.sequence,

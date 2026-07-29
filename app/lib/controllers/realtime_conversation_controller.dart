@@ -172,8 +172,13 @@ class RealtimeConversationState {
   final List<RealtimeConversationItem> historyItems;
   final String? selectedHistorySessionId;
   final bool historyLoading;
-  final String? historyError;
-  final String? error;
+
+  /// Why the history list or a replayed session could not be read. A named
+  /// notice, never an interpolated exception.
+  final RealtimeConversationNotice? historyError;
+
+  /// Why the conversation itself could not start, run or finish.
+  final RealtimeConversationNotice? error;
 
   bool get canConfigure =>
       phase == RealtimeConversationPhase.idle ||
@@ -239,8 +244,10 @@ class RealtimeConversationState {
     historyLoading: historyLoading ?? this.historyLoading,
     historyError: identical(historyError, _unset)
         ? this.historyError
-        : historyError as String?,
-    error: identical(error, _unset) ? this.error : error as String?,
+        : historyError as RealtimeConversationNotice?,
+    error: identical(error, _unset)
+        ? this.error
+        : error as RealtimeConversationNotice?,
   );
 }
 
@@ -298,7 +305,10 @@ class RealtimeConversationController extends ChangeNotifier {
       );
     } catch (error) {
       state = state.copyWith(
-        error: 'Could not load realtime providers: $error',
+        error: RealtimeConversationNotice(
+          kind: 'providers_not_loaded',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -326,7 +336,10 @@ class RealtimeConversationController extends ChangeNotifier {
     } catch (error) {
       state = state.copyWith(
         historyLoading: false,
-        historyError: 'Could not load conversation history: $error',
+        historyError: RealtimeConversationNotice(
+          kind: 'history_not_loaded',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -350,7 +363,10 @@ class RealtimeConversationController extends ChangeNotifier {
     } catch (error) {
       state = state.copyWith(
         historyLoading: false,
-        historyError: 'Could not load conversation turns: $error',
+        historyError: RealtimeConversationNotice(
+          kind: 'turns_not_loaded',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -404,14 +420,16 @@ class RealtimeConversationController extends ChangeNotifier {
     final profileId = state.selectedProfileId;
     if (profileId == null) {
       state = state.copyWith(
-        error: 'Add and select a realtime provider first.',
+        error: const RealtimeConversationNotice(kind: 'no_voice_selected'),
       );
       notifyListeners();
       return;
     }
     if (launch.mode == RealtimeConversationMode.topicAnchored &&
         launch.anchor == null) {
-      state = state.copyWith(error: 'Choose a topic before starting.');
+      state = state.copyWith(
+        error: const RealtimeConversationNotice(kind: 'no_topic_selected'),
+      );
       notifyListeners();
       return;
     }
@@ -454,12 +472,23 @@ class RealtimeConversationController extends ChangeNotifier {
       _connectionSubscription = connection.messages.listen(
         _onConnectionMessage,
         onError: (Object error) {
-          unawaited(_failAndCleanup('Realtime connection failed: $error'));
+          unawaited(
+            _failAndCleanup(
+              RealtimeConversationNotice(
+                kind: 'connection_failed',
+                detail: describeApiFailure(error),
+              ),
+            ),
+          );
         },
         onDone: () {
           if (state.phase == RealtimeConversationPhase.live ||
               state.phase == RealtimeConversationPhase.draining) {
-            unawaited(_failAndCleanup('Realtime provider disconnected.'));
+            unawaited(
+              _failAndCleanup(
+                const RealtimeConversationNotice(kind: 'provider_disconnected'),
+              ),
+            );
           }
         },
       );
@@ -491,7 +520,10 @@ class RealtimeConversationController extends ChangeNotifier {
       state = state.copyWith(
         phase: RealtimeConversationPhase.failed,
         activity: RealtimeConversationActivity.inactive,
-        error: 'Could not start realtime conversation: $error',
+        error: RealtimeConversationNotice(
+          kind: 'start_failed',
+          detail: describeApiFailure(error),
+        ),
       );
       notifyListeners();
     }
@@ -566,10 +598,28 @@ class RealtimeConversationController extends ChangeNotifier {
           );
           if (_responseDone?.isCompleted == false) _responseDone!.complete();
         case 'provider_error' || 'connection_failed':
-          unawaited(_failAndCleanup(value['error'].toString()));
+          // The provider's own words. They were being shown verbatim, which
+          // is the same mistake in a different costume — they get the same
+          // treatment: a named state, with whatever the parser can type kept
+          // as diagnostics.
+          unawaited(
+            _failAndCleanup(
+              RealtimeConversationNotice(
+                kind: 'provider_error',
+                detail: ApiFailure.parse(value['error'].toString()),
+              ),
+            ),
+          );
       }
     } catch (error) {
-      unawaited(_failAndCleanup('Invalid realtime provider event: $error'));
+      unawaited(
+        _failAndCleanup(
+          RealtimeConversationNotice(
+            kind: 'provider_event_invalid',
+            detail: describeApiFailure(error),
+          ),
+        ),
+      );
     }
     notifyListeners();
   }
@@ -1076,7 +1126,10 @@ class RealtimeConversationController extends ChangeNotifier {
       state = state.copyWith(
         phase: RealtimeConversationPhase.failed,
         activity: RealtimeConversationActivity.inactive,
-        error: 'Could not finish realtime conversation: $error',
+        error: RealtimeConversationNotice(
+          kind: 'finish_failed',
+          detail: describeApiFailure(error),
+        ),
       );
     }
     notifyListeners();
@@ -1259,7 +1312,7 @@ class RealtimeConversationController extends ChangeNotifier {
     _connection = null;
   }
 
-  Future<void> _failAndCleanup(String message) async {
+  Future<void> _failAndCleanup(RealtimeConversationNotice notice) async {
     await _cleanup(discard: true);
     await _persistTerminalSession(
       status: 'failed',
@@ -1269,7 +1322,7 @@ class RealtimeConversationController extends ChangeNotifier {
     state = state.copyWith(
       phase: RealtimeConversationPhase.failed,
       activity: RealtimeConversationActivity.inactive,
-      error: message,
+      error: notice,
     );
     notifyListeners();
   }
