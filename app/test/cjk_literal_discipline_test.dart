@@ -121,14 +121,11 @@ void main() {
   // tracks. Same shape as `icon_size_discipline_test.dart` and
   // `error_leak_discipline_test.dart`.
   //
-  // S6 owns 我的表达 (`personal_expression_screen.dart`) and the conversation
-  // chain; the rest of this list is outside its file domain because the S2
-  // token migration is running on those same files in parallel, and two agents
-  // editing one file is how a merge loses copy. Each entry is one screen's
-  // worth of welded copy, and the next slice's number.
+  // S6 cleared 我的表达 (62 literals) and the manual timing dialog. The three
+  // left are outside its file domain — the S2 token migration is running on
+  // those same files in parallel, and two agents editing one file is how a
+  // merge loses copy. Six literals between them, and the next slice's number.
   const knownOffenders = <String>{
-    // 我的表达 — cleared by S6; see the migration commit.
-    'lib/screens/personal_expression_screen.dart',
     // 首页侧栏 ▸ 我的表达 entry (issue #7's fourth site). Two literals.
     'lib/learning_assets_ui.dart',
     // 「保存到我的表达」 tooltip on the reading surface. One literal.

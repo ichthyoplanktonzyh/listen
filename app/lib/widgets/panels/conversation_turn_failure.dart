@@ -203,8 +203,6 @@ class _ConversationTurnFailureNoticeState
     if (detail.code != null) detail.code!,
     if (detail.message != null) detail.message!,
     if (detail.correlationId != null)
-      l
-          .text('failureReference')
-          .replaceAll('{id}', detail.correlationId!),
+      l.text('failureReference').replaceAll('{id}', detail.correlationId!),
   ];
 }
