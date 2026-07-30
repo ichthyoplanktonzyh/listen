@@ -37,6 +37,9 @@ Notable runtime seams:
 - `learning-resource-runtime` gives installers and dictionary readers one
   authoritative resource directory, opaque filename scheme, and replacement
   signature without exposing local paths through learner-facing contracts.
+- `ManagedFastEmbedProvider` owns candidate isolation, artifact-integrity
+  validation, atomic active-manifest publication, last-good retention, and
+  failed-candidate provenance for the local embedding runtime.
 - `LocalRealtimeCascadeRuntime` owns opt-in local speech-cascade spawn,
   pool-readiness, bounded diagnostics, and process-group shutdown; the
   `local_cascade_realtime` codec remains in `realtime-provider`.

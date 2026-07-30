@@ -56,6 +56,15 @@ Parsed indexes are replaceable caches: an asset installed, replaced, removed,
 or damaged after process start is reflected by subsequent lookups without a
 restart.
 
+Local semantic-embedding upgrades build under an isolated candidate directory.
+The runtime records a size-and-SHA-256 inventory for the complete candidate,
+moves it to an immutable version directory, reloads it from that final path,
+and only then atomically publishes the active manifest. Ordinary download,
+validation, or activation failure preserves the last-good provider, readiness,
+and index fingerprint while retaining separate failed-candidate provenance.
+Restart removes partial candidates and restores only the manifest-selected
+version; legacy flat caches remain readable until the first successful upgrade.
+
 Sound-line jobs probe the media's audio-stream inventory before extracting
 evidence. A sole audio stream resolves deterministically to ffmpeg audio index
 zero; media with multiple streams requires an explicit ffmpeg-relative index.
