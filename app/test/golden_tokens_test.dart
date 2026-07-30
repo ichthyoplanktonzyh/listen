@@ -81,11 +81,7 @@ class _TokenSheet extends StatelessWidget {
             children: [
               for (final (label, fill, ink) in [
                 ('surface', colors.surface, colors.onSurface),
-                (
-                  'container',
-                  colors.surfaceContainer,
-                  colors.onSurfaceVariant,
-                ),
+                ('container', colors.surfaceContainer, colors.onSurfaceVariant),
                 ('high', colors.surfaceContainerHigh, colors.onSurface),
                 ('primary', colors.primary, colors.onPrimary),
                 (
@@ -286,10 +282,7 @@ class _ControlSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: ListenSpacing.gap16),
-          SizedBox(
-            width: 320,
-            child: Slider(value: 0.4, onChanged: (_) {}),
-          ),
+          SizedBox(width: 320, child: Slider(value: 0.4, onChanged: (_) {})),
           const SizedBox(height: ListenSpacing.gap8),
           const SizedBox(
             width: 320,

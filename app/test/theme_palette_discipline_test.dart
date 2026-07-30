@@ -197,18 +197,21 @@ void main() {
     expect(ListenColors.moonBlue, isNot(ListenColors.darkAccent));
   });
 
-  test('the content column tokens stay a legible measure within their fold', () {
-    // A reading column caps narrower than the window that would fold the
-    // vocabulary workbench to one column, so the capped column never has to
-    // share the row it was sized for.
-    expect(
-      ListenBreakpoints.contentColumnMax,
-      lessThan(ListenBreakpoints.vocabularyTwoPane),
-    );
-    // A card reads narrower than a full text column.
-    expect(
-      ListenBreakpoints.cardColumnMax,
-      lessThan(ListenBreakpoints.contentColumnMax),
-    );
-  });
+  test(
+    'the content column tokens stay a legible measure within their fold',
+    () {
+      // A reading column caps narrower than the window that would fold the
+      // vocabulary workbench to one column, so the capped column never has to
+      // share the row it was sized for.
+      expect(
+        ListenBreakpoints.contentColumnMax,
+        lessThan(ListenBreakpoints.vocabularyTwoPane),
+      );
+      // A card reads narrower than a full text column.
+      expect(
+        ListenBreakpoints.cardColumnMax,
+        lessThan(ListenBreakpoints.contentColumnMax),
+      );
+    },
+  );
 }

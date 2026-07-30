@@ -814,8 +814,7 @@ class EntryCapabilityEditor extends StatelessWidget {
     IconData icon,
   ) {
     final colors = Theme.of(context).colorScheme;
-    final assessment =
-        _dimension(channel)?.effectiveAssessment ?? 'unassessed';
+    final assessment = _dimension(channel)?.effectiveAssessment ?? 'unassessed';
     final assessed = assessment == 'acquired' || assessment == 'not_acquired';
     return Row(
       children: [

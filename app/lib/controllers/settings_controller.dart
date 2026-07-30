@@ -80,6 +80,7 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
     return save();
   }
+
   Color get secondaryColor => Color(_settings.secondaryColor);
 
   /// Load settings from disk and notify listeners.

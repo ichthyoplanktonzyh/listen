@@ -54,9 +54,8 @@ VocabularyRowStatus vocabularyRowStatus(
   );
   if (measured.isEmpty) return VocabularyRowStatus.firstSeen;
   final lens = focusCapability == null ? null : assessments[focusCapability];
-  return switch (lens ?? (measured.contains('not_acquired')
-      ? 'not_acquired'
-      : 'acquired')) {
+  return switch (lens ??
+      (measured.contains('not_acquired') ? 'not_acquired' : 'acquired')) {
     'acquired' => VocabularyRowStatus.acquired,
     'not_acquired' => VocabularyRowStatus.notAcquired,
     _ => VocabularyRowStatus.unassessed,
@@ -72,10 +71,7 @@ Color vocabularyRowStatusColor(
   VocabularyRowStatus status,
 ) => switch (status) {
   VocabularyRowStatus.firstSeen => ListenColors.moonBlue,
-  VocabularyRowStatus.acquired => capabilityAssessmentColor(
-    colors,
-    'acquired',
-  ),
+  VocabularyRowStatus.acquired => capabilityAssessmentColor(colors, 'acquired'),
   VocabularyRowStatus.notAcquired => capabilityAssessmentColor(
     colors,
     'not_acquired',

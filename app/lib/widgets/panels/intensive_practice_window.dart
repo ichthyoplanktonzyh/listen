@@ -823,8 +823,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
 
   String _diffLabel(PracticeTokenEvaluation token) => switch (token.result) {
     'correct' => token.expected ?? token.actual ?? '',
-    'equivalent' =>
-      '${token.actual ?? ''} ≈ ${token.expected ?? ''}',
+    'equivalent' => '${token.actual ?? ''} ≈ ${token.expected ?? ''}',
     'missing' => '- ${token.expected ?? ''}',
     'extra' => '+ ${token.actual ?? ''}',
     'mismatch' =>
