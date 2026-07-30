@@ -19,6 +19,7 @@
 | `scripts/syntactic-analysis` | syntax capability tooling |
 | `scripts/release_artifacts.py` | deterministic release packaging/verification |
 | `testdata` | committed license-clear fixtures |
+| `docs/domain` | current domain maps and code/contract terminology mappings |
 | `docs/decisions` | append-only ADRs |
 | `.planning` | current core project memory |
 

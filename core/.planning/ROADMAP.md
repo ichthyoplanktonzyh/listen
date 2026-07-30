@@ -20,10 +20,21 @@ Repository separation baseline 已建立：
 
 ## Product Work
 
-当前 active slice 是未发布的 contract `1.1.0` local realtime cascade：
+未发布的 contract `1.1.0` local realtime cascade 已完成并合并：
 credential-free loopback profile、独立协议 codec、SQLite v53 与 opt-in managed
-sidecar 已进入 core；后续是 review/release、app lock/DTO handoff，以及经显式授权的
-Apple Silicon 实机短音频 smoke。
+sidecar 已进入 core；后续 release、app lock/DTO handoff，以及经显式授权的 Apple
+Silicon 实机短音频 smoke 继续遵循既有发布门禁。
+
+Owner 已将语言学习模型重构设为下一条 P0 主线：
+
+1. **Domain vocabulary (#81)** — 固定 Content Document/Selection、Learning
+   Object 概念族、Activity/Attempt、Evidence/Judgment/Projection/User
+   Authority、Capability/Channel 与 Learning Agenda 的边界；不创建万能父实体。
+2. **Construction Learning MVP (#80)** — 先修正 spike 的英语中心 variant
+   边界，再按“真实实例 → 解释 → 识别 → 变式产出 → evidence”交付最小垂直切片。
+3. **Frontend-originated contracts** — Learning Session、Learning Agenda、
+   Assistance Ladder、Learning Goal 与 Construction UI 先由 `listen-app`
+   给出旅程、状态和信息请求，core 再设计最小兼容合约。
 
 其他后端产品 phase 由 owner 决定优先级。任何跨仓 feature 必须先有 app 侧 user
 journey/contract request，再进入 core contract 和实现 phase。纯 UI phase 不进入此 roadmap。

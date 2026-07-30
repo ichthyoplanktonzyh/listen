@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-07-29 CST
+> Updated: 2026-07-30 CST
 
 ## Position
 
@@ -14,13 +14,12 @@
 
 ## Current Work
 
-The first local realtime cascade slice is implemented. Core can persist a
-credential-free, loopback-only `local_cascade_realtime` profile, normalize the
-pinned Hugging Face speech-to-speech protocol behind the existing application
-port, and optionally supervise an explicitly configured sidecar. The runtime
-waits for an available `/v1/pool` pipeline and owns process-group shutdown.
-Model installation and live inference remain intentionally outside normal
-tests.
+The first local realtime cascade slice is implemented and merged. The current
+P0 product line starts by consolidating the language-learning domain vocabulary
+and authority boundaries in core issue #81, then uses that model to constrain
+the Construction Learning MVP in core issue #80. App-owned Learning Session,
+Learning Agenda, Assistance Ladder, Learning Goal, and Construction journeys
+remain frontend-first contract requests.
 
 ## Established Boundaries
 
@@ -38,10 +37,13 @@ not code evidence.
 
 ## Next
 
-1. Review and merge the local realtime cascade slice.
-2. Publish immutable `1.1.0` contract/runtime artifacts only after owner
+1. Review and merge the language-learning domain model from core issue #81.
+2. Split core issue #80 into a production-model slice followed by an
+   app-originated contract slice; do not promote the English-centric spike
+   variant enums into the multilingual contract.
+3. Publish immutable `1.1.0` contract/runtime artifacts only after owner
    approval, then complete the `listen-app` lock and DTO handoff.
-3. Run the Apple Silicon short-audio cascade smoke only with explicit model
+4. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-4. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+5. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.
