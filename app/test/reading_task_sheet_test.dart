@@ -6,6 +6,8 @@ import 'package:llplayer_next/controllers/reading_task_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/reading_task_sheet.dart';
 import 'package:llplayer_next/widgets/panels/reading_task_studio.dart';
 
@@ -192,6 +194,50 @@ void main() {
     expect(find.text(_source.transcriptSnapshot), findsOneWidget);
     expect(find.text('Main idea point'), findsOneWidget);
     expect(controller.state.phase, 'editing');
+
+    // The studio header is the same object as the reading-diff header, so it
+    // takes the same role; it had been insetting 18/10 against that one's 14/8.
+    final header = tester.widget<Padding>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('reading-task-back')),
+            matching: find.byType(Padding),
+          )
+          .last,
+    );
+    expect(header.padding, ListenPadding.row);
+
+    // The source pane is a page of prose, so its wide arrangement takes the
+    // page role rather than the 28 it had picked.
+    final snapshot = tester.widget<SingleChildScrollView>(
+      find.ancestor(
+        of: find.text(_source.transcriptSnapshot),
+        matching: find.byType(SingleChildScrollView),
+      ),
+    );
+    expect(snapshot.padding, ListenPadding.pageCompact);
+  });
+
+  testWidgets('the sheet body insets like a dialog body', (tester) async {
+    final api = _fakeApi();
+    final controller = ReadingTaskController();
+    await controller.openTask(api, source: _source, templatePoints: _template);
+    await tester.pumpWidget(_host(controller, api));
+
+    // 20/14 was neither a card nor a page; a sheet body is a dialog body. The
+    // keyboard inset is added on top of the role rather than folded into it,
+    // so with no keyboard up the inset is exactly the role — asserted as the
+    // gap the reader actually sees between the sheet edge and its first glyph.
+    final sheet = tester.getRect(find.byType(ReadingTaskSheet));
+    final title = tester.getRect(find.byIcon(Icons.checklist_outlined));
+    expect(title.left - sheet.left, ListenPadding.card.left);
+    expect(title.top - sheet.top, ListenPadding.card.top);
+
+    // The rubric row's star toggle is tappable, so `control`, not `inline`.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.star)).size,
+      ListenIconSize.control,
+    );
   });
 
   testWidgets('walks editing → answering → assessing → done', (tester) async {

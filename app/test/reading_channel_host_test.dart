@@ -16,6 +16,8 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/channels/reading_channel.dart';
 import 'package:llplayer_next/widgets/panels/listening_check_panel.dart';
 import 'package:llplayer_next/widgets/panels/reading_diff_panel.dart';
@@ -179,6 +181,36 @@ void main() {
     await tester.pump();
     expect(find.byType(ReadingDiffPanel), findsOneWidget);
     expect(find.byType(ReadingView), findsNothing);
+
+    // The card column was capped at 760 — twenty pixels off the reading
+    // column's 780 for no reason anyone recorded, and the pair of outcome
+    // cards below it insetted 18 rather than a card's 16.
+    final caps = tester
+        .widgetList<ConstrainedBox>(
+          find.descendant(
+            of: find.byType(ReadingDiffPanel),
+            matching: find.byType(ConstrainedBox),
+          ),
+        )
+        .map((box) => box.constraints.maxWidth);
+    expect(caps, contains(ListenBreakpoints.contentColumnMax));
+    expect(caps, isNot(contains(760.0)));
+    // Both outcome cards, and nothing left at the old 18. (The other insets in
+    // here belong to `Card` and `OutlinedButton` internals.)
+    final cardInsets = tester
+        .widgetList<Padding>(
+          find.descendant(
+            of: find.byType(Card),
+            matching: find.byType(Padding),
+          ),
+        )
+        .map((padding) => padding.padding)
+        .toList();
+    expect(
+      cardInsets.where((inset) => inset == ListenPadding.card),
+      hasLength(2),
+    );
+    expect(cardInsets, isNot(contains(const EdgeInsets.all(18))));
 
     final source = harness.coordinator.diffSource!;
     harness.coordinator.closeDiff();

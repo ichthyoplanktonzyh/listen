@@ -6,6 +6,7 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -74,11 +75,12 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
       final colors = Theme.of(context).colorScheme;
       return SafeArea(
         child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 14,
-            bottom: 14 + MediaQuery.of(context).viewInsets.bottom,
+          // A sheet body is a dialog body, so it takes the `card` role rather
+          // than the 20/14 it had picked. The keyboard inset is added on top
+          // instead of being folded into the number, which is what made the
+          // original impossible to state as one role.
+          padding: ListenPadding.card.add(
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
@@ -153,7 +155,10 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             onPressed: _state.busy
                 ? null
                 : () => unawaited(widget.controller.generateRubric(widget.api)),
-            icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+            icon: const Icon(
+              Icons.auto_awesome_outlined,
+              size: ListenIconSize.control,
+            ),
             label: Text(l.text('readingTaskAiGenerate')),
           ),
         ),
@@ -174,7 +179,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
   Widget _draftPointRow(AppLocalizations l, ColorScheme colors, int index) {
     final point = _state.draftPoints[index];
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -187,7 +192,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             child: IconButton(
               icon: Icon(
                 point.importance == 'required' ? Icons.star : Icons.star_border,
-                size: 18,
+                size: ListenIconSize.control,
                 color: point.importance == 'required'
                     ? colors.primary
                     : colors.onSurfaceVariant,
@@ -224,7 +229,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 16),
+            icon: const Icon(Icons.close, size: ListenIconSize.control),
             onPressed: _state.draftPoints.length <= 1
                 ? null
                 : () => widget.controller.removeDraftPoint(index),
@@ -264,7 +269,11 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             children: [
               ActionChip(
                 key: const ValueKey('reading-task-play-segment'),
-                avatar: Icon(Icons.play_arrow, size: 16, color: colors.primary),
+                avatar: Icon(
+                  Icons.play_arrow,
+                  size: ListenIconSize.control,
+                  color: colors.primary,
+                ),
                 label: Text(l.text('readingTaskListenPlay')),
                 onPressed: widget.onPlaySegment,
               ),
@@ -283,7 +292,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         ] else
           for (final point in rubric.points)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap2),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -291,7 +300,8 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                     point.importance == 'required'
                         ? Icons.star
                         : Icons.star_border,
-                    size: 14,
+                    // A bullet marker in the text flow, not a control.
+                    size: ListenIconSize.inline,
                     color: colors.onSurfaceVariant,
                   ),
                   const SizedBox(width: ListenSpacing.gap6),
@@ -345,7 +355,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(10),
+          padding: ListenPadding.row,
           decoration: BoxDecoration(
             color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
             borderRadius: ListenRadii.controlBorder,
@@ -375,7 +385,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
   }
 
   Widget _assessRow(AppLocalizations l, RubricPointView point) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
+    padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap4),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -421,7 +431,9 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         const SizedBox(height: ListenSpacing.gap8),
         for (final point in rubric.points)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
+            // 3 was the only off-ladder rhythm in this file; down to 2 rather
+            // than up to 4, so no row grows taller than it was.
+            padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap2),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -444,7 +456,10 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                 PopupMenuButton<String>(
                   key: ValueKey('adjudicate-${point.pointId}'),
                   tooltip: l.text('readingTaskCorrect'),
-                  icon: const Icon(Icons.edit_outlined, size: 15),
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    size: ListenIconSize.control,
+                  ),
                   onSelected: (verdict) => unawaited(
                     widget.controller.adjudicate(
                       widget.api,
