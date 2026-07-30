@@ -9,6 +9,7 @@ import '../controllers/hunting_controller.dart';
 import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
+import '../models/api_failure.dart';
 import '../models/practice.dart';
 import '../models/production_corpus.dart';
 import '../models/projection_review.dart';
@@ -19,6 +20,7 @@ import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import '../widgets/common/api_failure_disclosure.dart';
 import '../widgets/common/listen_empty_state.dart';
 import '../widgets/common/listen_loading.dart';
 import '../widgets/vocabulary/hunting_list_panel.dart';
@@ -82,9 +84,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   /// degrades to a notice instead of failing the workbench.
   bool gapLoading = true;
   List<CrossModalReviewCandidateView>? gapCandidates;
-  String? gapCandidatesError;
+  ApiFailure? gapCandidatesError;
   ProductionGapReviewView? gapProduction;
-  String? gapProductionError;
+  ApiFailure? gapProductionError;
 
   /// Set when the coach's cross-modal hand-off lands us here so the candidates
   /// section is emphasised (the number the coach clicked).
@@ -364,16 +366,16 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   /// down. Rendering only: neither query is changed, they are juxtaposed.
   Future<void> _loadGapPanel() async {
     List<CrossModalReviewCandidateView>? candidates;
-    String? candidatesError;
+    ApiFailure? candidatesError;
     try {
       candidates = await widget.api.crossModalReviewGaps(
         language: widget.language,
       );
     } catch (error) {
-      candidatesError = '$error';
+      candidatesError = describeApiFailure(error);
     }
     ProductionGapReviewView? production;
-    String? productionError;
+    ApiFailure? productionError;
     try {
       final enriched = await widget.api.semanticProductionGapReview(
         language: widget.language,
@@ -386,7 +388,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           language: widget.language,
         );
       } catch (error) {
-        productionError = '$error';
+        productionError = describeApiFailure(error);
       }
     }
     if (mounted) {
@@ -461,7 +463,12 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     try {
       proposals = await widget.api.auditProjectionEntry(lexicalEntryId);
     } catch (error) {
-      if (mounted) _snack('${l.text('projectionReviewUnavailable')}: $error');
+      if (mounted) {
+        _snack(
+          l.text('projectionReviewUnavailable'),
+          failure: describeApiFailure(error),
+        );
+      }
       return;
     }
     if (!mounted) return;
@@ -656,7 +663,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryCollectFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryCollectFailed'),
+          failure: describeApiFailure(error),
         );
       }
       return false;
@@ -693,7 +701,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryReindexFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryReindexFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -719,7 +728,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryUpdateFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -742,7 +752,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryUpdateFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -827,7 +838,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryUpdateFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -845,7 +857,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryUpdateFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -862,7 +875,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryUpdateFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryUpdateFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -924,7 +938,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryReviewFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryReviewFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -948,7 +963,8 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          l.text('dictionaryReviewFailed').replaceAll('{error}', '$error'),
+          l.text('dictionaryReviewFailed'),
+          failure: describeApiFailure(error),
         );
       }
     }
@@ -1005,11 +1021,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     if (saved) {
       _snack(l.text('huntingAdded'));
     } else if (hunting.state.error != null) {
-      _snack(
-        l
-            .text('huntingUpdateFailed')
-            .replaceAll('{error}', hunting.state.error!),
-      );
+      // The controller's own `error` is already a named sentence (#66), so the
+      // localized one wins here rather than being pasted into a placeholder.
+      _snack(l.text('huntingUpdateFailed'));
     }
   }
 
@@ -1048,18 +1062,36 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     } catch (error) {
       if (mounted) {
         _snack(
-          AppLocalizations.of(
-            context,
-          ).text('dictionaryMarkFailed').replaceAll('{error}', '$error'),
+          AppLocalizations.of(context).text('dictionaryMarkFailed'),
+          failure: describeApiFailure(error),
         );
       }
       return false;
     }
   }
 
-  void _snack(String message) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(message)));
+  /// A SnackBar that names what failed, with the diagnostics one tap away.
+  ///
+  /// Every call here used to read
+  /// `_snack(l.text('…').replaceAll('{error}', '$error'))`, which put the whole
+  /// exception in the bar. A bar is one line and cannot hold a disclosure, so
+  /// [failure] becomes an action that opens the same fields in a dialog — and
+  /// the reference id a bug report needs stops being thrown away.
+  void _snack(String message, {ApiFailure? failure}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: ApiFailureDisclosure.hasDetail(failure)
+            ? SnackBarAction(
+                label: AppLocalizations.of(context).text('failureDetailsShow'),
+                onPressed: () =>
+                    unawaited(showApiFailureDetails(context, failure!)),
+              )
+            : null,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

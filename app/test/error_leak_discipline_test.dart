@@ -117,26 +117,20 @@ Map<String, List<String>> _offences() {
 }
 
 void main() {
-  // Every file that already leaks, at the moment this rule was written. The
-  // migration is done when this set is empty; no new entry may be added.
+  // The debt this gate was built to measure is **paid**. #62 started at 14
+  // files and this set is now empty, so every match below is a regression, not
+  // a backlog item.
   //
-  // File-path granularity on purpose — line numbers drift with every unrelated
-  // edit, so a line-level list would cost more to maintain than the debt it
-  // tracks. Same shape as the token gates in `icon_size_discipline_test.dart`.
-  const knownOffenders = <String>{
-    'lib/controllers/download_controller.dart',
-    'lib/main.dart',
-    'lib/phonetic_analysis_ui.dart',
-    'lib/player_adapter.dart',
-    'lib/screens/vocabulary_screen.dart',
-    'lib/widgets/coach/coach_dashboard_screen.dart',
-    'lib/widgets/flows/manual_review_flow.dart',
-    'lib/widgets/flows/media_import_flows.dart',
-    'lib/widgets/settings/llm_provider_settings.dart',
-    'lib/widgets/settings/realtime_provider_settings.dart',
-    'lib/widgets/settings/syntax_capability_settings.dart',
-    'lib/widgets/vocabulary/semantic_search_dialog.dart',
-  };
+  // The set is kept rather than deleted because it is the thing the second
+  // test guards: emptiness is now the rule, so re-registering a file to force
+  // the first test green fails the second one instead of quietly raising the
+  // floor. An allowlist that can only be read, never written, is the cheapest
+  // form a paid-off ratchet can take.
+  //
+  // File-path granularity, when there were entries: line numbers drift with
+  // every unrelated edit, so a line-level list would have cost more to
+  // maintain than the debt it tracked.
+  const knownOffenders = <String>{};
 
   test('a caught exception never reaches a user-visible string', () {
     final offenders = [
@@ -154,22 +148,19 @@ void main() {
     );
   });
 
-  test('the known-offender list only shrinks', () {
-    // A registered file that no longer offends must leave the list, so the
-    // count stays an honest measure of the remaining debt — and so the list
-    // cannot be padded to force green.
-    final offendingPaths = _offences().keys;
-    final stale = knownOffenders.where(
-      (known) => !offendingPaths.any((path) => path.endsWith(known)),
-    );
-
+  test('the known-offender list stays empty', () {
+    // Its earlier form was "the list only shrinks", which stopped the list
+    // being padded to force green while there was still debt on it. At zero
+    // that ratchet has one position left, and this is it: a new entry is a
+    // failure whatever the file behind it does, so the only way to answer the
+    // first test is to fix the code.
     expect(
-      stale,
+      knownOffenders,
       isEmpty,
       reason:
-          'These files are registered as known offenders but no longer put a '
-          'caught exception in a user-visible string — delete them from '
-          'knownOffenders.',
+          'The #62 migration finished at zero. A caught exception in a '
+          'user-visible string is a regression now — name the failure and give '
+          'its detail to describeApiFailure, do not re-open this list.',
     );
   });
 }

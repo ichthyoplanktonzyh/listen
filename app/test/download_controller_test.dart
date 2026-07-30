@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/download_controller.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/widgets/player/download_status_bar.dart';
 
 void main() {
@@ -10,7 +11,7 @@ void main() {
       final controller = DownloadController();
       addTearDown(controller.dispose);
 
-      controller.fail('boom');
+      controller.fail(ApiFailure(raw: 'boom'));
       expect(controller.snapshot?.kind, DownloadStatusKind.failed);
 
       controller.starting();
@@ -52,19 +53,21 @@ void main() {
       addTearDown(controller.dispose);
       final progress = StreamController<double>();
       final completed = Completer<String?>();
-      String? failure;
+      ApiFailure? failure;
 
       controller.attach(
         progress: progress.stream,
         completed: completed.future,
         cancel: () {},
-        onFailed: (error) => failure = error,
+        onFailed: (value) => failure = value,
       );
 
       completed.completeError(StateError('nope'));
       await Future<void>.delayed(Duration.zero);
       expect(controller.snapshot?.kind, DownloadStatusKind.failed);
-      expect(failure, contains('nope'));
+      // The detail survives as diagnostics; it is the *sentence* that no
+      // longer contains it.
+      expect(failure?.raw, contains('nope'));
 
       await progress.close();
     });
@@ -127,7 +130,7 @@ void main() {
       );
       addTearDown(controller.dispose);
 
-      controller.fail('boom');
+      controller.fail(ApiFailure(raw: 'boom'));
       expect(controller.snapshot?.kind, DownloadStatusKind.failed);
 
       await Future<void>.delayed(const Duration(milliseconds: 60));
@@ -142,7 +145,7 @@ void main() {
       final progress = StreamController<double>();
       final completed = Completer<String?>();
 
-      controller.fail('boom');
+      controller.fail(ApiFailure(raw: 'boom'));
       controller.starting();
       controller.attach(
         progress: progress.stream,

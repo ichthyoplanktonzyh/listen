@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/llm_provider.dart';
+import '../../models/named_failure.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
 
 /// Phase 3.12 provider settings: configure vendor-neutral LLM providers for
@@ -27,7 +29,11 @@ class LlmProviderSettings extends StatefulWidget {
 class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   List<LlmProviderProfileView> _providers = const [];
   bool _loading = true;
-  String? _error;
+
+  /// The last failure, as a *key* plus typed detail. It used to be a
+  /// `String? _error = '$e'`, which is how a `correlation_id` and the sidecar's
+  /// loopback URI ended up in this panel's red line.
+  NamedFailure? _failure;
   bool _submitting = false;
 
   final _nameCtrl = TextEditingController();
@@ -58,7 +64,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _failure = null;
     });
     try {
       final raw = await widget.api.listLlmProviders();
@@ -75,7 +81,10 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _failure = NamedFailure(
+          'llmProvidersLoadFailed',
+          detail: describeApiFailure(e),
+        );
         _loading = false;
       });
     }
@@ -93,7 +102,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     }
     setState(() {
       _submitting = true;
-      _error = null;
+      _failure = null;
     });
     try {
       await widget.api.registerLlmProvider(
@@ -117,7 +126,10 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _failure = NamedFailure(
+          'llmProviderSaveFailed',
+          detail: describeApiFailure(e),
+        );
         _submitting = false;
       });
     }
@@ -130,7 +142,12 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = '$e');
+      setState(
+        () => _failure = NamedFailure(
+          'llmProviderRemoveFailed',
+          detail: describeApiFailure(e),
+        ),
+      );
     }
   }
 
@@ -186,12 +203,12 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmNotQualified'), style: theme.textTheme.bodySmall),
         const SizedBox(height: ListenSpacing.gap12),
-        if (_error != null)
+        if (_failure != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              _error!,
-              style: TextStyle(color: theme.colorScheme.error),
+            child: ApiFailureNotice(
+              message: l.text(_failure!.messageKey),
+              failure: _failure!.detail,
             ),
           ),
         if (_loading)

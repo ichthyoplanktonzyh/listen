@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/api_failure.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
+import '../common/api_failure_disclosure.dart';
 
 enum DownloadStatusKind { downloading, completed, failed }
 
@@ -10,14 +12,23 @@ class DownloadStatusSnapshot {
   const DownloadStatusSnapshot.downloading({required this.progress})
     : kind = DownloadStatusKind.downloading,
       downloadedMediaPath = null,
-      error = null;
+      failure = null;
 
   const DownloadStatusSnapshot.completed(this.downloadedMediaPath)
     : kind = DownloadStatusKind.completed,
       progress = 1.0,
-      error = null;
+      failure = null;
 
-  const DownloadStatusSnapshot.failed(this.error)
+  /// A failed download carries a *typed* [ApiFailure], not the tool's own text.
+  ///
+  /// This used to be `String? error`, filled with `error.toString()`, and the
+  /// bar below built `'${l.text('downloadFailed')}: ${status.error}'` out of
+  /// it — so a failed download printed yt-dlp's raw stderr, or a whole
+  /// `ProcessException` with the executable path in it, where a sentence
+  /// belongs. Typing the field is what makes that unrepresentable: the only
+  /// way to render the detail now is to reach into a named diagnostic field,
+  /// and [ApiFailure.raw] is documented as never rendered.
+  const DownloadStatusSnapshot.failed(this.failure)
     : kind = DownloadStatusKind.failed,
       progress = 1.0,
       downloadedMediaPath = null;
@@ -25,7 +36,7 @@ class DownloadStatusSnapshot {
   final DownloadStatusKind kind;
   final double progress;
   final String? downloadedMediaPath;
-  final String? error;
+  final ApiFailure? failure;
 }
 
 class DownloadStatusBar extends StatelessWidget {
@@ -70,14 +81,17 @@ class DownloadStatusBar extends StatelessWidget {
                   DownloadStatusKind.downloading =>
                     '${l.text('downloadingInBackground')} ${(status.progress * 100).toStringAsFixed(1)}%',
                   DownloadStatusKind.completed => l.text('downloadComplete'),
-                  DownloadStatusKind.failed =>
-                    '${l.text('downloadFailed')}: ${status.error}',
+                  DownloadStatusKind.failed => l.text('downloadFailed'),
                 },
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: ListenSpacing.gap12),
+            // One line has no room to expand in place, so the diagnostics open
+            // as a dialog. It appears only when there is something to show.
+            if (status.failure != null)
+              ApiFailureDetailsButton(failure: status.failure!),
             if (downloading)
               TextButton(onPressed: onCancel, child: Text(l.text('cancel'))),
             if (completed)

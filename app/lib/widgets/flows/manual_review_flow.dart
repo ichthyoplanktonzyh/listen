@@ -125,8 +125,9 @@ Future<void> openManualReviewFlow({
   } catch (error) {
     if (context.mounted) {
       playerController.setStatus(
-        '${l.text('statusManualReviewFailed')}: $error',
+        l.text('statusManualReviewFailed'),
         error: true,
+        failure: describeApiFailure(error),
       );
     }
   }

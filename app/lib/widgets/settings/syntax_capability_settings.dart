@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/named_failure.dart';
 import '../../models/syntax_capability.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/api_failure_disclosure.dart';
 import '../common/listen_error_state.dart';
 
 class SyntaxCapabilitySettings extends StatefulWidget {
@@ -26,7 +28,11 @@ class SyntaxCapabilitySettings extends StatefulWidget {
 class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
   SyntaxCapabilityView? _capability;
   TrackSyntaxAnalysisView? _track;
-  String? _error;
+
+  /// The last failure, as a *key* plus typed detail — see `NamedFailure`.
+  /// This was a `String? _error = '$error'`, handed straight to
+  /// [ListenErrorNotice], so a failed install printed the whole exception.
+  NamedFailure? _failure;
   bool _busy = false;
   Timer? _poller;
 
@@ -49,7 +55,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
       final becameReady = _capability?.isReady != true && next.isReady;
       setState(() {
         _capability = next;
-        _error = null;
+        _failure = null;
       });
       if (next.isDownloading) {
         _poller ??= Timer.periodic(
@@ -64,14 +70,21 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
         await _analyze(force: false);
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        setState(
+          () => _failure = NamedFailure(
+            'syntaxCapabilityLoadFailed',
+            detail: describeApiFailure(error),
+          ),
+        );
+      }
     }
   }
 
   Future<void> _action(String action) async {
     setState(() {
       _busy = true;
-      _error = null;
+      _failure = null;
     });
     try {
       final next = await widget.api.syntaxCapabilityAction(action);
@@ -85,7 +98,10 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _failure = NamedFailure(
+          'syntaxCapabilityActionFailed',
+          detail: describeApiFailure(error),
+        );
       });
     }
   }
@@ -95,7 +111,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
     if (trackId == null || _busy) return;
     setState(() {
       _busy = true;
-      _error = null;
+      _failure = null;
     });
     try {
       final result = await widget.api.runTrackSyntaxAnalysis(
@@ -111,7 +127,10 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '$error';
+        _failure = NamedFailure(
+          'syntaxTrackAnalysisFailed',
+          detail: describeApiFailure(error),
+        );
       });
     }
   }
@@ -158,9 +177,12 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
           const SizedBox(height: ListenSpacing.gap6),
           ListenErrorNotice(message: capability.error!),
         ],
-        if (_error != null) ...[
+        if (_failure != null) ...[
           const SizedBox(height: ListenSpacing.gap6),
-          ListenErrorNotice(message: _error!),
+          ApiFailureNotice(
+            message: l.text(_failure!.messageKey),
+            failure: _failure!.detail,
+          ),
         ],
         const SizedBox(height: ListenSpacing.gap8),
         Wrap(
