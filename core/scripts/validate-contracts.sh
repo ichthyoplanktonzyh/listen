@@ -338,6 +338,8 @@ for (const schema of ["WordTiming", "WordTimeline", "WordTimelineSummary", "Crea
 if (!openapi.includes("version: { enum: [5, 6, 7] }")) throw new Error("vocabulary asset versions v5-v7 missing");
 if (!openapi.includes("phonetic_finding_feedback:")) throw new Error("phonetic feedback backup missing");
 if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Error("provider pronunciation audio missing");
+if (!client.includes("sense_group_analyses?: SenseGroupAnalysis[];")) throw new Error("generated LLTimeline sense-group analyses missing");
+if (!client.includes("active_sense_group_analysis_id?: string | null;")) throw new Error("generated LLTimeline active sense-group id missing");
 for (const item of examples) {
   if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid example");
 }

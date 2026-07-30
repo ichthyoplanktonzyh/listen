@@ -111,5 +111,7 @@
   "active_phone_timeline_id": null,
   "chunk_timelines": [],
   "active_chunk_timeline_id": null,
+  "sense_group_analyses": [],
+  "active_sense_group_analysis_id": null,
   "artifacts": []
 }

@@ -89,6 +89,43 @@ fn openapi_version_snapshot_and_path_count() {
 }
 
 #[test]
+fn lltimeline_sense_group_fields_match_rust_compatibility_semantics() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+    let schema = openapi
+        .split("    LLTimelineDocument:\n")
+        .nth(1)
+        .and_then(|tail| tail.split("\n    LLTimelineMetadata:\n").next())
+        .expect("LLTimelineDocument schema block exists");
+    let required = schema
+        .lines()
+        .find(|line| line.trim_start().starts_with("required:"))
+        .expect("LLTimelineDocument required list exists");
+
+    assert!(
+        !required.contains("sense_group_analyses"),
+        "legacy imports may omit sense_group_analyses"
+    );
+    assert!(
+        !required.contains("active_sense_group_analysis_id"),
+        "legacy imports may omit active_sense_group_analysis_id"
+    );
+    assert!(
+        schema.contains("sense_group_analyses:\n          type: array\n          default: []"),
+        "sense_group_analyses must default to an empty array"
+    );
+    assert!(
+        schema.contains(
+            "active_sense_group_analysis_id:\n          type: [string, \"null\"]\n          default: null"
+        ),
+        "active sense-group analysis id must be nullable and default to null"
+    );
+    assert!(
+        schema.contains("items: { $ref: \"#/components/schemas/SenseGroupAnalysis\" }"),
+        "sense_group_analyses items must use the canonical schema"
+    );
+}
+
+#[test]
 fn practice_token_result_openapi_values_match_domain() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
     let documented = openapi

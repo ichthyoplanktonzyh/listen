@@ -127,6 +127,42 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     );
     assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 1);
     assert_eq!(document["active_chunk_timeline_id"], chunk_timeline["id"]);
+    assert_eq!(document["sense_group_analyses"], serde_json::json!([]));
+    assert_eq!(
+        document["active_sense_group_analysis_id"],
+        serde_json::Value::Null
+    );
+    document["sense_group_analyses"] = serde_json::json!([
+        {
+            "id": "sense-group-analysis-fixture",
+            "track_id": track["id"],
+            "media_id": track["media_id"],
+            "parent_word_timeline_id": timeline["id"],
+            "provider_id": "rule-based-sense-group",
+            "provider_version": "v1",
+            "algorithm": "fixture-rule-v1",
+            "status": "active",
+            "created_by": "algorithm",
+            "metrics_json": {"fixture": true},
+            "groups": [
+                {
+                    "id": "sense-group-fixture-0",
+                    "sentence_id": sentence["id"],
+                    "group_index": 0,
+                    "start_token_index": word_tokens[0]["index"],
+                    "end_token_index": word_tokens.last().unwrap()["index"],
+                    "text": document["segments"][0]["text"],
+                    "label": "clause",
+                    "head_token_index": word_tokens[0]["index"],
+                    "confidence": 0.9,
+                    "sources": ["rule"]
+                }
+            ],
+            "created_at_ms": 1781782222000_u64,
+            "updated_at_ms": 1781782222000_u64
+        }
+    ]);
+    document["active_sense_group_analysis_id"] = serde_json::json!("sense-group-analysis-fixture");
     document["metadata"]["generator"] = serde_json::json!({
         "id": "fixture-production-engine",
         "version": "v2",
@@ -178,9 +214,15 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let imported_track: serde_json::Value =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "LLTimeline import failed: {}",
+        String::from_utf8_lossy(&body)
+    );
+    let imported_track: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(imported_track["id"], track["id"]);
     assert_eq!(imported_track["sentences"].as_array().unwrap().len(), 4);
 
@@ -246,6 +288,18 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     assert_eq!(
         exported_after_import["artifacts"][0]["kind"],
         "production_report"
+    );
+    assert_eq!(
+        exported_after_import["active_sense_group_analysis_id"],
+        "sense-group-analysis-fixture"
+    );
+    assert_eq!(
+        exported_after_import["sense_group_analyses"][0]["status"],
+        "active"
+    );
+    assert_eq!(
+        exported_after_import["sense_group_analyses"][0]["groups"][0]["sentence_id"],
+        sentence["id"]
     );
     assert_eq!(
         exported_after_import["rhythm_frames"][0]["rhythm_frame"]["generated_from"],

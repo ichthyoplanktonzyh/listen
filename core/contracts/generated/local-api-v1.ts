@@ -271,6 +271,44 @@ export interface PhoneTimelineSummary {
   can_delete: boolean;
 }
 
+export type SenseGroupSource =
+  | "dependency_parse"
+  | "phrase_structure"
+  | "language_model"
+  | "punctuation"
+  | "length_limit"
+  | "rule"
+  | "user";
+
+export interface SenseGroup {
+  id: string;
+  sentence_id: string;
+  group_index: number;
+  start_token_index: number;
+  end_token_index: number;
+  text: string;
+  label: string | null;
+  head_token_index: number | null;
+  confidence: number;
+  sources: SenseGroupSource[];
+}
+
+export interface SenseGroupAnalysis {
+  id: string;
+  track_id: string;
+  media_id: string;
+  parent_word_timeline_id: string | null;
+  provider_id: string;
+  provider_version: string;
+  algorithm: string;
+  status: TimelineStatus;
+  created_by: TimelineCreator;
+  metrics_json: unknown;
+  groups: SenseGroup[];
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
 export interface LLTimelineDocument {
   schema: "llplayer.timeline.v1";
   metadata: {
@@ -302,6 +340,8 @@ export interface LLTimelineDocument {
   active_phone_timeline_id: string | null;
   chunk_timelines: unknown[];
   active_chunk_timeline_id: string | null;
+  sense_group_analyses?: SenseGroupAnalysis[];
+  active_sense_group_analysis_id?: string | null;
   artifacts: unknown[];
 }
 

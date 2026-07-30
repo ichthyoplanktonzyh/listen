@@ -4320,6 +4320,15 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ChunkTimeline" }
         active_chunk_timeline_id: { type: [string, "null"] }
+        sense_group_analyses:
+          type: array
+          default: []
+          description: Serialized exports include this field; imports may omit it and default to an empty collection.
+          items: { $ref: "#/components/schemas/SenseGroupAnalysis" }
+        active_sense_group_analysis_id:
+          type: [string, "null"]
+          default: null
+          description: Serialized exports include this field; imports may omit it and default to no active analysis.
         artifacts:
           type: array
           items: { $ref: "#/components/schemas/LLTimelineArtifact" }

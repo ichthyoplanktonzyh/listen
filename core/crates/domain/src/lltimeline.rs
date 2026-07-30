@@ -135,5 +135,29 @@ mod tests {
             document.active_word_timeline_id,
             Some(WordTimelineId::parse("timeline-fixture").unwrap())
         );
+        assert!(document.sense_group_analyses.is_empty());
+        assert_eq!(document.active_sense_group_analysis_id, None);
+    }
+
+    #[test]
+    fn lltimeline_v1_legacy_document_defaults_missing_sense_group_fields() {
+        let mut fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/lltimeline/v1-minimal.lltimeline.json"
+        ))
+        .unwrap();
+        let object = fixture.as_object_mut().unwrap();
+        object.remove("sense_group_analyses");
+        object.remove("active_sense_group_analysis_id");
+
+        let document: LLTimelineDocument = serde_json::from_value(fixture).unwrap();
+
+        assert!(document.sense_group_analyses.is_empty());
+        assert_eq!(document.active_sense_group_analysis_id, None);
+        let serialized = serde_json::to_value(document).unwrap();
+        assert_eq!(serialized["sense_group_analyses"], serde_json::json!([]));
+        assert_eq!(
+            serialized["active_sense_group_analysis_id"],
+            serde_json::Value::Null
+        );
     }
 }
