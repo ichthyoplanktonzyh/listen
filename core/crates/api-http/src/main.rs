@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         install_dir.join("syntax-sidecar.py"),
     ));
     let syntax_manager = SyntaxCapabilityManager::new(syntax_root, Some(syntax_provider.clone()));
-    state = state.with_syntax_capability(syntax_manager, syntax_provider);
+    state = state.with_syntax_capability(syntax_manager.clone(), syntax_manager);
     state = state.with_speech_synthesis(SpeechSynthesisManager::system_default(
         speech_synthesis_cache_root(),
     ));

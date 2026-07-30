@@ -16,7 +16,7 @@ python3 -m unittest scripts/test_release_artifacts.py
 - failure-injection tests for background-job writes, credential cleanup retry,
   LLTimeline resource/projection transaction rollback, migration-backup
   publication, semantic-embedding candidate download/validation/activation,
-  and sidecar cancellation;
+  syntax candidate activation/cleanup, and sidecar cancellation;
 - semantic-embedding lifecycle tests cover restart cleanup, last-good
   retention, persisted candidate-failure provenance, final-path reload, and
   concurrent-upgrade rejection without downloading a live model;

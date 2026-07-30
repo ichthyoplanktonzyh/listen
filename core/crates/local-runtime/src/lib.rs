@@ -47,7 +47,8 @@ pub use subtitle_search::{
     SubtitleSearchRequest,
 };
 pub use syntax_capability::{
-    SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView,
+    SyntaxCandidateFailure, SyntaxCandidateFailureStage, SyntaxCapabilityManager,
+    SyntaxCapabilityStatus, SyntaxCapabilityView,
 };
 pub use transcription::{
     CreateJobRequest, CreateRecordingTranscriptionRequest, TranscriptionCoordinator,

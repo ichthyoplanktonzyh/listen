@@ -96,6 +96,14 @@ captures only a bounded stderr tail, and terminates/reaps the process group on
 shutdown. Realtime routes see only the application adapter seam and never child
 process details.
 
+The optional syntax runtime installs upgrades into isolated versioned release
+directories. A candidate must start, probe successfully, and match the
+qualified delivery identity before `SyntaxCapabilityManager` durably publishes
+its active-directory journal and switches the in-memory provider pointer.
+Ordinary candidate failures preserve the last-good provider and readiness;
+candidate failure provenance and deferred old-release cleanup remain in an
+internal runtime journal rather than the learner-facing capability contract.
+
 Before a schema upgrade, SQLite publishes a source-schema-versioned recovery
 copy only after a same-directory temporary copy is synced. Hard-link
 no-replace publication plus parent-directory sync prevents a partial copy from
