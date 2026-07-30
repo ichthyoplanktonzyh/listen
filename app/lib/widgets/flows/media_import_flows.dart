@@ -258,18 +258,21 @@ Future<void> _downloadOnline({
       cancel: download.cancel,
       onCompleted: (path) =>
           playerController.setStatus('${l.text('downloadComplete')}: $path'),
-      onFailed: (error) => playerController.setStatus(
-        '${l.text('downloadFailed')}: $error',
+      onFailed: (failure) => playerController.setStatus(
+        l.text('downloadFailed'),
         error: true,
+        failure: failure,
       ),
     );
     playerController.setStatus(l.text('downloadingInBackground'));
   } catch (error) {
     if (context.mounted) {
-      downloadController.fail(error.toString());
+      final failure = describeApiFailure(error);
+      downloadController.fail(failure);
       playerController.setStatus(
-        '${l.text('downloadFailed')}: $error',
+        l.text('downloadFailed'),
         error: true,
+        failure: failure,
       );
     }
   }
