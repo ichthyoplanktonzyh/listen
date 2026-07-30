@@ -150,9 +150,6 @@ void main() {
     'lib/widgets/flows/manual_review_flow.dart',
     'lib/widgets/flows/media_import_flows.dart',
     'lib/widgets/panels/manual_timeline_review_dialog.dart',
-    'lib/widgets/settings/llm_provider_settings.dart',
-    'lib/widgets/settings/realtime_provider_settings.dart',
-    'lib/widgets/settings/syntax_capability_settings.dart',
     'lib/widgets/vocabulary/semantic_search_dialog.dart',
   };
 
