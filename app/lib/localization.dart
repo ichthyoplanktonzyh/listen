@@ -1462,7 +1462,6 @@ class AppLocalizations {
       'realtimeRetryTranscription': 'Retry transcription',
       'realtimeFailureDetailsShow': 'Details',
       'realtimeFailureDetailsHide': 'Hide details',
-      'realtimeFailureReference': 'Reference {id}',
       'realtimeFailureAudioCapture':
           'The recording for this turn was not captured.',
       'realtimeFailureLocalTranscription':
@@ -1796,6 +1795,37 @@ class AppLocalizations {
       'statusTrackResourcesPartlyUnavailable':
           'Some of this track\'s timeline resources could not be read',
       'statusAudioAnalysisFailed': 'Audio analysis failed',
+
+      // The id that ties a report to a backend log line. Domain-neutral on
+      // purpose: it was `realtimeFailureReference`, but every failure surface
+      // needs the same line and a second copy of one string is how the two
+      // drift apart.
+      'failureReference': 'Reference {id}',
+
+      // ── 人工校对词级时间 · manual word timing dialog (#7 · S6) ──────────
+      // The whole surface was hardcoded English with zero `l.text`, so a `zh`
+      // learner opened it to a screen in a language they had not chosen.
+      'manualTimingTitle': 'Manual word timing review',
+      'manualTimingPlaySentence': 'Play sentence',
+      'manualTimingPlayWord': 'Play word',
+      'manualTimingEditedCount': '{count} edited',
+      'manualTimingBoundariesValid': 'Current sentence boundaries are valid.',
+      'manualTimingResetSentence': 'Reset sentence',
+      'manualTimingSaveRevision': 'Save revision',
+      // The provenance slot of a row: normally where the timing came from,
+      // and after an edit, that it came from you.
+      'manualTimingUserAdjusted': 'you adjusted this',
+      'manualTimingStart': 'Start',
+      'manualTimingEnd': 'End',
+      'manualTimingSentence': 'Sentence {index}',
+      'manualTimingPreviousSentence': 'Previous sentence',
+      'manualTimingNextSentence': 'Next sentence',
+      // A named failure state (#62), not an interpolated exception. The
+      // backend's own message and the transport text stay off screen; only
+      // the reference id travels, and only when there is one.
+      'manualTimingSaveFailed': 'This revision could not be saved.',
+      'manualTimingSaveRejected':
+          'The backend would not accept these boundaries.',
     },
     'zh': {
       'reviewTitle': '声音复习',
@@ -3072,7 +3102,6 @@ class AppLocalizations {
       'realtimeRetryTranscription': '重试转写',
       'realtimeFailureDetailsShow': '详情',
       'realtimeFailureDetailsHide': '收起详情',
-      'realtimeFailureReference': '追踪编号 {id}',
       'realtimeFailureAudioCapture': '这一轮的录音没能保存下来。',
       'realtimeFailureLocalTranscription': '本地转写没有返回结果。',
       'realtimeFailurePostProcessing': '你说完之后，这一轮没能处理完成。',
@@ -3342,6 +3371,25 @@ class AppLocalizations {
       // ── Named failure states (#62) ─────────────────────────────────────
       'statusTrackResourcesPartlyUnavailable': '这条字幕的部分时间轴资源读取失败',
       'statusAudioAnalysisFailed': '音频分析失败',
+
+      'failureReference': '追踪编号 {id}',
+
+      // ── 人工校对词级时间（#7 · S6）───────────────────────────────────
+      'manualTimingTitle': '人工校对词级时间',
+      'manualTimingPlaySentence': '播放整句',
+      'manualTimingPlayWord': '播放这个词',
+      'manualTimingEditedCount': '已改 {count} 处',
+      'manualTimingBoundariesValid': '这一句的边界没有问题。',
+      'manualTimingResetSentence': '还原这一句',
+      'manualTimingSaveRevision': '保存修订',
+      'manualTimingUserAdjusted': '你调整过',
+      'manualTimingStart': '起点',
+      'manualTimingEnd': '终点',
+      'manualTimingSentence': '第 {index} 句',
+      'manualTimingPreviousSentence': '上一句',
+      'manualTimingNextSentence': '下一句',
+      'manualTimingSaveFailed': '这次修订没能保存。',
+      'manualTimingSaveRejected': '后端不接受这组边界。',
     },
   };
 }
