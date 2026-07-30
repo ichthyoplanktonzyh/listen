@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/api_failure.dart';
 import '../../models/task_status.dart';
 import '../../player_adapter.dart';
 import '../../theme/breakpoints.dart';
@@ -14,6 +15,7 @@ import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 import '../../utils/format_duration.dart';
 import '../../utils/media_title.dart';
+import '../common/api_failure_disclosure.dart';
 
 /// One receded look for both transport progress bars (#30): a thin track that
 /// nearly sinks into the bar, where only the played portion and the handle
@@ -108,6 +110,7 @@ class PlaybackControls extends StatelessWidget {
     required this.secondarySubtitleOffset,
     required this.status,
     this.statusIsError = false,
+    this.statusFailure,
     required this.taskStatuses,
     required this.extensiveListeningActive,
     this.huntingActive = false,
@@ -176,6 +179,15 @@ class PlaybackControls extends StatelessWidget {
 
   /// Error statuses render in the error color with a leading icon.
   final bool statusIsError;
+
+  /// The transport detail behind an error [status], when there is one.
+  ///
+  /// [status] is now the whole sentence, which leaves the reference id a bug
+  /// report needs with nowhere to go — this is where it goes. The row is one
+  /// ellipsized line with no room to expand in place, so the detail opens as a
+  /// dialog, and only when there is something to open. `ApiFailure.raw` is not
+  /// among the fields shown even then.
+  final ApiFailure? statusFailure;
   final List<UserTaskStatus> taskStatuses;
   final bool extensiveListeningActive;
   final bool huntingActive;
@@ -590,6 +602,11 @@ class PlaybackControls extends StatelessWidget {
                                           ?.copyWith(color: colors.error),
                                     ),
                                   ),
+                                  if (statusFailure != null)
+                                    ApiFailureDetailsButton(
+                                      key: const Key('playback-error-details'),
+                                      failure: statusFailure!,
+                                    ),
                                 ],
                               ),
                             ),

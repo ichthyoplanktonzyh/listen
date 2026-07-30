@@ -176,6 +176,8 @@ Widget _harness({required double width, required Widget child}) => MaterialApp(
     GlobalCupertinoLocalizations.delegate,
   ],
   home: Scaffold(
-    body: Center(child: SizedBox(width: width, child: child)),
+    body: Center(
+      child: SizedBox(width: width, child: child),
+    ),
   ),
 );

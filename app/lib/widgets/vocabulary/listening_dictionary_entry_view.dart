@@ -510,12 +510,7 @@ class _ListeningDictionaryEntryViewState
         // for itself.
         if (widget.suggestionsLoading || widget.suggestions.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-              24,
-              ListenSpacing.gap12,
-              24,
-              0,
-            ),
+            padding: const EdgeInsets.fromLTRB(24, ListenSpacing.gap12, 24, 0),
             child: _suggestionRegion(l),
           ),
         const SizedBox(height: ListenSpacing.gap8),
@@ -531,12 +526,7 @@ class _ListeningDictionaryEntryViewState
             // Every section stays built (anchors, not tabs), so scrolling to
             // the last one is always possible and evidence stays readable
             // beside clips.
-            padding: const EdgeInsets.fromLTRB(
-              24,
-              ListenSpacing.gap12,
-              24,
-              32,
-            ),
+            padding: const EdgeInsets.fromLTRB(24, ListenSpacing.gap12, 24, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1250,10 +1240,7 @@ class _ListeningDictionaryEntryViewState
         ),
         OutlinedButton.icon(
           onPressed: () => openExternal(url),
-          icon: const Icon(
-            Icons.open_in_new,
-            size: ListenIconSize.control,
-          ),
+          icon: const Icon(Icons.open_in_new, size: ListenIconSize.control),
           label: Text(l.text('dictionaryYouglish')),
         ),
       ],

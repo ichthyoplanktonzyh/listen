@@ -225,8 +225,9 @@ Future<void> openOnlineMediaFlow({
     onMediaSwitched();
   } catch (error) {
     playerController.setStatus(
-      '${l.text('statusOnlineMediaFailed')}: $error',
+      l.text('statusOnlineMediaFailed'),
       error: true,
+      failure: describeApiFailure(error),
     );
   }
 }
@@ -258,18 +259,21 @@ Future<void> _downloadOnline({
       cancel: download.cancel,
       onCompleted: (path) =>
           playerController.setStatus('${l.text('downloadComplete')}: $path'),
-      onFailed: (error) => playerController.setStatus(
-        '${l.text('downloadFailed')}: $error',
+      onFailed: (failure) => playerController.setStatus(
+        l.text('downloadFailed'),
         error: true,
+        failure: failure,
       ),
     );
     playerController.setStatus(l.text('downloadingInBackground'));
   } catch (error) {
     if (context.mounted) {
-      downloadController.fail(error.toString());
+      final failure = describeApiFailure(error);
+      downloadController.fail(failure);
       playerController.setStatus(
-        '${l.text('downloadFailed')}: $error',
+        l.text('downloadFailed'),
         error: true,
+        failure: failure,
       );
     }
   }
@@ -343,8 +347,9 @@ Future<void> importEmbeddedSubtitleFlow({
     await mediaSession.openSubtitlePath(extracted, secondary: choice.$2);
   } catch (error) {
     playerController.setStatus(
-      '${l.text('statusEmbeddedImportFailed')}: $error',
+      l.text('statusEmbeddedImportFailed'),
       error: true,
+      failure: describeApiFailure(error),
     );
   }
 }

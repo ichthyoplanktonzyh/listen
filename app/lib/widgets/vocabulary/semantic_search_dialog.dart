@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/named_failure.dart';
 import '../../models/semantic_embedding.dart';
 import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
+import '../common/api_failure_disclosure.dart';
 import '../common/listen_empty_state.dart';
-import '../common/listen_error_state.dart';
 
 class SemanticSearchDialog extends StatefulWidget {
   const SemanticSearchDialog({
@@ -29,7 +30,15 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
   List<SemanticSearchHitView> hits = const [];
   bool busy = true;
   String? busyLabel;
-  String? error;
+
+  /// Which action failed, and what the transport said.
+  ///
+  /// Seven `catch` blocks used to write `error = '$failure'` into one `String?`,
+  /// which `semanticSearchFailure`'s `{error}` placeholder then rendered — so a
+  /// failed install printed an `HttpException` with the sidecar's loopback URI.
+  /// A key plus a typed detail makes that unrepresentable, and names *which*
+  /// action failed instead of saying "semantic search" for all seven.
+  NamedFailure? failure;
 
   @override
   void initState() {
@@ -50,14 +59,17 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
         setState(() {
           capability = value;
           busy = false;
-          error = null;
+          failure = null;
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchCapabilityUnavailable',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -68,7 +80,7 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
     setState(() {
       busy = true;
       busyLabel = l.text('semanticSearchInstalling');
-      error = null;
+      failure = null;
     });
     try {
       final value = await widget.api.installSemanticEmbedding();
@@ -79,12 +91,15 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
           busyLabel = null;
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
           busyLabel = null;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchInstallFailed',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -95,7 +110,7 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
     setState(() {
       busy = true;
       busyLabel = l.text('semanticSearchIndexing');
-      error = null;
+      failure = null;
     });
     try {
       final value = await widget.api.rebuildSemanticEmbedding();
@@ -106,12 +121,15 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
           busyLabel = null;
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
           busyLabel = null;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchRebuildFailed',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -128,11 +146,14 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
           hits = const [];
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchToggleFailed',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -148,11 +169,14 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
           busy = false;
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchToggleFailed',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -169,11 +193,14 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
           hits = const [];
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchUninstallFailed',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -184,7 +211,7 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
     setState(() {
       busy = true;
       busyLabel = null;
-      error = null;
+      failure = null;
     });
     try {
       final result = await widget.api.semanticSearch(
@@ -198,11 +225,14 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
           busy = false;
         });
       }
-    } catch (failure) {
+    } catch (thrown) {
       if (mounted) {
         setState(() {
           busy = false;
-          error = '$failure';
+          failure = NamedFailure(
+            'semanticSearchQueryFailed',
+            detail: describeApiFailure(thrown),
+          );
         });
       }
     }
@@ -228,13 +258,12 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
                   child: Text(busyLabel!),
                 ),
             ],
-            if (error != null)
+            if (failure != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: ListenErrorNotice(
-                  message: l
-                      .text('semanticSearchFailure')
-                      .replaceAll('{error}', error!),
+                child: ApiFailureNotice(
+                  message: l.text(failure!.messageKey),
+                  failure: failure!.detail,
                 ),
               ),
             if (value != null) ...[
@@ -330,7 +359,7 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          child: Text(l.text('close')),
         ),
         FilledButton(
           onPressed: !busy && (value?.canSearch ?? false) ? _search : null,

@@ -290,13 +290,13 @@ class AppLocalizations {
       'dictionaryMarkedNotHeard': 'Marked: did not hear it',
       'dictionaryMarkUnavailable':
           'This older clip has no durable sentence link, so it cannot add evidence.',
-      'dictionaryMarkFailed': 'Could not save this marking: {error}',
+      'dictionaryMarkFailed': 'Could not save this marking',
       'dictionaryLibrarySection': 'More from my library',
       'dictionaryFindMore': 'Search my library',
       'dictionaryNoLibraryResults': 'No other contexts in your library yet',
       'dictionaryCollect': 'Save as source clip',
       'dictionaryCollected': 'Saved as a source clip of this entry',
-      'dictionaryCollectFailed': 'Could not save this clip: {error}',
+      'dictionaryCollectFailed': 'Could not save this clip',
       'corpusKindWord': 'Word',
       'corpusKindSentence': 'Sentence',
       'corpusKindChunk': 'Chunk',
@@ -305,7 +305,7 @@ class AppLocalizations {
       'dictionaryReindexFailed': 'Could not rebuild the index',
       'dictionaryAddToReview': 'Add to review',
       'dictionaryReviewQueued': 'Added to sound review',
-      'dictionaryReviewFailed': 'Could not add to review: {error}',
+      'dictionaryReviewFailed': 'Could not add to review',
       'dictionaryReviewClip': 'Add this clip to review',
       'huntingList': 'Hunting List',
       'huntingTargetCount': '{count} of 5 active targets',
@@ -318,7 +318,7 @@ class AppLocalizations {
       'huntingAdded': 'Added to Hunting List',
       'huntingAlreadyAdded': 'Already in Hunting List',
       'huntingArchived': 'Removed from active targets',
-      'huntingUpdateFailed': 'Could not update Hunting List: {error}',
+      'huntingUpdateFailed': 'Could not update Hunting List',
       'huntingArchive': 'Remove from active targets',
       'huntingSourceManual': 'Added from the listening dictionary',
       'huntingSourceReview': 'Confirmed after repeated review misses',
@@ -346,7 +346,7 @@ class AppLocalizations {
       'productionGapTargetReason':
           '{frequency} · receptive evidence {evidence} · recency band {recency}',
       'productionGapFrequencyUnavailable': 'frequency unavailable',
-      'productionGapUnavailable': 'Could not load output review: {error}',
+      'productionGapUnavailable': 'Could not load output review',
       'productionGapSemanticClue':
           'Near something you used: {word} · {score} (model clue, not a synonym claim)',
       'semanticSearchTitle': 'Search by meaning',
@@ -362,7 +362,7 @@ class AppLocalizations {
       'semanticSearchUnavailable':
           'Semantic search is optional. Exact search remains available.',
       'semanticSearchNoHits': 'No semantic matches yet.',
-      'semanticSearchFailure': 'Semantic search unavailable: {error}',
+      'semanticSearchFailure': 'Semantic search unavailable',
       'semanticSearchToggle': 'Semantic',
       // S3 · the vocabulary workbench's gap instrument room (default right pane)
       'gapPaneTitle': 'Where output lags input',
@@ -423,7 +423,7 @@ class AppLocalizations {
       'dictionaryAssignedSenseFolder': 'Change meaning',
       'dictionaryUnassignSenseFolder': 'Remove from {label}',
       'dictionaryContentSaved': 'Definition and note saved',
-      'dictionaryUpdateFailed': 'Could not update: {error}',
+      'dictionaryUpdateFailed': 'Could not update',
       'dictionaryUpgradeSuggestion':
           'Listening evidence from {count} contexts suggests you can hear this now.',
       'home': 'Home',
@@ -554,6 +554,8 @@ class AppLocalizations {
       'coachEvidenceSource': 'Durable source',
       'coachEvidenceCount': 'Facts in period',
       'coachEvidenceEmpty': 'No source facts in this period.',
+      // #62: this drill-down used to print the whole caught exception.
+      'coachEvidenceFailed': 'This evidence could not be loaded.',
       // ── Coach as navigation (#81 · S2) ──
       'coachChannelEvidence': 'Channel evidence',
       'coachChannelNoEvidence': 'No evidence for {channel} in this period.',
@@ -1796,6 +1798,41 @@ class AppLocalizations {
           'Some of this track\'s timeline resources could not be read',
       'statusAudioAnalysisFailed': 'Audio analysis failed',
 
+      // The diagnostics disclosure. Collapsed by default; it shows the
+      // reference id and the backend's own message, and never the raw body or
+      // the loopback URI the exception's toString appended.
+      'failureDetailsShow': 'Details',
+      'failureDetailsHide': 'Hide details',
+      'failureDetailsTitle': 'Failure details',
+
+      // Playback (player_adapter → the status line).
+      'statusPositionPollingFailed': 'Lost track of the playback position',
+
+      // Settings panels.
+      'llmProvidersLoadFailed': 'Could not load the AI providers',
+      'llmProviderSaveFailed': 'Could not save this provider',
+      'llmProviderRemoveFailed': 'Could not remove this provider',
+      'realtimeProvidersLoadFailed': 'Could not load the speech providers',
+      'realtimeProviderSaveFailed': 'Could not save this provider',
+      'realtimeProviderRemoveFailed': 'Could not remove this provider',
+      'syntaxCapabilityLoadFailed':
+          'Could not read the sentence-analysis state',
+      'syntaxCapabilityActionFailed': 'That sentence-analysis action failed',
+      'syntaxTrackAnalysisFailed': 'Could not analyse this track',
+
+      // Semantic search (the vocabulary workbench's dialog).
+      'semanticSearchCapabilityUnavailable':
+          'Could not read the meaning-search state',
+      'semanticSearchInstallFailed': 'Could not install meaning search',
+      'semanticSearchRebuildFailed': 'Could not rebuild the meaning index',
+      'semanticSearchToggleFailed': 'Could not change meaning search',
+      'semanticSearchUninstallFailed': 'Could not uninstall meaning search',
+      'semanticSearchQueryFailed': 'That search could not be run',
+
+      // Phonetic analysis centre.
+      'phoneticAnalysisLoadFailed': 'Could not load the analysis centre',
+      'phoneticModelInstallFailed': 'Could not install this model',
+
       // The id that ties a report to a backend log line. Domain-neutral on
       // purpose: it was `realtimeFailureReference`, but every failure surface
       // needs the same line and a second copy of one string is how the two
@@ -2146,13 +2183,13 @@ class AppLocalizations {
       'dictionaryMarkedHeard': '已标记：这次听出来了',
       'dictionaryMarkedNotHeard': '已标记：这次没听出',
       'dictionaryMarkUnavailable': '这条旧切片没有稳定句子关联，不能写入学习证据。',
-      'dictionaryMarkFailed': '保存本次标记失败：{error}',
+      'dictionaryMarkFailed': '保存本次标记失败',
       'dictionaryLibrarySection': '媒体库中的更多例句',
       'dictionaryFindMore': '在我的媒体库中搜索',
       'dictionaryNoLibraryResults': '媒体库中暂时没有其他语境',
       'dictionaryCollect': '收为来源切片',
       'dictionaryCollected': '已收为该词条的来源切片',
-      'dictionaryCollectFailed': '收藏切片失败：{error}',
+      'dictionaryCollectFailed': '收藏切片失败',
       'corpusKindWord': '词',
       'corpusKindSentence': '句子',
       'corpusKindChunk': '语块',
@@ -2161,7 +2198,7 @@ class AppLocalizations {
       'dictionaryReindexFailed': '重建语料索引失败',
       'dictionaryAddToReview': '加入复习',
       'dictionaryReviewQueued': '已加入声音复习',
-      'dictionaryReviewFailed': '加入复习失败：{error}',
+      'dictionaryReviewFailed': '加入复习失败',
       'dictionaryReviewClip': '此切片加入复习',
       'huntingList': '猎词单',
       'huntingTargetCount': '正在攻克 {count} / 5 个目标',
@@ -2173,7 +2210,7 @@ class AppLocalizations {
       'huntingAdded': '已加入猎词单',
       'huntingAlreadyAdded': '已在猎词单中',
       'huntingArchived': '已移出正在攻克',
-      'huntingUpdateFailed': '更新猎词单失败：{error}',
+      'huntingUpdateFailed': '更新猎词单失败',
       'huntingArchive': '移出正在攻克',
       'huntingSourceManual': '从听力词典手动加入',
       'huntingSourceReview': '复习反复失败后确认加入',
@@ -2196,7 +2233,7 @@ class AppLocalizations {
       'productionGapTargetReason':
           '{frequency} · 接收证据强度 {evidence} · 近期档 {recency}',
       'productionGapFrequencyUnavailable': '通用词频暂无',
-      'productionGapUnavailable': '无法加载产出复盘：{error}',
+      'productionGapUnavailable': '无法加载产出复盘',
       'productionGapSemanticClue': '与你用过的词语义相近：{word} · {score}（模型线索，不是同义词结论）',
       'semanticSearchTitle': '按意思搜索',
       'semanticSearchHint': '描述你想查找的意思',
@@ -2210,7 +2247,7 @@ class AppLocalizations {
       'semanticSearchIndexing': '正在为可重建语料生成向量…',
       'semanticSearchUnavailable': '语义搜索是可选能力；精确搜索仍可使用。',
       'semanticSearchNoHits': '暂时没有语义近邻结果。',
-      'semanticSearchFailure': '语义搜索不可用：{error}',
+      'semanticSearchFailure': '语义搜索不可用',
       'semanticSearchToggle': '语义',
       // S3 · 词汇本工作台的差距仪表间(右面默认页)
       'gapPaneTitle': '输出跟不上输入的词',
@@ -2262,7 +2299,7 @@ class AppLocalizations {
       'dictionaryAssignedSenseFolder': '更改义项',
       'dictionaryUnassignSenseFolder': '从“{label}”移出',
       'dictionaryContentSaved': '释义与笔记已保存',
-      'dictionaryUpdateFailed': '更新失败：{error}',
+      'dictionaryUpdateFailed': '更新失败',
       'dictionaryUpgradeSuggestion': '来自 {count} 个语境的听力证据显示你可能已能听出它。',
       'home': '首页',
       'library': '内容库',
@@ -2375,6 +2412,7 @@ class AppLocalizations {
       'coachEvidenceSource': '持久事实来源',
       'coachEvidenceCount': '周期内事实数',
       'coachEvidenceEmpty': '该周期内没有来源事实。',
+      'coachEvidenceFailed': '这份证据没能加载。',
       // ── 教练页即导航（#81 · S2）──
       'coachChannelEvidence': '通道证据',
       'coachChannelNoEvidence': '这段时间{channel}还没有证据。',
@@ -3463,6 +3501,27 @@ class AppLocalizations {
       // ── Named failure states (#62) ─────────────────────────────────────
       'statusTrackResourcesPartlyUnavailable': '这条字幕的部分时间轴资源读取失败',
       'statusAudioAnalysisFailed': '音频分析失败',
+      'failureDetailsShow': '诊断详情',
+      'failureDetailsHide': '收起详情',
+      'failureDetailsTitle': '失败诊断',
+      'statusPositionPollingFailed': '播放进度读取中断',
+      'llmProvidersLoadFailed': '无法加载 AI 供应商',
+      'llmProviderSaveFailed': '保存该供应商失败',
+      'llmProviderRemoveFailed': '移除该供应商失败',
+      'realtimeProvidersLoadFailed': '无法加载语音供应商',
+      'realtimeProviderSaveFailed': '保存该供应商失败',
+      'realtimeProviderRemoveFailed': '移除该供应商失败',
+      'syntaxCapabilityLoadFailed': '无法读取句法分析状态',
+      'syntaxCapabilityActionFailed': '该句法分析操作失败',
+      'syntaxTrackAnalysisFailed': '无法分析这条字幕',
+      'semanticSearchCapabilityUnavailable': '无法读取语义检索状态',
+      'semanticSearchInstallFailed': '安装语义检索失败',
+      'semanticSearchRebuildFailed': '重建语义索引失败',
+      'semanticSearchToggleFailed': '切换语义检索失败',
+      'semanticSearchUninstallFailed': '卸载语义检索失败',
+      'semanticSearchQueryFailed': '本次检索没能执行',
+      'phoneticAnalysisLoadFailed': '无法加载分析中心',
+      'phoneticModelInstallFailed': '安装该模型失败',
 
       'failureReference': '追踪编号 {id}',
 

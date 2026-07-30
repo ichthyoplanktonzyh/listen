@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/named_failure.dart';
 import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
 
 const openAiRealtimeBaselineModel = 'gpt-realtime-2.1';
@@ -35,7 +37,10 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
   List<RealtimeProviderProfileView> _profiles = const [];
   bool _loading = true;
   bool _submitting = false;
-  String? _error;
+
+  /// The last failure, as a *key* plus typed detail — see
+  /// `NamedFailure`. This was a `String? _error = '$error'`, rendered verbatim.
+  NamedFailure? _failure;
 
   final _name = TextEditingController();
   final _endpoint = TextEditingController(
@@ -73,7 +78,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _failure = null;
     });
     try {
       final profiles = await widget.api.realtimeProfiles();
@@ -85,7 +90,10 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _failure = NamedFailure(
+          'realtimeProvidersLoadFailed',
+          detail: describeApiFailure(error),
+        );
         _loading = false;
       });
     }
@@ -109,7 +117,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
     }
     setState(() {
       _submitting = true;
-      _error = null;
+      _failure = null;
     });
     try {
       await widget.api.registerRealtimeProfile(
@@ -131,7 +139,10 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _failure = NamedFailure(
+          'realtimeProviderSaveFailed',
+          detail: describeApiFailure(error),
+        );
         _submitting = false;
       });
     }
@@ -163,7 +174,12 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = '$error');
+      setState(
+        () => _failure = NamedFailure(
+          'realtimeProviderRemoveFailed',
+          detail: describeApiFailure(error),
+        ),
+      );
     }
   }
 
@@ -199,12 +215,12 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
           ),
         ),
         const SizedBox(height: ListenSpacing.gap12),
-        if (_error != null)
+        if (_failure != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              _error!,
-              style: TextStyle(color: theme.colorScheme.error),
+            child: ApiFailureNotice(
+              message: l.text(_failure!.messageKey),
+              failure: _failure!.detail,
             ),
           ),
         if (_loading)

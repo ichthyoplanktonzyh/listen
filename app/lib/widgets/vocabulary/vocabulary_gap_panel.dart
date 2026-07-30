@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../models/api_failure.dart';
 import '../../models/production_corpus.dart';
 import '../../models/projection_review.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
+import '../common/api_failure_disclosure.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_empty_state.dart';
 import '../common/listen_loading.dart';
@@ -38,11 +40,19 @@ class VocabularyGapPanel extends StatelessWidget {
   /// Cross-channel review candidates (`GET /v1/review/cross-modal`). `null`
   /// while still loading; empty is an honest "no gaps" answer.
   final List<CrossModalReviewCandidateView>? candidates;
-  final String? candidatesError;
+
+  /// Why the candidate source could not be read, when it could not.
+  ///
+  /// Typed, not a `String?`: this used to hold `'$error'` and the notice below
+  /// substituted it into a `{error}` placeholder, which is how an
+  /// `HttpException` — loopback URI and all — reached this pane.
+  final ApiFailure? candidatesError;
 
   /// The production gap review (`/v1/production-gap/*`). `null` while loading.
   final ProductionGapReviewView? production;
-  final String? productionError;
+
+  /// Why the production-gap source could not be read. See [candidatesError].
+  final ApiFailure? productionError;
 
   final ValueChanged<String> onOpenEntry;
 
@@ -113,10 +123,9 @@ class VocabularyGapPanel extends StatelessWidget {
               emphasised: highlightCandidates,
             ),
             if (candidatesError != null)
-              _InlineNotice(
-                text: l
-                    .text('crossModalReviewUnavailable')
-                    .replaceAll('{error}', candidatesError!),
+              _FailedSource(
+                text: l.text('crossModalReviewUnavailable'),
+                failure: candidatesError!,
               )
             else if (candidateList.isEmpty)
               _InlineNotice(text: l.text('crossModalReviewEmpty'))
@@ -134,10 +143,9 @@ class VocabularyGapPanel extends StatelessWidget {
             // ── Source 2: production gap ──
             _SectionHeader(label: l.text('gapPaneProductionSection')),
             if (productionError != null)
-              _InlineNotice(
-                text: l
-                    .text('productionGapUnavailable')
-                    .replaceAll('{error}', productionError!),
+              _FailedSource(
+                text: l.text('productionGapUnavailable'),
+                failure: productionError!,
               )
             else if (production == null)
               const SizedBox.shrink()
@@ -207,6 +215,28 @@ class _InlineNotice extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A source of this pane that could not be read: the sentence in the pane's
+/// own quiet notice voice, plus the diagnostics behind a toggle.
+///
+/// The pane degrades rather than fails — one source being down is not the
+/// workbench being down — so the failure keeps [_InlineNotice]'s weight
+/// instead of shouting in an error container.
+class _FailedSource extends StatelessWidget {
+  const _FailedSource({required this.text, required this.failure});
+
+  final String text;
+  final ApiFailure failure;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _InlineNotice(text: text),
+      ApiFailureDisclosure(failure: failure),
+    ],
+  );
 }
 
 class _CandidateRow extends StatelessWidget {

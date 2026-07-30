@@ -518,8 +518,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       adapter.playing.listen((value) {
         playerController.setPlaying(value);
       }),
-      adapter.errors.listen((value) {
-        playerController.setStatus(value);
+      adapter.errors.listen((failure) {
+        playerController.setNamedFailure(failure, l.text);
       }),
       adapter.tracks.listen((value) {
         if (!mounted) return;
@@ -637,8 +637,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     } catch (error) {
       if (mounted) {
         playerController.setStatus(
-          '${l.text('statusCoreUnavailable')}: $error',
+          l.text('statusCoreUnavailable'),
           error: true,
+          failure: describeApiFailure(error),
         );
         setState(() {
           connectingApi = false;
@@ -984,9 +985,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           // The lobby's caption switch is a habit, so it is remembered
           // across conversations and restarts (#85 · S8).
           captionEnabled: settingsController.realtimeCaptionVisible,
-          onCaptionEnabledChanged: (value) => unawaited(
-            settingsController.setRealtimeCaptionVisible(value),
-          ),
+          onCaptionEnabledChanged: (value) =>
+              unawaited(settingsController.setRealtimeCaptionVisible(value)),
           // The debrief's 回流 is a door, not a claim (#86 · S9): the words
           // this conversation handed to the speaking channel are in the
           // vocabulary book, and an amber target goes straight into 我的表达.
@@ -1171,8 +1171,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       playerController.setStatus(l.text('readingMarkSaved'));
     } catch (error) {
       playerController.setStatus(
-        '${l.text('statusReadingMarkFailed')}: $error',
+        l.text('statusReadingMarkFailed'),
         error: true,
+        failure: describeApiFailure(error),
       );
     }
   }
@@ -1196,8 +1197,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
     } catch (error) {
       playerController.setStatus(
-        '${l.text('statusSpecialtyClipsUnavailable')}: $error',
+        l.text('statusSpecialtyClipsUnavailable'),
         error: true,
+        failure: describeApiFailure(error),
       );
       return;
     }

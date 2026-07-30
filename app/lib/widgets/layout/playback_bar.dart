@@ -120,6 +120,7 @@ class _PlaybackBarState extends State<PlaybackBar> {
       secondarySubtitleOffset: subtitleController.secondarySubtitleOffset,
       status: status,
       statusIsError: playerController.statusIsError,
+      statusFailure: playerController.statusFailure,
       taskStatuses: taskStatuses,
       extensiveListeningActive: extensiveListeningController.active,
       huntingActive: widget.huntingSessionController.state.enabled,

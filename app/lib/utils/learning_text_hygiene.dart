@@ -78,7 +78,13 @@ const _clauseOpeners = <String>{'(', '['};
 /// Languages written with fullwidth punctuation, by base subtag. Korean is
 /// absent on purpose: modern Korean typography uses the ASCII period and
 /// comma, so a `。` in Korean text is the same IME residue it is in English.
-const _fullwidthPunctuationLanguages = <String>{'zh', 'ja', 'yue', 'wuu', 'lzh'};
+const _fullwidthPunctuationLanguages = <String>{
+  'zh',
+  'ja',
+  'yue',
+  'wuu',
+  'lzh',
+};
 
 /// Whether [language] (a BCP-47-ish tag such as `zh`, `zh-Hans`, `ja_JP`)
 /// writes with fullwidth punctuation, in which case punctuation is left alone.

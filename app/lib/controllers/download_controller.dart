@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/api_failure.dart';
+import '../services/api_service.dart';
 import '../widgets/player/download_status_bar.dart';
 
 /// Owns the full online-download lifecycle as a single source of truth.
@@ -61,12 +63,16 @@ class DownloadController extends ChangeNotifier {
   /// [onCompleted]/[onFailed] are optional side effects (e.g. status text). They
   /// only fire for the current generation and while the controller is alive, so
   /// they cannot run after cancel/dismiss/dispose.
+  ///
+  /// [onFailed] receives a typed [ApiFailure], not the exception's text. It used
+  /// to receive `error.toString()`, and every caller pasted that into a
+  /// sentence — see [DownloadStatusSnapshot.failed].
   void attach({
     required Stream<double> progress,
     required Future<String?> completed,
     required void Function() cancel,
     void Function(String path)? onCompleted,
-    void Function(String error)? onFailed,
+    void Function(ApiFailure failure)? onFailed,
   }) {
     final generation = _generation;
     _cancelActive = cancel;
@@ -92,17 +98,21 @@ class DownloadController extends ChangeNotifier {
       onError: (Object error) {
         if (_stale(generation)) return;
         _cancelActive = null;
-        _setSnapshot(DownloadStatusSnapshot.failed(error.toString()));
+        final failure = describeApiFailure(error);
+        _setSnapshot(DownloadStatusSnapshot.failed(failure));
         _scheduleFailedAutoDismiss();
-        onFailed?.call(error.toString());
+        onFailed?.call(failure);
       },
     );
   }
 
   /// The download could not even start (e.g. the launch call threw).
-  void fail(String error) {
+  ///
+  /// Takes an already-described [ApiFailure] so the caller's `catch` hands the
+  /// exception to `describeApiFailure` rather than to a sentence.
+  void fail(ApiFailure failure) {
     _cancelActive = null;
-    _setSnapshot(DownloadStatusSnapshot.failed(error));
+    _setSnapshot(DownloadStatusSnapshot.failed(failure));
     _scheduleFailedAutoDismiss();
   }
 

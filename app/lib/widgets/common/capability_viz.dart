@@ -911,7 +911,9 @@ class _DashedRectPainter extends CustomPainter {
 /// the real one. Presentation reads existing counts; it never derives a new
 /// metric.
 int capabilityLibrarySize(Iterable<CoachAssessmentSummary> counts) => counts
-    .map((summary) => summary.acquired + summary.notAcquired + summary.unassessed)
+    .map(
+      (summary) => summary.acquired + summary.notAcquired + summary.unassessed,
+    )
     .fold(0, math.max);
 
 /// The dashboard's portrait section: compass overview beside the echo-bar
