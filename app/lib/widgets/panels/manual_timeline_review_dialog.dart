@@ -5,6 +5,7 @@ import '../../localization.dart';
 import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_loading.dart';
@@ -221,7 +222,7 @@ class _ManualTimelineReviewDialogState
           borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: ListenPadding.row,
           child: Row(
             children: [
               SizedBox(
@@ -549,7 +550,7 @@ class _MessageBox extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 18),
+          Icon(icon, color: color, size: ListenIconSize.control),
           const SizedBox(width: ListenSpacing.gap8),
           Expanded(
             child: Text(

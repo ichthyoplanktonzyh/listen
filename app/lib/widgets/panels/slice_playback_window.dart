@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
 import '../../localization.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -94,7 +95,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
         padding: const EdgeInsets.only(left: 16, right: 6),
         child: Row(
           children: [
-            const Icon(Icons.headphones_outlined, size: 20),
+            const Icon(Icons.headphones_outlined, size: ListenIconSize.control),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(
@@ -120,7 +121,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
     final state = widget.controller.state;
     if (state.error != null) {
       return Padding(
-        padding: const EdgeInsets.all(20),
+        padding: ListenPadding.card,
         child: Center(
           child: Text(
             state.error == 'This source clip has an invalid time range'
@@ -131,7 +132,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
       );
     }
     return ListView(
-      padding: const EdgeInsets.all(18),
+      padding: ListenPadding.card,
       children: [
         Text(
           state.sentence ?? l.text('slicePlaybackNoSentence'),
@@ -166,7 +167,10 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
           children: [
             Icon(
               Icons.graphic_eq,
-              size: 34,
+              // Illustration, not a control: an audio-only slice has no video
+              // surface, so this glyph is the picture of what is playing. It
+              // labels nothing and nothing is tappable here.
+              size: ListenIconSize.illustration,
               color: Theme.of(context).colorScheme.secondary,
             ),
             const SizedBox(height: ListenSpacing.gap8),

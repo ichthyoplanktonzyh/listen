@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/timeline_resource_summary_panel.dart';
 
 void main() {
@@ -128,6 +130,40 @@ void main() {
 
     expect(find.text('LLTimeline present'), findsOneWidget);
     expect(find.text('Learning capabilities'), findsOneWidget);
+
+    // S2 token provenance. This panel had nine icon sizes across 14/15/16/18
+    // and five different `EdgeInsets`; the two steps it needs are `control` for
+    // the header identity glyph, sitting beside 14px `titleSmall`, and `inline`
+    // for the status markers that lead a line of 12px body text.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.timeline)).size,
+      ListenIconSize.control,
+    );
+    expect(
+      tester
+          .widget<Padding>(
+            find
+                .ancestor(
+                  of: find.byIcon(Icons.timeline),
+                  matching: find.byType(Padding),
+                )
+                .first,
+          )
+          .padding,
+      ListenPadding.row,
+    );
+    // And no glyph anywhere in this pane sits off the ladder — the check the
+    // source gate cannot make, since a size can reach an `Icon` through a
+    // variable.
+    final steps = <double>{
+      ListenIconSize.inline,
+      ListenIconSize.control,
+      ListenIconSize.chrome,
+      ListenIconSize.illustration,
+    };
+    for (final icon in tester.widgetList<Icon>(find.byType(Icon))) {
+      if (icon.size != null) expect(steps, contains(icon.size));
+    }
     expect(find.text('Word sync'), findsOneWidget);
     expect(find.text('Listening structure'), findsOneWidget);
     expect(
