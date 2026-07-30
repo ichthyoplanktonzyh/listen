@@ -2,14 +2,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
-    CorpusIndexRepository, DifficultyRepository, LLTimelineResourceRepository,
-    LearnerProfileUseCases, LearningEventKind, LearningEventRepository, LearningEventSubjectKind,
-    LexicalEntryRepository, LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem,
-    MediaLibraryEntry, MediaRepository, MediaTriageIntent, PhoneTimelineRepository,
-    PlaybackProgressRepository, PronunciationProvider, PronunciationRepository,
-    PronunciationUseCases, RegisterMedia, SenseGroupRepository, SubtitleTrack, SubtitleTrackId,
-    SubtitleTrackRepository, SubtitleTrackStatus, TimeMs, WordTimelineRepository, now_ms,
-    require_text,
+    CorpusIndexRepository, DifficultyRepository, LLTimelineImportRepository,
+    LLTimelineResourceRepository, LearnerProfileUseCases, LearningEventKind,
+    LearningEventRepository, LearningEventSubjectKind, LexicalEntryRepository,
+    LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem, MediaLibraryEntry,
+    MediaRepository, MediaTriageIntent, PhoneTimelineRepository, PlaybackProgressRepository,
+    PronunciationProvider, PronunciationRepository, PronunciationUseCases, RegisterMedia,
+    SenseGroupRepository, SubtitleTrack, SubtitleTrackId, SubtitleTrackRepository,
+    SubtitleTrackStatus, TimeMs, WordTimelineRepository, now_ms, require_text,
 };
 use std::sync::Arc;
 
@@ -27,6 +27,7 @@ pub struct MediaAnalysisUseCases {
     pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
+    pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -49,6 +50,7 @@ impl MediaAnalysisUseCases {
             sense_groups: services.sense_groups.clone(),
             phone_timelines: services.phone_timelines.clone(),
             lltimeline_resources: services.lltimeline_resources.clone(),
+            lltimeline_imports: services.lltimeline_imports.clone(),
             corpus: services.corpus.clone(),
             difficulty: services.difficulty.clone(),
             lexical_entries: services.lexical_entries.clone(),

@@ -900,6 +900,14 @@ async fn imports_lltimeline_for_current_media_with_existing_resource_fingerprint
         "duration_ms": null
     });
     document["metadata"]["extra"]["track_id"] = serde_json::json!(external_track_id);
+    let original_word_timeline_id = document["word_timelines"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let external_word_timeline_id =
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    document["word_timelines"][0]["id"] = serde_json::json!(external_word_timeline_id);
+    document["active_word_timeline_id"] = serde_json::json!(external_word_timeline_id);
     let mut sentence_ids = std::collections::HashMap::new();
     for (index, segment) in document["segments"]
         .as_array_mut()
@@ -923,6 +931,9 @@ async fn imports_lltimeline_for_current_media_with_existing_resource_fingerprint
     for frame in document["rhythm_frames"].as_array_mut().unwrap() {
         frame["media_id"] = target_media["id"].clone();
         frame["track_id"] = serde_json::json!(external_track_id);
+        if frame["parent_word_timeline_id"].as_str() == Some(original_word_timeline_id.as_str()) {
+            frame["parent_word_timeline_id"] = serde_json::json!(external_word_timeline_id);
+        }
         let original = frame["sentence_id"].as_str().unwrap();
         frame["sentence_id"] = serde_json::json!(sentence_ids[original]);
     }

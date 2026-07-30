@@ -2,9 +2,47 @@ use application::{ApplicationError, SenseGroupRepository, batch_governor::Cached
 use domain::{
     SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleTrackId, TimelineStatus, WordTimelineId,
 };
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
+
+pub(crate) fn save_sense_group_analysis_in_connection(
+    connection: &Connection,
+    analysis: &SenseGroupAnalysis,
+) -> Result<(), ApplicationError> {
+    super::guard_timeline_ownership(
+        connection,
+        "sense_group_analysis_runs",
+        analysis.id.as_str(),
+        &analysis.track_id,
+        &analysis.media_id,
+    )?;
+    connection
+        .execute(
+            "INSERT INTO sense_group_analysis_runs
+             (id,track_id,media_id,parent_word_timeline_id,status,analysis_json,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(id) DO UPDATE SET
+               parent_word_timeline_id=excluded.parent_word_timeline_id,
+               status=excluded.status,analysis_json=excluded.analysis_json,
+               updated_at_ms=excluded.updated_at_ms",
+            params![
+                analysis.id.as_str(),
+                analysis.track_id.as_str(),
+                analysis.media_id.as_str(),
+                analysis
+                    .parent_word_timeline_id
+                    .as_ref()
+                    .map(WordTimelineId::as_str),
+                json(&analysis.status)?,
+                json(analysis)?,
+                analysis.created_at_ms,
+                analysis.updated_at_ms
+            ],
+        )
+        .map(|_| ())
+        .map_err(repo)
+}
 
 impl SenseGroupRepository for SqliteRepository {
     fn get_llm_sentence_checkpoint(
@@ -49,28 +87,7 @@ impl SenseGroupRepository for SqliteRepository {
         &self,
         analysis: &SenseGroupAnalysis,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        self.connection
-            .lock()
-            .execute(
-                "INSERT INTO sense_group_analysis_runs
-                 (id,track_id,media_id,parent_word_timeline_id,status,analysis_json,created_at_ms,updated_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
-                 ON CONFLICT(id) DO UPDATE SET
-                   parent_word_timeline_id=excluded.parent_word_timeline_id,
-                   status=excluded.status,analysis_json=excluded.analysis_json,
-                   updated_at_ms=excluded.updated_at_ms",
-                params![
-                    analysis.id.as_str(),
-                    analysis.track_id.as_str(),
-                    analysis.media_id.as_str(),
-                    analysis.parent_word_timeline_id.as_ref().map(WordTimelineId::as_str),
-                    json(&analysis.status)?,
-                    json(analysis)?,
-                    analysis.created_at_ms,
-                    analysis.updated_at_ms
-                ],
-            )
-            .map_err(repo)?;
+        save_sense_group_analysis_in_connection(&self.connection.lock(), analysis)?;
         Ok(analysis.clone())
     }
 

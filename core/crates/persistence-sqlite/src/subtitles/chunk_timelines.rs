@@ -1,36 +1,53 @@
 use application::{ApplicationError, ChunkTimelineRepository};
 use domain::{ChunkTimeline, ChunkTimelineId, SubtitleTrackId, TimelineStatus, WordTimelineId};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
+
+pub(crate) fn save_chunk_timeline_in_connection(
+    connection: &Connection,
+    timeline: &ChunkTimeline,
+) -> Result<(), ApplicationError> {
+    super::guard_timeline_ownership(
+        connection,
+        "chunk_timeline_runs",
+        timeline.id.as_str(),
+        &timeline.track_id,
+        &timeline.media_id,
+    )?;
+    connection
+        .execute(
+            "INSERT INTO chunk_timeline_runs
+             (id,track_id,media_id,parent_word_timeline_id,status,timeline_json,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(id) DO UPDATE SET
+               parent_word_timeline_id=excluded.parent_word_timeline_id,
+               status=excluded.status,timeline_json=excluded.timeline_json,
+               updated_at_ms=excluded.updated_at_ms",
+            params![
+                timeline.id.as_str(),
+                timeline.track_id.as_str(),
+                timeline.media_id.as_str(),
+                timeline
+                    .parent_word_timeline_id
+                    .as_ref()
+                    .map(WordTimelineId::as_str),
+                json(&timeline.status)?,
+                json(timeline)?,
+                timeline.created_at_ms,
+                timeline.updated_at_ms
+            ],
+        )
+        .map(|_| ())
+        .map_err(repo)
+}
 
 impl ChunkTimelineRepository for SqliteRepository {
     fn save_chunk_timeline(
         &self,
         timeline: &ChunkTimeline,
     ) -> Result<ChunkTimeline, ApplicationError> {
-        self.connection
-            .lock()
-            .execute(
-                "INSERT INTO chunk_timeline_runs
-                 (id,track_id,media_id,parent_word_timeline_id,status,timeline_json,created_at_ms,updated_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
-                 ON CONFLICT(id) DO UPDATE SET
-                   parent_word_timeline_id=excluded.parent_word_timeline_id,
-                   status=excluded.status,timeline_json=excluded.timeline_json,
-                   updated_at_ms=excluded.updated_at_ms",
-                params![
-                    timeline.id.as_str(),
-                    timeline.track_id.as_str(),
-                    timeline.media_id.as_str(),
-                    timeline.parent_word_timeline_id.as_ref().map(WordTimelineId::as_str),
-                    json(&timeline.status)?,
-                    json(timeline)?,
-                    timeline.created_at_ms,
-                    timeline.updated_at_ms
-                ],
-            )
-            .map_err(repo)?;
+        save_chunk_timeline_in_connection(&self.connection.lock(), timeline)?;
         Ok(timeline.clone())
     }
 

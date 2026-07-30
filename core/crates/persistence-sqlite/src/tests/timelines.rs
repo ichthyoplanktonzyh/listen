@@ -644,3 +644,201 @@ fn sense_group_analysis_json_round_trip() {
         vec![SenseGroupSource::Punctuation, SenseGroupSource::LengthLimit]
     );
 }
+
+fn lltimeline_fixture() -> LLTimelineDocument {
+    serde_json::from_str(include_str!(
+        "../../../../testdata/lltimeline/v1-minimal.lltimeline.json"
+    ))
+    .unwrap()
+}
+
+fn lltimeline_import_services() -> (Arc<SqliteRepository>, application::MediaAnalysisUseCases) {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_corpus_index_repository(repo.clone());
+    (repo, services.media_analysis())
+}
+
+fn assert_no_lltimeline_import_rows(repo: &SqliteRepository) {
+    let connection = repo.connection.lock();
+    for table in [
+        "media_items",
+        "subtitle_tracks",
+        "subtitle_sentences",
+        "lltimeline_resources",
+        "word_timeline_runs",
+        "phone_timeline_runs",
+        "chunk_timeline_runs",
+        "sense_group_analysis_runs",
+        "corpus_occurrences",
+    ] {
+        let count = connection
+            .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get::<_, u64>(0)
+            })
+            .unwrap();
+        assert_eq!(count, 0, "{table} must remain empty after failed import");
+    }
+}
+
+#[test]
+fn lltimeline_validation_failures_happen_before_any_durable_write() {
+    let mut cases = Vec::new();
+
+    let mut wrong_source = lltimeline_fixture();
+    wrong_source.word_timelines[0].track_id = SubtitleTrackId::parse("wrong-track").unwrap();
+    cases.push(wrong_source);
+
+    let mut missing_parent = lltimeline_fixture();
+    missing_parent.word_timelines[0].parent_timeline_id =
+        Some(WordTimelineId::parse("missing-parent").unwrap());
+    cases.push(missing_parent);
+
+    let mut missing_active = lltimeline_fixture();
+    missing_active.active_word_timeline_id = Some(WordTimelineId::parse("missing-active").unwrap());
+    cases.push(missing_active);
+
+    for document in cases {
+        let (repo, media) = lltimeline_import_services();
+        assert!(media.import_lltimeline_document(document).is_err());
+        assert_no_lltimeline_import_rows(&repo);
+    }
+}
+
+#[test]
+fn lltimeline_repository_and_reindex_failures_roll_back_the_whole_import() {
+    for (table, operation) in [
+        ("lltimeline_resources", "INSERT"),
+        ("word_timeline_runs", "INSERT"),
+        ("corpus_occurrences", "INSERT"),
+    ] {
+        let (repo, media) = lltimeline_import_services();
+        repo.connection
+            .lock()
+            .execute_batch(&format!(
+                "CREATE TRIGGER fail_import BEFORE {operation} ON {table}
+                 BEGIN SELECT RAISE(ABORT, 'injected LLTimeline import failure'); END;"
+            ))
+            .unwrap();
+
+        assert!(
+            media
+                .import_lltimeline_document(lltimeline_fixture())
+                .is_err(),
+            "{table} failure must reach the caller"
+        );
+        assert_no_lltimeline_import_rows(&repo);
+    }
+}
+
+fn corpus_snapshot(repo: &SqliteRepository) -> Vec<String> {
+    let connection = repo.connection.lock();
+    let mut statement = connection
+        .prepare(
+            "SELECT json_object(
+               'id',id,'language',language,'kind',kind,'normalized_key',normalized_key,
+               'display_text',display_text,'media_id',media_id,'track_id',track_id,
+               'sentence_id',sentence_id,'start_ms',start_ms,'end_ms',end_ms,
+               'source_snapshot',source_snapshot
+             )
+             FROM corpus_occurrences ORDER BY id",
+        )
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+#[test]
+fn lltimeline_import_rebuilds_legacy_word_timings_and_canonical_corpus() {
+    let (repo, media) = lltimeline_import_services();
+    let track = media
+        .import_lltimeline_document(lltimeline_fixture())
+        .unwrap();
+    let active = repo
+        .active_word_timeline(&track.id)
+        .unwrap()
+        .expect("fixture has an active word timeline");
+    let sentence_id = track.sentences[0].id.clone();
+    assert_eq!(
+        repo.get_word_timings(&sentence_id).unwrap(),
+        active
+            .words
+            .iter()
+            .filter(|word| word.sentence_id == sentence_id)
+            .cloned()
+            .collect::<Vec<_>>()
+    );
+
+    let mut reimport = media.export_lltimeline_document(&track.id).unwrap();
+    let mut duplicate = reimport.rhythm_frames[0].clone();
+    duplicate.id = RhythmFrameId::parse("untrusted-duplicate-frame").unwrap();
+    duplicate.status = TimelineStatus::Archived;
+    reimport.rhythm_frames.push(duplicate);
+    media.import_lltimeline_document(reimport).unwrap();
+
+    let imported = corpus_snapshot(&repo);
+    media.rebuild_corpus_index().unwrap();
+    assert_eq!(
+        corpus_snapshot(&repo),
+        imported,
+        "import projection must equal the canonical subsequent rebuild"
+    );
+
+    let mut without_active = media.export_lltimeline_document(&track.id).unwrap();
+    without_active.active_word_timeline_id = None;
+    for timeline in &mut without_active.word_timelines {
+        timeline.status = TimelineStatus::Candidate;
+    }
+    media.import_lltimeline_document(without_active).unwrap();
+    assert!(
+        repo.get_word_timings(&sentence_id).unwrap().is_empty(),
+        "removing the active word timeline clears legacy compatibility rows"
+    );
+}
+
+#[test]
+fn lltimeline_cross_source_resource_id_reuse_rolls_back() {
+    let (repo, media) = lltimeline_import_services();
+    let original = media
+        .import_lltimeline_document(lltimeline_fixture())
+        .unwrap();
+    let original_timeline = repo
+        .active_word_timeline(&original.id)
+        .unwrap()
+        .expect("fixture active timeline");
+
+    let mut conflicting = lltimeline_fixture();
+    let other_media_id = MediaId::parse("other-media").unwrap();
+    let other_track_id = SubtitleTrackId::parse("other-track").unwrap();
+    conflicting.metadata.media.id = other_media_id.clone();
+    conflicting.metadata.media.fingerprint = "other-media-fingerprint".into();
+    conflicting.metadata.extra["track_id"] = serde_json::json!(other_track_id.as_str());
+    conflicting.metadata.extra["track_fingerprint"] = serde_json::json!("other-track-fingerprint");
+    conflicting.word_timelines[0].media_id = other_media_id.clone();
+    conflicting.word_timelines[0].track_id = other_track_id;
+
+    assert!(media.import_lltimeline_document(conflicting).is_err());
+    assert!(
+        repo.get(&other_media_id).unwrap().is_none(),
+        "the conflicting import media write must roll back"
+    );
+    assert_eq!(
+        repo.get_word_timeline(&original_timeline.id)
+            .unwrap()
+            .expect("original resource remains")
+            .track_id,
+        original.id
+    );
+}

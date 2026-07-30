@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    ApplicationError, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
-    L1SpecialtyOccurrences, LanguageCode, MediaAnalysisUseCases, SubtitleTokenKind, SubtitleTrack,
-    SubtitleTrackId, clean_required, normalize_phrase,
+    ApplicationError, ChunkTimeline, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
+    L1SpecialtyOccurrences, LLTimelineRhythmFrame, LanguageCode, MediaAnalysisUseCases,
+    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, clean_required, normalize_phrase,
 };
 
 impl MediaAnalysisUseCases {
@@ -20,6 +20,29 @@ impl MediaAnalysisUseCases {
     pub(crate) fn build_subtitle_corpus_occurrences(
         &self,
         track: &SubtitleTrack,
+    ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
+        let active_chunk_timeline = self.chunk_timelines.active_chunk_timeline(&track.id)?;
+        let rhythm_frames = self
+            .export_lltimeline_document(&track.id)
+            .map(|document| document.rhythm_frames)
+            .unwrap_or_default();
+        self.build_subtitle_corpus_occurrences_from_resources(
+            track,
+            active_chunk_timeline.as_ref(),
+            &rhythm_frames,
+        )
+    }
+
+    /// Builds the projection from an already validated import snapshot.
+    ///
+    /// Unlike the ordinary rebuild path, this does not read resources that
+    /// have not been committed yet. The resulting rows can therefore join the
+    /// source track and all imported resources in one persistence transaction.
+    pub(crate) fn build_subtitle_corpus_occurrences_from_resources(
+        &self,
+        track: &SubtitleTrack,
+        active_chunk_timeline: Option<&ChunkTimeline>,
+        rhythm_frames: &[LLTimelineRhythmFrame],
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
         let language = track.language.clone().unwrap_or(LanguageCode::parse("en")?);
         // One provider round per distinct surface per track; provider failure
@@ -82,7 +105,7 @@ impl MediaAnalysisUseCases {
                 });
             }
         }
-        if let Some(timeline) = self.chunk_timelines.active_chunk_timeline(&track.id)? {
+        if let Some(timeline) = active_chunk_timeline {
             for chunk in &timeline.chunks {
                 occurrences.push(CorpusOccurrence {
                     id: CorpusOccurrenceId::from_fingerprint(
@@ -102,7 +125,7 @@ impl MediaAnalysisUseCases {
                 });
             }
         }
-        self.append_family_occurrences(track, &language, &mut occurrences);
+        self.append_family_occurrences(track, &language, rhythm_frames, &mut occurrences);
         Ok(occurrences)
     }
 
@@ -127,19 +150,15 @@ impl MediaAnalysisUseCases {
         &self,
         track: &SubtitleTrack,
         language: &LanguageCode,
+        rhythm_frames: &[LLTimelineRhythmFrame],
         occurrences: &mut Vec<CorpusOccurrence>,
     ) {
-        // Frame assembly needs media + timelines; any failure degrades to a
-        // projection without family rows rather than failing the reindex.
-        let Ok(document) = self.export_lltimeline_document(&track.id) else {
-            return;
-        };
         let text_by_sentence = track
             .sentences
             .iter()
             .map(|sentence| (sentence.id.clone(), sentence.display_text.clone()))
             .collect::<HashMap<_, _>>();
-        for frame in &document.rhythm_frames {
+        for frame in rhythm_frames {
             let Some(snapshot) = text_by_sentence.get(&frame.sentence_id) else {
                 continue;
             };
@@ -277,7 +296,11 @@ impl MediaAnalysisUseCases {
             .get_track(track_id)?
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let mut occurrences = Vec::new();
-        self.append_family_occurrences(&track, language, &mut occurrences);
+        let rhythm_frames = self
+            .export_lltimeline_document(&track.id)
+            .map(|document| document.rhythm_frames)
+            .unwrap_or_default();
+        self.append_family_occurrences(&track, language, &rhythm_frames, &mut occurrences);
         occurrences.retain(|occurrence| {
             occurrence
                 .normalized_key

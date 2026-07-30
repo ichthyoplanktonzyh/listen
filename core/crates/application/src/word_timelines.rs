@@ -1,16 +1,17 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ApplicationError, CreateWordTimeline, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact,
-    LLTimelineDocument, LLTimelineGenerator, LLTimelineMedia, LLTimelineMetadata,
+    ApplicationError, ChunkTimeline, CreateWordTimeline, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact,
+    LLTimelineDocument, LLTimelineGenerator, LLTimelineImport, LLTimelineMedia, LLTimelineMetadata,
     LLTimelineRhythmFrame, MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind,
-    RhythmFrameId, SentenceWordTimingDiagnostics, SubtitleSentenceId, SubtitleTrack,
-    SubtitleTrackId, SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus,
-    WordTimeline, WordTimelineId, WordTimelineSummary, WordTimingBoundaryDiagnostic,
-    build_word_timeline, detached_media_path, lltimeline_segments_from_track,
-    lltimeline_segments_to_sentences, lltimeline_track_extra, lltimeline_track_fingerprint,
-    lltimeline_track_id, mark_word_timeline_published, merge_lltimeline_track_extra, now_ms,
-    remap_lltimeline_identity, require_text, validate_word_timeline_words, word_timeline_summary,
+    PhoneTimeline, RhythmFrameId, SenseGroupAnalysis, SentenceWordTimingDiagnostics,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
+    TimelineCreator, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
+    WordTimelineSummary, WordTimingBoundaryDiagnostic, build_word_timeline, detached_media_path,
+    lltimeline_segments_from_track, lltimeline_segments_to_sentences, lltimeline_track_extra,
+    lltimeline_track_fingerprint, lltimeline_track_id, mark_word_timeline_published,
+    merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity, require_text,
+    validate_word_timeline_words, word_timeline_summary,
 };
 
 const RHYTHM_FRAME_PROVIDER_ID: &str = "wordtimeline-rhythm-frame";
@@ -141,6 +142,251 @@ fn select_rhythm_source_word_timeline_id(
         .max_by_key(|timeline| timeline.updated_at_ms)
         .map(|timeline| timeline.id.clone())
         .or_else(|| active_word_timeline_id.cloned())
+}
+
+fn prepare_active_selection<T, I: Eq>(
+    items: &mut [T],
+    active_id: Option<&I>,
+    item_id: impl Fn(&T) -> &I,
+    status: impl Fn(&mut T) -> &mut TimelineStatus,
+    field: &'static str,
+) -> Result<(), ApplicationError> {
+    let mut found = active_id.is_none();
+    for item in items {
+        let selected = active_id.is_some_and(|active_id| item_id(item) == active_id);
+        let item_status = status(item);
+        if selected {
+            found = true;
+            if *item_status == TimelineStatus::Archived {
+                return Err(ApplicationError::Invalid(format!("{field} is archived")));
+            }
+            *item_status = TimelineStatus::Active;
+        } else if *item_status == TimelineStatus::Active {
+            *item_status = TimelineStatus::Candidate;
+        }
+    }
+    if found {
+        Ok(())
+    } else {
+        Err(ApplicationError::Invalid(format!(
+            "{field} is not in the document"
+        )))
+    }
+}
+
+fn validate_and_prepare_lltimeline_resources(
+    document: &mut LLTimelineDocument,
+    track: &SubtitleTrack,
+) -> Result<(), ApplicationError> {
+    let sentence_ids = track
+        .sentences
+        .iter()
+        .map(|sentence| sentence.id.clone())
+        .collect::<HashSet<_>>();
+    let word_ids = document
+        .word_timelines
+        .iter()
+        .map(|timeline| timeline.id.clone())
+        .collect::<HashSet<_>>();
+    if word_ids.len() != document.word_timelines.len() {
+        return Err(ApplicationError::Invalid(
+            "duplicate LLTimeline word timeline id".into(),
+        ));
+    }
+    for timeline in &document.word_timelines {
+        if timeline.media_id != track.media_id || timeline.track_id != track.id {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline word timeline belongs to another source".into(),
+            ));
+        }
+        if timeline
+            .parent_timeline_id
+            .as_ref()
+            .is_some_and(|parent| !word_ids.contains(parent))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline word timeline parent is missing".into(),
+            ));
+        }
+        if timeline
+            .words
+            .iter()
+            .any(|word| !sentence_ids.contains(&word.sentence_id))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline word timing sentence is missing".into(),
+            ));
+        }
+    }
+    prepare_active_selection(
+        &mut document.word_timelines,
+        document.active_word_timeline_id.as_ref(),
+        |timeline: &WordTimeline| &timeline.id,
+        |timeline: &mut WordTimeline| &mut timeline.status,
+        "active_word_timeline_id",
+    )?;
+
+    let phone_ids = document
+        .phone_timelines
+        .iter()
+        .map(|timeline| timeline.id.clone())
+        .collect::<HashSet<_>>();
+    if phone_ids.len() != document.phone_timelines.len() {
+        return Err(ApplicationError::Invalid(
+            "duplicate LLTimeline phone timeline id".into(),
+        ));
+    }
+    for timeline in &document.phone_timelines {
+        if timeline.media_id != track.media_id || timeline.track_id != track.id {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline phone timeline belongs to another source".into(),
+            ));
+        }
+        if timeline
+            .sentence_id
+            .as_ref()
+            .is_some_and(|sentence| !sentence_ids.contains(sentence))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline phone timeline sentence is missing".into(),
+            ));
+        }
+        if timeline
+            .parent_word_timeline_id
+            .as_ref()
+            .is_some_and(|parent| !word_ids.contains(parent))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline phone timeline parent is missing".into(),
+            ));
+        }
+    }
+    prepare_active_selection(
+        &mut document.phone_timelines,
+        document.active_phone_timeline_id.as_ref(),
+        |timeline: &PhoneTimeline| &timeline.id,
+        |timeline: &mut PhoneTimeline| &mut timeline.status,
+        "active_phone_timeline_id",
+    )?;
+
+    let chunk_ids = document
+        .chunk_timelines
+        .iter()
+        .map(|timeline| timeline.id.clone())
+        .collect::<HashSet<_>>();
+    if chunk_ids.len() != document.chunk_timelines.len() {
+        return Err(ApplicationError::Invalid(
+            "duplicate LLTimeline chunk timeline id".into(),
+        ));
+    }
+    for timeline in &document.chunk_timelines {
+        if timeline.media_id != track.media_id || timeline.track_id != track.id {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline chunk timeline belongs to another source".into(),
+            ));
+        }
+        if timeline
+            .parent_word_timeline_id
+            .as_ref()
+            .is_some_and(|parent| !word_ids.contains(parent))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline chunk timeline parent is missing".into(),
+            ));
+        }
+        if timeline
+            .chunks
+            .iter()
+            .any(|chunk| !sentence_ids.contains(&chunk.sentence_id))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline chunk sentence is missing".into(),
+            ));
+        }
+    }
+    prepare_active_selection(
+        &mut document.chunk_timelines,
+        document.active_chunk_timeline_id.as_ref(),
+        |timeline: &ChunkTimeline| &timeline.id,
+        |timeline: &mut ChunkTimeline| &mut timeline.status,
+        "active_chunk_timeline_id",
+    )?;
+
+    let sense_group_ids = document
+        .sense_group_analyses
+        .iter()
+        .map(|analysis| analysis.id.clone())
+        .collect::<HashSet<_>>();
+    if sense_group_ids.len() != document.sense_group_analyses.len() {
+        return Err(ApplicationError::Invalid(
+            "duplicate LLTimeline sense-group analysis id".into(),
+        ));
+    }
+    for analysis in &document.sense_group_analyses {
+        if analysis.media_id != track.media_id || analysis.track_id != track.id {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline sense-group analysis belongs to another source".into(),
+            ));
+        }
+        if analysis
+            .parent_word_timeline_id
+            .as_ref()
+            .is_some_and(|parent| !word_ids.contains(parent))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline sense-group analysis parent is missing".into(),
+            ));
+        }
+        if analysis
+            .groups
+            .iter()
+            .any(|group| !sentence_ids.contains(&group.sentence_id))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline sense-group sentence is missing".into(),
+            ));
+        }
+    }
+    prepare_active_selection(
+        &mut document.sense_group_analyses,
+        document.active_sense_group_analysis_id.as_ref(),
+        |analysis: &SenseGroupAnalysis| &analysis.id,
+        |analysis: &mut SenseGroupAnalysis| &mut analysis.status,
+        "active_sense_group_analysis_id",
+    )?;
+
+    let rhythm_ids = document
+        .rhythm_frames
+        .iter()
+        .map(|frame| frame.id.clone())
+        .collect::<HashSet<_>>();
+    if rhythm_ids.len() != document.rhythm_frames.len() {
+        return Err(ApplicationError::Invalid(
+            "duplicate LLTimeline rhythm frame id".into(),
+        ));
+    }
+    for frame in &document.rhythm_frames {
+        if frame.media_id != track.media_id || frame.track_id != track.id {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline rhythm frame belongs to another source".into(),
+            ));
+        }
+        if !sentence_ids.contains(&frame.sentence_id) {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline rhythm frame sentence is missing".into(),
+            ));
+        }
+        if frame
+            .parent_word_timeline_id
+            .as_ref()
+            .is_some_and(|parent| !word_ids.contains(parent))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline rhythm frame parent is missing".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 impl MediaAnalysisUseCases {
@@ -468,7 +714,7 @@ impl MediaAnalysisUseCases {
 
     fn import_lltimeline_document_with_media(
         &self,
-        document: LLTimelineDocument,
+        mut document: LLTimelineDocument,
         attached_media: Option<MediaItem>,
     ) -> Result<SubtitleTrack, ApplicationError> {
         if document.schema != LLTIMELINE_SCHEMA_V1 {
@@ -476,8 +722,8 @@ impl MediaAnalysisUseCases {
         }
         require_text(&document.metadata.media.fingerprint, "media fingerprint")?;
         require_text(&document.metadata.media.title, "media title")?;
-        let media = match attached_media {
-            Some(media) => media,
+        let (media, media_to_create) = match attached_media {
+            Some(media) => (media, None),
             None => {
                 if let Some(existing) = self.media.get(&document.metadata.media.id)? {
                     if existing.fingerprint != document.metadata.media.fingerprint {
@@ -485,7 +731,7 @@ impl MediaAnalysisUseCases {
                             "lltimeline media identity has a different fingerprint",
                         ));
                     }
-                    existing
+                    (existing, None)
                 } else {
                     let now = now_ms();
                     let media = MediaItem {
@@ -502,7 +748,7 @@ impl MediaAnalysisUseCases {
                         created_at_ms: now,
                         updated_at_ms: now,
                     };
-                    self.media.upsert(&media)?
+                    (media.clone(), Some(media))
                 }
             }
         };
@@ -525,85 +771,59 @@ impl MediaAnalysisUseCases {
             status: SubtitleTrackStatus::Available,
             sentences: lltimeline_segments_to_sentences(&document.segments)?,
         };
-        self.subtitle_tracks.save_track(&track)?;
-        self.lltimeline_resources.save_lltimeline_resource(
-            &track.id,
-            &document.metadata,
+        validate_and_prepare_lltimeline_resources(&mut document, &track)?;
+        let imported_word_ids = document
+            .word_timelines
+            .iter()
+            .map(|timeline| timeline.id.clone())
+            .collect::<HashSet<_>>();
+        let mut effective_word_timelines = self.word_timelines.list_word_timelines(&track.id)?;
+        effective_word_timelines.retain(|timeline| !imported_word_ids.contains(&timeline.id));
+        for timeline in &mut effective_word_timelines {
+            if timeline.status == TimelineStatus::Active {
+                timeline.status = TimelineStatus::Candidate;
+            }
+        }
+        effective_word_timelines.extend(document.word_timelines.iter().cloned());
+        let rhythm_source_word_timeline_id = select_rhythm_source_word_timeline_id(
+            &effective_word_timelines,
+            document.active_word_timeline_id.as_ref(),
             &document.artifacts,
+        );
+        let word_acoustic_cues = rhythm_word_acoustic_cues_by_sentence(
+            &document.artifacts,
+            rhythm_source_word_timeline_id.as_ref(),
+        );
+        let canonical_rhythm_frames = self.rhythm_frames_from_word_timeline(
+            &track,
+            &effective_word_timelines,
+            rhythm_source_word_timeline_id.as_ref(),
+            document.active_word_timeline_id.as_ref(),
+            &word_acoustic_cues,
         )?;
-
-        for mut timeline in document.word_timelines {
-            if timeline.media_id != track.media_id || timeline.track_id != track.id {
-                return Err(ApplicationError::Validation("lltimeline word timeline"));
-            }
-            if document.active_word_timeline_id.as_ref() == Some(&timeline.id)
-                && timeline.status == TimelineStatus::Active
-            {
-                timeline.status = TimelineStatus::Candidate;
-            }
-            self.word_timelines.save_word_timeline(&timeline)?;
-        }
-        if let Some(active_id) = document.active_word_timeline_id {
-            self.word_timelines.activate_word_timeline(&active_id)?;
-        }
-
-        for mut timeline in document.phone_timelines {
-            if timeline.media_id != track.media_id || timeline.track_id != track.id {
-                return Err(ApplicationError::Validation("lltimeline phone timeline"));
-            }
-            if document.active_phone_timeline_id.as_ref() == Some(&timeline.id)
-                && timeline.status == TimelineStatus::Active
-            {
-                timeline.status = TimelineStatus::Candidate;
-            }
-            self.phone_timelines.save_phone_timeline(&timeline)?;
-        }
-        if let Some(active_id) = document.active_phone_timeline_id {
-            self.phone_timelines.activate_phone_timeline(&active_id)?;
-        }
-
-        for frame in document.rhythm_frames {
-            if frame.media_id != track.media_id || frame.track_id != track.id {
-                return Err(ApplicationError::Validation("lltimeline rhythm frame"));
-            }
-        }
-
-        for mut timeline in document.chunk_timelines {
-            if timeline.media_id != track.media_id || timeline.track_id != track.id {
-                return Err(ApplicationError::Validation("lltimeline chunk timeline"));
-            }
-            if document.active_chunk_timeline_id.as_ref() == Some(&timeline.id)
-                && timeline.status == TimelineStatus::Active
-            {
-                timeline.status = TimelineStatus::Candidate;
-            }
-            self.chunk_timelines.save_chunk_timeline(&timeline)?;
-        }
-        if let Some(active_id) = document.active_chunk_timeline_id {
-            self.chunk_timelines.activate_chunk_timeline(&active_id)?;
-        }
-
-        for mut analysis in document.sense_group_analyses {
-            if analysis.media_id != track.media_id || analysis.track_id != track.id {
-                return Err(ApplicationError::Validation(
-                    "lltimeline sense group analysis",
-                ));
-            }
-            if document.active_sense_group_analysis_id.as_ref() == Some(&analysis.id)
-                && analysis.status == TimelineStatus::Active
-            {
-                analysis.status = TimelineStatus::Candidate;
-            }
-            self.sense_groups.save_sense_group_analysis(&analysis)?;
-        }
-        if let Some(active_id) = document.active_sense_group_analysis_id {
-            self.sense_groups
-                .activate_sense_group_analysis(&active_id)?;
-        }
-
-        // One reindex after every timeline landed, so the corpus projection
-        // (words/phrases/chunks + Phase 3.9 family rows) reflects the import.
-        self.reindex_subtitle_track(&track)?;
+        let active_chunk_timeline = document.active_chunk_timeline_id.as_ref().and_then(|id| {
+            document
+                .chunk_timelines
+                .iter()
+                .find(|timeline| &timeline.id == id)
+        });
+        let corpus_occurrences = self.build_subtitle_corpus_occurrences_from_resources(
+            &track,
+            active_chunk_timeline,
+            &canonical_rhythm_frames,
+        )?;
+        let import = LLTimelineImport {
+            media_to_create,
+            track: track.clone(),
+            metadata: document.metadata,
+            artifacts: document.artifacts,
+            word_timelines: document.word_timelines,
+            phone_timelines: document.phone_timelines,
+            chunk_timelines: document.chunk_timelines,
+            sense_group_analyses: document.sense_group_analyses,
+            corpus_occurrences,
+        };
+        self.lltimeline_imports.import_lltimeline(&import)?;
 
         Ok(track)
     }

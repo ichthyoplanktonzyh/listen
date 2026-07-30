@@ -168,11 +168,12 @@ erasure, then be removed through an explicit breaking contract migration.
 
 `LLTimelineDocument` is a versioned interchange envelope that can carry text
 segments and several Analysis Resources. It is not a separate Learning Object
-or the domain authority for a Content Document. Its current import path is
-staged rather than atomic: the text track can persist before all carried
-resources and reindexing complete. Detached imports also create a synthetic
-`lltimeline://` media identity currently marked available even though it is not
-playable. These are implementation gaps, not new document semantics.
+or the domain authority for a Content Document. Import validates the complete
+document before writing, then commits the source identity when needed, text
+track, carried resources, active selections, and corpus projection in one
+transaction. A failed resource write or projection rebuild therefore leaves no
+partial import. Detached imports use a synthetic `lltimeline://` media identity
+marked unavailable until explicitly attached to registered media.
 
 Derived Explanations translate source facts or Analysis Resources into
 learner-facing meaning. They may be regenerated or withdrawn as analysis

@@ -99,6 +99,16 @@ replaces the rebuildable corpus projection. Stable sentence identities are
 updated in place so language correction does not delete subtitle data or
 dependent facts.
 
+LLTimeline import uses its own application-owned unit-of-work port. Application
+validation and projection assembly finish before the adapter starts writing;
+SQLite then commits optional detached media identity, subtitle track, resource
+metadata, independent timeline families and active selections, and corpus rows
+in one transaction. Any resource or corpus write failure rolls back the whole
+import, so there is no ambiguous post-commit reindex state. The import builds
+corpus rows from the same canonical rhythm derivation used by later rebuilds,
+refreshes legacy active-word compatibility rows inside the transaction, and
+rejects resource IDs already owned by another track or media item.
+
 Detached LLTimeline import creates a synthetic `lltimeline://` identity with
 `MediaAvailability::Missing`; document path metadata remains a provenance
 snapshot and is never exposed as a live playback source. Explicit import for a

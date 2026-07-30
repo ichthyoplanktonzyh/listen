@@ -278,6 +278,38 @@ pub trait LLTimelineResourceRepository: Send + Sync {
     ) -> Result<Option<(LLTimelineMetadata, Vec<LLTimelineArtifact>)>, ApplicationError>;
 }
 
+/// A fully validated LLTimeline import snapshot.
+///
+/// This is an import-specific unit of work, not a new domain aggregate:
+/// resource families keep their independent repositories and lifecycles after
+/// import. The persistence adapter must commit every field below, including
+/// the rebuildable corpus projection, in one transaction.
+#[derive(Debug, Clone)]
+pub struct LLTimelineImport {
+    /// Present only when detached import creates a synthetic, unavailable
+    /// media identity. Attached and already-known media are read-only here.
+    pub media_to_create: Option<MediaItem>,
+    pub track: SubtitleTrack,
+    pub metadata: LLTimelineMetadata,
+    pub artifacts: Vec<LLTimelineArtifact>,
+    pub word_timelines: Vec<WordTimeline>,
+    pub phone_timelines: Vec<PhoneTimeline>,
+    pub chunk_timelines: Vec<ChunkTimeline>,
+    pub sense_group_analyses: Vec<SenseGroupAnalysis>,
+    pub corpus_occurrences: Vec<CorpusOccurrence>,
+}
+
+/// Atomic persistence boundary for one LLTimeline interchange import.
+pub trait LLTimelineImportRepository: Send + Sync {
+    /// Commits the source identity (when new), subtitle track, independent
+    /// analysis resources, active selections, and corpus projection together.
+    ///
+    /// Returning `Err` guarantees that none of this import's durable writes
+    /// were committed. Consequently there is no post-commit reindex phase
+    /// whose failure could make an otherwise successful import ambiguous.
+    fn import_lltimeline(&self, import: &LLTimelineImport) -> Result<(), ApplicationError>;
+}
+
 /// Capability projections and their audit history change under one invariant.
 pub trait LexicalCapabilityRepository: Send + Sync {
     fn lexical_capability_profile(

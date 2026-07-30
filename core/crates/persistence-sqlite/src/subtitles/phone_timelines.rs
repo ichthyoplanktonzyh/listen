@@ -3,51 +3,65 @@ use domain::{
     PhoneTimeline, PhoneTimelineId, PhoneticAnalysisId, SubtitleSentenceId, SubtitleTrackId,
     TimelineStatus, WordTimelineId,
 };
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
+
+pub(crate) fn save_phone_timeline_in_connection(
+    connection: &Connection,
+    timeline: &PhoneTimeline,
+) -> Result<(), ApplicationError> {
+    super::guard_timeline_ownership(
+        connection,
+        "phone_timeline_runs",
+        timeline.id.as_str(),
+        &timeline.track_id,
+        &timeline.media_id,
+    )?;
+    connection
+        .execute(
+            "INSERT INTO phone_timeline_runs
+             (id,track_id,media_id,sentence_id,parent_word_timeline_id,
+              parent_phonetic_analysis_id,status,timeline_json,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
+             ON CONFLICT(id) DO UPDATE SET
+               sentence_id=excluded.sentence_id,
+               parent_word_timeline_id=excluded.parent_word_timeline_id,
+               parent_phonetic_analysis_id=excluded.parent_phonetic_analysis_id,
+               status=excluded.status,timeline_json=excluded.timeline_json,
+               updated_at_ms=excluded.updated_at_ms",
+            params![
+                timeline.id.as_str(),
+                timeline.track_id.as_str(),
+                timeline.media_id.as_str(),
+                timeline
+                    .sentence_id
+                    .as_ref()
+                    .map(SubtitleSentenceId::as_str),
+                timeline
+                    .parent_word_timeline_id
+                    .as_ref()
+                    .map(WordTimelineId::as_str),
+                timeline
+                    .parent_phonetic_analysis_id
+                    .as_ref()
+                    .map(PhoneticAnalysisId::as_str),
+                json(&timeline.status)?,
+                json(timeline)?,
+                timeline.created_at_ms,
+                timeline.updated_at_ms
+            ],
+        )
+        .map(|_| ())
+        .map_err(repo)
+}
 
 impl PhoneTimelineRepository for SqliteRepository {
     fn save_phone_timeline(
         &self,
         timeline: &PhoneTimeline,
     ) -> Result<PhoneTimeline, ApplicationError> {
-        self.connection
-            .lock()
-            .execute(
-                "INSERT INTO phone_timeline_runs
-                 (id,track_id,media_id,sentence_id,parent_word_timeline_id,
-                  parent_phonetic_analysis_id,status,timeline_json,created_at_ms,updated_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
-                 ON CONFLICT(id) DO UPDATE SET
-                   sentence_id=excluded.sentence_id,
-                   parent_word_timeline_id=excluded.parent_word_timeline_id,
-                   parent_phonetic_analysis_id=excluded.parent_phonetic_analysis_id,
-                   status=excluded.status,timeline_json=excluded.timeline_json,
-                   updated_at_ms=excluded.updated_at_ms",
-                params![
-                    timeline.id.as_str(),
-                    timeline.track_id.as_str(),
-                    timeline.media_id.as_str(),
-                    timeline
-                        .sentence_id
-                        .as_ref()
-                        .map(SubtitleSentenceId::as_str),
-                    timeline
-                        .parent_word_timeline_id
-                        .as_ref()
-                        .map(WordTimelineId::as_str),
-                    timeline
-                        .parent_phonetic_analysis_id
-                        .as_ref()
-                        .map(PhoneticAnalysisId::as_str),
-                    json(&timeline.status)?,
-                    json(timeline)?,
-                    timeline.created_at_ms,
-                    timeline.updated_at_ms
-                ],
-            )
-            .map_err(repo)?;
+        save_phone_timeline_in_connection(&self.connection.lock(), timeline)?;
         Ok(timeline.clone())
     }
 

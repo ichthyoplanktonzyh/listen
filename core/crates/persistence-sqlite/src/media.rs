@@ -1,42 +1,42 @@
 use application::{ApplicationError, MediaRepository};
 use domain::{MediaAvailability, MediaId, MediaItem, MediaTriageIntent, TimeMs};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use super::{SqliteRepository, domain_sql, from_json, json, repo};
 
-impl MediaRepository for SqliteRepository {
-    fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError> {
-        {
-            let conn = self.connection.lock();
-            conn.execute(
-                "INSERT INTO media_items
+pub(crate) fn upsert_media_in_transaction(
+    tx: &Transaction<'_>,
+    media: &MediaItem,
+) -> Result<(), ApplicationError> {
+    tx.execute(
+        "INSERT INTO media_items
                  (id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT(fingerprint) DO UPDATE SET
                    path=excluded.path, title=excluded.title, kind=excluded.kind,
                    duration_ms=excluded.duration_ms, updated_at_ms=excluded.updated_at_ms,
                    availability=excluded.availability",
-                params![
-                    media.id.as_str(),
-                    media.path,
-                    media.fingerprint,
-                    media.title,
-                    json(&media.kind)?,
-                    media.duration.map(TimeMs::get),
-                    media.created_at_ms,
-                    media.updated_at_ms,
-                    json(&media.availability)?
-                ],
-            )
-            .map_err(repo)?;
-            conn.execute(
-                "UPDATE lexical_occurrences SET media_id=?1
+        params![
+            media.id.as_str(),
+            media.path,
+            media.fingerprint,
+            media.title,
+            json(&media.kind)?,
+            media.duration.map(TimeMs::get),
+            media.created_at_ms,
+            media.updated_at_ms,
+            json(&media.availability)?
+        ],
+    )
+    .map_err(repo)?;
+    tx.execute(
+        "UPDATE lexical_occurrences SET media_id=?1
                  WHERE media_id IS NULL AND media_fingerprint_snapshot=?2",
-                params![media.id.as_str(), media.fingerprint],
-            )
-            .map_err(repo)?;
-            conn.execute(
-                "UPDATE lexical_occurrences
+        params![media.id.as_str(), media.fingerprint],
+    )
+    .map_err(repo)?;
+    tx.execute(
+        "UPDATE lexical_occurrences
                  SET sentence_id=(
                    SELECT s.id FROM subtitle_sentences s
                    JOIN subtitle_tracks t ON t.id=s.track_id
@@ -47,11 +47,11 @@ impl MediaRepository for SqliteRepository {
                    LIMIT 1
                  )
                  WHERE media_id=?1 AND sentence_id IS NULL",
-                [media.id.as_str()],
-            )
-            .map_err(repo)?;
-            conn.execute(
-                "UPDATE lexical_observations
+        [media.id.as_str()],
+    )
+    .map_err(repo)?;
+    tx.execute(
+        "UPDATE lexical_observations
                  SET sentence_id=sentence_id_snapshot
                  WHERE sentence_id IS NULL
                    AND EXISTS (
@@ -59,10 +59,19 @@ impl MediaRepository for SqliteRepository {
                      JOIN subtitle_tracks t ON t.id=s.track_id
                      WHERE s.id=lexical_observations.sentence_id_snapshot AND t.media_id=?1
                    )",
-                [media.id.as_str()],
-            )
-            .map_err(repo)?;
-        }
+        [media.id.as_str()],
+    )
+    .map_err(repo)?;
+    Ok(())
+}
+
+impl MediaRepository for SqliteRepository {
+    fn upsert(&self, media: &MediaItem) -> Result<MediaItem, ApplicationError> {
+        let mut conn = self.connection.lock();
+        let tx = conn.transaction().map_err(repo)?;
+        upsert_media_in_transaction(&tx, media)?;
+        tx.commit().map_err(repo)?;
+        drop(conn);
         MediaRepository::get(self, &media.id)?
             .ok_or_else(|| ApplicationError::Repository("media upsert returned no row".into()))
     }

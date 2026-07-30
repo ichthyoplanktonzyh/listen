@@ -250,7 +250,7 @@ impl SubtitleTrackRepository for SqliteRepository {
     }
 }
 
-fn save_track_in_transaction(
+pub(crate) fn save_track_in_transaction(
     tx: &Transaction<'_>,
     track: &SubtitleTrack,
 ) -> Result<(), ApplicationError> {

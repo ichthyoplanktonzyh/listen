@@ -2,9 +2,94 @@ use application::{ApplicationError, WordTimelineRepository};
 use domain::{
     SubtitleSentenceId, SubtitleTrackId, TimelineStatus, WordTimeline, WordTimelineId, WordTiming,
 };
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
+
+pub(crate) fn save_word_timeline_in_connection(
+    connection: &Connection,
+    timeline: &WordTimeline,
+) -> Result<(), ApplicationError> {
+    super::guard_timeline_ownership(
+        connection,
+        "word_timeline_runs",
+        timeline.id.as_str(),
+        &timeline.track_id,
+        &timeline.media_id,
+    )?;
+    connection
+        .execute(
+            "INSERT INTO word_timeline_runs
+             (id,track_id,media_id,status,timeline_json,created_at_ms,updated_at_ms)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(id) DO UPDATE SET
+               status=excluded.status,timeline_json=excluded.timeline_json,
+               updated_at_ms=excluded.updated_at_ms",
+            params![
+                timeline.id.as_str(),
+                timeline.track_id.as_str(),
+                timeline.media_id.as_str(),
+                json(&timeline.status)?,
+                json(timeline)?,
+                timeline.created_at_ms,
+                timeline.updated_at_ms
+            ],
+        )
+        .map(|_| ())
+        .map_err(repo)
+}
+
+pub(crate) fn replace_legacy_word_timings_in_connection(
+    connection: &Connection,
+    track_id: &SubtitleTrackId,
+    active: Option<&WordTimeline>,
+    updated_at_ms: u64,
+) -> Result<(), ApplicationError> {
+    connection
+        .execute(
+            "DELETE FROM word_timings
+             WHERE sentence_id IN (
+               SELECT id FROM subtitle_sentences WHERE track_id=?1
+             )",
+            [track_id.as_str()],
+        )
+        .map_err(repo)?;
+    let Some(active) = active else {
+        return Ok(());
+    };
+    let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
+    for word in &active.words {
+        grouped
+            .entry(word.sentence_id.clone())
+            .or_default()
+            .push(word.clone());
+    }
+    for (sentence_id, mut timings) in grouped {
+        timings.sort_by_key(|value| (value.start_ms, value.end_ms, value.token_index));
+        if let Some(first) = timings.first() {
+            connection
+                .execute(
+                    "INSERT INTO word_timings
+                     (sentence_id,timing_source,provider_id,provider_version,timings_json,updated_at_ms)
+                     VALUES (?1,?2,?3,?4,?5,?6)
+                     ON CONFLICT(sentence_id) DO UPDATE SET
+                       timing_source=excluded.timing_source,provider_id=excluded.provider_id,
+                       provider_version=excluded.provider_version,timings_json=excluded.timings_json,
+                       updated_at_ms=excluded.updated_at_ms",
+                    params![
+                        sentence_id.as_str(),
+                        json(&first.timing_source)?,
+                        first.provider_id,
+                        first.provider_version,
+                        json(&timings)?,
+                        updated_at_ms
+                    ],
+                )
+                .map_err(repo)?;
+        }
+    }
+    Ok(())
+}
 
 impl WordTimelineRepository for SqliteRepository {
     fn save_word_timings(
@@ -57,26 +142,7 @@ impl WordTimelineRepository for SqliteRepository {
         &self,
         timeline: &WordTimeline,
     ) -> Result<WordTimeline, ApplicationError> {
-        self.connection
-            .lock()
-            .execute(
-                "INSERT INTO word_timeline_runs
-                 (id,track_id,media_id,status,timeline_json,created_at_ms,updated_at_ms)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7)
-                 ON CONFLICT(id) DO UPDATE SET
-                   status=excluded.status,timeline_json=excluded.timeline_json,
-                   updated_at_ms=excluded.updated_at_ms",
-                params![
-                    timeline.id.as_str(),
-                    timeline.track_id.as_str(),
-                    timeline.media_id.as_str(),
-                    json(&timeline.status)?,
-                    json(timeline)?,
-                    timeline.created_at_ms,
-                    timeline.updated_at_ms
-                ],
-            )
-            .map_err(repo)?;
+        save_word_timeline_in_connection(&self.connection.lock(), timeline)?;
         Ok(timeline.clone())
     }
 
@@ -200,44 +266,7 @@ impl WordTimelineRepository for SqliteRepository {
             ],
         )
         .map_err(repo)?;
-        tx.execute(
-            "DELETE FROM word_timings
-             WHERE sentence_id IN (
-               SELECT id FROM subtitle_sentences WHERE track_id=?1
-             )",
-            [selected.track_id.as_str()],
-        )
-        .map_err(repo)?;
-        let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
-        for word in &selected.words {
-            grouped
-                .entry(word.sentence_id.clone())
-                .or_default()
-                .push(word.clone());
-        }
-        for (sentence_id, mut timings) in grouped {
-            timings.sort_by_key(|value| (value.start_ms, value.end_ms, value.token_index));
-            if let Some(first) = timings.first() {
-                tx.execute(
-                    "INSERT INTO word_timings
-                     (sentence_id,timing_source,provider_id,provider_version,timings_json,updated_at_ms)
-                     VALUES (?1,?2,?3,?4,?5,?6)
-                     ON CONFLICT(sentence_id) DO UPDATE SET
-                       timing_source=excluded.timing_source,provider_id=excluded.provider_id,
-                       provider_version=excluded.provider_version,timings_json=excluded.timings_json,
-                       updated_at_ms=excluded.updated_at_ms",
-                    params![
-                        sentence_id.as_str(),
-                        json(&first.timing_source)?,
-                        first.provider_id,
-                        first.provider_version,
-                        json(&timings)?,
-                        now
-                    ],
-                )
-                .map_err(repo)?;
-            }
-        }
+        replace_legacy_word_timings_in_connection(&tx, &selected.track_id, Some(&selected), now)?;
         tx.commit().map_err(repo)?;
         Ok(selected)
     }

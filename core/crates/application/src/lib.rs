@@ -143,6 +143,7 @@ pub struct AppServices {
     pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
+    pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
     pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -264,6 +265,7 @@ impl AppServices {
             + ChunkTimelineRepository
             + SenseGroupRepository
             + PhoneTimelineRepository
+            + LLTimelineImportRepository
             + 'static,
         L: LexicalCapabilityRepository
             + LexicalEntryRepository
@@ -280,8 +282,9 @@ impl AppServices {
             word_timelines: timelines.clone(),
             chunk_timelines: timelines.clone(),
             sense_groups: timelines.clone(),
-            phone_timelines: timelines,
+            phone_timelines: timelines.clone(),
             lltimeline_resources,
+            lltimeline_imports: timelines,
             dictionary,
             lexical_capabilities: learning_assets.clone(),
             lexical_entries: learning_assets.clone(),

@@ -1,8 +1,29 @@
 use application::{ApplicationError, LLTimelineResourceRepository};
 use domain::{LLTimelineArtifact, LLTimelineMetadata, SubtitleTrackId};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
+
+pub(crate) fn save_lltimeline_resource_in_connection(
+    connection: &Connection,
+    track_id: &SubtitleTrackId,
+    metadata: &LLTimelineMetadata,
+    artifacts: &[LLTimelineArtifact],
+) -> Result<(), ApplicationError> {
+    connection
+        .execute(
+            "INSERT INTO lltimeline_resources
+             (track_id,metadata_json,artifacts_json,updated_at_ms)
+             VALUES (?1,?2,?3,unixepoch('subsec') * 1000)
+             ON CONFLICT(track_id) DO UPDATE SET
+               metadata_json=excluded.metadata_json,
+               artifacts_json=excluded.artifacts_json,
+               updated_at_ms=excluded.updated_at_ms",
+            params![track_id.as_str(), json(metadata)?, json(artifacts)?],
+        )
+        .map(|_| ())
+        .map_err(repo)
+}
 
 impl LLTimelineResourceRepository for SqliteRepository {
     fn save_lltimeline_resource(
@@ -11,20 +32,12 @@ impl LLTimelineResourceRepository for SqliteRepository {
         metadata: &LLTimelineMetadata,
         artifacts: &[LLTimelineArtifact],
     ) -> Result<(), ApplicationError> {
-        self.connection
-            .lock()
-            .execute(
-                "INSERT INTO lltimeline_resources
-                 (track_id,metadata_json,artifacts_json,updated_at_ms)
-                 VALUES (?1,?2,?3,unixepoch('subsec') * 1000)
-                 ON CONFLICT(track_id) DO UPDATE SET
-                   metadata_json=excluded.metadata_json,
-                   artifacts_json=excluded.artifacts_json,
-                   updated_at_ms=excluded.updated_at_ms",
-                params![track_id.as_str(), json(metadata)?, json(artifacts)?],
-            )
-            .map(|_| ())
-            .map_err(repo)
+        save_lltimeline_resource_in_connection(
+            &self.connection.lock(),
+            track_id,
+            metadata,
+            artifacts,
+        )
     }
 
     fn get_lltimeline_resource(

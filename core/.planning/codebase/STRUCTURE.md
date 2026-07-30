@@ -42,6 +42,9 @@ Notable runtime seams:
   `local_cascade_realtime` codec remains in `realtime-provider`.
 - `SubtitleTrackRepository::save_track_and_replace_corpus` is the atomic
   subtitle/corpus unit of work.
+- `LLTimelineImportRepository` is the import-only atomic boundary for a
+  validated LLTimeline snapshot; resource families keep their independent
+  lifecycle repositories after import.
 
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.
