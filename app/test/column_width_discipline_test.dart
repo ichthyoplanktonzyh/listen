@@ -53,9 +53,7 @@ void main() {
     'lib/widgets/panels/conversation_afterglow_caption.dart',
     'lib/widgets/panels/hunting_prompt_card.dart',
     'lib/widgets/panels/realtime_conversation_panel.dart',
-    'lib/widgets/panels/speaking_task_studio.dart',
     'lib/widgets/panels/transcript_panel.dart',
-    'lib/widgets/panels/writing_task_studio.dart',
   };
 
   test('column caps use ListenBreakpoints widths, not maxWidth literals', () {

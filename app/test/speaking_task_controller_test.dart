@@ -1,10 +1,16 @@
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/speaking_task_controller.dart';
+import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
+import 'package:llplayer_next/widgets/panels/speaking_task_studio.dart';
 
 const _source = SpeakingTaskSource(
   anchorCueId: 'cue-1',
@@ -539,6 +545,80 @@ void main() {
         (request) => request.$2 == '/v1/semantic/attempts',
       ),
       isEmpty,
+    );
+  });
+
+  testWidgets('the studio measures from the token vocabulary (S2)', (
+    tester,
+  ) async {
+    final backend = _FakeBackend();
+    final controller = SpeakingTaskController(
+      recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
+    );
+    await controller.openTask(
+      backend.api,
+      source: _source,
+      fixedRubricPoints: _points,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: const [AppLocalizations.delegate],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SpeakingTaskStudio(
+            controller: controller,
+            api: backend.api,
+            onPlaySource: () async {},
+            onPlayRecording: () async {},
+            onAcquireRecordingFocus: () async {},
+            onOpenL1Check: () async {},
+            onClose: () async {},
+          ),
+        ),
+      ),
+    );
+    expect(controller.state.phase, 'listening');
+
+    // Illustration, not a control: the headphones glyph is the listening
+    // phase's whole instruction. At 72 it was the largest icon in the app.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.headphones_rounded)).size,
+      ListenIconSize.illustration,
+    );
+
+    // The stage header was insetting 18/10 while the reading studio's identical
+    // header used 14/8; both are now the one row role.
+    final header = tester.widget<Padding>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('speaking-task-back')),
+            matching: find.byType(Padding),
+          )
+          .last,
+    );
+    expect(header.padding, ListenPadding.row);
+
+    // The phase column was capped at 760 — a reading measure on a column of
+    // headings and buttons.
+    final caps = tester
+        .widgetList<ConstrainedBox>(
+          find.descendant(
+            of: find.byType(SpeakingTaskStudio),
+            matching: find.byType(ConstrainedBox),
+          ),
+        )
+        .map((box) => box.constraints.maxWidth);
+    expect(caps, contains(ListenBreakpoints.cardColumnMax));
+    expect(caps, isNot(contains(760.0)));
+
+    // The phase title had been reading Material's unmapped `headlineSmall`.
+    final context = tester.element(find.byType(SpeakingTaskStudio));
+    expect(
+      tester
+          .widget<Text>(find.text('Listen, then retell in your own words'))
+          .style,
+      Theme.of(context).textTheme.titleLarge,
     );
   });
 }
