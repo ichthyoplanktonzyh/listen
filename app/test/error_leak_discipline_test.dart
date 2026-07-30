@@ -145,10 +145,8 @@ void main() {
     'lib/phonetic_analysis_ui.dart',
     'lib/player_adapter.dart',
     'lib/screens/personal_expression_screen.dart',
-    'lib/screens/vocabulary_screen.dart',
     'lib/widgets/coach/coach_dashboard_screen.dart',
     'lib/widgets/panels/manual_timeline_review_dialog.dart',
-    'lib/widgets/vocabulary/semantic_search_dialog.dart',
   };
 
   test('a caught exception never reaches a user-visible string', () {
