@@ -975,32 +975,69 @@ paths:
     get:
       operationId: soundLineJobs
       responses:
-        "200": { description: Durable sound-line (listening structure) jobs with queued-work recovery and interrupted-work reporting after restart }
+        "200":
+          description: Durable sound-line (listening structure) jobs with queued-work recovery and interrupted-work reporting after restart
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SoundLineJob" }
+        default:
+          $ref: "#/components/responses/Error"
     post:
       operationId: createSoundLineJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSoundLineJob" }
       responses:
-        "200": { description: Queued background sound-line enrichment job }
+        "200":
+          description: Queued background sound-line enrichment job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SoundLineJob" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/sound-line/jobs/{job_id}:
     parameters:
       - { name: job_id, in: path, required: true, schema: { type: string } }
     get:
       operationId: soundLineJob
       responses:
-        "200": { description: Sound-line job status }
+        "200":
+          description: Sound-line job status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SoundLineJob" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/sound-line/jobs/{job_id}/cancel:
     parameters:
       - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: cancelSoundLineJob
       responses:
-        "200": { description: Cancelled sound-line job }
+        "200":
+          description: Cancelled sound-line job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SoundLineJob" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/sound-line/jobs/{job_id}/retry:
     parameters:
       - { name: job_id, in: path, required: true, schema: { type: string } }
     post:
       operationId: retrySoundLineJob
       responses:
-        "200": { description: Retried sound-line job }
+        "200":
+          description: Retried sound-line job
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SoundLineJob" }
+        default:
+          $ref: "#/components/responses/Error"
   /v1/lexical-entries/batch:
     post:
       operationId: readLexicalEntries
@@ -3559,6 +3596,58 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    CreateSoundLineJob:
+      type: object
+      required: [track_id]
+      properties:
+        track_id: { type: string }
+        audio_track:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            Zero-based audio stream index in ffmpeg 0:a:N order. May be
+            omitted only when the media contains exactly one audio stream.
+    SoundLineJob:
+      type: object
+      required:
+        - id
+        - track_id
+        - audio_track
+        - status
+        - timeline_id
+        - acoustic_cue_count
+        - error_code
+        - error
+        - retry_of_job_id
+        - created_at_ms
+        - updated_at_ms
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        audio_track:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            Requested zero-based audio stream index and, for completed jobs,
+            the stream verified by ffprobe and used by ffmpeg. Null means the
+            job has not resolved an audio stream, including legacy or failed
+            unselected jobs.
+        status: { type: string, enum: [queued, running, completed, cancelled, failed] }
+        timeline_id: { type: [string, "null"] }
+        acoustic_cue_count: { type: integer, minimum: 0 }
+        error_code:
+          type: [string, "null"]
+          enum:
+            - audio_track_required
+            - audio_track_not_found
+            - audio_track_probe_failed
+            - sound_line_source_unavailable
+            - sound_line_failed
+            - null
+        error: { type: [string, "null"] }
+        retry_of_job_id: { type: [string, "null"] }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
     SpeechSynthesisLocality:
       type: string
       enum: [local, remote]

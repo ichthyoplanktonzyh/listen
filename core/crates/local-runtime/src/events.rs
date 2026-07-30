@@ -144,6 +144,7 @@ impl PronunciationProviderDiagnosticPayload {
 pub struct SoundLineCompletedPayload {
     pub job_id: String,
     pub track_id: String,
+    pub audio_track: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeline_id: Option<String>,
     pub acoustic_cue_count: usize,
@@ -305,6 +306,7 @@ mod tests {
             SoundLineCompletedPayload {
                 job_id: "sound-line-job-1".into(),
                 track_id: "track-1".into(),
+                audio_track: Some(1),
                 timeline_id: Some("word-timeline-1".into()),
                 acoustic_cue_count: 34,
             }

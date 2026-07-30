@@ -2038,11 +2038,13 @@ dependencies = [
  "hex",
  "learning-resource-runtime",
  "libc",
+ "persistence-sqlite",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2",
  "syntactic-provider",
+ "tempfile",
  "thiserror",
  "tokio",
 ]

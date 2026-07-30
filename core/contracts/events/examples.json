@@ -20,6 +20,7 @@
       "event": "sound-line-completed",
       "payload": {
         "acoustic_cue_count": 34,
+        "audio_track": 1,
         "job_id": "sound-line-job-1",
         "timeline_id": "word-timeline-1",
         "track_id": "track-1"

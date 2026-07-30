@@ -3,8 +3,8 @@ use std::path::Path;
 use crate::{
     ApplicationError, ForcedAlignCancellation, ForcedAlignFailure, ForcedAlignProvider,
     ForcedAlignRequest, ForcedAlignmentReport, ForcedAlignmentStatus, MediaAnalysisUseCases,
-    NeverCancelForcedAlignment, SubtitleSentence, SubtitleTrackId, TimelineMetrics, TimelineStatus,
-    WordTimelinePipelineResult, WordTiming, forced_align_segments,
+    NeverCancelForcedAlignment, SoundLineSourceProvenance, SubtitleSentence, SubtitleTrackId,
+    TimelineMetrics, TimelineStatus, WordTimelinePipelineResult, WordTiming, forced_align_segments,
     save_word_timeline_snapshot_with_metrics,
 };
 
@@ -85,7 +85,10 @@ impl MediaAnalysisUseCases {
             audio_wav_path,
             forced_aligner,
             None,
-            language,
+            SoundLineSourceProvenance {
+                language: language.map(str::to_owned),
+                audio_track: None,
+            },
         )
         .await
     }
@@ -97,7 +100,7 @@ impl MediaAnalysisUseCases {
         audio_wav_path: &Path,
         forced_aligner: Option<&dyn ForcedAlignProvider>,
         cancellation: Option<&dyn ForcedAlignCancellation>,
-        language: Option<&str>,
+        source: SoundLineSourceProvenance,
     ) -> Result<Option<WordTimelinePipelineResult>, ApplicationError> {
         if cancellation_requested(cancellation) {
             return Ok(None);
@@ -138,7 +141,7 @@ impl MediaAnalysisUseCases {
                 &mut timings,
                 provider,
                 cancellation,
-                language,
+                source.language.as_deref(),
             )
             .await
         } else {
@@ -166,6 +169,7 @@ impl MediaAnalysisUseCases {
                     Some(TimelineMetrics::from_value(serde_json::json!({
                         "line": "sound",
                         "source": "forced_alignment",
+                        "audio_track": source.audio_track,
                         "forced_alignment": forced_alignment,
                     }))),
                 )
@@ -199,6 +203,7 @@ impl MediaAnalysisUseCases {
                     Some(TimelineMetrics::from_value(serde_json::json!({
                         "line": "sound",
                         "source": "pause_refinement",
+                        "audio_track": source.audio_track,
                         "pause_count": refined.pauses.len(),
                         "forced_alignment": forced_alignment,
                     }))),
@@ -223,6 +228,7 @@ impl MediaAnalysisUseCases {
                     Some(TimelineMetrics::from_value(serde_json::json!({
                         "line": "sound",
                         "source": "whisper.cpp_dtw",
+                        "audio_track": source.audio_track,
                         "forced_alignment": forced_alignment,
                     }))),
                 )

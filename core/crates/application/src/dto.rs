@@ -174,6 +174,12 @@ pub struct WordTimelinePipelineResult {
     pub pitch_prominence_cue_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SoundLineSourceProvenance {
+    pub language: Option<String>,
+    pub audio_track: Option<u32>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RegisterMedia {
     pub path: String,

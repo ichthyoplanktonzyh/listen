@@ -20,5 +20,9 @@ syntactic-provider = { path = "../syntactic-provider" }
 thiserror.workspace = true
 tokio.workspace = true
 
+[dev-dependencies]
+persistence-sqlite = { path = "../persistence-sqlite" }
+tempfile = "3"
+
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
