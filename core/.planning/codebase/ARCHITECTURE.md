@@ -47,6 +47,15 @@ recovery survive a service restart. Transcription jobs use their own
 domain-specific SQLite compare-and-swap transitions because their import stage
 is an explicit irreversible commit point.
 
+Foundation learning preparation is a separate application module rather than a
+new generic background-job kind. Its interface accepts an exact media,
+SubtitleTrack, and audio-stream selection plus the recommended-foundation
+intent and download consent. A fixed typed plan owns WordTimeline, SoundLine,
+ChunkTimeline, and rule SenseGroup slots. Dedicated SQLite runs use revision
+compare-and-swap and an active-target partial unique index for durable
+single-flight; startup recovery, cancellation, retry, plan/input fingerprints,
+and child-job references remain preparation-specific.
+
 Installable dictionary assets resolve through `learning-resource-runtime`.
 The installer and all dictionary readers share its environment override,
 default directory, opaque filename derivation, and file-replacement signature.

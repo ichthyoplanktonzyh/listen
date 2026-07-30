@@ -7,6 +7,7 @@ mod corpus;
 mod dictionary;
 mod learner_profile;
 mod learning_loop;
+mod learning_preparation;
 mod lexical;
 mod llm_provider;
 mod media;

@@ -28,6 +28,10 @@ Notable runtime seams:
 
 - `application::BackgroundJobStore` owns durable generic job lifecycle
   semantics; `persistence-sqlite` supplies the production adapter.
+- `application::LearningPreparationUseCases` owns the internal recommended
+  foundation planner and typed state machine. Its dedicated SQLite repository
+  owns revision CAS and target-level single-flight; it does not inherit
+  `BackgroundJobStore`.
 - `SecretCleanupRepository` and atomic profile-mutation methods own the durable
   provider-credential cleanup outbox.
 - `SemanticLlmRuntimeFactory` and `RealtimeConversationAdapterFactory` keep

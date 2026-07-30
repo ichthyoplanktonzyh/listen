@@ -14,12 +14,12 @@
 
 ## Current Work
 
-The first local realtime cascade slice is implemented and merged. The current
-P0 product line starts by consolidating the language-learning domain vocabulary
-and authority boundaries in core issue #81, then uses that model to constrain
-the Construction Learning MVP in core issue #80. App-owned Learning Session,
-Learning Agenda, Assistance Ladder, Learning Goal, and Construction journeys
-remain frontend-first contract requests.
+The language-learning model, LLTimeline contract/import corrections, runtime
+dictionary reload, and SoundLine provenance fixes are merged. Core issue #91
+now establishes the internal recommended-foundation preparation module before
+any learner-facing contract: exact source selection, fixed typed preparation
+slots, durable single-flight, revision CAS, cancellation/retry/recovery, and
+honest four-state readiness.
 
 ## Established Boundaries
 
@@ -37,7 +37,9 @@ not code evidence.
 
 ## Next
 
-1. Review and merge the language-learning domain model from core issue #81.
+1. Complete issue #91's local-runtime adapters against the internal typed
+   preparation module; do not add routes or OpenAPI until an app-owned journey
+   request exists.
 2. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.

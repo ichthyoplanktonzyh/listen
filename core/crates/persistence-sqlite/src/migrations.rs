@@ -16,8 +16,10 @@ use super::PersistenceError;
 // 3.15.7 realtime provider config and local session/turn facts. v53 allows
 // credential-free local realtime profiles without a synthetic keychain ref.
 // v54 corrects legacy detached LLTimeline media availability without touching
-// subtitle, analysis-resource, or learning-history rows.
-pub const MIGRATION_VERSION: u32 = 54;
+// subtitle, analysis-resource, or learning-history rows. v55 adds the dedicated
+// typed learning-preparation run store and its active-target single-flight
+// authority.
+pub const MIGRATION_VERSION: u32 = 55;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -458,6 +460,16 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             ))?;
         }
         tx.pragma_update(None, "user_version", 54)?;
+        tx.commit()?;
+    }
+    if current < 55 {
+        let tx = connection.unchecked_transaction()?;
+        if !table_exists(&tx, "learning_preparation_runs")? {
+            tx.execute_batch(include_str!(
+                "../migrations/0055_learning_preparation_runs.sql"
+            ))?;
+        }
+        tx.pragma_update(None, "user_version", 55)?;
         tx.commit()?;
     }
     Ok(())

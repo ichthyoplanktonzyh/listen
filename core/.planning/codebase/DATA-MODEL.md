@@ -39,6 +39,11 @@ Key invariants:
   runtime still exposes a deprecated-target cascade DELETE until the
   persistence and contract slices implement that migration;
 - versioned LLTimeline/resource schemas are compatibility boundaries;
+- `LearningPreparationRun` is an application-owned orchestration record, not a
+  Learning Object or generic resource. It stores exact source selection,
+  input/plan fingerprints, revision, retry lineage, and four named foundation
+  step slots. Only queued/running/cancelling runs participate in target-level
+  single-flight;
 - destructive migration or cascade behavior requires explicit requirement,
   tests, and release/migration notes.
 
