@@ -87,10 +87,6 @@ void main() {
     'lib/widgets/panels/timeline_resource_summary_panel.dart',
     'lib/widgets/panels/word_learning_panel.dart',
     'lib/widgets/panels/writing_task_studio.dart',
-    'lib/widgets/settings/llm_provider_settings.dart',
-    'lib/widgets/settings/realtime_provider_settings.dart',
-    'lib/widgets/settings/settings_dialog.dart',
-    'lib/widgets/settings/syntax_capability_settings.dart',
   };
 
   test('icon glyphs use ListenIconSize steps, not bare literals', () {

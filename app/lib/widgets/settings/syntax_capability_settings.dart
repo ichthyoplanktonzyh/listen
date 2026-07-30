@@ -6,6 +6,7 @@ import '../../localization.dart';
 import '../../models/named_failure.dart';
 import '../../models/syntax_capability.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_error_state.dart';
@@ -157,7 +158,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
                         capability.status == 'partial'
                   ? Icons.warning_amber_outlined
                   : Icons.extension_outlined,
-              size: 20,
+              size: ListenIconSize.control,
             ),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(

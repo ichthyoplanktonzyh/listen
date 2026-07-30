@@ -133,8 +133,6 @@ void main() {
     'lib/widgets/panels/word_learning_panel.dart',
     'lib/widgets/panels/writing_task_studio.dart',
     'lib/widgets/player/shortcut_cheat_sheet.dart',
-    'lib/widgets/settings/llm_provider_settings.dart',
-    'lib/widgets/settings/realtime_provider_settings.dart',
     'lib/widgets/subtitle/connected_speech_reference_ribbon.dart',
     'lib/widgets/subtitle/expected_pronunciation_reference.dart',
     'lib/widgets/subtitle/phoneme_ribbon.dart',

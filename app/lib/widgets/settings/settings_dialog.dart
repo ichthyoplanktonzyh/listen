@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../player/shortcut_cheat_sheet.dart';
 import 'llm_provider_settings.dart';
@@ -1091,7 +1092,10 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       child: OutlinedButton.icon(
                         onPressed: () =>
                             unawaited(showShortcutCheatSheet(context)),
-                        icon: const Icon(Icons.keyboard_outlined, size: 16),
+                        icon: const Icon(
+                          Icons.keyboard_outlined,
+                          size: ListenIconSize.control,
+                        ),
                         label: Text(l.text('shortcutsViewAll')),
                       ),
                     ),
