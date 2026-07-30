@@ -2633,9 +2633,14 @@ class AppLocalizations {
       'listeningMode': '泛听',
       'extensiveListeningActive': '泛听进行中',
       'extensiveListeningIdle': '泛听未开始',
-      'markListeningInbox': '标记到 Listening Inbox',
+      'markListeningInbox': '标记到泛听收集箱',
       'hardInterruptListening': '暂停查看',
-      'listeningInbox': 'Listening Inbox',
+      // Owner ruling 2026-07-28: this was the English source string, which made
+      // the Chinese interface read 「Listening Inbox」 next to 「泛听进行中」 and
+      // 「还没有标记的泛听片段」. It is a feature surface, not a product name —
+      // 泛听 is the word the rest of this block already uses for it. See
+      // docs/development/ui-terminology.md for which terms stay English.
+      'listeningInbox': '泛听收集箱',
       'listeningInboxEmpty': '还没有标记的泛听片段。',
       'comprehensionReportPrompt': '这次泛听理解得怎么样？',
       'extensiveSessionPlayedDuration': '本次实际泛听时长：{duration}',
