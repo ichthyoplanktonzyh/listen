@@ -116,6 +116,12 @@ abstract final class ListenBreakpoints {
   /// way across. And a column this width reads as *one thing to do*, while a
   /// wider one starts reading as a form to be filled in — which is the wrong
   /// invitation for a surface whose whole job is to get the learner talking.
+  ///
+  /// The live stage takes the same cap (S2): its afterglow caption and its
+  /// notice bar are the same room seen a moment later, and one measure across
+  /// the lobby→stage transition is what stops the room from resizing under the
+  /// learner. That folded in a 520 that differed from the 560 beside it for no
+  /// reason anyone could name.
   static const formColumnMax = 560.0;
 
   /// Wide content that is two columns or carries media — the home surface, the

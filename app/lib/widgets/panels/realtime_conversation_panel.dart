@@ -461,7 +461,12 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
           if (state.error != null) ...[
             const SizedBox(height: ListenSpacing.gap16),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              // The stage's column measure, same as the caption above it: two
+              // caps 40pt apart on one surface is two measurements pretending
+              // to be a design.
+              constraints: const BoxConstraints(
+                maxWidth: ListenBreakpoints.formColumnMax,
+              ),
               child: ConversationNoticeBar(notice: state.error!),
             ),
           ],
@@ -976,7 +981,10 @@ class _ConversationTurnCard extends StatelessWidget {
             borderRadius: ListenRadii.panelBorder,
           ),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            // A turn bubble is a card: its own surface, its own border radius,
+            // read as one object. 14 was the third-most-common off-ladder inset
+            // in the app and it never meant anything but "16, roughly".
+            padding: ListenPadding.card,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
