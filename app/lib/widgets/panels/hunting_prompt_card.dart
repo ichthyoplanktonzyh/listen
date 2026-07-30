@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/hunting_session_controller.dart';
 import '../../localization.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 
@@ -108,7 +109,9 @@ class _PromptShell extends StatelessWidget {
     borderRadius: ListenRadii.panelBorder,
     color: Theme.of(context).colorScheme.surfaceContainerHigh,
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 560),
+      constraints: const BoxConstraints(
+        maxWidth: ListenBreakpoints.formColumnMax,
+      ),
       child: Padding(padding: const EdgeInsets.all(16), child: child),
     ),
   );

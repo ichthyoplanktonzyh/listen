@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/content_activity.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
 import 'package:llplayer_next/widgets/flows/content_speaking_activity_dialog.dart';
 
 void main() {
@@ -32,6 +33,25 @@ void main() {
     expect(
       find.byKey(const ValueKey('content-activity-conversation')),
       findsOne,
+    );
+
+    // S2 token provenance: three named choices are a column of decisions, so
+    // the chooser takes `formColumnMax` rather than the 440 it hard-coded.
+    expect(
+      tester
+          .widget<ConstrainedBox>(
+            find
+                .ancestor(
+                  of: find.byKey(
+                    const ValueKey('content-activity-conversation'),
+                  ),
+                  matching: find.byType(ConstrainedBox),
+                )
+                .first,
+          )
+          .constraints
+          .maxWidth,
+      ListenBreakpoints.formColumnMax,
     );
 
     await tester.tap(

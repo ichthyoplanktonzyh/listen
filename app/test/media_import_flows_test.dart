@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
 
 void main() {
@@ -20,6 +21,18 @@ void main() {
     );
     await tester.pump();
     expect(find.text('YouTube'), findsOneWidget);
+
+    // S2 token provenance: the recognized-source glyph and the authorization
+    // notice glyph are both `control` — they used to be 20 and 18, two steps
+    // apart in a dialog where they play the same role.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.play_circle_outline)).size,
+      ListenIconSize.control,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.gavel_outlined)).size,
+      ListenIconSize.control,
+    );
 
     await tester.tap(find.text('Download to this Mac'));
     await tester.pump();
