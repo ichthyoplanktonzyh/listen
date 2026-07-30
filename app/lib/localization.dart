@@ -1462,7 +1462,6 @@ class AppLocalizations {
       'realtimeRetryTranscription': 'Retry transcription',
       'realtimeFailureDetailsShow': 'Details',
       'realtimeFailureDetailsHide': 'Hide details',
-      'realtimeFailureReference': 'Reference {id}',
       'realtimeFailureAudioCapture':
           'The recording for this turn was not captured.',
       'realtimeFailureLocalTranscription':
@@ -1796,6 +1795,129 @@ class AppLocalizations {
       'statusTrackResourcesPartlyUnavailable':
           'Some of this track\'s timeline resources could not be read',
       'statusAudioAnalysisFailed': 'Audio analysis failed',
+
+      // The id that ties a report to a backend log line. Domain-neutral on
+      // purpose: it was `realtimeFailureReference`, but every failure surface
+      // needs the same line and a second copy of one string is how the two
+      // drift apart.
+      'failureReference': 'Reference {id}',
+
+      // ── 人工校对词级时间 · manual word timing dialog (#7 · S6) ──────────
+      // The whole surface was hardcoded English with zero `l.text`, so a `zh`
+      // learner opened it to a screen in a language they had not chosen.
+      'manualTimingTitle': 'Manual word timing review',
+      'manualTimingPlaySentence': 'Play sentence',
+      'manualTimingPlayWord': 'Play word',
+      'manualTimingEditedCount': '{count} edited',
+      'manualTimingBoundariesValid': 'Current sentence boundaries are valid.',
+      'manualTimingResetSentence': 'Reset sentence',
+      'manualTimingSaveRevision': 'Save revision',
+      // The provenance slot of a row: normally where the timing came from,
+      // and after an edit, that it came from you.
+      'manualTimingUserAdjusted': 'you adjusted this',
+      'manualTimingStart': 'Start',
+      'manualTimingEnd': 'End',
+      'manualTimingSentence': 'Sentence {index}',
+      'manualTimingPreviousSentence': 'Previous sentence',
+      'manualTimingNextSentence': 'Next sentence',
+      // A named failure state (#62), not an interpolated exception. The
+      // backend's own message and the transport text stay off screen; only
+      // the reference id travels, and only when there is one.
+      'manualTimingSaveFailed': 'This revision could not be saved.',
+      'manualTimingSaveRejected':
+          'The backend would not accept these boundaries.',
+
+      // ── 我的表达 · personal expression (#7 · S6) ────────────────────────
+      // The screen with 65 Chinese literals and a single `l.text` call, so an
+      // `en` learner opened it to a full screen of Chinese.
+
+      // The scaffolding ladder. The four `value`s stay the backend's enum;
+      // only the wording lives here (呈现≠语义).
+      'expressionRungTemplateVisible': 'Show the whole pattern',
+      'expressionRungTemplateVisibleHint': 'Pattern and slots, all of it',
+      'expressionRungSlotHints': 'Slots only',
+      'expressionRungSlotHintsHint': 'Plan the content, not the structure',
+      'expressionRungKeywords': 'Keywords only',
+      'expressionRungKeywordsHint': 'Just the words — the sentence is yours',
+      'expressionRungNoText': 'No pattern',
+      'expressionRungNoTextHint': 'All of it in your own language',
+      'expressionLadderTitle':
+          'Scaffolding ladder · retire a rung, take back a share of the '
+          'light',
+      'expressionRungCurrent': 'you are here',
+      'expressionRungUsed': 'used {count}×',
+      'expressionRungUntried': 'not tried',
+
+      // Self-assessment. Descriptive, never a score.
+      'expressionAssessNeedsWork': 'Needs more practice',
+      'expressionAssessPartlyExpressed': 'Mostly got it out',
+      'expressionAssessExpressed': 'Came out naturally',
+
+      // Relative time on a history row, so it reads as a moment rather than a
+      // millisecond stamp.
+      'expressionTimeJustNow': 'just now',
+      'expressionTimeMinutesAgo': '{count} min ago',
+      'expressionTimeHoursAgo': '{count} h ago',
+      'expressionTimeDaysAgo': '{count} d ago',
+      'expressionTimeMonthsAgo': '{count} mo ago',
+      'expressionTimeYearsAgo': '{count} y ago',
+
+      // The save/edit sheet.
+      'expressionSaveTitle': 'Save to my expressions',
+      'expressionEditTitle': 'Edit this expression',
+      'expressionFieldName': 'Name',
+      'expressionFieldSource': 'Source snapshot (never changes)',
+      'expressionFieldPattern': 'My pattern',
+      'expressionFieldSlots': 'Slot names (comma separated)',
+      'expressionFieldNote': 'My note',
+
+      // List card and detail page.
+      'expressionLastWrote': '↳ You last wrote: {text}',
+      'expressionSourceLine': 'From: {text}',
+      'expressionSourceSnapshot': 'Source snapshot: {text}',
+      'expressionNoteLine': 'Note: {text}',
+      'expressionWriteYourOwn': 'Write your own sentence',
+      'expressionSpeakUnscripted': 'Say it without the script',
+      'expressionPlaySource': 'Hear the source',
+      'expressionUsageHistory': 'Usage history',
+      'expressionNoUsageYet': 'No usage recorded yet.',
+      'expressionVersionHistory': 'Version history ({count})',
+      'expressionVersionLine': 'v{version} · {name}',
+      'expressionDeleteAction': 'Delete this expression',
+      'expressionDelete': 'Delete',
+      // E1: deletion states its blast radius before anything is destroyed.
+      'expressionDeleteTitle': 'Delete this expression?',
+      'expressionDeleteBody':
+          'Its {versions} versions and {attempts} usage records go with it, '
+          'and cannot be recovered.',
+
+      // The writing desk.
+      'expressionWriteTitle': 'Write: {name}',
+      'expressionChannelSpoken': 'spoken',
+      'expressionChannelWritten': 'written',
+      'expressionSlotFallbackLabel': 'Fill in {slot}',
+      'expressionGenerateDraft': 'Draft it from my slots',
+      'expressionSlotOnlyIntro':
+          'Plan what you want to say; the pattern stays hidden:',
+      'expressionNoKeywords': 'No keyword hints were saved.',
+      'expressionKeywordsLine': 'Keywords: {list}',
+      'expressionNoTemplateHint':
+          'Pattern and slot hints are hidden — write it in your own words.',
+      'expressionDownshiftHint':
+          'That came out naturally last time. Want to try with less help '
+          '({rung})?',
+      'expressionDownshiftDismiss': 'Got it',
+      'expressionYourSentence': 'Your sentence',
+      'expressionYourSentenceHint': 'Write something that is actually yours',
+      'expressionHowItFelt': 'How it felt',
+      'expressionSaveAttempt': 'Save this attempt',
+
+      // Named failure states (#62). Each replaces a sentence that had a caught
+      // exception interpolated into it.
+      'expressionListFailed': 'Your saved expressions could not be loaded.',
+      'expressionExported': 'Exported {count} to {path}',
+      'expressionExportFailed': 'The export could not be written.',
+      'expressionAttemptSaveFailed': 'This attempt could not be saved.',
     },
     'zh': {
       'reviewTitle': '声音复习',
@@ -2633,9 +2755,14 @@ class AppLocalizations {
       'listeningMode': '泛听',
       'extensiveListeningActive': '泛听进行中',
       'extensiveListeningIdle': '泛听未开始',
-      'markListeningInbox': '标记到 Listening Inbox',
+      'markListeningInbox': '标记到泛听收集箱',
       'hardInterruptListening': '暂停查看',
-      'listeningInbox': 'Listening Inbox',
+      // Owner ruling 2026-07-28: this was the English source string, which made
+      // the Chinese interface read 「Listening Inbox」 next to 「泛听进行中」 and
+      // 「还没有标记的泛听片段」. It is a feature surface, not a product name —
+      // 泛听 is the word the rest of this block already uses for it. See
+      // docs/development/ui-terminology.md for which terms stay English.
+      'listeningInbox': '泛听收集箱',
       'listeningInboxEmpty': '还没有标记的泛听片段。',
       'comprehensionReportPrompt': '这次泛听理解得怎么样？',
       'extensiveSessionPlayedDuration': '本次实际泛听时长：{duration}',
@@ -3067,7 +3194,6 @@ class AppLocalizations {
       'realtimeRetryTranscription': '重试转写',
       'realtimeFailureDetailsShow': '详情',
       'realtimeFailureDetailsHide': '收起详情',
-      'realtimeFailureReference': '追踪编号 {id}',
       'realtimeFailureAudioCapture': '这一轮的录音没能保存下来。',
       'realtimeFailureLocalTranscription': '本地转写没有返回结果。',
       'realtimeFailurePostProcessing': '你说完之后，这一轮没能处理完成。',
@@ -3337,6 +3463,96 @@ class AppLocalizations {
       // ── Named failure states (#62) ─────────────────────────────────────
       'statusTrackResourcesPartlyUnavailable': '这条字幕的部分时间轴资源读取失败',
       'statusAudioAnalysisFailed': '音频分析失败',
+
+      'failureReference': '追踪编号 {id}',
+
+      // ── 人工校对词级时间（#7 · S6）───────────────────────────────────
+      'manualTimingTitle': '人工校对词级时间',
+      'manualTimingPlaySentence': '播放整句',
+      'manualTimingPlayWord': '播放这个词',
+      'manualTimingEditedCount': '已改 {count} 处',
+      'manualTimingBoundariesValid': '这一句的边界没有问题。',
+      'manualTimingResetSentence': '还原这一句',
+      'manualTimingSaveRevision': '保存修订',
+      'manualTimingUserAdjusted': '你调整过',
+      'manualTimingStart': '起点',
+      'manualTimingEnd': '终点',
+      'manualTimingSentence': '第 {index} 句',
+      'manualTimingPreviousSentence': '上一句',
+      'manualTimingNextSentence': '下一句',
+      'manualTimingSaveFailed': '这次修订没能保存。',
+      'manualTimingSaveRejected': '后端不接受这组边界。',
+
+      // ── 我的表达（#7 · S6）─────────────────────────────────────────────
+      'expressionRungTemplateVisible': '看完整模板',
+      'expressionRungTemplateVisibleHint': '模板 + 槽位全给',
+      'expressionRungSlotHints': '只看槽位',
+      'expressionRungSlotHintsHint': '只规划内容，不给结构',
+      'expressionRungKeywords': '只看关键词',
+      'expressionRungKeywordsHint': '只剩词，句子归你',
+      'expressionRungNoText': '不看模板',
+      'expressionRungNoTextHint': '全是你的语言',
+      'expressionLadderTitle': '帮助梯子 · 撤一阶，光多归你一分',
+      'expressionRungCurrent': '你在这',
+      'expressionRungUsed': '用过 {count} 次',
+      'expressionRungUntried': '还没试过',
+
+      'expressionAssessNeedsWork': '还需要练习',
+      'expressionAssessPartlyExpressed': '基本表达出来',
+      'expressionAssessExpressed': '表达自然',
+
+      'expressionTimeJustNow': '刚刚',
+      'expressionTimeMinutesAgo': '{count} 分钟前',
+      'expressionTimeHoursAgo': '{count} 小时前',
+      'expressionTimeDaysAgo': '{count} 天前',
+      'expressionTimeMonthsAgo': '{count} 个月前',
+      'expressionTimeYearsAgo': '{count} 年前',
+
+      'expressionSaveTitle': '保存到我的表达',
+      'expressionEditTitle': '编辑个人表达',
+      'expressionFieldName': '名称',
+      'expressionFieldSource': '不可变来源快照',
+      'expressionFieldPattern': '我的模板',
+      'expressionFieldSlots': '槽位名称（逗号分隔）',
+      'expressionFieldNote': '我的说明',
+
+      'expressionLastWrote': '↳ 你上次写：{text}',
+      'expressionSourceLine': '来源：{text}',
+      'expressionSourceSnapshot': '来源快照：{text}',
+      'expressionNoteLine': '说明：{text}',
+      'expressionWriteYourOwn': '写自己的句子',
+      'expressionSpeakUnscripted': '脱稿说一遍',
+      'expressionPlaySource': '回听来源',
+      'expressionUsageHistory': '使用历史',
+      'expressionNoUsageYet': '还没有使用记录。',
+      'expressionVersionHistory': '版本历史（{count}）',
+      'expressionVersionLine': 'v{version} · {name}',
+      'expressionDeleteAction': '删除这个表达',
+      'expressionDelete': '删除',
+      'expressionDeleteTitle': '删除这个表达？',
+      'expressionDeleteBody': '会一起删掉它的 {versions} 个版本与 {attempts} 条使用记录，无法恢复。',
+
+      'expressionWriteTitle': '写出：{name}',
+      'expressionChannelSpoken': '口头',
+      'expressionChannelWritten': '书面',
+      'expressionSlotFallbackLabel': '填入 {slot}',
+      'expressionGenerateDraft': '用我的槽位生成草稿',
+      'expressionSlotOnlyIntro': '只规划要表达的内容，不显示模板结构：',
+      'expressionNoKeywords': '没有保存关键词提示。',
+      'expressionKeywordsLine': '关键词：{list}',
+      'expressionNoTemplateHint': '模板与槽位提示已隐藏，请直接写出自己的表达。',
+      'expressionDownshiftHint': '上次你写得很自然，要不要试试更少的帮助（{rung}）？',
+      'expressionDownshiftDismiss': '知道了',
+      'expressionYourSentence': '你的句子',
+      'expressionYourSentenceHint': '写出自己的真实内容',
+      'expressionHowItFelt': '写完感觉',
+      'expressionSaveAttempt': '保存使用记录',
+
+      // ── Named failure states (#62) ─────────────────────────────────────
+      'expressionListFailed': '没能加载你保存的表达。',
+      'expressionExported': '已导出 {count} 条到 {path}',
+      'expressionExportFailed': '这份导出没能写出来。',
+      'expressionAttemptSaveFailed': '这次记录没能保存。',
     },
   };
 }

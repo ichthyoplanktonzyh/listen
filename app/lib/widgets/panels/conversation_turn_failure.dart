@@ -91,7 +91,7 @@ class ConversationNoticeBar extends StatelessWidget {
             const SizedBox(height: ListenSpacing.gap4),
             SelectableText(
               key: const ValueKey('realtime-notice-reference'),
-              l.text('realtimeFailureReference').replaceAll('{id}', reference),
+              l.text('failureReference').replaceAll('{id}', reference),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onErrorContainer.withValues(
                   alpha: 0.8,
@@ -203,8 +203,6 @@ class _ConversationTurnFailureNoticeState
     if (detail.code != null) detail.code!,
     if (detail.message != null) detail.message!,
     if (detail.correlationId != null)
-      l
-          .text('realtimeFailureReference')
-          .replaceAll('{id}', detail.correlationId!),
+      l.text('failureReference').replaceAll('{id}', detail.correlationId!),
   ];
 }

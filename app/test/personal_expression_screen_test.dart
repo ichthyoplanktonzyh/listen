@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/personal_expression_screen.dart';
@@ -127,16 +128,60 @@ LocalApi _api({
   );
 }
 
-Future<void> _pumpScreen(WidgetTester tester, LocalApi api) async {
+/// The strings under test, read the way the screen reads them.
+///
+/// Before S6 (#7) this file asserted Chinese literals while pumping an `en`
+/// app — which passed only because the screen ignored the locale entirely. An
+/// assertion written against `AppLocalizations` cannot pass that way: it moves
+/// with the table, and running it under both locales is then free.
+late AppLocalizations l;
+
+Future<void> _pumpScreen(
+  WidgetTester tester,
+  LocalApi api, {
+  Locale locale = const Locale('en'),
+  Size size = _tallWindow,
+}) async {
+  l = AppLocalizations(locale);
+  _setWindow(tester, size);
   await tester.pumpWidget(
     MaterialApp(
-      localizationsDelegates: const [AppLocalizations.delegate],
+      // Keyed on the locale so re-pumping with a different one rebuilds from
+      // the root. Without it Flutter updates the existing `MaterialApp`
+      // element, the `Navigator` keeps whatever route the previous pass pushed,
+      // and the second locale is asserted against the first one's screen.
+      key: ValueKey(locale),
+      locale: locale,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: PersonalExpressionScreen(api: api, language: 'en'),
     ),
   );
   await tester.pumpAndSettle();
 }
+
+/// One usage-history line, assembled from the table the same way `_HistoryRow`
+/// assembles it — channel, rung, self-assessment, relative time.
+String _historyLine({
+  required String channelKey,
+  required String rungKey,
+  required String assessmentKey,
+}) =>
+    '${l.text(channelKey)} · ${l.text(rungKey)} · '
+    '${l.text(assessmentKey)} · ';
+
+/// Tall enough that every row of the detail page and the writing desk is
+/// built.
+///
+/// Not cosmetic: both are `ListView`s, which build lazily, so an unbuilt row is
+/// indistinguishable from a missing one to `find.text`. At the 800×600 default
+/// the English copy — longer than the Chinese it replaced — pushed the delete
+/// action and the writing desk's lower half out of the viewport, and three
+/// assertions started failing for a reason that had nothing to do with them.
+const _tallWindow = Size(900, 1600);
 
 /// Sizes the test window, so a layout claim ("the search field is capped at the
 /// content column") is made at a width where the uncapped form would be
@@ -151,52 +196,140 @@ void _setWindow(WidgetTester tester, Size size) {
 Future<void> _openWritingDesk(WidgetTester tester) async {
   await tester.tap(find.text('Ended up'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('写自己的句子'));
+  await tester.tap(find.text(l.text('expressionWriteYourOwn')));
   await tester.pumpAndSettle();
 }
 
+/// Han ideographs, for the "no Chinese survives an English interface" check.
+final _han = RegExp(r'[一-鿿]');
+
 void main() {
-  testWidgets(
-    '写作台是页面不是弹窗；梯子四阶月白光比例单调递减；不看模板隐藏模板',
-    (tester) async {
-      await _pumpScreen(tester, _api());
-      await _openWritingDesk(tester);
+  testWidgets('#7: the screen speaks the interface language, in both '
+      'directions', (tester) async {
+    // The regression this slice exists for. 我的表达 had 65 Chinese literals
+    // and a single `l.text` call, so an `en` learner opened it to a full screen
+    // of Chinese and the language setting did nothing at all.
+    for (final locale in const [Locale('en'), Locale('zh')]) {
+      await _pumpScreen(tester, _api(), locale: locale);
 
-      // 弹窗死刑：写作流程不再是 AlertDialog。
-      expect(find.byType(AlertDialog), findsNothing);
-
-      // 梯子四阶都在。
-      for (final label in ['看完整模板', '只看槽位', '只看关键词', '不看模板']) {
-        expect(find.text(label), findsOneWidget);
+      // The list surface: page title, both AppBar actions, the starter guide.
+      for (final key in const [
+        'personalExpressions',
+        'expressionStarterTitle',
+        'expressionStarterBody',
+        'expressionStarterCreate',
+      ]) {
+        expect(
+          find.textContaining(l.text(key)),
+          findsAtLeastNWidgets(1),
+          reason: '$key is missing under $locale',
+        );
       }
 
-      // 月白光比例随档位单调递减（撤一阶脚手架，月白少一分）。
-      final moonFinder = find.byWidgetPredicate(
-        (widget) => widget is ColoredBox && widget.color == ListenColors.moonWhite,
-      );
-      final moonFlexes = moonFinder
-          .evaluate()
-          .map((element) {
-            final expanded = element
-                .findAncestorWidgetOfExactType<Expanded>();
-            return expanded!.flex;
-          })
-          .toList();
-      expect(moonFlexes, [3, 2, 1]);
-      for (var i = 0; i < moonFlexes.length - 1; i++) {
-        expect(moonFlexes[i] > moonFlexes[i + 1], isTrue);
-      }
-
-      // 默认档 template_visible：模板可见。
-      expect(find.text('I ended up {result}.'), findsOneWidget);
-
-      // 撤到最底一阶：模板与槽位退场。
-      await tester.tap(find.text('不看模板'));
+      // Down into the detail page and the writing desk, which is where most of
+      // the welded copy lived.
+      await tester.tap(find.text('Ended up'));
       await tester.pumpAndSettle();
-      expect(find.text('I ended up {result}.'), findsNothing);
-      expect(find.text('模板与槽位提示已隐藏，请直接写出自己的表达。'), findsOneWidget);
-    },
-  );
+      for (final key in const [
+        'expressionWriteYourOwn',
+        'expressionSpeakUnscripted',
+        'expressionUsageHistory',
+        'expressionNoUsageYet',
+        'expressionDeleteAction',
+      ]) {
+        expect(
+          find.textContaining(l.text(key)),
+          findsAtLeastNWidgets(1),
+          reason: '$key is missing under $locale',
+        );
+      }
+
+      await tester.tap(find.text(l.text('expressionWriteYourOwn')));
+      await tester.pumpAndSettle();
+      for (final key in const [
+        'expressionLadderTitle',
+        'expressionYourSentence',
+        'expressionHowItFelt',
+        'expressionSaveAttempt',
+        'expressionAssessNeedsWork',
+        'expressionAssessExpressed',
+      ]) {
+        expect(
+          find.textContaining(l.text(key)),
+          findsAtLeastNWidgets(1),
+          reason: '$key is missing under $locale',
+        );
+      }
+    }
+  });
+
+  testWidgets('#7: under an English interface no Chinese is left on screen', (
+    tester,
+  ) async {
+    // The direction `cjk_literal_discipline_test.dart` cannot check: that gate
+    // reads source, so a key whose `en` value was filled with the Chinese
+    // string, or one that fell back to a Chinese literal, passes it and is
+    // still wrong here. This reads what renders.
+    await _pumpScreen(tester, _api());
+    await tester.tap(find.text('Ended up'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l.text('expressionWriteYourOwn')));
+    await tester.pumpAndSettle();
+
+    final chinese = [
+      for (final widget in tester.widgetList<Text>(find.byType(Text)))
+        if (widget.data case final text?)
+          if (_han.hasMatch(text)) text,
+    ];
+    expect(
+      chinese,
+      isEmpty,
+      reason:
+          'Still welded to Chinese, or a `zh` value leaked into the `en` '
+          'table:\n${chinese.join('\n')}',
+    );
+  });
+
+  testWidgets('写作台是页面不是弹窗；梯子四阶月白光比例单调递减；不看模板隐藏模板', (tester) async {
+    await _pumpScreen(tester, _api());
+    await _openWritingDesk(tester);
+
+    // 弹窗死刑：写作流程不再是 AlertDialog。
+    expect(find.byType(AlertDialog), findsNothing);
+
+    // 梯子四阶都在。
+    for (final key in const [
+      'expressionRungTemplateVisible',
+      'expressionRungSlotHints',
+      'expressionRungKeywords',
+      'expressionRungNoText',
+    ]) {
+      expect(find.text(l.text(key)), findsOneWidget);
+    }
+
+    // 月白光比例随档位单调递减（撤一阶脚手架，月白少一分）。
+    final moonFinder = find.byWidgetPredicate(
+      (widget) =>
+          widget is ColoredBox && widget.color == ListenColors.moonWhite,
+    );
+    final moonFlexes = moonFinder.evaluate().map((element) {
+      final expanded = element.findAncestorWidgetOfExactType<Expanded>();
+      return expanded!.flex;
+    }).toList();
+    expect(moonFlexes, [3, 2, 1]);
+    for (var i = 0; i < moonFlexes.length - 1; i++) {
+      expect(moonFlexes[i] > moonFlexes[i + 1], isTrue);
+    }
+
+    // 默认档 template_visible：模板可见。
+    expect(find.text('I ended up {result}.'), findsOneWidget);
+
+    // 撤到最底一阶：模板与槽位退场。
+    await tester.tap(find.text(l.text('expressionRungNoText')));
+    await tester.pumpAndSettle();
+    expect(find.text('I ended up {result}.'), findsNothing);
+    expect(find.text(l.text('expressionNoTemplateHint')), findsOneWidget);
+  });
 
   testWidgets('用过 N 次 / 还没试过：既有 attempts 前端聚合', (tester) async {
     await _pumpScreen(
@@ -211,24 +344,31 @@ void main() {
     );
     await _openWritingDesk(tester);
 
-    expect(find.text('你在这'), findsOneWidget); // 当前档 template_visible
-    expect(find.text('用过 2 次'), findsOneWidget); // slot_hints
-    expect(find.text('用过 1 次'), findsOneWidget); // keywords
-    expect(find.text('还没试过'), findsOneWidget); // no_text
+    String used(int count) =>
+        l.text('expressionRungUsed').replaceAll('{count}', '$count');
+
+    expect(
+      find.text(l.text('expressionRungCurrent')),
+      findsOneWidget,
+    ); // 当前档 template_visible
+    expect(find.text(used(2)), findsOneWidget); // slot_hints
+    expect(find.text(used(1)), findsOneWidget); // keywords
+    expect(find.text(l.text('expressionRungUntried')), findsOneWidget);
   });
 
   testWidgets('历史为空则梯子只显当前档，不编造「还没试过」', (tester) async {
     await _pumpScreen(tester, _api());
     await _openWritingDesk(tester);
 
-    expect(find.text('你在这'), findsOneWidget);
-    expect(find.text('还没试过'), findsNothing);
-    expect(find.text('用过 1 次'), findsNothing);
+    expect(find.text(l.text('expressionRungCurrent')), findsOneWidget);
+    expect(find.text(l.text('expressionRungUntried')), findsNothing);
+    expect(
+      find.text(l.text('expressionRungUsed').replaceAll('{count}', '1')),
+      findsNothing,
+    );
   });
 
-  testWidgets('降档轻提示：上次表达自然→提示更少帮助，可忽略，绝不自动降档', (
-    tester,
-  ) async {
+  testWidgets('降档轻提示：上次表达自然→提示更少帮助，可忽略，绝不自动降档', (tester) async {
     await _pumpScreen(
       tester,
       _api(
@@ -246,17 +386,17 @@ void main() {
     await _openWritingDesk(tester);
 
     // 提示出现且指向下一阶（更少帮助）。
-    expect(
-      find.textContaining('要不要试试更少的帮助（只看槽位）'),
-      findsOneWidget,
-    );
+    final hint = l
+        .text('expressionDownshiftHint')
+        .replaceAll('{rung}', l.text('expressionRungSlotHints'));
+    expect(find.text(hint), findsOneWidget);
     // 绝不自动降档：当前仍是 template_visible，模板仍在场。
     expect(find.text('I ended up {result}.'), findsOneWidget);
 
     // 可忽略：点「知道了」后提示消失。
-    await tester.tap(find.text('知道了'));
+    await tester.tap(find.text(l.text('expressionDownshiftDismiss')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('要不要试试更少的帮助'), findsNothing);
+    expect(find.text(hint), findsNothing);
   });
 
   testWidgets('E1 删除确认：明说牵连 N 个版本 + M 条使用记录', (tester) async {
@@ -280,17 +420,22 @@ void main() {
     await tester.tap(find.text('Ended up'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('删除这个表达'));
+    await tester.tap(find.text(l.text('expressionDeleteAction')));
     await tester.pumpAndSettle();
 
     expect(find.byType(AlertDialog), findsOneWidget);
-    expect(find.textContaining('2 个版本'), findsOneWidget);
-    expect(find.textContaining('2 条使用记录'), findsOneWidget);
+    expect(
+      find.text(
+        l
+            .text('expressionDeleteBody')
+            .replaceAll('{versions}', '2')
+            .replaceAll('{attempts}', '2'),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('E3 列表卡你上次写的句子上屏 · E4 历史行人话替 raw 枚举', (
-    tester,
-  ) async {
+  testWidgets('E3 列表卡你上次写的句子上屏 · E4 历史行人话替 raw 枚举', (tester) async {
     await _pumpScreen(
       tester,
       _api(
@@ -306,7 +451,11 @@ void main() {
 
     // E3：列表卡呈现最近一次你写的句子。
     expect(
-      find.textContaining('↳ 你上次写：Last summer I ended up'),
+      find.text(
+        l
+            .text('expressionLastWrote')
+            .replaceAll('{text}', 'Last summer I ended up taking a job.'),
+      ),
       findsOneWidget,
     );
 
@@ -315,15 +464,24 @@ void main() {
     await tester.pumpAndSettle();
 
     // E4：历史行是人话，不直出 raw 枚举。
-    expect(find.textContaining('书面 · 看完整模板 · 基本表达出来'), findsOneWidget);
+    expect(
+      find.textContaining(
+        _historyLine(
+          channelKey: 'expressionChannelWritten',
+          rungKey: 'expressionRungTemplateVisible',
+          assessmentKey: 'expressionAssessPartlyExpressed',
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(find.textContaining('template_visible'), findsNothing);
     expect(find.textContaining('partly_expressed'), findsNothing);
+    expect(find.textContaining('writing'), findsNothing);
   });
 
   testWidgets('§3.6-1 搜索框与内容列同宽，且同锁在内容列宽内', (tester) async {
     // 宽窗（截图 1 的量级）：未收口时搜索框会是满窗宽，内容列却停在 780。
-    _setWindow(tester, const Size(1000, 900));
-    await _pumpScreen(tester, _api());
+    await _pumpScreen(tester, _api(), size: const Size(1000, 900));
 
     final searchWidth = tester.getSize(find.byType(TextField)).width;
     final cardWidth = tester.getSize(find.byType(Card).first).width;
@@ -341,8 +499,7 @@ void main() {
   testWidgets('§3.6-2 AppBar 两个动作有名字：窄窗 tooltip，宽窗文字标签，图标收到 chrome 尺寸', (
     tester,
   ) async {
-    _setWindow(tester, const Size(700, 800));
-    await _pumpScreen(tester, _api());
+    await _pumpScreen(tester, _api(), size: const Size(700, 800));
 
     // 窄窗：纯图标，但名字通过 tooltip（也是读屏播报的那一份）可达。
     expect(find.byTooltip('Export expressions'), findsOneWidget);
@@ -351,10 +508,7 @@ void main() {
 
     for (final icon in [Icons.download_outlined, Icons.add]) {
       final glyph = tester.widget<Icon>(
-        find.descendant(
-          of: find.byType(AppBar),
-          matching: find.byIcon(icon),
-        ),
+        find.descendant(of: find.byType(AppBar), matching: find.byIcon(icon)),
       );
       expect(glyph.size, ListenIconSize.chrome);
     }
@@ -366,16 +520,13 @@ void main() {
   });
 
   testWidgets('§3.6-2 宽窗下 AppBar 动作直接显示文字标签', (tester) async {
-    _setWindow(tester, const Size(1200, 900));
-    await _pumpScreen(tester, _api());
+    await _pumpScreen(tester, _api(), size: const Size(1200, 900));
 
     expect(find.text('Export expressions'), findsOneWidget);
     expect(find.text('New expression'), findsOneWidget);
   });
 
-  testWidgets('§3.6-3 字幕残留清洗后才上屏：去前导 dash，按学习语言规范化标点', (
-    tester,
-  ) async {
+  testWidgets('§3.6-3 字幕残留清洗后才上屏：去前导 dash，按学习语言规范化标点', (tester) async {
     await _pumpScreen(
       tester,
       _api(
@@ -390,15 +541,20 @@ void main() {
     );
 
     expect(find.text('I need to do something.'), findsOneWidget);
-    expect(find.textContaining('来源：I need to wear this, yes.'), findsOneWidget);
+    expect(
+      find.text(
+        l
+            .text('expressionSourceLine')
+            .replaceAll('{text}', 'I need to wear this, yes.'),
+      ),
+      findsOneWidget,
+    );
     // 脏形态一处都不许上屏。
     expect(find.textContaining('- I need'), findsNothing);
     expect(find.textContaining('。'), findsNothing);
   });
 
-  testWidgets('§3.6-3 学习语言是中文时，全角标点是正字法，不被 UI 语言带偏', (
-    tester,
-  ) async {
+  testWidgets('§3.6-3 学习语言是中文时，全角标点是正字法，不被 UI 语言带偏', (tester) async {
     await _pumpScreen(
       tester,
       _api(
@@ -414,7 +570,12 @@ void main() {
     );
 
     expect(find.text('我最后还是{结果}。'), findsOneWidget);
-    expect(find.textContaining('来源：我最后还是去了。'), findsOneWidget);
+    expect(
+      find.text(
+        l.text('expressionSourceLine').replaceAll('{text}', '我最后还是去了。'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('§3.6-4 少于 3 条时下方接起步引导，不是留白', (tester) async {

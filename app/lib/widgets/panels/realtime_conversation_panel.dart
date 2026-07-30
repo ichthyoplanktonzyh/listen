@@ -197,7 +197,13 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
         },
         child: ConversationStageShell(
           segment: segment,
-          child: switch (segment) {
+          // The room is built from the shell's own context, not this one.
+          // These three builders read `Theme.of` for their ink, and the outer
+          // context is the *app* theme — under the light theme that put the
+          // lobby's heading at `#1d2623` on the stage's `#141d1a` ground,
+          // invisible. The shell's context is the only one where the dark
+          // scheme is guaranteed.
+          builder: (context) => switch (segment) {
             ConversationStageSegment.lobby => _lobby(context, state),
             ConversationStageSegment.stage => _stage(context, state),
             ConversationStageSegment.debrief => _debrief(context, state),

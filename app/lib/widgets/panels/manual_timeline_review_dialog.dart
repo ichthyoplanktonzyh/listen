@@ -1,10 +1,42 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/manual_review_controller.dart';
+import '../../localization.dart';
+import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
+import '../../services/api_service.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_loading.dart';
+
+/// Why a revision did not get saved — a *named state*, never the exception.
+///
+/// This dialog used to hold `String? _saveError` and fill it with `'$error'`,
+/// which put an `HttpException` (internal error code, `correlation_id`,
+/// loopback port, internal route) straight into the message box. Charter P4
+/// asks for an honest instrument, not debug output: the two cases a learner can
+/// tell apart get a sentence each, and the transport's own text travels beside
+/// them on an [ApiFailure] that is never rendered.
+enum ManualTimingSaveFailure {
+  /// The backend refused these boundaries — a validation answer, so re-editing
+  /// is the way forward.
+  rejected,
+
+  /// Anything else: the request did not complete. Nothing about *why* is
+  /// useful to a learner, so it does not get a second sentence.
+  notSaved;
+
+  /// Classifies a caught save error. Only a `validation_error` envelope counts
+  /// as a rejection; every other body — including one this client cannot type
+  /// at all — degrades to [notSaved] rather than guessing.
+  static ManualTimingSaveFailure of(ApiFailure failure) =>
+      failure.code == 'validation_error' ? rejected : notSaved;
+
+  String key() => switch (this) {
+    rejected => 'manualTimingSaveRejected',
+    notSaved => 'manualTimingSaveFailed',
+  };
+}
 
 class ManualTimelineReviewDialog extends StatefulWidget {
   const ManualTimelineReviewDialog({
@@ -27,7 +59,12 @@ class _ManualTimelineReviewDialogState
     extends State<ManualTimelineReviewDialog> {
   WordKey? _selected;
   bool _saving = false;
-  String? _saveError;
+
+  /// The named state of the last failed save, and the diagnostics that came
+  /// with it. [_saveDetail] is never rendered — it is here so the reference id
+  /// can be shown, and so the rest stays reachable for a log.
+  ManualTimingSaveFailure? _saveFailure;
+  ApiFailure? _saveDetail;
 
   ManualReviewDraft get draft => widget.draft;
 
@@ -42,10 +79,11 @@ class _ManualTimelineReviewDialogState
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final errors = draft.validateCurrentSentence();
     final selectedWord = _selectedWord();
     return AlertDialog(
-      title: const Text('Manual word timing review'),
+      title: Text(l.text('manualTimingTitle')),
       content: SizedBox(
         width: 860,
         height: 620,
@@ -68,7 +106,7 @@ class _ManualTimelineReviewDialogState
                     draft.currentCue.end,
                   ),
                   icon: const Icon(Icons.play_arrow),
-                  label: const Text('Play sentence'),
+                  label: Text(l.text('manualTimingPlaySentence')),
                 ),
                 const SizedBox(width: ListenSpacing.gap8),
                 FilledButton.tonalIcon(
@@ -79,11 +117,13 @@ class _ManualTimelineReviewDialogState
                           selectedWord.end,
                         ),
                   icon: const Icon(Icons.volume_up_outlined),
-                  label: const Text('Play word'),
+                  label: Text(l.text('manualTimingPlayWord')),
                 ),
                 const Spacer(),
                 Text(
-                  '${draft.dirtyWords.length} edited',
+                  l
+                      .text('manualTimingEditedCount')
+                      .replaceAll('{count}', '${draft.dirtyWords.length}'),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -99,14 +139,21 @@ class _ManualTimelineReviewDialogState
               _MessageBox(
                 icon: Icons.check_circle_outline,
                 color: Theme.of(context).colorScheme.primary,
-                messages: ['Current sentence boundaries are valid.'],
+                messages: [l.text('manualTimingBoundariesValid')],
               ),
-            if (_saveError != null) ...[
+            if (_saveFailure != null) ...[
               const SizedBox(height: ListenSpacing.gap8),
               _MessageBox(
                 icon: Icons.warning_amber_outlined,
                 color: Theme.of(context).colorScheme.error,
-                messages: [_saveError!],
+                // One sentence, plus the id that ties a bug report to a
+                // backend log line. The error code, the operator-facing
+                // message and `ApiFailure.raw` stay off screen entirely.
+                messages: [
+                  l.text(_saveFailure!.key()),
+                  if (_saveDetail?.correlationId case final id?)
+                    l.text('failureReference').replaceAll('{id}', id),
+                ],
               ),
             ],
             const SizedBox(height: ListenSpacing.gap8),
@@ -125,7 +172,7 @@ class _ManualTimelineReviewDialogState
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l.text('cancel')),
         ),
         TextButton(
           onPressed: _saving
@@ -136,9 +183,9 @@ class _ManualTimelineReviewDialogState
                   _selected = words.isEmpty
                       ? null
                       : WordKey(words.first.sentenceId, words.first.tokenIndex);
-                  _saveError = null;
+                  _clearSaveFailure();
                 }),
-          child: const Text('Reset sentence'),
+          child: Text(l.text('manualTimingResetSentence')),
         ),
         FilledButton(
           onPressed: _saving || !draft.dirty || draft.validateAll().isNotEmpty
@@ -146,13 +193,14 @@ class _ManualTimelineReviewDialogState
               : _save,
           child: _saving
               ? const ListenLoading.inline(size: 16)
-              : const Text('Save revision'),
+              : Text(l.text('manualTimingSaveRevision')),
         ),
       ],
     );
   }
 
   Widget _wordRow(WordTiming word) {
+    final l = AppLocalizations.of(context);
     final key = WordKey(word.sentenceId, word.tokenIndex);
     final selected = key == _selected;
     final dirty = draft.dirtyWords.contains(key);
@@ -189,7 +237,7 @@ class _ManualTimelineReviewDialogState
                     ),
                     const SizedBox(height: ListenSpacing.gap2),
                     Text(
-                      dirty ? 'user adjusted' : word.source,
+                      dirty ? l.text('manualTimingUserAdjusted') : word.source,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
@@ -199,7 +247,8 @@ class _ManualTimelineReviewDialogState
               ),
               const SizedBox(width: ListenSpacing.gap8),
               _BoundaryEditor(
-                label: 'Start',
+                slot: 'start',
+                label: l.text('manualTimingStart'),
                 value: word.start,
                 onStep: (delta) =>
                     _step(word, adjustStart: true, deltaMs: delta),
@@ -207,7 +256,8 @@ class _ManualTimelineReviewDialogState
               ),
               const SizedBox(width: ListenSpacing.gap8),
               _BoundaryEditor(
-                label: 'End',
+                slot: 'end',
+                label: l.text('manualTimingEnd'),
                 value: word.end,
                 onStep: (delta) =>
                     _step(word, adjustStart: false, deltaMs: delta),
@@ -252,7 +302,7 @@ class _ManualTimelineReviewDialogState
         start: start,
         end: end,
       );
-      _saveError = null;
+      _clearSaveFailure();
     });
   }
 
@@ -269,25 +319,38 @@ class _ManualTimelineReviewDialogState
         adjustStart: adjustStart,
         deltaMs: deltaMs,
       );
-      _saveError = null;
+      _clearSaveFailure();
     });
+  }
+
+  /// Clears a stale failure. Any edit invalidates it: the message named a
+  /// state of the *last save attempt*, and the boundaries it referred to no
+  /// longer exist.
+  ///
+  /// Must be called from inside a `setState`.
+  void _clearSaveFailure() {
+    _saveFailure = null;
+    _saveDetail = null;
   }
 
   Future<void> _save() async {
     setState(() {
       _saving = true;
-      _saveError = null;
+      _clearSaveFailure();
     });
     try {
       await widget.onSave(draft);
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _saving = false;
-          _saveError = '$error';
-        });
-      }
+      if (!mounted) return;
+      // The exception becomes a typed diagnostic and a named state. Nothing
+      // from `describeApiFailure`'s result is rendered except the reference id.
+      final detail = describeApiFailure(error);
+      setState(() {
+        _saving = false;
+        _saveFailure = ManualTimingSaveFailure.of(detail);
+        _saveDetail = detail;
+      });
     }
   }
 
@@ -299,7 +362,7 @@ class _ManualTimelineReviewDialogState
       _selected = words.isEmpty
           ? null
           : WordKey(words.first.sentenceId, words.first.tokenIndex);
-      _saveError = null;
+      _clearSaveFailure();
     });
   }
 
@@ -347,49 +410,60 @@ class _Header extends StatelessWidget {
   final VoidCallback onNext;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Sentence ${cue.index + 1}',
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            const SizedBox(height: ListenSpacing.gap4),
-            Text(cue.text, maxLines: 3, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: ListenSpacing.gap4),
-            Text(
-              '${_formatMs(cue.start)} - ${_formatMs(cue.end)}',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l
+                    .text('manualTimingSentence')
+                    .replaceAll('{index}', '${cue.index + 1}'),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: ListenSpacing.gap4),
+              Text(cue.text, maxLines: 3, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: ListenSpacing.gap4),
+              Text(
+                '${_formatMs(cue.start)} - ${_formatMs(cue.end)}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
-      ),
-      IconButton(
-        tooltip: 'Previous sentence',
-        onPressed: canPrevious ? onPrevious : null,
-        icon: const Icon(Icons.chevron_left),
-      ),
-      IconButton(
-        tooltip: 'Next sentence',
-        onPressed: canNext ? onNext : null,
-        icon: const Icon(Icons.chevron_right),
-      ),
-    ],
-  );
+        IconButton(
+          tooltip: l.text('manualTimingPreviousSentence'),
+          onPressed: canPrevious ? onPrevious : null,
+          icon: const Icon(Icons.chevron_left),
+        ),
+        IconButton(
+          tooltip: l.text('manualTimingNextSentence'),
+          onPressed: canNext ? onNext : null,
+          icon: const Icon(Icons.chevron_right),
+        ),
+      ],
+    );
+  }
 }
 
 class _BoundaryEditor extends StatelessWidget {
   const _BoundaryEditor({
+    required this.slot,
     required this.label,
     required this.value,
     required this.onStep,
     required this.onSet,
   });
 
+  /// Which boundary this edits (`start` / `end`). Identifies the field for its
+  /// `ValueKey` so the key does not change with the interface language —
+  /// [label] is copy, and a key built from copy resets the field on a locale
+  /// switch.
+  final String slot;
   final String label;
   final Duration value;
   final void Function(int deltaMs) onStep;
@@ -413,7 +487,7 @@ class _BoundaryEditor extends StatelessWidget {
         ),
         const SizedBox(height: ListenSpacing.gap4),
         TextFormField(
-          key: ValueKey('$label-${value.inMilliseconds}'),
+          key: ValueKey('$slot-${value.inMilliseconds}'),
           initialValue: value.inMilliseconds.toString(),
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(

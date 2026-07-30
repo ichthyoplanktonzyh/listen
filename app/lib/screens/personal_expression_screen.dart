@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../localization.dart';
+import '../models/api_failure.dart';
 import '../models/personal_expression.dart';
 import '../services/api_service.dart';
 import '../theme/breakpoints.dart';
@@ -40,29 +41,29 @@ const _starterGuideThreshold = 3;
 const _ladderRungs = <_LadderRung>[
   _LadderRung(
     value: 'template_visible',
-    label: '看完整模板',
-    hint: '模板 + 槽位全给',
+    labelKey: 'expressionRungTemplateVisible',
+    hintKey: 'expressionRungTemplateVisibleHint',
     moonFlex: 3,
     signalFlex: 1,
   ),
   _LadderRung(
     value: 'slot_hints',
-    label: '只看槽位',
-    hint: '只规划内容，不给结构',
+    labelKey: 'expressionRungSlotHints',
+    hintKey: 'expressionRungSlotHintsHint',
     moonFlex: 2,
     signalFlex: 2,
   ),
   _LadderRung(
     value: 'keywords',
-    label: '只看关键词',
-    hint: '只剩词，句子归你',
+    labelKey: 'expressionRungKeywords',
+    hintKey: 'expressionRungKeywordsHint',
     moonFlex: 1,
     signalFlex: 3,
   ),
   _LadderRung(
     value: 'no_text',
-    label: '不看模板',
-    hint: '全是你的语言',
+    labelKey: 'expressionRungNoText',
+    hintKey: 'expressionRungNoTextHint',
     moonFlex: 0,
     signalFlex: 4,
   ),
@@ -71,17 +72,26 @@ const _ladderRungs = <_LadderRung>[
 class _LadderRung {
   const _LadderRung({
     required this.value,
-    required this.label,
-    required this.hint,
+    required this.labelKey,
+    required this.hintKey,
     required this.moonFlex,
     required this.signalFlex,
   });
 
+  /// The backend `assistance` enum value. Wire vocabulary, never on screen.
   final String value;
-  final String label;
-  final String hint;
+
+  /// Localization keys rather than text: the ladder is a `const` list built
+  /// before any `BuildContext` exists, so the wording has to be resolved at
+  /// render time or it is welded to whichever language wrote it.
+  final String labelKey;
+  final String hintKey;
+
   final int moonFlex;
   final int signalFlex;
+
+  String label(AppLocalizations l) => l.text(labelKey);
+  String hint(AppLocalizations l) => l.text(hintKey);
 }
 
 int _ladderIndex(String value) {
@@ -91,33 +101,43 @@ int _ladderIndex(String value) {
 
 _LadderRung _rungFor(String value) => _ladderRungs[_ladderIndex(value)];
 
+/// The self-assessment scale: backend value paired with its localization key.
+///
+/// Order is the scale's order, weakest first. Descriptive words, never a score
+/// (charter P4) — and never the raw enum, which is what `template_visible ·
+/// partly_expressed` used to put on a history row.
 const _assessments = <(String, String)>[
-  ('needs_work', '还需要练习'),
-  ('partly_expressed', '基本表达出来'),
-  ('expressed', '表达自然'),
+  ('needs_work', 'expressionAssessNeedsWork'),
+  ('partly_expressed', 'expressionAssessPartlyExpressed'),
+  ('expressed', 'expressionAssessExpressed'),
 ];
 
-String _assessmentLabel(String value) {
+/// The sentence for an assessment value. An unrecognised value degrades to
+/// itself rather than to a wrong label — a new scale point from the backend
+/// shows up as unfamiliar, not as a lie.
+String _assessmentLabel(String value, AppLocalizations l) {
   for (final entry in _assessments) {
-    if (entry.$1 == value) return entry.$2;
+    if (entry.$1 == value) return l.text(entry.$2);
   }
   return value;
 }
 
-/// Human relative time for a `completed_at_ms` epoch, so history rows show
-/// "3 天前" instead of a raw millisecond stamp.
-String _relativeTime(int ms) {
+/// Human relative time for a `completed_at_ms` epoch, so a history row reads as
+/// a moment instead of a millisecond stamp.
+String _relativeTime(int ms, AppLocalizations l) {
+  String at(String key, int count) =>
+      l.text(key).replaceAll('{count}', '$count');
   final diff = DateTime.now().millisecondsSinceEpoch - ms;
-  if (diff < 60000) return '刚刚';
+  if (diff < 60000) return l.text('expressionTimeJustNow');
   final minutes = diff ~/ 60000;
-  if (minutes < 60) return '$minutes 分钟前';
+  if (minutes < 60) return at('expressionTimeMinutesAgo', minutes);
   final hours = minutes ~/ 60;
-  if (hours < 24) return '$hours 小时前';
+  if (hours < 24) return at('expressionTimeHoursAgo', hours);
   final days = hours ~/ 24;
-  if (days < 30) return '$days 天前';
+  if (days < 30) return at('expressionTimeDaysAgo', days);
   final months = days ~/ 30;
-  if (months < 12) return '$months 个月前';
-  return '${days ~/ 365} 年前';
+  if (months < 12) return at('expressionTimeMonthsAgo', months);
+  return at('expressionTimeYearsAgo', days ~/ 365);
 }
 
 /// The most recent `writing` attempt, or null when the learner has never
@@ -195,10 +215,10 @@ class _LightMixBar extends StatelessWidget {
 }
 
 /// The visible ladder used inside the writing desk. Four rungs, current one
-/// highlighted, each tail-labelled 你在这 / 用过 N 次 / 还没试过.
+/// highlighted, each tail-labelled 「你在这」/「用过 N 次」/「还没试过」.
 ///
 /// When [usage] is null (no writing history) only the current rung is marked
-/// "你在这" — the other rungs stay silent rather than claim "还没试过", so an
+/// 「你在这」 — the other rungs stay silent rather than claim 「还没试过」, so an
 /// empty history never fabricates a trajectory (owner 拍板 · 前端聚合).
 class _AssistanceLadder extends StatelessWidget {
   const _AssistanceLadder({
@@ -211,15 +231,18 @@ class _AssistanceLadder extends StatelessWidget {
   final Map<String, int>? usage;
   final ValueChanged<String> onSelect;
 
-  String? _tail(_LadderRung rung) {
-    if (rung.value == current) return '你在这';
+  String? _tail(_LadderRung rung, AppLocalizations l) {
+    if (rung.value == current) return l.text('expressionRungCurrent');
     if (usage == null) return null;
     final count = usage![rung.value] ?? 0;
-    return count > 0 ? '用过 $count 次' : '还没试过';
+    return count > 0
+        ? l.text('expressionRungUsed').replaceAll('{count}', '$count')
+        : l.text('expressionRungUntried');
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
@@ -230,7 +253,7 @@ class _AssistanceLadder extends StatelessWidget {
           Semantics(
             button: true,
             selected: rung.value == current,
-            label: '${rung.label}，${rung.hint}',
+            label: '${rung.label(l)} · ${rung.hint(l)}',
             child: InkWell(
               borderRadius: ListenRadii.controlBorder,
               onTap: () => onSelect(rung.value),
@@ -259,9 +282,9 @@ class _AssistanceLadder extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(rung.label, style: textTheme.labelLarge),
+                          Text(rung.label(l), style: textTheme.labelLarge),
                           Text(
-                            rung.hint,
+                            rung.hint(l),
                             style: textTheme.labelSmall?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
@@ -278,7 +301,7 @@ class _AssistanceLadder extends StatelessWidget {
                     const SizedBox(width: ListenSpacing.gap12),
                     Expanded(
                       child: Text(
-                        _tail(rung) ?? '',
+                        _tail(rung, l) ?? '',
                         textAlign: TextAlign.right,
                         style: textTheme.labelSmall?.copyWith(
                           color: rung.value == current
@@ -331,7 +354,17 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
   Map<String, PersonalExpressionAttemptView> _lastWritten = const {};
   String _query = '';
   bool _busy = true;
-  String? _error;
+
+  /// Whether the last load failed, and the diagnostics that came with it.
+  ///
+  /// This used to be `String? _error = '$error'`, which put an `HttpException`
+  /// — internal error code, `correlation_id`, loopback port, internal route —
+  /// straight into the page's error notice. The page has exactly one failure
+  /// mode a learner can act on ("your expressions did not load, try again"),
+  /// so it gets one named state; [_loadDetail] is never rendered beyond its
+  /// reference id.
+  bool _loadFailed = false;
+  ApiFailure? _loadDetail;
 
   @override
   void initState() {
@@ -348,7 +381,8 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
   Future<void> _refresh() async {
     setState(() {
       _busy = true;
-      _error = null;
+      _loadFailed = false;
+      _loadDetail = null;
     });
     try {
       final values = await widget.api.sentencePatterns(
@@ -359,7 +393,13 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
       setState(() => _patterns = values);
       await _loadLastWritten(values);
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) {
+        final detail = describeApiFailure(error);
+        setState(() {
+          _loadFailed = true;
+          _loadDetail = detail;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -367,9 +407,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
 
   /// Reads existing attempts per pattern (no new backend semantics) to surface
   /// the learner's last written sentence on each list card.
-  Future<void> _loadLastWritten(
-    List<SentencePatternAssetView> patterns,
-  ) async {
+  Future<void> _loadLastWritten(List<SentencePatternAssetView> patterns) async {
     final entries = await Future.wait(
       patterns.map((pattern) async {
         try {
@@ -403,12 +441,41 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
       await File(location.path).writeAsString(
         const JsonEncoder.withIndent('  ').convert(bundle.toJson()),
       );
-      if (mounted) {
-        _notify('已导出 ${bundle.patternCount} 条到 ${location.path}');
-      }
+      if (!mounted) return;
+      final l = AppLocalizations.of(context);
+      _notify(
+        l
+            .text('expressionExported')
+            .replaceAll('{count}', '${bundle.patternCount}')
+            .replaceAll('{path}', location.path),
+      );
     } catch (error) {
-      if (mounted) _notify('导出失败：$error', isError: true);
+      if (!mounted) return;
+      // The export can fail in the API *or* in the file write, and neither
+      // exception says anything a learner can use. One named state, and the
+      // reference id only when the backend supplied one.
+      final l = AppLocalizations.of(context);
+      final detail = describeApiFailure(error);
+      final reference = detail.correlationId;
+      _notify(
+        reference == null
+            ? l.text('expressionExportFailed')
+            : '${l.text('expressionExportFailed')} '
+                  '${l.text('failureReference').replaceAll('{id}', reference)}',
+        isError: true,
+      );
     }
+  }
+
+  /// The load failure's sentence, plus the reference id when the backend gave
+  /// one. The error code, the operator-facing message and [ApiFailure.raw] stay
+  /// off screen entirely.
+  String _loadNotice(AppLocalizations l) {
+    final sentence = l.text('expressionListFailed');
+    final reference = _loadDetail?.correlationId;
+    if (reference == null) return sentence;
+    return '$sentence '
+        '${l.text('failureReference').replaceAll('{id}', reference)}';
   }
 
   void _notify(String message, {bool isError = false}) {
@@ -417,7 +484,9 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
       SnackBar(
         content: Text(
           message,
-          style: TextStyle(color: isError ? scheme.onError : scheme.onInverseSurface),
+          style: TextStyle(
+            color: isError ? scheme.onError : scheme.onInverseSurface,
+          ),
         ),
         backgroundColor: isError ? scheme.error : scheme.inverseSurface,
       ),
@@ -455,10 +524,15 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
     );
     final note = TextEditingController(text: current?.note ?? '');
     final sourceText = TextEditingController(text: effectiveSource.text);
+    final l = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(pattern == null ? '保存到我的表达' : '编辑个人表达'),
+        title: Text(
+          l.text(
+            pattern == null ? 'expressionSaveTitle' : 'expressionEditTitle',
+          ),
+        ),
         content: SizedBox(
           width: 640,
           child: SingleChildScrollView(
@@ -467,7 +541,9 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
               children: [
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: '名称'),
+                  decoration: InputDecoration(
+                    labelText: l.text('expressionFieldName'),
+                  ),
                 ),
                 const SizedBox(height: ListenSpacing.gap12),
                 TextField(
@@ -475,30 +551,38 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                   enabled: pattern == null && source == null,
                   minLines: 2,
                   maxLines: 4,
-                  decoration: const InputDecoration(labelText: '不可变来源快照'),
+                  decoration: InputDecoration(
+                    labelText: l.text('expressionFieldSource'),
+                  ),
                 ),
                 const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: patternText,
                   minLines: 2,
                   maxLines: 5,
-                  decoration: const InputDecoration(
-                    labelText: '我的模板',
+                  decoration: InputDecoration(
+                    labelText: l.text('expressionFieldPattern'),
+                    // The example is in the *learning* language, not the
+                    // interface language: it demonstrates the shape a pattern
+                    // takes, and translating it would demonstrate the wrong
+                    // one (AGENT.md keeps the two separate).
                     hintText: 'I ended up {result}.',
                   ),
                 ),
                 const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: slotNames,
-                  decoration: const InputDecoration(
-                    labelText: '槽位名称（逗号分隔）',
+                  decoration: InputDecoration(
+                    labelText: l.text('expressionFieldSlots'),
                     hintText: 'result, reason',
                   ),
                 ),
                 const SizedBox(height: ListenSpacing.gap12),
                 TextField(
                   controller: note,
-                  decoration: const InputDecoration(labelText: '我的说明'),
+                  decoration: InputDecoration(
+                    labelText: l.text('expressionFieldNote'),
+                  ),
                 ),
               ],
             ),
@@ -507,7 +591,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l.text('cancel')),
           ),
           FilledButton(
             onPressed: () async {
@@ -549,7 +633,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
               }
               if (context.mounted) Navigator.pop(context, true);
             },
-            child: const Text('保存'),
+            child: Text(l.text('save')),
           ),
         ],
       ),
@@ -590,7 +674,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
     final l = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('我的表达'),
+        title: Text(l.text('personalExpressions')),
         actions: [
           _ChromeAction(
             icon: Icons.download_outlined,
@@ -634,10 +718,10 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                   },
                 ),
               ),
-              if (_error != null)
+              if (_loadFailed)
                 Padding(
                   padding: ListenPadding.pageCompact.copyWith(bottom: 0),
-                  child: ListenErrorNotice(message: _error!),
+                  child: ListenErrorNotice(message: _loadNotice(l)),
                 ),
               Expanded(child: _list(l)),
             ],
@@ -805,6 +889,7 @@ class _PatternCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final version = pattern.currentVersion;
@@ -839,7 +924,9 @@ class _PatternCard extends StatelessWidget {
                     if (lastWritten != null) ...[
                       const SizedBox(height: ListenSpacing.gap6),
                       Text(
-                        '↳ 你上次写：${lastWritten!.responseText}',
+                        l
+                            .text('expressionLastWrote')
+                            .replaceAll('{text}', lastWritten!.responseText),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: textTheme.bodySmall?.copyWith(
@@ -849,8 +936,15 @@ class _PatternCard extends StatelessWidget {
                     ],
                     const SizedBox(height: ListenSpacing.gap6),
                     Text(
-                      '来源：'
-                      '${cleanLearningText(pattern.source.text, language: pattern.language)}',
+                      l
+                          .text('expressionSourceLine')
+                          .replaceAll(
+                            '{text}',
+                            cleanLearningText(
+                              pattern.source.text,
+                              language: pattern.language,
+                            ),
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodySmall?.copyWith(
@@ -928,18 +1022,21 @@ class _PatternDetailState extends State<_PatternDetail> {
   /// E1: deletion states its blast radius (N versions + M usage records) before
   /// anything is destroyed, matching the coach graduation flow spec.
   Future<void> _confirmDelete() async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('删除这个表达？'),
+        title: Text(l.text('expressionDeleteTitle')),
         content: Text(
-          '会一起删掉它的 ${versions.length} 个版本'
-          '与 ${attempts.length} 条使用记录，无法恢复。',
+          l
+              .text('expressionDeleteBody')
+              .replaceAll('{versions}', '${versions.length}')
+              .replaceAll('{attempts}', '${attempts.length}'),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l.text('cancel')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -947,7 +1044,7 @@ class _PatternDetailState extends State<_PatternDetail> {
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
+            child: Text(l.text('expressionDelete')),
           ),
         ],
       ),
@@ -959,6 +1056,7 @@ class _PatternDetailState extends State<_PatternDetail> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     return Scaffold(
@@ -992,8 +1090,15 @@ class _PatternDetailState extends State<_PatternDetail> {
               ),
               const SizedBox(height: ListenSpacing.gap8),
               Text(
-                '来源快照：'
-                '${cleanLearningText(widget.pattern.source.text, language: widget.pattern.language)}',
+                l
+                    .text('expressionSourceSnapshot')
+                    .replaceAll(
+                      '{text}',
+                      cleanLearningText(
+                        widget.pattern.source.text,
+                        language: widget.pattern.language,
+                      ),
+                    ),
                 style: textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -1001,7 +1106,14 @@ class _PatternDetailState extends State<_PatternDetail> {
               if (widget.pattern.currentVersion.note != null)
                 Padding(
                   padding: const EdgeInsets.only(top: ListenSpacing.gap4),
-                  child: Text('说明：${widget.pattern.currentVersion.note}'),
+                  child: Text(
+                    l
+                        .text('expressionNoteLine')
+                        .replaceAll(
+                          '{text}',
+                          '${widget.pattern.currentVersion.note}',
+                        ),
+                  ),
                 ),
               const SizedBox(height: ListenSpacing.gap8),
               Wrap(
@@ -1019,7 +1131,7 @@ class _PatternDetailState extends State<_PatternDetail> {
                   FilledButton.icon(
                     onPressed: _write,
                     icon: const Icon(Icons.edit_note),
-                    label: const Text('写自己的句子'),
+                    label: Text(l.text('expressionWriteYourOwn')),
                   ),
                   OutlinedButton.icon(
                     onPressed: widget.onStartSpeaking == null
@@ -1029,7 +1141,7 @@ class _PatternDetailState extends State<_PatternDetail> {
                             await widget.onStartSpeaking!(widget.pattern);
                           },
                     icon: const Icon(Icons.mic_none),
-                    label: const Text('脱稿说一遍'),
+                    label: Text(l.text('expressionSpeakUnscripted')),
                   ),
                   if (widget.onPlaySource != null)
                     OutlinedButton.icon(
@@ -1039,27 +1151,40 @@ class _PatternDetailState extends State<_PatternDetail> {
                           ? null
                           : () => widget.onPlaySource!(widget.pattern.source),
                       icon: const Icon(Icons.volume_up_outlined),
-                      label: const Text('回听来源'),
+                      label: Text(l.text('expressionPlaySource')),
                     ),
                 ],
               ),
               const Divider(height: 40),
               // A section title inside the page, not a second hero.
-              Text('使用历史', style: textTheme.titleMedium),
+              Text(
+                l.text('expressionUsageHistory'),
+                style: textTheme.titleMedium,
+              ),
               if (attempts.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: ListenSpacing.gap16),
-                  child: Text('还没有使用记录。'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: ListenSpacing.gap16,
+                  ),
+                  child: Text(l.text('expressionNoUsageYet')),
                 ),
-              for (final attempt in attempts)
-                _HistoryRow(attempt: attempt),
+              for (final attempt in attempts) _HistoryRow(attempt: attempt),
               const Divider(height: 40),
               ExpansionTile(
-                title: Text('版本历史（${versions.length}）'),
+                title: Text(
+                  l
+                      .text('expressionVersionHistory')
+                      .replaceAll('{count}', '${versions.length}'),
+                ),
                 children: [
                   for (final version in versions)
                     ListTile(
-                      title: Text('v${version.version} · ${version.name}'),
+                      title: Text(
+                        l
+                            .text('expressionVersionLine')
+                            .replaceAll('{version}', '${version.version}')
+                            .replaceAll('{name}', version.name),
+                      ),
                       subtitle: Text(
                         cleanLearningText(
                           version.patternText,
@@ -1074,7 +1199,7 @@ class _PatternDetailState extends State<_PatternDetail> {
                 style: TextButton.styleFrom(foregroundColor: scheme.error),
                 onPressed: () => unawaited(_confirmDelete()),
                 icon: const Icon(Icons.delete_outline),
-                label: const Text('删除这个表达'),
+                label: Text(l.text('expressionDeleteAction')),
               ),
             ],
           ),
@@ -1094,10 +1219,15 @@ class _HistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final rung = _rungFor(attempt.assistance);
-    final channelLabel = attempt.channel == 'speaking' ? '口头' : '书面';
+    final channelLabel = l.text(
+      attempt.channel == 'speaking'
+          ? 'expressionChannelSpoken'
+          : 'expressionChannelWritten',
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap8),
       child: Row(
@@ -1120,9 +1250,9 @@ class _HistoryRow extends StatelessWidget {
                 Text(attempt.responseText, style: textTheme.bodyMedium),
                 const SizedBox(height: ListenSpacing.gap2),
                 Text(
-                  '$channelLabel · ${rung.label} · '
-                  '${_assessmentLabel(attempt.selfAssessment)} · '
-                  '${_relativeTime(attempt.completedAtMs)}',
+                  '$channelLabel · ${rung.label(l)} · '
+                  '${_assessmentLabel(attempt.selfAssessment, l)} · '
+                  '${_relativeTime(attempt.completedAtMs, l)}',
                   style: textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -1216,16 +1346,31 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (error) {
-      if (mounted) {
-        setState(() => _saving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失败：$error')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _saving = false);
+      // A named state, not the exception. `describeApiFailure` keeps the
+      // transport text on an `ApiFailure` that is never rendered; only the
+      // reference id travels, and only when the backend supplied one.
+      final l = AppLocalizations.of(context);
+      final reference = describeApiFailure(error).correlationId;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            reference == null
+                ? l.text('expressionAttemptSaveFailed')
+                : '${l.text('expressionAttemptSaveFailed')} '
+                      '${l.text('failureReference').replaceAll('{id}', reference)}',
+          ),
+        ),
+      );
     }
   }
 
-  Widget _templateArea(ColorScheme scheme, TextTheme textTheme) {
+  Widget _templateArea(
+    ColorScheme scheme,
+    TextTheme textTheme,
+    AppLocalizations l,
+  ) {
     final version = widget.pattern.currentVersion;
     final mutedStyle = textTheme.bodyMedium?.copyWith(
       color: scheme.onSurfaceVariant,
@@ -1251,7 +1396,11 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                 child: TextField(
                   controller: _slotValues[slot.name],
                   decoration: InputDecoration(
-                    labelText: slot.prompt ?? '填入 ${slot.name}',
+                    labelText:
+                        slot.prompt ??
+                        l
+                            .text('expressionSlotFallbackLabel')
+                            .replaceAll('{slot}', slot.name),
                     hintText: slot.exampleValue,
                   ),
                 ),
@@ -1261,7 +1410,7 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _generateDraft,
-                  child: const Text('用我的槽位生成草稿'),
+                  child: Text(l.text('expressionGenerateDraft')),
                 ),
               ),
           ],
@@ -1271,7 +1420,7 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
           key: const ValueKey('slot_hints'),
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('只规划要表达的内容，不显示模板结构：', style: mutedStyle),
+            Text(l.text('expressionSlotOnlyIntro'), style: mutedStyle),
             for (final slot in version.slots)
               Padding(
                 padding: const EdgeInsets.only(top: ListenSpacing.gap8),
@@ -1289,14 +1438,19 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
         return Text(
           key: const ValueKey('keywords'),
           version.slots.isEmpty
-              ? '没有保存关键词提示。'
-              : '关键词：${version.slots.map((slot) => slot.name).join(' · ')}',
+              ? l.text('expressionNoKeywords')
+              : l
+                    .text('expressionKeywordsLine')
+                    .replaceAll(
+                      '{list}',
+                      version.slots.map((slot) => slot.name).join(' · '),
+                    ),
           style: mutedStyle,
         );
       default:
         return Text(
           key: const ValueKey('no_text'),
-          '模板与槽位提示已隐藏，请直接写出自己的表达。',
+          l.text('expressionNoTemplateHint'),
           style: mutedStyle,
         );
     }
@@ -1304,13 +1458,20 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final usage = _writingUsage(widget.attempts);
     final target = _downshiftTarget;
     return Scaffold(
-      appBar: AppBar(title: Text('写出：${widget.pattern.currentVersion.name}')),
+      appBar: AppBar(
+        title: Text(
+          l
+              .text('expressionWriteTitle')
+              .replaceAll('{name}', widget.pattern.currentVersion.name),
+        ),
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -1331,22 +1492,23 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          '上次你写得很自然，要不要试试更少的帮助（${target.label}）？',
+                          l
+                              .text('expressionDownshiftHint')
+                              .replaceAll('{rung}', target.label(l)),
                           style: textTheme.bodyMedium?.copyWith(
                             color: scheme.onSecondaryContainer,
                           ),
                         ),
                       ),
                       TextButton(
-                        onPressed: () =>
-                            setState(() => _hintDismissed = true),
-                        child: const Text('知道了'),
+                        onPressed: () => setState(() => _hintDismissed = true),
+                        child: Text(l.text('expressionDownshiftDismiss')),
                       ),
                     ],
                   ),
                 ),
               Text(
-                '帮助梯子 · 撤一阶，光多归你一分',
+                l.text('expressionLadderTitle'),
                 style: textTheme.labelMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -1362,11 +1524,11 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                 duration: reduceMotion ? Duration.zero : ListenMotion.base,
                 switchInCurve: ListenMotion.enter,
                 switchOutCurve: ListenMotion.exit,
-                child: _templateArea(scheme, textTheme),
+                child: _templateArea(scheme, textTheme, l),
               ),
               const SizedBox(height: ListenSpacing.gap16),
               Text(
-                '你的句子',
+                l.text('expressionYourSentence'),
                 style: textTheme.labelMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -1377,14 +1539,14 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                 minLines: 3,
                 maxLines: 8,
                 style: textTheme.bodyLarge?.copyWith(color: scheme.primary),
-                decoration: const InputDecoration(
-                  hintText: '写出自己的真实内容',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: l.text('expressionYourSentenceHint'),
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: ListenSpacing.gap16),
               Text(
-                '写完感觉',
+                l.text('expressionHowItFelt'),
                 style: textTheme.labelMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -1395,10 +1557,9 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                 children: [
                   for (final entry in _assessments)
                     ChoiceChip(
-                      label: Text(entry.$2),
+                      label: Text(l.text(entry.$2)),
                       selected: _assessment == entry.$1,
-                      onSelected: (_) =>
-                          setState(() => _assessment = entry.$1),
+                      onSelected: (_) => setState(() => _assessment = entry.$1),
                     ),
                 ],
               ),
@@ -1408,7 +1569,7 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
                 child: FilledButton.icon(
                   onPressed: _saving ? null : _save,
                   icon: const Icon(Icons.check),
-                  label: const Text('保存使用记录'),
+                  label: Text(l.text('expressionSaveAttempt')),
                 ),
               ),
             ],
