@@ -947,6 +947,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
       return;
     }
+    // A returning user must land on the lobby, not a stale debrief: the
+    // controller is a singleton that outlives the route, so its terminal
+    // state (done/failed + items) would re-render the old debrief on re-entry.
+    realtimeConversationController.resetToIdle();
     await Navigator.push<void>(
       context,
       // The stage powers on instead of sliding in like a page of chrome
