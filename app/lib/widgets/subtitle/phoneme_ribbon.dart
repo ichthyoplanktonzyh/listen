@@ -471,6 +471,20 @@ class _PhoneCell extends StatelessWidget {
   final PhonemeRibbonLane lane;
   final ValueChanged<PhonemeRibbonFinding>? onLoopFinding;
 
+  // ── Optical geometry ──
+  // A phone cell is [width] wide and [height] tall because the ribbon divides
+  // the video's subtitle band by the number of phones — so everything inside it
+  // is measured against the cell, not against the app's window grid, and is
+  // deliberately off the `ListenSpacing` ladder (see that class's scope note).
+
+  /// Inset of the finding underline inside its cell. The shoulder makes the mark
+  /// visibly narrower than the cell, so two adjacent findings read as two marks
+  /// rather than one continuous rule — that is the whole job of the value, and
+  /// it is why it cannot be widened to the ladder's next step in a cell that may
+  /// only be a few points wide. The foot below it is a real gap and stays on the
+  /// ladder.
+  static const _findingMarkerShoulder = 3.0;
+
   @override
   Widget build(BuildContext context) {
     final color = _phoneColor(phone.symbol, lane);
@@ -541,7 +555,11 @@ class _PhoneCell extends StatelessWidget {
               alignment: Alignment.bottomCenter,
               child: Container(
                 height: marker.strong ? 3.0 : 2.0,
-                margin: const EdgeInsets.only(left: 3, right: 3, bottom: 2),
+                margin: const EdgeInsets.only(
+                  left: _findingMarkerShoulder,
+                  right: _findingMarkerShoulder,
+                  bottom: ListenSpacing.gap2,
+                ),
                 decoration: BoxDecoration(
                   color: marker.color,
                   borderRadius: ListenRadii.tightBorder,

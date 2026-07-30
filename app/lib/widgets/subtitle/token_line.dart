@@ -88,6 +88,29 @@ class TokenLine extends StatefulWidget {
 }
 
 class _TokenLineState extends State<TokenLine> {
+  // ── Optical geometry ──
+  // The token line *is* the subtitle: every inset here sits between two glyphs
+  // of running text drawn at the user's own subtitle size over the video, so it
+  // is measured against the type rather than picked off the `ListenSpacing`
+  // ladder (see that class's scope note). These are the values that decide
+  // whether a line of words reads as one sentence or as a row of buttons, and
+  // the ladder's 2pt floor is already too coarse for that: 1pt of extra air per
+  // token accumulates into a visibly gappy line.
+
+  /// Vertical inset of a plain (non-capsule) token. A hairline, because the
+  /// token has to occupy exactly the line height the surrounding text does —
+  /// any more and the subtitle's leading changes when chunk display is on.
+  static const _plainTokenInsetVertical = 1.0;
+
+  /// Air between two tokens. The capsule form gets one notch more because its
+  /// border would otherwise touch its neighbour's.
+  static double _tokenSeam({required bool capsule}) => capsule ? 5 : 4;
+
+  /// Air around the divergence caret. Half the token seam: the marker has to
+  /// read as sitting *at* a boundary between two words, so it must be closer to
+  /// both of them than they are to each other.
+  static const _divergenceMarkerSeam = 1.5;
+
   late Map<String, ({int startMs, int endMs})?> _sensePlaybackRanges;
 
   /// Tie placements derived from [TokenLine.connectedSpeechRefs]:
@@ -354,7 +377,7 @@ class _TokenLineState extends State<TokenLine> {
       duration: ListenMotion.base,
       padding: EdgeInsets.symmetric(
         horizontal: capsule ? ListenSpacing.gap8 : ListenSpacing.gap2,
-        vertical: capsule ? ListenSpacing.gap4 : 1,
+        vertical: capsule ? ListenSpacing.gap4 : _plainTokenInsetVertical,
       ),
       decoration: BoxDecoration(
         // The capsule's ink, never a light block (§3.7). A pale grey fill
@@ -401,7 +424,7 @@ class _TokenLineState extends State<TokenLine> {
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: capsule ? 5 : 4),
+        padding: EdgeInsets.symmetric(horizontal: _tokenSeam(capsule: capsule)),
         child: AnimatedScale(
           key: ValueKey('$keyPrefix-scale-$keyIndex'),
           scale: active && chunkHighlightStyle == 'bounce' ? 1.045 : 1,
@@ -529,23 +552,23 @@ class _TokenLineState extends State<TokenLine> {
 
   /// Compare-mode overlay: a small accent caret + dashed tick sitting between
   /// two tokens where the sense-group boundary diverges from the prosodic one.
-  InlineSpan _divergenceMarkerSpan(BuildContext context, int tokenIndex) =>
-      WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 1.5),
-          child: Tooltip(
-            message: AppLocalizations.of(
-              context,
-            ).text('groupingDivergenceHint'),
-            child: _DivergenceMarker(
-              key: ValueKey('divergence-marker-$tokenIndex'),
-              height: fontSize,
-              color: ListenColors.accent,
-            ),
-          ),
+  InlineSpan _divergenceMarkerSpan(
+    BuildContext context,
+    int tokenIndex,
+  ) => WidgetSpan(
+    alignment: PlaceholderAlignment.middle,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _divergenceMarkerSeam),
+      child: Tooltip(
+        message: AppLocalizations.of(context).text('groupingDivergenceHint'),
+        child: _DivergenceMarker(
+          key: ValueKey('divergence-marker-$tokenIndex'),
+          height: fontSize,
+          color: ListenColors.accent,
         ),
-      );
+      ),
+    ),
+  );
 
   InlineSpan _tokenSpan(BuildContext context, SubtitleToken token) {
     final clickable = token.kind == 'word' && token.normalized != null;
@@ -717,11 +740,20 @@ class PhraseUnderlineSpan extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onTap;
 
+  /// Optical geometry (see `_TokenLineState`): how far the words are lifted off
+  /// the underline band drawn beneath them. Derived from that band's own 6pt
+  /// height rather than from the spacing ladder — one point of overlap and the
+  /// stroke crosses the descenders of the very words it is marking.
+  static const _bandClearance = 5.0;
+
   @override
   Widget build(BuildContext context) => Stack(
     clipBehavior: Clip.none,
     children: [
-      Padding(padding: const EdgeInsets.only(bottom: 5), child: child),
+      Padding(
+        padding: const EdgeInsets.only(bottom: _bandClearance),
+        child: child,
+      ),
       Positioned(
         left: 0,
         right: 0,

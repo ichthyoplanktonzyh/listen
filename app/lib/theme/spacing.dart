@@ -72,6 +72,19 @@ abstract final class ListenSpacing {
 /// Scope: the padding of a **container**. A one-off asymmetric inset that
 /// exists to align with a specific neighbour (nudging a label under an icon
 /// column) is geometry, not a container role, and stays a literal.
+///
+/// The standing example is `lib/widgets/subtitle/` — the instruments drawn over
+/// the video. Their insets are functions of the *rendered subtitle size*, which
+/// the user sets and the video frame scales, so they are measured in units of
+/// the glyph beside them rather than in steps of a fixed grid: the same 4pt
+/// that hangs a bracket on an 11px cue detaches it from a 34px one. Snapping
+/// them to this ladder would not tidy a rhythm, it would break the coupling
+/// that makes each mark read as part of the word it annotates. They are named
+/// as `static const`/helpers on the widget that owns them — the way
+/// `capability_viz.dart` already names its baseline hairline — because a ratio
+/// one instrument uses is element geometry, and a theme class of single-use
+/// numbers would be a vocabulary nobody picks from. On-ladder values in those
+/// files still use these names; only the derived ones are local.
 abstract final class ListenPadding {
   /// Inside a dense control: chips, badges, inline buttons, table cells —
   /// anything whose own height is the constraint.
