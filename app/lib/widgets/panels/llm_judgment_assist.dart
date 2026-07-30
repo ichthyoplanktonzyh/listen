@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -43,7 +44,7 @@ class LlmJudgmentAssist extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final judgment = this.judgment;
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(top: ListenSpacing.gap12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -53,13 +54,20 @@ class LlmJudgmentAssist extends StatelessWidget {
             OutlinedButton.icon(
               key: ValueKey('$keyPrefix-request-ai'),
               onPressed: busy ? null : onRequest,
-              icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+              icon: const Icon(
+                Icons.auto_awesome_outlined,
+                size: ListenIconSize.control,
+              ),
               label: Text(l.text('llmAssistRequest')),
             )
           else ...[
             Row(
               children: [
-                Icon(Icons.auto_awesome, size: 16, color: colors.tertiary),
+                Icon(
+                  Icons.auto_awesome,
+                  size: ListenIconSize.inline,
+                  color: colors.tertiary,
+                ),
                 const SizedBox(width: ListenSpacing.gap6),
                 Text(
                   l.text('llmAssistTitle'),
@@ -105,7 +113,7 @@ class LlmJudgmentAssist extends StatelessWidget {
   ) {
     final verdict = _effectiveVerdict(point.pointId);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -126,7 +134,7 @@ class LlmJudgmentAssist extends StatelessWidget {
           PopupMenuButton<String>(
             key: ValueKey('$keyPrefix-adjudicate-ai-${point.pointId}'),
             tooltip: l.text('llmAssistCorrect'),
-            icon: const Icon(Icons.edit_outlined, size: 15),
+            icon: const Icon(Icons.edit_outlined, size: ListenIconSize.inline),
             onSelected: (userVerdict) => onCorrect(point.pointId, userVerdict),
             itemBuilder: (context) => [
               for (final option in _verdicts)

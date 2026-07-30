@@ -16,6 +16,8 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/channels/reading_channel.dart';
 import 'package:llplayer_next/widgets/panels/listening_check_panel.dart';
 import 'package:llplayer_next/widgets/panels/reading_diff_panel.dart';
@@ -189,6 +191,27 @@ void main() {
     await tester.pump();
     expect(find.byType(ListeningCheckPanel), findsOneWidget);
     expect(find.byType(ReadingDiffPanel), findsNothing);
+
+    // S2 token provenance: the panel's header bar is one dense row of chrome,
+    // so it insets at `ListenPadding.row` rather than the 20/10/10/10 it used
+    // to compose by hand, and its back affordance is a `control` glyph.
+    expect(
+      tester
+          .widget<Padding>(
+            find
+                .ancestor(
+                  of: find.byIcon(Icons.arrow_back),
+                  matching: find.byType(Padding),
+                )
+                .last,
+          )
+          .padding,
+      ListenPadding.row,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.arrow_back)).size,
+      ListenIconSize.control,
+    );
     await tester.pump(const Duration(milliseconds: 20));
     harness.dispose();
   });
