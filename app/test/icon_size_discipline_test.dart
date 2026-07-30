@@ -64,8 +64,6 @@ void main() {
   const knownOffenders = <String>{
     'lib/phonetic_analysis_ui.dart',
     'lib/screens/review_queue_screen.dart',
-    'lib/widgets/common/listen_empty_state.dart',
-    'lib/widgets/common/listen_error_state.dart',
     'lib/widgets/flows/media_import_flows.dart',
     'lib/widgets/home/listening_home.dart',
     'lib/widgets/home/media_library_section.dart',

@@ -48,7 +48,6 @@ void main() {
   const knownOffenders = <String>{
     'lib/screens/review_queue_screen.dart',
     'lib/widgets/coach/coach_dashboard_screen.dart',
-    'lib/widgets/common/capability_viz.dart',
     'lib/widgets/home/listening_home.dart',
     'lib/widgets/panels/cold_start_marking_sheet.dart',
     'lib/widgets/panels/speaking_task_studio.dart',
