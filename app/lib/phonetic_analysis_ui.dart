@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'localization.dart';
+import 'models/named_failure.dart';
 import 'models/runtime_resources.dart';
 import 'services/api_service.dart';
 import 'theme/radii.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
+import 'widgets/common/api_failure_disclosure.dart';
 import 'widgets/common/listen_empty_state.dart';
 import 'widgets/common/listen_error_state.dart';
 import 'widgets/common/listen_loading.dart';
@@ -39,7 +41,15 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   List<PhoneticModelView> models = const [];
   List<PhoneticJobView> jobs = const [];
   Timer? timer;
-  String? error;
+
+  /// The last failure, as a *key* plus typed detail — see `NamedFailure`.
+  ///
+  /// This was a `String? error` holding `value.toString()`, rendered verbatim
+  /// as the whole panel's body. Only one of the two sites that filled it was
+  /// visible to the source gate: `_refresh` catches into a variable called
+  /// `value`, which is not a name the gate recognises as an exception. The
+  /// leak was the same either way.
+  NamedFailure? failure;
 
   bool get _hasActiveJobs => jobs.any((job) => _isActive(job.status));
   bool get _hasTerminalJobs => jobs.any((job) => _isTerminal(job.status));
@@ -81,11 +91,17 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
         providers = providerValues;
         models = modelValues;
         jobs = jobValues;
-        error = null;
+        failure = null;
       });
       if (hadActive != _hasActiveJobs) _scheduleTimer();
-    } catch (value) {
-      if (mounted) setState(() => error = value.toString());
+    } catch (error) {
+      if (!mounted) return;
+      setState(
+        () => failure = NamedFailure(
+          'phoneticAnalysisLoadFailed',
+          detail: describeApiFailure(error),
+        ),
+      );
     }
   }
 
@@ -118,12 +134,19 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
             IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
           ],
         ),
-        body: error != null
+        body: failure != null
             ? ListenErrorState(
-                message: error!,
-                action: OutlinedButton(
-                  onPressed: _refresh,
-                  child: Text(l.text('retry')),
+                message: l.text(failure!.messageKey),
+                action: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton(
+                      onPressed: _refresh,
+                      child: Text(l.text('retry')),
+                    ),
+                    if (ApiFailureDisclosure.hasDetail(failure!.detail))
+                      ApiFailureDisclosure(failure: failure!.detail!),
+                  ],
                 ),
               )
             : TabBarView(children: [_models(l), _jobs(l)]),
@@ -166,8 +189,14 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     try {
       await (widget.api?.installPhoneticAnalysisModel(modelId));
       await _refresh();
-    } catch (e) {
-      if (mounted) setState(() => error = e.toString());
+    } catch (error) {
+      if (!mounted) return;
+      setState(
+        () => failure = NamedFailure(
+          'phoneticModelInstallFailed',
+          detail: describeApiFailure(error),
+        ),
+      );
     }
   }
 
