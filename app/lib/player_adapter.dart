@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:fvp/fvp.dart';
 import 'package:video_player/video_player.dart';
 
+import 'models/api_failure.dart';
+import 'models/named_failure.dart';
 import 'theme/listen_theme.dart';
 
 class PlayerTrack {
@@ -37,7 +39,7 @@ class DesktopPlayerAdapter {
   final _position = StreamController<Duration>.broadcast();
   final _duration = StreamController<Duration>.broadcast();
   final _playing = StreamController<bool>.broadcast();
-  final _errors = StreamController<String>.broadcast();
+  final _errors = StreamController<NamedFailure>.broadcast();
   final _tracks = StreamController<PlayerTracks>.broadcast();
   Timer? _positionTimer;
   int? _pollingPositionGeneration;
@@ -50,7 +52,18 @@ class DesktopPlayerAdapter {
   Stream<Duration> get position => _position.stream;
   Stream<Duration> get duration => _duration.stream;
   Stream<bool> get playing => _playing.stream;
-  Stream<String> get errors => _errors.stream;
+
+  /// Playback failures as *named* states, not sentences.
+  ///
+  /// This used to be a `Stream<String>` carrying `'Playback failed: $error'`,
+  /// which the composition root passed straight to the status line — so a
+  /// decoder's own text reached the transport bar. An adapter has no
+  /// `BuildContext` and so cannot localize anything anyway: emitting a key is
+  /// both the honest shape and the only one that can follow the UI language.
+  ///
+  /// The exception itself travels in [NamedFailure.detail] as
+  /// [ApiFailure.raw], the one place documented as never rendered.
+  Stream<NamedFailure> get errors => _errors.stream;
   Stream<PlayerTracks> get tracks => _tracks.stream;
   Duration get currentPosition => _lastPublishedPosition ?? Duration.zero;
 
@@ -78,7 +91,9 @@ class DesktopPlayerAdapter {
       _publishTracks(next);
     } catch (error) {
       _stopPositionTimer();
-      _errors.add('Playback failed: $error');
+      _errors.add(
+        NamedFailure('statusPlaybackFailed', detail: ApiFailure(raw: '$error')),
+      );
       rethrow;
     }
   }
@@ -89,7 +104,16 @@ class DesktopPlayerAdapter {
     if (value == null) return;
     _duration.add(value.duration);
     _playing.add(value.isPlaying);
-    if (value.hasError) _errors.add(value.errorDescription ?? 'Playback error');
+    // `errorDescription` is the decoder's own line — operator text, sometimes
+    // carrying the media path. It goes where the caught exceptions go.
+    if (value.hasError) {
+      _errors.add(
+        NamedFailure(
+          'statusPlaybackFailed',
+          detail: ApiFailure(raw: value.errorDescription ?? ''),
+        ),
+      );
+    }
   }
 
   void _startPositionTimer(VideoPlayerController value) {
@@ -127,7 +151,14 @@ class DesktopPlayerAdapter {
       }
       _publishPosition(position);
     } catch (error) {
-      if (!_errors.isClosed) _errors.add('Position polling failed: $error');
+      if (!_errors.isClosed) {
+        _errors.add(
+          NamedFailure(
+            'statusPositionPollingFailed',
+            detail: ApiFailure(raw: '$error'),
+          ),
+        );
+      }
     } finally {
       if (_pollingPositionGeneration == generation) {
         _pollingPositionGeneration = null;

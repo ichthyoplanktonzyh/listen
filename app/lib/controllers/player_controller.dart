@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/api_failure.dart';
+import '../models/named_failure.dart';
 import '../player_adapter.dart';
 import '../state/store.dart';
 
@@ -257,6 +258,19 @@ class PlayerController extends ChangeNotifier {
       statusFailure: failure,
     ),
   );
+
+  /// Publish a [NamedFailure] — the shape [DesktopPlayerAdapter.errors] emits
+  /// — on the status line, localizing its key through [text].
+  ///
+  /// The seam exists so the composition root does not have to unpack a failure
+  /// by hand. It had one line for this (`setStatus(value)`, `value` being a
+  /// sentence the adapter had already concatenated an exception into), and a
+  /// line in `main.dart` is a line no test can reach.
+  void setNamedFailure(
+    NamedFailure failure,
+    String Function(String key) text,
+  ) =>
+      setStatus(text(failure.messageKey), error: true, failure: failure.detail);
 
   void setAudioTracks(List<PlayerTrack> tracks) =>
       _store.update((s) => s.copyWith(audioTracks: tracks));
