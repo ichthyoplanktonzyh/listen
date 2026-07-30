@@ -15,6 +15,70 @@ fn new_database_migrates_to_latest() {
 }
 
 #[test]
+fn v54_marks_legacy_synthetic_lltimeline_media_missing_without_deleting_resources_or_history() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let connection = repo.connection.lock();
+    connection
+        .execute_batch(
+            r#"
+            INSERT INTO media_items
+              (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,availability)
+            VALUES
+              ('detached','lltimeline://detached','detached-fp','Detached','"video"',1000,1,1,'"available"'),
+              ('real','/tmp/real.mp4','real-fp','Real','"video"',1000,1,1,'"available"');
+            INSERT INTO subtitle_tracks
+              (id,media_id,fingerprint,language,source,status)
+            VALUES
+              ('detached-track','detached','track-fp','en','lltimeline-json-v1','"available"');
+            INSERT INTO lltimeline_resources
+              (track_id,metadata_json,artifacts_json,updated_at_ms)
+            VALUES
+              ('detached-track','{"media":{"path":"/old/source.mp4"}}','[]',1);
+            INSERT INTO learning_events
+              (id,occurred_at_ms,kind,subject_kind,subject_id,session_id,event_json)
+            VALUES
+              ('history',1,'"familiar_material_marked"','"media"','detached',NULL,'{}');
+            PRAGMA user_version=53;
+            "#,
+        )
+        .unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT availability FROM media_items WHERE id='detached'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        "\"missing\""
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT availability FROM media_items WHERE id='real'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        "\"available\""
+    );
+    for table in ["subtitle_tracks", "lltimeline_resources", "learning_events"] {
+        assert_eq!(
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            1,
+            "{table} survives availability correction"
+        );
+    }
+}
+
+#[test]
 fn v45_removes_role_reply_facts_projections_and_recording_file() {
     let repo = SqliteRepository::in_memory().unwrap();
     let recording_path =

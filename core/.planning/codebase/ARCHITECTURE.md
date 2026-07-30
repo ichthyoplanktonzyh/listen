@@ -78,6 +78,12 @@ replaces the rebuildable corpus projection. Stable sentence identities are
 updated in place so language correction does not delete subtitle data or
 dependent facts.
 
+Detached LLTimeline import creates a synthetic `lltimeline://` identity with
+`MediaAvailability::Missing`; document path metadata remains a provenance
+snapshot and is never exposed as a live playback source. Explicit import for a
+registered media item preserves that media item's current availability, so
+attaching text/analysis cannot silently repair source loss.
+
 ## Contract Boundary
 
 OpenAPI and resource/event schemas are core-owned. Route parity validates

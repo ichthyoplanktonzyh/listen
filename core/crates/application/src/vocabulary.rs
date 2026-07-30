@@ -671,6 +671,17 @@ impl LexicalLearningUseCases {
         id: &MediaId,
         availability: MediaAvailability,
     ) -> Result<MediaItem, ApplicationError> {
+        if availability == MediaAvailability::Available {
+            let media = self
+                .media
+                .get(id)?
+                .ok_or(ApplicationError::NotFound("media"))?;
+            if media.has_detached_source() {
+                return Err(ApplicationError::Invalid(
+                    "media source is detached; register the real media and import the LLTimeline for that media before marking it available".into(),
+                ));
+            }
+        }
         self.media.set_availability(id, availability)
     }
 }

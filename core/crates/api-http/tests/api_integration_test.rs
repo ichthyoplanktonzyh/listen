@@ -303,6 +303,40 @@ async fn lltimeline_import_creates_track_with_word_timeline() {
         "imported document yields subtitle sentences"
     );
 
+    // Detached import preserves the text/analysis resource but never claims
+    // that the document's path snapshot is a live playback source.
+    let media_id = document["metadata"]["media"]["id"]
+        .as_str()
+        .expect("fixture media id");
+    let (status, media) = send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{media}");
+    assert_eq!(media["availability"], "missing");
+    assert_eq!(media["path"], format!("lltimeline://{media_id}"));
+
+    let (status, library) = send(&app, get("/v1/media", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{library}");
+    assert_eq!(library[0]["media"]["availability"], "missing");
+    assert_eq!(library[0]["primary_track_id"], track_id);
+
+    // A synthetic source cannot be made playable by flipping a status bit.
+    // Recovery must bind the resource to registered real media.
+    let (status, unavailable) = send(
+        &app,
+        put_json(
+            &format!("/v1/media/{media_id}/availability"),
+            Some(TOKEN),
+            &json!({"availability": "available"}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{unavailable}");
+    assert_eq!(unavailable["code"], "invalid_input");
+    assert!(
+        unavailable["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("import the LLTimeline for that media"))
+    );
+
     // The bundled word timeline imports alongside the track.
     let (status, timelines) = send(
         &app,
@@ -320,6 +354,47 @@ async fn lltimeline_import_creates_track_with_word_timeline() {
             .is_empty(),
         "imported document carries its word timeline"
     );
+}
+
+#[tokio::test]
+async fn lltimeline_import_for_missing_media_preserves_source_loss_state() {
+    let app = build_app();
+    let media = register_media(&app, "Missing LLTimeline Host").await;
+    let media_id = media["id"].as_str().expect("media id");
+
+    let (status, missing) = send(
+        &app,
+        put_json(
+            &format!("/v1/media/{media_id}/availability"),
+            Some(TOKEN),
+            &json!({"availability": "missing"}),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{missing}");
+    assert_eq!(missing["availability"], "missing");
+
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/lltimeline/v1-minimal.lltimeline.json");
+    let document: Value = serde_json::from_slice(&std::fs::read(&fixture).expect("read fixture"))
+        .expect("parse lltimeline fixture");
+    let (status, track) = send(
+        &app,
+        post_json(
+            &format!("/v1/media/{media_id}/lltimeline/import?allow_mismatch=true"),
+            Some(TOKEN),
+            &document,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{track}");
+    assert_eq!(track["media_id"], media_id);
+
+    let (status, after_import) =
+        send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{after_import}");
+    assert_eq!(after_import["availability"], "missing");
+    assert_eq!(after_import["path"], media["path"]);
 }
 
 #[tokio::test]

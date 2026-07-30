@@ -79,6 +79,11 @@ paths:
   /v1/lltimeline/import:
     post:
       operationId: importLLTimeline
+      description: >
+        Imports a detached text/analysis resource. Media path metadata is a
+        source snapshot, not a verified playback source; the resulting media
+        item is missing until the resource is explicitly imported for
+        registered real media.
       requestBody:
         required: true
         content:
@@ -3655,7 +3660,14 @@ components:
         title: { type: string }
         kind: { enum: [video, audio] }
         duration: { type: [integer, "null"], minimum: 0 }
-        availability: { enum: [available, missing, archived] }
+        availability:
+          enum: [available, missing, archived]
+          description: >
+            Playback-source state. Detached LLTimeline imports are missing
+            because document path metadata is only a source snapshot. Recover
+            them by registering real media and importing the LLTimeline for
+            that media; changing availability alone cannot make a synthetic
+            lltimeline:// source playable.
         created_at_ms: { type: integer, minimum: 0 }
         updated_at_ms: { type: integer, minimum: 0 }
     MediaLibraryEntry:

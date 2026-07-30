@@ -44,7 +44,7 @@ use domain::{
     WordPronunciation, WordTimeline, WordTimelineId, WordTimelineLifecycleStage,
     WordTimelineSummary, WordTiming, WritingDraft, WritingFeedbackFinding,
     WritingFeedbackFindingId, WritingFindingDisposition, WritingFindingDispositionId,
-    learning_observation_id, normalize_lemma, observation_spec_for_marking,
+    detached_media_path, learning_observation_id, normalize_lemma, observation_spec_for_marking,
     observation_spec_for_practice, observation_spec_for_reading_marking,
     observation_spec_for_review, observation_spec_for_speaking_production,
     observation_spec_for_upgrade_confirmation, projection_proposal_v1, validate_syntactic_analysis,

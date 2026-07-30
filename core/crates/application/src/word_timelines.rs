@@ -7,10 +7,10 @@ use crate::{
     RhythmFrameId, SentenceWordTimingDiagnostics, SubtitleSentenceId, SubtitleTrack,
     SubtitleTrackId, SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus,
     WordTimeline, WordTimelineId, WordTimelineSummary, WordTimingBoundaryDiagnostic,
-    build_word_timeline, lltimeline_segments_from_track, lltimeline_segments_to_sentences,
-    lltimeline_track_extra, lltimeline_track_fingerprint, lltimeline_track_id,
-    mark_word_timeline_published, merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity,
-    require_text, validate_word_timeline_words, word_timeline_summary,
+    build_word_timeline, detached_media_path, lltimeline_segments_from_track,
+    lltimeline_segments_to_sentences, lltimeline_track_extra, lltimeline_track_fingerprint,
+    lltimeline_track_id, mark_word_timeline_published, merge_lltimeline_track_extra, now_ms,
+    remap_lltimeline_identity, require_text, validate_word_timeline_words, word_timeline_summary,
 };
 
 const RHYTHM_FRAME_PROVIDER_ID: &str = "wordtimeline-rhythm-frame";
@@ -463,27 +463,49 @@ impl MediaAnalysisUseCases {
         &self,
         document: LLTimelineDocument,
     ) -> Result<SubtitleTrack, ApplicationError> {
+        self.import_lltimeline_document_with_media(document, None)
+    }
+
+    fn import_lltimeline_document_with_media(
+        &self,
+        document: LLTimelineDocument,
+        attached_media: Option<MediaItem>,
+    ) -> Result<SubtitleTrack, ApplicationError> {
         if document.schema != LLTIMELINE_SCHEMA_V1 {
             return Err(ApplicationError::Validation("lltimeline schema"));
         }
         require_text(&document.metadata.media.fingerprint, "media fingerprint")?;
         require_text(&document.metadata.media.title, "media title")?;
-        let now = now_ms();
-        let media =
-            MediaItem {
-                id: document.metadata.media.id.clone(),
-                path: document.metadata.media.path.clone().unwrap_or_else(|| {
-                    format!("lltimeline://{}", document.metadata.media.id.as_str())
-                }),
-                fingerprint: document.metadata.media.fingerprint.clone(),
-                title: document.metadata.media.title.clone(),
-                kind: MediaKind::Video,
-                duration: document.metadata.media.duration_ms.map(TimeMs::new),
-                availability: MediaAvailability::Available,
-                created_at_ms: now,
-                updated_at_ms: now,
-            };
-        self.media.upsert(&media)?;
+        let media = match attached_media {
+            Some(media) => media,
+            None => {
+                if let Some(existing) = self.media.get(&document.metadata.media.id)? {
+                    if existing.fingerprint != document.metadata.media.fingerprint {
+                        return Err(ApplicationError::Conflict(
+                            "lltimeline media identity has a different fingerprint",
+                        ));
+                    }
+                    existing
+                } else {
+                    let now = now_ms();
+                    let media = MediaItem {
+                        id: document.metadata.media.id.clone(),
+                        // A path in an LLTimeline document is a source snapshot. The
+                        // detached import endpoint has not attached or verified live
+                        // media, so it must never expose that snapshot as playable.
+                        path: detached_media_path(&document.metadata.media.id),
+                        fingerprint: document.metadata.media.fingerprint.clone(),
+                        title: document.metadata.media.title.clone(),
+                        kind: MediaKind::Video,
+                        duration: document.metadata.media.duration_ms.map(TimeMs::new),
+                        availability: MediaAvailability::Missing,
+                        created_at_ms: now,
+                        updated_at_ms: now,
+                    };
+                    self.media.upsert(&media)?
+                }
+            }
+        };
 
         let track_id = lltimeline_track_id(&document)?;
         let fingerprint = lltimeline_track_fingerprint(&document);
@@ -664,7 +686,7 @@ impl MediaAnalysisUseCases {
             &source,
         );
         remap_lltimeline_identity(&mut document, &track_id, &media.id);
-        self.import_lltimeline_document(document)
+        self.import_lltimeline_document_with_media(document, Some(media))
     }
 
     fn rhythm_frames_from_word_timeline(

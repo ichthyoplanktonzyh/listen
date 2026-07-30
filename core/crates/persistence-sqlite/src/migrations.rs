@@ -15,7 +15,9 @@ use super::PersistenceError;
 // the Phase 3.15.5 rebuildable production-corpus projection. v40 adds Phase
 // 3.15.7 realtime provider config and local session/turn facts. v53 allows
 // credential-free local realtime profiles without a synthetic keychain ref.
-pub const MIGRATION_VERSION: u32 = 53;
+// v54 corrects legacy detached LLTimeline media availability without touching
+// subtitle, analysis-resource, or learning-history rows.
+pub const MIGRATION_VERSION: u32 = 54;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -447,6 +449,16 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         } else {
             connection.pragma_update(None, "user_version", 53)?;
         }
+    }
+    if current < 54 {
+        let tx = connection.unchecked_transaction()?;
+        if table_exists(&tx, "media_items")? {
+            tx.execute_batch(include_str!(
+                "../migrations/0054_detached_lltimeline_availability.sql"
+            ))?;
+        }
+        tx.pragma_update(None, "user_version", 54)?;
+        tx.commit()?;
     }
     Ok(())
 }
