@@ -22,19 +22,78 @@ pub mod phonetics;
 pub mod timing;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock, RwLock};
 
 use domain::{
-    LearningResourceId, Phoneme, PronunciationProviderInfo, PronunciationVariant,
-    SentencePronunciation, SpeechRuleFinding, SpeechRuleStatus, SubtitleSentence,
-    SubtitleTokenKind, TimingSource, WordPronunciation, WordTiming,
+    Phoneme, PronunciationProviderInfo, PronunciationVariant, SentencePronunciation,
+    SpeechRuleFinding, SpeechRuleStatus, SubtitleSentence, SubtitleTokenKind, TimingSource,
+    WordPronunciation, WordTiming,
 };
+use learning_resource_runtime::{ResourceSignature, cmudict_resource_path};
 use serde::Serialize;
 
 pub const PROVIDER_ID: &str = "cmudict-deterministic";
 pub const PROVIDER_VERSION: &str = "74790861+fallback-v2";
 pub const ANALYZER_VERSION: &str = "en-us-rules-v1";
-static CMUDICT: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
+static CMUDICT: OnceLock<CmudictProvider> = OnceLock::new();
+
+struct CmudictProvider {
+    path: PathBuf,
+    index: RwLock<CmudictCache>,
+}
+
+#[derive(Default)]
+struct CmudictCache {
+    signature: Option<ResourceSignature>,
+    index: Arc<HashMap<String, Vec<String>>>,
+}
+
+impl CmudictProvider {
+    fn new() -> Self {
+        Self::with_path(cmudict_resource_path())
+    }
+
+    fn with_path(path: PathBuf) -> Self {
+        Self {
+            path,
+            index: RwLock::new(CmudictCache::default()),
+        }
+    }
+
+    fn index(&self) -> Arc<HashMap<String, Vec<String>>> {
+        for _ in 0..2 {
+            let signature = match ResourceSignature::read(&self.path) {
+                Ok(Some(value)) => value,
+                Ok(None) | Err(_) => {
+                    let mut cached = self.index.write().expect("CMUdict index lock poisoned");
+                    cached.signature = None;
+                    cached.index = Arc::default();
+                    return cached.index.clone();
+                }
+            };
+            {
+                let cached = self.index.read().expect("CMUdict index lock poisoned");
+                if cached.signature.as_ref() == Some(&signature) {
+                    return cached.index.clone();
+                }
+            }
+
+            // File I/O and parsing are intentionally outside the write lock;
+            // the second signature check prevents publishing a torn version.
+            let parsed = read_cmudict_index(&self.path).unwrap_or_default();
+            if ResourceSignature::read(&self.path).ok().flatten().as_ref() != Some(&signature) {
+                continue;
+            }
+            let mut cached = self.index.write().expect("CMUdict index lock poisoned");
+            if cached.signature.as_ref() != Some(&signature) {
+                cached.index = Arc::new(parsed);
+                cached.signature = Some(signature);
+            }
+            return cached.index.clone();
+        }
+        Arc::default()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RuleDefinition {
@@ -174,8 +233,17 @@ pub fn provider_info() -> PronunciationProviderInfo {
 }
 
 pub fn lookup(word: &str, token_index: u32) -> WordPronunciation {
+    lookup_with_provider(default_cmudict_provider(), word, token_index)
+}
+
+fn lookup_with_provider(
+    provider: &CmudictProvider,
+    word: &str,
+    token_index: u32,
+) -> WordPronunciation {
     let normalized = normalize_word(word);
-    let variants = cmudict()
+    let index = provider.index();
+    let variants = index
         .get(&normalized)
         .map(|values| {
             values
@@ -200,42 +268,38 @@ pub fn lookup(word: &str, token_index: u32) -> WordPronunciation {
     }
 }
 
-fn cmudict() -> &'static HashMap<String, Vec<String>> {
-    CMUDICT.get_or_init(|| {
-        let Some(path) = cmudict_path().filter(|path| path.is_file()) else {
-            return HashMap::new();
-        };
-        let Ok(content) = std::fs::read_to_string(path) else {
-            return HashMap::new();
-        };
-        let mut values: HashMap<String, Vec<String>> = HashMap::new();
-        for line in content.lines() {
-            if line.starts_with(";;;") || line.trim().is_empty() {
-                continue;
-            }
-            let Some((word, phonemes)) = line.split_once(char::is_whitespace) else {
-                continue;
-            };
-            let word = word
-                .split_once('(')
-                .map_or(word, |(base, _)| base)
-                .to_ascii_lowercase();
-            values.entry(word).or_default().push(phonemes.trim().into());
-        }
-        values
-    })
+fn cmudict() -> Arc<HashMap<String, Vec<String>>> {
+    default_cmudict_provider().index()
 }
 
-fn cmudict_path() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("LLPLAYERNEXT_CMUDICT") {
-        return Some(path.into());
+fn default_cmudict_provider() -> &'static CmudictProvider {
+    CMUDICT.get_or_init(CmudictProvider::new)
+}
+
+fn read_cmudict_index(path: &std::path::Path) -> Result<HashMap<String, Vec<String>>, String> {
+    let content = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let mut values: HashMap<String, Vec<String>> = HashMap::new();
+    for line in content.lines() {
+        if line.starts_with(";;;") || line.trim().is_empty() {
+            continue;
+        }
+        let Some((word, phonemes)) = line.split_once(char::is_whitespace) else {
+            continue;
+        };
+        let phonemes = phonemes.trim();
+        if phonemes.is_empty() {
+            continue;
+        }
+        let word = word
+            .split_once('(')
+            .map_or(word, |(base, _)| base)
+            .to_ascii_lowercase();
+        values.entry(word).or_default().push(phonemes.into());
     }
-    let id = LearningResourceId::from_fingerprint("learning-resource", "cmudict");
-    std::env::var_os("HOME").map(|home| {
-        PathBuf::from(home)
-            .join("Library/Application Support/LLPlayerNext/resources/learning")
-            .join(format!("{}.data", id.as_str()))
-    })
+    if values.is_empty() {
+        return Err("CMUdict contains no valid entries".into());
+    }
+    Ok(values)
 }
 
 pub fn analyze_sentence(sentence: &SubtitleSentence) -> SentencePronunciation {
@@ -919,6 +983,7 @@ fn arpabet_ipa(value: &str) -> &'static str {
 mod tests {
     use super::*;
     use domain::{SubtitleSentenceId, SubtitleToken, TimeMs};
+    use learning_resource_runtime::learning_resource_file_name;
 
     fn sentence(text: &str) -> SubtitleSentence {
         SubtitleSentence {
@@ -956,6 +1021,75 @@ mod tests {
     #[test]
     fn fallback_is_explicit() {
         assert!(lookup("codex", 0).variants[0].is_fallback);
+    }
+
+    #[test]
+    fn cmudict_loads_after_startup_miss_from_custom_resource_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(learning_resource_file_name("cmudict"));
+        let provider = CmudictProvider::with_path(path.clone());
+
+        assert!(lookup_with_provider(&provider, "quokka", 0).variants[0].is_fallback);
+        std::fs::write(&path, "quokka K W AA1 K AH0\n").unwrap();
+
+        let loaded = lookup_with_provider(&provider, "quokka", 0);
+        assert!(!loaded.variants[0].is_fallback);
+        assert_eq!(loaded.variants[0].phonemes[0].symbol, "K");
+    }
+
+    #[test]
+    fn cmudict_reloads_replacement_and_drops_deleted_or_invalid_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(learning_resource_file_name("cmudict"));
+        std::fs::write(&path, "quokka K W AA1 K AH0\n").unwrap();
+        let provider = CmudictProvider::with_path(path.clone());
+
+        assert_eq!(
+            lookup_with_provider(&provider, "quokka", 0).variants[0].phonemes[0].symbol,
+            "K"
+        );
+
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, "quokka Z IY1 B R AH0\n").unwrap();
+        let replaced = lookup_with_provider(&provider, "quokka", 0);
+        assert!(!replaced.variants[0].is_fallback);
+        assert_eq!(replaced.variants[0].phonemes[0].symbol, "Z");
+
+        std::fs::write(&path, "not-a-valid-cmudict-file").unwrap();
+        assert!(lookup_with_provider(&provider, "quokka", 0).variants[0].is_fallback);
+
+        std::fs::remove_file(&path).unwrap();
+        assert!(lookup_with_provider(&provider, "quokka", 0).variants[0].is_fallback);
+    }
+
+    #[test]
+    fn cmudict_supports_concurrent_lookups() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory
+            .path()
+            .join(learning_resource_file_name("cmudict"));
+        std::fs::write(&path, "quokka K W AA1 K AH0\n").unwrap();
+        let provider = Arc::new(CmudictProvider::with_path(path));
+
+        let handles = (0..16)
+            .map(|_| {
+                let provider = provider.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..100 {
+                        let value = lookup_with_provider(&provider, "quokka", 0);
+                        assert!(!value.variants[0].is_fallback);
+                        assert_eq!(value.variants[0].phonemes[0].symbol, "K");
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            handle.join().unwrap();
+        }
     }
 
     #[test]

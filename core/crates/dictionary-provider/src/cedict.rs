@@ -13,6 +13,7 @@ use domain::{
     DictionaryProviderInfo, LanguageCode, Phoneme, PronunciationProviderInfo, PronunciationVariant,
     SentencePronunciation, SubtitleSentence, SubtitleTokenKind, WordPronunciation,
 };
+use learning_resource_runtime::learning_resource_path;
 
 /// Mandarin dictionary provider. It resolves from CC-CEDICT when that resource
 /// is installed (the full ~120k-entry community dictionary), and falls back to a
@@ -73,15 +74,7 @@ struct CedictEntry {
 
 impl ChineseDictionaryProvider {
     pub fn new() -> Self {
-        let id = domain::LearningResourceId::from_fingerprint("learning-resource", "cc-cedict");
-        let path = std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                    .join("Library/Application Support/LLPlayerNext/resources/learning")
-            })
-            .join(format!("{}.data", id.as_str()));
-        Self::with_path(path)
+        Self::with_path(learning_resource_path("cc-cedict"))
     }
 
     pub fn with_path(path: PathBuf) -> Self {
@@ -99,11 +92,7 @@ impl ChineseDictionaryProvider {
     /// resource is not installed or cannot be read, so lookups degrade to the
     /// built-in seed.
     fn load_index(&self) -> Option<Arc<CedictIndex>> {
-        let metadata = std::fs::metadata(&self.path).ok()?;
-        let signature = ResourceSignature {
-            len: metadata.len(),
-            modified: metadata.modified().ok(),
-        };
+        let signature = ResourceSignature::read(&self.path).ok()??;
         let mut cached = self.index.lock().expect("CC-CEDICT index mutex poisoned");
         if let Some((cached_signature, index)) = cached.as_ref()
             && *cached_signature == signature
@@ -225,14 +214,7 @@ const CHINESE_PRONUNCIATION_PROVIDER_VERSION: &str = "1.0";
 
 impl ChinesePronunciationProvider {
     pub fn new() -> Self {
-        let id = domain::LearningResourceId::from_fingerprint("learning-resource", "cc-cedict");
-        let path = std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                    .join("Library/Application Support/LLPlayerNext/resources/learning")
-            })
-            .join(format!("{}.data", id.as_str()));
+        let path = learning_resource_path("cc-cedict");
         Self {
             seed: CHINESE_DICTIONARY_SEED
                 .iter()
@@ -244,11 +226,7 @@ impl ChinesePronunciationProvider {
     }
 
     fn load_index(&self) -> Option<Arc<CedictIndex>> {
-        let metadata = std::fs::metadata(&self.path).ok()?;
-        let signature = ResourceSignature {
-            len: metadata.len(),
-            modified: metadata.modified().ok(),
-        };
+        let signature = ResourceSignature::read(&self.path).ok()??;
         let mut cached = self.index.lock().expect("CC-CEDICT index mutex poisoned");
         if let Some((cached_signature, index)) = cached.as_ref()
             && *cached_signature == signature

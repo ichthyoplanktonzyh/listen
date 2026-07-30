@@ -73,6 +73,36 @@ fn ecdict_normalizes_inflections_and_finds_phrase_entries() {
 }
 
 #[test]
+fn ecdict_reflects_install_replacement_damage_and_removal_without_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("ecdict.data");
+    let provider = EcdictProvider::with_path(path.clone(), "fixture-v1");
+    let language = LanguageCode::parse("en").unwrap();
+
+    assert_eq!(provider.frequency_rank(&language, "quokka"), None);
+    std::fs::write(
+        &path,
+        "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio\nquokka,,marsupial,,,,,,71,,,,\n",
+    )
+    .unwrap();
+    assert_eq!(provider.frequency_rank(&language, "quokka"), Some(71));
+
+    std::fs::remove_file(&path).unwrap();
+    std::fs::write(
+        &path,
+        "word,phonetic,definition,translation,pos,collins,oxford,tag,bnc,frq,exchange,detail,audio\nquokka,,animal,,,,,,19,,,,\n",
+    )
+    .unwrap();
+    assert_eq!(provider.frequency_rank(&language, "quokka"), Some(19));
+
+    std::fs::write(&path, "invalid").unwrap();
+    assert_eq!(provider.frequency_rank(&language, "quokka"), None);
+
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(provider.frequency_rank(&language, "quokka"), None);
+}
+
+#[test]
 fn chinese_provider_falls_back_to_seed_without_cedict() {
     // No installed CC-CEDICT: lookups come from the built-in seed.
     let provider = ChineseDictionaryProvider::with_path("/nonexistent/cc-cedict.data".into());
@@ -144,6 +174,40 @@ fn chinese_provider_reads_installed_cedict() {
 }
 
 #[test]
+fn chinese_provider_reflects_replacement_damage_and_removal() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("cc-cedict.data");
+    let provider = ChineseDictionaryProvider::with_path(path.clone());
+
+    assert!(provider.resolve("量子力学").is_none());
+    std::fs::write(
+        &path,
+        "量子力學 量子力学 [liang4 zi3 li4 xue2] /quantum mechanics/\n",
+    )
+    .unwrap();
+    assert_eq!(
+        provider.resolve("量子力学").unwrap().definitions[0].text,
+        "quantum mechanics"
+    );
+
+    std::fs::remove_file(&path).unwrap();
+    std::fs::write(
+        &path,
+        "量子力學 量子力学 [liang4 zi3 li4 xue2] /quantum physics/\n",
+    )
+    .unwrap();
+    assert_eq!(
+        provider.resolve("量子力学").unwrap().definitions[0].text,
+        "quantum physics"
+    );
+
+    std::fs::write(&path, "invalid").unwrap();
+    assert!(provider.resolve("量子力学").is_none());
+    std::fs::remove_file(&path).unwrap();
+    assert!(provider.resolve("量子力学").is_none());
+}
+
+#[test]
 fn japanese_provider_falls_back_to_seed_without_jmdict() {
     // No installed JMdict/EDICT2: lookups come from the built-in seed.
     let provider = JapaneseDictionaryProvider::with_path("/nonexistent/jmdict.data".into());
@@ -208,6 +272,36 @@ fn japanese_provider_reads_installed_edict() {
         provider.resolve("学生").unwrap().phonetics[0].text,
         "がくせい"
     );
+}
+
+#[test]
+fn japanese_provider_reflects_replacement_damage_and_removal() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("jmdict.data");
+    let provider = JapaneseDictionaryProvider::with_path(path.clone());
+
+    assert!(provider.resolve("量子力学").is_none());
+    std::fs::write(
+        &path,
+        "量子力学 [りょうしりきがく] /(n) quantum mechanics/\n",
+    )
+    .unwrap();
+    assert_eq!(
+        provider.resolve("量子力学").unwrap().definitions[0].text,
+        "quantum mechanics"
+    );
+
+    std::fs::remove_file(&path).unwrap();
+    std::fs::write(&path, "量子力学 [りょうしりきがく] /(n) quantum physics/\n").unwrap();
+    assert_eq!(
+        provider.resolve("量子力学").unwrap().definitions[0].text,
+        "quantum physics"
+    );
+
+    std::fs::write(&path, "invalid").unwrap();
+    assert!(provider.resolve("量子力学").is_none());
+    std::fs::remove_file(&path).unwrap();
+    assert!(provider.resolve("量子力学").is_none());
 }
 
 #[test]

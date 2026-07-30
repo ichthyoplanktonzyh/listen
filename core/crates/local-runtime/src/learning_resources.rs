@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use application::{ApplicationError, now_ms};
 use domain::{LearningResourceDescriptor, LearningResourceId, LearningResourceState};
+use learning_resource_runtime::{learning_resource_file_name_for_id, learning_resources_dir};
 use thiserror::Error;
 
 use crate::download::{ArtifactDownloader, DownloadProgress, ReqwestArtifactDownloader};
@@ -31,7 +32,7 @@ impl LearningResourceManager {
     pub fn new() -> Self {
         Self::with_configuration(
             resource_catalog(),
-            default_resources_dir(),
+            learning_resources_dir(),
             Arc::new(ReqwestArtifactDownloader),
         )
     }
@@ -42,7 +43,7 @@ impl LearningResourceManager {
         downloader: Arc<dyn ArtifactDownloader>,
     ) -> Self {
         for descriptor in &mut resources {
-            let path = resource_dir.join(format!("{}.data", descriptor.id.as_str()));
+            let path = resource_dir.join(learning_resource_file_name_for_id(&descriptor.id));
             if let Ok(metadata) = std::fs::metadata(&path) {
                 if metadata.is_file() && metadata.len() == descriptor.size_bytes {
                     descriptor.local_path = Some(path.to_string_lossy().into_owned());
@@ -79,7 +80,9 @@ impl LearningResourceManager {
         tokio::fs::create_dir_all(&self.resource_dir)
             .await
             .map_err(io_error)?;
-        let path = self.resource_dir.join(format!("{}.data", id.as_str()));
+        let path = self
+            .resource_dir
+            .join(learning_resource_file_name_for_id(id));
         let partial = self
             .resource_dir
             .join(format!("{}.data.download", id.as_str()));
@@ -197,15 +200,6 @@ impl DownloadProgress for ResourceDownloadProgress {
     }
 }
 
-fn default_resources_dir() -> PathBuf {
-    std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                .join("Library/Application Support/LLPlayerNext/resources/learning")
-        })
-}
-
 fn resource_catalog() -> Vec<LearningResourceDescriptor> {
     [
         ("ecdict", "ECDICT", "bc015ed2", "https://raw.githubusercontent.com/skywind3000/ECDICT/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b/ecdict.csv", "MIT", "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf", 65_933_428),
@@ -267,6 +261,13 @@ mod tests {
         );
         let installed = manager.install(&id).await.unwrap();
         let path = installed.local_path.clone().unwrap();
+        assert_eq!(
+            std::path::Path::new(&path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy(),
+            learning_resource_file_name_for_id(&id)
+        );
         assert_eq!(installed.state, LearningResourceState::Installed);
         assert!(std::path::Path::new(&path).exists());
         assert_eq!(
@@ -295,7 +296,11 @@ mod tests {
             Err(LearningResourceError::ChecksumMismatch)
         ));
         assert_eq!(manager.list()[0].state, LearningResourceState::Failed);
-        assert!(!directory.join(format!("{}.data", id.as_str())).exists());
+        assert!(
+            !directory
+                .join(learning_resource_file_name_for_id(&id))
+                .exists()
+        );
         assert!(
             !directory
                 .join(format!("{}.data.download", id.as_str()))

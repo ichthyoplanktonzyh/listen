@@ -11,6 +11,7 @@
 | `crates/diagnosis-core` | deterministic diagnosis |
 | `crates/speech-analysis` | timing, speech, phonetic analysis |
 | `crates/*-provider` | dictionary, embedding, LLM, realtime, syntax adapters |
+| `crates/learning-resource-runtime` | authoritative installed-resource paths and file change signatures |
 | `crates/local-runtime` | local capability/runtime lifecycle |
 | `crates/writing-feedback` | writing feedback behavior |
 | `contracts` | canonical HTTP/event/player/resource schemas |
@@ -33,6 +34,9 @@ Notable runtime seams:
   concrete provider selection out of HTTP route modules.
 - `ForcedAlignProvider` keeps sidecar process and wire protocol details in
   `local-runtime`.
+- `learning-resource-runtime` gives installers and dictionary readers one
+  authoritative resource directory, opaque filename scheme, and replacement
+  signature without exposing local paths through learner-facing contracts.
 - `LocalRealtimeCascadeRuntime` owns opt-in local speech-cascade spawn,
   pool-readiness, bounded diagnostics, and process-group shutdown; the
   `local_cascade_realtime` codec remains in `realtime-provider`.

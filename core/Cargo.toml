@@ -7,6 +7,7 @@ members = [
   "crates/embedding-provider",
   "crates/dictionary-provider",
   "crates/llm-provider",
+  "crates/learning-resource-runtime",
   "crates/local-runtime",
   "crates/diagnosis-core",
   "crates/persistence-sqlite",

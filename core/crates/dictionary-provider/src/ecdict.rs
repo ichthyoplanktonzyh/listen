@@ -15,6 +15,7 @@ use domain::{
     DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
     LanguageCode, PhraseCandidate, SubtitleSentence, SubtitleTokenKind, normalize_lemma,
 };
+use learning_resource_runtime::learning_resource_path;
 
 pub struct EcdictProvider {
     path: PathBuf,
@@ -38,15 +39,7 @@ struct EcdictEntry {
 
 impl EcdictProvider {
     pub fn new() -> Self {
-        let id = domain::LearningResourceId::from_fingerprint("learning-resource", "ecdict");
-        let path = std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                    .join("Library/Application Support/LLPlayerNext/resources/learning")
-            })
-            .join(format!("{}.data", id.as_str()));
-        Self::with_path(path, "bc015ed2")
+        Self::with_path(learning_resource_path("ecdict"), "bc015ed2")
     }
 
     pub fn with_path(path: PathBuf, version: impl Into<String>) -> Self {
@@ -58,14 +51,10 @@ impl EcdictProvider {
     }
 
     fn load_index(&self) -> Result<Option<Arc<EcdictIndex>>, String> {
-        let metadata = match std::fs::metadata(&self.path) {
-            Ok(value) => value,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error.to_string()),
-        };
-        let signature = ResourceSignature {
-            len: metadata.len(),
-            modified: metadata.modified().ok(),
+        let Some(signature) =
+            ResourceSignature::read(&self.path).map_err(|error| error.to_string())?
+        else {
+            return Ok(None);
         };
         let mut cached = self.index.lock().expect("ECDICT index mutex poisoned");
         if let Some((cached_signature, index)) = cached.as_ref()

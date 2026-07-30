@@ -10,6 +10,7 @@ application = { path = "../application" }
 async-trait.workspace = true
 csv.workspace = true
 domain = { path = "../domain" }
+learning-resource-runtime = { path = "../learning-resource-runtime" }
 reqwest.workspace = true
 serde_json.workspace = true
 

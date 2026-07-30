@@ -863,6 +863,7 @@ dependencies = [
  "async-trait",
  "csv",
  "domain",
+ "learning-resource-runtime",
  "reqwest 0.12.28",
  "serde_json",
  "tempfile",
@@ -1857,6 +1858,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
+name = "learning-resource-runtime"
+version = "0.7.0"
+dependencies = [
+ "domain",
+]
+
+[[package]]
 name = "levenshtein_automata"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2028,6 +2036,7 @@ dependencies = [
  "async-trait",
  "domain",
  "hex",
+ "learning-resource-runtime",
  "libc",
  "reqwest 0.12.28",
  "serde",
@@ -3502,10 +3511,12 @@ dependencies = [
  "criterion",
  "domain",
  "hound",
+ "learning-resource-runtime",
  "proptest",
  "serde",
  "serde_json",
  "subtitle-core",
+ "tempfile",
  "thiserror",
 ]
 

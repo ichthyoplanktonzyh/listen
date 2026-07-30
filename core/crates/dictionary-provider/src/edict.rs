@@ -12,6 +12,7 @@ use domain::{
     DictionaryDefinition, DictionaryLookup, DictionaryPhonetic, DictionaryProviderInfo,
     LanguageCode,
 };
+use learning_resource_runtime::learning_resource_path;
 
 /// Japanese dictionary provider. It resolves from an installed JMdict/EDICT2 dump
 /// (the EDRDG community dictionary) when present, and falls back to a small
@@ -62,15 +63,7 @@ struct EdictEntry {
 
 impl JapaneseDictionaryProvider {
     pub fn new() -> Self {
-        let id = domain::LearningResourceId::from_fingerprint("learning-resource", "jmdict");
-        let path = std::env::var_os("LLPLAYERNEXT_RESOURCES_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
-                    .join("Library/Application Support/LLPlayerNext/resources/learning")
-            })
-            .join(format!("{}.data", id.as_str()));
-        Self::with_path(path)
+        Self::with_path(learning_resource_path("jmdict"))
     }
 
     pub fn with_path(path: PathBuf) -> Self {
@@ -87,11 +80,7 @@ impl JapaneseDictionaryProvider {
     /// Load (and cache) the installed JMdict/EDICT2 index. Returns `None` when the
     /// resource is not installed or unreadable, so lookups degrade to the seed.
     fn load_index(&self) -> Option<Arc<EdictIndex>> {
-        let metadata = std::fs::metadata(&self.path).ok()?;
-        let signature = ResourceSignature {
-            len: metadata.len(),
-            modified: metadata.modified().ok(),
-        };
+        let signature = ResourceSignature::read(&self.path).ok()??;
         let mut cached = self.index.lock().expect("JMdict index mutex poisoned");
         if let Some((cached_signature, index)) = cached.as_ref()
             && *cached_signature == signature
