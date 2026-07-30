@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
@@ -58,7 +59,7 @@ class MediaLibrarySection extends StatelessWidget {
               tooltip: l.text('settings'),
               icon: Icon(
                 Icons.tune_outlined,
-                size: 18,
+                size: ListenIconSize.control,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               onSelected: (value) {
@@ -172,7 +173,7 @@ class _QueueHeader extends StatelessWidget {
     };
     return Row(
       children: [
-        Icon(icon, size: 15, color: colors.onSurfaceVariant),
+        Icon(icon, size: ListenIconSize.inline, color: colors.onSurfaceVariant),
         const SizedBox(width: ListenSpacing.gap6),
         Text(
           label,
@@ -233,7 +234,7 @@ class _MediaRow extends StatelessWidget {
                 entry.media.kind == 'audio'
                     ? Icons.audiotrack_outlined
                     : Icons.movie_outlined,
-                size: 20,
+                size: ListenIconSize.control,
                 color: colors.onSurfaceVariant,
               ),
               const SizedBox(width: ListenSpacing.gap8),
@@ -301,7 +302,7 @@ class _MediaRow extends StatelessWidget {
                 tooltip: l.text('moreActions'),
                 icon: Icon(
                   Icons.more_vert,
-                  size: 18,
+                  size: ListenIconSize.control,
                   color: colors.onSurfaceVariant,
                 ),
                 onSelected: (value) =>
@@ -356,7 +357,7 @@ class _MiniFitChip extends StatelessWidget {
         borderRadius: ListenRadii.pillBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        padding: ListenPadding.tight,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -392,7 +393,7 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(icon, size: 13, color: color),
+      Icon(icon, size: ListenIconSize.inline, color: color),
       const SizedBox(width: ListenSpacing.gap2),
       Text(
         label,

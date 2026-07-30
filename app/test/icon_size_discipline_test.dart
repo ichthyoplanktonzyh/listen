@@ -66,8 +66,6 @@ void main() {
     'lib/screens/review_queue_screen.dart',
     'lib/widgets/common/listen_empty_state.dart',
     'lib/widgets/common/listen_error_state.dart',
-    'lib/widgets/home/listening_home.dart',
-    'lib/widgets/home/media_library_section.dart',
     'lib/widgets/panels/reading_task_sheet.dart',
     'lib/widgets/panels/reading_task_studio.dart',
     'lib/widgets/panels/reading_view.dart',

@@ -109,8 +109,6 @@ void main() {
   const knownOffenders = <String>{
     'lib/phonetic_analysis_ui.dart',
     'lib/screens/review_queue_screen.dart',
-    'lib/widgets/home/listening_home.dart',
-    'lib/widgets/home/media_library_section.dart',
     'lib/widgets/panels/conversation_debrief.dart',
     'lib/widgets/panels/reading_diff_panel.dart',
     'lib/widgets/panels/reading_task_sheet.dart',
