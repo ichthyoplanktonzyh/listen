@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
@@ -68,9 +69,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ListenTheme.light(),
-        home: const ConversationStageShell(
+        home: ConversationStageShell(
           segment: ConversationStageSegment.stage,
-          child: Text('body'),
+          builder: (context) => const Text('body'),
         ),
       ),
     );
@@ -93,6 +94,52 @@ void main() {
     );
   });
 
+  testWidgets('the lobby resolves its ink against the dark room, not the app '
+      'theme', (tester) async {
+    // The regression the golden net found on its first day. The shell put
+    // `ListenTheme.dark()` on its child, but the panel *built* the lobby with
+    // its own outer context — so under the light app theme the heading
+    // resolved `titleLarge` at `#1d2623` while the ground behind it stayed
+    // `ListenColors.stageGround` (`#141d1a`), and it was invisible.
+    //
+    // Every widget was present and correct, which is why only a picture caught
+    // it. This is the same claim made cheaply: the context the lobby's ink
+    // comes from must be a dark one.
+    final controller = RealtimeConversationController(audio: _FakeAudio());
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ListenTheme.light(),
+        localizationsDelegates: const [AppLocalizations.delegate],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: RealtimeConversationPanel(
+          controller: controller,
+          api: _api(),
+          launch: RealtimeConversationLaunch.free(
+            language: 'en',
+            modelId: 'asr-model',
+          ),
+          acquireAudioFocus: () async {},
+          onClose: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    final heading = find.text(
+      const AppLocalizations(Locale('en')).text('realtimeLobbyReady'),
+    );
+    expect(heading, findsOneWidget);
+    final scheme = Theme.of(tester.element(heading)).colorScheme;
+    expect(scheme.brightness, Brightness.dark);
+    // And the ink is actually legible on the stage ground, which is the thing
+    // the learner cares about — a dark scheme reached by some other route
+    // would still have to satisfy this.
+    expect(scheme.onSurface.computeLuminance(), greaterThan(0.4));
+
+    controller.dispose();
+  });
+
   testWidgets('the two-stage entrance drops to zero duration under '
       'reduce motion', (tester) async {
     Future<Duration> switcherDuration({required bool disableAnimations}) async {
@@ -100,9 +147,9 @@ void main() {
         MaterialApp(
           home: MediaQuery(
             data: MediaQueryData(disableAnimations: disableAnimations),
-            child: const ConversationStageShell(
+            child: ConversationStageShell(
               segment: ConversationStageSegment.lobby,
-              child: Text('body'),
+              builder: (context) => const Text('body'),
             ),
           ),
         ),

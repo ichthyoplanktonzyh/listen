@@ -65,20 +65,32 @@ fixture reads `14:43` in UTC and `22:43` in UTC+8. They stay off the net until
 the panel accepts an injectable clock/zone. Their wording is pinned directly in
 `realtime_conversation_panel_test.dart`.
 
-## A baseline that records a defect
+## What the net has caught so far
 
-`conversation_lobby.light.png` is not a picture of a correct screen.
-`ConversationStageShell` applies `ListenTheme.dark()` to its *child*, but the
-panel builds the lobby with its own outer `BuildContext`, so under the light
-app theme the lobby's ink resolves against the light scheme while the ground
-behind it stays `ListenColors.stageGround`. `titleLarge` lands at `#1d2623` on
-`#141d1a` — the heading and the "Recent conversations" label are effectively
+One defect, on its first day, and it is the argument for the whole approach.
+
+`conversation_lobby.light.png` was recorded showing an unreadable screen.
+`ConversationStageShell` applied `ListenTheme.dark()` to its *child*, but the
+panel **built** the lobby with its own outer `BuildContext` — so under the light
+app theme the lobby's ink resolved against the light scheme while the ground
+behind it stayed `ListenColors.stageGround`. `titleLarge` landed at `#1d2623` on
+`#141d1a`: the heading and the "Recent conversations" label were effectively
 invisible.
 
-It is committed anyway. A golden records what the app does, not what it should
-do, and deleting the scene would hide the first thing this net found. Fixing it
-is a `lib/` change (build the lobby under the shell's theme); re-record
-`test/golden_conversation_test.dart` in the same PR that fixes it.
+Every widget was present, every colour literal legal, every widget test green.
+Only the picture showed it.
+
+Fixed in S6 (#7): the shell takes a `WidgetBuilder` instead of a `Widget`, so
+the room is built from a context below the dark `Theme` and the light-theme
+path is no longer representable. The baseline was re-recorded in the same
+commit, and `conversation_stage_shell_test.dart` now also asserts the cheap
+version of the claim — the context the lobby's ink comes from is a dark one.
+
+The general rule this leaves behind: **do not commit a baseline of a screen you
+know to be wrong.** Recording the defect was defensible only because the fix
+was out of that slice's scope and the note was carried in three places at once;
+a red picture that survives review teaches reviewers to stop looking, which
+costs more than the bug.
 
 ## Determinism
 
