@@ -50,7 +50,7 @@ void main() {
       brightnesses: const [Brightness.dark],
       builder: (context) => ConversationStageShell(
         segment: ConversationStageSegment.stage,
-        child: Center(
+        builder: (context) => Center(
           child: ConversationEchoSurface(
             levels: conversationEchoLevelsOf(activity),
           ),
@@ -78,20 +78,10 @@ void main() {
     builder: (context) => _stage(),
   );
 
-  // Both brightnesses, and the light one is currently a bug report.
-  //
-  // `ConversationStageShell` puts `ListenTheme.dark()` on its *child*, but the
-  // panel builds the lobby with its own outer `BuildContext` — so under the
-  // light app theme the lobby's ink resolves against the light scheme while
-  // the ground behind it is `ListenColors.stageGround`. The result is
-  // `titleLarge` at `#1d2623` on `#141d1a`: the heading 「Ready when you are」
-  // and the 「Recent conversations」 label are, in practice, invisible.
-  //
-  // The baseline records that, deliberately. A golden is a record of what the
-  // app does, not of what it should do, and deleting the light scene would
-  // hide the one thing this net found on its first day. The fix is a `lib/`
-  // change (build the lobby under the shell's theme) which S10 is scoped out
-  // of; re-record this file with the fix.
+  // Both brightnesses, even though the room is dark in both: the light
+  // baseline is what caught the lobby resolving its ink against the *app*
+  // theme instead of the shell's, and it is the file that would go red if the
+  // shell ever went back to taking a pre-built `child`.
   goldenScene(
     'conversation_lobby',
     size: GoldenSurface.window,
@@ -109,7 +99,7 @@ void main() {
 
 Widget _stage() => ConversationStageShell(
   segment: ConversationStageSegment.stage,
-  child: ConversationStageLayout(
+  builder: (context) => ConversationStageLayout(
     exitAffordance: IconButton(
       onPressed: () {},
       iconSize: ListenIconSize.chrome,

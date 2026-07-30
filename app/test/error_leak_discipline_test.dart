@@ -89,23 +89,6 @@ final _diagnosticStatement = RegExp(
   r'\bApiFailure\(|\bdebugPrint\(|(?<![A-Za-z0-9_$.])print\(|\blog\(|\bthrow\b',
 );
 
-/// The code from the previous statement boundary up to [offset].
-///
-/// Crude on purpose: statement boundaries are `;`, `{` and `}`, which is enough
-/// to tell `ApiFailure(raw: '$error')` from `s.copyWith(error: '$error')` while
-/// staying immune to the line breaks `dart format` inserts.
-String _statementAt(String code, int offset) {
-  var start = 0;
-  for (var i = offset - 1; i >= 0; i--) {
-    final char = code[i];
-    if (char == ';' || char == '{' || char == '}') {
-      start = i + 1;
-      break;
-    }
-  }
-  return code.substring(start, offset);
-}
-
 /// Files under `lib/` that put a caught exception where a widget can render
 /// it, mapped to the offending `path:line → source` records.
 Map<String, List<String>> _offences() {
@@ -116,7 +99,7 @@ Map<String, List<String>> _offences() {
     final prose = stringLiteralsOnly(source);
 
     void record(int offset) {
-      if (_diagnosticStatement.hasMatch(_statementAt(code, offset))) return;
+      if (_diagnosticStatement.hasMatch(statementAt(code, offset))) return;
       final line = lineNumberAt(source, offset);
       (byFile[file.path] ??= []).add(
         '${file.path}:$line → ${lineAt(source, line)}',
@@ -144,9 +127,7 @@ void main() {
     'lib/main.dart',
     'lib/phonetic_analysis_ui.dart',
     'lib/player_adapter.dart',
-    'lib/screens/personal_expression_screen.dart',
     'lib/widgets/coach/coach_dashboard_screen.dart',
-    'lib/widgets/panels/manual_timeline_review_dialog.dart',
   };
 
   test('a caught exception never reaches a user-visible string', () {

@@ -104,7 +104,7 @@ class ApiFailureDetail extends StatelessWidget {
       children: [
         if (reference != null)
           SelectableText(
-            '${l.text('failureReference')}: $reference',
+            l.text('failureReference').replaceAll('{id}', reference),
             style: caption.copyWith(fontFamily: ListenFonts.mono),
           ),
         if (message != null)

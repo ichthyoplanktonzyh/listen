@@ -22,6 +22,34 @@ The split baseline contains 130 Dart test files covering:
 - golden visual regression baselines under `test/goldens`;
 - regression behavior for learning journeys.
 
+## Source-Level Discipline Gates
+
+Seven `*_discipline_test.dart` files scan `lib/` for a shape rather than
+exercising behavior, all sharing `test/support/dart_source.dart`:
+
+| Gate | Forbids |
+| --- | --- |
+| `theme_palette_discipline_test` | a colour literal outside the palette |
+| `radius_discipline_test` | a corner radius outside `ListenRadii` |
+| `spacing_discipline_test` | a gap outside the `ListenSpacing` ladder |
+| `loading_discipline_test` | a wait state that is not `ListenLoading` |
+| `icon_size_discipline_test` | an icon size outside `ListenIconSize` |
+| `typography_slot_discipline_test` | an unmapped Material type slot |
+| `column_width_discipline_test` | a hardcoded content `maxWidth` |
+| `error_leak_discipline_test` | a caught exception inside user-visible text |
+| `cjk_literal_discipline_test` | Chinese copy welded into `lib/` (#7) |
+
+The last two carry a `knownOffenders` allowlist plus a companion test asserting
+the list **only shrinks**: a file that stops offending must leave it, so the
+count stays an honest measure of the remaining debt and the list cannot be
+padded to force green. Never add an entry; the way past one of these gates is to
+fix the file.
+
+Each gate's own library doc states its known limits — they are textual scans,
+not proofs of absence. `docs/development/ui-terminology.md` records which terms
+are allowed to stay English, so the CJK gate's exemptions have a reason on file
+rather than being argued again per key.
+
 ## Golden Visual Regression
 
 `test/golden_*_test.dart` compare rendered frames against the PNG baselines in

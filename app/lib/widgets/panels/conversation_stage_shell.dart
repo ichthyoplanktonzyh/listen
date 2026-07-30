@@ -56,15 +56,35 @@ ConversationStageSegment conversationStageSegmentOf(
 /// The 门厅→舞台 two-stage entrance is a cross-fade between segments: the lobby
 /// leaves on [ListenMotion.exit], the stage arrives on [ListenMotion.enter] at
 /// [ListenMotion.slow]. Never a bounce; zero duration under reduce-motion.
+///
+/// ## Why the room is a [builder] and not a `child`
+///
+/// It used to take a `Widget child`, and that is how the light theme broke the
+/// lobby. A widget *instance* mounts under this shell's [Theme] and resolves
+/// dark, so a plain `child` looks safe — but the panel does not pass a widget,
+/// it calls a method (`_lobby(context, state)`) that reads
+/// `Theme.of(context)` while *building* the child, from the context outside
+/// this shell. Under the light app theme the lobby's ink resolved against the
+/// light scheme while the ground behind it stayed [ListenColors.stageGround]:
+/// `titleLarge` landed at `#1d2623` on `#141d1a`, and the heading was
+/// effectively invisible. The visual regression net (#12) caught it; no widget
+/// test could, because every widget was present and correct.
+///
+/// A builder makes that unrepresentable. The room is built from a context
+/// below the [Theme], so the dark scheme is not something a caller has to
+/// remember — it is the only scheme reachable from where the room is built.
 class ConversationStageShell extends StatelessWidget {
   const ConversationStageShell({
     super.key,
     required this.segment,
-    required this.child,
+    required this.builder,
   });
 
   final ConversationStageSegment segment;
-  final Widget child;
+
+  /// Builds the room. Its `BuildContext` is below this shell's dark [Theme] —
+  /// see the class doc for why that is a builder and not a widget.
+  final WidgetBuilder builder;
 
   @override
   Widget build(BuildContext context) {
@@ -86,7 +106,10 @@ class ConversationStageShell extends StatelessWidget {
             duration: reduceMotion ? Duration.zero : ListenMotion.slow,
             switchInCurve: ListenMotion.enter,
             switchOutCurve: ListenMotion.exit,
-            child: KeyedSubtree(key: ValueKey(segment), child: child),
+            child: KeyedSubtree(
+              key: ValueKey(segment),
+              child: Builder(builder: builder),
+            ),
           ),
         ),
       ),

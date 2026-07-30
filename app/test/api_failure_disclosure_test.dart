@@ -102,7 +102,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // What a bug report can actually be matched against a backend log line.
-    expect(find.text('Reference: api-853'), findsOneWidget);
+    expect(find.text('Reference api-853'), findsOneWidget);
     expect(find.text('recording metadata must not be empty'), findsOneWidget);
     expect(find.text('Hide details'), findsOneWidget);
     // And the loopback port / internal route still are not anywhere.
@@ -140,7 +140,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Failure details'), findsOneWidget);
-    expect(find.text('Reference: api-853'), findsOneWidget);
+    expect(find.text('Reference api-853'), findsOneWidget);
     expectNoRawAnywhere(tester);
   });
 }

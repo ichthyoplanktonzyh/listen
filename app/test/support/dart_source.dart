@@ -185,6 +185,28 @@ String lineAt(String source, int line) {
   return line <= lines.length ? lines[line - 1].trim() : '';
 }
 
+/// The code from the previous statement boundary up to [offset].
+///
+/// Crude on purpose: statement boundaries are `;`, `{` and `}`, which is enough
+/// to tell `ApiFailure(raw: '$error')` from `s.copyWith(error: '$error')`, or
+/// `RegExp(r'^\d{4}年')` from `Text('还没试过')`, while staying immune to the line
+/// breaks `dart format` inserts.
+///
+/// Pass the [maskNonCode] rendering, not the raw source: a `;` inside a string
+/// or a comment is not a statement boundary, and matching on one would cut the
+/// statement short and lose the very call being looked for.
+String statementAt(String code, int offset) {
+  var start = 0;
+  for (var i = offset - 1; i >= 0; i--) {
+    final char = code[i];
+    if (char == ';' || char == '{' || char == '}') {
+      start = i + 1;
+      break;
+    }
+  }
+  return code.substring(start, offset);
+}
+
 /// One character of an argument list, or one whole parenthesised group nested
 /// inside it — balanced up to two levels. Repeat it (`'$balancedArgUnit*?'`)
 /// to walk an argument list without ever crossing the closing paren of the

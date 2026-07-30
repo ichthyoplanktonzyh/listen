@@ -49,7 +49,15 @@ becomes a rubber stamp. Left empty on purpose:
 | 我的表达 (`personal_expression_screen`) | S9 | PR [#63] merges |
 | 词汇本 (`vocabulary_screen`, entry detail) | S7 | that slice merges |
 | 播放器主屏 (`player_stage`, `playback_bar`, `transcript_panel`) | S8 | that slice merges |
-| Everything, re-checked | S6 i18n, S2 token migration | both merge — S6 changes strings (and therefore line breaks) on almost every surface, S2 changes padding and icon sizes app-wide |
+| Everything, re-checked | ~~S6 i18n~~, S2 token migration | S2 merges — it changes padding and icon sizes app-wide |
+
+S6 (#7) has landed and moved **two** baselines, both for the shell fix below
+rather than for a string. That is not luck: the surfaces it rewrote (我的表达,
+the manual timing dialog) are the ones deliberately left off the net, and every
+scene here pins `locale: en`, so re-reading a sentence from the table produced
+the same glyphs it had hardcoded. A slice that changes *English* copy on a
+covered surface will move baselines; that is the net working, and the diff
+images are the review artefact.
 
 The exact follow-up is one scene registration plus one record command; see
 [Adding a scene](#adding-a-scene) and [Updating baselines](#updating-baselines).
@@ -65,20 +73,32 @@ fixture reads `14:43` in UTC and `22:43` in UTC+8. They stay off the net until
 the panel accepts an injectable clock/zone. Their wording is pinned directly in
 `realtime_conversation_panel_test.dart`.
 
-## A baseline that records a defect
+## What the net has caught so far
 
-`conversation_lobby.light.png` is not a picture of a correct screen.
-`ConversationStageShell` applies `ListenTheme.dark()` to its *child*, but the
-panel builds the lobby with its own outer `BuildContext`, so under the light
-app theme the lobby's ink resolves against the light scheme while the ground
-behind it stays `ListenColors.stageGround`. `titleLarge` lands at `#1d2623` on
-`#141d1a` — the heading and the "Recent conversations" label are effectively
+One defect, on its first day, and it is the argument for the whole approach.
+
+`conversation_lobby.light.png` was recorded showing an unreadable screen.
+`ConversationStageShell` applied `ListenTheme.dark()` to its *child*, but the
+panel **built** the lobby with its own outer `BuildContext` — so under the light
+app theme the lobby's ink resolved against the light scheme while the ground
+behind it stayed `ListenColors.stageGround`. `titleLarge` landed at `#1d2623` on
+`#141d1a`: the heading and the "Recent conversations" label were effectively
 invisible.
 
-It is committed anyway. A golden records what the app does, not what it should
-do, and deleting the scene would hide the first thing this net found. Fixing it
-is a `lib/` change (build the lobby under the shell's theme); re-record
-`test/golden_conversation_test.dart` in the same PR that fixes it.
+Every widget was present, every colour literal legal, every widget test green.
+Only the picture showed it.
+
+Fixed in S6 (#7): the shell takes a `WidgetBuilder` instead of a `Widget`, so
+the room is built from a context below the dark `Theme` and the light-theme
+path is no longer representable. The baseline was re-recorded in the same
+commit, and `conversation_stage_shell_test.dart` now also asserts the cheap
+version of the claim — the context the lobby's ink comes from is a dark one.
+
+The general rule this leaves behind: **do not commit a baseline of a screen you
+know to be wrong.** Recording the defect was defensible only because the fix
+was out of that slice's scope and the note was carried in three places at once;
+a red picture that survives review teaches reviewers to stop looking, which
+costs more than the bug.
 
 ## Determinism
 
