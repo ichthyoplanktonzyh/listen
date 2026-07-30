@@ -153,8 +153,7 @@ class ApiFailureDetailsButton extends StatelessWidget {
   final ApiFailure failure;
 
   @override
-  Widget build(BuildContext context) =>
-      ApiFailureDisclosure.hasDetail(failure)
+  Widget build(BuildContext context) => ApiFailureDisclosure.hasDetail(failure)
       ? TextButton(
           onPressed: () => showApiFailureDetails(context, failure),
           child: Text(AppLocalizations.of(context).text('failureDetailsShow')),

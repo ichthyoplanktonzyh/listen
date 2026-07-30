@@ -69,28 +69,26 @@ void main() {
     }
   }
 
-  Future<void> pumpBar(
-    WidgetTester tester,
-    DownloadStatusSnapshot snapshot,
-  ) => tester.pumpWidget(
-    MaterialApp(
-      supportedLocales: AppLocalizations.supportedLocales,
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      home: Scaffold(
-        body: DownloadStatusBar(
-          status: snapshot,
-          onCancel: () {},
-          onOpenMediaPath: () {},
-          onDismiss: () {},
+  Future<void> pumpBar(WidgetTester tester, DownloadStatusSnapshot snapshot) =>
+      tester.pumpWidget(
+        MaterialApp(
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          home: Scaffold(
+            body: DownloadStatusBar(
+              status: snapshot,
+              onCancel: () {},
+              onOpenMediaPath: () {},
+              onDismiss: () {},
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   testWidgets('a download whose tool exits non-zero says "Download failed" '
       'and not what the tool printed', (tester) async {
