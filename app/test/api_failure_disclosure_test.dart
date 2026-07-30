@@ -132,9 +132,7 @@ void main() {
   testWidgets('the modal form shows the same two fields and no more', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      host(ApiFailureDetailsButton(failure: failure)),
-    );
+    await tester.pumpWidget(host(ApiFailureDetailsButton(failure: failure)));
 
     await tester.tap(find.text('Details'));
     await tester.pumpAndSettle();

@@ -88,9 +88,7 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: Scaffold(
-          body: SingleChildScrollView(child: panel),
-        ),
+        home: Scaffold(body: SingleChildScrollView(child: panel)),
       ),
     );
     await tester.pumpAndSettle();
@@ -148,7 +146,7 @@ void main() {
           ok: {
             '/v1/syntax/capability':
                 '{"status":"not_installed","enabled":false,'
-                    '"runtime_version":"3.7","model_version":"en_core_web_sm"}',
+                '"runtime_version":"3.7","model_version":"en_core_web_sm"}',
           },
         ),
       ),

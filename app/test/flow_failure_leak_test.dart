@@ -160,13 +160,10 @@ void main() {
     final harness = _harness(
       api(
         fail: (method, path) =>
-            path.startsWith('/v1/word-timelines/') &&
-                !path.contains('/summary')
+            path.startsWith('/v1/word-timelines/') && !path.contains('/summary')
             ? (statusCode: 500, body: envelope)
             : null,
-        ok: {
-          '/word-timelines/summary': '[$_activeSummary]',
-        },
+        ok: {'/word-timelines/summary': '[$_activeSummary]'},
       ),
     );
     harness.player.setMedia(
@@ -268,4 +265,3 @@ _harness(LocalApi service) {
     mediaSession: mediaSession,
   );
 }
-
