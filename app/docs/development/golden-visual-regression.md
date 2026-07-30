@@ -49,7 +49,15 @@ becomes a rubber stamp. Left empty on purpose:
 | 我的表达 (`personal_expression_screen`) | S9 | PR [#63] merges |
 | 词汇本 (`vocabulary_screen`, entry detail) | S7 | that slice merges |
 | 播放器主屏 (`player_stage`, `playback_bar`, `transcript_panel`) | S8 | that slice merges |
-| Everything, re-checked | S6 i18n, S2 token migration | both merge — S6 changes strings (and therefore line breaks) on almost every surface, S2 changes padding and icon sizes app-wide |
+| Everything, re-checked | ~~S6 i18n~~, S2 token migration | S2 merges — it changes padding and icon sizes app-wide |
+
+S6 (#7) has landed and moved **two** baselines, both for the shell fix below
+rather than for a string. That is not luck: the surfaces it rewrote (我的表达,
+the manual timing dialog) are the ones deliberately left off the net, and every
+scene here pins `locale: en`, so re-reading a sentence from the table produced
+the same glyphs it had hardcoded. A slice that changes *English* copy on a
+covered surface will move baselines; that is the net working, and the diff
+images are the review artefact.
 
 The exact follow-up is one scene registration plus one record command; see
 [Adding a scene](#adding-a-scene) and [Updating baselines](#updating-baselines).
