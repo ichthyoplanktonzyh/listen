@@ -6,6 +6,7 @@ import 'localization.dart';
 import 'models/named_failure.dart';
 import 'models/runtime_resources.dart';
 import 'services/api_service.dart';
+import 'theme/icon_size.dart';
 import 'theme/radii.dart';
 import 'theme/spacing.dart';
 import 'theme/typography.dart';
@@ -163,7 +164,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
         ? Theme.of(context).colorScheme.tertiary
         : Theme.of(context).colorScheme.onSurfaceVariant;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: ListenPadding.tight,
       decoration: BoxDecoration(
         color: color.withAlpha(30),
         borderRadius: ListenRadii.controlBorder,
@@ -295,7 +296,10 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
               children: [
                 TextButton.icon(
                   onPressed: () => _confirmClearTerminal(l),
-                  icon: const Icon(Icons.clear_all, size: 18),
+                  icon: const Icon(
+                    Icons.clear_all,
+                    size: ListenIconSize.control,
+                  ),
                   label: Text(l.text('clearCompleted')),
                 ),
               ],
@@ -382,34 +386,37 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
         return Icon(
           Icons.check_circle,
           color: Theme.of(context).colorScheme.primary,
-          size: 22,
+          size: ListenIconSize.chrome,
         );
       case 'failed':
         return Icon(
           Icons.error,
           color: Theme.of(context).colorScheme.error,
-          size: 22,
+          size: ListenIconSize.chrome,
         );
       case 'cancelled':
         return Icon(
           Icons.cancel,
           color: Theme.of(context).colorScheme.secondary,
-          size: 22,
+          size: ListenIconSize.chrome,
         );
       case 'interrupted':
         return Icon(
           Icons.warning_amber,
           color: Theme.of(context).colorScheme.secondary,
-          size: 22,
+          size: ListenIconSize.chrome,
         );
       case 'queued':
         return Icon(
           Icons.schedule,
           color: Theme.of(context).colorScheme.tertiary,
-          size: 22,
+          size: ListenIconSize.chrome,
         );
       default:
-        return const ListenLoading.inline(size: 22);
+        // The spinner stands in for whichever status icon will replace it,
+        // so it reads the same step: at any other size the row would resize
+        // the moment the job settled.
+        return const ListenLoading.inline(size: ListenIconSize.chrome);
     }
   }
 
@@ -489,14 +496,14 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
                     widget.api!.retryPhoneticAnalysisJob(id));
                 await _refresh();
               },
-              icon: const Icon(Icons.refresh, size: 20),
+              icon: const Icon(Icons.refresh, size: ListenIconSize.control),
             ),
           IconButton(
             tooltip: l.text('deleteJob'),
             onPressed: () => _confirmDeleteJob(id, l),
             icon: Icon(
               Icons.delete_outline,
-              size: 20,
+              size: ListenIconSize.control,
               color: Theme.of(context).colorScheme.error.withAlpha(180),
             ),
           ),
