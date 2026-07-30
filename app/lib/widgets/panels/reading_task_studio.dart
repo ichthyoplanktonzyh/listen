@@ -4,6 +4,7 @@ import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import 'reading_task_sheet.dart';
 import '../../theme/typography.dart';
@@ -103,7 +104,8 @@ class ReadingTaskStudio extends StatelessWidget {
         border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        // Same object as the reading-diff header, so the same role.
+        padding: ListenPadding.row,
         child: Row(
           children: [
             IconButton(
@@ -133,8 +135,10 @@ class ReadingTaskStudio extends StatelessWidget {
                     ),
                     if (i != phases.length - 1)
                       Icon(
+                        // A separator glyph between stage badges — it sits in
+                        // the label flow and is not tappable.
                         Icons.arrow_forward,
-                        size: 14,
+                        size: ListenIconSize.inline,
                         color: colors.outline,
                       ),
                   ],
@@ -178,7 +182,9 @@ class _StageBadge extends StatelessWidget {
                 ? colors.onPrimary
                 : colors.onSurfaceVariant,
             child: complete
-                ? const Icon(Icons.check, size: 15)
+                // A marker inside a 26pt badge, standing in for the digit the
+                // other badges show — `control` would crowd the circle.
+                ? const Icon(Icons.check, size: ListenIconSize.inline)
                 : Text('$index', style: ListenType.body),
           ),
           const SizedBox(width: ListenSpacing.gap6),
@@ -213,7 +219,10 @@ class _SourceSnapshot extends StatelessWidget {
     return ColoredBox(
       color: colors.surfaceContainerLowest,
       child: SingleChildScrollView(
-        padding: EdgeInsets.all(compact ? 16 : 28),
+        // The source pane is a page of prose, so it takes the page roles: the
+        // narrow arrangement reads as a card beside the task, the wide one as
+        // its own column.
+        padding: compact ? ListenPadding.card : ListenPadding.pageCompact,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

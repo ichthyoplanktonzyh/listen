@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/settings/settings_dialog.dart';
 
@@ -89,6 +90,44 @@ void main() {
       Theme.of(tester.element(find.byType(SettingsDialog))).brightness,
       Brightness.light,
     );
+  });
+
+  testWidgets('the shortcut cheat-sheet button sizes its icon from the ladder', (
+    tester,
+  ) async {
+    await _pumpSettingsDialog(
+      tester,
+      senseGroupsAvailable: true,
+      groupingMode: 'semantic',
+    );
+
+    // The dialog body is a lazy `ListView` and this button is its last row, so
+    // it has to be scrolled into existence before it can be read.
+    final button = find.widgetWithText(
+      OutlinedButton,
+      'View keyboard shortcuts',
+    );
+    // `scrollable:` is explicit because the body's text fields each own a
+    // horizontal `Scrollable`; the vertical list is the first one.
+    await tester.scrollUntilVisible(
+      button,
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    // Was 16 — one point off the `control` step used by every other icon in
+    // this dialog, so the keyboard glyph read a shade lighter than its row.
+    // Scoped to the button because the category rail carries the same glyph,
+    // sized by `IconTheme` rather than by a literal — that one was never an
+    // offender and must stay untouched.
+    final icon = tester.widget<Icon>(
+      find.descendant(
+        of: button,
+        matching: find.byIcon(Icons.keyboard_outlined),
+      ),
+    );
+    expect(icon.size, ListenIconSize.control);
   });
 }
 

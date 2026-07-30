@@ -51,9 +51,6 @@ void main() {
     'lib/widgets/common/capability_viz.dart',
     'lib/widgets/home/listening_home.dart',
     'lib/widgets/panels/cold_start_marking_sheet.dart',
-    'lib/widgets/panels/speaking_task_studio.dart',
-    'lib/widgets/panels/word_learning_panel.dart',
-    'lib/widgets/panels/writing_task_studio.dart',
   };
 
   test('text styles come from mapped textTheme slots, not display/headline', () {

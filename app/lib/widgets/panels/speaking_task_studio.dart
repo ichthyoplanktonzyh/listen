@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../controllers/speaking_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_loading.dart';
@@ -59,9 +61,14 @@ class SpeakingTaskStudio extends StatelessWidget {
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(28),
+                  padding: ListenPadding.pageCompact,
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 760),
+                    // A page-inline studio card, which is what `cardColumnMax`
+                    // names; 760 was a reading measure applied to a column of
+                    // headings, notices and buttons.
+                    constraints: const BoxConstraints(
+                      maxWidth: ListenBreakpoints.cardColumnMax,
+                    ),
                     child: _phase(context, state),
                   ),
                 ),
@@ -91,7 +98,8 @@ class SpeakingTaskStudio extends StatelessWidget {
         border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        // The same stage-header row as the reading studio, so the same role.
+        padding: ListenPadding.row,
         child: Row(
           children: [
             IconButton(
@@ -158,14 +166,17 @@ class SpeakingTaskStudio extends StatelessWidget {
       children: [
         const SizedBox(height: ListenSpacing.gap8),
         Icon(
+          // Illustration: this glyph is the instruction for the whole phase
+          // ("listen first"), not a label attached to a control. 72 was the
+          // largest icon in the app.
           Icons.headphones_rounded,
-          size: 72,
+          size: ListenIconSize.illustration,
           color: Theme.of(context).colorScheme.primary,
         ),
         const SizedBox(height: ListenSpacing.gap16),
         Text(
           l.text('speakingListenTitle'),
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.titleLarge,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: ListenSpacing.gap8),
@@ -228,12 +239,15 @@ class SpeakingTaskStudio extends StatelessWidget {
           radius: 58,
           backgroundColor: colors.errorContainer,
           foregroundColor: colors.onErrorContainer,
-          child: const Icon(Icons.mic, size: 64),
+          // Illustration: the recording state's whole visual, filling a 116pt
+          // circle. It reports "you are on the air"; there is nothing to tap
+          // and no label beside it.
+          child: const Icon(Icons.mic, size: ListenIconSize.illustration),
         ),
         const SizedBox(height: ListenSpacing.gap24),
         Text(
           l.text('speakingRecordingNow'),
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: ListenSpacing.gap24),
         FilledButton.icon(
@@ -273,7 +287,7 @@ class SpeakingTaskStudio extends StatelessWidget {
       children: [
         Text(
           l.text('speakingReviewTitle'),
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: ListenSpacing.gap6),
         Text(l.text('speakingReviewBody')),
@@ -341,11 +355,16 @@ class SpeakingTaskStudio extends StatelessWidget {
     final totalPauseMs = state.audioFacts?.totalPauseMs;
     return Column(
       children: [
-        const Icon(Icons.check_circle_outline, size: 68),
+        // Illustration: the "saved" confirmation carries its meaning alone,
+        // above the title rather than beside it.
+        const Icon(
+          Icons.check_circle_outline,
+          size: ListenIconSize.illustration,
+        ),
         const SizedBox(height: ListenSpacing.gap16),
         Text(
           l.text('speakingSavedTitle'),
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: ListenSpacing.gap12),
         _Notice(
@@ -371,7 +390,7 @@ class SpeakingTaskStudio extends StatelessWidget {
                 ActionChip(
                   avatar:
                       state.confirmedTargetIds.contains(target.lexicalEntryId)
-                      ? const Icon(Icons.check, size: 16)
+                      ? const Icon(Icons.check, size: ListenIconSize.control)
                       : null,
                   label: Text(target.surfaceForm),
                   onPressed:
@@ -422,11 +441,13 @@ class SpeakingTaskStudio extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Column(
       children: [
-        const Icon(Icons.task_alt, size: 72),
+        // Illustration: same role as the saved-state glyph — the finished
+        // phase's own statement, not a control.
+        const Icon(Icons.task_alt, size: ListenIconSize.illustration),
         const SizedBox(height: ListenSpacing.gap16),
         Text(
           l.text('speakingDoneTitle'),
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         _llmFeedback(state),
         if (state.source?.recall == 'delayed' &&
@@ -519,7 +540,9 @@ class _StageLabel extends StatelessWidget {
               ? colors.onPrimary
               : colors.onSurfaceVariant,
           child: complete
-              ? const Icon(Icons.check, size: 14)
+              // A marker inside a 24pt stage badge, standing in for the digit
+              // the other badges show.
+              ? const Icon(Icons.check, size: ListenIconSize.inline)
               : Text('$index', style: ListenType.caption),
         ),
         const SizedBox(width: ListenSpacing.gap4),
@@ -547,7 +570,7 @@ class _Notice extends StatelessWidget {
         borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: ListenPadding.card,
         child: Text(
           text,
           style: TextStyle(

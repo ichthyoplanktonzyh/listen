@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_empty_state.dart';
 import '../common/listen_loading.dart';
@@ -66,7 +68,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
         color: Theme.of(context).colorScheme.surface,
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: ListenPadding.pageCompact,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -215,11 +217,25 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
 
   Widget _submittedBody(AppLocalizations l, WritingTaskState state) => Center(
     child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 620),
+      // A page-inline studio card, the same object as the speaking studio's
+      // column, so the same cap. `formColumnMax` reads like the better
+      // semantic fit — one heading, one primary action — but at 560 the three
+      // actions below wrap to a third row and overflow the phase's height
+      // (`writing_task_studio_test` catches it). A cap that breaks the layout
+      // it is capping is the wrong cap.
+      constraints: const BoxConstraints(
+        maxWidth: ListenBreakpoints.cardColumnMax,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_circle_outline, size: 46),
+          // Illustration, not a control: this glyph is the whole statement
+          // that the draft is safely stored — nothing beside it to label, and
+          // nothing to tap. It was 46, two points under the step.
+          const Icon(
+            Icons.check_circle_outline,
+            size: ListenIconSize.illustration,
+          ),
           const SizedBox(height: ListenSpacing.gap12),
           Text(
             l.text('writingDraftSaved'),
@@ -267,7 +283,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
     children: [
       Text(
         l.text('writingRevisionSaved'),
-        style: Theme.of(context).textTheme.headlineSmall,
+        style: Theme.of(context).textTheme.titleLarge,
       ),
       const SizedBox(height: ListenSpacing.gap16),
       _VersionCard(
