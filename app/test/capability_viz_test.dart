@@ -260,7 +260,12 @@ void main() {
           width: 600,
           child: CapabilityEchoBars(
             channels: [
-              channel('listening', acquired: 5, notAcquired: 3, unassessed: 200),
+              channel(
+                'listening',
+                acquired: 5,
+                notAcquired: 3,
+                unassessed: 200,
+              ),
               channel('reading', unassessed: 200),
               channel('speaking', unassessed: 200),
               channel('writing', unassessed: 200),
@@ -367,7 +372,12 @@ void main() {
           width: 900,
           child: CapabilityPortrait(
             channels: [
-              channel('listening', acquired: 5, notAcquired: 3, unassessed: 200),
+              channel(
+                'listening',
+                acquired: 5,
+                notAcquired: 3,
+                unassessed: 200,
+              ),
               channel('reading', acquired: 6, notAcquired: 2, unassessed: 200),
               channel('speaking', acquired: 1, notAcquired: 4, unassessed: 200),
               channel('writing', notAcquired: 2, unassessed: 200),
@@ -535,9 +545,7 @@ void main() {
     await mouse.addPointer(location: Offset.zero);
     addTearDown(mouse.removePointer);
     await tester.pump();
-    await mouse.moveTo(
-      tester.getCenter(find.text('can hear 46 · can say 12')),
-    );
+    await mouse.moveTo(tester.getCenter(find.text('can hear 46 · can say 12')));
     await tester.pumpAndSettle();
 
     // Exactly the hovered pair lights up — the picture says where the door is.

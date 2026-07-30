@@ -276,9 +276,7 @@ void main() {
         ),
       ),
     );
-    final colors = Theme.of(
-      tester.element(find.text('rather')),
-    ).colorScheme;
+    final colors = Theme.of(tester.element(find.text('rather'))).colorScheme;
     expect(barColor(), capabilityAssessmentColor(colors, 'acquired'));
     expect(find.byTooltip('Listening: Acquired'), findsOneWidget);
 
@@ -754,10 +752,9 @@ void main() {
       expect(find.text('Not acquired'), findsNWidgets(4));
       // State 1 · unanswered: neither side is lit and the row says so in
       // words rather than leaving two unpressed buttons to be read as "no".
-      for (final button
-          in tester.widgetList<SegmentedButton<String>>(
-            find.byType(SegmentedButton<String>),
-          )) {
+      for (final button in tester.widgetList<SegmentedButton<String>>(
+        find.byType(SegmentedButton<String>),
+      )) {
         expect(button.selected, isEmpty);
       }
       expect(find.text('Not yet assessed'), findsNWidgets(4));
@@ -768,9 +765,11 @@ void main() {
       // State 2 · answered: exactly one side is lit, the note is gone, and
       // the verdict is marked as the user's own.
       await tester.pumpWidget(view(profile('acquired')));
-      final reading = tester.widgetList<SegmentedButton<String>>(
-        find.byType(SegmentedButton<String>),
-      ).first;
+      final reading = tester
+          .widgetList<SegmentedButton<String>>(
+            find.byType(SegmentedButton<String>),
+          )
+          .first;
       expect(reading.selected, {'acquired'});
       expect(find.text('Not yet assessed'), findsNWidgets(3));
       expect(find.byTooltip('Your own call'), findsOneWidget);

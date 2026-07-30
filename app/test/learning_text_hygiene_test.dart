@@ -43,10 +43,7 @@ void main() {
     });
 
     test('英文学习语言：全角逗号/问号补回英文的词间空格', () {
-      expect(
-        cleanLearningText('Wait，what？', language: 'en'),
-        'Wait, what?',
-      );
+      expect(cleanLearningText('Wait，what？', language: 'en'), 'Wait, what?');
     });
 
     test('英文学习语言：全角标点前的空隙收掉', () {
@@ -61,35 +58,20 @@ void main() {
         cleanLearningText('He said（quietly）it works', language: 'en'),
         'He said (quietly) it works',
       );
-      expect(
-        cleanLearningText('one　two', language: 'en'),
-        'one two',
-      );
+      expect(cleanLearningText('one　two', language: 'en'), 'one two');
     });
 
     test('中文学习语言：全角标点是正字法，不动', () {
-      expect(
-        cleanLearningText('我需要做点什么。', language: 'zh'),
-        '我需要做点什么。',
-      );
-      expect(
-        cleanLearningText('等等，什么？', language: 'zh-Hans'),
-        '等等，什么？',
-      );
+      expect(cleanLearningText('我需要做点什么。', language: 'zh'), '我需要做点什么。');
+      expect(cleanLearningText('等等，什么？', language: 'zh-Hans'), '等等，什么？');
     });
 
     test('中文学习语言：仍然去前导短横，但标点不动', () {
-      expect(
-        cleanLearningText('- 我需要做点什么。', language: 'zh_CN'),
-        '我需要做点什么。',
-      );
+      expect(cleanLearningText('- 我需要做点什么。', language: 'zh_CN'), '我需要做点什么。');
     });
 
     test('日文学习语言同样保留全角标点', () {
-      expect(
-        cleanLearningText('これで大丈夫。', language: 'ja-JP'),
-        'これで大丈夫。',
-      );
+      expect(cleanLearningText('これで大丈夫。', language: 'ja-JP'), 'これで大丈夫。');
     });
 
     test('韩文按 ASCII 标点排版，全角句号视作输入法残留', () {
@@ -125,10 +107,7 @@ void main() {
     });
 
     test('相邻标点之间不插入多余空格', () {
-      expect(
-        cleanLearningText('Really？！', language: 'en'),
-        'Really?!',
-      );
+      expect(cleanLearningText('Really？！', language: 'en'), 'Really?!');
     });
   });
 }

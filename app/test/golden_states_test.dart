@@ -132,8 +132,10 @@ class _WordmarkSheet extends StatelessWidget {
               ListenWordmark(size: size, withText: false),
           ],
         ),
-        Text('mark colors are brand constants, not theme roles',
-            style: ListenType.caption),
+        Text(
+          'mark colors are brand constants, not theme roles',
+          style: ListenType.caption,
+        ),
       ],
     ),
   );

@@ -87,10 +87,7 @@ abstract final class ListenPadding {
 
   /// A full page or sheet at a narrow window, where [page] would eat too much
   /// of the content column.
-  static const pageCompact = EdgeInsets.symmetric(
-    horizontal: 24,
-    vertical: 24,
-  );
+  static const pageCompact = EdgeInsets.symmetric(horizontal: 24, vertical: 24);
 
   /// A full page or sheet at a comfortable window: the outermost breathing
   /// room, matching [ListenSpacing.gap32].

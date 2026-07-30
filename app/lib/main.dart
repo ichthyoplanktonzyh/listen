@@ -980,9 +980,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           // The lobby's caption switch is a habit, so it is remembered
           // across conversations and restarts (#85 · S8).
           captionEnabled: settingsController.realtimeCaptionVisible,
-          onCaptionEnabledChanged: (value) => unawaited(
-            settingsController.setRealtimeCaptionVisible(value),
-          ),
+          onCaptionEnabledChanged: (value) =>
+              unawaited(settingsController.setRealtimeCaptionVisible(value)),
           // The debrief's 回流 is a door, not a claim (#86 · S9): the words
           // this conversation handed to the speaking channel are in the
           // vocabulary book, and an amber target goes straight into 我的表达.
