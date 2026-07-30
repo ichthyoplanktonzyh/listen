@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../controllers/coach_dashboard_controller.dart';
 import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
+import '../../models/named_failure.dart';
 import '../../services/api_service.dart';
 import '../../theme/motion.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../common/api_failure_disclosure.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_error_state.dart';
 import '../common/listen_loading.dart';
@@ -52,13 +54,20 @@ class _EvidenceFeed {
   const _EvidenceFeed({
     this.items = const [],
     this.loading = false,
-    this.error,
+    this.failure,
     this.exhausted = false,
   });
 
   final List<CoachEvidenceItem> items;
   final bool loading;
-  final String? error;
+
+  /// Why the page could not be fetched, as a *key* plus typed detail.
+  ///
+  /// This was `String? error` filled with `'$error'` and rendered as the
+  /// panel's only line, so opening a metric on a bad connection printed the
+  /// whole `HttpException` — envelope, `correlation_id`, loopback URI and all
+  /// — inside the evidence drill-down.
+  final NamedFailure? failure;
   final bool exhausted;
 }
 
@@ -560,7 +569,10 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       setState(
         () => _evidence[metricKey] = _EvidenceFeed(
           items: current.items,
-          error: '$error',
+          failure: NamedFailure(
+            'coachEvidenceFailed',
+            detail: describeApiFailure(error),
+          ),
         ),
       );
     }
@@ -851,14 +863,13 @@ class _EvidencePanel extends StatelessWidget {
         child: ListenLoading.inline(),
       );
     }
-    if (current.error != null && current.items.isEmpty) {
+    final failure = current.failure;
+    if (failure != null && current.items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap8),
-        child: Text(
-          current.error!,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.error,
-          ),
+        child: ApiFailureNotice(
+          message: l.text(failure.messageKey),
+          failure: failure.detail,
         ),
       );
     }

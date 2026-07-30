@@ -554,6 +554,8 @@ class AppLocalizations {
       'coachEvidenceSource': 'Durable source',
       'coachEvidenceCount': 'Facts in period',
       'coachEvidenceEmpty': 'No source facts in this period.',
+      // #62: this drill-down used to print the whole caught exception.
+      'coachEvidenceFailed': 'This evidence could not be loaded.',
       // ── Coach as navigation (#81 · S2) ──
       'coachChannelEvidence': 'Channel evidence',
       'coachChannelNoEvidence': 'No evidence for {channel} in this period.',
@@ -2410,6 +2412,7 @@ class AppLocalizations {
       'coachEvidenceSource': '持久事实来源',
       'coachEvidenceCount': '周期内事实数',
       'coachEvidenceEmpty': '该周期内没有来源事实。',
+      'coachEvidenceFailed': '这份证据没能加载。',
       // ── 教练页即导航（#81 · S2）──
       'coachChannelEvidence': '通道证据',
       'coachChannelNoEvidence': '这段时间{channel}还没有证据。',
