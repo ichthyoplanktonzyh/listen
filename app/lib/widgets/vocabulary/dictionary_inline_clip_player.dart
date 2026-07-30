@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../controllers/slice_player_controller.dart';
+import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
@@ -32,6 +33,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: controller.store,
     builder: (context, _) {
+      final l = AppLocalizations.of(context);
       final state = controller.state;
       final video = controller.videoController;
       return Card(
@@ -48,7 +50,9 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                   const SizedBox(width: ListenSpacing.gap8),
                   Expanded(
                     child: Text(
-                      '$target · 当前来源切片',
+                      l
+                          .text('dictionaryClipPlayerTitle')
+                          .replaceFirst('{word}', target),
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                   ),
@@ -122,7 +126,13 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                         ? null
                         : () => unawaited(controller.togglePlayback()),
                     icon: Icon(state.playing ? Icons.pause : Icons.play_arrow),
-                    label: Text(state.playing ? '暂停' : '播放'),
+                    label: Text(
+                      l.text(
+                        state.playing
+                            ? 'dictionaryClipPause'
+                            : 'dictionaryClipPlay',
+                      ),
+                    ),
                   ),
                   if (onShadowing != null) ...[
                     const SizedBox(width: ListenSpacing.gap8),
@@ -131,7 +141,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                           ? null
                           : () => unawaited(onShadowing!()),
                       icon: const Icon(Icons.mic_none),
-                      label: const Text('跟一下'),
+                      label: Text(l.text('dictionaryClipShadow')),
                     ),
                   ],
                   const Spacer(),

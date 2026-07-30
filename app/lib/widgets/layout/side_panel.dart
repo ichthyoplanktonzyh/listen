@@ -14,6 +14,7 @@ import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../panels/content_fit_card.dart';
@@ -465,7 +466,11 @@ class _PanelEmptyState extends StatelessWidget {
       child: Padding(
         padding: ListenPadding.pageCompact,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+          // Same centred-notice measure as the transcript panel's empty state —
+          // the two are the same shape and must not drift apart again.
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.noticeColumnMax,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

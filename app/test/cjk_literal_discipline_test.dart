@@ -131,7 +131,6 @@ void main() {
     // 「保存到我的表达」 tooltip on the reading surface. One literal.
     'lib/widgets/panels/reading_view.dart',
     // 当前来源切片 / 暂停 / 播放 / 跟一下 on the dictionary clip player.
-    'lib/widgets/vocabulary/dictionary_inline_clip_player.dart',
   };
 
   test('user-visible copy lives in localization.dart, not in a literal', () {
