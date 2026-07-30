@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
 
@@ -107,7 +108,7 @@ class DiagnosisCard extends StatelessWidget {
                                 ),
                                 icon: const Icon(
                                   Icons.headphones_outlined,
-                                  size: 16,
+                                  size: ListenIconSize.control,
                                 ),
                                 label: Text(l.text('openListeningDictionary')),
                               ),
@@ -219,7 +220,9 @@ class DiagnosisCard extends StatelessWidget {
                           if (ruleHintsLevel == 'all' ||
                               rule.status == 'likely_by_context')
                             Padding(
-                              padding: const EdgeInsets.only(top: 5),
+                              padding: const EdgeInsets.only(
+                                top: ListenSpacing.gap4,
+                              ),
                               child: Text(
                                 '• ${rule.ruleFamily}: ${rule.reason} '
                                 '(${(rule.confidence * 100).round()}%)',
@@ -240,7 +243,7 @@ class DiagnosisCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Padding(
       key: const Key('diagnosis-l1-section'),
-      padding: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.only(top: ListenSpacing.gap8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -280,7 +283,10 @@ class DiagnosisCard extends StatelessWidget {
                               visualDensity: VisualDensity.compact,
                               materialTapTargetSize:
                                   MaterialTapTargetSize.shrinkWrap,
-                              avatar: const Icon(Icons.replay, size: 14),
+                              avatar: const Icon(
+                                Icons.replay,
+                                size: ListenIconSize.control,
+                              ),
                               backgroundColor: Theme.of(
                                 context,
                               ).colorScheme.tertiary.withAlpha(42),
@@ -306,7 +312,7 @@ class DiagnosisCard extends StatelessWidget {
                             onPressed: () => onOpenL1Specialty!(hint),
                             icon: const Icon(
                               Icons.grid_view_outlined,
-                              size: 14,
+                              size: ListenIconSize.control,
                             ),
                             label: Text(
                               l.text('l1SimilarClips'),
@@ -325,7 +331,7 @@ class DiagnosisCard extends StatelessWidget {
   }
 
   Widget _section(String title, String body) => Padding(
-    padding: const EdgeInsets.only(top: 10),
+    padding: const EdgeInsets.only(top: ListenSpacing.gap8),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -433,7 +439,7 @@ class DiagnosisCard extends StatelessWidget {
         .toList(growable: false);
     if (chips.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 5),
+      padding: const EdgeInsets.only(top: ListenSpacing.gap4),
       child: Wrap(
         spacing: 5,
         runSpacing: 5,
@@ -452,7 +458,7 @@ class DiagnosisCard extends StatelessWidget {
     if (hotspots.isEmpty) return const SizedBox.shrink();
     final color = Theme.of(context).colorScheme.secondary;
     return Padding(
-      padding: const EdgeInsets.only(top: 5),
+      padding: const EdgeInsets.only(top: ListenSpacing.gap4),
       child: Wrap(
         spacing: 5,
         runSpacing: 5,

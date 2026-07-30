@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/widgets/panels/diagnosis_card.dart';
 
 void main() {
@@ -74,6 +75,15 @@ void main() {
 
     await tester.tap(find.text('Listen in dictionary'));
     expect(opened, 'entry-1');
+
+    // Token provenance: the dictionary link is a secondary action, so its
+    // glyph is `control` — not the 16 it used to carry while its neighbour on
+    // the same card carried 14. The gate can only see that no literal is left;
+    // this sees that both now land on one step.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.headphones_outlined)).size,
+      ListenIconSize.control,
+    );
   });
 
   testWidgets('audio findings expose evidence loop and feedback actions', (

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
+import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_empty_state.dart';
 import '../common/listen_loading.dart';
@@ -96,9 +98,15 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
     final colors = Theme.of(context).colorScheme;
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 420),
+        // A column of decisions, not of reading: one word and three verdicts.
+        // `maxHeight` is a viewport budget rather than a column measure, so it
+        // stays a literal.
+        constraints: const BoxConstraints(
+          maxWidth: ListenBreakpoints.formColumnMax,
+          maxHeight: 420,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: ListenPadding.card,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -113,7 +121,7 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 18),
+                    icon: const Icon(Icons.close, size: ListenIconSize.control),
                     onPressed: _finish,
                   ),
                 ],
@@ -154,10 +162,11 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
         ),
         const SizedBox(height: ListenSpacing.gap16),
         Text(
+          // The word under judgement is the largest thing on this sheet, so it
+          // takes the one hero size. `ListenType.hero` already carries w600;
+          // the old w700 override came with the unmapped Material slot.
           candidate.displayForm,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: ListenSpacing.gap24),
         _ActionButton(
