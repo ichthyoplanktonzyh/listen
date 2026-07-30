@@ -34,6 +34,10 @@ Key invariants:
   writing dimensions; `unassessed` is not `not_acquired`;
 - Review, Listening Inbox, Hunting, proposal, and gap records keep their own
   identities even when a future Learning Agenda aggregates their presentation;
+- ADR 0035 defines archive/restore as the target User Sentence Pattern
+  lifecycle and keeps future Personal Content Erasure separate. The current
+  runtime still exposes a deprecated-target cascade DELETE until the
+  persistence and contract slices implement that migration;
 - versioned LLTimeline/resource schemas are compatibility boundaries;
 - destructive migration or cascade behavior requires explicit requirement,
   tests, and release/migration notes.

@@ -94,6 +94,16 @@ A versioned, learner-owned expression template retained with its source
 snapshot; a Construction link may explain it but never owns or renames it.
 _Avoid_: Canonical Construction, automatic projection
 
+**Archived User Sentence Pattern**:
+A User Sentence Pattern withdrawn from active reuse while its identity,
+immutable versions, uses, source snapshots, and historical meaning remain.
+_Avoid_: Deleted pattern, erased content, inactive version
+
+**Personal Content Erasure**:
+An explicit, irreversible removal of learner-owned content across every
+declared authoritative and derived representation within a stated scope.
+_Avoid_: Archive, ordinary pattern removal, hidden content
+
 **Sense Group**:
 A contiguous semantic processing span in sentence text.
 _Avoid_: Prosodic Chunk, reusable phrase

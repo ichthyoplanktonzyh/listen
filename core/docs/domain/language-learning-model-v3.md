@@ -159,11 +159,12 @@ Neither becomes a reusable lexical phrase merely because it spans words.
 
 One current lifecycle conflicts with the target durability boundary:
 hard-deleting a User Sentence Pattern cascades to its versions and Personal
-Expression attempts. This model does not silently redefine that behavior.
-Before core can promise retained learning history for deleted user assets, a
-separate decision must balance privacy deletion, asset ownership, and
-historical explainability, define migration and API semantics, and add an ADR
-if the resulting policy is hard to reverse.
+Expression attempts. ADR 0035 deprecates that legacy operation in favor of
+archive/restore. Archive preserves the pattern identity, immutable versions,
+uses, source snapshots, and historical explanations; it is not privacy
+erasure. The published DELETE operation must retain its documented legacy
+meaning during a compatibility window rather than silently becoming archive or
+erasure, then be removed through an explicit breaking contract migration.
 
 `LLTimelineDocument` is a versioned interchange envelope that can carry text
 segments and several Analysis Resources. It is not a separate Learning Object
@@ -361,7 +362,7 @@ same underlying fact should be deduplicated in presentation.
 | Performance | `PracticeAttempt.input`; `AttemptResponse`; personal-expression response; realtime learner turn | Embedded in corresponding attempt/turn schemas | Concrete facts |
 | Assistance | `AssistanceLevel`, `SpeakingAssistanceLevel`, `PersonalExpressionAssistance`, `ProductionAssistance`, task conditions | Corresponding enums/conditions | Multiple factual vocabularies |
 | Constructed Speaking Task | `SemanticTaskKind::L2Retelling` and `PatternProduction` with semantic attempt/response | Semantic task/attempt/response schemas | Production activity family |
-| Personal Expression Use | `PersonalExpressionAttempt`, optionally linked to its semantic Pattern Production attempt | `PersonalExpressionAttempt` and create request | Production user-owned use fact with the current hard-delete caveat above |
+| Personal Expression Use | `PersonalExpressionAttempt`, optionally linked to its semantic Pattern Production attempt | `PersonalExpressionAttempt` and create request | Production user-owned use fact; current DELETE cascades history, while ADR 0035 defines archive/restore as its replacement lifecycle |
 | Realtime Conversation / Conversation History | `RealtimeConversationSession`, ordered `RealtimeConversationTurn` | Corresponding realtime session/turn schemas | Production durable conversation facts |
 | Production Corpus | `ProductionCorpusDocument`, entry, hit, and summary read types | Corresponding production-corpus schemas | Production rebuildable read layer |
 | Observation | `LearningObservation`; legacy `LexicalObservation` | Both schemas | New append-only authority plus legacy context record |
@@ -430,6 +431,7 @@ same underlying fact should be deduplicated in presentation.
 | Legacy `LexicalObservation` | Latest-wins context record lacks channel, assistance, and append-only history | Diagnosis and all API consumers use `LearningObservation` or an equally precise replacement; bundle migration is defined |
 | `RecognitionEvidence` + `UpgradeSuggestion` pipeline | Duplicates evidence/proposal concepts beside `LearningObservation` + `ProjectionProposal` | Recognition thresholds and confirmation behavior are reproduced through qualified observations/proposals with history and compatibility tests |
 | Generic `/learning-resources` product vocabulary | Describes downloadable runtime assets as if they were learner-facing language objects | Consumers move to explicitly named runtime asset/capability contracts while install, checksum, license, failure, and removal authority remains available |
+| Legacy User Sentence Pattern `DELETE` | Cascades immutable versions and Personal Expression attempts, yet does not constitute complete privacy erasure | Archive/restore is released and consumed; the deprecated route is removed through an explicit breaking contract migration |
 | Legacy sentence `word_timings` beside versioned `WordTimeline` | Two representations of the same timing family invite drift and ambiguous authority | Every current consumer reads the selected versioned timeline or an explicit compatibility projection; migration and contract aliases are tested |
 | Individual timeline `/export` aliases that return the same representation as `GET` | Duplicate routes imply an export distinction that the contract does not provide | Consumers use one canonical retrieval route or export gains an explicitly different format/behavior with compatibility coverage |
 | User-facing “Listening Inbox”, “Hunting List”, and queue names as primary destinations | Internal lifecycle names expose queue management rather than learning intent | Learning Agenda provides deduplicated routing, availability, reason, and commands back to each owner |
@@ -479,10 +481,9 @@ explicit `listen-app` lock update.
 
 ## ADR assessment
 
-No ADR is added with this model. Its hard-to-reverse boundaries are already
-recorded by ADRs 0012, 0015–0017, 0020–0021, 0024–0025, and 0028. This document
-consolidates those accepted decisions, labels current gaps, and defines future
-contract seams; it does not choose a new irreversible implementation with a
-new trade-off. In particular, it does not decide the current Personal
-Expression hard-delete conflict or the future Construction occurrence
-authority lifecycle; either decision may require its own ADR when finalized.
+The original model added no ADR because its hard-to-reverse boundaries were
+already recorded by ADRs 0012, 0015–0017, 0020–0021, 0024–0025, and 0028. ADR
+0035 now resolves the Personal Expression hard-delete conflict by choosing
+archive/restore and separating future erasure. The Construction occurrence
+authority lifecycle remains undecided and may require its own ADR when
+finalized.
