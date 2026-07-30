@@ -147,8 +147,6 @@ void main() {
     'lib/screens/personal_expression_screen.dart',
     'lib/screens/vocabulary_screen.dart',
     'lib/widgets/coach/coach_dashboard_screen.dart',
-    'lib/widgets/flows/manual_review_flow.dart',
-    'lib/widgets/flows/media_import_flows.dart',
     'lib/widgets/panels/manual_timeline_review_dialog.dart',
     'lib/widgets/vocabulary/semantic_search_dialog.dart',
   };

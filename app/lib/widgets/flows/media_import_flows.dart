@@ -225,8 +225,9 @@ Future<void> openOnlineMediaFlow({
     onMediaSwitched();
   } catch (error) {
     playerController.setStatus(
-      '${l.text('statusOnlineMediaFailed')}: $error',
+      l.text('statusOnlineMediaFailed'),
       error: true,
+      failure: describeApiFailure(error),
     );
   }
 }
@@ -346,8 +347,9 @@ Future<void> importEmbeddedSubtitleFlow({
     await mediaSession.openSubtitlePath(extracted, secondary: choice.$2);
   } catch (error) {
     playerController.setStatus(
-      '${l.text('statusEmbeddedImportFailed')}: $error',
+      l.text('statusEmbeddedImportFailed'),
       error: true,
+      failure: describeApiFailure(error),
     );
   }
 }
