@@ -1796,6 +1796,41 @@ class AppLocalizations {
       'statusTrackResourcesPartlyUnavailable':
           'Some of this track\'s timeline resources could not be read',
       'statusAudioAnalysisFailed': 'Audio analysis failed',
+
+      // The diagnostics disclosure. Collapsed by default; it shows the
+      // reference id and the backend's own message, and never the raw body or
+      // the loopback URI the exception's toString appended.
+      'failureDetailsShow': 'Details',
+      'failureDetailsHide': 'Hide details',
+      'failureDetailsTitle': 'Failure details',
+      'failureReference': 'Reference',
+
+      // Playback (player_adapter → the status line).
+      'statusPositionPollingFailed': 'Lost track of the playback position',
+
+      // Settings panels.
+      'llmProvidersLoadFailed': 'Could not load the AI providers',
+      'llmProviderSaveFailed': 'Could not save this provider',
+      'llmProviderRemoveFailed': 'Could not remove this provider',
+      'realtimeProvidersLoadFailed': 'Could not load the speech providers',
+      'realtimeProviderSaveFailed': 'Could not save this provider',
+      'realtimeProviderRemoveFailed': 'Could not remove this provider',
+      'syntaxCapabilityLoadFailed': 'Could not read the sentence-analysis state',
+      'syntaxCapabilityActionFailed': 'That sentence-analysis action failed',
+      'syntaxTrackAnalysisFailed': 'Could not analyse this track',
+
+      // Semantic search (the vocabulary workbench's dialog).
+      'semanticSearchCapabilityUnavailable':
+          'Could not read the meaning-search state',
+      'semanticSearchInstallFailed': 'Could not install meaning search',
+      'semanticSearchRebuildFailed': 'Could not rebuild the meaning index',
+      'semanticSearchToggleFailed': 'Could not change meaning search',
+      'semanticSearchUninstallFailed': 'Could not uninstall meaning search',
+      'semanticSearchQueryFailed': 'That search could not be run',
+
+      // Phonetic analysis centre.
+      'phoneticAnalysisLoadFailed': 'Could not load the analysis centre',
+      'phoneticModelInstallFailed': 'Could not install this model',
     },
     'zh': {
       'reviewTitle': '声音复习',
@@ -3337,6 +3372,28 @@ class AppLocalizations {
       // ── Named failure states (#62) ─────────────────────────────────────
       'statusTrackResourcesPartlyUnavailable': '这条字幕的部分时间轴资源读取失败',
       'statusAudioAnalysisFailed': '音频分析失败',
+      'failureDetailsShow': '诊断详情',
+      'failureDetailsHide': '收起详情',
+      'failureDetailsTitle': '失败诊断',
+      'failureReference': '诊断编号',
+      'statusPositionPollingFailed': '播放进度读取中断',
+      'llmProvidersLoadFailed': '无法加载 AI 供应商',
+      'llmProviderSaveFailed': '保存该供应商失败',
+      'llmProviderRemoveFailed': '移除该供应商失败',
+      'realtimeProvidersLoadFailed': '无法加载语音供应商',
+      'realtimeProviderSaveFailed': '保存该供应商失败',
+      'realtimeProviderRemoveFailed': '移除该供应商失败',
+      'syntaxCapabilityLoadFailed': '无法读取句法分析状态',
+      'syntaxCapabilityActionFailed': '该句法分析操作失败',
+      'syntaxTrackAnalysisFailed': '无法分析这条字幕',
+      'semanticSearchCapabilityUnavailable': '无法读取语义检索状态',
+      'semanticSearchInstallFailed': '安装语义检索失败',
+      'semanticSearchRebuildFailed': '重建语义索引失败',
+      'semanticSearchToggleFailed': '切换语义检索失败',
+      'semanticSearchUninstallFailed': '卸载语义检索失败',
+      'semanticSearchQueryFailed': '本次检索没能执行',
+      'phoneticAnalysisLoadFailed': '无法加载分析中心',
+      'phoneticModelInstallFailed': '安装该模型失败',
     },
   };
 }
