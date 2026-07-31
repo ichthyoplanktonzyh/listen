@@ -119,7 +119,8 @@ not a shared branch or moving core `main`.
 
 - App composition: `lib/main.dart`
 - Models and typed wire/domain views: `lib/models/`
-- State machines and lifecycle: `lib/controllers/`
+- State machines, view models and lifecycle: `lib/controllers/`
+- Per-surface data boundaries over `LocalApi`: `lib/data/repositories/`
 - API transport and endpoint adapters: `lib/services/api_service.dart`,
   `lib/services/api/`
 - Global state composition: `lib/state/`

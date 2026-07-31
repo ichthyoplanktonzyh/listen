@@ -4,7 +4,8 @@
 |---|---|
 | `lib/main.dart` | composition root and desktop shell |
 | `lib/models` | typed client/domain views and wire-compatible parsing |
-| `lib/controllers` | state machines, coordinators and lifecycle |
+| `lib/controllers` | state machines, coordinators, view models and lifecycle |
+| `lib/data/repositories` | per-surface data boundaries over `LocalApi` |
 | `lib/services/api_service.dart` | LocalApi transport/process boundary |
 | `lib/services/api` | endpoint groups as Dart part files |
 | `lib/state` | shared store/builder composition |
