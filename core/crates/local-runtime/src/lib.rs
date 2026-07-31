@@ -8,6 +8,7 @@ pub mod events;
 
 mod download;
 mod forced_align;
+mod learning_preparation;
 mod learning_resources;
 mod phonetic_analysis;
 mod process;
@@ -24,6 +25,7 @@ pub use download::{
     ArtifactDownloader, DownloadProgress, FakeArtifactDownloader, ReqwestArtifactDownloader,
 };
 pub use forced_align::{SidecarForcedAlignProvider, resolved_forced_align_provider};
+pub use learning_preparation::LearningPreparationCoordinator;
 pub use learning_resources::{LearningResourceError, LearningResourceManager};
 pub use phonetic_analysis::{CreatePhoneticJobRequest, PhoneticAnalysisCoordinator, finding_id};
 pub use process::{

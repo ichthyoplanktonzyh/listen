@@ -20,6 +20,15 @@ python3 -m unittest scripts/test_release_artifacts.py
 - semantic-embedding lifecycle tests cover restart cleanup, last-good
   retention, persisted candidate-failure provenance, final-path reload, and
   concurrent-upgrade rejection without downloading a live model;
+- scripted foundation-preparation execution tests cover the exact three-resource
+  plan, WordTimeline-to-Chunk dependency, independent SenseGroup execution, and
+  completion without any SoundLine or phoneme-analysis job;
+- preparation state tests cover cancellation CAS conflicts, input replacement,
+  restart/retry preservation, derived A/B readiness, invalid-artifact rebuild,
+  and stable plan identity after artifacts appear;
+- timeline persistence tests cover atomic activate-if-absent for WordTimeline,
+  ChunkTimeline, and SenseGroup, including preservation of an existing active
+  user selection and the WordTimeline legacy-timing invariant;
 - local realtime contract fixtures for snapshot transcripts, chunk merging,
   loopback/keyless policy, plus sidecar pool-readiness and process reaping;
 - OpenAPI method+path parity and structural validation;

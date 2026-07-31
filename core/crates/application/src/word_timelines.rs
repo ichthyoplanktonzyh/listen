@@ -142,6 +142,22 @@ fn select_rhythm_source_word_timeline_id(
         .max_by_key(|timeline| timeline.updated_at_ms)
         .map(|timeline| timeline.id.clone())
         .or_else(|| active_word_timeline_id.cloned())
+        .or_else(|| {
+            word_timelines
+                .iter()
+                .filter(|timeline| {
+                    timeline.status != TimelineStatus::Archived
+                        && word_timeline_line(timeline) == Some("text")
+                        && timeline
+                            .metrics_json
+                            .as_object()
+                            .get("preparation_input_fingerprint")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some()
+                })
+                .max_by_key(|timeline| timeline.updated_at_ms)
+                .map(|timeline| timeline.id.clone())
+        })
 }
 
 fn prepare_active_selection<T, I: Eq>(
@@ -498,6 +514,83 @@ impl MediaAnalysisUseCases {
         };
         self.reindex_track_corpus(&timeline.track_id)?;
         Ok(timeline)
+    }
+
+    /// Materializes the pronunciation timing cache as the active text-line
+    /// timeline used by foundation preparation.
+    pub fn create_foundation_word_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+        preparation_input_fingerprint: &str,
+    ) -> Result<WordTimeline, ApplicationError> {
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        if let Some(existing) = self
+            .word_timelines
+            .list_word_timelines(track_id)?
+            .into_iter()
+            .find(|timeline| {
+                timeline.track_id == track.id
+                    && timeline.media_id == track.media_id
+                    && timeline.status != TimelineStatus::Archived
+                    && !timeline.words.is_empty()
+                    && timeline
+                        .metrics_json
+                        .as_object()
+                        .get("line")
+                        .and_then(serde_json::Value::as_str)
+                        == Some("text")
+                    && timeline
+                        .metrics_json
+                        .as_object()
+                        .get("preparation_input_fingerprint")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(preparation_input_fingerprint)
+            })
+        {
+            let active = self
+                .word_timelines
+                .activate_word_timeline_if_absent(&existing.id)?;
+            if active.id == existing.id {
+                self.reindex_track_corpus(&active.track_id)?;
+                return Ok(active);
+            }
+            return Ok(existing);
+        }
+        let mut words = Vec::new();
+        for sentence in &track.sentences {
+            words.extend(self.pronunciation().word_timings(&sentence.id)?);
+        }
+        let timeline = self.create_word_timeline(
+            track_id,
+            crate::CreateWordTimeline {
+                algorithm_id: Some("foundation-pronunciation-timing".into()),
+                algorithm_version: Some("v1".into()),
+                config_hash: Some(preparation_input_fingerprint.into()),
+                parent_timeline_id: None,
+                created_by: Some(TimelineCreator::Algorithm),
+                status: Some(TimelineStatus::Candidate),
+                metrics_json: Some(
+                    serde_json::json!({
+                        "line": "text",
+                        "preparation_input_fingerprint": preparation_input_fingerprint,
+                    })
+                    .into(),
+                ),
+                words,
+            },
+        )?;
+        let active = self
+            .word_timelines
+            .activate_word_timeline_if_absent(&timeline.id)?;
+        if active.id == timeline.id {
+            self.reindex_track_corpus(&active.track_id)?;
+            Ok(active)
+        } else {
+            Ok(timeline)
+        }
     }
 
     pub fn activate_word_timeline(
@@ -933,6 +1026,14 @@ impl MediaAnalysisUseCases {
             "active_word_timeline_fallback"
         } else if word_timeline_line(timeline) == Some("sound") {
             "sound_line_word_timeline"
+        } else if timeline
+            .metrics_json
+            .as_object()
+            .get("preparation_input_fingerprint")
+            .and_then(serde_json::Value::as_str)
+            .is_some()
+        {
+            "foundation_word_timeline"
         } else {
             "acoustic_cue_word_timeline"
         };

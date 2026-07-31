@@ -7,8 +7,69 @@ use crate::{
     TimingSource, WordTimeline, WordTiming, build_word_timeline,
     chunk_partition_config_for_track_source, now_ms, timing_priority,
 };
+use sha2::{Digest, Sha256};
+
+pub fn foundation_chunk_policy() -> (&'static str, &'static str, &'static str) {
+    (
+        speech_analysis::chunking::PARTITIONER_ID,
+        speech_analysis::chunking::PARTITIONER_VERSION,
+        "acoustic_semantic_v1",
+    )
+}
 
 impl MediaAnalysisUseCases {
+    /// Canonical subtitle snapshot for pronunciation/word-timing artifacts.
+    ///
+    /// Deliberately excludes phrase-provider output: lexical updates must not
+    /// invalidate a word timeline whose real inputs are unchanged.
+    pub fn foundation_text_input_fingerprint(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<String, ApplicationError> {
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        canonical_foundation_input_fingerprint(&track, None)
+    }
+
+    /// Canonical subtitle + phrase-analysis snapshot for chunk and rule
+    /// artifacts. Provider output is sorted before hashing so repository
+    /// iteration order cannot create false cache misses.
+    pub fn foundation_analysis_input_fingerprint(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<String, ApplicationError> {
+        let track = self
+            .subtitle_tracks
+            .get_track(track_id)?
+            .ok_or(ApplicationError::NotFound("subtitle track"))?;
+        let mut phrase_candidates = Vec::with_capacity(track.sentences.len());
+        for sentence in &track.sentences {
+            let mut phrases = self.lexical_learning().phrase_candidates(&sentence.id)?;
+            phrases.sort_by(|left, right| {
+                (
+                    left.token_start,
+                    left.token_end,
+                    &left.normalized_form,
+                    &left.canonical_form,
+                    &left.display_form,
+                    &left.reason,
+                )
+                    .cmp(&(
+                        right.token_start,
+                        right.token_end,
+                        &right.normalized_form,
+                        &right.canonical_form,
+                        &right.display_form,
+                        &right.reason,
+                    ))
+            });
+            phrase_candidates.push(phrases);
+        }
+        canonical_foundation_input_fingerprint(&track, Some(&phrase_candidates))
+    }
+
     pub fn list_chunk_timelines(
         &self,
         track_id: &SubtitleTrackId,
@@ -36,6 +97,29 @@ impl MediaAnalysisUseCases {
         track_id: &SubtitleTrackId,
         requested_status: Option<TimelineStatus>,
     ) -> Result<ChunkTimeline, ApplicationError> {
+        let word_timeline = self
+            .word_timelines
+            .active_word_timeline(track_id)?
+            .ok_or(ApplicationError::NotFound("active word timeline"))?;
+        self.generate_chunk_timeline_from_word_timeline(
+            track_id,
+            &word_timeline.id,
+            requested_status,
+            None,
+        )
+    }
+
+    /// Builds a chunk family member from an exact word-timeline snapshot.
+    ///
+    /// Foundation preparation uses this seam so the chunk snapshot has an
+    /// explicit word-timeline parent.
+    pub fn generate_chunk_timeline_from_word_timeline(
+        &self,
+        track_id: &SubtitleTrackId,
+        word_timeline_id: &domain::WordTimelineId,
+        requested_status: Option<TimelineStatus>,
+        preparation_input_fingerprint: Option<&str>,
+    ) -> Result<ChunkTimeline, ApplicationError> {
         let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
         let track = self
             .subtitle_tracks
@@ -43,8 +127,15 @@ impl MediaAnalysisUseCases {
             .ok_or(ApplicationError::NotFound("subtitle track"))?;
         let word_timeline = self
             .word_timelines
-            .active_word_timeline(track_id)?
-            .ok_or(ApplicationError::NotFound("active word timeline"))?;
+            .get_word_timeline(word_timeline_id)?
+            .ok_or(ApplicationError::NotFound("word timeline"))?;
+        if word_timeline.track_id != track.id
+            || word_timeline.media_id != track.media_id
+            || word_timeline.status == TimelineStatus::Archived
+            || word_timeline.words.is_empty()
+        {
+            return Err(ApplicationError::Validation("chunk word timeline source"));
+        }
         let mut grouped = std::collections::HashMap::<SubtitleSentenceId, Vec<WordTiming>>::new();
         for word in &word_timeline.words {
             grouped
@@ -89,16 +180,30 @@ impl MediaAnalysisUseCases {
             ChunkTimelinePrecision::Precise
         };
         let now = now_ms();
-        let provider_id = speech_analysis::chunking::PARTITIONER_ID.to_owned();
-        let provider_version = speech_analysis::chunking::PARTITIONER_VERSION.to_owned();
-        let algorithm = "acoustic_semantic_v1".to_owned();
-        let fingerprint = format!(
+        let (provider_id, provider_version, algorithm) = foundation_chunk_policy();
+        let provider_id = provider_id.to_owned();
+        let provider_version = provider_version.to_owned();
+        let algorithm = algorithm.to_owned();
+        let mut fingerprint = format!(
             "{}:{}:{}:{}",
             track.id.as_str(),
             word_timeline.id.as_str(),
             provider_version,
             serde_json::to_string(&chunks).unwrap_or_default()
         );
+        if let Some(preparation_input_fingerprint) = preparation_input_fingerprint {
+            fingerprint.push_str(":preparation:");
+            fingerprint.push_str(preparation_input_fingerprint);
+        }
+        let mut metrics = serde_json::json!({
+            "parent_word_timeline_id": word_timeline.id.as_str(),
+            "word_timing_sources": timing_sources.iter().map(|source| serde_json::json!(source)).collect::<Vec<_>>(),
+            "partitioner_config": config,
+        });
+        if let Some(fingerprint) = preparation_input_fingerprint {
+            metrics["preparation_input_fingerprint"] =
+                serde_json::Value::String(fingerprint.into());
+        }
         let mut timeline = ChunkTimeline {
             id: ChunkTimelineId::from_fingerprint("chunk-timeline", &fingerprint),
             track_id: track.id.clone(),
@@ -110,12 +215,7 @@ impl MediaAnalysisUseCases {
             precision,
             created_by: TimelineCreator::Algorithm,
             status: requested_status,
-            metrics_json: serde_json::json!({
-                "parent_word_timeline_id": word_timeline.id.as_str(),
-                "word_timing_sources": timing_sources.iter().map(|source| serde_json::json!(source)).collect::<Vec<_>>(),
-                "partitioner_config": config,
-            })
-            .into(),
+            metrics_json: metrics.into(),
             chunks,
             created_at_ms: now,
             updated_at_ms: now,
@@ -124,7 +224,17 @@ impl MediaAnalysisUseCases {
             timeline.status = TimelineStatus::Candidate;
         }
         let timeline = self.chunk_timelines.save_chunk_timeline(&timeline)?;
-        if requested_status == TimelineStatus::Active {
+        if preparation_input_fingerprint.is_some() {
+            let active = self
+                .chunk_timelines
+                .activate_chunk_timeline_if_absent(&timeline.id)?;
+            if active.id == timeline.id {
+                self.reindex_track_corpus(&active.track_id)?;
+                Ok(active)
+            } else {
+                Ok(timeline)
+            }
+        } else if requested_status == TimelineStatus::Active {
             let timeline = self.chunk_timelines.activate_chunk_timeline(&timeline.id)?;
             self.reindex_track_corpus(&timeline.track_id)?;
             Ok(timeline)
@@ -337,6 +447,43 @@ impl MediaAnalysisUseCases {
     }
 }
 
+fn canonical_foundation_input_fingerprint(
+    track: &SubtitleTrack,
+    phrase_candidates: Option<&[Vec<domain::PhraseCandidate>]>,
+) -> Result<String, ApplicationError> {
+    let sentences = track
+        .sentences
+        .iter()
+        .enumerate()
+        .map(|(index, sentence)| {
+            let phrases = phrase_candidates
+                .and_then(|all| all.get(index))
+                .cloned()
+                .unwrap_or_default();
+            serde_json::json!({
+                "index": sentence.index,
+                "start_ms": sentence.start,
+                "end_ms": sentence.end,
+                "original_text": sentence.original_text,
+                "display_text": sentence.display_text,
+                "tokens": sentence.tokens,
+                "phrase_candidates": phrases,
+            })
+        })
+        .collect::<Vec<_>>();
+    let encoded = serde_json::to_vec(&serde_json::json!({
+        "version": if phrase_candidates.is_some() {
+            "foundation-analysis-input-v1"
+        } else {
+            "foundation-text-input-v1"
+        },
+        "language": track.language,
+        "sentences": sentences,
+    }))
+    .map_err(|error| ApplicationError::Repository(error.to_string()))?;
+    Ok(hex::encode(Sha256::digest(encoded)))
+}
+
 fn sentence_chunk_partition_from_analysis(
     value: speech_analysis::chunking::SentenceChunkPartition,
 ) -> SentenceChunkPartition {
@@ -533,5 +680,87 @@ fn chunk_boundary_source(
         speech_analysis::chunking::ChunkBoundarySource::LengthLimit => {
             ChunkBoundarySource::LengthLimit
         }
+    }
+}
+
+#[cfg(test)]
+mod foundation_fingerprint_tests {
+    use super::*;
+    use domain::{
+        LanguageCode, MediaId, PhraseCandidate, SubtitleSentenceId, SubtitleToken, SubtitleTrackId,
+        TimeMs,
+    };
+
+    fn track(token_text: &str) -> SubtitleTrack {
+        SubtitleTrack {
+            id: SubtitleTrackId::parse("track-a").unwrap(),
+            media_id: MediaId::parse("media-a").unwrap(),
+            fingerprint: "transport-fingerprint".into(),
+            language: Some(LanguageCode::parse("en").unwrap()),
+            source: "test".into(),
+            status: domain::SubtitleTrackStatus::Available,
+            sentences: vec![SubtitleSentence {
+                id: SubtitleSentenceId::parse("sentence-a").unwrap(),
+                index: 0,
+                start: TimeMs::new(100),
+                end: TimeMs::new(500),
+                original_text: token_text.into(),
+                display_text: token_text.into(),
+                tokens: vec![SubtitleToken {
+                    index: 0,
+                    kind: SubtitleTokenKind::Word,
+                    text: token_text.into(),
+                    normalized: Some(token_text.to_lowercase()),
+                    start_char: 0,
+                    end_char: token_text.len() as u32,
+                }],
+            }],
+        }
+    }
+
+    fn phrase(display: &str) -> PhraseCandidate {
+        PhraseCandidate {
+            canonical_form: display.to_lowercase(),
+            display_form: display.into(),
+            normalized_form: display.to_lowercase(),
+            token_start: 0,
+            token_end: 1,
+            reason: "test-provider".into(),
+        }
+    }
+
+    #[test]
+    fn token_changes_invalidate_text_and_analysis_but_phrase_changes_only_analysis() {
+        let original = track("Hello");
+        let changed_token = track("Hallo");
+        let phrase_a = vec![vec![phrase("Hello")]];
+        let phrase_b = vec![vec![phrase("Hello there")]];
+
+        let text = canonical_foundation_input_fingerprint(&original, None).unwrap();
+        let text_after_phrase_update =
+            canonical_foundation_input_fingerprint(&original, None).unwrap();
+        let changed_text = canonical_foundation_input_fingerprint(&changed_token, None).unwrap();
+        let analysis_a =
+            canonical_foundation_input_fingerprint(&original, Some(&phrase_a)).unwrap();
+        let analysis_b =
+            canonical_foundation_input_fingerprint(&original, Some(&phrase_b)).unwrap();
+
+        assert_eq!(text, text_after_phrase_update);
+        assert_ne!(text, changed_text);
+        assert_ne!(analysis_a, analysis_b);
+    }
+
+    #[test]
+    fn opaque_track_and_media_identity_do_not_change_the_real_input_fingerprint() {
+        let left = track("Hello");
+        let mut right = left.clone();
+        right.id = SubtitleTrackId::parse("track-b").unwrap();
+        right.media_id = MediaId::parse("media-b").unwrap();
+        right.fingerprint = "another-transport-fingerprint".into();
+
+        assert_eq!(
+            canonical_foundation_input_fingerprint(&left, None).unwrap(),
+            canonical_foundation_input_fingerprint(&right, None).unwrap()
+        );
     }
 }

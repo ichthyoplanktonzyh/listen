@@ -1,6 +1,6 @@
 use application::{ApplicationError, ChunkTimelineRepository};
 use domain::{ChunkTimeline, ChunkTimelineId, SubtitleTrackId, TimelineStatus, WordTimelineId};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
 
@@ -160,6 +160,64 @@ impl ChunkTimelineRepository for SqliteRepository {
 
         selected.status = TimelineStatus::Active;
         selected.updated_at_ms = now;
+        tx.execute(
+            "UPDATE chunk_timeline_runs
+             SET status=?2,timeline_json=?3,updated_at_ms=?4 WHERE id=?1",
+            params![
+                selected.id.as_str(),
+                json(&selected.status)?,
+                json(&selected)?,
+                selected.updated_at_ms
+            ],
+        )
+        .map_err(repo)?;
+        tx.commit().map_err(repo)?;
+        Ok(selected)
+    }
+
+    fn activate_chunk_timeline_if_absent(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError> {
+        let mut conn = self.connection.lock();
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(repo)?;
+        let selected_json = tx
+            .query_row(
+                "SELECT timeline_json FROM chunk_timeline_runs WHERE id=?1",
+                [id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .ok_or(ApplicationError::NotFound("chunk timeline"))?;
+        let mut selected: ChunkTimeline = from_json(&selected_json).map_err(repo)?;
+        if selected.status == TimelineStatus::Archived {
+            return Err(ApplicationError::Validation("archived chunk timeline"));
+        }
+        let active = tx
+            .query_row(
+                "SELECT timeline_json FROM chunk_timeline_runs
+                 WHERE track_id=?1 AND status=?2
+                 ORDER BY updated_at_ms DESC LIMIT 1",
+                params![selected.track_id.as_str(), json(&TimelineStatus::Active)?],
+                |row| from_json::<ChunkTimeline>(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)?;
+        if let Some(active) = active {
+            tx.commit().map_err(repo)?;
+            return Ok(active);
+        }
+        if selected.status != TimelineStatus::Candidate {
+            return Err(ApplicationError::Validation(
+                "chunk timeline activation candidate",
+            ));
+        }
+
+        selected.status = TimelineStatus::Active;
+        selected.updated_at_ms = application::now_ms();
         tx.execute(
             "UPDATE chunk_timeline_runs
              SET status=?2,timeline_json=?3,updated_at_ms=?4 WHERE id=?1",

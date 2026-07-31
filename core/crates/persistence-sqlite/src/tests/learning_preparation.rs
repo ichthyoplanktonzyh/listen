@@ -2,12 +2,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use application::{
-    CreateLearningPreparationRun, ExactAudioTrack, FoundationAssetAvailability, FoundationInputs,
-    FoundationPreparationInspector, FoundationPreparationIntent, FoundationPreparationRequest,
-    FoundationPreparationTarget, FoundationSourceInspection, LearningPreparationRunRepository,
-    LearningPreparationRunStatus, LearningPreparationRunTransition, LearningPreparationUseCases,
-    PreparationConsent, PreparationReadiness, PreparationStepState, PrepareFoundationResult,
-    ReusableFoundationArtifact, SelectionRequiredReason, WordTimelinePrecision,
+    CreateLearningPreparationRun, FoundationAssetAvailability, FoundationDerivedAvailability,
+    FoundationInputs, FoundationPreparationInspector, FoundationPreparationIntent,
+    FoundationPreparationRequest, FoundationPreparationTarget, FoundationSourceInspection,
+    LearningPreparationRunRepository, LearningPreparationRunStatus,
+    LearningPreparationRunTransition, LearningPreparationUseCases, PreparationReadiness,
+    PreparationStepState, PrepareFoundationResult, ReusableFoundationArtifact,
+    SelectionRequiredReason, WordTimelinePrecision,
 };
 use domain::{MediaId, SubtitleTrackId};
 
@@ -16,6 +17,84 @@ use crate::SqliteRepository;
 struct ScriptedFoundationAdapter {
     inspections: AtomicUsize,
     result: FoundationSourceInspection,
+}
+
+#[derive(Default)]
+struct ChangingFoundationAdapter {
+    inspections: AtomicUsize,
+}
+
+struct ConflictOncePreparationRepository {
+    inner: Arc<SqliteRepository>,
+    reject_next_transition: std::sync::atomic::AtomicBool,
+}
+
+impl LearningPreparationRunRepository for ConflictOncePreparationRepository {
+    fn create_active(
+        &self,
+        run: &application::LearningPreparationRun,
+    ) -> Result<CreateLearningPreparationRun, application::ApplicationError> {
+        self.inner.create_active(run)
+    }
+
+    fn get(
+        &self,
+        id: &application::LearningPreparationRunId,
+    ) -> Result<Option<application::LearningPreparationRun>, application::ApplicationError> {
+        self.inner.get(id)
+    }
+
+    fn transition(
+        &self,
+        expected_revision: u64,
+        run: &application::LearningPreparationRun,
+    ) -> Result<LearningPreparationRunTransition, application::ApplicationError> {
+        if self.reject_next_transition.swap(false, Ordering::SeqCst) {
+            let mut concurrent = self.inner.get(&run.id)?.unwrap();
+            let concurrent_expected = concurrent.revision;
+            concurrent.revision += 1;
+            concurrent.updated_at_ms += 1;
+            assert!(matches!(
+                self.inner.transition(concurrent_expected, &concurrent)?,
+                LearningPreparationRunTransition::Applied(_)
+            ));
+            return Ok(LearningPreparationRunTransition::Rejected(concurrent));
+        }
+        self.inner.transition(expected_revision, run)
+    }
+
+    fn recover_active(
+        &self,
+        now_ms: u64,
+    ) -> Result<Vec<application::LearningPreparationRun>, application::ApplicationError> {
+        self.inner.recover_active(now_ms)
+    }
+}
+
+impl FoundationPreparationInspector for ChangingFoundationAdapter {
+    fn inspect(
+        &self,
+        _target: &FoundationPreparationTarget,
+    ) -> Result<FoundationSourceInspection, application::ApplicationError> {
+        let generated = self.inspections.fetch_add(1, Ordering::SeqCst) > 0;
+        let availability = |name: &str| {
+            if generated {
+                FoundationAssetAvailability::Reusable(ReusableFoundationArtifact {
+                    artifact_ref: format!("{name}-ready"),
+                    input_fingerprint: format!("{name}-fp"),
+                })
+            } else {
+                FoundationAssetAvailability::Buildable
+            }
+        };
+        Ok(FoundationSourceInspection::Selected(FoundationInputs {
+            word_timeline: availability("word"),
+            word_timeline_precision: WordTimelinePrecision::Estimated,
+            chunk_timeline: availability("chunk"),
+            sense_group: availability("sense"),
+            audible_structure: FoundationDerivedAvailability::Available,
+        }))
+    }
 }
 
 impl ScriptedFoundationAdapter {
@@ -28,15 +107,9 @@ impl ScriptedFoundationAdapter {
                     input_fingerprint: "word-fp".into(),
                 }),
                 word_timeline_precision: WordTimelinePrecision::Exact,
-                sound_line: FoundationAssetAvailability::Buildable {
-                    requires_download: true,
-                },
-                chunk_timeline: FoundationAssetAvailability::Buildable {
-                    requires_download: false,
-                },
-                rule_sense_group: FoundationAssetAvailability::Buildable {
-                    requires_download: false,
-                },
+                chunk_timeline: FoundationAssetAvailability::Buildable,
+                sense_group: FoundationAssetAvailability::Buildable,
+                audible_structure: FoundationDerivedAvailability::Available,
             }),
         }
     }
@@ -58,17 +131,12 @@ fn target(media_fingerprint: &str) -> FoundationPreparationTarget {
         media_fingerprint: media_fingerprint.into(),
         subtitle_track_id: SubtitleTrackId::parse("track").unwrap(),
         subtitle_fingerprint: "subtitle-fp".into(),
-        audio_track: ExactAudioTrack {
-            stream_index: 0,
-            fingerprint: "audio-fp".into(),
-        },
     }
 }
 
-fn request(allow_downloads: bool) -> FoundationPreparationRequest {
+fn request() -> FoundationPreparationRequest {
     FoundationPreparationRequest {
         intent: FoundationPreparationIntent::RecommendedFoundation,
-        consent: PreparationConsent { allow_downloads },
     }
 }
 
@@ -78,10 +146,10 @@ fn prepared(
     now_ms: u64,
 ) -> application::LearningPreparationRun {
     match use_cases
-        .prepare(target(media_fingerprint), request(false), now_ms)
+        .prepare(target(media_fingerprint), request(), now_ms)
         .unwrap()
     {
-        PrepareFoundationResult::Run(run) => *run,
+        PrepareFoundationResult::Run(run) | PrepareFoundationResult::Replaced { run, .. } => *run,
         other => panic!("expected run, got {other:?}"),
     }
 }
@@ -120,6 +188,54 @@ fn sqlite_is_single_flight_authority_for_concurrent_prepare() {
 }
 
 #[test]
+fn generated_artifacts_do_not_change_the_active_run_plan_identity() {
+    let repository = Arc::new(SqliteRepository::in_memory().unwrap());
+    let use_cases = LearningPreparationUseCases::new(
+        repository.clone(),
+        Arc::new(ChangingFoundationAdapter::default()),
+    );
+
+    let before_generation = prepared(&use_cases, "media-fp", 100);
+    let after_generation = prepared(&use_cases, "media-fp", 200);
+
+    assert_eq!(after_generation.id, before_generation.id);
+    assert_eq!(
+        repository
+            .get(&before_generation.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        LearningPreparationRunStatus::Queued
+    );
+}
+
+#[test]
+fn cancellation_retries_revision_conflicts_until_the_intent_is_durable() {
+    let inner = Arc::new(SqliteRepository::in_memory().unwrap());
+    let repository = Arc::new(ConflictOncePreparationRepository {
+        inner: inner.clone(),
+        reject_next_transition: std::sync::atomic::AtomicBool::new(false),
+    });
+    let use_cases = LearningPreparationUseCases::new(
+        repository.clone(),
+        Arc::new(ScriptedFoundationAdapter::selected()),
+    );
+    let run = prepared(&use_cases, "media-fp", 100);
+    repository
+        .reject_next_transition
+        .store(true, Ordering::SeqCst);
+
+    let cancelling = use_cases.cancel(&run.id, 200).unwrap();
+
+    assert_eq!(cancelling.status, LearningPreparationRunStatus::Cancelling);
+    assert_eq!(
+        inner.get(&run.id).unwrap().unwrap().status,
+        LearningPreparationRunStatus::Cancelling
+    );
+    assert!(cancelling.revision >= 2);
+}
+
+#[test]
 fn changed_input_invalidates_active_run_before_creating_replacement() {
     let repository = Arc::new(SqliteRepository::in_memory().unwrap());
     let use_cases = LearningPreparationUseCases::new(
@@ -141,32 +257,21 @@ fn changed_input_invalidates_active_run_before_creating_replacement() {
 }
 
 #[test]
-fn consent_and_selection_are_resolved_before_any_child_work_is_planned() {
-    let repository = Arc::new(SqliteRepository::in_memory().unwrap());
-    let selected = Arc::new(ScriptedFoundationAdapter::selected());
-    let selected_use_cases = LearningPreparationUseCases::new(repository.clone(), selected.clone());
-    let run = prepared(&selected_use_cases, "media-fp", 100);
-    assert_eq!(
-        run.plan.sound_line.state,
-        PreparationStepState::Skipped {
-            reason: "download_consent_required".into()
-        }
-    );
-
+fn selection_is_resolved_before_any_foundation_work_is_planned() {
     let ambiguous_repository = Arc::new(SqliteRepository::in_memory().unwrap());
     let ambiguous = Arc::new(ScriptedFoundationAdapter {
         inspections: AtomicUsize::new(0),
         result: FoundationSourceInspection::SelectionRequired {
-            reason: SelectionRequiredReason::AudioTrackAmbiguous,
+            reason: SelectionRequiredReason::SubtitleTrackAmbiguous,
         },
     });
     let ambiguous_use_cases =
         LearningPreparationUseCases::new(ambiguous_repository.clone(), ambiguous.clone());
     assert_eq!(
         ambiguous_use_cases
-            .prepare(target("media-fp"), request(true), 100)
+            .prepare(target("media-fp"), request(), 100)
             .unwrap(),
-        PrepareFoundationResult::SelectionRequired(SelectionRequiredReason::AudioTrackAmbiguous)
+        PrepareFoundationResult::SelectionRequired(SelectionRequiredReason::SubtitleTrackAmbiguous)
     );
     let count: u64 = ambiguous_repository
         .connection
@@ -182,7 +287,7 @@ fn consent_and_selection_are_resolved_before_any_child_work_is_planned() {
 }
 
 #[test]
-fn partial_optional_failure_does_not_promote_real_listening_flow_or_fail_parent() {
+fn derived_audible_structure_is_not_a_foundation_step() {
     let repository = Arc::new(SqliteRepository::in_memory().unwrap());
     let use_cases = LearningPreparationUseCases::new(
         repository.clone(),
@@ -191,26 +296,28 @@ fn partial_optional_failure_does_not_promote_real_listening_flow_or_fail_parent(
     let mut run = prepared(&use_cases, "media-fp", 100);
     let expected = run.revision;
     run.start(110).unwrap();
-    run.plan.sound_line.state = PreparationStepState::Failed {
-        reason: "sound-line model failed".into(),
-    };
     run.plan.chunk_timeline.state = PreparationStepState::Ready {
         artifact_ref: "chunk-from-word".into(),
         input_fingerprint: "chunk-fp".into(),
         reused: false,
     };
-    run.plan.rule_sense_group.state = PreparationStepState::Ready {
+    run.plan.sense_group.state = PreparationStepState::Ready {
         artifact_ref: "sense-rule".into(),
         input_fingerprint: "sense-fp".into(),
         reused: false,
     };
+    run.plan.audible_structure = FoundationDerivedAvailability::Unavailable {
+        reason: "unsupported_language".into(),
+    };
     run.settle(120);
 
     assert_eq!(run.status, LearningPreparationRunStatus::Completed);
-    assert!(!matches!(
-        run.plan.sound_line.state,
-        PreparationStepState::Ready { .. }
-    ));
+    assert_eq!(
+        run.readiness().citation_structure,
+        PreparationReadiness::Unavailable {
+            reason: "unsupported_language".into()
+        }
+    );
     assert!(matches!(
         repository.transition(expected, &run).unwrap(),
         LearningPreparationRunTransition::Applied(_)
@@ -225,21 +332,22 @@ fn typed_state_machine_enforces_foundation_dependencies() {
         Arc::new(ScriptedFoundationAdapter::selected()),
     );
     let mut run = match use_cases
-        .prepare(target("media-fp"), request(true), 100)
+        .prepare(target("media-fp"), request(), 100)
         .unwrap()
     {
         PrepareFoundationResult::Run(run) => run,
         other => panic!("expected run, got {other:?}"),
     };
     run.start(110).unwrap();
+    run.plan.word_timeline.state = PreparationStepState::Pending;
 
     assert!(run.begin_chunk_timeline(120).is_err());
-    run.begin_rule_sense_group(121).unwrap();
-    run.begin_sound_line("sound-line-job", 122).unwrap();
-    run.complete_sound_line(
+    run.begin_sense_group(121).unwrap();
+    run.begin_word_timeline(122).unwrap();
+    run.complete_word_timeline(
         ReusableFoundationArtifact {
-            artifact_ref: "sound-line".into(),
-            input_fingerprint: "sound-fp".into(),
+            artifact_ref: "word".into(),
+            input_fingerprint: "word-fp".into(),
         },
         123,
     )
@@ -248,7 +356,7 @@ fn typed_state_machine_enforces_foundation_dependencies() {
 }
 
 #[test]
-fn estimated_words_support_following_but_never_real_listening_flow() {
+fn audible_structure_readiness_is_derived_from_word_and_language_capability() {
     let repository = Arc::new(SqliteRepository::in_memory().unwrap());
     let use_cases = LearningPreparationUseCases::new(
         repository,
@@ -256,23 +364,26 @@ fn estimated_words_support_following_but_never_real_listening_flow() {
     );
     let mut run = prepared(&use_cases, "media-fp", 100);
     run.plan.word_timeline.precision = WordTimelinePrecision::Estimated;
-    run.plan.sound_line.state = PreparationStepState::Ready {
-        artifact_ref: "sound-line".into(),
-        input_fingerprint: "sound-fp".into(),
-        reused: false,
-    };
-    run.plan.chunk_timeline.state = PreparationStepState::Ready {
-        artifact_ref: "chunk".into(),
-        input_fingerprint: "chunk-fp".into(),
-        reused: false,
-    };
 
     let readiness = run.readiness();
     assert_eq!(readiness.word_following, PreparationReadiness::Ready);
+    assert_eq!(readiness.citation_structure, PreparationReadiness::Ready);
+    assert_eq!(readiness.predicted_structure, PreparationReadiness::Ready);
+
+    run.plan.audible_structure = FoundationDerivedAvailability::Unavailable {
+        reason: "unsupported_language".into(),
+    };
+    let readiness = run.readiness();
     assert_eq!(
-        readiness.real_listening_flow,
+        readiness.citation_structure,
         PreparationReadiness::Unavailable {
-            reason: "estimated_word_timeline".into()
+            reason: "unsupported_language".into()
+        }
+    );
+    assert_eq!(
+        readiness.predicted_structure,
+        PreparationReadiness::Unavailable {
+            reason: "unsupported_language".into()
         }
     );
 }

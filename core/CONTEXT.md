@@ -122,6 +122,45 @@ A replaceable, provenance-bearing analysis derived from a Content Document,
 such as word timing, sound grouping, syntax, or rhythm structure.
 _Avoid_: Subtitle Text Track, learner history, user authority
 
+**Word Timeline**:
+A replaceable alignment of the word tokens in one Subtitle Text Track to media
+time; it is derived from the text track and is not the subtitle itself.
+_Avoid_: Subtitle Text Track, transcript, standalone subtitle resource
+
+**Foundation Resource Set**:
+The minimum content-bound sources and analyses required for standard learning
+activities: a Subtitle Text Track, Word Timeline, Prosodic Chunk analysis, and
+Sense Group analysis, including the citation and predicted audible structures
+used by the first two listening-flow views.
+_Avoid_: Every possible analysis, technical resource center, optional enhancement
+
+**Foundation Preparation**:
+A learner-requested operation that reuses or creates the missing members of a
+Foundation Resource Set for one Content Document.
+_Avoid_: Resource installation, generate everything, analysis upgrade
+
+**Phoneme Analysis**:
+An optional, comparatively expensive Analysis Resource that explains speech at
+phone level and supplies the observed audible structure used by the third
+listening-flow view. It requires a separate learner decision from Foundation
+Preparation.
+_Avoid_: Word Timeline, required foundation resource, automatic preparation step
+
+**Citation Audible Structure (View A)**:
+A fast, text-derived listening reference that groups dictionary or citation
+phones by written-word boundaries.
+_Avoid_: Observed speech, audio-backed evidence, Word Timeline
+
+**Predicted Audible Structure (View B)**:
+A fast, text-and-rule-derived listening reference that predicts how citation
+phones may be regrouped in connected speech.
+_Avoid_: Observed speech, phoneme detection, guaranteed pronunciation
+
+**Observed Audible Structure (View C)**:
+An audio-backed listening reference derived from observed phone evidence for
+the specific recording.
+_Avoid_: Rule prediction, required foundation resource, automatic fallback
+
 **Derived Explanation**:
 A learner-facing interpretation built from source facts or an Analysis
 Resource, with its uncertainty and provenance retained.

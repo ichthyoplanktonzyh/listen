@@ -194,6 +194,82 @@ fn activating_word_timeline_updates_active_resource_and_compatibility_timings() 
 }
 
 #[test]
+fn activating_word_timeline_if_absent_activates_candidate_and_updates_compatibility_timings() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    let sentence_id = track.sentences[0].id.clone();
+    repo.save_track(&track).unwrap();
+    let candidate = word_timeline(
+        "timeline-if-absent",
+        &track,
+        TimelineStatus::Candidate,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&candidate).unwrap();
+
+    let active = repo
+        .activate_word_timeline_if_absent(&candidate.id)
+        .unwrap();
+
+    assert_eq!(active.id, candidate.id);
+    assert_eq!(active.status, TimelineStatus::Active);
+    assert_eq!(
+        repo.active_word_timeline(&track.id).unwrap().unwrap().id,
+        candidate.id
+    );
+    let compatibility_timings = repo.get_word_timings(&sentence_id).unwrap();
+    assert_eq!(compatibility_timings.len(), 1);
+    assert_eq!(compatibility_timings[0].provider_id, "mms-fa");
+}
+
+#[test]
+fn activating_word_timeline_if_absent_preserves_existing_active_and_legacy_timings() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    let sentence_id = track.sentences[0].id.clone();
+    repo.save_track(&track).unwrap();
+    let existing = word_timeline(
+        "timeline-existing-active",
+        &track,
+        TimelineStatus::Candidate,
+        "user-selected",
+        120,
+        300,
+    );
+    let candidate = word_timeline(
+        "timeline-foundation-candidate",
+        &track,
+        TimelineStatus::Candidate,
+        "foundation",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&existing).unwrap();
+    repo.activate_word_timeline(&existing.id).unwrap();
+    repo.save_word_timeline(&candidate).unwrap();
+
+    let active = repo
+        .activate_word_timeline_if_absent(&candidate.id)
+        .unwrap();
+
+    assert_eq!(active.id, existing.id);
+    assert_eq!(
+        repo.get_word_timeline(&candidate.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        TimelineStatus::Candidate
+    );
+    let compatibility_timings = repo.get_word_timings(&sentence_id).unwrap();
+    assert_eq!(compatibility_timings.len(), 1);
+    assert_eq!(compatibility_timings[0].provider_id, "user-selected");
+}
+
+#[test]
 fn timeline_active_uniqueness_is_schema_enforced() {
     let repo = SqliteRepository::in_memory().unwrap();
     MediaRepository::upsert(&repo, &transcription_media()).unwrap();
@@ -340,6 +416,81 @@ fn activating_chunk_timeline_updates_active_resource() {
         TimelineStatus::Candidate
     );
     assert_eq!(repo.list_chunk_timelines(&track.id).unwrap().len(), 2);
+}
+
+#[test]
+fn activating_chunk_timeline_if_absent_activates_candidate() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let parent = word_timeline(
+        "timeline-parent-if-absent",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&parent).unwrap();
+    let candidate = chunk_timeline(
+        "chunk-timeline-if-absent",
+        &track,
+        &parent,
+        TimelineStatus::Candidate,
+    );
+    repo.save_chunk_timeline(&candidate).unwrap();
+
+    let active = repo
+        .activate_chunk_timeline_if_absent(&candidate.id)
+        .unwrap();
+
+    assert_eq!(active.id, candidate.id);
+    assert_eq!(active.status, TimelineStatus::Active);
+}
+
+#[test]
+fn activating_chunk_timeline_if_absent_preserves_existing_active() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let parent = word_timeline(
+        "timeline-parent-preserve",
+        &track,
+        TimelineStatus::Active,
+        "mms-fa",
+        150,
+        260,
+    );
+    repo.save_word_timeline(&parent).unwrap();
+    let existing = chunk_timeline(
+        "chunk-timeline-existing-active",
+        &track,
+        &parent,
+        TimelineStatus::Active,
+    );
+    let candidate = chunk_timeline(
+        "chunk-timeline-foundation-candidate",
+        &track,
+        &parent,
+        TimelineStatus::Candidate,
+    );
+    repo.save_chunk_timeline(&existing).unwrap();
+    repo.save_chunk_timeline(&candidate).unwrap();
+
+    let active = repo
+        .activate_chunk_timeline_if_absent(&candidate.id)
+        .unwrap();
+
+    assert_eq!(active.id, existing.id);
+    assert_eq!(
+        repo.get_chunk_timeline(&candidate.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        TimelineStatus::Candidate
+    );
 }
 
 #[test]
@@ -545,6 +696,57 @@ fn activating_sense_group_analysis_updates_active_resource() {
         TimelineStatus::Candidate
     );
     assert_eq!(repo.list_sense_group_analyses(&track.id).unwrap().len(), 2);
+}
+
+#[test]
+fn activating_sense_group_analysis_if_absent_activates_candidate() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let candidate =
+        sense_group_analysis("sg-analysis-if-absent", &track, TimelineStatus::Candidate);
+    repo.save_sense_group_analysis(&candidate).unwrap();
+
+    let active = repo
+        .activate_sense_group_analysis_if_absent(&candidate.id)
+        .unwrap();
+
+    assert_eq!(active.id, candidate.id);
+    assert_eq!(active.status, TimelineStatus::Active);
+}
+
+#[test]
+fn activating_sense_group_analysis_if_absent_preserves_existing_active() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let existing = sense_group_analysis(
+        "sg-analysis-existing-active",
+        &track,
+        TimelineStatus::Active,
+    );
+    let candidate = sense_group_analysis(
+        "sg-analysis-foundation-candidate",
+        &track,
+        TimelineStatus::Candidate,
+    );
+    repo.save_sense_group_analysis(&existing).unwrap();
+    repo.save_sense_group_analysis(&candidate).unwrap();
+
+    let active = repo
+        .activate_sense_group_analysis_if_absent(&candidate.id)
+        .unwrap();
+
+    assert_eq!(active.id, existing.id);
+    assert_eq!(
+        repo.get_sense_group_analysis(&candidate.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        TimelineStatus::Candidate
+    );
 }
 
 #[test]

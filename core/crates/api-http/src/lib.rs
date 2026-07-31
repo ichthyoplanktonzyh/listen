@@ -41,9 +41,9 @@ mod secret_store_keychain;
 use application_executor::ApplicationExecutor;
 use local_runtime::{
     CreateJobRequest, CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
-    LearningResourceManager, PhoneticAnalysisCoordinator, SoundLineCoordinator,
-    SpeechBatchCoordinator, SpeechSynthesisManager, SubtitleSearchCoordinator,
-    TranscriptionCoordinator,
+    LearningPreparationCoordinator, LearningResourceManager, PhoneticAnalysisCoordinator,
+    SoundLineCoordinator, SpeechBatchCoordinator, SpeechSynthesisManager,
+    SubtitleSearchCoordinator, TranscriptionCoordinator,
 };
 pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
 pub use secret_store_keychain::KeychainSecretStore;
@@ -63,6 +63,7 @@ pub struct AnalysisRuntime {
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
+    pub foundation_preparation: Arc<LearningPreparationCoordinator>,
 }
 
 #[derive(Clone)]
@@ -117,6 +118,7 @@ impl ApiState {
         R: application::TranscriptionRepository
             + application::PhoneticAnalysisRepository
             + application::BackgroundJobStore
+            + application::LearningPreparationRunRepository
             + 'static,
     {
         let (events, _) = broadcast::channel(128);
@@ -155,6 +157,9 @@ impl ApiState {
             local_runtime::resolved_forced_align_provider(),
         )
         .expect("sound line coordinator must initialize");
+        let foundation_preparation =
+            LearningPreparationCoordinator::new(services.clone(), repository.clone())
+                .expect("learning preparation coordinator must initialize");
         Self {
             application: ApplicationExecutor::new(services.clone()),
             analysis: AnalysisRuntime {
@@ -162,6 +167,7 @@ impl ApiState {
                 phonetic_analysis,
                 speech_jobs,
                 sound_line,
+                foundation_preparation,
             },
             language: LanguageRuntime {
                 dictionaries: Arc::new(vec![

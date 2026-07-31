@@ -2,7 +2,7 @@ use application::{ApplicationError, SenseGroupRepository, batch_governor::Cached
 use domain::{
     SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleTrackId, TimelineStatus, WordTimelineId,
 };
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::{SqliteRepository, from_json, json, repo};
 
@@ -202,6 +202,66 @@ impl SenseGroupRepository for SqliteRepository {
 
         selected.status = TimelineStatus::Active;
         selected.updated_at_ms = now;
+        tx.execute(
+            "UPDATE sense_group_analysis_runs
+             SET status=?2,analysis_json=?3,updated_at_ms=?4 WHERE id=?1",
+            params![
+                selected.id.as_str(),
+                json(&selected.status)?,
+                json(&selected)?,
+                selected.updated_at_ms
+            ],
+        )
+        .map_err(repo)?;
+        tx.commit().map_err(repo)?;
+        Ok(selected)
+    }
+
+    fn activate_sense_group_analysis_if_absent(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        let mut conn = self.connection.lock();
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(repo)?;
+        let selected_json = tx
+            .query_row(
+                "SELECT analysis_json FROM sense_group_analysis_runs WHERE id=?1",
+                [id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(repo)?
+            .ok_or(ApplicationError::NotFound("sense group analysis"))?;
+        let mut selected: SenseGroupAnalysis = from_json(&selected_json).map_err(repo)?;
+        if selected.status == TimelineStatus::Archived {
+            return Err(ApplicationError::Validation(
+                "archived sense group analysis",
+            ));
+        }
+        let active = tx
+            .query_row(
+                "SELECT analysis_json FROM sense_group_analysis_runs
+                 WHERE track_id=?1 AND status=?2
+                 ORDER BY updated_at_ms DESC LIMIT 1",
+                params![selected.track_id.as_str(), json(&TimelineStatus::Active)?],
+                |row| from_json::<SenseGroupAnalysis>(&row.get::<_, String>(0)?),
+            )
+            .optional()
+            .map_err(repo)?;
+        if let Some(active) = active {
+            tx.commit().map_err(repo)?;
+            return Ok(active);
+        }
+        if selected.status != TimelineStatus::Candidate {
+            return Err(ApplicationError::Validation(
+                "sense group analysis activation candidate",
+            ));
+        }
+
+        selected.status = TimelineStatus::Active;
+        selected.updated_at_ms = application::now_ms();
         tx.execute(
             "UPDATE sense_group_analysis_runs
              SET status=?2,analysis_json=?3,updated_at_ms=?4 WHERE id=?1",

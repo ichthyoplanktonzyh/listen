@@ -97,6 +97,7 @@ mod word_timelines;
 pub use background_jobs::{
     BackgroundJobStore, BackgroundJobTransition, InMemoryBackgroundJobStore,
 };
+pub use chunks::foundation_chunk_policy;
 pub use coach_dashboard::{
     CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
@@ -125,6 +126,7 @@ pub use repositories::*;
 pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_embedding::*;
 pub use semantic_task::SemanticUseCases;
+pub use sense_groups::foundation_rule_sense_group_policy;
 pub use speech_synthesis::*;
 pub use syntactic_consumers::*;
 pub use util::now_ms;

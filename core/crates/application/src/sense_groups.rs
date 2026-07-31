@@ -21,6 +21,14 @@ const LLM_ALGORITHM: &str = "hybrid_rule_llm_partition_v1";
 const LLM_TASK_CONCURRENCY: usize = 1000;
 const LLM_SENSE_GROUP_PROMPT_CONTRACT: &str = "sense-group-partition-v1";
 
+pub fn foundation_rule_sense_group_policy() -> (&'static str, &'static str, &'static str) {
+    (
+        speech_analysis::audible_structure::PROVIDER_ID,
+        speech_analysis::audible_structure::PROVIDER_VERSION,
+        speech_analysis::audible_structure::ALGORITHM,
+    )
+}
+
 fn syntactic_complexity<'a>(
     analyses: impl Iterator<Item = &'a SyntacticAnalysis>,
 ) -> (Option<f32>, Option<f32>) {
@@ -101,7 +109,22 @@ impl MediaAnalysisUseCases {
         track_id: &SubtitleTrackId,
         requested_status: Option<TimelineStatus>,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
-        self.generate_sense_group_analysis_internal(track_id, requested_status, None)
+        self.generate_sense_group_analysis_internal(track_id, requested_status, None, None)
+    }
+
+    /// Builds the deterministic rule partition with preparation provenance.
+    pub fn generate_rule_sense_group_analysis(
+        &self,
+        track_id: &SubtitleTrackId,
+        requested_status: Option<TimelineStatus>,
+        preparation_input_fingerprint: &str,
+    ) -> Result<SenseGroupAnalysis, ApplicationError> {
+        self.generate_sense_group_analysis_internal(
+            track_id,
+            requested_status,
+            None,
+            Some(preparation_input_fingerprint),
+        )
     }
 
     /// Generates a candidate analysis through an LLM while keeping rules as a
@@ -357,6 +380,7 @@ impl MediaAnalysisUseCases {
         track_id: &SubtitleTrackId,
         requested_status: Option<TimelineStatus>,
         syntax: Option<&SyntacticAnalysis>,
+        preparation_input_fingerprint: Option<&str>,
     ) -> Result<SenseGroupAnalysis, ApplicationError> {
         let requested_status = requested_status.unwrap_or(TimelineStatus::Candidate);
         let track = self
@@ -412,13 +436,14 @@ impl MediaAnalysisUseCases {
                 speech_analysis::audible_structure::SYNTAX_ALGORITHM.to_owned(),
             )
         } else {
+            let (provider_id, provider_version, algorithm) = foundation_rule_sense_group_policy();
             (
-                speech_analysis::audible_structure::PROVIDER_ID.to_owned(),
-                speech_analysis::audible_structure::PROVIDER_VERSION.to_owned(),
-                speech_analysis::audible_structure::ALGORITHM.to_owned(),
+                provider_id.to_owned(),
+                provider_version.to_owned(),
+                algorithm.to_owned(),
             )
         };
-        let fingerprint = format!(
+        let mut fingerprint = format!(
             "{}:{}:{}:{}",
             track.id.as_str(),
             provider_version,
@@ -427,30 +452,35 @@ impl MediaAnalysisUseCases {
                 .unwrap_or("none"),
             serde_json::to_string(&groups).unwrap_or_default()
         );
+        if let Some(preparation_input_fingerprint) = preparation_input_fingerprint {
+            fingerprint.push_str(":preparation:");
+            fingerprint.push_str(preparation_input_fingerprint);
+        }
         let (syntax_max_depth, syntax_mean_dependency_span) = syntax
             .map(|analysis| syntactic_complexity(std::iter::once(analysis)))
             .unwrap_or((None, None));
+        let mut metrics = serde_json::json!({
+            "syntactic_analysis_id": syntax.map(|analysis| analysis.id.as_str()),
+            "syntactic_provider": syntax.map(|analysis| &analysis.descriptor),
+            "syntax_max_depth": syntax_max_depth,
+            "syntax_mean_dependency_span": syntax_mean_dependency_span,
+            "chunk_timeline_dependency": false
+        });
+        if let Some(fingerprint) = preparation_input_fingerprint {
+            metrics["preparation_input_fingerprint"] =
+                serde_json::Value::String(fingerprint.into());
+        }
         let mut analysis = SenseGroupAnalysis {
             id: SenseGroupAnalysisId::from_fingerprint("sense-group-analysis", &fingerprint),
             track_id: track.id.clone(),
             media_id: track.media_id.clone(),
-            parent_word_timeline_id: self
-                .word_timelines
-                .active_word_timeline(track_id)?
-                .map(|wt| wt.id),
+            parent_word_timeline_id: None,
             provider_id,
             provider_version,
             algorithm,
             status: requested_status,
             created_by: TimelineCreator::Algorithm,
-            metrics_json: serde_json::json!({
-                "syntactic_analysis_id": syntax.map(|analysis| analysis.id.as_str()),
-                "syntactic_provider": syntax.map(|analysis| &analysis.descriptor),
-                "syntax_max_depth": syntax_max_depth,
-                "syntax_mean_dependency_span": syntax_mean_dependency_span,
-                "chunk_timeline_dependency": false
-            })
-            .into(),
+            metrics_json: metrics.into(),
             groups,
             created_at_ms: now,
             updated_at_ms: now,
@@ -459,7 +489,16 @@ impl MediaAnalysisUseCases {
             analysis.status = TimelineStatus::Candidate;
         }
         let analysis = self.sense_groups.save_sense_group_analysis(&analysis)?;
-        if requested_status == TimelineStatus::Active {
+        if preparation_input_fingerprint.is_some() {
+            let active = self
+                .sense_groups
+                .activate_sense_group_analysis_if_absent(&analysis.id)?;
+            if active.id == analysis.id {
+                Ok(active)
+            } else {
+                Ok(analysis)
+            }
+        } else if requested_status == TimelineStatus::Active {
             self.sense_groups
                 .activate_sense_group_analysis(&analysis.id)
         } else {
@@ -1085,6 +1124,44 @@ mod tests {
                 analysis.track_id == track_id && analysis.status == TimelineStatus::Active
             }) {
                 analysis.status = TimelineStatus::Candidate;
+            }
+            let selected = analyses
+                .iter_mut()
+                .find(|analysis| analysis.id == *id)
+                .unwrap();
+            selected.status = TimelineStatus::Active;
+            Ok(selected.clone())
+        }
+
+        fn activate_sense_group_analysis_if_absent(
+            &self,
+            id: &SenseGroupAnalysisId,
+        ) -> Result<SenseGroupAnalysis, ApplicationError> {
+            let mut analyses = self.analyses.lock().unwrap();
+            let selected = analyses
+                .iter()
+                .find(|analysis| analysis.id == *id)
+                .cloned()
+                .ok_or(ApplicationError::NotFound("sense group analysis"))?;
+            if selected.status == TimelineStatus::Archived {
+                return Err(ApplicationError::Validation(
+                    "archived sense group analysis",
+                ));
+            }
+            if let Some(active) = analyses
+                .iter()
+                .find(|analysis| {
+                    analysis.track_id == selected.track_id
+                        && analysis.status == TimelineStatus::Active
+                })
+                .cloned()
+            {
+                return Ok(active);
+            }
+            if selected.status != TimelineStatus::Candidate {
+                return Err(ApplicationError::Validation(
+                    "sense group analysis activation candidate",
+                ));
             }
             let selected = analyses
                 .iter_mut()

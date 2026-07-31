@@ -32,6 +32,9 @@ Notable runtime seams:
   foundation planner and typed state machine. Its dedicated SQLite repository
   owns revision CAS and target-level single-flight; it does not inherit
   `BackgroundJobStore`.
+- `local_runtime::LearningPreparationCoordinator` adapts the fixed foundation
+  plan to `AppServices`; it has no HTTP route, SoundLine dependency, or generic
+  resource/job abstraction.
 - `SecretCleanupRepository` and atomic profile-mutation methods own the durable
   provider-credential cleanup outbox.
 - `SemanticLlmRuntimeFactory` and `RealtimeConversationAdapterFactory` keep

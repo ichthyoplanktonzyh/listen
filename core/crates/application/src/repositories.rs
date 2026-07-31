@@ -155,6 +155,12 @@ pub trait WordTimelineRepository: Send + Sync {
     ) -> Result<Option<WordTimeline>, ApplicationError>;
     fn activate_word_timeline(&self, id: &WordTimelineId)
     -> Result<WordTimeline, ApplicationError>;
+    /// Returns the track's existing active timeline, or atomically activates
+    /// `id` when the track has no active timeline.
+    fn activate_word_timeline_if_absent(
+        &self,
+        id: &WordTimelineId,
+    ) -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
 }
@@ -178,6 +184,12 @@ pub trait ChunkTimelineRepository: Send + Sync {
         track_id: &SubtitleTrackId,
     ) -> Result<Option<ChunkTimeline>, ApplicationError>;
     fn activate_chunk_timeline(
+        &self,
+        id: &ChunkTimelineId,
+    ) -> Result<ChunkTimeline, ApplicationError>;
+    /// Returns the track's existing active timeline, or atomically activates
+    /// `id` when the track has no active timeline.
+    fn activate_chunk_timeline_if_absent(
         &self,
         id: &ChunkTimelineId,
     ) -> Result<ChunkTimeline, ApplicationError>;
@@ -220,6 +232,12 @@ pub trait SenseGroupRepository: Send + Sync {
         track_id: &SubtitleTrackId,
     ) -> Result<Option<SenseGroupAnalysis>, ApplicationError>;
     fn activate_sense_group_analysis(
+        &self,
+        id: &SenseGroupAnalysisId,
+    ) -> Result<SenseGroupAnalysis, ApplicationError>;
+    /// Returns the track's existing active analysis, or atomically activates
+    /// `id` when the track has no active analysis.
+    fn activate_sense_group_analysis_if_absent(
         &self,
         id: &SenseGroupAnalysisId,
     ) -> Result<SenseGroupAnalysis, ApplicationError>;

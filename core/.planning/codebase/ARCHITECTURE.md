@@ -49,12 +49,31 @@ is an explicit irreversible commit point.
 
 Foundation learning preparation is a separate application module rather than a
 new generic background-job kind. Its interface accepts an exact media,
-SubtitleTrack, and audio-stream selection plus the recommended-foundation
-intent and download consent. A fixed typed plan owns WordTimeline, SoundLine,
-ChunkTimeline, and rule SenseGroup slots. Dedicated SQLite runs use revision
+SubtitleTrack selection plus the recommended-foundation intent. Audio-stream
+selection belongs to upstream ASR or separately confirmed phone analysis, not
+this text-derived plan. A fixed typed plan owns the three required fast slots: WordTimeline,
+ChunkTimeline, and SenseGroup. Dedicated SQLite runs use revision
 compare-and-swap and an active-target partial unique index for durable
 single-flight; startup recovery, cancellation, retry, plan/input fingerprints,
-and child-job references remain preparation-specific.
+and artifact references remain preparation-specific.
+The local-runtime coordinator validates the current media and subtitle
+fingerprints before local writes. It reuses a valid active resource or creates
+an idempotent preparation candidate, then atomically activates that candidate
+only when the resource family has no active selection. Existing user or
+higher-quality active resources are never replaced. ChunkTimeline depends only
+on the exact WordTimeline selected by the run; SenseGroup is independent and
+can complete even when word timing fails. Separate text and phrase-analysis
+fingerprints prevent unrelated phrase updates from invalidating WordTimeline
+while still invalidating ChunkTimeline and SenseGroup when their true inputs
+change.
+
+Views A and B are deterministic projections from a ready WordTimeline and the
+current language capability; they are readiness outputs, not durable resource
+slots. The current projection implementation is English-only and reports
+unsupported or unknown languages honestly. SoundLine remains an independent
+best-effort acoustic enrichment path and does not block foundation readiness.
+View C depends on separately confirmed Phoneme Analysis and is outside this
+plan. Cancellation intent retries revision conflicts until it is durable.
 
 Installable dictionary assets resolve through `learning-resource-runtime`.
 The installer and all dictionary readers share its environment override,

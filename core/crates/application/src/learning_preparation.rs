@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 
 use crate::ApplicationError;
 
-const FOUNDATION_PLANNER_VERSION: &str = "foundation-v1";
+const FOUNDATION_PLANNER_VERSION: &str = "foundation-v2";
 const INPUTS_CHANGED_ERROR: &str = "preparation inputs or plan changed";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -34,29 +34,18 @@ impl LearningPreparationRunId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExactAudioTrack {
-    pub stream_index: u32,
-    pub fingerprint: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundationPreparationTarget {
     pub media_id: MediaId,
     pub media_fingerprint: String,
     pub subtitle_track_id: SubtitleTrackId,
     pub subtitle_fingerprint: String,
-    pub audio_track: ExactAudioTrack,
 }
 
 impl FoundationPreparationTarget {
     pub fn target_key(&self) -> String {
         digest_fields(
             "learning-preparation-target",
-            &[
-                self.media_id.as_str(),
-                self.subtitle_track_id.as_str(),
-                &self.audio_track.stream_index.to_string(),
-            ],
+            &[self.media_id.as_str(), self.subtitle_track_id.as_str()],
         )
     }
 
@@ -68,17 +57,12 @@ impl FoundationPreparationTarget {
                 &self.media_fingerprint,
                 self.subtitle_track_id.as_str(),
                 &self.subtitle_fingerprint,
-                &self.audio_track.stream_index.to_string(),
-                &self.audio_track.fingerprint,
             ],
         )
     }
 
     fn validate(&self) -> Result<(), ApplicationError> {
-        if self.media_fingerprint.trim().is_empty()
-            || self.subtitle_fingerprint.trim().is_empty()
-            || self.audio_track.fingerprint.trim().is_empty()
-        {
+        if self.media_fingerprint.trim().is_empty() || self.subtitle_fingerprint.trim().is_empty() {
             return Err(ApplicationError::Invalid(
                 "preparation target fingerprints must not be empty".into(),
             ));
@@ -104,23 +88,15 @@ pub enum FoundationPreparationIntent {
     RecommendedFoundation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PreparationConsent {
-    pub allow_downloads: bool,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundationPreparationRequest {
     pub intent: FoundationPreparationIntent,
-    pub consent: PreparationConsent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectionRequiredReason {
     SubtitleTrackUnavailable,
-    AudioTrackUnavailable,
-    AudioTrackAmbiguous,
     SubtitleTrackAmbiguous,
 }
 
@@ -142,7 +118,7 @@ pub struct ReusableFoundationArtifact {
 #[serde(rename_all = "snake_case", tag = "state")]
 pub enum FoundationAssetAvailability {
     Reusable(ReusableFoundationArtifact),
-    Buildable { requires_download: bool },
+    Buildable,
     Unavailable { reason: String },
 }
 
@@ -154,12 +130,29 @@ pub enum WordTimelinePrecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "state")]
+pub enum FoundationDerivedAvailability {
+    Available,
+    Unavailable { reason: String },
+}
+
+impl Default for FoundationDerivedAvailability {
+    fn default() -> Self {
+        Self::Unavailable {
+            reason: "audible_structure_capability_unknown".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundationInputs {
     pub word_timeline: FoundationAssetAvailability,
     pub word_timeline_precision: WordTimelinePrecision,
-    pub sound_line: FoundationAssetAvailability,
     pub chunk_timeline: FoundationAssetAvailability,
-    pub rule_sense_group: FoundationAssetAvailability,
+    #[serde(alias = "rule_sense_group")]
+    pub sense_group: FoundationAssetAvailability,
+    #[serde(default)]
+    pub audible_structure: FoundationDerivedAvailability,
 }
 
 pub trait FoundationPreparationInspector: Send + Sync {
@@ -173,7 +166,6 @@ pub trait FoundationPreparationInspector: Send + Sync {
 #[serde(rename_all = "snake_case")]
 pub enum PreparationRequirement {
     Required,
-    Optional,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,28 +204,13 @@ pub struct WordTimelinePreparation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SoundLinePreparation {
-    pub requirement: PreparationRequirement,
-    pub child_job_ref: Option<String>,
-    pub state: PreparationStepState,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ChunkTimelineInput {
-    WordTimeline,
-    SoundLine,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChunkTimelinePreparation {
     pub requirement: PreparationRequirement,
-    pub input: ChunkTimelineInput,
     pub state: PreparationStepState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RuleSenseGroupPreparation {
+pub struct SenseGroupPreparation {
     pub requirement: PreparationRequirement,
     pub state: PreparationStepState,
 }
@@ -241,103 +218,72 @@ pub struct RuleSenseGroupPreparation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundationPreparationPlan {
     pub word_timeline: WordTimelinePreparation,
-    pub sound_line: SoundLinePreparation,
     pub chunk_timeline: ChunkTimelinePreparation,
-    pub rule_sense_group: RuleSenseGroupPreparation,
+    #[serde(alias = "rule_sense_group")]
+    pub sense_group: SenseGroupPreparation,
+    #[serde(default)]
+    pub audible_structure: FoundationDerivedAvailability,
 }
 
 impl FoundationPreparationPlan {
-    fn from_inputs(inputs: FoundationInputs, consent: PreparationConsent) -> Self {
+    fn from_inputs(inputs: FoundationInputs) -> Self {
         let word_timeline = WordTimelinePreparation {
             requirement: PreparationRequirement::Required,
             precision: inputs.word_timeline_precision,
-            state: initial_state(inputs.word_timeline, consent, true),
+            state: initial_state(inputs.word_timeline),
         };
-        let mut sound_line = SoundLinePreparation {
-            requirement: PreparationRequirement::Optional,
-            child_job_ref: None,
-            state: initial_state(inputs.sound_line, consent, false),
-        };
-        let sound_line_available = !matches!(
-            sound_line.state,
-            PreparationStepState::Skipped { .. } | PreparationStepState::Failed { .. }
-        );
         let mut chunk_timeline = ChunkTimelinePreparation {
             requirement: PreparationRequirement::Required,
-            input: if sound_line_available {
-                ChunkTimelineInput::SoundLine
-            } else {
-                ChunkTimelineInput::WordTimeline
-            },
-            state: initial_state(inputs.chunk_timeline, consent, true),
+            state: initial_state(inputs.chunk_timeline),
         };
         if matches!(
             word_timeline.state,
             PreparationStepState::Skipped { .. } | PreparationStepState::Failed { .. }
-        ) {
-            if matches!(sound_line.state, PreparationStepState::Pending) {
-                sound_line.state = PreparationStepState::Skipped {
-                    reason: "word_timeline_unavailable".into(),
-                };
-            }
-            if matches!(chunk_timeline.state, PreparationStepState::Pending) {
-                chunk_timeline.state = PreparationStepState::Skipped {
-                    reason: "word_timeline_unavailable".into(),
-                };
-            }
+        ) && matches!(chunk_timeline.state, PreparationStepState::Pending)
+        {
+            chunk_timeline.state = PreparationStepState::Skipped {
+                reason: "word_timeline_unavailable".into(),
+            };
         }
-        let rule_sense_group = RuleSenseGroupPreparation {
+        let sense_group = SenseGroupPreparation {
             requirement: PreparationRequirement::Required,
-            state: initial_state(inputs.rule_sense_group, consent, true),
+            state: initial_state(inputs.sense_group),
         };
         Self {
             word_timeline,
-            sound_line,
             chunk_timeline,
-            rule_sense_group,
+            sense_group,
+            audible_structure: inputs.audible_structure,
         }
     }
 
     fn all_terminal(&self) -> bool {
         self.word_timeline.state.is_terminal()
-            && self.sound_line.state.is_terminal()
             && self.chunk_timeline.state.is_terminal()
-            && self.rule_sense_group.state.is_terminal()
+            && self.sense_group.state.is_terminal()
     }
 
     fn has_required_failure(&self) -> bool {
         [
             &self.word_timeline.state,
             &self.chunk_timeline.state,
-            &self.rule_sense_group.state,
+            &self.sense_group.state,
         ]
         .into_iter()
         .any(|state| matches!(state, PreparationStepState::Failed { .. }))
     }
 }
 
-fn initial_state(
-    availability: FoundationAssetAvailability,
-    consent: PreparationConsent,
-    required: bool,
-) -> PreparationStepState {
+fn initial_state(availability: FoundationAssetAvailability) -> PreparationStepState {
     match availability {
         FoundationAssetAvailability::Reusable(artifact) => PreparationStepState::Ready {
             artifact_ref: artifact.artifact_ref,
             input_fingerprint: artifact.input_fingerprint,
             reused: true,
         },
-        FoundationAssetAvailability::Buildable {
-            requires_download: true,
-        } if !consent.allow_downloads => PreparationStepState::Skipped {
-            reason: "download_consent_required".into(),
-        },
-        FoundationAssetAvailability::Buildable { .. } => PreparationStepState::Pending,
-        FoundationAssetAvailability::Unavailable { reason } if required => {
-            PreparationStepState::Failed { reason }
-        }
+        FoundationAssetAvailability::Buildable => PreparationStepState::Pending,
         FoundationAssetAvailability::Unavailable { reason } => {
-            PreparationStepState::Skipped { reason }
+            PreparationStepState::Failed { reason }
         }
     }
 }
@@ -366,8 +312,9 @@ pub enum PreparationReadiness {
 pub struct FoundationActivityReadiness {
     pub word_following: PreparationReadiness,
     pub approximate_chunking: PreparationReadiness,
-    pub real_listening_flow: PreparationReadiness,
-    pub rule_sense_groups: PreparationReadiness,
+    pub sense_groups: PreparationReadiness,
+    pub citation_structure: PreparationReadiness,
+    pub predicted_structure: PreparationReadiness,
 }
 
 impl LearningPreparationRunStatus {
@@ -397,34 +344,13 @@ impl LearningPreparationRun {
     pub fn readiness(&self) -> FoundationActivityReadiness {
         let word = readiness_for(&self.plan.word_timeline.state);
         let chunk = readiness_for(&self.plan.chunk_timeline.state);
-        let sound_line = readiness_for(&self.plan.sound_line.state);
-        let real_listening_flow = match (&sound_line, &chunk) {
-            (PreparationReadiness::Ready, PreparationReadiness::Ready) => {
-                if self.plan.word_timeline.precision == WordTimelinePrecision::Exact {
-                    PreparationReadiness::Ready
-                } else {
-                    PreparationReadiness::Unavailable {
-                        reason: "estimated_word_timeline".into(),
-                    }
-                }
-            }
-            (PreparationReadiness::Failed { reason }, _)
-            | (_, PreparationReadiness::Failed { reason }) => PreparationReadiness::Failed {
-                reason: reason.clone(),
-            },
-            (PreparationReadiness::Unavailable { reason }, _)
-            | (_, PreparationReadiness::Unavailable { reason }) => {
-                PreparationReadiness::Unavailable {
-                    reason: reason.clone(),
-                }
-            }
-            _ => PreparationReadiness::Preparing,
-        };
+        let audible_structure = derived_readiness(&word, &self.plan.audible_structure);
         FoundationActivityReadiness {
             word_following: word,
             approximate_chunking: chunk,
-            real_listening_flow,
-            rule_sense_groups: readiness_for(&self.plan.rule_sense_group.state),
+            sense_groups: readiness_for(&self.plan.sense_group.state),
+            citation_structure: audible_structure.clone(),
+            predicted_structure: audible_structure,
         }
     }
 
@@ -473,57 +399,13 @@ impl LearningPreparationRun {
         now_ms: u64,
     ) -> Result<(), ApplicationError> {
         fail_step(&mut self.plan.word_timeline.state, reason)?;
-        self.bump(now_ms);
-        Ok(())
-    }
-
-    pub fn begin_sound_line(
-        &mut self,
-        child_job_ref: impl Into<String>,
-        now_ms: u64,
-    ) -> Result<(), ApplicationError> {
-        ensure_running(self.status)?;
-        if !matches!(
-            self.plan.word_timeline.state,
-            PreparationStepState::Ready { .. }
-        ) {
-            return Err(ApplicationError::Conflict(
-                "sound-line preparation requires a ready word timeline",
-            ));
-        }
-        let child_job_ref = child_job_ref.into();
-        if child_job_ref.trim().is_empty() {
-            return Err(ApplicationError::Validation(
-                "sound-line child job reference",
-            ));
-        }
-        begin_step(&mut self.plan.sound_line.state)?;
-        self.plan.sound_line.child_job_ref = Some(child_job_ref);
-        self.bump(now_ms);
-        Ok(())
-    }
-
-    pub fn complete_sound_line(
-        &mut self,
-        artifact: ReusableFoundationArtifact,
-        now_ms: u64,
-    ) -> Result<(), ApplicationError> {
-        complete_step(&mut self.plan.sound_line.state, artifact)?;
-        self.bump(now_ms);
-        Ok(())
-    }
-
-    pub fn fail_sound_line(
-        &mut self,
-        reason: impl Into<String>,
-        now_ms: u64,
-    ) -> Result<(), ApplicationError> {
-        fail_step(&mut self.plan.sound_line.state, reason)?;
         if matches!(
-            self.plan.word_timeline.state,
-            PreparationStepState::Ready { .. }
+            self.plan.chunk_timeline.state,
+            PreparationStepState::Pending
         ) {
-            self.plan.chunk_timeline.input = ChunkTimelineInput::WordTimeline;
+            self.plan.chunk_timeline.state = PreparationStepState::Skipped {
+                reason: "word_timeline_failed".into(),
+            };
         }
         self.bump(now_ms);
         Ok(())
@@ -531,19 +413,12 @@ impl LearningPreparationRun {
 
     pub fn begin_chunk_timeline(&mut self, now_ms: u64) -> Result<(), ApplicationError> {
         ensure_running(self.status)?;
-        let input_ready = match self.plan.chunk_timeline.input {
-            ChunkTimelineInput::WordTimeline => matches!(
-                self.plan.word_timeline.state,
-                PreparationStepState::Ready { .. }
-            ),
-            ChunkTimelineInput::SoundLine => matches!(
-                self.plan.sound_line.state,
-                PreparationStepState::Ready { .. }
-            ),
-        };
-        if !input_ready {
+        if !matches!(
+            self.plan.word_timeline.state,
+            PreparationStepState::Ready { .. }
+        ) {
             return Err(ApplicationError::Conflict(
-                "chunk preparation input is not ready",
+                "chunk preparation requires a ready word timeline",
             ));
         }
         begin_step(&mut self.plan.chunk_timeline.state)?;
@@ -571,38 +446,53 @@ impl LearningPreparationRun {
         Ok(())
     }
 
-    pub fn begin_rule_sense_group(&mut self, now_ms: u64) -> Result<(), ApplicationError> {
+    pub fn begin_sense_group(&mut self, now_ms: u64) -> Result<(), ApplicationError> {
         ensure_running(self.status)?;
-        begin_step(&mut self.plan.rule_sense_group.state)?;
+        begin_step(&mut self.plan.sense_group.state)?;
         self.bump(now_ms);
         Ok(())
     }
 
-    pub fn complete_rule_sense_group(
+    pub fn complete_sense_group(
         &mut self,
         artifact: ReusableFoundationArtifact,
         now_ms: u64,
     ) -> Result<(), ApplicationError> {
-        complete_step(&mut self.plan.rule_sense_group.state, artifact)?;
+        complete_step(&mut self.plan.sense_group.state, artifact)?;
         self.bump(now_ms);
         Ok(())
     }
 
-    pub fn fail_rule_sense_group(
+    pub fn fail_sense_group(
         &mut self,
         reason: impl Into<String>,
         now_ms: u64,
     ) -> Result<(), ApplicationError> {
-        fail_step(&mut self.plan.rule_sense_group.state, reason)?;
+        fail_step(&mut self.plan.sense_group.state, reason)?;
         self.bump(now_ms);
         Ok(())
     }
 
+    pub fn invalidate_word_timeline_artifact(&mut self, now_ms: u64) {
+        invalidate_ready_step(&mut self.plan.word_timeline.state);
+        invalidate_dependent_step(&mut self.plan.chunk_timeline.state);
+        self.bump(now_ms);
+    }
+
+    pub fn invalidate_chunk_timeline_artifact(&mut self, now_ms: u64) {
+        invalidate_ready_step(&mut self.plan.chunk_timeline.state);
+        self.bump(now_ms);
+    }
+
+    pub fn invalidate_sense_group_artifact(&mut self, now_ms: u64) {
+        invalidate_ready_step(&mut self.plan.sense_group.state);
+        self.bump(now_ms);
+    }
+
     pub fn finish_cancellation(&mut self, now_ms: u64) {
         cancel_non_terminal(&mut self.plan.word_timeline.state);
-        cancel_non_terminal(&mut self.plan.sound_line.state);
         cancel_non_terminal(&mut self.plan.chunk_timeline.state);
-        cancel_non_terminal(&mut self.plan.rule_sense_group.state);
+        cancel_non_terminal(&mut self.plan.sense_group.state);
         self.status = LearningPreparationRunStatus::Cancelled;
         self.bump(now_ms);
     }
@@ -610,9 +500,8 @@ impl LearningPreparationRun {
     pub fn recover_after_restart(&mut self, now_ms: u64) {
         if self.status == LearningPreparationRunStatus::Running {
             reset_running(&mut self.plan.word_timeline.state);
-            reset_running(&mut self.plan.sound_line.state);
             reset_running(&mut self.plan.chunk_timeline.state);
-            reset_running(&mut self.plan.rule_sense_group.state);
+            reset_running(&mut self.plan.sense_group.state);
             self.status = LearningPreparationRunStatus::Queued;
             self.bump(now_ms);
         }
@@ -620,11 +509,26 @@ impl LearningPreparationRun {
 
     pub fn invalidate(&mut self, now_ms: u64) {
         cancel_non_terminal(&mut self.plan.word_timeline.state);
-        cancel_non_terminal(&mut self.plan.sound_line.state);
         cancel_non_terminal(&mut self.plan.chunk_timeline.state);
-        cancel_non_terminal(&mut self.plan.rule_sense_group.state);
+        cancel_non_terminal(&mut self.plan.sense_group.state);
         self.status = LearningPreparationRunStatus::Failed;
         self.error = Some(INPUTS_CHANGED_ERROR.into());
+        self.bump(now_ms);
+    }
+
+    pub fn fail_execution(&mut self, reason: impl Into<String>, now_ms: u64) {
+        if !matches!(
+            self.status,
+            LearningPreparationRunStatus::Queued | LearningPreparationRunStatus::Running
+        ) {
+            return;
+        }
+        let reason = reason.into();
+        fail_non_terminal(&mut self.plan.word_timeline.state, &reason);
+        fail_non_terminal(&mut self.plan.chunk_timeline.state, &reason);
+        fail_non_terminal(&mut self.plan.sense_group.state, &reason);
+        self.status = LearningPreparationRunStatus::Failed;
+        self.error = Some(reason);
         self.bump(now_ms);
     }
 
@@ -696,6 +600,23 @@ fn fail_step(
     Ok(())
 }
 
+fn invalidate_ready_step(state: &mut PreparationStepState) {
+    if matches!(state, PreparationStepState::Ready { .. }) {
+        *state = PreparationStepState::Pending;
+    }
+}
+
+fn invalidate_dependent_step(state: &mut PreparationStepState) {
+    if matches!(
+        state,
+        PreparationStepState::Pending
+            | PreparationStepState::Running
+            | PreparationStepState::Ready { .. }
+    ) {
+        *state = PreparationStepState::Pending;
+    }
+}
+
 fn readiness_for(state: &PreparationStepState) -> PreparationReadiness {
     match state {
         PreparationStepState::Ready { .. } => PreparationReadiness::Ready,
@@ -714,9 +635,31 @@ fn readiness_for(state: &PreparationStepState) -> PreparationReadiness {
     }
 }
 
+fn derived_readiness(
+    word_timeline: &PreparationReadiness,
+    availability: &FoundationDerivedAvailability,
+) -> PreparationReadiness {
+    match availability {
+        FoundationDerivedAvailability::Available => word_timeline.clone(),
+        FoundationDerivedAvailability::Unavailable { reason } => {
+            PreparationReadiness::Unavailable {
+                reason: reason.clone(),
+            }
+        }
+    }
+}
+
 fn cancel_non_terminal(state: &mut PreparationStepState) {
     if !state.is_terminal() {
         *state = PreparationStepState::Cancelled;
+    }
+}
+
+fn fail_non_terminal(state: &mut PreparationStepState, reason: &str) {
+    if !state.is_terminal() {
+        *state = PreparationStepState::Failed {
+            reason: reason.into(),
+        };
     }
 }
 
@@ -766,6 +709,10 @@ pub struct FoundationPreparationInspection {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrepareFoundationResult {
     Run(Box<LearningPreparationRun>),
+    Replaced {
+        run: Box<LearningPreparationRun>,
+        invalidated_run_id: LearningPreparationRunId,
+    },
     SelectionRequired(SelectionRequiredReason),
     Unavailable(String),
 }
@@ -813,8 +760,8 @@ impl LearningPreparationUseCases {
                 return Ok(PrepareFoundationResult::Unavailable(reason));
             }
         };
-        let plan = FoundationPreparationPlan::from_inputs(inputs, request.consent);
-        let plan_fingerprint = plan_fingerprint(&plan)?;
+        let plan = FoundationPreparationPlan::from_inputs(inputs);
+        let plan_fingerprint = plan_fingerprint(request.intent, &plan.audible_structure);
         let run = LearningPreparationRun {
             id: LearningPreparationRunId::from_fingerprint(&format!(
                 "{}:{plan_fingerprint}:{now_ms}",
@@ -833,9 +780,14 @@ impl LearningPreparationUseCases {
             created_at_ms: now_ms,
             updated_at_ms: now_ms,
         };
-        self.create_replacing_stale_input(run, now_ms)
-            .map(Box::new)
-            .map(PrepareFoundationResult::Run)
+        let (run, invalidated_run_id) = self.create_replacing_stale_input(run, now_ms)?;
+        Ok(match invalidated_run_id {
+            Some(invalidated_run_id) => PrepareFoundationResult::Replaced {
+                run: Box::new(run),
+                invalidated_run_id,
+            },
+            None => PrepareFoundationResult::Run(Box::new(run)),
+        })
     }
 
     pub fn get_run(
@@ -853,13 +805,16 @@ impl LearningPreparationUseCases {
         now_ms: u64,
     ) -> Result<LearningPreparationRun, ApplicationError> {
         let mut run = self.get_run(id)?;
-        let expected_revision = run.revision;
-        run.request_cancel(now_ms)?;
-        match self.runs.transition(expected_revision, &run)? {
-            LearningPreparationRunTransition::Applied(run) => Ok(run),
-            LearningPreparationRunTransition::Rejected(_) => Err(ApplicationError::Conflict(
-                "learning preparation run changed concurrently",
-            )),
+        loop {
+            if run.status == LearningPreparationRunStatus::Cancelling {
+                return Ok(run);
+            }
+            let expected_revision = run.revision;
+            run.request_cancel(now_ms)?;
+            match self.runs.transition(expected_revision, &run)? {
+                LearningPreparationRunTransition::Applied(run) => return Ok(run),
+                LearningPreparationRunTransition::Rejected(current) => run = current,
+            }
         }
     }
 
@@ -877,6 +832,32 @@ impl LearningPreparationUseCases {
                 "learning preparation run cannot be retried",
             ));
         }
+        let inputs = match self.inspector.inspect(&previous.target)? {
+            FoundationSourceInspection::Selected(inputs) => inputs,
+            FoundationSourceInspection::SelectionRequired { .. } => {
+                return Err(ApplicationError::Conflict(
+                    "learning preparation source selection changed before retry",
+                ));
+            }
+            FoundationSourceInspection::Unavailable { .. } => {
+                return Err(ApplicationError::Conflict(
+                    "learning preparation source is unavailable before retry",
+                ));
+            }
+        };
+        let mut refreshed_plan = FoundationPreparationPlan::from_inputs(inputs);
+        preserve_ready(
+            &mut refreshed_plan.word_timeline.state,
+            &previous.plan.word_timeline.state,
+        );
+        preserve_ready(
+            &mut refreshed_plan.chunk_timeline.state,
+            &previous.plan.chunk_timeline.state,
+        );
+        preserve_ready(
+            &mut refreshed_plan.sense_group.state,
+            &previous.plan.sense_group.state,
+        );
         let mut run = previous.clone();
         run.id = LearningPreparationRunId::from_fingerprint(&format!(
             "{}:retry:{now_ms}",
@@ -886,16 +867,10 @@ impl LearningPreparationUseCases {
         run.revision = 0;
         run.retry_of_run_id = Some(previous.id);
         run.error = None;
+        run.plan = refreshed_plan;
+        run.plan_fingerprint = plan_fingerprint(run.intent, &run.plan.audible_structure);
         run.created_at_ms = now_ms;
         run.updated_at_ms = now_ms;
-        reset_retryable(&mut run.plan.word_timeline.state);
-        reset_retryable(&mut run.plan.sound_line.state);
-        if matches!(run.plan.sound_line.state, PreparationStepState::Pending) {
-            run.plan.sound_line.child_job_ref = None;
-        }
-        reset_retryable(&mut run.plan.chunk_timeline.state);
-        reset_retryable(&mut run.plan.rule_sense_group.state);
-        run.plan_fingerprint = plan_fingerprint(&run.plan)?;
         match self.runs.create_active(&run)? {
             CreateLearningPreparationRun::Created(run)
             | CreateLearningPreparationRun::Existing(run) => Ok(run),
@@ -916,11 +891,12 @@ impl LearningPreparationUseCases {
         &self,
         run: LearningPreparationRun,
         now_ms: u64,
-    ) -> Result<LearningPreparationRun, ApplicationError> {
+    ) -> Result<(LearningPreparationRun, Option<LearningPreparationRunId>), ApplicationError> {
         match self.runs.create_active(&run)? {
             CreateLearningPreparationRun::Created(run)
-            | CreateLearningPreparationRun::Existing(run) => Ok(run),
+            | CreateLearningPreparationRun::Existing(run) => Ok((run, None)),
             CreateLearningPreparationRun::InputChanged(mut previous) => {
+                let invalidated_run_id = previous.id.clone();
                 let expected_revision = previous.revision;
                 previous.invalidate(now_ms);
                 match self.runs.transition(expected_revision, &previous)? {
@@ -933,7 +909,9 @@ impl LearningPreparationUseCases {
                 }
                 match self.runs.create_active(&run)? {
                     CreateLearningPreparationRun::Created(run)
-                    | CreateLearningPreparationRun::Existing(run) => Ok(run),
+                    | CreateLearningPreparationRun::Existing(run) => {
+                        Ok((run, Some(invalidated_run_id)))
+                    }
                     CreateLearningPreparationRun::InputChanged(_) => {
                         Err(ApplicationError::Conflict(
                             "learning preparation inputs changed concurrently",
@@ -945,19 +923,35 @@ impl LearningPreparationUseCases {
     }
 }
 
-fn plan_fingerprint(plan: &FoundationPreparationPlan) -> Result<String, ApplicationError> {
-    let encoded = serde_json::to_vec(plan)
-        .map_err(|error| ApplicationError::Repository(error.to_string()))?;
-    let encoded = hex::encode(encoded);
-    Ok(digest_fields(FOUNDATION_PLANNER_VERSION, &[&encoded]))
+fn plan_fingerprint(
+    intent: FoundationPreparationIntent,
+    audible_structure: &FoundationDerivedAvailability,
+) -> String {
+    let audible_structure = match audible_structure {
+        FoundationDerivedAvailability::Available => "audible-structure:available".into(),
+        FoundationDerivedAvailability::Unavailable { reason } => {
+            format!("audible-structure:unavailable:{reason}")
+        }
+    };
+    digest_fields(
+        FOUNDATION_PLANNER_VERSION,
+        &[
+            match intent {
+                FoundationPreparationIntent::RecommendedFoundation => "recommended_foundation",
+            },
+            "word:required",
+            "chunk:required",
+            "sense-group:required",
+            "citation-structure:derived",
+            "predicted-structure:derived",
+            &audible_structure,
+        ],
+    )
 }
 
-fn reset_retryable(state: &mut PreparationStepState) {
-    if matches!(
-        state,
-        PreparationStepState::Failed { .. } | PreparationStepState::Cancelled
-    ) {
-        *state = PreparationStepState::Pending;
+fn preserve_ready(current: &mut PreparationStepState, previous: &PreparationStepState) {
+    if matches!(previous, PreparationStepState::Ready { .. }) {
+        *current = previous.clone();
     }
 }
 
@@ -976,58 +970,103 @@ mod tests {
         FoundationInputs {
             word_timeline: reusable("word"),
             word_timeline_precision: WordTimelinePrecision::Exact,
-            sound_line: FoundationAssetAvailability::Buildable {
-                requires_download: true,
-            },
-            chunk_timeline: FoundationAssetAvailability::Buildable {
-                requires_download: false,
-            },
-            rule_sense_group: FoundationAssetAvailability::Buildable {
-                requires_download: false,
-            },
+            chunk_timeline: FoundationAssetAvailability::Buildable,
+            sense_group: FoundationAssetAvailability::Buildable,
+            audible_structure: FoundationDerivedAvailability::Available,
         }
     }
 
     #[test]
-    fn no_download_consent_uses_word_timeline_for_chunks() {
-        let plan = FoundationPreparationPlan::from_inputs(
-            inputs(),
-            PreparationConsent {
-                allow_downloads: false,
-            },
+    fn all_foundation_resources_are_required() {
+        let plan = FoundationPreparationPlan::from_inputs(inputs());
+
+        assert_eq!(
+            plan.word_timeline.requirement,
+            PreparationRequirement::Required
         );
         assert_eq!(
-            plan.sound_line.state,
-            PreparationStepState::Skipped {
-                reason: "download_consent_required".into()
-            }
+            plan.chunk_timeline.requirement,
+            PreparationRequirement::Required
         );
-        assert_eq!(plan.chunk_timeline.input, ChunkTimelineInput::WordTimeline);
+        assert_eq!(
+            plan.sense_group.requirement,
+            PreparationRequirement::Required
+        );
     }
 
     #[test]
-    fn optional_sound_line_failure_does_not_fail_completed_parent() {
-        let mut plan = FoundationPreparationPlan::from_inputs(
-            FoundationInputs {
-                sound_line: FoundationAssetAvailability::Unavailable {
-                    reason: "model unavailable".into(),
-                },
-                chunk_timeline: reusable("chunk"),
-                rule_sense_group: reusable("sense"),
-                ..inputs()
+    fn unavailable_word_skips_dependent_chunk_but_not_sense_group() {
+        let plan = FoundationPreparationPlan::from_inputs(FoundationInputs {
+            word_timeline: FoundationAssetAvailability::Unavailable {
+                reason: "word timeline unavailable".into(),
             },
-            PreparationConsent {
-                allow_downloads: true,
-            },
-        );
-        assert_eq!(plan.chunk_timeline.input, ChunkTimelineInput::WordTimeline);
-        assert!(plan.all_terminal());
-        assert!(!plan.has_required_failure());
+            chunk_timeline: FoundationAssetAvailability::Buildable,
+            sense_group: reusable("sense"),
+            ..inputs()
+        });
 
-        plan.word_timeline.precision = WordTimelinePrecision::Estimated;
-        assert!(!matches!(
-            plan.sound_line.state,
+        assert!(plan.all_terminal());
+        assert!(plan.has_required_failure());
+        assert_eq!(
+            plan.chunk_timeline.state,
+            PreparationStepState::Skipped {
+                reason: "word_timeline_unavailable".into()
+            }
+        );
+        assert!(matches!(
+            plan.sense_group.state,
             PreparationStepState::Ready { .. }
         ));
+    }
+
+    #[test]
+    fn invalid_ready_artifacts_return_to_pending_for_rebuild() {
+        let mut run = LearningPreparationRun {
+            id: LearningPreparationRunId::parse("run").unwrap(),
+            target: FoundationPreparationTarget {
+                media_id: MediaId::parse("media").unwrap(),
+                media_fingerprint: "media-fp".into(),
+                subtitle_track_id: SubtitleTrackId::parse("track").unwrap(),
+                subtitle_fingerprint: "subtitle-fp".into(),
+            },
+            target_key: "target".into(),
+            input_fingerprint: "input".into(),
+            plan_fingerprint: "plan".into(),
+            intent: FoundationPreparationIntent::RecommendedFoundation,
+            status: LearningPreparationRunStatus::Running,
+            plan: FoundationPreparationPlan::from_inputs(FoundationInputs {
+                chunk_timeline: reusable("chunk"),
+                sense_group: reusable("sense"),
+                ..inputs()
+            }),
+            revision: 0,
+            retry_of_run_id: None,
+            error: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+
+        run.invalidate_word_timeline_artifact(2);
+        run.invalidate_sense_group_artifact(3);
+
+        assert_eq!(run.plan.word_timeline.state, PreparationStepState::Pending);
+        assert_eq!(run.plan.chunk_timeline.state, PreparationStepState::Pending);
+        assert_eq!(run.plan.sense_group.state, PreparationStepState::Pending);
+    }
+
+    #[test]
+    fn language_capability_changes_the_plan_identity() {
+        assert_ne!(
+            plan_fingerprint(
+                FoundationPreparationIntent::RecommendedFoundation,
+                &FoundationDerivedAvailability::Available,
+            ),
+            plan_fingerprint(
+                FoundationPreparationIntent::RecommendedFoundation,
+                &FoundationDerivedAvailability::Unavailable {
+                    reason: "unsupported:zh-hans".into(),
+                },
+            )
+        );
     }
 }

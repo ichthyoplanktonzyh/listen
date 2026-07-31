@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-07-30 CST
+> Updated: 2026-07-31 CST
 
 ## Position
 
@@ -14,12 +14,15 @@
 
 ## Current Work
 
-The language-learning model, LLTimeline contract/import corrections, runtime
-dictionary reload, and SoundLine provenance fixes are merged. Core issue #91
-now establishes the internal recommended-foundation preparation module before
-any learner-facing contract: exact source selection, fixed typed preparation
-slots, durable single-flight, revision CAS, cancellation/retry/recovery, and
-honest four-state readiness.
+The internal recommended-foundation preparation module now owns exact source
+selection, fixed typed preparation slots, durable single-flight, revision CAS,
+cancellation/retry/recovery, and local-runtime execution through the three fast
+required analyses: WordTimeline, ChunkTimeline, and SenseGroup. Citation and
+predicted audible structures (views A/B) are derived from WordTimeline rather
+than persisted as preparation jobs. SoundLine is independent best-effort
+enrichment; observed phone evidence (view C) remains a separately confirmed
+Phoneme Analysis. The module remains internal until the media-level one-click
+journey in issue #103 supplies or creates the exact Subtitle Text Track.
 
 ## Established Boundaries
 
@@ -37,9 +40,8 @@ not code evidence.
 
 ## Next
 
-1. Complete issue #91's local-runtime adapters against the internal typed
-   preparation module; do not add routes or OpenAPI until an app-owned journey
-   request exists.
+1. Implement issue #103 as the media-level one-click entry: reuse an exact
+   Subtitle Text Track or run ASR, then enter foundation preparation.
 2. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
