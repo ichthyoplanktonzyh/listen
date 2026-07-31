@@ -339,15 +339,19 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
               if (attempt == null) ...[
                 SelectableText(hit.document.responseText),
               ],
-              for (final response in attempt?.responses ?? const []) ...[
-                Text(
-                  '${l.text('revision')} ${response.revision}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: ListenSpacing.gap4),
-                SelectableText(response.transcript),
-                const SizedBox(height: ListenSpacing.gap12),
-              ],
+              // `attempt?.responses ?? const []` would infer `List<dynamic>`
+              // here (a for-in gives the literal an `Iterable<dynamic>`
+              // context), so promote instead and keep `response` typed.
+              if (attempt != null)
+                for (final response in attempt.responses) ...[
+                  Text(
+                    '${l.text('revision')} ${response.revision}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: ListenSpacing.gap4),
+                  SelectableText(response.transcript),
+                  const SizedBox(height: ListenSpacing.gap12),
+                ],
             ],
           ),
         ),

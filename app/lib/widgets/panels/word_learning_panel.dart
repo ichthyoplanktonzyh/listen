@@ -59,6 +59,15 @@ class WordLearningPanel extends StatefulWidget {
   State<WordLearningPanel> createState() => _WordLearningPanelState();
 }
 
+// Typed empty fallbacks. A bare `?? const []` inside a `for-in` header gets
+// `List<dynamic>` (the loop supplies `Iterable<dynamic>` as the literal's
+// context instead of the left operand's type), which silently made every
+// element below dynamic. Naming the element type keeps the loops typed.
+const List<DictionaryLookupResult> _noResults = [];
+const List<CharacterBreakdown> _noBreakdowns = [];
+const List<DictionaryPhonetic> _noPhonetics = [];
+const List<PronunciationVariant> _noVariants = [];
+
 class _WordLearningPanelState extends State<WordLearningPanel> {
   late final TextEditingController definition;
   late final TextEditingController note;
@@ -121,8 +130,8 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
 
   List<({String character, String pinyin, String meaning})>
   _backendCharacterBreakdowns() {
-    for (final result in widget.dictionary?.results ?? const []) {
-      final breakdowns = result.lookup?.characterBreakdowns ?? const [];
+    for (final result in widget.dictionary?.results ?? _noResults) {
+      final breakdowns = result.lookup?.characterBreakdowns ?? _noBreakdowns;
       if (breakdowns.isEmpty) continue;
       return [
         for (final value in breakdowns)
@@ -137,8 +146,8 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   }
 
   String? _firstChinesePinyin() {
-    for (final result in widget.dictionary?.results ?? const []) {
-      for (final phonetic in result.lookup?.phonetics ?? const []) {
+    for (final result in widget.dictionary?.results ?? _noResults) {
+      for (final phonetic in result.lookup?.phonetics ?? _noPhonetics) {
         final text = phonetic.text.trim();
         if (phonetic.region == 'zh' && text.isNotEmpty) return text;
       }
@@ -157,7 +166,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     // dictionary phonetics below) yield empty variants, so the section hides
     // instead of showing a blank row.
     final pronunciationVariants = [
-      for (final variant in widget.pronunciation?.variants ?? const [])
+      for (final variant in widget.pronunciation?.variants ?? _noVariants)
         if (variant.displayIpa.isNotEmpty) variant,
     ];
     final occurrences = widget.details.occurrences;

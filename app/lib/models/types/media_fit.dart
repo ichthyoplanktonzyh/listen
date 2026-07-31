@@ -45,7 +45,7 @@ class DifficultyDimension {
       DifficultyDimension(
         fit: json['fit'] as String,
         signals: (json['signals'] as List<dynamic>? ?? const [])
-            .whereType<Map>()
+            .whereType<Map<Object?, Object?>>()
             .map(
               (value) => FitSignal.fromJson(Map<String, dynamic>.from(value)),
             )
