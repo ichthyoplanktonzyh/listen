@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/content_activity.dart';
+import '../../theme/breakpoints.dart';
 
 Future<ContentSpeakingActivity?> showContentSpeakingActivityDialog(
   BuildContext context,
@@ -19,7 +20,9 @@ class _ContentSpeakingActivityDialog extends StatelessWidget {
     return AlertDialog(
       title: Text(l.text('contentSpeakingActivityTitle')),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
+        constraints: const BoxConstraints(
+          maxWidth: ListenBreakpoints.formColumnMax,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

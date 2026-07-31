@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_empty_state.dart';
@@ -95,10 +96,13 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            padding: ListenPadding.row,
             child: Row(
               children: [
-                const Icon(Icons.subtitles_outlined, size: 18),
+                const Icon(
+                  Icons.subtitles_outlined,
+                  size: ListenIconSize.control,
+                ),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
@@ -358,12 +362,12 @@ class _SubtitleResourceTile extends StatelessWidget {
         borderRadius: ListenRadii.controlBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: ListenPadding.row,
         child: Row(
           children: [
             Icon(
               active ? Icons.check_circle : Icons.subtitles_outlined,
-              size: 18,
+              size: ListenIconSize.control,
               color: active
                   ? Theme.of(context).colorScheme.primary
                   : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -601,7 +605,7 @@ class _CapabilityChip extends StatelessWidget {
         borderRadius: ListenRadii.pillBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        padding: ListenPadding.tight,
         child: Text(
           _text(),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -666,13 +670,13 @@ class _LanguageChip extends StatelessWidget {
           borderRadius: ListenRadii.pillBorder,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          padding: ListenPadding.tight,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 Icons.language,
-                size: 12,
+                size: ListenIconSize.inline,
                 color: Theme.of(context).colorScheme.tertiary,
               ),
               const SizedBox(width: ListenSpacing.gap2),

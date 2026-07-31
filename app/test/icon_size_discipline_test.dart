@@ -62,33 +62,6 @@ void main() {
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
   const knownOffenders = <String>{
-    'lib/phonetic_analysis_ui.dart',
-    'lib/screens/review_queue_screen.dart',
-    'lib/widgets/flows/media_import_flows.dart',
-    'lib/widgets/home/listening_home.dart',
-    'lib/widgets/home/media_library_section.dart',
-    'lib/widgets/panels/cold_start_marking_sheet.dart',
-    'lib/widgets/panels/content_fit_card.dart',
-    'lib/widgets/panels/diagnosis_card.dart',
-    'lib/widgets/panels/intensive_practice_window.dart',
-    'lib/widgets/panels/listening_check_panel.dart',
-    'lib/widgets/panels/listening_inbox_panel.dart',
-    'lib/widgets/panels/llm_feedback_assist.dart',
-    'lib/widgets/panels/llm_judgment_assist.dart',
-    'lib/widgets/panels/manual_timeline_review_dialog.dart',
-    'lib/widgets/panels/reading_task_sheet.dart',
-    'lib/widgets/panels/reading_task_studio.dart',
-    'lib/widgets/panels/reading_view.dart',
-    'lib/widgets/panels/slice_playback_window.dart',
-    'lib/widgets/panels/speaking_task_studio.dart',
-    'lib/widgets/panels/subtitle_resource_manager_panel.dart',
-    'lib/widgets/panels/timeline_resource_summary_panel.dart',
-    'lib/widgets/panels/word_learning_panel.dart',
-    'lib/widgets/panels/writing_task_studio.dart',
-    'lib/widgets/settings/llm_provider_settings.dart',
-    'lib/widgets/settings/realtime_provider_settings.dart',
-    'lib/widgets/settings/settings_dialog.dart',
-    'lib/widgets/settings/syntax_capability_settings.dart',
   };
 
   test('icon glyphs use ListenIconSize steps, not bare literals', () {

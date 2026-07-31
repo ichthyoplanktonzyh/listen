@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -165,7 +166,12 @@ class _HomeSidebar extends StatelessWidget {
         key: const ValueKey('home-sidebar-scroll'),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(14, 22, 14, 0),
+            padding: const EdgeInsets.fromLTRB(
+              ListenSpacing.gap12,
+              ListenSpacing.gap24,
+              ListenSpacing.gap12,
+              0,
+            ),
             sliver: SliverList.list(
               children: [
                 _SectionLabel(label: l.text('listenNow')),
@@ -215,7 +221,12 @@ class _HomeSidebar extends StatelessWidget {
           SliverFillRemaining(
             hasScrollBody: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              padding: const EdgeInsets.fromLTRB(
+                ListenSpacing.gap12,
+                0,
+                ListenSpacing.gap12,
+                ListenSpacing.gap12,
+              ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -298,26 +309,31 @@ class _HomeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final horizontalPadding = compact ? 24.0 : 48.0;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        horizontalPadding,
-        compact ? 28 : 44,
-        horizontalPadding,
-        40,
-      ),
+      // One page role per window width, instead of four different numbers in
+      // four directions (24|48 / 28|44 / 24|48 / 40, three of them off any
+      // ladder). This is the inset the coach dashboard and the vocabulary
+      // detail already use, so the home page finally measures its margin the
+      // same way the rest of the app does.
+      padding: compact ? ListenPadding.pageCompact : ListenPadding.page,
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 920),
+          // Wide content that carries media, not a reading measure: the cap
+          // only stops the layout sprawling once the window is much wider than
+          // the content needs.
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.wideColumnMax,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
+                // The page title is the one hero size. `headlineMedium` is
+                // 28px w400 — a geometry the ladder never chose — and this was
+                // the largest of the sixteen sites that had picked one up.
                 l.text('contentHome'),
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: ListenSpacing.gap16),
               Text(
@@ -555,7 +571,7 @@ class _ContinueLearningCard extends StatelessWidget {
       child: InkWell(
         onTap: _hasMedia ? onContinue : onOpenMedia,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 16, 16),
+          padding: ListenPadding.card,
           child: Row(
             children: [
               Container(
@@ -736,10 +752,14 @@ class _StatusTile extends StatelessWidget {
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: ListenPadding.row,
         child: Row(
           children: [
-            Icon(item.icon, size: 18, color: colors.primary),
+            Icon(
+              item.icon,
+              size: ListenIconSize.control,
+              color: colors.primary,
+            ),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(
@@ -805,7 +825,7 @@ class _SourceAction extends StatelessWidget {
         child: SizedBox(
           height: 112,
           child: Padding(
-            padding: const EdgeInsets.all(18),
+            padding: ListenPadding.card,
             child: Row(
               children: [
                 Container(
@@ -898,7 +918,7 @@ class _SidebarItem extends StatelessWidget {
     // lets the teal show only through icon, label and a faint ring — a solid
     // teal block would make the shell itself a light source.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+      padding: const EdgeInsets.only(bottom: ListenSpacing.gap2),
       child: Material(
         color: selected ? colors.surfaceContainerHigh : Colors.transparent,
         shape: RoundedRectangleBorder(
@@ -918,7 +938,7 @@ class _SidebarItem extends StatelessWidget {
                 children: [
                   Icon(
                     icon,
-                    size: 20,
+                    size: ListenIconSize.control,
                     // pressedPrimary is the primary shade made for sitting on
                     // a surface — plain primary misses AA on the raised row
                     // in the light theme (4.3:1).

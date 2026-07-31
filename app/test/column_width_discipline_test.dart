@@ -51,15 +51,6 @@ void main() {
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
   const knownOffenders = <String>{
-    'lib/screens/review_queue_screen.dart',
-    'lib/widgets/flows/content_speaking_activity_dialog.dart',
-    'lib/widgets/home/listening_home.dart',
-    'lib/widgets/panels/cold_start_marking_sheet.dart',
-    'lib/widgets/panels/hunting_prompt_card.dart',
-    'lib/widgets/panels/reading_diff_panel.dart',
-    'lib/widgets/panels/reading_view.dart',
-    'lib/widgets/panels/speaking_task_studio.dart',
-    'lib/widgets/panels/writing_task_studio.dart',
   };
 
   test('column caps use ListenBreakpoints widths, not maxWidth literals', () {

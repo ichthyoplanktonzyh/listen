@@ -11,6 +11,7 @@ import '../models/practice.dart';
 import '../services/api_service.dart';
 import '../state/builder.dart';
 import '../theme/breakpoints.dart';
+import '../theme/icon_size.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_error_state.dart';
@@ -125,7 +126,9 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
                         .text('reviewDueCount')
                         .replaceAll('{count}', '${state.remaining}');
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: ListenSpacing.gap16,
+                ),
                 child: Center(child: Text(label)),
               );
             },
@@ -299,7 +302,7 @@ class _ReviewCardState extends State<_ReviewCard> {
     final card = widget.entry.card;
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: ListenPadding.pageCompact,
         child: ConstrainedBox(
           constraints: const BoxConstraints(
             maxWidth: ListenBreakpoints.cardColumnMax,
@@ -368,7 +371,7 @@ class _ReviewCardState extends State<_ReviewCard> {
           Text(
             card.cue ?? '____',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: ListenSpacing.gap16),
           TextField(
@@ -399,7 +402,7 @@ class _ReviewCardState extends State<_ReviewCard> {
           Text(
             card.cue ?? card.target ?? '',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: ListenSpacing.gap16),
           Row(
@@ -501,7 +504,7 @@ class _ReviewCardState extends State<_ReviewCard> {
         Text(
           card.answer,
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall,
+          style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: ListenSpacing.gap24),
         // R5: four grades (Again/Hard/Good/Easy). The backend `ReviewRating`
@@ -568,7 +571,7 @@ class _CardHead extends StatelessWidget {
     final face = _channelFace(_channel(card.kind));
     return Row(
       children: [
-        Icon(face.icon, size: 18, color: colors.primary),
+        Icon(face.icon, size: ListenIconSize.control, color: colors.primary),
         const SizedBox(width: ListenSpacing.gap8),
         Expanded(
           child: Text(
@@ -735,7 +738,7 @@ class _Finished extends StatelessWidget {
     final l = AppLocalizations.of(context);
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: ListenPadding.pageCompact,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -743,7 +746,11 @@ class _Finished extends StatelessWidget {
               state.error == null
                   ? Icons.check_circle_outline
                   : Icons.error_outline,
-              size: 52,
+              // Illustration, not a control: this is the whole subject of the
+              // round-finished / nothing-due screen, carrying its meaning on
+              // its own rather than labelling anything, and nothing here is
+              // tappable.
+              size: ListenIconSize.illustration,
             ),
             const SizedBox(height: ListenSpacing.gap12),
             Text(
@@ -770,9 +777,11 @@ class _Finished extends StatelessWidget {
               for (final suggestion in state.upgradeSuggestions)
                 Card(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
+                    constraints: const BoxConstraints(
+                      maxWidth: ListenBreakpoints.formColumnMax,
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.all(18),
+                      padding: ListenPadding.card,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [

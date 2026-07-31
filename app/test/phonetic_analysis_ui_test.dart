@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 
 Future<void> pumpAnalysisCenterFrame(WidgetTester tester) async {
   await tester.pump();
@@ -87,6 +88,23 @@ void main() {
     expect(find.text('track'), findsOneWidget);
     expect(find.text('Recognizing phones'), findsOneWidget);
     expect(find.textContaining('research failure'), findsOneWidget);
+
+    // S2 token provenance: the job list's status glyphs are `chrome`, and the
+    // spinner that stands in for one while a job runs reads the same step — at
+    // any other size the row would resize the moment the job settled.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.error)).size,
+      ListenIconSize.chrome,
+    );
+    final steps = <double>{
+      ListenIconSize.inline,
+      ListenIconSize.control,
+      ListenIconSize.chrome,
+      ListenIconSize.illustration,
+    };
+    for (final icon in tester.widgetList<Icon>(find.byType(Icon))) {
+      if (icon.size != null) expect(steps, contains(icon.size));
+    }
 
     await tester.tap(find.byTooltip('Cancel'));
     await pumpAnalysisCenterFrame(tester);

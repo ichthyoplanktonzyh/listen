@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/writing_task_studio.dart';
 
 const _source = WritingTaskSource(
@@ -138,6 +141,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('writing-request-feedback')), findsOneWidget);
     expect(find.text('Requested feedback'), findsNothing);
+
+    // The saved-draft phase is where S2's column and icon steps land. The
+    // confirmation glyph is an illustration — it states the outcome on its own
+    // rather than labelling a control — and the column is a studio card, not
+    // the 620 it had picked.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.check_circle_outline)).size,
+      ListenIconSize.illustration,
+    );
+    final caps = tester
+        .widgetList<ConstrainedBox>(
+          find.ancestor(
+            of: find.byKey(const Key('writing-request-feedback')),
+            matching: find.byType(ConstrainedBox),
+          ),
+        )
+        .map((box) => box.constraints.maxWidth);
+    expect(caps, contains(ListenBreakpoints.cardColumnMax));
+    expect(caps, isNot(contains(620.0)));
+    // The studio surface insets as a page, not at the 20 it had. Identified by
+    // shape rather than position, since `SafeArea` contributes a zero-inset
+    // `Padding` of its own above it.
+    final surface = tester
+        .widgetList<Padding>(
+          find.descendant(
+            of: find.byType(WritingTaskStudio),
+            matching: find.byType(Padding),
+          ),
+        )
+        .firstWhere((padding) => padding.child is Column);
+    expect(surface.padding, ListenPadding.pageCompact);
 
     await tester.tap(find.byKey(const Key('writing-request-feedback')));
     await tester.pumpAndSettle();

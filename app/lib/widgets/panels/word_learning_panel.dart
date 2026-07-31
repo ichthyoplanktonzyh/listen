@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
@@ -162,7 +163,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
     final occurrences = widget.details.occurrences;
     final history = widget.details.history;
     return ListView(
-      padding: const EdgeInsets.all(14),
+      padding: ListenPadding.card,
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +171,10 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             Expanded(
               child: Text(
                 entry.displayForm,
-                style: Theme.of(context).textTheme.headlineMedium,
+                // The headword is this panel's title. It had been reading
+                // Material's unmapped 28px w400; `titleLarge` is the ladder's
+                // one hero size (22 w600).
+                style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
             DecoratedBox(
@@ -182,7 +186,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
                 borderRadius: ListenRadii.pillBorder,
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                padding: ListenPadding.tight,
                 child: Text(
                   l.status(entry.status),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -200,7 +204,10 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               onPressed: widget.onOpenListeningDictionary,
-              icon: const Icon(Icons.headphones_outlined, size: 18),
+              icon: const Icon(
+                Icons.headphones_outlined,
+                size: ListenIconSize.control,
+              ),
               label: Text(l.text('openListeningDictionary')),
             ),
           ),
@@ -238,25 +245,34 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
           runSpacing: 6,
           children: [
             TextButton.icon(
-              icon: const Icon(Icons.hearing, size: 18),
+              icon: const Icon(Icons.hearing, size: ListenIconSize.control),
               onPressed: widget.onHeard,
               label: Text(l.text('heard')),
             ),
             TextButton.icon(
-              icon: const Icon(Icons.hearing_disabled, size: 18),
+              icon: const Icon(
+                Icons.hearing_disabled,
+                size: ListenIconSize.control,
+              ),
               onPressed: widget.onNotHeard,
               label: Text(l.text('notHeard')),
             ),
             if (widget.onReadingMark != null) ...[
               TextButton.icon(
                 key: const ValueKey('reading-mark-understood'),
-                icon: const Icon(Icons.chrome_reader_mode_outlined, size: 18),
+                icon: const Icon(
+                  Icons.chrome_reader_mode_outlined,
+                  size: ListenIconSize.control,
+                ),
                 onPressed: () => widget.onReadingMark!(true),
                 label: Text(l.text('readUnderstood')),
               ),
               TextButton.icon(
                 key: const ValueKey('reading-mark-not-understood'),
-                icon: const Icon(Icons.help_outline, size: 18),
+                icon: const Icon(
+                  Icons.help_outline,
+                  size: ListenIconSize.control,
+                ),
                 onPressed: () => widget.onReadingMark!(false),
                 label: Text(l.text('readNotUnderstood')),
               ),
@@ -264,7 +280,10 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             if (widget.onCorrectLemma != null)
               TextButton.icon(
                 key: const ValueKey('correct-lemma'),
-                icon: const Icon(Icons.edit_note_outlined, size: 18),
+                icon: const Icon(
+                  Icons.edit_note_outlined,
+                  size: ListenIconSize.control,
+                ),
                 onPressed: widget.onCorrectLemma,
                 label: Text(l.text('correctLemma')),
               ),
@@ -390,7 +409,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.icon(
-            icon: const Icon(Icons.save_outlined, size: 18),
+            icon: const Icon(Icons.save_outlined, size: ListenIconSize.control),
             onPressed: () => widget.onSave(definition.text, note.text),
             label: Text(l.text('save')),
           ),
@@ -408,7 +427,7 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
             if (widget.onRecordSource != null)
               TextButton.icon(
                 onPressed: widget.hasSelectedCue ? widget.onRecordSource : null,
-                icon: const Icon(Icons.add, size: 16),
+                icon: const Icon(Icons.add, size: ListenIconSize.control),
                 label: Text(l.text('recordCurrentSentence')),
                 style: TextButton.styleFrom(
                   visualDensity: VisualDensity.compact,
@@ -482,7 +501,11 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
   Widget _sectionHeader(BuildContext context, String title, IconData icon) =>
       Row(
         children: [
-          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          Icon(
+            icon,
+            size: ListenIconSize.control,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(width: ListenSpacing.gap8),
           Text(title, style: Theme.of(context).textTheme.titleSmall),
         ],
@@ -527,7 +550,11 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+          Icon(
+            icon,
+            size: ListenIconSize.control,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(width: ListenSpacing.gap6),
           SizedBox(width: 48, child: Text(label, style: ListenType.reading)),
           const SizedBox(width: ListenSpacing.gap8),
@@ -560,8 +587,9 @@ class _WordLearningPanelState extends State<WordLearningPanel> {
               child: Tooltip(
                 message: 'User override',
                 child: Icon(
+                  // A provenance marker in the row's text flow, not a control.
                   Icons.person_outline,
-                  size: 14,
+                  size: ListenIconSize.inline,
                   color: Theme.of(context).colorScheme.outline,
                 ),
               ),

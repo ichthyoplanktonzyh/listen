@@ -438,6 +438,56 @@ void main() {
         await harness.controller.cancel();
       },
     );
+
+    test(
+      'resetToIdle drops a finished conversation but keeps the chosen voice',
+      () async {
+        final harness = _Harness(
+          transcripts: const ['learner'],
+          providerDrainTimeout: Duration.zero,
+        );
+        await harness.start();
+        await harness.learnerTurn('user-1', 'provider learner');
+        await harness.assistantTurn('assistant-1', 'A reply');
+        await harness.controller.finish();
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.done);
+        expect(harness.controller.state.items, isNotEmpty);
+        final profiles = harness.controller.state.profiles;
+        final selected = harness.controller.state.selectedProfileId;
+
+        harness.controller.resetToIdle();
+
+        // The controller outlives the route, so a terminal state left in place
+        // would re-render the previous debrief on re-entry. What a returning
+        // user must not lose is the voice they already picked.
+        expect(harness.controller.state.phase, RealtimeConversationPhase.idle);
+        expect(harness.controller.state.items, isEmpty);
+        expect(harness.controller.state.profiles, profiles);
+        expect(harness.controller.state.selectedProfileId, selected);
+      },
+    );
+
+    test(
+      'resetToIdle refuses to discard a conversation that is still live',
+      () async {
+        final harness = _Harness(transcripts: const ['learner']);
+        await harness.start();
+        await harness.learnerTurn('user-1', 'provider learner');
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.live);
+        final items = harness.controller.state.items;
+        expect(items, isNotEmpty);
+
+        harness.controller.resetToIdle();
+
+        // canConfigure is the only state where dropping the turns cannot lose
+        // anything; a live session is never silently discarded.
+        expect(harness.controller.state.phase, RealtimeConversationPhase.live);
+        expect(harness.controller.state.items, items);
+        await harness.controller.cancel();
+      },
+    );
   });
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/extensive_listening_controller.dart';
 import '../../localization.dart';
 import '../../models/listening.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
@@ -41,7 +42,7 @@ class ListeningInboxPanel extends StatelessWidget {
               children: [
                 Icon(
                   controller.active ? Icons.hearing : Icons.hearing_disabled,
-                  size: 18,
+                  size: ListenIconSize.control,
                 ),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
@@ -118,14 +119,17 @@ class _InboxTile extends StatelessWidget {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: ListenRadii.controlBorder),
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding: ListenPadding.row,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.bookmark_added_outlined, size: 18),
+                const Icon(
+                  Icons.bookmark_added_outlined,
+                  size: ListenIconSize.control,
+                ),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(

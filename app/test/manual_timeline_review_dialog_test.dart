@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/manual_review_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/manual_timeline_review_dialog.dart';
 
 /// The manual timing dialog's two S6 (#7) claims.
@@ -178,6 +179,22 @@ void main() {
 
     expect(find.text(l.text('manualTimingUserAdjusted')), findsOneWidget);
     expect(find.text('user adjusted'), findsNothing);
+
+    // S2 token provenance: a word row is the repeating unit a user scans down,
+    // so its inset is the `row` role rather than the 10/8 it composed by hand.
+    expect(
+      tester
+          .widget<Padding>(
+            find
+                .ancestor(
+                  of: find.text('Hello').first,
+                  matching: find.byType(Padding),
+                )
+                .first,
+          )
+          .padding,
+      ListenPadding.row,
+    );
     expect(
       find.text(l.text('manualTimingEditedCount').replaceAll('{count}', '1')),
       findsOneWidget,

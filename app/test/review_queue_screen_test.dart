@@ -7,6 +7,9 @@ import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/screens/review_queue_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:video_player/video_player.dart';
 
 /// A no-op second decoder so a review clip can "play" without opening a real
@@ -485,6 +488,37 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('heard in 5 contexts'), findsOneWidget);
+
+    // S2 token provenance for the finished screen: its page inset is a page
+    // role (28 before), its verdict glyph is the screen's one `illustration`
+    // (52 before), and the suggestion card takes a named column cap.
+    expect(
+      tester
+          .widget<SingleChildScrollView>(
+            find.byType(SingleChildScrollView).first,
+          )
+          .padding,
+      ListenPadding.pageCompact,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.check_circle_outline)).size,
+      ListenIconSize.illustration,
+    );
+    expect(
+      tester
+          .widget<ConstrainedBox>(
+            find
+                .ancestor(
+                  of: find.textContaining('heard in 5 contexts'),
+                  matching: find.byType(ConstrainedBox),
+                )
+                .last,
+          )
+          .constraints
+          .maxWidth,
+      ListenBreakpoints.formColumnMax,
+    );
+
     await tester.tap(find.text('Not yet'));
     await tester.pumpAndSettle();
     expect(

@@ -121,15 +121,13 @@ void main() {
   // tracks. Same shape as `icon_size_discipline_test.dart` and
   // `error_leak_discipline_test.dart`.
   //
-  // S6 cleared 我的表达 (62 literals) and the manual timing dialog. The three
-  // left are outside its file domain — the S2 token migration is running on
-  // those same files in parallel, and two agents editing one file is how a
-  // merge loses copy. Six literals between them, and the next slice's number.
+  // S6 cleared 我的表达 (62 literals) and the manual timing dialog, leaving
+  // three files outside its domain to whoever next touched them. S2 then took
+  // two of the three: the studios slice picked up `reading_view` (its single
+  // 保存到我的表达 tooltip now reads the `expressionSaveTitle` key both tables
+  // already carried), and the panels slice picked up `learning_assets_ui`
+  // (whose two literals likewise duplicated existing keys). One file left.
   const knownOffenders = <String>{
-    // 首页侧栏 ▸ 我的表达 entry (issue #7's fourth site). Two literals.
-    'lib/learning_assets_ui.dart',
-    // 「保存到我的表达」 tooltip on the reading surface. One literal.
-    'lib/widgets/panels/reading_view.dart',
     // 当前来源切片 / 暂停 / 播放 / 跟一下 on the dictionary clip player.
   };
 

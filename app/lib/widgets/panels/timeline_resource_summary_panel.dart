@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/capability_readiness.dart';
 import '../../models/timeline.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -88,14 +89,14 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
         ),
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        padding: ListenPadding.row,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.timeline, size: 18),
+                const Icon(Icons.timeline, size: ListenIconSize.control),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
@@ -187,7 +188,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                   key: const Key('timeline-technical-details'),
                   tilePadding: EdgeInsets.zero,
                   childrenPadding: const EdgeInsets.only(bottom: 4),
-                  leading: const Icon(Icons.tune, size: 18),
+                  leading: const Icon(Icons.tune, size: ListenIconSize.control),
                   title: Text(l.text('technicalDetails')),
                   children: [
                     if (document != null)
@@ -386,14 +387,18 @@ class _CapabilityReadinessTile extends StatelessWidget {
           borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          padding: ListenPadding.row,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
-                  Icon(_stateIcon(readiness.state), size: 15, color: color),
+                  Icon(
+                    _stateIcon(readiness.state),
+                    size: ListenIconSize.inline,
+                    color: color,
+                  ),
                   const SizedBox(width: ListenSpacing.gap6),
                   Expanded(
                     child: Text(
@@ -509,7 +514,7 @@ class _ActiveTimelineLine extends StatelessWidget {
                     ? Icons.check_circle_outline
                     : Icons.history
               : Icons.radio_button_checked,
-          size: 16,
+          size: ListenIconSize.inline,
           color: active == null && !hasFallback
               ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
@@ -543,7 +548,7 @@ class _ActiveChunkLine extends StatelessWidget {
       children: [
         Icon(
           active == null ? Icons.splitscreen_outlined : Icons.grid_view,
-          size: 16,
+          size: ListenIconSize.inline,
           color: active == null
               ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
@@ -577,7 +582,7 @@ class _ActivePhoneLine extends StatelessWidget {
       children: [
         Icon(
           active == null ? Icons.hearing_outlined : Icons.graphic_eq,
-          size: 16,
+          size: ListenIconSize.inline,
           color: active == null
               ? Theme.of(context).colorScheme.onSurfaceVariant
               : Theme.of(context).colorScheme.primary,
@@ -626,14 +631,14 @@ class _CandidateTile extends StatelessWidget {
           borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: ListenPadding.row,
           child: Row(
             children: [
               Icon(
                 summary.isActive
                     ? Icons.check_circle
                     : Icons.radio_button_unchecked,
-                size: 18,
+                size: ListenIconSize.control,
                 color: summary.isActive
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -722,12 +727,12 @@ class _PhoneCandidateTile extends StatelessWidget {
           borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: ListenPadding.row,
           child: Row(
             children: [
               Icon(
                 summary.isActive ? Icons.check_circle : Icons.graphic_eq,
-                size: 18,
+                size: ListenIconSize.control,
                 color: summary.isActive
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -825,12 +830,12 @@ class _ChunkCandidateTile extends StatelessWidget {
           borderRadius: ListenRadii.controlBorder,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: ListenPadding.row,
           child: Row(
             children: [
               Icon(
                 summary.isActive ? Icons.check_circle : Icons.grid_view,
-                size: 18,
+                size: ListenIconSize.control,
                 color: summary.isActive
                     ? Theme.of(context).colorScheme.primary
                     : Theme.of(context).colorScheme.onSurfaceVariant,
@@ -916,11 +921,11 @@ class _Chip extends StatelessWidget {
       borderRadius: ListenRadii.controlBorder,
     ),
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: ListenPadding.tight,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
+          Icon(icon, size: ListenIconSize.inline, color: color),
           const SizedBox(width: ListenSpacing.gap4),
           Flexible(
             child: Text(

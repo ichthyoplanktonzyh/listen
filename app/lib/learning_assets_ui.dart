@@ -161,8 +161,13 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
             child: Card(
               child: ListTile(
                 leading: const Icon(Icons.auto_stories_outlined),
-                title: const Text('我的表达'),
-                subtitle: const Text('收藏真实句子，编辑成自己的模板，并分别练习书面与口头表达'),
+                // Both strings already existed in `localization.dart` for
+                // this same destination — the compact home card reads them —
+                // so this tile was showing a second, hand-written subtitle for
+                // one place. Reading the keys fixes the i18n hole and makes the
+                // two surfaces agree on what 我的表达 is for.
+                title: Text(l.text('personalExpressions')),
+                subtitle: Text(l.text('personalExpressionSummary')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   await Navigator.of(context).push<void>(
