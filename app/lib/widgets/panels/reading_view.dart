@@ -8,6 +8,7 @@ import '../../models/reading.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
@@ -129,15 +130,17 @@ class _ReadingViewState extends State<ReadingView> {
                   )
                 : ListView.builder(
                     controller: _scroll,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 20,
-                    ),
+                    padding: ListenPadding.pageCompact,
                     itemCount: _state.paragraphs.length,
                     itemBuilder: (context, index) => Align(
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 900),
+                        // 900 was the widest reading measure in the app and the
+                        // only one above the 780 the charter calls comfortable;
+                        // prose here is exactly what `contentColumnMax` is for.
+                        constraints: const BoxConstraints(
+                          maxWidth: ListenBreakpoints.contentColumnMax,
+                        ),
                         child: _paragraph(context, _state.paragraphs[index]),
                       ),
                     ),
@@ -156,7 +159,16 @@ class _ReadingViewState extends State<ReadingView> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < ListenBreakpoints.readingCompact;
         return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
+          // Asymmetric on purpose and kept that way: the row opens with a bare
+          // `Icon` and closes with `IconButton`s that carry their own hit
+          // padding, so an even inset would look off-centre. Only the numbers
+          // move onto the ladder (20/10 → 16/8).
+          padding: const EdgeInsets.fromLTRB(
+            ListenSpacing.gap16,
+            ListenSpacing.gap8,
+            ListenSpacing.gap8,
+            ListenSpacing.gap8,
+          ),
           child: Row(
             children: [
               Icon(Icons.chrome_reader_mode_outlined, color: colors.primary),
@@ -174,14 +186,20 @@ class _ReadingViewState extends State<ReadingView> {
                   tooltip: l.text('readingVocabularyOverview'),
                   onPressed: () =>
                       setState(() => _overviewVisible = !_overviewVisible),
-                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  icon: const Icon(
+                    Icons.analytics_outlined,
+                    size: ListenIconSize.control,
+                  ),
                 )
               else
                 TextButton.icon(
                   key: const ValueKey('reading-vocabulary-overview'),
                   onPressed: () =>
                       setState(() => _overviewVisible = !_overviewVisible),
-                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  icon: const Icon(
+                    Icons.analytics_outlined,
+                    size: ListenIconSize.control,
+                  ),
                   label: Text(l.text('readingVocabularyOverview')),
                 ),
               PopupMenuButton<ReadingLens>(
@@ -197,14 +215,14 @@ class _ReadingViewState extends State<ReadingView> {
                     ),
                 ],
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
+                  padding: ListenPadding.row,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.filter_alt_outlined, size: 18),
+                      const Icon(
+                        Icons.filter_alt_outlined,
+                        size: ListenIconSize.control,
+                      ),
                       if (!compact) ...[
                         const SizedBox(width: ListenSpacing.gap6),
                         Text(_lensLabel(l, _lens)),
@@ -249,7 +267,7 @@ class _ReadingViewState extends State<ReadingView> {
     final colors = Theme.of(context).colorScheme;
     if (paragraph.nonSpeech) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap8),
         child: Center(
           child: Text(
             paragraph.sentences.single.text,
@@ -284,8 +302,10 @@ class _ReadingViewState extends State<ReadingView> {
             onTap: () => widget.controller.markPosition(paragraph.anchorCueId),
             child: Container(
               key: ValueKey('reading-paragraph-${paragraph.anchorCueId}'),
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+              margin: const EdgeInsets.only(bottom: ListenSpacing.gap6),
+              // One paragraph is the repeating unit a reader scans down, and
+              // the 3pt anchor bar rides the left edge of this same inset.
+              padding: ListenPadding.row,
               decoration: BoxDecoration(
                 border: Border(
                   left: BorderSide(
@@ -391,9 +411,15 @@ class _ReadingViewState extends State<ReadingView> {
         border: Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+        // The strip's gutter must equal the prose list's, or the metrics sit
+        // out of line with the paragraphs below them; only its depth is its
+        // own, since a one-line strip does not want a page's vertical inset.
+        padding: ListenPadding.pageCompact.copyWith(
+          top: ListenSpacing.gap12,
+          bottom: ListenSpacing.gap12,
+        ),
         child: Wrap(
-          spacing: 28,
+          spacing: ListenSpacing.gap24,
           runSpacing: 8,
           children: [
             _OverviewMetric(
@@ -421,7 +447,7 @@ class _ReadingViewState extends State<ReadingView> {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.only(top: ListenSpacing.gap8),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.surfaceContainerHighest.withValues(alpha: 0.55),
@@ -435,7 +461,10 @@ class _ReadingViewState extends State<ReadingView> {
             children: [
               TextButton.icon(
                 key: ValueKey('reading-play-${paragraph.anchorCueId}'),
-                icon: const Icon(Icons.play_arrow, size: 17),
+                icon: const Icon(
+                  Icons.play_arrow,
+                  size: ListenIconSize.control,
+                ),
                 label: Text(l.text('readingPlayParagraph')),
                 onPressed: () {
                   widget.controller.noteSlicePlay(paragraph.anchorCueId);
@@ -446,14 +475,20 @@ class _ReadingViewState extends State<ReadingView> {
                 IconButton(
                   key: ValueKey('reading-task-${paragraph.anchorCueId}'),
                   tooltip: l.text('readingTaskStart'),
-                  icon: const Icon(Icons.checklist_outlined, size: 18),
+                  icon: const Icon(
+                    Icons.checklist_outlined,
+                    size: ListenIconSize.control,
+                  ),
                   onPressed: () => unawaited(widget.onStartTask!(paragraph)),
                 ),
               if (widget.onOpenDiff != null)
                 IconButton(
                   key: ValueKey('reading-diff-${paragraph.anchorCueId}'),
                   tooltip: l.text('readingDiffChip'),
-                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  icon: const Icon(
+                    Icons.compare_arrows,
+                    size: ListenIconSize.control,
+                  ),
                   onPressed: () => unawaited(widget.onOpenDiff!(paragraph)),
                 ),
               for (var i = 0; i < paragraph.sentences.length; i++)
@@ -467,7 +502,10 @@ class _ReadingViewState extends State<ReadingView> {
                         key: ValueKey(
                           'reading-sentence-${paragraph.anchorCueId}-$i',
                         ),
-                        icon: const Icon(Icons.volume_up_outlined, size: 15),
+                        icon: const Icon(
+                          Icons.volume_up_outlined,
+                          size: ListenIconSize.control,
+                        ),
                         label: Text('${i + 1}'),
                         onPressed: () {
                           widget.controller.noteSlicePlay(
@@ -484,8 +522,11 @@ class _ReadingViewState extends State<ReadingView> {
                         key: ValueKey(
                           'reading-save-pattern-${paragraph.anchorCueId}-$i',
                         ),
-                        tooltip: '保存到我的表达',
-                        icon: const Icon(Icons.bookmark_add_outlined, size: 17),
+                        tooltip: l.text('expressionSaveTitle'),
+                        icon: const Icon(
+                          Icons.bookmark_add_outlined,
+                          size: ListenIconSize.control,
+                        ),
                         onPressed: () => unawaited(
                           widget.onSaveSentencePattern!(paragraph.sentences[i]),
                         ),

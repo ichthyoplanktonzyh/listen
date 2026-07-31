@@ -1346,6 +1346,24 @@ class RealtimeConversationController extends ChangeNotifier {
     state = state.copyWith(items: _turns.items);
   }
 
+  /// Resets the controller to its initial idle state, clearing all
+  /// conversation data. Called before pushing the conversation route so a
+  /// returning user always lands on the lobby rather than a stale debrief.
+  ///
+  /// Only safe when no conversation is active; an in-flight session is never
+  /// silently dropped by this method.
+  void resetToIdle() {
+    if (!state.canConfigure) return;
+    final profiles = state.profiles;
+    final selectedProfileId = state.selectedProfileId;
+    _resetConversationState();
+    state = RealtimeConversationState(
+      profiles: profiles,
+      selectedProfileId: selectedProfileId,
+    );
+    notifyListeners();
+  }
+
   void _resetConversationState() {
     _turns.reset();
     _providerResponseActive = false;

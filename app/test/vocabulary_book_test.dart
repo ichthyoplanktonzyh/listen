@@ -6,6 +6,8 @@ import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/models/production_corpus.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
+import 'package:llplayer_next/theme/spacing.dart';
+import 'package:llplayer_next/theme/typography.dart';
 import 'package:llplayer_next/widgets/common/capability_viz.dart';
 import 'package:llplayer_next/widgets/panels/word_learning_panel.dart';
 import 'package:llplayer_next/widgets/vocabulary/vocabulary_book_view.dart';
@@ -1100,6 +1102,52 @@ void main() {
     await tester.tap(find.byTooltip('Import vocabulary assets'));
     expect(exported, isTrue);
     expect(imported, isTrue);
+  });
+
+  testWidgets('the headword reads the hero slot and the panel insets as a '
+      'card', (tester) async {
+    await tester.pumpWidget(
+      localized(
+        WordLearningPanel(
+          details: _helloDetails,
+          dictionary: _helloDictionary,
+          onStatus: (_) {},
+          onSave: (_, _) async {},
+          onSource: (_) {},
+          onHeard: () {},
+          onNotHeard: () {},
+        ),
+      ),
+    );
+
+    // The headword had been reading `headlineMedium`, a slot the theme leaves
+    // unmapped — so Material's own 28px w400, off the ladder in both size and
+    // weight. `titleLarge` is the ladder's single hero size.
+    final context = tester.element(find.byType(WordLearningPanel));
+    final headword = tester.widget<Text>(
+      find.text(_helloDetails.entry.displayForm),
+    );
+    expect(headword.style, Theme.of(context).textTheme.titleLarge);
+    expect(headword.style?.fontSize, ListenType.hero.fontSize);
+
+    // The panel body was insetting 14 and its status pill 9/4.
+    expect(
+      tester.widget<ListView>(find.byType(ListView)).padding,
+      ListenPadding.card,
+    );
+    expect(
+      tester
+          .widget<Padding>(
+            find
+                .ancestor(
+                  of: find.text('Unknown meaning'),
+                  matching: find.byType(Padding),
+                )
+                .first,
+          )
+          .padding,
+      ListenPadding.tight,
+    );
   });
 
   testWidgets('lemma correction is offered only where a token is selected', (

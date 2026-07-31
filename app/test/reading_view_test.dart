@@ -5,6 +5,9 @@ import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/reading.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/reading_view.dart';
 import 'package:llplayer_next/widgets/panels/reading_word_inspector.dart';
 
@@ -184,6 +187,56 @@ void main() {
         expect(saved?.text, 'I ended up fixing it.');
       },
     );
+
+    testWidgets('the prose column and its rows measure from the token '
+        'vocabulary', (tester) async {
+      final controller = ReadingController();
+      controller.open(
+        _track([_cue(0, 'I ended up fixing it.', startMs: 0, endMs: 1000)]),
+      );
+      await tester.pumpWidget(
+        host(controller, onSaveSentencePattern: (_) async {}),
+      );
+
+      // The reading column was capped at 900 — the widest measure anywhere in
+      // the app, and the one value above the 780 the charter calls a
+      // comfortable line length.
+      final paragraph = find.byKey(const ValueKey('reading-paragraph-cue-0'));
+      final caps = tester
+          .widgetList<ConstrainedBox>(
+            find.ancestor(of: paragraph, matching: find.byType(ConstrainedBox)),
+          )
+          .map((box) => box.constraints.maxWidth);
+      expect(caps, contains(ListenBreakpoints.contentColumnMax));
+      expect(caps, isNot(contains(900.0)));
+
+      // The page gutter and the repeating paragraph row each name their role.
+      expect(
+        tester.widget<ListView>(find.byType(ListView)).padding,
+        ListenPadding.pageCompact,
+      );
+      expect(tester.widget<Container>(paragraph).padding, ListenPadding.row);
+
+      // The contextual toolbar only exists while the paragraph is active.
+      await tester.tapAt(tester.getTopLeft(paragraph) + const Offset(4, 4));
+      await tester.pump();
+      for (final icon in [
+        Icons.play_arrow,
+        Icons.volume_up_outlined,
+        Icons.bookmark_add_outlined,
+      ]) {
+        expect(
+          tester.widget<Icon>(find.byIcon(icon)).size,
+          ListenIconSize.control,
+          reason:
+              '$icon is a tappable control in the paragraph toolbar; it had '
+              'been sized 17/15/17 by hand.',
+        );
+      }
+
+      // The save affordance's tooltip was the file's last Chinese literal.
+      expect(find.byTooltip('Save to my expressions'), findsOneWidget);
+    });
 
     testWidgets('renders paragraphs and separator markers', (tester) async {
       final controller = ReadingController();

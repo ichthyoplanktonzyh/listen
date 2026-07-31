@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../models/named_failure.dart';
 import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
@@ -196,14 +197,14 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: ListenPadding.row,
           decoration: BoxDecoration(
             color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.5),
             borderRadius: ListenRadii.controlBorder,
           ),
           child: Row(
             children: [
-              const Icon(Icons.hearing_outlined, size: 18),
+              const Icon(Icons.hearing_outlined, size: ListenIconSize.control),
               const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Text(

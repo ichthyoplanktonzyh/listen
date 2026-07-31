@@ -4,6 +4,7 @@ import '../../localization.dart';
 import '../../models/llm_provider.dart';
 import '../../models/named_failure.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
@@ -182,14 +183,17 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: ListenPadding.row,
           decoration: BoxDecoration(
             color: theme.colorScheme.errorContainer.withValues(alpha: 0.35),
             borderRadius: ListenRadii.controlBorder,
           ),
           child: Row(
             children: [
-              const Icon(Icons.privacy_tip_outlined, size: 18),
+              const Icon(
+                Icons.privacy_tip_outlined,
+                size: ListenIconSize.control,
+              ),
               const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Text(

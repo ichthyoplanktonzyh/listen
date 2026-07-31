@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_diff_controller.dart';
 import '../../localization.dart';
 import '../../models/reading_diff.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -43,10 +44,11 @@ class ReadingDiffPanel extends StatelessWidget {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
+                // The three reading surfaces each insetted their header
+                // differently (14/8 here, 18/10 in the task studio, 20/10/10/10
+                // in the reading view); all three are the same object — one
+                // panel header row.
+                padding: ListenPadding.row,
                 child: Row(
                   children: [
                     IconButton(
@@ -69,11 +71,13 @@ class ReadingDiffPanel extends StatelessWidget {
             Expanded(
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
+                  constraints: const BoxConstraints(
+                    maxWidth: ListenBreakpoints.contentColumnMax,
+                  ),
                   child: state.loading
                       ? const ListenLoading()
                       : ListView(
-                          padding: const EdgeInsets.all(32),
+                          padding: ListenPadding.page,
                           shrinkWrap: true,
                           children: [
                             if (state.error != null)
@@ -100,7 +104,7 @@ class ReadingDiffPanel extends StatelessWidget {
                             ),
                             const SizedBox(height: ListenSpacing.gap16),
                             Container(
-                              padding: const EdgeInsets.all(18),
+                              padding: ListenPadding.card,
                               decoration: BoxDecoration(
                                 color: colors.surfaceContainerHighest
                                     .withValues(alpha: 0.5),
@@ -143,7 +147,7 @@ class ReadingDiffPanel extends StatelessWidget {
     return Card.outlined(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: ListenPadding.card,
         child: Row(
           children: [
             Icon(icon, color: colors.primary),

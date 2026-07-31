@@ -108,17 +108,8 @@ void main() {
   // debt it tracks.
   const knownOffenders = <String>{
     'lib/widgets/panels/conversation_debrief.dart',
-    'lib/widgets/panels/reading_diff_panel.dart',
-    'lib/widgets/panels/reading_task_sheet.dart',
-    'lib/widgets/panels/reading_task_studio.dart',
-    'lib/widgets/panels/reading_view.dart',
     'lib/widgets/panels/realtime_conversation_panel.dart',
-    'lib/widgets/panels/speaking_task_studio.dart',
-    'lib/widgets/panels/word_learning_panel.dart',
-    'lib/widgets/panels/writing_task_studio.dart',
     'lib/widgets/player/shortcut_cheat_sheet.dart',
-    'lib/widgets/settings/llm_provider_settings.dart',
-    'lib/widgets/settings/realtime_provider_settings.dart',
     'lib/widgets/subtitle/connected_speech_reference_ribbon.dart',
     'lib/widgets/subtitle/expected_pronunciation_reference.dart',
     'lib/widgets/subtitle/phoneme_ribbon.dart',
