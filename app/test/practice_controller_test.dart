@@ -54,10 +54,10 @@ void main() {
                 'token_results': [
                   {'expected': 'heard', 'actual': 'hard', 'result': 'mismatch'},
                 ],
-                'extra': {},
+                'extra': <String, dynamic>{},
               },
               'generated_observation_ids': ['obs-1'],
-              'generated_review_item_ids': [],
+              'generated_review_item_ids': <dynamic>[],
             }),
           );
         }
@@ -219,11 +219,11 @@ void main() {
                 'evaluation': {
                   'summary':
                       'Shadowing recording completed without automated scoring.',
-                  'token_results': [],
+                  'token_results': <dynamic>[],
                   'extra': {'evaluation_kind': 'not_scored'},
                 },
-                'generated_observation_ids': [],
-                'generated_review_item_ids': [],
+                'generated_observation_ids': <dynamic>[],
+                'generated_review_item_ids': <dynamic>[],
               }),
             );
           }

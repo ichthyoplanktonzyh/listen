@@ -329,7 +329,10 @@ void main() {
 
     test('unknown events are a no-op and do not throw', () async {
       final recorder = _Recorder()..mediaId = 'media-1';
-      recorder.build().handle({'event': 'mystery-event', 'payload': {}});
+      recorder.build().handle({
+        'event': 'mystery-event',
+        'payload': <String, dynamic>{},
+      });
       await pumpEventQueue();
 
       expect(recorder.loadWordEntriesCalls, 0);

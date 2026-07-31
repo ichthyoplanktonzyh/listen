@@ -92,8 +92,8 @@ void main() {
                   'interval_days': 1.0,
                   'lapse_count': 0,
                 },
-                'generated_observation_ids': const [],
-                'hunting_candidate_ids': const [],
+                'generated_observation_ids': const <dynamic>[],
+                'hunting_candidate_ids': const <dynamic>[],
                 'upgrade_suggestions': [upgradeSuggestionJson],
               }),
             );

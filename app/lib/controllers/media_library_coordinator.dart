@@ -106,7 +106,7 @@ class MediaLibraryCoordinator {
     if (service == null) return;
     try {
       final entries = (await service.listMediaLibrary())
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map(
             (value) =>
                 MediaLibraryEntry.fromJson(Map<String, dynamic>.from(value)),

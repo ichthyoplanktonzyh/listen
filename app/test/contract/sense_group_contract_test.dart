@@ -81,7 +81,7 @@ void main() {
         'algorithm': 'punctuation_length_rule_v1',
         'created_by': 'algorithm',
         'status': 'candidate',
-        'metrics_json': {},
+        'metrics_json': <String, dynamic>{},
         'groups': [
           {
             'id': 'sg-1',
@@ -120,8 +120,8 @@ void main() {
         'algorithm': 'punctuation_length_rule_v1',
         'created_by': 'algorithm',
         'status': 'active',
-        'metrics_json': {},
-        'groups': [],
+        'metrics_json': <String, dynamic>{},
+        'groups': <dynamic>[],
         'created_at_ms': 1000,
         'updated_at_ms': 1000,
       });

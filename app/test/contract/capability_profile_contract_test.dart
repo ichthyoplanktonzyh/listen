@@ -80,8 +80,8 @@ void main() {
             'updated_at_ms': 1700000000000,
           },
         },
-        'speaking': {},
-        'writing': {},
+        'speaking': <String, dynamic>{},
+        'writing': <String, dynamic>{},
       });
       expect(profile.lexicalEntryId, 'entry-1');
       expect(profile.reading.effectiveAssessment, 'not_acquired');
@@ -116,8 +116,8 @@ void main() {
             'updated_at_ms': 1700000001000,
           },
         },
-        'speaking': {},
-        'writing': {},
+        'speaking': <String, dynamic>{},
+        'writing': <String, dynamic>{},
       });
       final json = profile.toJson();
       final roundTripped = LexicalCapabilityProfile.fromJson(json);
@@ -137,8 +137,8 @@ void main() {
           'kind': 'word',
           'language': 'en',
         },
-        'history': [],
-        'occurrences': [],
+        'history': <dynamic>[],
+        'occurrences': <dynamic>[],
         'capability_profile': {
           'lexical_entry_id': 'e-1',
           'reading': {
@@ -149,9 +149,9 @@ void main() {
               'updated_at_ms': 1700000000000,
             },
           },
-          'listening': {},
-          'speaking': {},
-          'writing': {},
+          'listening': <String, dynamic>{},
+          'speaking': <String, dynamic>{},
+          'writing': <String, dynamic>{},
         },
       });
       expect(details.capabilityProfile, isNotNull);
@@ -174,8 +174,8 @@ void main() {
           'kind': 'word',
           'language': 'en',
         },
-        'history': [],
-        'occurrences': [],
+        'history': <dynamic>[],
+        'occurrences': <dynamic>[],
       });
       expect(details.capabilityProfile, isNull);
     });

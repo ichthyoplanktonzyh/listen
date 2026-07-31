@@ -51,7 +51,7 @@ class Store<T> extends ChangeNotifier {
     }
     final initial = selector(_state);
     final notifier = ValueNotifier<R>(initial);
-    _slots[key] = _Slot(notifier, selector as dynamic);
+    _slots[key] = _Slot(notifier, selector);
     return notifier;
   }
 

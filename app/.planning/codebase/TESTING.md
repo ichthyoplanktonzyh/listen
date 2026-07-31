@@ -9,6 +9,11 @@ flutter test
 python3 -m unittest tool/test_backend_artifacts.py
 ```
 
+`analysis_options.yaml` enables `strict-casts`, `strict-inference` and
+`strict-raw-types` on top of `flutter_lints`, so an implicit downcast, an
+uninferable collection literal or a raw generic is a build-blocking
+diagnostic rather than a silent `dynamic`.
+
 ## Test Shape
 
 The split baseline contains 130 Dart test files covering:

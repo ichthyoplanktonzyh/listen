@@ -318,7 +318,7 @@ void main() {
       'parent_timeline_id': null,
       'created_by': 'algorithm',
       'status': 'active',
-      'metrics_json': {},
+      'metrics_json': <String, dynamic>{},
       'created_at_ms': 10,
       'updated_at_ms': 20,
       'words': [
@@ -360,7 +360,7 @@ void main() {
         },
         'language': 'en',
         'human_reviewed': false,
-        'extra': {},
+        'extra': <String, dynamic>{},
       },
       'active_word_timeline_id': 'word-active',
       'active_phone_timeline_id': null,
@@ -375,7 +375,7 @@ void main() {
           'provider_id': 'wordtimeline-rhythm-frame',
           'provider_version': 'phase-2.21-w2',
           'status': 'active',
-          'metrics_json': {},
+          'metrics_json': <String, dynamic>{},
           'created_at_ms': 10,
           'updated_at_ms': 20,
           'rhythm_frame': {
@@ -409,10 +409,10 @@ void main() {
                 'confidence': 0.8,
               },
             ],
-            'nuclei': [],
-            'weak_groups': [],
-            'compression_spans': [],
-            'phrase_boundaries': [],
+            'nuclei': <dynamic>[],
+            'weak_groups': <dynamic>[],
+            'compression_spans': <dynamic>[],
+            'phrase_boundaries': <dynamic>[],
             'connected_speech_refs': [
               {
                 'id': 'cs1',
@@ -462,11 +462,11 @@ void main() {
                 'confidence': 0.82,
               },
             ],
-            'listening_hotspots': [],
+            'listening_hotspots': <dynamic>[],
             'quality': {
               'timing_source': 'word_timeline',
               'prominence_sources': ['timing'],
-              'boundary_sources': [],
+              'boundary_sources': <dynamic>[],
               'connected_speech_source': 'phone_segmental',
               'phone_evidence_coverage': 0.0,
               'rhythm_confidence': 0.8,
@@ -474,7 +474,7 @@ void main() {
           },
         },
       ],
-      'artifacts': [],
+      'artifacts': <dynamic>[],
     });
 
     expect(
@@ -532,10 +532,10 @@ void main() {
       'precision': 'detected',
       'created_by': 'algorithm',
       'status': 'active',
-      'metrics_json': {},
-      'phones': [],
-      'alignments': [],
-      'findings': [],
+      'metrics_json': <String, dynamic>{},
+      'phones': <dynamic>[],
+      'alignments': <dynamic>[],
+      'findings': <dynamic>[],
       'sound_analysis': {
         'provider_id': 'wav2vec2-ctc-phoneme',
         'provider_version': 'fb-espeak-v1',
@@ -576,8 +576,8 @@ void main() {
         'syllables': [
           {
             'phones': [0],
-            'onset': [],
-            'nucleus': [],
+            'onset': <dynamic>[],
+            'nucleus': <dynamic>[],
             'coda': [0],
             'start_ms': 120,
             'end_ms': 180,
@@ -601,7 +601,10 @@ void main() {
     expect(timeline.soundAnalysis?.learningPhones.single.symbol, 'S');
     expect(timeline.soundAnalysis?.learningPhones.single.observedSymbol, 'K');
     expect(timeline.soundAnalysis?.connectedSpeech.single.family, 'weak_form');
-    expect(timeline.toSoundPatternJson()['sound_analysis'], isA<Map>());
+    expect(
+      timeline.toSoundPatternJson()['sound_analysis'],
+      isA<Map<dynamic, dynamic>>(),
+    );
   });
 
   test(
@@ -784,9 +787,9 @@ void main() {
           'evidence': 'substitution',
         },
       ],
-      'connected_speech': [],
-      'syllables': [],
-      'prosodic_phrases': [],
+      'connected_speech': <dynamic>[],
+      'syllables': <dynamic>[],
+      'prosodic_phrases': <dynamic>[],
     });
     final phones = soundAnalysis.learningPhones
         .map(
@@ -843,9 +846,9 @@ void main() {
             'evidence': 'substitution',
           },
         ],
-        'connected_speech': [],
-        'syllables': [],
-        'prosodic_phrases': [],
+        'connected_speech': <dynamic>[],
+        'syllables': <dynamic>[],
+        'prosodic_phrases': <dynamic>[],
       });
 
       final phones = buildSoundPatternPhones(soundAnalysis);
@@ -934,8 +937,8 @@ void main() {
           'evidence': 'reduction evidence',
         },
       ],
-      'syllables': [],
-      'prosodic_phrases': [],
+      'syllables': <dynamic>[],
+      'prosodic_phrases': <dynamic>[],
     });
     final phones = buildSoundPatternPhones(soundAnalysis);
 
@@ -990,9 +993,9 @@ void main() {
             'evidence': 'match',
           },
         ],
-        'connected_speech': [],
-        'syllables': [],
-        'prosodic_phrases': [],
+        'connected_speech': <dynamic>[],
+        'syllables': <dynamic>[],
+        'prosodic_phrases': <dynamic>[],
       });
       final phones = soundAnalysis.learningPhones
           .map(
@@ -1135,7 +1138,7 @@ void main() {
       'precision': 'precise',
       'created_by': 'algorithm',
       'status': 'active',
-      'metrics_json': {},
+      'metrics_json': <String, dynamic>{},
       'chunks': [
         {
           'id': 'chunk-1',
@@ -1148,8 +1151,8 @@ void main() {
           'text': 'hello world',
           'boundary_sources': ['pause'],
           'confidence': 0.92,
-          'warnings': [],
-          'evidence_json': {},
+          'warnings': <dynamic>[],
+          'evidence_json': <String, dynamic>{},
         },
       ],
       'created_at_ms': 1,

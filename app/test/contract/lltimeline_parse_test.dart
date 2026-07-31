@@ -67,10 +67,10 @@ PhoneTimeline _phoneTimelineFromLLTimelineResource(
     'precision': json['precision'] ?? 'fixture',
     'created_by': json['created_by'] ?? 'fixture',
     'status': json['status'],
-    'metrics_json': json['metrics_json'] ?? const {},
-    'phones': json['phones'] ?? json['detected_phones'] ?? const [],
-    'alignments': json['alignments'] ?? const [],
-    'findings': json['findings'] ?? const [],
+    'metrics_json': json['metrics_json'] ?? const <String, dynamic>{},
+    'phones': json['phones'] ?? json['detected_phones'] ?? const <dynamic>[],
+    'alignments': json['alignments'] ?? const <dynamic>[],
+    'findings': json['findings'] ?? const <dynamic>[],
     'sound_analysis': soundAnalysis == null
         ? null
         : _soundAnalysisFromLLTimelineResource(soundAnalysis),
