@@ -397,12 +397,24 @@ failed, cancelled, and completed states honestly」。屏幕里其它来源（�
 `_loadEntryProduction` 传 `language: entry.language`。跨语言词条（差距面板/猎词单
 可以把任意词条送进来）会用错的语言查词典。
 
-### D11 · 搜索框绕过 `setState`（`1445-1449`）
+### ~~D11 · 搜索框绕过 `setState`（`1445-1449`）~~ — 已随重构消失
 
-`onChanged` 直接改 `search` 与 `homeResults` 两个字段。今天没有可见后果，因为精确
-模式紧接着 `_load()` 会自己 `setState`；但语义模式下**不调用** `_load()`，字段与已
-渲染的树从此不同步，直到别的原因触发重建。属于潜伏项，重构成 ViewModel 时会自然
-消失——也正因如此，重构后若行为有变，要先确认变的是这条。
+> **状态：不再成立**（`LexicalRepository` + `VocabularyViewModel` 拆分之后）。
+> 按 §6.3 移出 Suspected defects，编号保留以免打乱其它条目的引用。
+
+原文：`onChanged` 直接改 `search` 与 `homeResults` 两个字段。今天没有可见后果，因为
+精确模式紧接着 `_load()` 会自己 `setState`；但语义模式下**不调用** `_load()`，字段
+与已渲染的树从此不同步，直到别的原因触发重建。属于潜伏项，重构成 ViewModel 时会自然
+消失。
+
+它确实自然消失了，且是**结构上不可避免**的：`search` 与 `homeResults` 现在是
+`VocabularyState` 的字段，唯一的写入口是 `Store.update`，而 `Store.update` 一定
+通知。没有「改了字段但不通知」这条路可走，除非把这两个字段留在状态之外单独保存
+——那是为了保住一个潜伏 bug 而牺牲状态的完整性。
+
+可见后果：语义模式下每次按键会多触发一次重建（精确模式本来就因 `_load()` 重建）。
+搜索框是非受控的 `TextField`，重建不会重置文本；`homeResults` 只在精确模式渲染。
+33 条特征测试全部未改动通过，说明这条变化没有可观察的行为差异。
 
 ### D12 · 关闭详情不推进 `detailRequest`（`313-316`、`408-415`）
 
