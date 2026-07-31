@@ -113,9 +113,9 @@ Map<String, dynamic> _submission(String rating) => {
     'interval_days': null,
     'lapse_count': 0,
   },
-  'generated_observation_ids': const [],
-  'hunting_candidate_ids': const [],
-  'upgrade_suggestions': const [],
+  'generated_observation_ids': const <dynamic>[],
+  'hunting_candidate_ids': const <dynamic>[],
+  'upgrade_suggestions': const <dynamic>[],
 };
 
 const _bounded = [

@@ -57,7 +57,7 @@ void main() {
                   'channel': 'reading',
                   'status': 'unassessed',
                   'unavailable_reason': 'no_active_validation',
-                  'metrics': [],
+                  'metrics': <dynamic>[],
                   'effective_assessments': {
                     'acquired': 0,
                     'not_acquired': 0,

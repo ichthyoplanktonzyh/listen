@@ -80,10 +80,10 @@ void main() {
       channel('reading'),
       channel('writing'),
     ],
-    'suggestions': const [],
-    'starter_checklist': const [],
-    'materials': const [],
-    'features': const [],
+    'suggestions': const <dynamic>[],
+    'starter_checklist': const <dynamic>[],
+    'materials': const <dynamic>[],
+    'features': const <dynamic>[],
   };
 
   /// The dashboard reads; the evidence page is what fails.

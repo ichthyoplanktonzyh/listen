@@ -43,7 +43,7 @@ void main() {
             'expires_at_ms': 3,
             'status': 'active',
             'resolution': null,
-            'review_item_ids': [],
+            'review_item_ids': <dynamic>[],
             'practice_item_id': null,
             'updated_at_ms': 2,
           };

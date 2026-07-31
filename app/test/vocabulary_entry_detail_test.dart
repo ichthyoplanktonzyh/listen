@@ -204,7 +204,7 @@ void main() {
         }
         if (path.startsWith('/v1/dictionary')) {
           await dictionaryGate.future;
-          return (statusCode: 200, body: jsonEncode({'results': []}));
+          return (statusCode: 200, body: jsonEncode({'results': <dynamic>[]}));
         }
         if (path.startsWith('/v1/production-corpus/search')) {
           await productionGate.future;
