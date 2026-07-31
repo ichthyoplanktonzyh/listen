@@ -359,7 +359,10 @@ class _TargetCard extends StatelessWidget {
         borderRadius: ListenRadii.panelBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        // Card role: each turn in the debrief is its own surface with its own
+        // left edge and radius. Both bubbles in this file inset alike, so they
+        // move together.
+        padding: ListenPadding.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -458,7 +461,7 @@ class _ConversationDebriefTurnCardState
         borderRadius: ListenRadii.panelBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: ListenPadding.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

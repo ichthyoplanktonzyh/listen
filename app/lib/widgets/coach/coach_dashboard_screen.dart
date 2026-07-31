@@ -164,10 +164,11 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
     final theme = Theme.of(context);
     final gapCount = crossModalGapCount(dashboard);
     return [
-      Text(
-        l.text('capabilityPortraitTitle'),
-        style: theme.textTheme.headlineSmall,
-      ),
+      // The portrait is one of this screen's five sections, so it takes the
+      // same heading style as the other four. It had drifted onto Material's
+      // unmapped `headlineSmall` (24/w400) — a rank of its own, one nobody
+      // chose, on the section that happens to come first.
+      Text(l.text('capabilityPortraitTitle'), style: _sectionStyle(context)),
       Tooltip(
         message: _absoluteTime(dashboard.generatedAtMs),
         child: Align(

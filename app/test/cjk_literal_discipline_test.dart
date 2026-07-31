@@ -129,7 +129,6 @@ void main() {
   // (whose two literals likewise duplicated existing keys). One file left.
   const knownOffenders = <String>{
     // 当前来源切片 / 暂停 / 播放 / 跟一下 on the dictionary clip player.
-    'lib/widgets/vocabulary/dictionary_inline_clip_player.dart',
   };
 
   test('user-visible copy lives in localization.dart, not in a literal', () {

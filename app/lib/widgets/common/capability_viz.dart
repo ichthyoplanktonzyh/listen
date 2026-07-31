@@ -384,7 +384,13 @@ class _CapabilityCompassState extends State<CapabilityCompass> {
             children: [
               Text(
                 '$gapCount',
-                style: theme.textTheme.headlineMedium?.copyWith(
+                // `titleLarge` (= ListenType.hero, 22): the one hero size, and
+                // this figure is the compass's hero — the biggest thing inside
+                // the ring, sitting on the caption below it. `headlineMedium`
+                // was Material's own unmapped 28/w400, two steps off the
+                // ladder; the w800 override the site already carried is what
+                // makes it dominate its 200pt ring, not the extra 6pt.
+                style: theme.textTheme.titleLarge?.copyWith(
                   color: theme.colorScheme.secondary,
                   fontWeight: FontWeight.w800,
                 ),
@@ -635,6 +641,17 @@ class _EchoColumnState extends State<_EchoColumn> {
   static const _baselineThickness = 1.2;
   static const _baselineInset = 2.0;
 
+  /// The gauge's own width, and for the same reason as the two above: element
+  /// geometry, not a content column. A [CapabilityEchoBars] pair is an
+  /// instrument with a fixed scale — [_EchoColumn.barWidth] is deliberately
+  /// narrow (§3.4: "a bar is a gauge, not a field of color"), so letting the
+  /// column absorb whatever width the dashboard grants would stretch the ink
+  /// without adding a single readable point of information. Matches
+  /// [CapabilityCompass.size] because the portrait lays the two side by side and
+  /// they have to read as one figure of the same scale — the same 200 that
+  /// [ListenBreakpoints.capabilityPortraitSideBySide] is derived from.
+  static const _gaugeWidth = 200.0;
+
   /// The column's own affordance: hovering lifts the whole pair so the door
   /// announces itself instead of needing a caption to explain it.
   bool _hovered = false;
@@ -681,7 +698,7 @@ class _EchoColumnState extends State<_EchoColumn> {
     return Align(
       alignment: Alignment.topLeft,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 200),
+        constraints: const BoxConstraints(maxWidth: _gaugeWidth),
         child: onTap == null
             ? column
             : InkWell(
@@ -1360,6 +1377,15 @@ class ConversationEchoTally extends StatelessWidget {
 
   final double barHeight;
 
+  /// The tally's width — element geometry, not a content column: this is a
+  /// gauge with a fixed scale, and stretching it across the debrief's column
+  /// would add ink without adding a readable point. Deliberately its own
+  /// constant rather than a reference to [_EchoColumnState]'s: the two coincide
+  /// today because this bar is the portrait's shape "收窄 back into one column",
+  /// but they answer to different content (turn counts here, library-wide
+  /// assessment there) and are free to drift apart.
+  static const _gaugeWidth = 200.0;
+
   @override
   Widget build(BuildContext context) {
     final unit = math.max(moonTurns, learnerTurns);
@@ -1370,7 +1396,7 @@ class ConversationEchoTally extends StatelessWidget {
           'and $learnerOutputTurns of yours came back as learner output.',
       excludeSemantics: true,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 200),
+        constraints: const BoxConstraints(maxWidth: _gaugeWidth),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

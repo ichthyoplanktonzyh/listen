@@ -107,14 +107,7 @@ void main() {
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
   const knownOffenders = <String>{
-    'lib/widgets/panels/conversation_debrief.dart',
-    'lib/widgets/panels/realtime_conversation_panel.dart',
     'lib/widgets/player/shortcut_cheat_sheet.dart',
-    'lib/widgets/subtitle/connected_speech_reference_ribbon.dart',
-    'lib/widgets/subtitle/expected_pronunciation_reference.dart',
-    'lib/widgets/subtitle/phoneme_ribbon.dart',
-    'lib/widgets/subtitle/rhythm_frame_ribbon.dart',
-    'lib/widgets/subtitle/token_line.dart',
   };
 
   test('container padding uses ListenPadding roles, not off-ladder insets', () {

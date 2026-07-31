@@ -31,6 +31,21 @@ class ExpectedPronunciationReference extends StatelessWidget {
   final String expandTooltip;
   final String collapseTooltip;
 
+  // ── Optical geometry ──
+  // Overlay instrument: the strip is sized from the rendered subtitle, not from
+  // the app's window grid, so its inset is measured against the IPA glyphs it
+  // contains rather than picked off the `ListenSpacing` ladder (see that
+  // class's scope note). Named here rather than in `lib/theme/` because a
+  // single instrument's proportions are element geometry.
+
+  /// The strip's own inset, one named value per axis because the two are
+  /// different decisions. Horizontal is the wider budget: the strip is a single
+  /// dense row of IPA that must not touch its border. Vertical stays under the
+  /// ladder's floor because [height] already sets the row's height, and padding
+  /// added on top of it fights the size the caller asked for.
+  static const _stripInsetX = 7.0;
+  static const _stripInsetY = 3.0;
+
   @override
   Widget build(BuildContext context) {
     final items = _items();
@@ -39,7 +54,10 @@ class ExpectedPronunciationReference extends StatelessWidget {
 
     final content = Container(
       constraints: BoxConstraints(minHeight: math.max(22.0, height)),
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: _stripInsetX,
+        vertical: _stripInsetY,
+      ),
       decoration: BoxDecoration(
         color: ListenColors.overlaySurfaceSoft,
         borderRadius: ListenRadii.controlBorder,

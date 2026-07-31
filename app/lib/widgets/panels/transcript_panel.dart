@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
@@ -301,7 +302,12 @@ class _TranscriptEmptyState extends StatelessWidget {
       child: Padding(
         padding: ListenPadding.pageCompact,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+          // A centred notice, not a column: glyph, one heading, one sentence,
+          // one action. See `noticeColumnMax` for why this rung exists rather
+          // than reusing `formColumnMax`.
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.noticeColumnMax,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

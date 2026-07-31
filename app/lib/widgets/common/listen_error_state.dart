@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 
@@ -35,7 +36,17 @@ class ListenErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline, size: 28, color: colors.error),
+            // `illustration` for the same reason as [ListenEmptyState]: the
+            // glyph is what marks which sibling state this is, with no label
+            // beside it. The two must stay the same step — the whole point of
+            // mirroring their geometry is that empty and failed read as one
+            // language, and a size difference would be the loudest thing on
+            // either screen.
+            Icon(
+              Icons.error_outline,
+              size: ListenIconSize.illustration,
+              color: colors.error,
+            ),
             const SizedBox(height: ListenSpacing.gap8),
             Text(
               message,
@@ -78,7 +89,13 @@ class ListenErrorNotice extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(Icons.error_outline, size: 16, color: colors.onErrorContainer),
+            // `control`, not `illustration`: here the glyph leads a row and
+            // labels the sentence next to it, which is the default step's job.
+            Icon(
+              Icons.error_outline,
+              size: ListenIconSize.control,
+              color: colors.onErrorContainer,
+            ),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
               child: Text(

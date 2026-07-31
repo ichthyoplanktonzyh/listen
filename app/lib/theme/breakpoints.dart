@@ -93,6 +93,27 @@ abstract final class ListenBreakpoints {
   // single column of text or a card stops growing before line length gets
   // tiring on a wide window (charter principle 5, "降低疲劳"). See the class
   // doc for why these live alongside the layout breakpoints.
+  //
+  // notice 360 · form 560 · card 680 · content 780 · wide 960 — one visible
+  // step apart at every rung, because two caps a few pixels apart would put the
+  // choice back on the call site.
+
+  /// A centred block of short copy that is **not a column**: an empty or failed
+  /// state's glyph, one heading, one sentence, at most one action (S2, 决策 2).
+  ///
+  /// The four caps below all assume the reader works *down* a column, so the
+  /// narrowest of them ([formColumnMax]) is still far too wide for two centred
+  /// lines. Centred text has a ragged left edge, so the return sweep has no
+  /// fixed anchor to come back to — a long centred line is measurably harder to
+  /// track than a long left-aligned one, and the fix is a shorter measure, not
+  /// a bigger gap. 360 breaks a typical empty-state sentence into two or three
+  /// balanced lines under its glyph, which is what makes the block read as one
+  /// object rather than as a paragraph that lost its column.
+  ///
+  /// The boundary against [formColumnMax] is therefore not "narrower text" but
+  /// "no column at all": the moment the content becomes rows the reader scans
+  /// down — even two of them — it wants a column cap, not this.
+  static const noticeColumnMax = 360.0;
 
   /// A single reading column of text-dense content — word detail, conversation
   /// transcript, coach evidence. Sized to a comfortable measure (~70ch at the
@@ -116,6 +137,12 @@ abstract final class ListenBreakpoints {
   /// way across. And a column this width reads as *one thing to do*, while a
   /// wider one starts reading as a form to be filled in — which is the wrong
   /// invitation for a surface whose whole job is to get the learner talking.
+  ///
+  /// The live stage takes the same cap (S2): its afterglow caption and its
+  /// notice bar are the same room seen a moment later, and one measure across
+  /// the lobby→stage transition is what stops the room from resizing under the
+  /// learner. That folded in a 520 that differed from the 560 beside it for no
+  /// reason anyone could name.
   static const formColumnMax = 560.0;
 
   /// Wide content that is two columns or carries media — the home surface, the

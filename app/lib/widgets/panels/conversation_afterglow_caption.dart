@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/realtime_conversation_controller.dart';
 import '../../models/realtime_conversation.dart';
+import '../../theme/breakpoints.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/motion.dart';
 
@@ -149,7 +150,12 @@ class _ConversationAfterglowCaptionState
               : (_visible ? ListenMotion.base : ListenMotion.slow),
           curve: _visible ? ListenMotion.enter : ListenMotion.exit,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
+            // The stage's own column measure, shared with the lobby it grew
+            // out of: the caption may not be wider than the room it is spoken
+            // in, and the cap is where the sentence gets trimmed.
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.formColumnMax,
+            ),
             child: Text(
               _shown,
               // One line, always. An overlong sentence is trimmed rather than

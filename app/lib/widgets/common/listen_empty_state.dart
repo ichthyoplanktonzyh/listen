@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 
 /// The unified empty-state language (#46): a quiet icon, one sentence, and —
@@ -44,7 +45,13 @@ class ListenEmptyState extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 28,
+              // `illustration`, the one permitted big icon: this glyph is the
+              // only thing naming what would live here, so it carries meaning
+              // on its own rather than labelling a control beside it — exactly
+              // the case ListenIconSize reserves the step for. It stays quiet
+              // through colour (55% of `onSurfaceVariant`), not through size;
+              // at `chrome` it read as a toolbar button that had lost its row.
+              size: ListenIconSize.illustration,
               color: colors.onSurfaceVariant.withValues(alpha: 0.55),
             ),
             const SizedBox(height: ListenSpacing.gap8),

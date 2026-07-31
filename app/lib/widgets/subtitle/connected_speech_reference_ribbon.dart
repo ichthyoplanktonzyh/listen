@@ -240,6 +240,34 @@ class _ConnectedAnnotation extends StatelessWidget {
   final double fontSize;
   final double height;
 
+  // ── Optical geometry ──
+  // This annotation is drawn over the video at the *rendered subtitle's* size,
+  // which the user sets and the frame scales — so its insets are functions of
+  // the glyph beside them, not steps of the app's spacing ladder (see the scope
+  // note on `ListenSpacing`). The same 4pt that hangs a bracket on an 11px cue
+  // detaches it from a 34px one, so snapping these to 2·4·6·8 would not tidy
+  // the rhythm, it would break the coupling that makes the mark read as part of
+  // the word. They are named here, on the widget that owns them, rather than in
+  // `lib/theme/`: a ratio used by one instrument is element geometry, and a
+  // theme class of single-use numbers would be a vocabulary nobody picks from.
+
+  /// Air on either side of one annotated cell. Cells sit shoulder to shoulder
+  /// in a packed row, so this is a *seam* rather than a gap — at overlay scale
+  /// 1pt a side already reads as "two marks, not one", and 2 reads as loose.
+  static const _cellSeam = 1.0;
+
+  /// The box `_SpeechMarkPainter` draws its bracket on. The sides track the
+  /// type size and the top tracks the row height, because the bracket has to
+  /// clear the glyph's ink at every subtitle size; the floors are what keeps
+  /// the mark visible when the subtitle is tiny.
+  static double _markSideInset(double fontSize) => math.max(3, fontSize * 0.3);
+
+  static double _markTopInset(double height) => math.max(4, height * 0.16);
+
+  /// The bracket's foot is drawn flush with the bottom edge, so this one does
+  /// not scale — it is the hairline that keeps the stroke off the descenders.
+  static const _markFootInset = 3.0;
+
   @override
   Widget build(BuildContext context) {
     final expected =
@@ -278,7 +306,7 @@ class _ConnectedAnnotation extends StatelessWidget {
       child: Semantics(
         label: tooltipLines.join(', '),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 1),
+          padding: const EdgeInsets.symmetric(horizontal: _cellSeam),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -303,10 +331,10 @@ class _ConnectedAnnotation extends StatelessWidget {
                 ),
                 child: Padding(
                   padding: EdgeInsets.fromLTRB(
-                    math.max(3, fontSize * 0.3),
-                    math.max(4, height * 0.16),
-                    math.max(3, fontSize * 0.3),
-                    3,
+                    _markSideInset(fontSize),
+                    _markTopInset(height),
+                    _markSideInset(fontSize),
+                    _markFootInset,
                   ),
                   child: Text(
                     audibleCue.isEmpty ? surface : audibleCue,
@@ -394,9 +422,16 @@ class _PlainSentenceText extends StatelessWidget {
   final String text;
   final double fontSize;
 
+  /// Optical geometry (see `_ConnectedAnnotation`): the sentence sits one
+  /// glyph-height clear of the annotation row drawn beneath it, so the lift has
+  /// to track the type size — at a fixed inset the marks collide with the
+  /// baseline as soon as the subtitle grows.
+  static double _annotationRowClearance(double fontSize) =>
+      math.max(10, fontSize * 0.86);
+
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(bottom: math.max(10, fontSize * 0.86)),
+    padding: EdgeInsets.only(bottom: _annotationRowClearance(fontSize)),
     child: Text(
       text.trim(),
       maxLines: 1,

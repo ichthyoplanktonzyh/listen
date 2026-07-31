@@ -4,11 +4,18 @@ import 'package:llplayer_next/theme/breakpoints.dart';
 import 'support/dart_source.dart';
 
 /// Content-column caps live in `lib/theme/breakpoints.dart` as a named
-/// vocabulary (form 560 · card 680 · content 780 · wide 960), because "how
-/// wide may a column grow" is one product decision, not nineteen. Nineteen is
-/// what the app had: `BoxConstraints(maxWidth:)` literals at 200/360/400/440/
-/// 520/560/620/760/900/920, several of them a few pixels apart for no reason
-/// anyone could name.
+/// vocabulary (notice 360 · form 560 · card 680 · content 780 · wide 960),
+/// because "how wide may a column grow" is one product decision, not nineteen.
+/// Nineteen is what the app had: `BoxConstraints(maxWidth:)` literals at
+/// 200/360/400/440/520/560/620/760/900/920, several of them a few pixels apart
+/// for no reason anyone could name.
+///
+/// `notice` was added by the migration (S2, 决策 2) rather than by the original
+/// vocabulary: the centred empty/failed states cap at 360, and forcing them onto
+/// `form` — the narrowest cap that existed — would have widened a two-line
+/// sentence by 200pt. Adding a rung is the right answer when a real measure has
+/// no name; picking the nearest existing rung is how a vocabulary stops meaning
+/// anything.
 ///
 /// Only `maxWidth` is policed. `maxHeight` is not a column measure — it is
 /// almost always a viewport or overlay budget — and `minWidth` is a floor,
@@ -44,11 +51,6 @@ void main() {
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
   const knownOffenders = <String>{
-    'lib/widgets/common/capability_viz.dart',
-    'lib/widgets/layout/side_panel.dart',
-    'lib/widgets/panels/conversation_afterglow_caption.dart',
-    'lib/widgets/panels/realtime_conversation_panel.dart',
-    'lib/widgets/panels/transcript_panel.dart',
   };
 
   test('column caps use ListenBreakpoints widths, not maxWidth literals', () {
@@ -62,9 +64,12 @@ void main() {
       isEmpty,
       reason:
           'Pick the ListenBreakpoints column cap that matches the content '
-          '(lib/theme/breakpoints.dart): formColumnMax for a form, '
-          'cardColumnMax for a single card, contentColumnMax for a reading '
-          'column, wideColumnMax for two-column or media pages:\n'
+          '(lib/theme/breakpoints.dart): noticeColumnMax for a centred block '
+          'of short copy, formColumnMax for a form, cardColumnMax for a single '
+          'card, contentColumnMax for a reading column, wideColumnMax for '
+          'two-column or media pages. If the value is the fixed size of a '
+          'graphic rather than a cap on text, it is element geometry — name it '
+          'on the widget instead:\n'
           '${offenders.join('\n')}',
     );
   });
@@ -86,10 +91,15 @@ void main() {
     );
   });
 
-  test('the column vocabulary stays ordered form < card < content < wide', () {
-    // The four caps are only a vocabulary if each step is visibly wider than
-    // the last; two caps within a few pixels would put the choice back on the
-    // call site, which is the drift this replaces.
+  test('the column vocabulary stays ordered notice < form < card < content < '
+      'wide', () {
+    // The caps are only a vocabulary if each step is visibly wider than the
+    // last; two caps within a few pixels would put the choice back on the call
+    // site, which is the drift this replaces.
+    expect(
+      ListenBreakpoints.noticeColumnMax,
+      lessThan(ListenBreakpoints.formColumnMax),
+    );
     expect(
       ListenBreakpoints.formColumnMax,
       lessThan(ListenBreakpoints.cardColumnMax),

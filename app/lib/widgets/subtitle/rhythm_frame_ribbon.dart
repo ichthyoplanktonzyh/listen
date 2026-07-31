@@ -65,6 +65,22 @@ class RhythmFrameRibbon extends StatelessWidget {
   final String expandTooltip;
   final String collapseTooltip;
 
+  // ── Optical geometry ──
+  // Every inset in this ribbon and its parts is measured against the *rendered
+  // subtitle* — the user's own font size, scaled by the video frame — rather
+  // than against the app's window grid, so they are deliberately off the
+  // `ListenSpacing` ladder (see that class's scope note). Snapping them to
+  // 2·4·6·8 would not tidy a rhythm; it would decouple each mark from the glyph
+  // it annotates, and at overlay scale that reads immediately. They are named
+  // on the widgets that own them, because a ratio one instrument uses is
+  // element geometry and would be a fake vocabulary in `lib/theme/`.
+
+  /// Air between two beats in the sequence, trailing-only so the row starts
+  /// flush with its container's edge. Wider than the seam between phones because
+  /// a beat is a group (label + sound label) and the eye has to see where one
+  /// group ends.
+  static const _beatSeam = 7.0;
+
   @override
   Widget build(BuildContext context) {
     final items = _audibleItems();
@@ -128,11 +144,12 @@ class RhythmFrameRibbon extends StatelessWidget {
         boundaryCursor += 1;
       }
       final active = item.contains(position);
+      final isLastBeat = index == items.length - 1;
       widgets.add(
         _SequenceNode(
           active: active,
           widget: Padding(
-            padding: EdgeInsets.only(right: index == items.length - 1 ? 0 : 7),
+            padding: EdgeInsets.only(right: isLastBeat ? 0 : _beatSeam),
             child: _AudibleNode(
               item: item,
               active: active,
@@ -492,10 +509,21 @@ class _RhythmBadge extends StatelessWidget {
   final bool predicted;
   final String? predictedLabel;
 
+  /// Optical geometry (see [RhythmFrameRibbon]): the badge's own inset, one
+  /// named value per axis because the two are different decisions. The badge's
+  /// height is already pinned to the subtitle row, so the vertical value only
+  /// has to centre the label inside that height; the horizontal one is what
+  /// keeps the title off the border at any subtitle size.
+  static const _badgeInsetX = 7.0;
+  static const _badgeInsetY = ListenSpacing.gap4;
+
   @override
   Widget build(BuildContext context) => Container(
     height: math.max(24.0, height * 0.86),
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+    padding: const EdgeInsets.symmetric(
+      horizontal: _badgeInsetX,
+      vertical: _badgeInsetY,
+    ),
     decoration: BoxDecoration(
       color: ListenColors.overlaySurface,
       borderRadius: ListenRadii.controlBorder,
@@ -552,9 +580,20 @@ class _PredictedPill extends StatelessWidget {
   final String label;
   final double fontSize;
 
+  /// Optical geometry (see [RhythmFrameRibbon]): this pill is nested *inside*
+  /// [_RhythmBadge], which has already spent its own inset, so the pill only
+  /// gets the remainder — one notch narrower across, and a hairline down, since
+  /// the badge's height is fixed and any real vertical padding here would push
+  /// the pill past it.
+  static const _pillInsetX = 5.0;
+  static const _pillInsetY = 1.0;
+
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+    padding: const EdgeInsets.symmetric(
+      horizontal: _pillInsetX,
+      vertical: _pillInsetY,
+    ),
     decoration: BoxDecoration(
       color: ListenColors.soundPredicted.withAlpha(58),
       borderRadius: ListenRadii.tightBorder,
@@ -588,6 +627,23 @@ class _AudibleNode extends StatelessWidget {
   final double fontSize;
   final double height;
   final RhythmCueLoopCallback? onLoopCue;
+
+  // ── Optical geometry ──
+  // See [RhythmFrameRibbon]. A weak syllable is drawn *tighter* than a stressed
+  // one on purpose — the rhythm is carried by the spacing as much as by the
+  // weight, so these two pairs of values are the shape of the beat itself and
+  // cannot be flattened onto one ladder step.
+
+  /// Air on either side of the beat's own skeleton. Tracks the type size so a
+  /// stressed beat keeps its room at every subtitle size.
+  static double _beatInset(double fontSize, {required bool weak}) =>
+      weak ? ListenSpacing.gap2 : math.max(4, fontSize * 0.3);
+
+  /// Air added by the hit target when the beat is tappable, so a click lands on
+  /// the beat rather than between two of them. Vertical tracks the row height.
+  static double _hitInsetHorizontal({required bool weak}) => weak ? 1 : 3;
+
+  static double _hitInsetVertical(double height) => math.max(2, height * 0.08);
 
   @override
   Widget build(BuildContext context) {
@@ -731,7 +787,7 @@ class _AudibleNode extends StatelessWidget {
       opacity: opacity,
       child: Padding(
         padding: EdgeInsets.symmetric(
-          horizontal: weak ? 2 : math.max(4, fontSize * 0.3),
+          horizontal: _beatInset(fontSize, weak: weak),
         ),
         child: skeleton,
       ),
@@ -752,8 +808,8 @@ class _AudibleNode extends StatelessWidget {
                 ),
                 child: Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: weak ? 1 : 3,
-                    vertical: math.max(2, height * 0.08),
+                    horizontal: _hitInsetHorizontal(weak: weak),
+                    vertical: _hitInsetVertical(height),
                   ),
                   child: node,
                 ),
@@ -770,13 +826,24 @@ class _PhraseDivider extends StatelessWidget {
   final RhythmPhraseBoundary boundary;
   final double height;
 
+  /// Optical geometry (see [RhythmFrameRibbon]): the divider closes the phrase
+  /// on its left, so it sits almost against the beat it follows and gives the
+  /// whole gap to the phrase it opens — that asymmetry *is* the boundary. A
+  /// symmetric container role would centre the rule between two phrases and lose
+  /// which side it belongs to. Only the lead-in is off the ladder; the air on the
+  /// opening side is a real gap.
+  static const _dividerLeadIn = 1.0;
+
   @override
   Widget build(BuildContext context) => Tooltip(
     message: boundary.reason,
     child: Container(
       width: 1,
       height: math.max(15, height * 0.58),
-      margin: const EdgeInsets.only(left: 1, right: 8),
+      margin: const EdgeInsets.only(
+        left: _dividerLeadIn,
+        right: ListenSpacing.gap8,
+      ),
       color: ListenColors.overlayText.withAlpha(72),
     ),
   );

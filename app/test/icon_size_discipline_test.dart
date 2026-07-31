@@ -62,8 +62,6 @@ void main() {
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
   const knownOffenders = <String>{
-    'lib/widgets/common/listen_empty_state.dart',
-    'lib/widgets/common/listen_error_state.dart',
   };
 
   test('icon glyphs use ListenIconSize steps, not bare literals', () {
