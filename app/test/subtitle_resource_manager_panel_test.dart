@@ -3,7 +3,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/subtitle_resource_manager_panel.dart';
 
 void main() {
@@ -40,6 +42,38 @@ void main() {
 
     expect(find.text('Hello'), findsOneWidget);
     expect(find.text('Learning capabilities'), findsWidgets);
+
+    // S2 token provenance: the pane header is a `row` inset with a `control`
+    // glyph, and the language pill is `tight` — the 7/3 it used to carry was
+    // not a step on any ladder.
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.subtitles_outlined).first).size,
+      ListenIconSize.control,
+    );
+    expect(
+      tester
+          .widget<Padding>(
+            find
+                .ancestor(
+                  of: find.byIcon(Icons.subtitles_outlined).first,
+                  matching: find.byType(Padding),
+                )
+                .first,
+          )
+          .padding,
+      ListenPadding.row,
+    );
+    // And no glyph in the pane sits off the ladder — including the ones whose
+    // size arrives through a variable, which the source gate cannot see.
+    final steps = <double>{
+      ListenIconSize.inline,
+      ListenIconSize.control,
+      ListenIconSize.chrome,
+      ListenIconSize.illustration,
+    };
+    for (final icon in tester.widgetList<Icon>(find.byType(Icon))) {
+      if (icon.size != null) expect(steps, contains(icon.size));
+    }
     expect(
       find.textContaining('Subtitles · Available · 1 cues'),
       findsOneWidget,

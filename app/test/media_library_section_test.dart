@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/widgets/home/media_library_section.dart';
 
 MediaLibraryEntry _entry({
@@ -86,6 +87,24 @@ void main() {
     expect(find.text('Extensive listening'), findsOneWidget);
     expect(find.text('Set aside for now'), findsOneWidget);
     expect(find.text('Not rated yet'), findsOneWidget);
+
+    // S2 token provenance. The section used to carry five icon sizes
+    // (13/15/18/18/20) and a 7/2 pill inset; every glyph it renders now lands
+    // on a `ListenIconSize` step — the check a source scan cannot make, since a
+    // size can reach an `Icon` through a variable.
+    final steps = <double>{
+      ListenIconSize.inline,
+      ListenIconSize.control,
+      ListenIconSize.chrome,
+      ListenIconSize.illustration,
+    };
+    for (final icon in tester.widgetList<Icon>(find.byType(Icon))) {
+      if (icon.size != null) expect(steps, contains(icon.size));
+    }
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.movie_outlined).first).size,
+      ListenIconSize.control,
+    );
 
     // Golden target badge appears on the intensive row.
     expect(find.text('Intensive pick'), findsOneWidget);

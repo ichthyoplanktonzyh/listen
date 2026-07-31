@@ -14,6 +14,7 @@ import '../../localization.dart';
 import '../../player_adapter.dart';
 import '../../services/api_service.dart';
 import '../../services/external_tools.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 
 /// Dialog-driven media/subtitle import flows extracted from the composition
@@ -96,7 +97,7 @@ class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
               children: [
                 Icon(
                   _isYouTube ? Icons.play_circle_outline : Icons.language,
-                  size: 20,
+                  size: ListenIconSize.control,
                 ),
                 const SizedBox(width: ListenSpacing.gap8),
                 Text('${l.text('recognizedSource')}: '),
@@ -136,7 +137,7 @@ class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.gavel_outlined, size: 18),
+                const Icon(Icons.gavel_outlined, size: ListenIconSize.control),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(

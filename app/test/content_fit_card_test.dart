@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/theme/icon_size.dart';
+import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/content_fit_card.dart';
 
 ContentDifficultyProfile _profile({
@@ -47,6 +49,28 @@ Widget _host(
 );
 
 void main() {
+  // The discipline gates prove no *literal* survives in the source; this
+  // proves the values that replaced them are the tokens and not a coincidence,
+  // which is the half a source scan cannot see.
+  testWidgets('card inset and header glyph come from the token layer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(_profile()));
+
+    final padding = tester.widget<Padding>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.tune_outlined),
+            matching: find.byType(Padding),
+          )
+          .last,
+    );
+    expect(padding.padding, ListenPadding.card);
+
+    final icon = tester.widget<Icon>(find.byIcon(Icons.tune_outlined));
+    expect(icon.size, ListenIconSize.control);
+  });
+
   testWidgets('renders both dimension bands and the golden-target note', (
     tester,
   ) async {

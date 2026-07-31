@@ -44,14 +44,9 @@ void main() {
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
   const knownOffenders = <String>{
-    'lib/screens/review_queue_screen.dart',
     'lib/widgets/common/capability_viz.dart',
-    'lib/widgets/flows/content_speaking_activity_dialog.dart',
-    'lib/widgets/home/listening_home.dart',
     'lib/widgets/layout/side_panel.dart',
-    'lib/widgets/panels/cold_start_marking_sheet.dart',
     'lib/widgets/panels/conversation_afterglow_caption.dart',
-    'lib/widgets/panels/hunting_prompt_card.dart',
     'lib/widgets/panels/realtime_conversation_panel.dart',
     'lib/widgets/panels/transcript_panel.dart',
   };

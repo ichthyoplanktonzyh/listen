@@ -8,6 +8,7 @@ import '../../localization.dart';
 import '../../models/practice.dart';
 import '../../services/shadowing_recorder.dart';
 import '../../theme/listen_theme.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -167,7 +168,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
             padding: const EdgeInsets.only(left: 16, right: 6),
             child: Row(
               children: [
-                const Icon(Icons.fact_check_outlined, size: 20),
+                const Icon(
+                  Icons.fact_check_outlined,
+                  size: ListenIconSize.control,
+                ),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
@@ -205,11 +209,11 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
   Widget _body(double width) {
     final content = _practiceContent();
     if (!_showMiniPlayer) {
-      return Padding(padding: const EdgeInsets.all(18), child: content);
+      return Padding(padding: ListenPadding.card, child: content);
     }
     if (width < 620) {
       return ListView(
-        padding: const EdgeInsets.all(18),
+        padding: ListenPadding.card,
         children: [
           content,
           const SizedBox(height: ListenSpacing.gap16),
@@ -218,7 +222,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
       );
     }
     return Padding(
-      padding: const EdgeInsets.all(18),
+      padding: ListenPadding.card,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -359,12 +363,12 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         ),
         if (state.recordingActive)
           Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
             child: Row(
               children: [
                 Icon(
                   Icons.fiber_manual_record,
-                  size: 14,
+                  size: ListenIconSize.inline,
                   color: Theme.of(context).colorScheme.error,
                 ),
                 const SizedBox(width: ListenSpacing.gap6),
@@ -374,7 +378,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
           ),
         if (permissionBlocked)
           Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
             child: Row(
               children: [
                 Expanded(child: Text(l.text('shadowingPermissionDenied'))),
@@ -437,7 +441,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
           ],
           if (state.comparisonWarning != null)
             Padding(
-              padding: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.only(top: ListenSpacing.gap8),
               child: Text(
                 state.comparisonWarning!,
                 style: ListenType.body.copyWith(
@@ -448,7 +452,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         ],
         if (controller.error != null)
           Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
             child: Text(
               controller.error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -585,7 +589,7 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
         ),
         if (controller.error != null)
           Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: ListenSpacing.gap8),
             child: Text(
               controller.error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
@@ -673,7 +677,10 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
           Icon(
             widget.isPlaying ? Icons.graphic_eq : Icons.play_circle_outline,
             color: ListenColors.overlayText,
-            size: 52,
+            // Illustration, not a control: the mini player has no video
+            // surface, so this glyph *is* the picture of what is playing —
+            // nothing is tappable here and no label sits beside it.
+            size: ListenIconSize.illustration,
           ),
           const SizedBox(height: ListenSpacing.gap12),
           Text(
@@ -738,10 +745,15 @@ class _IntensivePracticeWindowState extends State<IntensivePracticeWindow> {
   );
 
   Widget _progress() => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    // Horizontal inset matches the body's `ListenPadding.card` so the strip
+    // and the content below it share one left edge; vertical is the row step.
+    padding: const EdgeInsets.symmetric(
+      horizontal: ListenSpacing.gap16,
+      vertical: ListenSpacing.gap8,
+    ),
     child: Row(
       children: [
-        const Icon(Icons.format_list_numbered, size: 18),
+        const Icon(Icons.format_list_numbered, size: ListenIconSize.control),
         const SizedBox(width: ListenSpacing.gap8),
         Text(
           l

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/theme/breakpoints.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
+import 'package:llplayer_next/theme/spacing.dart';
+import 'package:llplayer_next/theme/typography.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
 
 void main() {
@@ -68,6 +71,62 @@ void main() {
     await tester.tap(find.text('打开视频或音频'));
     expect(openMediaCalls, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  // The headline of the S2 migration for this file. The home page used to
+  // measure its own margin — `fromLTRB(24|48, 28|44, 24|48, 40)`, four
+  // directions, four numbers, three of them off any ladder — which is why it
+  // never matched the coach dashboard or the vocabulary detail. Both of those
+  // inset at 24, so `pageCompact`/`page` is what makes the three agree.
+  testWidgets('the home page margin is a page role at both widths', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Future<EdgeInsetsGeometry?> pageInsetAt(Size size) async {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(app(onOpenMedia: () {}));
+      await tester.pumpAndSettle();
+      return tester
+          .widget<SingleChildScrollView>(
+            find
+                .ancestor(
+                  of: find.text('学习首页'),
+                  matching: find.byType(SingleChildScrollView),
+                )
+                .first,
+          )
+          .padding;
+    }
+
+    expect(await pageInsetAt(const Size(1200, 800)), ListenPadding.page);
+    // Below `homeSidebar` the page folds to the narrow role, the same one the
+    // vocabulary detail and the coach dashboard use.
+    expect(await pageInsetAt(const Size(640, 700)), ListenPadding.pageCompact);
+    expect(ListenPadding.pageCompact.horizontal / 2, ListenSpacing.gap24);
+
+    // And the content column takes the shared wide cap rather than the 920 it
+    // invented, so "how wide may the home column grow" is one decision.
+    expect(
+      tester
+          .widget<ConstrainedBox>(
+            find
+                .ancestor(
+                  of: find.text('学习首页'),
+                  matching: find.byType(ConstrainedBox),
+                )
+                .first,
+          )
+          .constraints
+          .maxWidth,
+      ListenBreakpoints.wideColumnMax,
+    );
+
+    // The page title reads the one hero size, not Material's unmapped 28px.
+    expect(
+      tester.widget<Text>(find.text('学习首页')).style?.fontSize,
+      ListenType.hero.fontSize,
+    );
   });
 
   testWidgets('wide short home keeps every sidebar destination visible', (

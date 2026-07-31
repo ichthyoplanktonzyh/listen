@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/types.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 
@@ -34,13 +35,17 @@ class ContentFitCard extends StatelessWidget {
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        padding: ListenPadding.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.tune_outlined, size: 16, color: colors.primary),
+                Icon(
+                  Icons.tune_outlined,
+                  size: ListenIconSize.control,
+                  color: colors.primary,
+                ),
                 const SizedBox(width: ListenSpacing.gap8),
                 Expanded(
                   child: Text(
@@ -61,7 +66,10 @@ class ContentFitCard extends StatelessWidget {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   tooltip: l.text('contentFitWhy'),
-                  icon: const Icon(Icons.info_outline, size: 16),
+                  icon: const Icon(
+                    Icons.info_outline,
+                    size: ListenIconSize.control,
+                  ),
                   onPressed: () => _showDetail(context),
                 ),
               ],
@@ -104,7 +112,10 @@ class ContentFitCard extends StatelessWidget {
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
-                    icon: const Icon(Icons.bolt_outlined, size: 16),
+                    icon: const Icon(
+                      Icons.bolt_outlined,
+                      size: ListenIconSize.control,
+                    ),
                     label: Text(l.text('coldStartQuickMarking')),
                     onPressed: onStartColdStart,
                   ),
@@ -139,7 +150,7 @@ class FitChip extends StatelessWidget {
         borderRadius: ListenRadii.pillBorder,
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: ListenPadding.tight,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -179,7 +190,7 @@ class _NoteLine extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Icon(icon, size: 14, color: color),
+      Icon(icon, size: ListenIconSize.inline, color: color),
       const SizedBox(width: ListenSpacing.gap6),
       Expanded(
         child: Text(
@@ -290,7 +301,7 @@ class _DimensionDetail extends StatelessWidget {
                   signal.decisive
                       ? Icons.radio_button_checked
                       : Icons.radio_button_unchecked,
-                  size: 12,
+                  size: ListenIconSize.inline,
                   color: signal.decisive
                       ? colors.primary
                       : colors.onSurfaceVariant,

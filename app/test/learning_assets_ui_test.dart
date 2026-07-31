@@ -169,6 +169,42 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  // The 我的表达 entry on this screen shipped its own hardcoded title and
+  // subtitle, so an `en` learner met two lines of Chinese here while the
+  // compact home card — the same destination — read the localized keys. Both
+  // directions are asserted: this is a copy path, and a gate that only counts
+  // Han ideographs cannot prove the English side.
+  testWidgets('the my-expressions entry speaks the interface language', (
+    tester,
+  ) async {
+    Widget screen(Locale locale) => localized(
+      LearningAssetsScreen(
+        api: LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'token',
+          transport: (method, path, body) async =>
+              (statusCode: 200, body: '[]'),
+        ),
+        language: 'en',
+      ),
+      locale: locale,
+    );
+
+    await tester.pumpWidget(screen(const Locale('en')));
+    await tester.pumpAndSettle();
+    expect(find.text('My expressions'), findsOneWidget);
+    expect(
+      find.text('Saved expressions to revisit and practice'),
+      findsOneWidget,
+    );
+    expect(find.text('我的表达'), findsNothing);
+
+    await tester.pumpWidget(screen(const Locale('zh')));
+    await tester.pumpAndSettle();
+    expect(find.text('我的表达'), findsOneWidget);
+    expect(find.text('My expressions'), findsNothing);
+  });
+
   testWidgets('learning asset tile shows phrase status and durable sources', (
     tester,
   ) async {

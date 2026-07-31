@@ -122,13 +122,12 @@ void main() {
   // `error_leak_discipline_test.dart`.
   //
   // S6 cleared 我的表达 (62 literals) and the manual timing dialog, leaving
-  // three files outside its domain to whoever next touched them. S2's studios
-  // slice took `reading_view` while it was already in that file — its single
+  // three files outside its domain to whoever next touched them. S2 then took
+  // two of the three: the studios slice picked up `reading_view` (its single
   // 保存到我的表达 tooltip now reads the `expressionSaveTitle` key both tables
-  // already carried. Two files and five literals left.
+  // already carried), and the panels slice picked up `learning_assets_ui`
+  // (whose two literals likewise duplicated existing keys). One file left.
   const knownOffenders = <String>{
-    // 首页侧栏 ▸ 我的表达 entry (issue #7's fourth site). Two literals.
-    'lib/learning_assets_ui.dart',
     // 当前来源切片 / 暂停 / 播放 / 跟一下 on the dictionary clip player.
     'lib/widgets/vocabulary/dictionary_inline_clip_player.dart',
   };

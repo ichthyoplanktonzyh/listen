@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../theme/typography.dart';
@@ -36,7 +37,7 @@ class LlmFeedbackAssist extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final feedback = this.feedback;
     return Padding(
-      padding: const EdgeInsets.only(top: 14),
+      padding: const EdgeInsets.only(top: ListenSpacing.gap12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -46,13 +47,20 @@ class LlmFeedbackAssist extends StatelessWidget {
             OutlinedButton.icon(
               key: ValueKey('$keyPrefix-request-ai'),
               onPressed: busy ? null : onRequest,
-              icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+              icon: const Icon(
+                Icons.auto_awesome_outlined,
+                size: ListenIconSize.control,
+              ),
               label: Text(l.text('llmFeedbackRequest')),
             )
           else ...[
             Row(
               children: [
-                Icon(Icons.auto_awesome, size: 16, color: colors.tertiary),
+                Icon(
+                  Icons.auto_awesome,
+                  size: ListenIconSize.inline,
+                  color: colors.tertiary,
+                ),
                 const SizedBox(width: ListenSpacing.gap6),
                 Text(
                   l.text('llmFeedbackTitle'),

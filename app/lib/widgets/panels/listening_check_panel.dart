@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import 'reading_task_sheet.dart';
 
@@ -39,7 +40,7 @@ class ListeningCheckPanel extends StatelessWidget {
               border: Border(bottom: BorderSide(color: colors.outlineVariant)),
             ),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 10, 10),
+              padding: ListenPadding.row,
               child: Row(
                 children: [
                   Icon(Icons.hearing_outlined, color: colors.primary),
@@ -54,7 +55,10 @@ class ListeningCheckPanel extends StatelessWidget {
                   TextButton.icon(
                     key: const ValueKey('listening-check-back'),
                     onPressed: onClose,
-                    icon: const Icon(Icons.arrow_back, size: 18),
+                    icon: const Icon(
+                      Icons.arrow_back,
+                      size: ListenIconSize.control,
+                    ),
                     label: Text(l.text('readingTaskListenBack')),
                   ),
                 ],
