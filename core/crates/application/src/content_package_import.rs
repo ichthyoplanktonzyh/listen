@@ -112,7 +112,10 @@ pub fn prepare_content_package_document(
     media: &MediaItem,
     package: &ValidatedPackage,
 ) -> Result<PreparedContentPackageImport, ApplicationError> {
-    if media.fingerprint != package.manifest.content_document.media_fingerprint {
+    if !media_fingerprint_matches(
+        &media.fingerprint,
+        &package.manifest.content_document.media_fingerprint,
+    ) {
         return Err(ApplicationError::Validation(
             "content package media fingerprint",
         ));
@@ -555,6 +558,21 @@ pub fn prepare_content_package_document(
     Ok(PreparedContentPackageImport { document, receipt })
 }
 
+fn media_fingerprint_matches(stored: &str, packaged: &str) -> bool {
+    if stored == packaged {
+        return true;
+    }
+
+    let Some(packaged_digest) = packaged.strip_prefix("sha256:") else {
+        return false;
+    };
+    stored.len() == 64
+        && stored
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        && stored == packaged_digest
+}
+
 fn producer<P>(resource: &content_package::ResourceEnvelope<P>) -> (String, String) {
     resource
         .provenance
@@ -747,6 +765,31 @@ mod tests {
             error,
             ApplicationError::Validation("content package media fingerprint")
         ));
+    }
+
+    #[test]
+    fn legacy_bare_sha256_media_fingerprint_matches_v1_package() {
+        let mut media = matching_media();
+        let media_id = media.id.clone();
+        media.fingerprint = "a".repeat(64);
+
+        let prepared = prepare_content_package_document(&media, &canonical_package()).unwrap();
+
+        assert_eq!(prepared.document.metadata.media.id, media_id);
+        assert_eq!(prepared.document.metadata.media.fingerprint, "a".repeat(64));
+    }
+
+    #[test]
+    fn malformed_bare_media_fingerprint_is_not_treated_as_sha256() {
+        for fingerprint in ["a".repeat(63), "A".repeat(64), "g".repeat(64)] {
+            let mut media = matching_media();
+            media.fingerprint = fingerprint;
+            let error = prepare_content_package_document(&media, &canonical_package()).unwrap_err();
+            assert!(matches!(
+                error,
+                ApplicationError::Validation("content package media fingerprint")
+            ));
+        }
     }
 
     #[test]
