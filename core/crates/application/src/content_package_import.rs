@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 
 use content_package::{KnownResource, ValidatedPackage};
 use domain::{
@@ -10,7 +11,7 @@ use domain::{
     TimelineStatus, TimingSource, WordTimeline, WordTimelineId, WordTiming,
 };
 
-use crate::{ApplicationError, MediaAnalysisUseCases};
+use crate::{ApplicationError, MediaAnalysisUseCases, SubtitleTrack};
 
 const PACKAGE_GENERATOR_ID: &str = "listen-resource-package";
 const PACKAGE_GENERATOR_VERSION: &str = "v1";
@@ -44,11 +45,15 @@ pub struct PreparedContentPackageImport {
     pub receipt: ContentPackageImportReceipt,
 }
 
+#[derive(Debug, Clone)]
+pub struct ImportedContentPackage {
+    pub track: SubtitleTrack,
+    pub receipt: ContentPackageImportReceipt,
+}
+
 impl MediaAnalysisUseCases {
-    /// Prepares a validated exchange package for the existing atomic LLTimeline
-    /// import seam. This method is intentionally read-only: candidate import
-    /// and preservation of an existing active selection are committed together
-    /// by the persistence-facing slice.
+    /// Projects a validated exchange package for the dedicated candidate-only
+    /// package import seam. This method is intentionally read-only.
     pub fn prepare_content_package_import(
         &self,
         media_id: &MediaId,
@@ -59,6 +64,47 @@ impl MediaAnalysisUseCases {
             .get(media_id)?
             .ok_or(ApplicationError::NotFound("media item"))?;
         prepare_content_package_document(&media, package)
+    }
+
+    /// Projects and atomically attaches resources from a previously verified
+    /// package as candidates. A Resource Package never selects or replaces an
+    /// active analysis; that remains an explicit Core lifecycle decision.
+    pub fn import_content_package(
+        &self,
+        media_id: &MediaId,
+        package: &ValidatedPackage,
+    ) -> Result<ImportedContentPackage, ApplicationError> {
+        let media = self
+            .media
+            .get(media_id)?
+            .ok_or(ApplicationError::NotFound("media item"))?;
+        let prepared = prepare_content_package_document(&media, package)?;
+        let projected_track =
+            self.import_content_package_document_with_media(prepared.document, media)?;
+        let track = self
+            .subtitle_tracks
+            .get_track(&projected_track.id)?
+            .ok_or_else(|| {
+                ApplicationError::Invalid(
+                    "content package import committed without a durable track".into(),
+                )
+            })?;
+        Ok(ImportedContentPackage {
+            track,
+            receipt: prepared.receipt,
+        })
+    }
+
+    /// Inspects a directory or `.listenpkg` and imports its verified package.
+    pub fn import_content_package_path(
+        &self,
+        media_id: &MediaId,
+        path: &Path,
+    ) -> Result<ImportedContentPackage, ApplicationError> {
+        let inspected = content_package::inspect_path(path).map_err(|error| {
+            ApplicationError::Invalid(format!("content package inspection failed: {error}"))
+        })?;
+        self.import_content_package(media_id, &inspected.package)
     }
 }
 

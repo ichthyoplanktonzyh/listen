@@ -13,11 +13,11 @@ contracts / HTTP / events
           |              |
  persistence-sqlite   *-provider adapters
 
-scripts/timeline-production and evaluation tools
-          |
- versioned LLTimeline/resource artifacts
-          |
- deterministic .listenpkg content resource packages
+legacy scripts/timeline-production       external offline producer
+          |                                       |
+ versioned LLTimeline --migration--> deterministic .listenpkg
+                                                   |
+                                      bounded Core import
 ```
 
 `domain` owns stable concepts. `application` owns use cases and ports.
@@ -25,7 +25,7 @@ scripts/timeline-production and evaluation tools
 crates implement ports. Python tooling produces/evaluates resources but is not
 embedded in the lightweight consumer runtime.
 
-The first portable content-resource contract lives under
+The portable content-resource contract lives under
 `contracts/content-package/v1`. A deterministic `.listenpkg` ZIP binds one
 Content Document descriptor to immutable, raw-byte-SHA-addressed resource
 files. Its common typed envelope carries subject, closed hash dependencies,
@@ -36,11 +36,24 @@ identity and lifecycle state as well as all learner facts.
 
 `content-package` owns bounded directory/ZIP inspection, raw-byte identity
 verification, compatibility checks, and typed decoding. The application
-adapter projects supported package resources into candidate-only LLTimeline
-records and reports unsupported-but-preserved resources explicitly. This first
-slice stops before persistence: attaching candidates without changing an
-existing active selection requires a dedicated atomic repository operation and
-must not reuse the legacy import behavior that can replace active choices.
+adapter projects supported package resources into candidate-only Core records
+and reports unsupported-but-preserved resources explicitly. A dedicated
+`ContentPackageImportRepository` operation commits the track, metadata,
+resources, and corpus projection in one transaction. Reimport skips existing
+identities, never creates or changes an active selection, and rejects a
+resource identity already owned by another track or media item. This operation
+is separate from legacy LLTimeline import, whose lifecycle policy may activate
+resources.
+
+The first generation split is the reusable whole-media path from media bytes
+through ASR Subtitle Text Track and Word Timeline to a native `.listenpkg`.
+Provider/model execution, media preprocessing, and batch generation belong on
+the external producer side of that boundary. The existing whole-media
+transcription runtime and `scripts/timeline-production` remain legacy migration
+paths until production cutover is verified; they are not the target interface
+for new generation work. Learner-recording transcription, realtime
+conversation, and learner-dependent or genuinely realtime LLM behavior remain
+Core responsibilities.
 
 Concrete LLM and realtime protocol selection is assembled in the HTTP
 composition root through application-owned factories. Forced alignment uses an

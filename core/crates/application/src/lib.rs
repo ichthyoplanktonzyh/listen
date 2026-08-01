@@ -105,8 +105,8 @@ pub use coach_dashboard::{
     CoachSuggestion, CoachSuggestionDestination,
 };
 pub use content_package_import::{
-    ContentPackageImportReceipt, PreparedContentPackageImport, ResourceImportDisposition,
-    ResourceImportOutcome, prepare_content_package_document,
+    ContentPackageImportReceipt, ImportedContentPackage, PreparedContentPackageImport,
+    ResourceImportDisposition, ResourceImportOutcome, prepare_content_package_document,
 };
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;
@@ -153,6 +153,7 @@ pub struct AppServices {
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
+    pub(crate) content_package_imports: Arc<dyn ContentPackageImportRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
     pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -275,6 +276,7 @@ impl AppServices {
             + SenseGroupRepository
             + PhoneTimelineRepository
             + LLTimelineImportRepository
+            + ContentPackageImportRepository
             + 'static,
         L: LexicalCapabilityRepository
             + LexicalEntryRepository
@@ -293,7 +295,8 @@ impl AppServices {
             sense_groups: timelines.clone(),
             phone_timelines: timelines.clone(),
             lltimeline_resources,
-            lltimeline_imports: timelines,
+            lltimeline_imports: timelines.clone(),
+            content_package_imports: timelines,
             dictionary,
             lexical_capabilities: learning_assets.clone(),
             lexical_entries: learning_assets.clone(),

@@ -1,5 +1,373 @@
 use super::*;
 
+fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
+    let mut document = lltimeline_fixture();
+    let media = MediaItem {
+        id: document.metadata.media.id.clone(),
+        path: "/tmp/package-fixture.mp4".into(),
+        fingerprint: document.metadata.media.fingerprint.clone(),
+        title: document.metadata.media.title.clone(),
+        kind: MediaKind::Video,
+        duration: document.metadata.media.duration_ms.map(TimeMs::new),
+        availability: MediaAvailability::Available,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    let track = SubtitleTrack {
+        id: SubtitleTrackId::parse(document.metadata.extra["track_id"].as_str().unwrap()).unwrap(),
+        media_id: media.id.clone(),
+        fingerprint: document.metadata.extra["track_fingerprint"]
+            .as_str()
+            .unwrap()
+            .into(),
+        language: document.metadata.language.clone(),
+        source: "listen-resource-package-v1".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: document
+            .segments
+            .iter()
+            .map(|segment| SubtitleSentence {
+                id: segment.id.clone(),
+                index: segment.index,
+                start: TimeMs::new(segment.start_ms),
+                end: TimeMs::new(segment.end_ms),
+                original_text: segment.text.clone(),
+                display_text: segment.display_text.clone(),
+                tokens: segment
+                    .tokens
+                    .iter()
+                    .map(|token| SubtitleToken {
+                        index: token.index,
+                        kind: token.kind,
+                        text: token.text.clone(),
+                        normalized: token.normalized.clone(),
+                        start_char: token.start_char,
+                        end_char: token.end_char,
+                    })
+                    .collect(),
+            })
+            .collect(),
+    };
+    for timeline in &mut document.word_timelines {
+        timeline.status = TimelineStatus::Candidate;
+    }
+    for timeline in &mut document.phone_timelines {
+        timeline.status = TimelineStatus::Candidate;
+    }
+    for timeline in &mut document.chunk_timelines {
+        timeline.status = TimelineStatus::Candidate;
+    }
+    for analysis in &mut document.sense_group_analyses {
+        analysis.status = TimelineStatus::Candidate;
+    }
+    ContentPackageCandidateImport {
+        track,
+        metadata: document.metadata,
+        artifacts: document.artifacts,
+        word_timelines: document.word_timelines,
+        phone_timelines: document.phone_timelines,
+        chunk_timelines: document.chunk_timelines,
+        sense_group_analyses: document.sense_group_analyses,
+        corpus_occurrences: Vec::new(),
+    }
+}
+
+fn seed_content_package_media(repo: &SqliteRepository, import: &ContentPackageCandidateImport) {
+    repo.upsert(&MediaItem {
+        id: import.track.media_id.clone(),
+        path: "/tmp/package-fixture.mp4".into(),
+        fingerprint: import.metadata.media.fingerprint.clone(),
+        title: import.metadata.media.title.clone(),
+        kind: MediaKind::Video,
+        duration: import.metadata.media.duration_ms.map(TimeMs::new),
+        availability: MediaAvailability::Available,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    })
+    .unwrap();
+}
+
+#[test]
+fn content_package_import_is_idempotent_and_never_selects_active() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let import = content_package_candidate_fixture();
+    seed_content_package_media(&repo, &import);
+    let track_id = import.track.id.clone();
+    repo.import_content_package_candidates(&import).unwrap();
+    let track_before = repo.get_track(&track_id).unwrap().unwrap();
+    repo.import_content_package_candidates(&import).unwrap();
+
+    assert_eq!(repo.get_track(&track_id).unwrap().unwrap(), track_before);
+    assert_eq!(repo.list_word_timelines(&track_id).unwrap().len(), 1);
+    assert_eq!(repo.list_phone_timelines(&track_id).unwrap().len(), 0);
+    assert_eq!(repo.list_sense_group_analyses(&track_id).unwrap().len(), 0);
+    assert!(repo.active_word_timeline(&track_id).unwrap().is_none());
+    assert!(repo.active_phone_timeline(&track_id).unwrap().is_none());
+    assert!(
+        repo.active_sense_group_analysis(&track_id)
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn content_package_import_preserves_existing_active_bytes_and_adds_candidate() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let import = content_package_candidate_fixture();
+    seed_content_package_media(&repo, &import);
+    let track_id = import.track.id.clone();
+    repo.import_content_package_candidates(&import).unwrap();
+    let original = repo.list_word_timelines(&track_id).unwrap().remove(0);
+    let active = repo.activate_word_timeline(&original.id).unwrap();
+    let active_json = serde_json::to_value(&active).unwrap();
+    let track_before = repo.get_track(&track_id).unwrap().unwrap();
+    let corpus_before = corpus_count_for_track(&repo, &track_id);
+
+    let mut additional = import;
+    additional.word_timelines[0].id =
+        WordTimelineId::parse("additional-package-candidate").unwrap();
+    additional.track.sentences.clear();
+    repo.import_content_package_candidates(&additional).unwrap();
+
+    let timelines = repo.list_word_timelines(&track_id).unwrap();
+    assert_eq!(timelines.len(), 2);
+    assert_eq!(
+        serde_json::to_value(repo.active_word_timeline(&track_id).unwrap().unwrap()).unwrap(),
+        active_json
+    );
+    assert_eq!(repo.get_track(&track_id).unwrap().unwrap(), track_before);
+    assert_eq!(corpus_count_for_track(&repo, &track_id), corpus_before);
+    assert!(
+        timelines
+            .iter()
+            .any(|value| { value.id != active.id && value.status == TimelineStatus::Candidate })
+    );
+}
+
+#[test]
+fn content_package_cross_source_resource_conflict_rolls_back_every_write() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let import = content_package_candidate_fixture();
+    seed_content_package_media(&repo, &import);
+    repo.import_content_package_candidates(&import).unwrap();
+    let original = import.word_timelines[0].clone();
+    let other_media = MediaItem {
+        id: MediaId::parse("content-package-other-media").unwrap(),
+        fingerprint: "other-content-package-fingerprint".into(),
+        path: "/tmp/other.mp4".into(),
+        title: "Other".into(),
+        kind: MediaKind::Video,
+        duration: None,
+        availability: MediaAvailability::Available,
+        created_at_ms: 2,
+        updated_at_ms: 2,
+    };
+    repo.upsert(&other_media).unwrap();
+    let media_before = repo.get(&other_media.id).unwrap().unwrap();
+    let mut other_track = import.track;
+    other_track.id = SubtitleTrackId::parse("content-package-other-track").unwrap();
+    other_track.media_id = other_media.id.clone();
+    other_track.fingerprint = "other-track-fingerprint".into();
+    other_track.sentences.clear();
+    let mut conflicting = original;
+    conflicting.track_id = other_track.id.clone();
+    conflicting.media_id = other_media.id.clone();
+
+    let result = repo.import_content_package_candidates(&ContentPackageCandidateImport {
+        track: other_track.clone(),
+        metadata: import.metadata,
+        artifacts: Vec::new(),
+        word_timelines: vec![conflicting],
+        phone_timelines: Vec::new(),
+        chunk_timelines: Vec::new(),
+        sense_group_analyses: Vec::new(),
+        corpus_occurrences: Vec::new(),
+    });
+    assert!(result.is_err());
+    assert_eq!(repo.get(&other_media.id).unwrap().unwrap(), media_before);
+    assert!(repo.get_track(&other_track.id).unwrap().is_none());
+}
+
+#[test]
+fn content_package_sentence_ownership_conflict_rolls_back_without_moving_sentence() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let import = content_package_candidate_fixture();
+    seed_content_package_media(&repo, &import);
+    repo.import_content_package_candidates(&import).unwrap();
+    let original_track = repo.get_track(&import.track.id).unwrap().unwrap();
+    let sentence_id = original_track.sentences[0].id.clone();
+    let word_count = repo.list_word_timelines(&import.track.id).unwrap().len();
+
+    let other_media = MediaItem {
+        id: MediaId::parse("sentence-conflict-media").unwrap(),
+        path: "/tmp/sentence-conflict.mp4".into(),
+        fingerprint: "sentence-conflict-media-fingerprint".into(),
+        title: "Sentence conflict".into(),
+        kind: MediaKind::Video,
+        duration: None,
+        availability: MediaAvailability::Available,
+        created_at_ms: 3,
+        updated_at_ms: 3,
+    };
+    repo.upsert(&other_media).unwrap();
+    let mut conflict = content_package_candidate_fixture();
+    conflict.track.id = SubtitleTrackId::parse("sentence-conflict-track").unwrap();
+    conflict.track.media_id = other_media.id.clone();
+    conflict.track.fingerprint = "sentence-conflict-track-fingerprint".into();
+    conflict.word_timelines[0].id = WordTimelineId::parse("sentence-conflict-word").unwrap();
+    conflict.word_timelines[0].track_id = conflict.track.id.clone();
+    conflict.word_timelines[0].media_id = other_media.id.clone();
+
+    assert!(repo.import_content_package_candidates(&conflict).is_err());
+    assert_eq!(
+        repo.sentence_track_id(&sentence_id).unwrap(),
+        Some(original_track.id.clone())
+    );
+    assert_eq!(
+        repo.get_track(&original_track.id).unwrap().unwrap(),
+        original_track
+    );
+    assert!(repo.get_track(&conflict.track.id).unwrap().is_none());
+    assert_eq!(
+        repo.list_word_timelines(&original_track.id).unwrap().len(),
+        word_count
+    );
+    assert_eq!(corpus_count_for_track(&repo, &conflict.track.id), 0);
+}
+
+#[test]
+fn content_package_enriched_reimport_merges_artifacts_idempotently() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let mut import = content_package_candidate_fixture();
+    seed_content_package_media(&repo, &import);
+    import.artifacts = vec![LLTimelineArtifact {
+        kind: "fixture".into(),
+        provider_id: Some("first".into()),
+        provider_version: Some("1".into()),
+        payload: serde_json::json!({"resource_id": "artifact-first", "value": 1}),
+    }];
+    repo.import_content_package_candidates(&import).unwrap();
+    let original_metadata = repo
+        .get_lltimeline_resource(&import.track.id)
+        .unwrap()
+        .unwrap()
+        .0;
+
+    let mut enriched = import.clone();
+    enriched.artifacts = vec![LLTimelineArtifact {
+        kind: "rhythm_word_acoustic_cues".into(),
+        provider_id: Some("acoustics".into()),
+        provider_version: Some("1".into()),
+        payload: serde_json::json!({"resource_id": "artifact-acoustics", "cues": []}),
+    }];
+    repo.import_content_package_candidates(&enriched).unwrap();
+    repo.import_content_package_candidates(&enriched).unwrap();
+
+    let (metadata, artifacts) = repo
+        .get_lltimeline_resource(&import.track.id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(metadata, original_metadata);
+    assert_eq!(artifacts.len(), 2);
+    assert!(
+        artifacts
+            .iter()
+            .any(|value| { value.payload["resource_id"] == serde_json::json!("artifact-first") })
+    );
+    assert!(
+        artifacts.iter().any(|value| {
+            value.payload["resource_id"] == serde_json::json!("artifact-acoustics")
+        })
+    );
+}
+
+#[test]
+fn public_content_package_use_case_inspects_projects_and_imports_atomically() {
+    let (repo, media) = lltimeline_import_services();
+    let source = MediaItem {
+        id: MediaId::parse("content-package-media").unwrap(),
+        path: "/tmp/content-package-media.mp4".into(),
+        fingerprint: format!("sha256:{}", "a".repeat(64)),
+        title: "Content package media".into(),
+        kind: MediaKind::Video,
+        duration: Some(TimeMs::new(2_500)),
+        availability: MediaAvailability::Available,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    repo.upsert(&source).unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/content-package/v1/examples/minimal");
+
+    let first = media
+        .import_content_package_path(&source.id, &path)
+        .unwrap();
+    let second = media
+        .import_content_package_path(&source.id, &path)
+        .unwrap();
+
+    assert_eq!(first.track.id, second.track.id);
+    assert_eq!(repo.list_word_timelines(&first.track.id).unwrap().len(), 1);
+    assert!(
+        repo.active_word_timeline(&first.track.id)
+            .unwrap()
+            .is_none()
+    );
+    assert!(corpus_count_for_track(&repo, &first.track.id) > 0);
+}
+
+#[test]
+fn public_content_package_reimport_returns_the_preserved_archived_track() {
+    let (repo, media) = lltimeline_import_services();
+    let source = MediaItem {
+        id: MediaId::parse("content-package-archived-media").unwrap(),
+        path: "/tmp/content-package-archived.mp4".into(),
+        fingerprint: format!("sha256:{}", "a".repeat(64)),
+        title: "Archived package media".into(),
+        kind: MediaKind::Video,
+        duration: Some(TimeMs::new(2_500)),
+        availability: MediaAvailability::Available,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    repo.upsert(&source).unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/content-package/v1/examples/minimal");
+    let first = media
+        .import_content_package_path(&source.id, &path)
+        .unwrap();
+    let archived = repo
+        .set_track_status(&first.track.id, SubtitleTrackStatus::Archived)
+        .unwrap();
+
+    let repeated = media
+        .import_content_package_path(&source.id, &path)
+        .unwrap();
+
+    assert_eq!(repeated.track, archived);
+    assert_eq!(
+        repo.get_track(&first.track.id).unwrap().unwrap().status,
+        SubtitleTrackStatus::Archived
+    );
+    assert_eq!(repo.list_word_timelines(&first.track.id).unwrap().len(), 1);
+    assert!(
+        repo.active_word_timeline(&first.track.id)
+            .unwrap()
+            .is_none()
+    );
+}
+
+fn corpus_count_for_track(repo: &SqliteRepository, track_id: &SubtitleTrackId) -> u64 {
+    repo.connection
+        .lock()
+        .query_row(
+            "SELECT count(*) FROM corpus_occurrences WHERE track_id=?1",
+            [track_id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap()
+}
+
 #[test]
 fn archived_transcription_jobs_are_hidden_from_list_and_reuse() {
     let repo = SqliteRepository::in_memory().unwrap();
