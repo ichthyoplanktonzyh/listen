@@ -1,0 +1,10 @@
+{
+  "authority": {
+    "path": "contracts/content-package/v1",
+    "repository": "ichthyoplanktonzyh/listen-core"
+  },
+  "manifest_schema_id": "https://listen.dev/contracts/content-package/v1/manifest.schema.json",
+  "package_schema": "listen.resource-package.v1",
+  "resource_schema_id": "https://listen.dev/contracts/content-package/v1/resource.schema.json",
+  "schema_version": 1
+}

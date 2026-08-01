@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "listen-gen"
+version = "0.1.0"
+description = "Heavy resource generation and content packaging for Listen"
+requires-python = ">=3.11"
+
+[project.scripts]
+listen-gen = "listen_gen.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,85 @@
+{
+  "schema": "llplayer.timeline.v1",
+  "metadata": {
+    "created_at_ms": 1700000000000,
+    "generator": {"id": "fixture-gen", "version": "1.0", "mode": "test"},
+    "media": {
+      "id": "core-media-id",
+      "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "path": "/private/user/video.mp4",
+      "title": "A small lesson",
+      "duration_ms": 2000
+    },
+    "language": "en",
+    "human_reviewed": false,
+    "extra": {"track_id": "core-track-id"}
+  },
+  "segments": [{
+    "id": "core-sentence-id",
+    "index": 0,
+    "start_ms": 100,
+    "end_ms": 1200,
+    "text": "Hello world.",
+    "display_text": "Hello world.",
+    "tokens": [
+      {"index": 0, "kind": "word", "text": "Hello", "normalized": "hello", "start_char": 0, "end_char": 5},
+      {"index": 1, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 5, "end_char": 6},
+      {"index": 2, "kind": "word", "text": "world", "normalized": "world", "start_char": 6, "end_char": 11},
+      {"index": 3, "kind": "punctuation", "text": ".", "normalized": null, "start_char": 11, "end_char": 12}
+    ]
+  }],
+  "word_timelines": [{
+    "id": "core-word-timeline",
+    "track_id": "core-track-id",
+    "media_id": "core-media-id",
+    "algorithm_id": "fixture-aligner",
+    "algorithm_version": "v1",
+    "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "parent_timeline_id": null,
+    "created_by": "algorithm",
+    "status": "active",
+    "metrics_json": {"private-runtime-detail": true},
+    "words": [
+      {"sentence_id": "core-sentence-id", "token_index": 0, "text": "Hello", "start_ms": 120, "end_ms": 400, "confidence": 0.98, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"},
+      {"sentence_id": "core-sentence-id", "token_index": 2, "text": "world", "start_ms": 430, "end_ms": 900, "confidence": 0.97, "timing_source": "forced_aligned", "provider_id": "fixture-aligner", "provider_version": "v1"}
+    ],
+    "created_at_ms": 1700000000000,
+    "updated_at_ms": 1700000000000
+  }],
+  "active_word_timeline_id": "core-word-timeline",
+  "phone_timelines": [{
+    "id": "core-phone-timeline",
+    "track_id": "core-track-id",
+    "media_id": "core-media-id",
+    "sentence_id": "core-sentence-id",
+    "parent_word_timeline_id": "core-word-timeline",
+    "provider_id": "fixture-phones",
+    "provider_version": "v1",
+    "model_id": "phones-model",
+    "model_revision": "r1",
+    "phone_set": "ipa",
+    "precision": "aligned",
+    "created_by": "algorithm",
+    "status": "active",
+    "metrics_json": {},
+    "phones": [{"symbol": "h", "display_ipa": "h", "phone_set": "ipa", "start_ms": 120, "end_ms": 180, "confidence": 0.9, "token_index": 0, "provider_id": "fixture-phones", "provider_version": "v1", "model_revision": "r1"}],
+    "alignments": [], "findings": [], "sound_analysis": null,
+    "created_at_ms": 1700000000000, "updated_at_ms": 1700000000000
+  }],
+  "active_phone_timeline_id": "core-phone-timeline",
+  "rhythm_frames": [],
+  "chunk_timelines": [],
+  "active_chunk_timeline_id": null,
+  "sense_group_analyses": [{
+    "id": "core-sense-analysis", "track_id": "core-track-id", "media_id": "core-media-id",
+    "parent_word_timeline_id": "core-word-timeline", "provider_id": "fixture-sense", "provider_version": "v1",
+    "algorithm": "fixture", "status": "active", "created_by": "algorithm", "metrics_json": {},
+    "groups": [{"id": "core-group-id", "sentence_id": "core-sentence-id", "group_index": 0, "start_token_index": 0, "end_token_index": 2, "text": "Hello world", "label": null, "head_token_index": 0, "confidence": 0.9, "sources": ["language_model"]}],
+    "created_at_ms": 1700000000000, "updated_at_ms": 1700000000000
+  }],
+  "active_sense_group_analysis_id": "core-sense-analysis",
+  "artifacts": [
+    {"kind": "rhythm_word_acoustic_cues", "provider_id": "rms-word-energy-prominence", "provider_version": "v1", "payload": {"status": "scored", "timeline_id": "core-word-timeline", "audio_path": "/private/tmp/audio.wav", "sample_rate_hz": 16000, "calibration": {"method": "sentence_median_dbfs_delta_v1", "delta_db_for_max": 6.0}, "cues": [{"sentence_id": "core-sentence-id", "token_index": 0, "text": "Hello", "start_ms": 120, "end_ms": 400, "energy_prominence": 0.5, "dbfs": -18.0, "sentence_median_dbfs": -21.0, "db_delta_from_sentence_median": 3.0}]}},
+    {"kind": "provider_debug_dump", "provider_id": "unsafe", "provider_version": "v1", "payload": {"secret": "must-not-leak"}}
+  ]
+}
