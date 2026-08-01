@@ -32,6 +32,7 @@ class ContentPackageJourneyState {
     List<String> generatorWarnings = const [],
     Set<String> activatedWordTimelineIds = const {},
     this.selectedTrackId,
+    this.archiveSha256,
   }) : _generatedResources = List.unmodifiable(generatedResources),
        _generatorWarnings = List.unmodifiable(generatorWarnings),
        _activatedWordTimelineIds = Set.unmodifiable(activatedWordTimelineIds);
@@ -49,6 +50,7 @@ class ContentPackageJourneyState {
   Set<String> get activatedWordTimelineIds =>
       Set.unmodifiable(_activatedWordTimelineIds);
   final String? selectedTrackId;
+  final String? archiveSha256;
 
   bool get busy =>
       phase == ContentPackageJourneyPhase.preparing ||
@@ -69,6 +71,8 @@ class ContentPackageJourneyState {
     Set<String>? activatedWordTimelineIds,
     String? selectedTrackId,
     bool clearSelectedTrackId = false,
+    String? archiveSha256,
+    bool clearArchiveSha256 = false,
   }) => ContentPackageJourneyState(
     phase: phase ?? this.phase,
     generatorPhase: clearGeneratorPhase
@@ -83,6 +87,9 @@ class ContentPackageJourneyState {
     selectedTrackId: clearSelectedTrackId
         ? null
         : selectedTrackId ?? this.selectedTrackId,
+    archiveSha256: clearArchiveSha256
+        ? null
+        : archiveSha256 ?? this.archiveSha256,
   );
 }
 
@@ -131,10 +138,30 @@ class ContentPackageJourneyViewModel extends ChangeNotifier {
 
   ContentPackageJourneyState get state => _store.state;
   bool get generatorConfigured =>
-      _repository.generatorConfigured && mediaPath.isNotEmpty && durationMs > 0;
+      _repository.coreAvailable &&
+      _repository.generatorConfigured &&
+      mediaPath.isNotEmpty &&
+      durationMs > 0;
+  bool get canCancel =>
+      _run != null &&
+      (state.phase == ContentPackageJourneyPhase.preparing ||
+          state.phase == ContentPackageJourneyPhase.generating);
+  bool get canRetry {
+    final intent = _lastIntent;
+    if (intent == null || state.busy) return false;
+    if (state.phase == ContentPackageJourneyPhase.fingerprintMismatch) {
+      return true;
+    }
+    if (state.phase == ContentPackageJourneyPhase.cancelled) {
+      return intent is _GeneratePackageIntent;
+    }
+    return state.phase == ContentPackageJourneyPhase.failed &&
+        state.failure?.retryable == true;
+  }
 
   Future<void> chooseAndImportPackage() async {
     final generation = ++_generation;
+    _lastIntent = null;
     _publish(
       ContentPackageJourneyState(phase: ContentPackageJourneyPhase.preparing),
     );
@@ -157,6 +184,7 @@ class ContentPackageJourneyViewModel extends ChangeNotifier {
   }
 
   Future<void> generateAndImport() async {
+    if (!generatorConfigured || state.busy) return;
     final request = ContentPackageGenerationRequest(
       mediaPath: mediaPath,
       title: mediaTitle,
@@ -170,7 +198,7 @@ class ContentPackageJourneyViewModel extends ChangeNotifier {
 
   Future<void> retry() async {
     final intent = _lastIntent;
-    if (intent == null || state.busy) return;
+    if (intent == null || !canRetry) return;
     final generation = ++_generation;
     _publish(
       state.copyWith(
@@ -208,6 +236,9 @@ class ContentPackageJourneyViewModel extends ChangeNotifier {
       }
       ownedRun = run;
       _run = run;
+      // Starting the process can precede its first machine event. Publish the
+      // active-run change so Preparing exposes cancellation immediately.
+      _publish(state.copyWith());
       ownedEvents = run.events.listen(
         (event) {
           if (_stale(generation)) return;
@@ -230,6 +261,7 @@ class ContentPackageJourneyViewModel extends ChangeNotifier {
             case ListenGenEventKind.completed:
               _publish(
                 state.copyWith(
+                  archiveSha256: event.packageSha256,
                   generatedResources: event.resources,
                   generatorWarnings: event.warnings,
                 ),

@@ -71,6 +71,30 @@ void main() {
       '/tmp/lesson.listenpkg',
       '/tmp/lesson.listenpkg',
     ]);
+    expect(viewModel.canRetry, isFalse);
+  });
+
+  test('picker cancellation has no retryable intent', () async {
+    final repository = _FakePackageRepository(pickedPath: null);
+    final viewModel = _viewModel(repository);
+    addTearDown(viewModel.dispose);
+
+    await viewModel.chooseAndImportPackage();
+
+    expect(viewModel.state.phase, ContentPackageJourneyPhase.cancelled);
+    expect(viewModel.canRetry, isFalse);
+  });
+
+  test('disconnected Core prevents generator startup', () async {
+    final repository = _FakePackageRepository(coreIsAvailable: false);
+    final viewModel = _viewModel(repository);
+    addTearDown(viewModel.dispose);
+
+    expect(viewModel.generatorConfigured, isFalse);
+    await viewModel.generateAndImport();
+
+    expect(repository.generationStarts, 0);
+    expect(viewModel.state.phase, ContentPackageJourneyPhase.idle);
   });
 
   test(
@@ -100,6 +124,39 @@ void main() {
       expect(viewModel.state.phase, ContentPackageJourneyPhase.cancelled);
     },
   );
+
+  test('successful generation preserves the verified archive digest', () async {
+    final run = _FakeRun();
+    final repository = _FakePackageRepository(run: run, receipt: _receipt());
+    final viewModel = _viewModel(repository);
+    addTearDown(viewModel.dispose);
+
+    final future = viewModel.generateAndImport();
+    await Future<void>.delayed(Duration.zero);
+    run.eventsController.add(
+      ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
+    );
+    run.eventsController.add(
+      ListenGenMachineEvent(sequence: 1, kind: ListenGenEventKind.started),
+    );
+    run.eventsController.add(
+      ListenGenMachineEvent(
+        sequence: 2,
+        kind: ListenGenEventKind.completed,
+        packageSha256:
+            'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    run.packageCompleter.complete('/tmp/generated.listenpkg');
+    await future;
+
+    expect(viewModel.state.phase, ContentPackageJourneyPhase.candidateReady);
+    expect(
+      viewModel.state.archiveSha256,
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
+  });
 }
 
 ContentPackageJourneyViewModel _viewModel(
@@ -145,23 +202,28 @@ class _FakePackageRepository implements ContentPackageRepository {
     this.importFailure,
     this.failuresRemaining = 0,
     this.run,
+    this.pickedPath = '/tmp/lesson.listenpkg',
+    this.coreIsAvailable = true,
   });
 
   final ContentPackageImportReceipt? receipt;
   final ApiFailure? importFailure;
   int failuresRemaining;
   final ListenGenProcessRun? run;
+  final String? pickedPath;
+  final bool coreIsAvailable;
+  int generationStarts = 0;
   final List<String> importedPaths = [];
 
   @override
-  bool get coreAvailable => true;
+  bool get coreAvailable => coreIsAvailable;
   @override
   bool get generatorConfigured => true;
   @override
   ApiFailure failureDetail(Object error) =>
       error is ApiFailure ? error : ApiFailure(raw: '', code: '$error');
   @override
-  Future<String?> pickPackage() async => '/tmp/lesson.listenpkg';
+  Future<String?> pickPackage() async => pickedPath;
   @override
   Future<ContentPackageImportReceipt> importPackage({
     required String mediaId,
@@ -179,7 +241,10 @@ class _FakePackageRepository implements ContentPackageRepository {
   @override
   Future<ListenGenProcessRun> startGeneration(
     ContentPackageGenerationRequest request,
-  ) async => run!;
+  ) async {
+    generationStarts++;
+    return run!;
+  }
 }
 
 class _FakeRun implements ListenGenProcessRun {

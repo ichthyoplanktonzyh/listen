@@ -64,10 +64,13 @@ void main() {
         )
         .toList(growable: false);
 
-    expect(events.map((event) => event.sequence), [0, 1, 2, 3]);
+    expect(events.map((event) => event.sequence), [0, 1, 2, 3, 4, 5]);
     expect(events.first.kind, ListenGenEventKind.protocol);
     expect(events.last.kind, ListenGenEventKind.completed);
-    expect(events.last.packageSha256, startsWith('sha256:fedcba'));
+    expect(
+      events.last.packageSha256,
+      'sha256:5c306bf95e086108cbed9574d5c4dd9f92a83c153cc6f8073464378acc752e6d',
+    );
   });
 
   test('rejects unknown Gen protocol versions and tool identities', () {
@@ -88,5 +91,27 @@ void main() {
       () => parseListenGenMachineEvent(event(version: 1, tool: 'other')),
       throwsFormatException,
     );
+  });
+
+  test('rejects malformed Core and Gen digest references', () async {
+    final core =
+        jsonDecode(
+              await File(
+                'test/fixtures/content-package/core-import-success.json',
+              ).readAsString(),
+            )
+            as Map<String, dynamic>;
+    (core['receipt'] as Map<String, dynamic>)['manifest_sha256'] = 'sha256:no';
+    expect(() => parseContentPackageImportReceipt(core), throwsFormatException);
+
+    final completed =
+        jsonDecode(
+              (await File(
+                'test/fixtures/content-package/gen-machine-events.ndjson',
+              ).readAsLines()).last,
+            )
+            as Map<String, dynamic>;
+    completed['package_sha256'] = 'sha256:no';
+    expect(() => parseListenGenMachineEvent(completed), throwsFormatException);
   });
 }

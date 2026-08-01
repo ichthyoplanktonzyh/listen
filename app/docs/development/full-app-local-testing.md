@@ -123,9 +123,11 @@ LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/asr
 
 Do not place API keys or other credentials in `LISTEN_GEN_PROVIDER_ARGUMENTS`;
 the configured provider wrapper owns secret retrieval. These variables are not
-written to settings or `backend.lock.json`. Without both a provider argument
-set and a local media path/duration, the UI keeps local generation unavailable
-while existing `.listenpkg` import remains usable.
+written to settings or `backend.lock.json`. Without a connected Core, provider
+argument set, and a local media path with positive duration, the UI keeps local
+generation unavailable. Process fallback signals reclaim the direct
+`listen-gen` PID; cleanup of descendants during a valid cancellation remains
+part of the generator contract.
 
 ## Manual smoke checklist
 

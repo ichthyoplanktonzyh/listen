@@ -53,7 +53,7 @@ class ContentPackageJourneyScreen extends StatelessWidget {
                     icon: const Icon(Icons.auto_awesome_outlined),
                     label: Text(l.text('generateContentPackage')),
                   ),
-                  if (state.phase == ContentPackageJourneyPhase.generating)
+                  if (viewModel.canCancel)
                     TextButton(
                       key: const Key('cancel-content-package'),
                       onPressed: viewModel.cancel,
@@ -76,7 +76,11 @@ class ContentPackageJourneyScreen extends StatelessWidget {
                 label: l.text('contentPackageProgress'),
                 child: _JourneyStatus(state: state),
               ),
-              if (_canRetry(state.phase)) ...[
+              if (_unknownGeneratorPhase(state.generatorPhase))
+                _TechnicalTextDisclosure(
+                  details: 'phase=${state.generatorPhase}',
+                ),
+              if (viewModel.canRetry) ...[
                 const SizedBox(height: ListenSpacing.gap12),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -90,7 +94,11 @@ class ContentPackageJourneyScreen extends StatelessWidget {
               ],
               if (state.receipt case final receipt?) ...[
                 const SizedBox(height: ListenSpacing.gap24),
-                _ReceiptView(receipt: receipt, viewModel: viewModel),
+                _ReceiptView(
+                  receipt: receipt,
+                  archiveSha256: state.archiveSha256,
+                  viewModel: viewModel,
+                ),
               ],
             ],
           ),
@@ -98,11 +106,6 @@ class ContentPackageJourneyScreen extends StatelessWidget {
       );
     },
   );
-
-  bool _canRetry(ContentPackageJourneyPhase phase) =>
-      phase == ContentPackageJourneyPhase.failed ||
-      phase == ContentPackageJourneyPhase.fingerprintMismatch ||
-      phase == ContentPackageJourneyPhase.cancelled;
 }
 
 class _JourneyStatus extends StatelessWidget {
@@ -121,8 +124,7 @@ class _JourneyStatus extends StatelessWidget {
             .text('contentPackageGenerating')
             .replaceAll(
               '{phase}',
-              state.generatorPhase?.replaceAll('_', ' ') ??
-                  l.text('contentPackageStarting'),
+              _generatorPhaseLabel(l, state.generatorPhase),
             ),
       ContentPackageJourneyPhase.importing => l.text('contentPackageImporting'),
       ContentPackageJourneyPhase.candidateReady => l.text(
@@ -152,10 +154,36 @@ class _JourneyStatus extends StatelessWidget {
   }
 }
 
+String _generatorPhaseLabel(AppLocalizations l, String? phase) =>
+    switch (phase) {
+      null => l.text('contentPackageStarting'),
+      'validating' => l.text('contentPackagePhaseValidating'),
+      'probing_media' => l.text('contentPackagePhaseProbing'),
+      'normalizing_audio' => l.text('contentPackagePhaseNormalizing'),
+      'transcribing' => l.text('contentPackagePhaseTranscribing'),
+      'building_package' => l.text('contentPackagePhaseBuilding'),
+      _ => l.text('contentPackagePhaseWorking'),
+    };
+
+bool _unknownGeneratorPhase(String? phase) =>
+    phase != null &&
+    !const {
+      'validating',
+      'probing_media',
+      'normalizing_audio',
+      'transcribing',
+      'building_package',
+    }.contains(phase);
+
 class _ReceiptView extends StatelessWidget {
-  const _ReceiptView({required this.receipt, required this.viewModel});
+  const _ReceiptView({
+    required this.receipt,
+    required this.archiveSha256,
+    required this.viewModel,
+  });
 
   final ContentPackageImportReceipt receipt;
+  final String? archiveSha256;
   final ContentPackageJourneyViewModel viewModel;
 
   @override
@@ -177,9 +205,17 @@ class _ReceiptView extends StatelessWidget {
             ),
             const SizedBox(height: ListenSpacing.gap8),
             SelectableText(
-              receipt.manifestSha256,
+              '${l.text('contentPackageManifestDigest')}: '
+              '${receipt.manifestSha256}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            if (archiveSha256 case final digest?) ...[
+              const SizedBox(height: ListenSpacing.gap4),
+              SelectableText(
+                '${l.text('contentPackageArchiveDigest')}: $digest',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: ListenSpacing.gap12),
             Wrap(
               spacing: ListenSpacing.gap8,
@@ -243,69 +279,173 @@ class _ResourceReceiptRow extends StatelessWidget {
       ),
       child: Padding(
         padding: ListenPadding.row,
-        child: Row(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.dataset_outlined, size: ListenIconSize.control),
-            const SizedBox(width: ListenSpacing.gap8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(resource.kind),
-                  const SizedBox(height: ListenSpacing.gap2),
-                  Text(
-                    [
-                      resource.outcome,
-                      if (resource.reason != null) resource.reason!,
-                      resource.reviewStatus ??
-                          l.text('contentPackageReviewUnknown'),
-                      resource.provenance?.tool.label ??
-                          l.text('contentPackageProvenanceUnknown'),
-                      if (resource.provenance?.provider case final provider?)
-                        provider.label,
-                      if (resource.provenance?.model case final model?)
-                        model.label,
-                      ...resource.localIds,
-                    ].join(' · '),
-                    style: Theme.of(context).textTheme.bodySmall,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.dataset_outlined,
+                  size: ListenIconSize.control,
+                ),
+                const SizedBox(width: ListenSpacing.gap8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_resourceKindLabel(l, resource.kind)),
+                      const SizedBox(height: ListenSpacing.gap2),
+                      Text(
+                        [
+                          _resourceOutcomeLabel(l, resource.outcome),
+                          if (resource.reason != null)
+                            _resourceReasonLabel(l, resource.reason!),
+                          _reviewStatusLabel(l, resource.reviewStatus),
+                          resource.provenance?.tool.label ??
+                              l.text('contentPackageProvenanceUnknown'),
+                          if (resource.provenance?.provider
+                              case final provider?)
+                            provider.label,
+                          if (resource.provenance?.model case final model?)
+                            model.label,
+                        ].join(' · '),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            if (resource.kind == 'subtitle_text_track' && canAct)
-              TextButton(
-                key: const Key('select-imported-subtitle'),
-                onPressed: state.selectedTrackId == receipt.track.id
-                    ? null
-                    : () => unawaited(viewModel.selectImportedSubtitle()),
-                child: Text(
-                  state.selectedTrackId == receipt.track.id
-                      ? l.text('contentPackageSelected')
-                      : l.text('contentPackageSelectSubtitle'),
-                ),
-              ),
-            if (resource.kind == 'word_timeline' && canAct)
-              for (final localId in resource.localIds)
-                TextButton(
-                  key: Key('activate-word-timeline-$localId'),
-                  onPressed: state.activatedWordTimelineIds.contains(localId)
-                      ? null
-                      : () => unawaited(
-                          viewModel.activateImportedWordTimeline(localId),
-                        ),
-                  child: Text(
-                    state.activatedWordTimelineIds.contains(localId)
-                        ? l.text('contentPackageActivated')
-                        : l.text('contentPackageActivateWordTimeline'),
+            _WireDetailDisclosure(resource: resource),
+            Wrap(
+              spacing: ListenSpacing.gap8,
+              runSpacing: ListenSpacing.gap4,
+              children: [
+                if (resource.kind == 'subtitle_text_track' && canAct)
+                  TextButton(
+                    key: const Key('select-imported-subtitle'),
+                    onPressed: state.selectedTrackId == receipt.track.id
+                        ? null
+                        : () => unawaited(viewModel.selectImportedSubtitle()),
+                    child: Text(
+                      state.selectedTrackId == receipt.track.id
+                          ? l.text('contentPackageSelected')
+                          : l.text('contentPackageSelectSubtitle'),
+                    ),
                   ),
-                ),
+                if (resource.kind == 'word_timeline' && canAct)
+                  for (final localId in resource.localIds)
+                    TextButton(
+                      key: Key('activate-word-timeline-$localId'),
+                      onPressed:
+                          state.activatedWordTimelineIds.contains(localId)
+                          ? null
+                          : () => unawaited(
+                              viewModel.activateImportedWordTimeline(localId),
+                            ),
+                      child: Text(
+                        state.activatedWordTimelineIds.contains(localId)
+                            ? l.text('contentPackageActivated')
+                            : l.text('contentPackageActivateWordTimeline'),
+                      ),
+                    ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 }
+
+class _WireDetailDisclosure extends StatelessWidget {
+  const _WireDetailDisclosure({required this.resource});
+
+  final ContentPackageResourceDisposition resource;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: EdgeInsets.zero,
+      title: Text(
+        AppLocalizations.of(context).text('contentPackageTechnicalDetails'),
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SelectableText(
+            [
+              'kind=${resource.kind}',
+              'outcome=${resource.outcome}',
+              if (resource.reason case final reason?) 'reason=$reason',
+              if (resource.localIds.isNotEmpty)
+                'local_ids=${resource.localIds.join(',')}',
+            ].join('\n'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _TechnicalTextDisclosure extends StatelessWidget {
+  const _TechnicalTextDisclosure({required this.details});
+
+  final String details;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text(
+        AppLocalizations.of(context).text('contentPackageTechnicalDetails'),
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SelectableText(
+            details,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String _resourceKindLabel(AppLocalizations l, String kind) => switch (kind) {
+  'subtitle_text_track' => l.text('contentPackageKindSubtitle'),
+  'word_timeline' => l.text('contentPackageKindWordTimeline'),
+  _ => l.text('contentPackageKindOther'),
+};
+
+String _resourceOutcomeLabel(AppLocalizations l, String outcome) =>
+    switch (outcome) {
+      'consumed' => l.text('contentPackageOutcomeImported'),
+      'preserved_not_consumed' => l.text('contentPackageOutcomePreserved'),
+      _ => l.text('contentPackageOutcomeUnknown'),
+    };
+
+String _resourceReasonLabel(AppLocalizations l, String reason) =>
+    switch (reason) {
+      'already_imported' => l.text('contentPackageReasonAlreadyImported'),
+      _ => l.text('contentPackageReasonOther'),
+    };
+
+String _reviewStatusLabel(AppLocalizations l, String? status) =>
+    switch (status) {
+      'unreviewed' => l.text('contentPackageReviewUnreviewed'),
+      'machine_checked' => l.text('contentPackageReviewMachineChecked'),
+      'human_reviewed' => l.text('contentPackageReviewHumanReviewed'),
+      _ => l.text('contentPackageReviewUnknown'),
+    };
 
 class _FactChip extends StatelessWidget {
   const _FactChip({required this.label});

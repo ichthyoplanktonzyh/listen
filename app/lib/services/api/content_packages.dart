@@ -23,7 +23,7 @@ ContentPackageImportReceipt parseContentPackageImportReceipt(
     throw const FormatException('Content package receipt requires a track');
   }
   return ContentPackageImportReceipt(
-    manifestSha256: receipt['manifest_sha256'] as String,
+    manifestSha256: _contentPackageSha256(receipt['manifest_sha256']),
     track: SubtitleTrack.fromJson({
       ...trackJson,
       'sentences':
@@ -44,7 +44,7 @@ ContentPackageImportReceipt parseContentPackageImportReceipt(
 ContentPackageResourceDisposition _parseContentPackageResourceDisposition(
   Map<String, dynamic> json,
 ) => ContentPackageResourceDisposition(
-  resourceId: json['resource_id'] as String,
+  resourceId: _contentPackageSha256(json['resource_id']),
   kind: json['kind'] as String,
   outcome: json['outcome'] as String,
   reason: json['reason'] as String?,
@@ -64,8 +64,17 @@ ContentPackageResourceProvenance _parseContentPackageResourceProvenance(
   tool: _parseContentPackageIdentity(json['tool'])!,
   provider: _parseContentPackageIdentity(json['provider']),
   model: _parseContentPackageIdentity(json['model']),
-  configSha256: json['config_sha256'] as String?,
+  configSha256: json['config_sha256'] == null
+      ? null
+      : _contentPackageSha256(json['config_sha256']),
 );
+
+String _contentPackageSha256(Object? value) {
+  if (value is! String || !RegExp(r'^sha256:[0-9a-f]{64}$').hasMatch(value)) {
+    throw const FormatException('Invalid content package SHA-256 reference');
+  }
+  return value;
+}
 
 ContentPackageProducerIdentity? _parseContentPackageIdentity(Object? value) =>
     value is Map<String, dynamic>

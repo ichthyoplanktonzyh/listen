@@ -25,7 +25,7 @@ printf '%s\n' '${_event(0, 'protocol')}'
 printf '%s\n' '${_event(1, 'started')}'
 printf '%s\n' '${_event(2, 'phase', extra: ',"phase":"building_package"')}'
 printf x > "\$output"
-printf '%s\n' '${_event(3, 'completed', extra: ',"package_sha256":"sha256:aaa","media_fingerprint":"sha256:bbb","resources":[],"warnings":[]')}'
+printf '%s\n' '${_completedEvent(3)}'
 ''');
     addTearDown(() => script.parent.delete(recursive: true));
     final service = LocalListenGenProcessService(
@@ -55,7 +55,7 @@ done
 printf x > "\$output"
 printf '%s\n' '${_event(0, 'protocol')}'
 printf '%s\n' '${_event(2, 'started')}'
-printf '%s\n' '${_event(3, 'completed', extra: ',"package_sha256":"sha256:aaa","media_fingerprint":"sha256:bbb","resources":[],"warnings":[]')}'
+printf '%s\n' '${_completedEvent(3)}'
 ''');
       addTearDown(() => script.parent.delete(recursive: true));
       final run = await LocalListenGenProcessService(
@@ -78,6 +78,36 @@ printf '%s\n' '${_event(3, 'completed', extra: ',"package_sha256":"sha256:aaa","
     },
   );
 
+  test(
+    'protocol failure is prompt while cleanup reclaims a hung process',
+    () async {
+      final script = await _script('''
+printf '%s\n' '${_event(0, 'protocol')}'
+printf '%s\n' '${_event(2, 'started')}'
+trap '' INT TERM
+while :; do :; done
+''');
+      addTearDown(() => script.parent.delete(recursive: true));
+      final run = await LocalListenGenProcessService(
+        executable: script.path,
+        providerArgs: const ['--provider', 'fixture'],
+      ).start(request);
+      run.events.listen((_) {}, onError: (_) {});
+
+      await expectLater(
+        run.packagePath.timeout(const Duration(seconds: 1)),
+        throwsA(
+          isA<ListenGenProcessFailure>().having(
+            (failure) => failure.code,
+            'code',
+            'generator_protocol_invalid',
+          ),
+        ),
+      );
+      await run.cleanUp().timeout(const Duration(seconds: 7));
+    },
+  );
+
   test('package completion does not require an event subscriber', () async {
     final script = await _script('''
 output=""
@@ -88,7 +118,7 @@ done
 printf x > "\$output"
 printf '%s\n' '${_event(0, 'protocol')}'
 printf '%s\n' '${_event(1, 'started')}'
-printf '%s\n' '${_event(2, 'completed', extra: ',"package_sha256":"sha256:aaa","media_fingerprint":"sha256:bbb","resources":[],"warnings":[]')}'
+printf '%s\n' '${_completedEvent(2)}'
 ''');
     addTearDown(() => script.parent.delete(recursive: true));
     final run = await LocalListenGenProcessService(
@@ -99,6 +129,38 @@ printf '%s\n' '${_event(2, 'completed', extra: ',"package_sha256":"sha256:aaa","
     expect(
       await run.packagePath.timeout(const Duration(seconds: 2)),
       isNotEmpty,
+    );
+    await run.cleanUp();
+  });
+
+  test('rejects a completed event with the wrong archive digest', () async {
+    final script = await _script('''
+output=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--output" ]; then shift; output="\$1"; fi
+  shift
+done
+printf x > "\$output"
+printf '%s\n' '${_event(0, 'protocol')}'
+printf '%s\n' '${_event(1, 'started')}'
+printf '%s\n' '${_event(2, 'completed', extra: ',"package_sha256":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","media_fingerprint":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","resources":[],"warnings":[]')}'
+''');
+    addTearDown(() => script.parent.delete(recursive: true));
+    final run = await LocalListenGenProcessService(
+      executable: script.path,
+      providerArgs: const ['--provider', 'fixture'],
+    ).start(request);
+    run.events.listen((_) {});
+
+    await expectLater(
+      run.packagePath,
+      throwsA(
+        isA<ListenGenProcessFailure>().having(
+          (failure) => failure.code,
+          'code',
+          'generator_package_digest_mismatch',
+        ),
+      ),
     );
     await run.cleanUp();
   });
@@ -209,6 +271,15 @@ String _event(int sequence, String event, {String extra = ''}) =>
     '{"schema":"listen_gen.machine-event.v1","protocol_version":1,'
     '"sequence":$sequence,"tool":{"id":"listen-gen","version":"0.1.0"},'
     '"event":"$event"${event == 'protocol' && extra.isEmpty ? ',"capabilities":{}' : ''}$extra}';
+
+String _completedEvent(int sequence) => _event(
+  sequence,
+  'completed',
+  extra:
+      ',"package_sha256":"sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"'
+      ',"media_fingerprint":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
+      ',"resources":[],"warnings":[]',
+);
 
 Future<File> _script(String body) async {
   final directory = await Directory.systemTemp.createTemp('listen-gen-test-');

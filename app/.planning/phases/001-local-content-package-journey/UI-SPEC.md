@@ -5,13 +5,15 @@ resources. Its two primary inputs are visually adjacent but mutually exclusive:
 import an existing package or generate one for the open media.
 
 Lifecycle status occupies one stable region so progress does not move the
-actions. Busy states expose Cancel only for active generator work. Failed,
-cancelled, and fingerprint-mismatch states expose Retry when the original
-input remains valid.
+actions. Preparing and generating states expose Cancel once a generator process
+is active. Retry appears only when an original intent remains and the failure is
+retryable, the package mismatched the media, or a generation was cancelled;
+dismissing the file picker does not create a retry action.
 
 The completed view separates:
 
-- immutable package digest;
+- immutable archive digest from Gen and manifest digest from Core, labelled as
+  distinct facts;
 - imported/preserved resource disposition and local IDs;
 - warnings;
 - publisher, review, license, and source provenance.

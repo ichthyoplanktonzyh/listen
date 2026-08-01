@@ -18,5 +18,9 @@ redacted `message`.
 SIGINT/SIGTERM must produce cancelled semantics, terminate provider/media-tool
 descendants, and clean temporary audio and incomplete output. The App owns the
 final temporary package path and removes it after Core import, cancellation,
-or failure. Provider credentials remain process-local and never appear in
+or failure. For a protocol-invalid or unresponsive generator, the App escalates
+INT to TERM and finally KILL to reclaim the direct generator PID; that fallback
+does not claim to reclaim an independently sessioned descendant. The App also
+hashes the completed archive bytes and rejects a terminal `package_sha256` that
+does not match. Provider credentials remain process-local and never appear in
 events, logs, package provenance, or App state.

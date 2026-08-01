@@ -2,7 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import '../models/content_package.dart';
+
+final RegExp _sha256Reference = RegExp(r'^sha256:[0-9a-f]{64}$');
 
 ListenGenMachineEvent parseListenGenMachineEvent(Map<String, dynamic> json) {
   if (json['schema'] != 'listen_gen.machine-event.v1') {
@@ -30,7 +34,9 @@ ListenGenMachineEvent parseListenGenMachineEvent(Map<String, dynamic> json) {
   }
   if (kind == ListenGenEventKind.completed &&
       (json['package_sha256'] is! String ||
+          !_sha256Reference.hasMatch(json['package_sha256'] as String) ||
           json['media_fingerprint'] is! String ||
+          !_sha256Reference.hasMatch(json['media_fingerprint'] as String) ||
           json['resources'] is! List<dynamic> ||
           json['warnings'] is! List<dynamic>)) {
     throw const FormatException('listen-gen completion fields missing');
@@ -56,10 +62,17 @@ ListenGenMachineEvent parseListenGenMachineEvent(Map<String, dynamic> json) {
 
 ListenGenResourceView _parseListenGenResource(Map<String, dynamic> json) =>
     ListenGenResourceView(
-      resourceId: json['resource_id'] as String,
+      resourceId: _validatedSha256(json['resource_id']),
       kind: json['kind'] as String,
       reviewStatus: json['review_status'] as String?,
     );
+
+String _validatedSha256(Object? value) {
+  if (value is! String || !_sha256Reference.hasMatch(value)) {
+    throw const FormatException('Invalid SHA-256 reference');
+  }
+  return value;
+}
 
 class ListenGenProcessFailure implements Exception {
   const ListenGenProcessFailure(this.code);
@@ -156,7 +169,7 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
     required this._outputPath,
   }) {
     _stdoutDone = _consumeStdout();
-    _packagePath = _complete();
+    _processDone = _settleProcessSafely();
     // Drain stderr without retaining provider/tool output.
     _process.stderr.listen((_) {});
   }
@@ -166,8 +179,9 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
   final String _outputPath;
   final StreamController<ListenGenMachineEvent> _eventController =
       StreamController<ListenGenMachineEvent>();
+  final Completer<String> _packagePathCompleter = Completer<String>();
   late final Future<void> _stdoutDone;
-  late final Future<String> _packagePath;
+  late final Future<void> _processDone;
   bool _cancelled = false;
   bool _sawProtocol = false;
   bool _sawStarted = false;
@@ -193,6 +207,8 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
       }
     } catch (error) {
       _protocolFailure = error;
+      _completeFailure('generator_protocol_invalid');
+      _requestTermination();
       _eventController.addError(
         const ListenGenProcessFailure('generator_protocol_invalid'),
       );
@@ -248,60 +264,91 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
   Stream<ListenGenMachineEvent> get events => _eventController.stream;
 
   @override
-  Future<String> get packagePath => _packagePath;
+  Future<String> get packagePath => _packagePathCompleter.future;
 
-  Future<String> _complete() async {
+  Future<void> _settleProcessSafely() async {
+    try {
+      await _settleProcess();
+    } catch (_) {
+      _completeFailure('generator_output_invalid');
+    }
+  }
+
+  Future<void> _settleProcess() async {
     final exitCode = await _process.exitCode;
     _termTimer?.cancel();
     _killTimer?.cancel();
     await _stdoutDone;
+    if (_packagePathCompleter.isCompleted) return;
     if (_protocolFailure != null || !_sawProtocol || !_sawStarted) {
-      throw const ListenGenProcessFailure('generator_protocol_invalid');
+      _completeFailure('generator_protocol_invalid');
+      return;
     }
     if (_cancelled) {
-      throw const ListenGenProcessFailure('cancelled');
+      _completeFailure('cancelled');
+      return;
     }
     final terminal = _terminal;
     if (terminal == null) {
-      throw const ListenGenProcessFailure('generator_terminal_missing');
+      _completeFailure('generator_terminal_missing');
+      return;
     }
     if (terminal.kind == ListenGenEventKind.cancelled) {
-      throw const ListenGenProcessFailure('cancelled');
+      _completeFailure('cancelled');
+      return;
     }
     if (terminal.kind == ListenGenEventKind.failed) {
-      throw ListenGenProcessFailure(terminal.code ?? 'generator_failed');
+      _completeFailure(terminal.code ?? 'generator_failed');
+      return;
     }
     if (terminal.kind != ListenGenEventKind.completed || exitCode != 0) {
-      throw const ListenGenProcessFailure('generator_failed');
+      _completeFailure('generator_failed');
+      return;
     }
     final package = File(_outputPath);
     if (!await package.exists() || await package.length() == 0) {
-      throw const ListenGenProcessFailure('generator_output_missing');
+      _completeFailure('generator_output_missing');
+      return;
     }
-    return _outputPath;
+    final expectedDigest = terminal.packageSha256!;
+    final actualDigest =
+        'sha256:${await sha256.bind(package.openRead()).first}';
+    if (actualDigest != expectedDigest) {
+      _completeFailure('generator_package_digest_mismatch');
+      return;
+    }
+    _packagePathCompleter.complete(_outputPath);
+  }
+
+  void _completeFailure(String code) {
+    if (!_packagePathCompleter.isCompleted) {
+      _packagePathCompleter.completeError(ListenGenProcessFailure(code));
+    }
+  }
+
+  void _requestTermination() {
+    _process.kill(ProcessSignal.sigint);
+    _termTimer ??= Timer(const Duration(seconds: 2), () {
+      _process.kill(ProcessSignal.sigterm);
+    });
+    _killTimer ??= Timer(const Duration(seconds: 4), () {
+      _process.kill(ProcessSignal.sigkill);
+    });
   }
 
   @override
   void cancel() {
     if (_cancelled) return;
     _cancelled = true;
-    _process.kill(ProcessSignal.sigint);
-    _termTimer = Timer(const Duration(seconds: 2), () {
-      _process.kill(ProcessSignal.sigterm);
-    });
-    _killTimer = Timer(const Duration(seconds: 4), () {
-      _process.kill(ProcessSignal.sigkill);
-    });
+    _completeFailure('cancelled');
+    _requestTermination();
   }
 
   @override
   Future<void> cleanUp() async {
-    try {
-      await _packagePath;
-    } catch (_) {
-      // The ViewModel presents completion failures. Cleanup only waits for
-      // process/stdout ownership to settle before deleting temporary output.
-    }
+    // packagePath can fail immediately, but temporary output remains owned by
+    // the run until the child process and stdout stream have been reclaimed.
+    await _processDone;
     if (await _directory.exists()) await _directory.delete(recursive: true);
   }
 }

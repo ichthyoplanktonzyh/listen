@@ -2,8 +2,10 @@
   "track": {
     "id": "track-local-1",
     "media_id": "media-1",
+    "fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "language": null,
     "source": "content-package",
-    "status": "ready",
+    "status": "available",
     "sentences": []
   },
   "receipt": {
@@ -29,7 +31,9 @@
         "kind": "word_timeline",
         "local_ids": ["word-timeline-local-1"],
         "outcome": "preserved_not_consumed",
-        "reason": "already_imported"
+        "reason": "already_imported",
+        "review_status": null,
+        "provenance": null
       }
     ],
     "warnings": ["review status is not declared"]

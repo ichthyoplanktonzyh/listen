@@ -1694,47 +1694,65 @@ class _PlayerScreenState extends State<PlayerScreen>
     },
   );
 
-  Future<void> _openSubtitleResources() => openSubtitleResourcesFlow(
-    context: context,
-    backendAvailable: coreSessionController.state.isConnected,
-    createColdStartViewModel: !coreSessionController.state.isConnected
-        ? null
-        : ({required trackId, required language}) => ColdStartMarkingViewModel(
-            coreRepositories.coldStartMarking,
-            trackId: trackId,
-            language: language,
-          ),
-    playerController: playerController,
-    subtitleController: subtitleController,
-    learningController: learningController,
-    resourceActions: resourceActions,
-    mediaSession: mediaSession,
-    onManualReviewTimeline: _openManualReviewTimeline,
-    createContentPackageViewModel: () => ContentPackageJourneyViewModel(
-      coreRepositories.contentPackage,
-      (track) async {
-        await mediaSession.usePrimarySubtitleTrack(
-          track,
-          nextStatus: l.text('contentPackageSelected'),
-        );
-        await resourceActions.loadSubtitleResources(updateStatus: false);
-      },
-      (timelineId) async {
-        await coreRepositories.resource.activateWordTimeline(timelineId);
-        final trackId = subtitleController.primaryTrack?.id;
-        if (trackId != null) {
-          await resourceActions.loadTimelineResource(trackId);
-        }
-      },
-      mediaId: playerController.mediaId!,
-      mediaPath: playerController.mediaPath ?? '',
-      mediaTitle: playerController.mediaPath == null
-          ? 'Local media'
-          : widget.pathHelper.basename(playerController.mediaPath!),
-      mediaKind: _contentPackageMediaKind(playerController.mediaPath),
-      durationMs: playerController.duration.inMilliseconds,
-    ),
-  );
+  Future<void> _openSubtitleResources() {
+    final mediaId = playerController.mediaId;
+    final mediaPath = playerController.mediaPath;
+    final durationMs = playerController.duration.inMilliseconds;
+    final canUseContentPackages =
+        mediaId != null &&
+        mediaPath != null &&
+        mediaPath.isNotEmpty &&
+        durationMs > 0;
+    final ContentPackageJourneyViewModelFactory? packageFactory =
+        canUseContentPackages
+        ? () => ContentPackageJourneyViewModel(
+            coreRepositories.contentPackage,
+            (track) async {
+              await mediaSession.usePrimarySubtitleTrack(
+                track,
+                nextStatus: l.text('contentPackageSelected'),
+              );
+              await resourceActions.loadSubtitleResources(updateStatus: false);
+            },
+            (timelineId) async {
+              await coreRepositories.resource.activateWordTimeline(timelineId);
+              final trackId = subtitleController.primaryTrack?.id;
+              if (trackId != null) {
+                try {
+                  await resourceActions.loadTimelineResource(trackId);
+                } catch (_) {
+                  // Activation is durable Core state. A follow-up refresh is
+                  // best-effort and must not report that activation failed.
+                }
+              }
+            },
+            mediaId: mediaId,
+            mediaPath: mediaPath,
+            mediaTitle: widget.pathHelper.basename(mediaPath),
+            mediaKind: _contentPackageMediaKind(mediaPath),
+            durationMs: durationMs,
+          )
+        : null;
+    return openSubtitleResourcesFlow(
+      context: context,
+      backendAvailable: coreSessionController.state.isConnected,
+      createColdStartViewModel: !coreSessionController.state.isConnected
+          ? null
+          : ({required trackId, required language}) =>
+                ColdStartMarkingViewModel(
+                  coreRepositories.coldStartMarking,
+                  trackId: trackId,
+                  language: language,
+                ),
+      playerController: playerController,
+      subtitleController: subtitleController,
+      learningController: learningController,
+      resourceActions: resourceActions,
+      mediaSession: mediaSession,
+      onManualReviewTimeline: _openManualReviewTimeline,
+      createContentPackageViewModel: packageFactory,
+    );
+  }
 
   String _contentPackageMediaKind(String? path) {
     final normalized = path?.toLowerCase() ?? '';

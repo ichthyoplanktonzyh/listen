@@ -8,6 +8,7 @@ import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/screens/subtitle_resources_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/flows/subtitle_resource_flows.dart';
 
@@ -60,6 +61,51 @@ class _Harness extends StatelessWidget {
 }
 
 void main() {
+  testWidgets('resources without current media hide package journey', (
+    tester,
+  ) async {
+    final player = PlayerController();
+    expect(player.mediaId, isNull);
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: SubtitleResourcesScreen(
+          playerController: player,
+          subtitleController: SubtitleController(),
+          onImportSubtitle: () async {},
+          onImportLLTimeline: () async {},
+          onRefreshResources: () async {},
+          onActivateSubtitle: (_) async {},
+          onArchiveSubtitle: (_) async {},
+          onRestoreSubtitle: (_) async {},
+          onDeleteSubtitle: (_) async {},
+          onExportSubtitle: (_) async {},
+          onLanguageChanged: (_, _) async {},
+          availableLanguages: const [],
+          onExportLLTimeline: (_) async {},
+          onActivateWordTimeline: (_) async {},
+          onManualReviewTimeline: () async {},
+          onActivatePhoneTimeline: (_) async {},
+          onArchivePhoneTimeline: (_) async {},
+          onDeletePhoneTimeline: (_) async {},
+          onGenerateChunkTimeline: () async {},
+          onActivateChunkTimeline: (_) async {},
+          onArchiveChunkTimeline: (_) async {},
+          onDeleteChunkTimeline: (_) async {},
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('open-content-packages')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('delete flow cancel leaves the resource untouched', (
     tester,
   ) async {
