@@ -45,6 +45,46 @@ An immutable historical explanation of what a learning fact referred to. It
 preserves context after source loss but does not make missing media available.
 _Avoid_: Playable source, replacement media
 
+**Content Source**:
+An external origin that publishes or identifies discoverable media; its
+availability does not imply local ownership or acquisition rights.
+_Avoid_: Catalog Entry, Media Rendition
+
+**Source Identity**:
+A stable, provider-scoped identity for one work at a Content Source. It does
+not by itself prove that two files share one edition or timeline.
+_Avoid_: File hash, Package Release, Timeline Compatibility
+
+**Content Edition**:
+An immutable semantic and timeline version of a sourced work; a changed cut,
+dub, or source revision is another edition.
+_Avoid_: Media Rendition, mutable latest version
+
+**Media Rendition**:
+A concrete encoding, container, and audio-track realization of one Content
+Edition whose bytes may differ from another rendition.
+_Avoid_: Content Edition, Content Source
+
+**Timeline Compatibility**:
+A verified relation showing that timed resources can apply to a Media
+Rendition without silent timing or semantic changes.
+_Avoid_: Same Source Identity, approximate match
+
+**Media Offer**:
+A declared playback or acquisition option for one Media Rendition, including
+its availability and licensing context.
+_Avoid_: Local media file, download entitlement
+
+**Catalog Entry**:
+A discoverable description that connects one Content Edition to Media Offers
+and Package Listings; it is not an installed learning object.
+_Avoid_: Learning Material, Package Release
+
+**Catalog Channel**:
+A curated, versioned collection or sequence of Catalog Entries published for
+discovery or subscription.
+_Avoid_: Content Source, learner Collection
+
 **Sentence Exemplar**:
 A concrete sentence in retained context that may exemplify one or more
 language patterns; identical wording from another context is another exemplar.
@@ -127,6 +167,46 @@ A portable, immutable exchange bundle for one Content Document's Subtitle Text
 Track and content-bound Analysis Resources, linked by strong content hashes.
 It contains neither core runtime state nor learner facts.
 _Avoid_: Database export, learner archive, model bundle
+
+**Package Listing**:
+A mutable discovery record that groups Package Releases with descriptive,
+ranking, moderation, and update information.
+_Avoid_: Resource Package, immutable release
+
+**Package Release**:
+An immutable published Resource Package identified by its digest and a
+publisher, review, license, and provenance snapshot.
+_Avoid_: Listing, mutable tag, installed candidate
+
+**Package Installation**:
+A local record that one validated Package Release was imported and projected
+as resource candidates.
+_Avoid_: Package download, active selection
+
+**Learning Material**:
+A local association of available media and installed candidate resources from
+which the learner can select a learning experience.
+_Avoid_: Catalog Entry, Resource Package, learner history
+
+**Publisher Status**:
+The declared or verified identity class of a Package Release publisher,
+independent of review quality and licensing rights.
+_Avoid_: Review Status, License Status, technical validity
+
+**Review Status**:
+The level and method by which resource content was checked, independent of who
+published it or whether redistribution is permitted.
+_Avoid_: Publisher Status, License Status, correctness guarantee
+
+**License Status**:
+The available evidence about permission to use and redistribute media or
+resources, independent of publisher identity and review quality.
+_Avoid_: Publisher Status, Review Status, availability
+
+**Official Starter Catalog**:
+The permanently free first-party Catalog Channel that seeds the ecosystem with
+authorized media offers and openly formatted Package Releases.
+_Avoid_: Hidden official format, paid generation quota, quality guarantee
 
 **Resource Identity**:
 The lowercase SHA-256 of one resource file's exact bytes, used to bind package

@@ -20,13 +20,16 @@ pipeline, and runtime-artifact authority for the listen product.
 
 Read these files before planning or changing code:
 
-1. `.planning/STATE.md`
-2. `.planning/PROJECT.md`
-3. `.planning/MAINTENANCE.md`
-4. `.planning/codebase/ARCHITECTURE.md`
-5. `.planning/codebase/STRUCTURE.md`
-6. `.planning/codebase/TESTING.md`
-7. `.planning/CROSS_REPO.md` when work can affect `listen-app`
+1. `CONTEXT.md`
+2. `ECOSYSTEM.md`
+3. `.planning/STATE.md`
+4. `.planning/PROJECT.md`
+5. `.planning/MAINTENANCE.md`
+6. `.planning/codebase/ARCHITECTURE.md`
+7. `.planning/codebase/STRUCTURE.md`
+8. `.planning/codebase/TESTING.md`
+9. `.planning/CROSS_REPO.md` when work can affect `listen-app`, `listen-gen`,
+   or a future hosted catalog/registry
 
 Read only the active phase under `.planning/phases/`. Everything under
 `.planning/archive/monorepo-baseline/` is frozen historical context and is not
@@ -40,7 +43,8 @@ current repository truth.
 - `api-http`, its loopback lifecycle, authentication, and version handshake;
 - canonical OpenAPI at `contracts/openapi/v1.yaml`;
 - shared event, timeline, and resource schemas under `contracts/`;
-- Python production, evaluation, and research tooling under `scripts/`;
+- legacy Python production plus evaluation/research tooling under `scripts/`
+  while reusable offline generation migrates to `listen-gen`;
 - runtime assembly inputs and immutable contract/runtime release artifacts;
 - backend ADRs, backend roadmap, backend requirements, and backend codebase
   documentation.
@@ -50,7 +54,11 @@ current repository truth.
 - Flutter widgets, controllers, navigation, themes, or client settings;
 - the app's handwritten wire adapters and compatibility parsers;
 - app distribution assembly;
-- `listen-app/backend.lock.json`.
+- `listen-app/backend.lock.json`;
+- reusable offline media preprocessing, model/provider execution, or native
+  package generation owned by `listen-gen`;
+- hosted catalog/registry implementation, whose repository and service
+  ownership have not yet been selected.
 
 ## Architecture Rules
 

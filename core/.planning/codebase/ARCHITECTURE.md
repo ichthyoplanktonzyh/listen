@@ -13,7 +13,7 @@ contracts / HTTP / events
           |              |
  persistence-sqlite   *-provider adapters
 
-legacy scripts/timeline-production       external offline producer
+legacy scripts/timeline-production               listen-gen
           |                                       |
  versioned LLTimeline --migration--> deterministic .listenpkg
                                                    |
@@ -22,8 +22,10 @@ legacy scripts/timeline-production       external offline producer
 
 `domain` owns stable concepts. `application` owns use cases and ports.
 `api-http` adapts loopback HTTP/SSE/WebSocket requests. Persistence and provider
-crates implement ports. Python tooling produces/evaluates resources but is not
-embedded in the lightweight consumer runtime.
+crates implement ports. Legacy Python tooling produces/evaluates resources but
+is not embedded in the lightweight consumer runtime. New reusable offline
+production belongs to the separate `listen-gen` producer; Core remains the
+contract and import authority.
 
 The portable content-resource contract lives under
 `contracts/content-package/v1`. A deterministic `.listenpkg` ZIP binds one
