@@ -382,7 +382,7 @@ impl ApiError {
         }
     }
 
-    fn internal(
+    pub(crate) fn internal(
         status: StatusCode,
         code: &'static str,
         public_message: &'static str,

@@ -104,7 +104,9 @@ impl MediaAnalysisUseCases {
         let inspected = content_package::inspect_path(path).map_err(|error| {
             ApplicationError::Invalid(format!("content package inspection failed: {error}"))
         })?;
-        self.import_content_package(media_id, &inspected.package)
+        let mut imported = self.import_content_package(media_id, &inspected.package)?;
+        imported.receipt.warnings.splice(0..0, inspected.warnings);
+        Ok(imported)
     }
 }
 

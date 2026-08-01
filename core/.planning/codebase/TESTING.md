@@ -33,6 +33,9 @@ python3 -m unittest scripts/test_release_artifacts.py
   loopback/keyless policy, plus sidecar pool-readiness and process reaping;
 - OpenAPI method+path parity and structural validation;
 - committed schema/example/fixture validation;
+- package-import HTTP tests cover the typed receipt, repeated-import
+  idempotency, candidate-only active-selection invariant, exact-media mismatch,
+  and path/hash redaction;
 - deterministic Python unit/contract tests;
 - architecture debt regression tests and dependency policy checks;
 - release archive safety, reproducibility, manifest, and SHA checks;

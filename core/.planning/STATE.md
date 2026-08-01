@@ -22,6 +22,11 @@ Timeline packages but has no remote or published handoff. Existing Core
 whole-media generation stays temporarily available until the new path is
 published, cut over, and observed.
 
+The additive local package-import HTTP contract exposes the bounded, atomic
+candidate-only application seam with a typed receipt and stable redacted
+failure codes. It remains unreleased until an owner-approved immutable
+contract/runtime artifact exists.
+
 ## Established Boundaries
 
 - Core owns canonical OpenAPI, Rust/Python backend, schemas, and runtime artifacts.
@@ -40,19 +45,22 @@ not code evidence.
 
 ## Next
 
-1. Define Content Edition, Media Rendition, Timeline Compatibility, and the
-   Package Listing/Release interface before exposing the one-click journey.
-2. Receive the App journey and add the smallest package-import contract, then
-   cut over to `listen-gen` and observe it before deleting legacy behavior.
-3. Split Core whole-media and learner-recording transcription responsibilities
+1. Complete the App-led local exact-media package round trip against this
+   unreleased import contract, then publish an owner-approved immutable Core
+   contract/runtime artifact and pin it in the App.
+2. Cut whole-media production over to `listen-gen` and observe it before
+   deleting legacy behavior.
+3. Define Content Edition, Media Rendition, Timeline Compatibility, and the
+   Package Listing/Release interface before a hosted catalog journey.
+4. Split Core whole-media and learner-recording transcription responsibilities
    before deleting any legacy coordinator code; realtime and learner-dependent
    capabilities remain in Core.
-4. Split core issue #80 into a production-model slice followed by an
+5. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
-5. Publish immutable `1.1.0` contract/runtime artifacts only after owner
+6. Publish immutable `1.1.0` contract/runtime artifacts only after owner
    approval, then complete the `listen-app` lock and DTO handoff.
-6. Run the Apple Silicon short-audio cascade smoke only with explicit model
+7. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-7. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+8. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.

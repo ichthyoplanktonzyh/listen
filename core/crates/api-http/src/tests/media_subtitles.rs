@@ -1,4 +1,167 @@
 use super::*;
+use application::WordTimelineRepository;
+
+async fn register_package_media(app: &Router, fingerprint: String) -> serde_json::Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/media")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "path": "/tmp/content-package-media.mp4",
+                        "fingerprint": fingerprint,
+                        "title": "Content package media",
+                        "kind": "video",
+                        "duration_ms": 2500
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+}
+
+fn content_package_fixture() -> String {
+    format!(
+        "{}/../../contracts/content-package/v1/examples/minimal",
+        env!("CARGO_MANIFEST_DIR")
+    )
+}
+
+#[tokio::test]
+async fn content_package_import_returns_a_typed_receipt_and_only_candidates() {
+    let (state, repo) = test_state_with_repository();
+    let app = router(state);
+    let media = register_package_media(&app, format!("sha256:{}", "a".repeat(64))).await;
+    let uri = format!(
+        "/v1/media/{}/content-packages/import",
+        media["id"].as_str().unwrap()
+    );
+    let request = || {
+        Request::post(&uri)
+            .header(AUTHORIZATION, "Bearer secret")
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(
+                serde_json::json!({"package_path": content_package_fixture()}).to_string(),
+            ))
+            .unwrap()
+    };
+
+    let first = app.clone().oneshot(request()).await.unwrap();
+    assert_eq!(first.status(), StatusCode::OK);
+    let first: serde_json::Value =
+        serde_json::from_slice(&to_bytes(first.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(first["track"]["media_id"], media["id"]);
+    assert!(
+        first["receipt"]["manifest_sha256"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:")
+    );
+    assert_eq!(first["receipt"]["resources"].as_array().unwrap().len(), 6);
+    assert!(
+        first["receipt"]["resources"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|resource| {
+                resource["resource_id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("sha256:"))
+                    && resource["local_ids"].is_array()
+                    && resource["outcome"].is_string()
+                    && (resource["reason"].is_null() || resource["reason"].is_string())
+            })
+    );
+
+    let second = app.oneshot(request()).await.unwrap();
+    assert_eq!(second.status(), StatusCode::OK);
+    let second: serde_json::Value =
+        serde_json::from_slice(&to_bytes(second.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(first, second);
+
+    let track_id =
+        domain::SubtitleTrackId::parse(first["track"]["id"].as_str().expect("imported track id"))
+            .unwrap();
+    assert_eq!(repo.list_word_timelines(&track_id).unwrap().len(), 1);
+    assert!(repo.active_word_timeline(&track_id).unwrap().is_none());
+}
+
+#[tokio::test]
+async fn content_package_import_errors_are_stable_and_redacted() {
+    let app = test_app();
+    let media = register_package_media(&app, format!("sha256:{}", "b".repeat(64))).await;
+    let uri = format!(
+        "/v1/media/{}/content-packages/import",
+        media["id"].as_str().unwrap()
+    );
+    let mismatch = app
+        .clone()
+        .oneshot(
+            Request::post(&uri)
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"package_path": content_package_fixture()}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mismatch.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let mismatch: serde_json::Value =
+        serde_json::from_slice(&to_bytes(mismatch.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(mismatch["code"], "content_package_media_mismatch");
+    let mismatch_body = mismatch.to_string();
+    assert!(!mismatch_body.contains(&"a".repeat(64)));
+    assert!(!mismatch_body.contains(&"b".repeat(64)));
+
+    let private_path = "/private/user/secret-package.listenpkg";
+    let invalid = app
+        .clone()
+        .oneshot(
+            Request::post(&uri)
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"package_path": private_path}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let invalid: serde_json::Value =
+        serde_json::from_slice(&to_bytes(invalid.into_body(), usize::MAX).await.unwrap()).unwrap();
+    assert_eq!(invalid["code"], "content_package_invalid");
+    assert!(!invalid.to_string().contains(private_path));
+
+    let missing_media = app
+        .oneshot(
+            Request::post("/v1/media/missing-media/content-packages/import")
+                .header(AUTHORIZATION, "Bearer secret")
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"package_path": content_package_fixture()}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_media.status(), StatusCode::NOT_FOUND);
+    let missing_media: serde_json::Value = serde_json::from_slice(
+        &to_bytes(missing_media.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(missing_media["code"], "not_found");
+}
 
 #[tokio::test]
 async fn media_registration_is_idempotent_over_http() {

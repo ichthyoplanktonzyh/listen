@@ -49,6 +49,15 @@ resources. Attachment compares the package's canonical `sha256:<digest>` media
 fingerprint with either the same stored form or the legacy lowercase bare
 SHA-256 form; it preserves the existing Media ID and stored fingerprint.
 
+The loopback HTTP adapter exposes this seam as
+`POST /v1/media/{media_id}/content-packages/import`. It accepts a local package
+path, performs bounded inspection inside the blocking application executor,
+and returns the imported Subtitle Text Track plus a nested receipt with the
+manifest digest, per-resource outcome/local IDs, and warnings. Media mismatch
+and invalid package failures have stable, path- and hash-redacted HTTP codes;
+persistence diagnostics remain internal. Projection and transaction policy
+stay inside `MediaAnalysisUseCases` and its repository port.
+
 The first generation split is the reusable whole-media path from media bytes
 through ASR Subtitle Text Track and Word Timeline to a native `.listenpkg`.
 Provider/model execution, media preprocessing, and batch generation belong on

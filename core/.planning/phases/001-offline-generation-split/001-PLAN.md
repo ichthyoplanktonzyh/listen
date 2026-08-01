@@ -34,6 +34,11 @@ has passed deterministic fake/command-adapter tests, the legacy semantic
 comparison, and the Core inspector. It has no remote handoff, release, or
 production-model smoke evidence yet.
 
+Core now also has an additive local-path HTTP adapter for exact-media package
+import. It returns the imported track and structured receipt, preserves the
+candidate-only/idempotent persistence semantics, and exposes stable redacted
+invalid-package and media-mismatch errors. The contract remains unreleased.
+
 Production cutover and legacy deletion remain open. No existing Core
 whole-media, learner-recording, realtime, or `scripts/timeline-production`
 implementation is removed by this slice.

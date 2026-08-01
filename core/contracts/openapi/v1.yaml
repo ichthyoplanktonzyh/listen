@@ -197,6 +197,34 @@ paths:
                 $ref: "#/components/schemas/SubtitleTrack"
         default:
           $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/content-packages/import:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    post:
+      operationId: importContentPackage
+      description: >
+        Inspects a bounded local `.listenpkg` or package directory, verifies
+        that its exact media fingerprint matches the registered media, and
+        atomically installs supported resources as candidates. Import is
+        idempotent and never creates or changes an active resource selection.
+        Failures use `not_found`, `content_package_media_mismatch`,
+        `content_package_invalid`, or `content_package_import_failed`; package
+        paths and expected/actual hashes are never included in error bodies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportContentPackageRequest"
+      responses:
+        "200":
+          description: Imported candidate resources and their projection receipt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportContentPackageResponse"
+        default:
+          $ref: "#/components/responses/Error"
   /v1/subtitles/{track_id}:
     parameters:
       - name: track_id
@@ -3795,6 +3823,57 @@ components:
       properties:
         path: { type: string }
         language: { type: [string, "null"] }
+    ImportContentPackageRequest:
+      type: object
+      required: [package_path]
+      additionalProperties: false
+      properties:
+        package_path:
+          type: string
+          minLength: 1
+          description: >
+            Local path to a `.listenpkg` archive or package directory. Core
+            rejects symlinks, unsafe entries, oversized files, oversized
+            packages, and excessive file counts during bounded inspection.
+    ContentPackageResourceImportOutcome:
+      type: string
+      enum: [consumed, preserved_not_consumed]
+    ContentPackageResourceDisposition:
+      type: object
+      required: [resource_id, kind, local_ids, outcome, reason]
+      additionalProperties: false
+      properties:
+        resource_id:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
+        kind: { type: string }
+        local_ids:
+          type: array
+          items: { type: string }
+        outcome:
+          $ref: "#/components/schemas/ContentPackageResourceImportOutcome"
+        reason: { type: [string, "null"] }
+    ContentPackageImportReceipt:
+      type: object
+      required: [manifest_sha256, resources, warnings]
+      additionalProperties: false
+      properties:
+        manifest_sha256:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
+        resources:
+          type: array
+          items: { $ref: "#/components/schemas/ContentPackageResourceDisposition" }
+        warnings:
+          type: array
+          items: { type: string }
+    ImportContentPackageResponse:
+      type: object
+      required: [track, receipt]
+      additionalProperties: false
+      properties:
+        track: { $ref: "#/components/schemas/SubtitleTrack" }
+        receipt: { $ref: "#/components/schemas/ContentPackageImportReceipt" }
     UpdateTrackLanguage:
       type: object
       required: [language]

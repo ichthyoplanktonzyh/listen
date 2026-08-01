@@ -1,7 +1,7 @@
 use crate::{
     ApiError, ApiState, ApplicationError, Deserialize, ImportSubtitle, IntoResponse, Json,
     LanguageCode, MediaId, MediaKind, MediaTriageIntent, Path, Query, RegisterMedia, Response,
-    State, StatusCode, SubtitleTrackId,
+    Serialize, State, StatusCode, SubtitleTrackId,
 };
 use tokio::io::AsyncReadExt;
 
@@ -103,6 +103,63 @@ pub(crate) struct ImportSubtitleRequest {
 #[derive(Debug, Deserialize)]
 pub(crate) struct ImportLLTimelineForMediaQuery {
     allow_mismatch: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ImportContentPackageRequest {
+    package_path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ImportContentPackageResponse {
+    track: domain::SubtitleTrack,
+    receipt: ContentPackageImportReceipt,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ContentPackageImportReceipt {
+    manifest_sha256: String,
+    resources: Vec<ContentPackageResourceDisposition>,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ContentPackageResourceDisposition {
+    resource_id: String,
+    kind: String,
+    local_ids: Vec<String>,
+    outcome: &'static str,
+    reason: Option<String>,
+}
+
+impl From<application::ImportedContentPackage> for ImportContentPackageResponse {
+    fn from(value: application::ImportedContentPackage) -> Self {
+        Self {
+            track: value.track,
+            receipt: ContentPackageImportReceipt {
+                manifest_sha256: value.receipt.manifest_sha256,
+                resources: value
+                    .receipt
+                    .resources
+                    .into_iter()
+                    .map(|resource| ContentPackageResourceDisposition {
+                        resource_id: resource.resource_id,
+                        kind: resource.kind,
+                        local_ids: resource.local_ids,
+                        outcome: match resource.outcome {
+                            application::ResourceImportOutcome::Consumed => "consumed",
+                            application::ResourceImportOutcome::PreservedNotConsumed => {
+                                "preserved_not_consumed"
+                            }
+                        },
+                        reason: resource.reason,
+                    })
+                    .collect(),
+                warnings: value.receipt.warnings,
+            },
+        }
+    }
 }
 
 pub(crate) async fn import_subtitle(
@@ -234,6 +291,67 @@ pub(crate) async fn import_lltimeline_for_media(
         .await
         .map(Json)
         .map_err(ApiError::from)
+}
+
+pub(crate) async fn import_content_package(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+    Json(request): Json<ImportContentPackageRequest>,
+) -> Result<Json<ImportContentPackageResponse>, ApiError> {
+    let media_id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    if request.package_path.trim().is_empty() {
+        return Err(content_package_invalid("package path must not be empty"));
+    }
+    let package_path = std::path::PathBuf::from(request.package_path);
+    state
+        .application
+        .execute("content_package.import", move |services| {
+            services
+                .media_analysis()
+                .import_content_package_path(&media_id, &package_path)
+        })
+        .await
+        .map(ImportContentPackageResponse::from)
+        .map(Json)
+        .map_err(content_package_import_error)
+}
+
+fn content_package_import_error(error: ApplicationError) -> ApiError {
+    match error {
+        ApplicationError::NotFound(entity) => ApiError::not_found(entity),
+        ApplicationError::Validation("content package media fingerprint") => ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "content_package_media_mismatch",
+            "content package does not match the selected media",
+            false,
+        ),
+        ApplicationError::Invalid(message) => content_package_invalid(message),
+        ApplicationError::Domain(error) => content_package_invalid(error.to_string()),
+        ApplicationError::Repository(message) => ApiError::internal(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "content_package_import_failed",
+            "content package import failed",
+            message,
+            true,
+        ),
+        other => ApiError::internal(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "content_package_import_failed",
+            "content package import failed",
+            other.to_string(),
+            false,
+        ),
+    }
+}
+
+fn content_package_invalid(internal_message: impl Into<String>) -> ApiError {
+    ApiError::internal(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "content_package_invalid",
+        "content package is invalid or cannot be accessed",
+        internal_message,
+        false,
+    )
 }
 
 pub(crate) async fn media_subtitles(

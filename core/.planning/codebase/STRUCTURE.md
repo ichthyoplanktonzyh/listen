@@ -64,6 +64,9 @@ Notable runtime seams:
 - `ContentPackageImportRepository` is the dedicated atomic persistence seam for
   those projections. It is idempotent, never selects an active analysis, and
   does not call the legacy LLTimeline import operation.
+- `api-http::routes::media::import_content_package` is the additive local-path
+  HTTP adapter for that application seam. Its wire DTO preserves the nested
+  receipt and maps package failures to stable redacted error codes.
 
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.
