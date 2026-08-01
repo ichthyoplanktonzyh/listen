@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-07-28 17:16 CST
+> Updated: 2026-08-01 CST
 
 ## Position
 
@@ -15,14 +15,20 @@
 
 ## Current Work
 
-Independent frontend governance is merged. The current maintenance slice makes
-this repository authoritative for frontend design assets, adopts release-only
-changelog maintenance, and documents complete local app startup.
+The current documentation slice aligns App agents with the owner-approved open
+package ecosystem, shared vocabulary, repository boundaries, and migration
+order. It does not implement or claim the package discovery, generator, or
+Registry journeys.
 
 ## Established Boundaries
 
 - App owns user journey, UI/UX, client state, compatibility parsing and assembly.
+- App owns lawful media-acquisition UX, `listen-gen` process lifecycle, and the
+  presentation of package trust, review, license, compatibility, and selection.
 - Core owns canonical contract, backend behavior and release artifacts.
+- Gen owns open offline production and provider adapters; App does not import
+  its implementation.
+- Hosted Catalog/Registry service ownership remains undecided.
 - App consumes only immutable artifacts pinned by `backend.lock.json`.
 - Normal app work does not require the old monorepo or a sibling core checkout.
 - `design-notes/` owns the frontend charter, audits, and approved explorations.
@@ -36,6 +42,8 @@ that constraint.
 
 ## Next
 
-1. Run the pinned complete app and perform owner smoke testing.
-2. Let Claude perform the next frontend journey/UX fact audit.
-3. Use `CROSS_REPO.md` for the next backend-dependent feature.
+1. Define the package discovery, lawful acquisition, match/generate/import,
+   cancellation/retry, and explicit selection journey as an App phase.
+2. Use `CROSS_REPO.md` for Core, Gen, and future Catalog/Registry requests.
+3. Keep the existing whole-media flow until the additive package path has been
+   integrated and validated end to end.

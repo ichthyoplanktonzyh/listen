@@ -21,12 +21,15 @@ state, backend compatibility layer, and final macOS application assembly.
 Read these files before planning or changing code:
 
 1. `.planning/STATE.md`
-2. `.planning/PROJECT.md`
-3. `.planning/MAINTENANCE.md`
-4. `.planning/codebase/ARCHITECTURE.md`
-5. `.planning/codebase/STRUCTURE.md`
-6. `.planning/codebase/TESTING.md`
-7. `.planning/CROSS_REPO.md` when backend data or behavior may change
+2. `CONTEXT.md`
+3. `ECOSYSTEM.md`
+4. `.planning/PROJECT.md`
+5. `.planning/MAINTENANCE.md`
+6. `.planning/codebase/ARCHITECTURE.md`
+7. `.planning/codebase/STRUCTURE.md`
+8. `.planning/codebase/TESTING.md`
+9. `.planning/CROSS_REPO.md` when core, generator, catalog, or registry data or
+   behavior may change
 
 Read only the active phase under `.planning/phases/`.
 For visible design work, also read `design-notes/listen-design-charter.md` and
@@ -43,6 +46,11 @@ the relevant audit or approved exploration under `design-notes/`.
 - client-side API transport and backward-compatible wire parsing;
 - app settings, external-tool UX, native macOS integration, and embedded
   `third_party/fvp`;
+- catalog and discovery UI, lawful media-acquisition UX, and the honest display
+  of package publisher, review, license, compatibility, and installation state;
+- launching and supervising `listen-gen` as an external process, including
+  progress, cancellation, retry, failure recovery, and temporary-output
+  ownership;
 - frontend fixtures, widget/controller/contract tests, app packaging, signing
   preparation, and packaged smoke verification;
 - `backend.lock.json` and installation of immutable core artifacts;
@@ -53,7 +61,10 @@ the relevant audit or approved exploration under `design-notes/`.
 - canonical OpenAPI or backend route definitions;
 - Rust domain/application/persistence behavior;
 - core release artifact contents or backend version declarations;
-- production/research pipelines.
+- the canonical `.listenpkg` schema or validator behavior;
+- `listen-gen` provider adapters, media preprocessing, or offline production
+  implementation;
+- the Hosted Catalog/Registry service or its deployment ownership.
 
 ## Product and UI Rules
 
@@ -78,21 +89,24 @@ the relevant audit or approved exploration under `design-notes/`.
 
 ## Frontend-Driven Cross-Repo Workflow
 
-For a feature needing backend data or operations:
+For a feature needing core, generator, catalog, or registry data or operations:
 
 1. Define the user journey, UI states, required information, operations, and
    failure/cancellation semantics in the app phase.
 2. Write a contract request using `.planning/CROSS_REPO.md`.
-3. Hand the request to the core owner. Do not edit a local/sibling copy of
-   `contracts/openapi/v1.yaml`.
-4. Develop UI against typed fixtures or a mock while core designs and
-   implements the canonical contract.
-5. Consume an immutable core release by updating `backend.lock.json`.
-6. Install and verify both artifacts.
+3. Hand the request to the repository or service owner. Do not edit a
+   local/sibling copy of `contracts/openapi/v1.yaml` or a generator contract
+   from an app-only task.
+4. Develop UI against typed fixtures or a mock while the owning component
+   designs and implements its canonical boundary.
+5. For core changes, consume an immutable release by updating
+   `backend.lock.json`.
+6. Install and verify all changed artifacts and boundaries.
 7. Run contract tests, app tests, Release build, and packaged smoke as required.
 
-The synchronization point is the released contract/runtime and lock update,
-not a shared branch or moving core `main`.
+The synchronization point is a released contract/runtime, immutable artifact,
+or versioned external protocol plus the corresponding App compatibility update,
+not a shared branch or moving repository `main`.
 
 ## Backend Lock and Compatibility
 
@@ -171,6 +185,9 @@ integration, manual smoke coverage, logs, and troubleshooting, follow
 ## Planning and Documentation
 
 The live `.planning` tree describes only frontend facts in this repository.
+`CONTEXT.md` defines shared terms, and `ECOSYSTEM.md` records owner-approved
+cross-repository product boundaries and invariants; neither replaces a
+repository-specific plan or codebase document.
 
 - `PROJECT.md`: durable app mission and product boundary
 - `REQUIREMENTS.md`: testable frontend requirements
