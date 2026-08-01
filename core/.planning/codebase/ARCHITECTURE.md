@@ -43,7 +43,9 @@ resources, and corpus projection in one transaction. Reimport skips existing
 identities, never creates or changes an active selection, and rejects a
 resource identity already owned by another track or media item. This operation
 is separate from legacy LLTimeline import, whose lifecycle policy may activate
-resources.
+resources. Attachment compares the package's canonical `sha256:<digest>` media
+fingerprint with either the same stored form or the legacy lowercase bare
+SHA-256 form; it preserves the existing Media ID and stored fingerprint.
 
 The first generation split is the reusable whole-media path from media bytes
 through ASR Subtitle Text Track and Word Timeline to a native `.listenpkg`.
