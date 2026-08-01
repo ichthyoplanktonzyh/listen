@@ -66,7 +66,9 @@ Notable runtime seams:
   does not call the legacy LLTimeline import operation.
 - `api-http::routes::media::import_content_package` is the additive local-path
   HTTP adapter for that application seam. Its wire DTO preserves the nested
-  receipt and maps package failures to stable redacted error codes.
+  receipt, exposes validated envelope provenance/review status, represents
+  opaque-resource trust facts as unknown, and maps package failures to stable
+  redacted error codes.
 
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.

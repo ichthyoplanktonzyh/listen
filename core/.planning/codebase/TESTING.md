@@ -35,7 +35,8 @@ python3 -m unittest scripts/test_release_artifacts.py
 - committed schema/example/fixture validation;
 - package-import HTTP tests cover the typed receipt, repeated-import
   idempotency, candidate-only active-selection invariant, exact-media mismatch,
-  and path/hash redaction;
+  resource provenance/review status, and path/hash redaction; application tests
+  cover honest unknown trust fields for opaque preserved resources;
 - deterministic Python unit/contract tests;
 - architecture debt regression tests and dependency policy checks;
 - release archive safety, reproducibility, manifest, and SHA checks;

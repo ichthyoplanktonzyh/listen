@@ -3840,7 +3840,7 @@ components:
       enum: [consumed, preserved_not_consumed]
     ContentPackageResourceDisposition:
       type: object
-      required: [resource_id, kind, local_ids, outcome, reason]
+      required: [resource_id, kind, local_ids, outcome, reason, review_status, provenance]
       additionalProperties: false
       properties:
         resource_id:
@@ -3853,6 +3853,40 @@ components:
         outcome:
           $ref: "#/components/schemas/ContentPackageResourceImportOutcome"
         reason: { type: [string, "null"] }
+        review_status:
+          type: [string, "null"]
+          enum: [unreviewed, machine_checked, human_reviewed, null]
+          description: Null only when an optional unknown resource is preserved opaquely.
+        provenance:
+          description: Null only when an optional unknown resource is preserved opaquely.
+          oneOf:
+            - $ref: "#/components/schemas/ContentPackageResourceProvenance"
+            - type: "null"
+    ContentPackageResourceProducer:
+      type: object
+      required: [id, version]
+      additionalProperties: false
+      properties:
+        id: { type: string, minLength: 1 }
+        version: { type: string, minLength: 1 }
+    ContentPackageResourceProvenance:
+      type: object
+      required: [created_at_ms, tool, provider, model, config_sha256]
+      additionalProperties: false
+      properties:
+        created_at_ms: { type: integer, minimum: 0 }
+        tool: { $ref: "#/components/schemas/ContentPackageResourceProducer" }
+        provider:
+          oneOf:
+            - $ref: "#/components/schemas/ContentPackageResourceProducer"
+            - type: "null"
+        model:
+          oneOf:
+            - $ref: "#/components/schemas/ContentPackageResourceProducer"
+            - type: "null"
+        config_sha256:
+          type: [string, "null"]
+          pattern: '^sha256:[a-f0-9]{64}$'
     ContentPackageImportReceipt:
       type: object
       required: [manifest_sha256, resources, warnings]

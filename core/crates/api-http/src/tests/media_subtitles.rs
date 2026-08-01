@@ -76,8 +76,26 @@ async fn content_package_import_returns_a_typed_receipt_and_only_candidates() {
                     && resource["local_ids"].is_array()
                     && resource["outcome"].is_string()
                     && (resource["reason"].is_null() || resource["reason"].is_string())
+                    && resource["review_status"].is_string()
+                    && resource["provenance"]["created_at_ms"].is_u64()
+                    && resource["provenance"]["tool"]["id"] == "listen-gen"
+                    && resource["provenance"]["tool"]["version"].is_string()
+                    && (resource["provenance"]["provider"].is_null()
+                        || resource["provenance"]["provider"].is_object())
+                    && (resource["provenance"]["model"].is_null()
+                        || resource["provenance"]["model"].is_object())
+                    && (resource["provenance"]["config_sha256"].is_null()
+                        || resource["provenance"]["config_sha256"].is_string())
             })
     );
+    let subtitle = first["receipt"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| resource["kind"] == "subtitle_text_track")
+        .unwrap();
+    assert_eq!(subtitle["review_status"], "machine_checked");
+    assert_eq!(subtitle["provenance"]["provider"]["id"], "example-asr");
 
     let second = app.oneshot(request()).await.unwrap();
     assert_eq!(second.status(), StatusCode::OK);

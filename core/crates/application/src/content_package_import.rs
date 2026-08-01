@@ -24,12 +24,36 @@ pub struct ResourceImportDisposition {
     pub local_ids: Vec<String>,
     pub outcome: ResourceImportOutcome,
     pub reason: Option<String>,
+    pub review_status: Option<ResourceImportReviewStatus>,
+    pub provenance: Option<ResourceImportProvenance>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceImportOutcome {
     Consumed,
     PreservedNotConsumed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceImportReviewStatus {
+    Unreviewed,
+    MachineChecked,
+    HumanReviewed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceImportProducer {
+    pub id: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceImportProvenance {
+    pub created_at_ms: u64,
+    pub tool: ResourceImportProducer,
+    pub provider: Option<ResourceImportProducer>,
+    pub model: Option<ResourceImportProducer>,
+    pub config_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -514,6 +538,8 @@ pub fn prepare_content_package_document(
             local_ids: Vec::new(),
             outcome: ResourceImportOutcome::PreservedNotConsumed,
             reason: Some("optional unknown resource remains preserved in the package".into()),
+            review_status: None,
+            provenance: None,
         });
     }
 
@@ -624,6 +650,8 @@ fn consumed(
         local_ids,
         outcome: ResourceImportOutcome::Consumed,
         reason: None,
+        review_status: Some(review_status(record)),
+        provenance: Some(provenance(record)),
     }
 }
 
@@ -637,6 +665,34 @@ fn not_consumed(
         local_ids: Vec::new(),
         outcome: ResourceImportOutcome::PreservedNotConsumed,
         reason: Some(reason.into()),
+        review_status: Some(review_status(record)),
+        provenance: Some(provenance(record)),
+    }
+}
+
+fn review_status(record: &content_package::ResourceRecord) -> ResourceImportReviewStatus {
+    match record.resource.quality().review_status {
+        content_package::ReviewStatus::Unreviewed => ResourceImportReviewStatus::Unreviewed,
+        content_package::ReviewStatus::MachineChecked => ResourceImportReviewStatus::MachineChecked,
+        content_package::ReviewStatus::HumanReviewed => ResourceImportReviewStatus::HumanReviewed,
+    }
+}
+
+fn provenance(record: &content_package::ResourceRecord) -> ResourceImportProvenance {
+    let value = record.resource.provenance();
+    ResourceImportProvenance {
+        created_at_ms: value.created_at_ms,
+        tool: producer_descriptor(&value.tool),
+        provider: value.provider.as_ref().map(producer_descriptor),
+        model: value.model.as_ref().map(producer_descriptor),
+        config_sha256: value.config_sha256.clone(),
+    }
+}
+
+fn producer_descriptor(value: &content_package::VersionedProducer) -> ResourceImportProducer {
+    ResourceImportProducer {
+        id: value.id.clone(),
+        version: value.version.clone(),
     }
 }
 
@@ -732,6 +788,30 @@ mod tests {
             resource.kind == "prosody_analysis"
                 && resource.outcome == ResourceImportOutcome::PreservedNotConsumed
         }));
+        assert!(prepared.receipt.resources.iter().all(|resource| {
+            resource.review_status.is_some()
+                && resource.provenance.as_ref().is_some_and(|provenance| {
+                    provenance.tool.id == "listen-gen" && provenance.tool.version == "0.1.0"
+                })
+        }));
+        let subtitle = prepared
+            .receipt
+            .resources
+            .iter()
+            .find(|resource| resource.kind == "subtitle_text_track")
+            .unwrap();
+        assert_eq!(
+            subtitle.review_status,
+            Some(ResourceImportReviewStatus::MachineChecked)
+        );
+        assert_eq!(
+            subtitle
+                .provenance
+                .as_ref()
+                .and_then(|provenance| provenance.provider.as_ref())
+                .map(|provider| provider.id.as_str()),
+            Some("example-asr")
+        );
         assert!(!prepared.receipt.warnings.is_empty());
         assert_eq!(
             prepared.document.artifacts[0].payload["cues"][0]["voiced_frame_ratio"],
@@ -832,6 +912,38 @@ mod tests {
         assert!(prepared.receipt.resources.iter().any(|resource| {
             resource.kind == "phone_timeline"
                 && resource.outcome == ResourceImportOutcome::PreservedNotConsumed
+                && resource.review_status == Some(ResourceImportReviewStatus::Unreviewed)
+                && resource.provenance.is_some()
         }));
+    }
+
+    #[test]
+    fn opaque_optional_resource_reports_unknown_review_and_provenance() {
+        let mut package = canonical_package();
+        let index = package
+            .resources
+            .iter()
+            .position(|record| record.descriptor.kind == "prosody_analysis")
+            .unwrap();
+        let record = package.resources.remove(index);
+        package
+            .opaque_resources
+            .push(content_package::OpaqueResource {
+                descriptor: record.descriptor,
+                subject: record.resource.subject().clone(),
+                dependencies: record.resource.dependencies().to_vec(),
+                bytes: record.bytes,
+            });
+
+        let prepared = prepare_content_package_document(&matching_media(), &package).unwrap();
+        let opaque = prepared
+            .receipt
+            .resources
+            .iter()
+            .find(|resource| resource.kind == "prosody_analysis")
+            .unwrap();
+        assert_eq!(opaque.outcome, ResourceImportOutcome::PreservedNotConsumed);
+        assert_eq!(opaque.review_status, None);
+        assert_eq!(opaque.provenance, None);
     }
 }

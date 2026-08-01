@@ -131,6 +131,23 @@ pub(crate) struct ContentPackageResourceDisposition {
     local_ids: Vec<String>,
     outcome: &'static str,
     reason: Option<String>,
+    review_status: Option<&'static str>,
+    provenance: Option<ContentPackageResourceProvenance>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ContentPackageResourceProvenance {
+    created_at_ms: u64,
+    tool: ContentPackageResourceProducer,
+    provider: Option<ContentPackageResourceProducer>,
+    model: Option<ContentPackageResourceProducer>,
+    config_sha256: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ContentPackageResourceProducer {
+    id: String,
+    version: String,
 }
 
 impl From<application::ImportedContentPackage> for ImportContentPackageResponse {
@@ -154,6 +171,35 @@ impl From<application::ImportedContentPackage> for ImportContentPackageResponse 
                             }
                         },
                         reason: resource.reason,
+                        review_status: resource.review_status.map(|status| match status {
+                            application::ResourceImportReviewStatus::Unreviewed => "unreviewed",
+                            application::ResourceImportReviewStatus::MachineChecked => {
+                                "machine_checked"
+                            }
+                            application::ResourceImportReviewStatus::HumanReviewed => {
+                                "human_reviewed"
+                            }
+                        }),
+                        provenance: resource.provenance.map(|value| {
+                            ContentPackageResourceProvenance {
+                                created_at_ms: value.created_at_ms,
+                                tool: ContentPackageResourceProducer {
+                                    id: value.tool.id,
+                                    version: value.tool.version,
+                                },
+                                provider: value.provider.map(|producer| {
+                                    ContentPackageResourceProducer {
+                                        id: producer.id,
+                                        version: producer.version,
+                                    }
+                                }),
+                                model: value.model.map(|producer| ContentPackageResourceProducer {
+                                    id: producer.id,
+                                    version: producer.version,
+                                }),
+                                config_sha256: value.config_sha256,
+                            }
+                        }),
                     })
                     .collect(),
                 warnings: value.receipt.warnings,

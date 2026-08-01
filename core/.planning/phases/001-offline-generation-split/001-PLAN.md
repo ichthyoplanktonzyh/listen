@@ -37,7 +37,9 @@ production-model smoke evidence yet.
 Core now also has an additive local-path HTTP adapter for exact-media package
 import. It returns the imported track and structured receipt, preserves the
 candidate-only/idempotent persistence semantics, and exposes stable redacted
-invalid-package and media-mismatch errors. The contract remains unreleased.
+invalid-package and media-mismatch errors. The receipt carries validated
+resource provenance and review status while leaving opaque-resource trust
+facts unknown. The contract remains unreleased.
 
 Production cutover and legacy deletion remain open. No existing Core
 whole-media, learner-recording, realtime, or `scripts/timeline-production`

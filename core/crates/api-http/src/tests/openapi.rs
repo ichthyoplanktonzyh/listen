@@ -69,6 +69,8 @@ fn openapi_version_snapshot_and_path_count() {
         "ImportContentPackageResponse:",
         "ContentPackageImportReceipt:",
         "ContentPackageResourceDisposition:",
+        "ContentPackageResourceProducer:",
+        "ContentPackageResourceProvenance:",
         "SubtitleTrack:",
         "SubtitleSentence:",
         "SubtitleToken:",

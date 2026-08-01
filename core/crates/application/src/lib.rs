@@ -106,7 +106,8 @@ pub use coach_dashboard::{
 };
 pub use content_package_import::{
     ContentPackageImportReceipt, ImportedContentPackage, PreparedContentPackageImport,
-    ResourceImportDisposition, ResourceImportOutcome, prepare_content_package_document,
+    ResourceImportDisposition, ResourceImportOutcome, ResourceImportProducer,
+    ResourceImportProvenance, ResourceImportReviewStatus, prepare_content_package_document,
 };
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;
