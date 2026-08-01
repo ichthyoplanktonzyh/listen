@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/practice_controller.dart';
 import '../../localization.dart';
 import '../../models/practice.dart';
-import '../../services/shadowing_recorder.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';

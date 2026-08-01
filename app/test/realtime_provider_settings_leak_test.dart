@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/provider_settings_view_models.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -39,15 +40,20 @@ void main() {
           throw StateError('Unexpected request: $method $path ${body ?? ''}');
         },
       );
+      final viewModels = <RealtimeProviderSettingsViewModel>[];
 
       for (var round = 0; round < 3; round++) {
+        final viewModel = RealtimeProviderSettingsViewModel(
+          LocalRealtimeProviderRepository(api),
+        );
+        viewModels.add(viewModel);
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
               body: SingleChildScrollView(
                 child: RealtimeProviderSettings(
                   key: ValueKey('round-$round'),
-                  repository: LocalRealtimeProviderRepository(api),
+                  viewModel: viewModel,
                 ),
               ),
             ),
@@ -60,6 +66,9 @@ void main() {
       // Unmount the tree so the only undisposed objects left are real leaks.
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
+      for (final viewModel in viewModels) {
+        viewModel.dispose();
+      }
     },
   );
 }

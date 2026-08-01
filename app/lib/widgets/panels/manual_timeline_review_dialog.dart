@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/manual_review_controller.dart';
+import '../../controllers/manual_review_flow_controller.dart';
 import '../../localization.dart';
 import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
@@ -41,14 +42,14 @@ enum ManualTimingSaveFailure {
 class ManualTimelineReviewDialog extends StatefulWidget {
   const ManualTimelineReviewDialog({
     super.key,
-    required this.draft,
+    required this.viewModel,
     required this.onPlayRange,
     required this.onSave,
   });
 
-  final ManualReviewDraft draft;
+  final ManualReviewEditorViewModel viewModel;
   final Future<void> Function(Duration start, Duration end) onPlayRange;
-  final Future<void> Function(ManualReviewDraft draft) onSave;
+  final Future<void> Function() onSave;
 
   @override
   State<ManualTimelineReviewDialog> createState() =>
@@ -66,21 +67,26 @@ class _ManualTimelineReviewDialogState
   ManualTimingSaveFailure? _saveFailure;
   ApiFailure? _saveDetail;
 
-  ManualReviewDraft get draft => widget.draft;
+  ManualReviewSnapshot get review => widget.viewModel.state;
 
   @override
   void initState() {
     super.initState();
-    final words = draft.currentSentenceWords;
+    final words = review.currentSentenceWords;
     if (words.isNotEmpty) {
       _selected = WordKey(words.first.sentenceId, words.first.tokenIndex);
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.viewModel,
+    builder: (context, _) => _buildDialog(context),
+  );
+
+  Widget _buildDialog(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final errors = draft.validateCurrentSentence();
+    final errors = review.currentSentenceErrors;
     final selectedWord = _selectedWord();
     return AlertDialog(
       title: Text(l.text('manualTimingTitle')),
@@ -91,7 +97,7 @@ class _ManualTimelineReviewDialogState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(
-              cue: draft.currentCue,
+              cue: review.currentCue,
               canPrevious: _previousCue() != null,
               canNext: _nextCue() != null,
               onPrevious: () => _selectCue(_previousCue()),
@@ -102,8 +108,8 @@ class _ManualTimelineReviewDialogState
               children: [
                 FilledButton.tonalIcon(
                   onPressed: () => widget.onPlayRange(
-                    draft.currentCue.start,
-                    draft.currentCue.end,
+                    review.currentCue.start,
+                    review.currentCue.end,
                   ),
                   icon: const Icon(Icons.play_arrow),
                   label: Text(l.text('manualTimingPlaySentence')),
@@ -123,7 +129,7 @@ class _ManualTimelineReviewDialogState
                 Text(
                   l
                       .text('manualTimingEditedCount')
-                      .replaceAll('{count}', '${draft.dirtyWords.length}'),
+                      .replaceAll('{count}', '${review.dirtyWords.length}'),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -159,11 +165,11 @@ class _ManualTimelineReviewDialogState
             const SizedBox(height: ListenSpacing.gap8),
             Expanded(
               child: ListView.separated(
-                itemCount: draft.currentSentenceWords.length,
+                itemCount: review.currentSentenceWords.length,
                 separatorBuilder: (_, _) =>
                     const SizedBox(height: ListenSpacing.gap8),
                 itemBuilder: (context, index) =>
-                    _wordRow(draft.currentSentenceWords[index]),
+                    _wordRow(review.currentSentenceWords[index]),
               ),
             ),
           ],
@@ -178,8 +184,8 @@ class _ManualTimelineReviewDialogState
           onPressed: _saving
               ? null
               : () => setState(() {
-                  draft.resetCurrentSentence();
-                  final words = draft.currentSentenceWords;
+                  widget.viewModel.resetCurrentSentence();
+                  final words = review.currentSentenceWords;
                   _selected = words.isEmpty
                       ? null
                       : WordKey(words.first.sentenceId, words.first.tokenIndex);
@@ -188,7 +194,7 @@ class _ManualTimelineReviewDialogState
           child: Text(l.text('manualTimingResetSentence')),
         ),
         FilledButton(
-          onPressed: _saving || !draft.dirty || draft.validateAll().isNotEmpty
+          onPressed: _saving || !review.dirty || review.allErrors.isNotEmpty
               ? null
               : _save,
           child: _saving
@@ -203,8 +209,8 @@ class _ManualTimelineReviewDialogState
     final l = AppLocalizations.of(context);
     final key = WordKey(word.sentenceId, word.tokenIndex);
     final selected = key == _selected;
-    final dirty = draft.dirtyWords.contains(key);
-    final label = wordLabel(word, draft.currentCue);
+    final dirty = review.dirtyWords.contains(key);
+    final label = wordLabel(word, review.currentCue);
     return InkWell(
       onTap: () => setState(() => _selected = key),
       borderRadius: ListenRadii.controlBorder,
@@ -296,7 +302,7 @@ class _ManualTimelineReviewDialogState
   void _setBoundary(WordTiming word, {Duration? start, Duration? end}) {
     setState(() {
       _selected = WordKey(word.sentenceId, word.tokenIndex);
-      draft.updateWordBoundary(
+      widget.viewModel.updateWordBoundary(
         sentenceId: word.sentenceId,
         tokenIndex: word.tokenIndex,
         start: start,
@@ -313,7 +319,7 @@ class _ManualTimelineReviewDialogState
   }) {
     setState(() {
       _selected = WordKey(word.sentenceId, word.tokenIndex);
-      draft.stepWordBoundary(
+      widget.viewModel.stepWordBoundary(
         sentenceId: word.sentenceId,
         tokenIndex: word.tokenIndex,
         adjustStart: adjustStart,
@@ -339,7 +345,7 @@ class _ManualTimelineReviewDialogState
       _clearSaveFailure();
     });
     try {
-      await widget.onSave(draft);
+      await widget.onSave();
       if (mounted) Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
@@ -359,8 +365,8 @@ class _ManualTimelineReviewDialogState
   void _selectCue(Cue? cue) {
     if (cue == null) return;
     setState(() {
-      draft.selectCue(cue);
-      final words = draft.currentSentenceWords;
+      widget.viewModel.selectCue(cue);
+      final words = review.currentSentenceWords;
       _selected = words.isEmpty
           ? null
           : WordKey(words.first.sentenceId, words.first.tokenIndex);
@@ -369,25 +375,25 @@ class _ManualTimelineReviewDialogState
   }
 
   Cue? _previousCue() {
-    final index = draft.track.cues.indexWhere(
-      (cue) => cue.id == draft.currentCue.id,
+    final index = review.cues.indexWhere(
+      (cue) => cue.id == review.currentCue.id,
     );
     if (index <= 0) return null;
-    return draft.track.cues[index - 1];
+    return review.cues[index - 1];
   }
 
   Cue? _nextCue() {
-    final index = draft.track.cues.indexWhere(
-      (cue) => cue.id == draft.currentCue.id,
+    final index = review.cues.indexWhere(
+      (cue) => cue.id == review.currentCue.id,
     );
-    if (index < 0 || index >= draft.track.cues.length - 1) return null;
-    return draft.track.cues[index + 1];
+    if (index < 0 || index >= review.cues.length - 1) return null;
+    return review.cues[index + 1];
   }
 
   WordTiming? _selectedWord() {
     final selected = _selected;
     if (selected == null) return null;
-    final values = draft.currentSentenceWords.where(
+    final values = review.currentSentenceWords.where(
       (word) =>
           word.sentenceId == selected.sentenceId &&
           word.tokenIndex == selected.tokenIndex,

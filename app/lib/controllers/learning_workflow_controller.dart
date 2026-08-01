@@ -358,7 +358,7 @@ class LearningWorkflowController {
 
   Future<void> refreshDiagnosis({
     required Cue? cue,
-    required Future<Diagnosis> Function(String cueId) diagnose,
+    Future<Diagnosis> Function(String cueId)? diagnose,
     required String? Function() currentCueId,
     required void Function(Diagnosis? diagnosis) setDiagnosis,
   }) async {
@@ -368,7 +368,7 @@ class LearningWorkflowController {
       return;
     }
     try {
-      final value = await diagnose(cue.id);
+      final value = await (diagnose ?? _repository.diagnose)(cue.id);
       if (_isCurrent(generation, cue.id, currentCueId())) {
         setDiagnosis(value);
       }
@@ -378,6 +378,32 @@ class LearningWorkflowController {
       }
     }
   }
+
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) => _repository.recordReadingMarking(
+    lexicalEntryId: lexicalEntryId,
+    sentenceId: sentenceId,
+    surfaceForm: surfaceForm,
+    mediaId: mediaId,
+    translationVisible: translationVisible,
+    understood: understood,
+  );
+
+  Future<L1SpecialtyView> l1SpecialtyOccurrences({
+    required String difficultyKind,
+    required String language,
+    String? trackId,
+  }) => _repository.l1SpecialtyOccurrences(
+    difficultyKind: difficultyKind,
+    language: language,
+    trackId: trackId,
+  );
 
   Future<void> recordCurrentSource({
     required String language,

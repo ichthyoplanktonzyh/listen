@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
+import 'package:llplayer_next/controllers/phonetic_analysis_view_model.dart';
 import 'package:llplayer_next/data/repositories/phonetic_analysis_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -89,8 +90,10 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: PhoneticAnalysisCenter(
-          repository: LocalPhoneticAnalysisRepository(service),
+        home: _OwnedPhoneticCenter(
+          viewModel: PhoneticAnalysisViewModel(
+            LocalPhoneticAnalysisRepository(service),
+          ),
         ),
       ),
     );
@@ -194,4 +197,25 @@ void main() {
       );
     }
   });
+}
+
+class _OwnedPhoneticCenter extends StatefulWidget {
+  const _OwnedPhoneticCenter({required this.viewModel});
+
+  final PhoneticAnalysisViewModel viewModel;
+
+  @override
+  State<_OwnedPhoneticCenter> createState() => _OwnedPhoneticCenterState();
+}
+
+class _OwnedPhoneticCenterState extends State<_OwnedPhoneticCenter> {
+  @override
+  void dispose() {
+    widget.viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      PhoneticAnalysisCenter(viewModel: widget.viewModel);
 }

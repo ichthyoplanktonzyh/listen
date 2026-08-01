@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/controllers/practice_controller.dart';
 import 'package:llplayer_next/data/repositories/practice_repository.dart';
 import 'package:llplayer_next/models/timeline.dart';

@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
+import 'package:llplayer_next/controllers/phonetic_analysis_view_model.dart';
 import 'package:llplayer_next/data/repositories/phonetic_analysis_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
@@ -39,43 +40,45 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: PhoneticAnalysisCenter(
-          repository: _FakePhoneticRepository(
-            loadProviders: () async => [
-              const PhoneticProviderView(
-                id: 'fixture',
-                displayName: 'Research fixture',
-                runtimeId: 'fixture-runtime',
-                runtimeVersion: 'v1',
-                available: false,
-                experimental: true,
-                diagnostic: 'Disabled outside verification',
-              ),
-            ],
-            loadModels: () async => [
-              const PhoneticModelView(
-                id: 'fixture-model',
-                providerId: 'fixture',
-                displayName: 'Fixture model',
-                revision: 'v1',
-                sizeBytes: 0,
-                state: 'custom',
-                installedBytes: 0,
-                license: 'Research only',
-                trainingDataProvenance: 'Synthetic',
-                distributionAllowed: false,
-                applicationVerified: false,
-              ),
-            ],
-            loadJobs: () async => jobs,
-            cancelJobCallback: (id) async {
-              cancelled = id;
-              jobs = [];
-            },
-            retryJobCallback: (id) async {
-              retried = id;
-              jobs = [];
-            },
+        home: _OwnedPhoneticCenter(
+          viewModel: PhoneticAnalysisViewModel(
+            _FakePhoneticRepository(
+              loadProviders: () async => [
+                const PhoneticProviderView(
+                  id: 'fixture',
+                  displayName: 'Research fixture',
+                  runtimeId: 'fixture-runtime',
+                  runtimeVersion: 'v1',
+                  available: false,
+                  experimental: true,
+                  diagnostic: 'Disabled outside verification',
+                ),
+              ],
+              loadModels: () async => [
+                const PhoneticModelView(
+                  id: 'fixture-model',
+                  providerId: 'fixture',
+                  displayName: 'Fixture model',
+                  revision: 'v1',
+                  sizeBytes: 0,
+                  state: 'custom',
+                  installedBytes: 0,
+                  license: 'Research only',
+                  trainingDataProvenance: 'Synthetic',
+                  distributionAllowed: false,
+                  applicationVerified: false,
+                ),
+              ],
+              loadJobs: () async => jobs,
+              cancelJobCallback: (id) async {
+                cancelled = id;
+                jobs = [];
+              },
+              retryJobCallback: (id) async {
+                retried = id;
+                jobs = [];
+              },
+            ),
           ),
         ),
       ),
@@ -129,6 +132,27 @@ void main() {
     await pumpAnalysisCenterFrame(tester);
     expect(retried, 'failed-job');
   });
+}
+
+class _OwnedPhoneticCenter extends StatefulWidget {
+  const _OwnedPhoneticCenter({required this.viewModel});
+
+  final PhoneticAnalysisViewModel viewModel;
+
+  @override
+  State<_OwnedPhoneticCenter> createState() => _OwnedPhoneticCenterState();
+}
+
+class _OwnedPhoneticCenterState extends State<_OwnedPhoneticCenter> {
+  @override
+  void dispose() {
+    widget.viewModel.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      PhoneticAnalysisCenter(viewModel: widget.viewModel);
 }
 
 final class _FakePhoneticRepository implements PhoneticAnalysisRepository {

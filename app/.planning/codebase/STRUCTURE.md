@@ -2,15 +2,16 @@
 
 | Path | Current responsibility |
 |---|---|
-| `lib/main.dart` | composition root and desktop shell |
+| `lib/main.dart` | application composition root and top-level shell wiring |
 | `lib/models` | typed client/domain views and wire-compatible parsing |
-| `lib/controllers` | state machines, coordinators, view models and lifecycle |
+| `lib/controllers` | immutable presentation state, ViewModels, state machines, coordinators and async lifecycle guards |
 | `lib/data/repositories` | injected per-feature data boundaries over `LocalApi` |
-| `lib/services/api_service.dart` | LocalApi transport/process boundary, used only below composition/data layers |
+| `lib/services/api_service.dart` | LocalApi transport/process boundary, used only by repositories and composition/session infrastructure |
+| `lib/services` | platform/API boundaries for files, pickers, environment, bootstrap, transports and diagnostics |
 | `lib/services/api` | endpoint groups as Dart part files |
 | `lib/state` | shared store/builder composition |
-| `lib/screens` | route/screen surfaces |
-| `lib/widgets` | reusable UI organized by journey/surface |
+| `lib/screens` | lean route/screen Views; receive injected ViewModels/Controllers |
+| `lib/widgets` | reusable UI organized by journey/surface; `widgets/flows` owns route-scoped notifier lifetimes |
 | `lib/theme` | breakpoints, colors, type, spacing, radii and motion |
 | `lib/utils` | pure presentation/parsing helpers |
 | `macos` | native runner, permissions and platform integration |

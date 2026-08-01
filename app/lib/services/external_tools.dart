@@ -2,26 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-class EmbeddedSubtitle {
-  const EmbeddedSubtitle({
-    required this.ordinal,
-    required this.codec,
-    required this.title,
-    required this.language,
-    required this.isText,
-  });
+import '../models/embedded_subtitle.dart';
+import '../models/media_download.dart';
 
-  final int ordinal;
-  final String codec;
-  final String? title;
-  final String? language;
-  final bool isText;
-
-  String get label {
-    final name = title ?? language ?? 'Subtitle ${ordinal + 1}';
-    return '$name ($codec${isText ? '' : ', bitmap'})';
-  }
-}
+export '../models/embedded_subtitle.dart';
 
 class ExternalTools {
   ExternalTools({
@@ -252,7 +236,7 @@ class ExternalTools {
   };
 }
 
-class OnlineMediaDownload {
+class OnlineMediaDownload implements MediaDownloadHandle {
   OnlineMediaDownload(this._process) {
     _finish();
   }
@@ -264,9 +248,12 @@ class OnlineMediaDownload {
   String _lastError = '';
   bool _cancelled = false;
 
+  @override
   Stream<double> get progress => _progress.stream;
+  @override
   Future<String?> get completed => _result.future;
 
+  @override
   void cancel() {
     _cancelled = true;
     _process.kill(ProcessSignal.sigterm);

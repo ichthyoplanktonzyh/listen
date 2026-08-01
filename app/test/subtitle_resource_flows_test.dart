@@ -164,4 +164,48 @@ void main() {
     expect(calls, isEmpty);
     expect(find.byType(SimpleDialog), findsNothing);
   });
+
+  testWidgets(
+    'transcription center without a view model reports missing core',
+    (tester) async {
+      final player = PlayerController();
+      await tester.pumpWidget(
+        _Harness(
+          onPressed: (context) => openTranscriptionCenterFlow(
+            context: context,
+            viewModel: null,
+            createRegenerateViewModel: (_) => throw StateError('unreachable'),
+            playerController: player,
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('go'));
+      await tester.pumpAndSettle();
+
+      expect(player.status, 'Connect the local core first');
+    },
+  );
+
+  testWidgets('cold-start flow without a factory reports missing core', (
+    tester,
+  ) async {
+    final player = PlayerController();
+    await tester.pumpWidget(
+      _Harness(
+        onPressed: (context) async => openColdStartMarkingFlow(
+          context: context,
+          createViewModel: null,
+          playerController: player,
+          subtitleController: SubtitleController(),
+          resourceActions: _resourceActions(() => null),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+
+    expect(player.status, 'Connect the local core first');
+  });
 }

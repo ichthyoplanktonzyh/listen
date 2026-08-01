@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/manual_review_controller.dart';
+import 'package:llplayer_next/controllers/manual_review_flow_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -72,12 +73,13 @@ void main() {
     initialCue: cue,
   );
 
-  Future<ManualReviewDraft> pump(
+  Future<ManualReviewEditorViewModel> pump(
     WidgetTester tester, {
     Locale locale = const Locale('en'),
     Future<void> Function(ManualReviewDraft draft)? onSave,
   }) async {
     final draft = newDraft();
+    final viewModel = ManualReviewEditorViewModel(draft);
     await tester.pumpWidget(
       MaterialApp(
         locale: locale,
@@ -87,14 +89,14 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: ManualTimelineReviewDialog(
-          draft: draft,
+          viewModel: viewModel,
           onPlayRange: (start, end) async {},
-          onSave: onSave ?? (draft) async {},
+          onSave: () => onSave?.call(draft) ?? Future<void>.value(),
         ),
       ),
     );
     await tester.pumpAndSettle();
-    return draft;
+    return viewModel;
   }
 
   testWidgets('the dialog speaks the interface language, in both directions', (
@@ -160,7 +162,7 @@ void main() {
   testWidgets('an edited row says you adjusted it, in the reader language', (
     tester,
   ) async {
-    final draft = await pump(tester, locale: const Locale('zh'));
+    final viewModel = await pump(tester, locale: const Locale('zh'));
     final l = AppLocalizations(const Locale('zh'));
 
     // Before the edit the row carries the algorithm's provenance verbatim —
@@ -168,7 +170,7 @@ void main() {
     expect(find.text('forced_aligned'), findsNWidgets(2));
     expect(find.text(l.text('manualTimingUserAdjusted')), findsNothing);
 
-    draft.updateWordBoundary(
+    viewModel.updateWordBoundary(
       sentenceId: 'sentence-1',
       tokenIndex: 0,
       start: const Duration(milliseconds: 1123),
@@ -209,13 +211,13 @@ void main() {
     const body =
         '{"code":"validation_error","message":"recording metadata must not be '
         'empty","correlation_id":"api-853","retryable":false}';
-    final draft = await pump(
+    final viewModel = await pump(
       tester,
       onSave: (draft) async => throw ApiFailure.parse(body),
     );
     final l = AppLocalizations(const Locale('en'));
 
-    draft.updateWordBoundary(
+    viewModel.updateWordBoundary(
       sentenceId: 'sentence-1',
       tokenIndex: 0,
       start: const Duration(milliseconds: 1123),
@@ -255,13 +257,13 @@ void main() {
   });
 
   testWidgets('editing again clears a stale failure message', (tester) async {
-    final draft = await pump(
+    final viewModel = await pump(
       tester,
       onSave: (draft) async => throw const ApiFailure(raw: 'boom'),
     );
     final l = AppLocalizations(const Locale('en'));
 
-    draft.updateWordBoundary(
+    viewModel.updateWordBoundary(
       sentenceId: 'sentence-1',
       tokenIndex: 0,
       start: const Duration(milliseconds: 1123),

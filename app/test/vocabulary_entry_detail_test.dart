@@ -6,6 +6,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/controllers/semantic_search_view_model.dart';
+import 'package:llplayer_next/controllers/slice_player_controller.dart';
+import 'package:llplayer_next/controllers/vocabulary_view_model.dart';
 import 'package:llplayer_next/data/repositories/lexical_repository.dart';
 import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/localization.dart';
@@ -252,8 +255,14 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         home: VocabularyScreen(
-          repository: LexicalRepository(api),
-          semanticSearchRepository: LocalSemanticSearchRepository(api),
+          viewModel: VocabularyViewModel(
+            repository: LexicalRepository(api),
+            language: 'en',
+          ),
+          semanticSearchViewModel: SemanticSearchViewModel(
+            LocalSemanticSearchRepository(api),
+          ),
+          slicePlayer: SlicePlayerController(),
           language: 'en',
           onExport: () async {},
           onImport: () async {},

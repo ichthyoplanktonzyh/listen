@@ -26,9 +26,9 @@ void main() {
         first.complete([_llmProvider('old')]);
         await firstLoad;
 
-        expect(viewModel.providers.single.id, 'new');
+        expect(viewModel.state.providers.single.id, 'new');
         expect(
-          () => viewModel.providers.add(_llmProvider('extra')),
+          () => viewModel.state.providers.add(_llmProvider('extra')),
           throwsA(isA<UnsupportedError>()),
         );
         viewModel.dispose();
@@ -39,7 +39,7 @@ void main() {
       final repository = _LlmRepository()
         ..immediateLoad = [_llmProvider('saved')];
       final viewModel = LlmProviderSettingsViewModel(repository);
-      const draft = LlmProviderDraft(
+      final input = LlmProviderFormInput(
         displayName: 'Provider',
         adapterKind: 'openai_chat_completions',
         baseUrl: 'https://example.test/v1',
@@ -48,10 +48,10 @@ void main() {
         secret: 'write-only',
       );
 
-      expect(await viewModel.register(draft), isTrue);
-      expect(viewModel.providers.single.id, 'saved');
-      expect(repository.registered, same(draft));
-      expect(viewModel.submitting, isFalse);
+      expect(await viewModel.register(input), isTrue);
+      expect(viewModel.state.providers.single.id, 'saved');
+      expect(repository.registered?.secret, 'write-only');
+      expect(viewModel.state.submitting, isFalse);
       viewModel.dispose();
     });
   });
@@ -66,9 +66,9 @@ void main() {
 
     await viewModel.load();
 
-    expect(viewModel.loading, isFalse);
-    expect(viewModel.failure?.messageKey, 'realtimeProvidersLoadFailed');
-    expect(viewModel.failure?.detail?.code, 'temporarily_unavailable');
+    expect(viewModel.state.loading, isFalse);
+    expect(viewModel.state.failure?.messageKey, 'realtimeProvidersLoadFailed');
+    expect(viewModel.state.failure?.detail?.code, 'temporarily_unavailable');
     viewModel.dispose();
   });
 
@@ -82,8 +82,8 @@ void main() {
     await viewModel.refresh();
 
     expect(repository.analyzedTracks, ['track-1']);
-    expect(viewModel.track?.analyzedSentenceCount, 2);
-    expect(viewModel.busy, isFalse);
+    expect(viewModel.state.track?.analyzedSentenceCount, 2);
+    expect(viewModel.state.busy, isFalse);
     viewModel.dispose();
   });
 }

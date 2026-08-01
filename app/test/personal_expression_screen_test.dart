@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/personal_expression_view_model.dart';
 import 'package:llplayer_next/data/repositories/personal_expression_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/personal_expression_screen.dart';
@@ -170,6 +171,9 @@ Future<void> _pumpScreen(
 }) async {
   l = AppLocalizations(locale);
   _setWindow(tester, size);
+  final repository = LocalPersonalExpressionRepository(api);
+  final viewModel = PersonalExpressionViewModel(repository, language: 'en');
+  addTearDown(viewModel.dispose);
   await tester.pumpWidget(
     MaterialApp(
       // Keyed on the locale so re-pumping with a different one rebuilds from
@@ -184,7 +188,28 @@ Future<void> _pumpScreen(
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: PersonalExpressionScreen(
-        repository: LocalPersonalExpressionRepository(api),
+        viewModel: viewModel,
+        onOpenPattern: (context, pattern) async {
+          final detailViewModel = PersonalExpressionDetailViewModel(
+            repository,
+            pattern: pattern,
+          );
+          try {
+            return await Navigator.of(
+                  context,
+                ).push<PersonalExpressionDetailOutcome>(
+                  MaterialPageRoute(
+                    builder: (_) => PersonalExpressionDetailScreen(
+                      viewModel: detailViewModel,
+                      pattern: pattern,
+                    ),
+                  ),
+                ) ??
+                PersonalExpressionDetailOutcome.closed;
+          } finally {
+            detailViewModel.dispose();
+          }
+        },
         language: 'en',
       ),
     ),

@@ -1,14 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../controllers/manual_review_controller.dart';
-import '../../controllers/media_session_coordinator.dart';
-import '../../controllers/player_controller.dart';
-import '../../controllers/resource_actions_coordinator.dart';
-import '../../controllers/subtitle_controller.dart';
-import '../../data/repositories/manual_review_repository.dart';
+import '../../controllers/manual_review_flow_controller.dart';
 import '../../localization.dart';
-import '../../models/timeline.dart';
-import '../../player_adapter.dart';
 import '../panels/manual_timeline_review_dialog.dart';
 
 /// Opens the sentence-level manual word-timing review dialog for the active
@@ -18,130 +11,52 @@ import '../panels/manual_timeline_review_dialog.dart';
 /// flow invocation, so it is a local here rather than host state.
 Future<void> openManualReviewFlow({
   required BuildContext context,
-  required ManualReviewRepository? repository,
-  required DesktopPlayerAdapter adapter,
-  required PlayerController playerController,
-  required SubtitleController subtitleController,
-  required ResourceActionsCoordinator resourceActions,
-  required MediaSessionCoordinator mediaSession,
+  required ManualReviewFlowController controller,
 }) async {
   final l = AppLocalizations.of(context);
-  final track = subtitleController.primaryTrack;
-  // Unavailable State (CONTEXT.md): manual review is a user row action; each
-  // missing prerequisite names its own recovery action.
-  if (repository == null) {
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  if (track == null) {
-    playerController.setStatus(l.text('statusActivateSubtitleFirst'));
-    return;
-  }
-  var statusPristine = false;
-
-  Future<void> playRange(Duration start, Duration end) async {
-    if (end <= start) return;
-    playerController.setSourceLoop(start, end, label: 'loopReview');
-    subtitleController.setLoopCue(false);
-    await adapter.seek(start);
-    await adapter.play();
-  }
-
-  Future<void> saveDraft(ManualReviewDraft draft) async {
-    final trackId = subtitleController.primaryTrack?.id;
-    if (trackId == null) {
-      // A silent return here would let the dialog pop as if the save
-      // succeeded; throwing surfaces the refusal in the dialog's error line
-      // (the same path validation errors take).
-      throw StateError(l.text('statusManualReviewTrackChanged'));
-    }
-    final errors = draft.validateAll();
-    if (errors.isNotEmpty) {
-      throw StateError(errors.join('; '));
-    }
-    playerController.setStatus(l.text('statusManualReviewSaving'));
-    statusPristine = false;
-    await repository.saveTimeline(trackId, draft.createPayload());
-    if (!context.mounted) return;
-    // Reload enhancements only while the reviewed track is still current;
-    // the save itself succeeded either way, so the confirmation still shows.
-    if (subtitleController.primaryTrack?.id == trackId) {
-      await mediaSession.loadSpeechEnhancements(trackId);
-    }
-    if (context.mounted) {
-      playerController.setStatus(l.text('statusManualReviewSaved'));
-    }
-  }
-
-  try {
-    playerController.setStatus(l.text('statusManualReviewLoading'));
-    statusPristine = true;
-    await resourceActions.loadTimelineResource(track.id);
-    final active = subtitleController.wordTimelineSummaries
-        .where((summary) => summary.isActive)
-        .firstOrNull;
-    final activeTimelineId =
-        active?.id ??
-        subtitleController.llTimelineDocument?.activeWordTimelineId;
-    if (activeTimelineId == null) {
-      if (context.mounted) {
-        playerController.setStatus(l.text('statusManualReviewNoTimeline'));
-      }
-      return;
-    }
-    final timeline = await repository.wordTimeline(activeTimelineId);
-    final initialCue = _initialCue(subtitleController, track, timeline);
-    if (initialCue == null) {
-      if (context.mounted) {
-        playerController.setStatus(l.text('statusManualReviewNoWords'));
-      }
-      return;
-    }
-    final draft = ManualReviewDraft(
-      track: track,
-      sourceTimeline: timeline,
-      words: timeline.words,
-      initialCue: initialCue,
-    );
-    if (!context.mounted) return;
-    final previousLoopStart = playerController.sourceLoopStart;
-    final previousLoopEnd = playerController.sourceLoopEnd;
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (_) => ManualTimelineReviewDialog(
-          draft: draft,
-          onPlayRange: playRange,
-          onSave: saveDraft,
-        ),
-      );
-    } finally {
-      playerController.setSourceLoop(previousLoopStart, previousLoopEnd);
-    }
-    if (context.mounted && statusPristine) {
-      playerController.setStatus(l.text('statusManualReviewClosed'));
-    }
-  } catch (error) {
-    if (context.mounted) {
-      playerController.setStatus(
+  controller.reportStatus(l.text('statusManualReviewLoading'));
+  final preparation = await controller.prepare();
+  if (!context.mounted) return;
+  switch (preparation) {
+    case ManualReviewUnavailable():
+      controller.reportStatus(l.text('statusConnectLocalCoreFirst'));
+    case ManualReviewNoTrack():
+      controller.reportStatus(l.text('statusActivateSubtitleFirst'));
+    case ManualReviewNoTimeline():
+      controller.reportStatus(l.text('statusManualReviewNoTimeline'));
+    case ManualReviewNoWords():
+      controller.reportStatus(l.text('statusManualReviewNoWords'));
+    case ManualReviewLoadFailed(:final failure):
+      controller.reportStatus(
         l.text('statusManualReviewFailed'),
         error: true,
-        failure: repository.failureDetail(error),
+        failure: failure,
       );
-    }
+    case ManualReviewSuperseded():
+      return;
+    case ManualReviewReady(:final editor):
+      final previousLoopStart = controller.loopStart;
+      final previousLoopEnd = controller.loopEnd;
+      try {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => ManualTimelineReviewDialog(
+            viewModel: editor,
+            onPlayRange: controller.playRange,
+            onSave: () async {
+              controller.reportStatus(l.text('statusManualReviewSaving'));
+              await controller.saveCurrent();
+              if (context.mounted) {
+                controller.reportStatus(l.text('statusManualReviewSaved'));
+              }
+            },
+          ),
+        );
+      } finally {
+        controller.restoreLoop(previousLoopStart, previousLoopEnd);
+      }
+      if (context.mounted && !controller.state.saveAttempted) {
+        controller.reportStatus(l.text('statusManualReviewClosed'));
+      }
   }
-}
-
-Cue? _initialCue(
-  SubtitleController subtitleController,
-  SubtitleTrack track,
-  WordTimeline timeline,
-) {
-  final sentenceIds = timeline.words.map((word) => word.sentenceId).toSet();
-  final current = subtitleController.currentPrimaryCue;
-  if (current != null && sentenceIds.contains(current.id)) return current;
-  for (final cue in track.cues) {
-    if (sentenceIds.contains(cue.id)) return cue;
-  }
-  return null;
 }

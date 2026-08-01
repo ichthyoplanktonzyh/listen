@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/manual_review_controller.dart';
+import 'package:llplayer_next/controllers/manual_review_flow_controller.dart';
 import 'package:llplayer_next/models/timeline.dart';
 
 void main() {
@@ -105,4 +106,36 @@ void main() {
     expect(draft.validateCurrentSentence(), isEmpty);
     expect(draft.dirty, false);
   });
+
+  test(
+    'editor intents publish immutable snapshots without mutating old state',
+    () {
+      final viewModel = ManualReviewEditorViewModel(
+        ManualReviewDraft(
+          track: track,
+          sourceTimeline: sourceTimeline,
+          words: sourceTimeline.words,
+          initialCue: cue,
+        ),
+      );
+      final before = viewModel.state;
+
+      viewModel.updateWordBoundary(
+        sentenceId: 'sentence-1',
+        tokenIndex: 0,
+        start: const Duration(milliseconds: 1123),
+      );
+      final after = viewModel.state;
+
+      expect(before.dirty, isFalse);
+      expect(before.currentSentenceWords.first.start.inMilliseconds, 1100);
+      expect(after.dirtyWords, contains(const WordKey('sentence-1', 0)));
+      expect(after.currentSentenceWords.first.start.inMilliseconds, 1123);
+      expect(() => after.currentSentenceWords.clear(), throwsUnsupportedError);
+      expect(() => after.dirtyWords.clear(), throwsUnsupportedError);
+      expect(() => after.allErrors.clear(), throwsUnsupportedError);
+      expect(() => after.cues.clear(), throwsUnsupportedError);
+      expect(() => after.currentCue.tokens.clear(), throwsUnsupportedError);
+    },
+  );
 }

@@ -79,14 +79,11 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         home: Scaffold(
-          body: SemanticSearchDialog(
-            repository: repository,
-            language: 'en',
-            viewModel: viewModel,
-          ),
+          body: SemanticSearchDialog(language: 'en', viewModel: viewModel),
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), '  meaning  ');
     await tester.tap(find.byIcon(Icons.search));

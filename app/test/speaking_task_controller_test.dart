@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/controllers/speaking_task_controller.dart';
 import 'package:llplayer_next/data/repositories/speaking_task_repository.dart';
 import 'package:llplayer_next/localization.dart';

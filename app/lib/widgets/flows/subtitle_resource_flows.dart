@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/learning_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
+import '../../controllers/cold_start_marking_view_model.dart';
+import '../../controllers/phonetic_analysis_view_model.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
-import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
-import '../../data/repositories/cold_start_marking_repository.dart';
-import '../../data/repositories/phonetic_analysis_repository.dart';
-import '../../data/repositories/transcription_repository.dart';
+import '../../controllers/transcription_view_models.dart';
 import '../../localization.dart';
 import '../../models/task_status.dart';
 import '../../models/timeline.dart';
+import '../../models/runtime_resources.dart';
 import '../../phonetic_analysis_ui.dart';
 import '../../screens/subtitle_resources_screen.dart';
 import '../../transcription_ui.dart';
@@ -21,6 +21,35 @@ import '../panels/cold_start_marking_sheet.dart';
 /// delete/export confirmation, subtitle generation, transcription and
 /// phonetic-analysis centers, the resources screen, and cold-start marking.
 /// Parameter names mirror the host's controller fields.
+
+typedef ColdStartMarkingViewModelFactory =
+    ColdStartMarkingViewModel Function({
+      required String trackId,
+      required String language,
+    });
+typedef RegenerateSubtitlesViewModelFactory =
+    GenerateSubtitlesViewModel Function(TranscriptionJobView job);
+
+class _OwnedNotifierRoute extends StatefulWidget {
+  const _OwnedNotifierRoute({required this.notifier, required this.child});
+
+  final ChangeNotifier notifier;
+  final Widget child;
+
+  @override
+  State<_OwnedNotifierRoute> createState() => _OwnedNotifierRouteState();
+}
+
+class _OwnedNotifierRouteState extends State<_OwnedNotifierRoute> {
+  @override
+  void dispose() {
+    widget.notifier.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 
 Future<void> deleteSubtitleResourceFlow({
   required BuildContext context,
@@ -97,28 +126,28 @@ Future<void> exportSubtitleResourceFlow({
 
 Future<void> generateSubtitlesFlow({
   required BuildContext context,
-  required TranscriptionRepository? repository,
+  required GenerateSubtitlesViewModel? viewModel,
   required PlayerController playerController,
-  required SettingsController settingsController,
-  required bool secondary,
   required void Function(UserTaskStatus value) recordTaskStatus,
 }) async {
   final l = AppLocalizations.of(context);
-  if (repository == null || playerController.mediaId == null) {
+  if (viewModel == null || playerController.mediaId == null) {
+    viewModel?.dispose();
     playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
     return;
   }
-  final created = await showGenerateSubtitles(
-    context: context,
-    repository: repository,
-    mediaId: playerController.mediaId!,
-    secondary: secondary,
-    preferredQuality: settingsController.transcriptionQuality,
-    preferredLanguage: settingsController.transcriptionLanguage,
-  );
+  bool created;
+  try {
+    created = await showGenerateSubtitles(
+      context: context,
+      viewModel: viewModel,
+    );
+  } finally {
+    viewModel.dispose();
+  }
   if (created && context.mounted) {
     playerController.setStatus(
-      secondary
+      viewModel.secondary
           ? l.text('secondarySubtitleGenerationStarted')
           : l.text('primarySubtitleGenerationStarted'),
     );
@@ -136,11 +165,11 @@ Future<void> generateSubtitlesFlow({
 
 Future<void> openTranscriptionCenterFlow({
   required BuildContext context,
-  required TranscriptionRepository? repository,
+  required TranscriptionCenterViewModel? viewModel,
+  required RegenerateSubtitlesViewModelFactory createRegenerateViewModel,
   required PlayerController playerController,
-  required LoadGeneratedTrack loadTrack,
 }) async {
-  if (repository == null) {
+  if (viewModel == null) {
     // Unavailable State (CONTEXT.md): the transcription center is a user menu
     // entry; report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -149,18 +178,39 @@ Future<void> openTranscriptionCenterFlow({
   }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
-      builder: (_) =>
-          TranscriptionCenter(repository: repository, loadTrack: loadTrack),
+      builder: (routeContext) {
+        Future<void> regenerate(TranscriptionJobView job) async {
+          final regenerateViewModel = createRegenerateViewModel(job);
+          bool created;
+          try {
+            created = await showGenerateSubtitles(
+              context: routeContext,
+              viewModel: regenerateViewModel,
+            );
+          } finally {
+            regenerateViewModel.dispose();
+          }
+          if (created) await viewModel.refresh();
+        }
+
+        return _OwnedNotifierRoute(
+          notifier: viewModel,
+          child: TranscriptionCenter(
+            viewModel: viewModel,
+            onRegenerate: regenerate,
+          ),
+        );
+      },
     ),
   );
 }
 
 Future<void> openPhoneticAnalysisCenterFlow({
   required BuildContext context,
-  required PhoneticAnalysisRepository? repository,
+  required PhoneticAnalysisViewModel? viewModel,
   required PlayerController playerController,
 }) async {
-  if (repository == null) {
+  if (viewModel == null) {
     // Unavailable State (CONTEXT.md): the analysis center is a user menu
     // entry; report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -169,14 +219,17 @@ Future<void> openPhoneticAnalysisCenterFlow({
   }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
-      builder: (_) => PhoneticAnalysisCenter(repository: repository),
+      builder: (_) => _OwnedNotifierRoute(
+        notifier: viewModel,
+        child: PhoneticAnalysisCenter(viewModel: viewModel),
+      ),
     ),
   );
 }
 
 void openColdStartMarkingFlow({
   required BuildContext context,
-  required ColdStartMarkingRepository? repository,
+  required ColdStartMarkingViewModelFactory? createViewModel,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required ResourceActionsCoordinator resourceActions,
@@ -187,7 +240,7 @@ void openColdStartMarkingFlow({
   // Unavailable State (CONTEXT.md): the cold-start button renders whenever
   // the content-fit card does, so each missing prerequisite names its own
   // recovery action instead of leaving a dead button.
-  if (repository == null) {
+  if (createViewModel == null) {
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
     return;
   }
@@ -199,21 +252,20 @@ void openColdStartMarkingFlow({
     playerController.setStatus(l.text('statusSetSubtitleLanguageFirst'));
     return;
   }
+  final viewModel = createViewModel(trackId: trackId, language: language);
   showDialog<void>(
     context: context,
     builder: (_) => ColdStartMarkingSheet(
-      repository: repository,
-      trackId: trackId,
-      language: language,
+      viewModel: viewModel,
       onDone: () => resourceActions.loadContentFit(trackId),
     ),
-  );
+  ).whenComplete(viewModel.dispose);
 }
 
 Future<void> openSubtitleResourcesFlow({
   required BuildContext context,
   required bool backendAvailable,
-  required ColdStartMarkingRepository? coldStartRepository,
+  required ColdStartMarkingViewModelFactory? createColdStartViewModel,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required LearningController learningController,
@@ -267,7 +319,7 @@ Future<void> openSubtitleResourcesFlow({
         onDeleteChunkTimeline: resourceActions.deleteChunkTimeline,
         onStartColdStart: () => openColdStartMarkingFlow(
           context: context,
-          repository: coldStartRepository,
+          createViewModel: createColdStartViewModel,
           playerController: playerController,
           subtitleController: subtitleController,
           resourceActions: resourceActions,

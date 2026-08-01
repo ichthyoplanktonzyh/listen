@@ -42,7 +42,10 @@ class BackendEventCoordinator {
   updateCapabilityProfile;
 
   void handle(Map<String, dynamic> raw) {
-    final event = BackendEvent.fromJson(raw);
+    handleEvent(BackendEvent.fromJson(raw));
+  }
+
+  void handleEvent(BackendEvent event) {
     if (event is ServiceStartedEvent) {
       unawaited(loadWordEntries());
       final trackId = currentPrimaryTrackId();

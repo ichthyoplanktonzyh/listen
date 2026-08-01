@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/provider_settings_view_models.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -9,16 +8,9 @@ import '../common/api_failure_disclosure.dart';
 import '../common/listen_error_state.dart';
 
 class SyntaxCapabilitySettings extends StatefulWidget {
-  const SyntaxCapabilitySettings({
-    super.key,
-    this.repository,
-    this.viewModel,
-    this.currentTrackId,
-  }) : assert(repository != null || viewModel != null);
+  const SyntaxCapabilitySettings({super.key, required this.viewModel});
 
-  final SyntaxCapabilityRepository? repository;
-  final SyntaxCapabilitySettingsViewModel? viewModel;
-  final String? currentTrackId;
+  final SyntaxCapabilitySettingsViewModel viewModel;
 
   @override
   State<SyntaxCapabilitySettings> createState() =>
@@ -26,25 +18,16 @@ class SyntaxCapabilitySettings extends StatefulWidget {
 }
 
 class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
-  late final SyntaxCapabilitySettingsViewModel _viewModel;
-  late final bool _ownsViewModel;
+  SyntaxCapabilitySettingsViewModel get _viewModel => widget.viewModel;
 
   @override
   void initState() {
     super.initState();
-    _ownsViewModel = widget.viewModel == null;
-    _viewModel =
-        widget.viewModel ??
-        SyntaxCapabilitySettingsViewModel(
-          widget.repository!,
-          currentTrackId: widget.currentTrackId,
-        );
     _viewModel.refresh();
   }
 
   @override
   void dispose() {
-    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 
@@ -58,7 +41,8 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
 
   Widget _buildContent(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final capability = _viewModel.capability;
+    final state = _viewModel.state;
+    final capability = state.capability;
     if (capability == null) {
       return const LinearProgressIndicator();
     }
@@ -97,11 +81,11 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
           const SizedBox(height: ListenSpacing.gap6),
           ListenErrorNotice(message: capability.error!),
         ],
-        if (_viewModel.failure != null) ...[
+        if (state.failure != null) ...[
           const SizedBox(height: ListenSpacing.gap6),
           ApiFailureNotice(
-            message: l.text(_viewModel.failure!.messageKey),
-            failure: _viewModel.failure!.detail,
+            message: l.text(state.failure!.messageKey),
+            failure: state.failure!.detail,
           ),
         ],
         const SizedBox(height: ListenSpacing.gap8),
@@ -111,7 +95,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
           children: [
             if (capability.status == 'not_installed')
               FilledButton.icon(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.runAction('install'),
                 icon: const Icon(Icons.download_outlined),
@@ -124,26 +108,26 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
               ),
             if ({'failed', 'partial'}.contains(capability.status))
               FilledButton(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.runAction('install'),
                 child: Text(l.text('retry')),
               ),
             if (capability.isInstalled && !capability.isDownloading) ...[
               OutlinedButton(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.runAction('validate'),
                 child: Text(l.text('syntaxVerify')),
               ),
               OutlinedButton(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.runAction('update'),
                 child: Text(l.text('syntaxUpdate')),
               ),
               OutlinedButton(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.runAction(
                         capability.enabled ? 'disable' : 'enable',
@@ -155,7 +139,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
                 ),
               ),
               TextButton(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.runAction('uninstall'),
                 child: Text(l.text('syntaxUninstall')),
@@ -163,21 +147,21 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
             ],
           ],
         ),
-        if (capability.isReady && widget.currentTrackId != null) ...[
+        if (capability.isReady && _viewModel.currentTrackId != null) ...[
           const Divider(),
           Row(
             children: [
               Expanded(
                 child: Text(
-                  _viewModel.track == null
+                  state.track == null
                       ? l.text('syntaxTrackBackground')
-                      : '${_statusLabel(l, _viewModel.track!.status)} · ${_viewModel.track!.analyzedSentenceCount}/'
-                            '${_viewModel.track!.sentenceCount} ${l.text('syntaxSentences')}'
-                            '${_viewModel.track!.cacheHit ? ' · ${l.text('syntaxCacheReused')}' : ''}',
+                      : '${_statusLabel(l, state.track!.status)} · ${state.track!.analyzedSentenceCount}/'
+                            '${state.track!.sentenceCount} ${l.text('syntaxSentences')}'
+                            '${state.track!.cacheHit ? ' · ${l.text('syntaxCacheReused')}' : ''}',
                 ),
               ),
               TextButton(
-                onPressed: _viewModel.busy
+                onPressed: state.busy
                     ? null
                     : () => _viewModel.analyze(force: true),
                 child: Text(l.text('syntaxRebuild')),

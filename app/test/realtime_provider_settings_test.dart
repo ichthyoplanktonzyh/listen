@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/provider_settings_view_models.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/settings/realtime_provider_settings.dart';
@@ -88,7 +89,9 @@ Widget _host(LocalApi api) => MaterialApp(
   home: Scaffold(
     body: SingleChildScrollView(
       child: RealtimeProviderSettings(
-        repository: LocalRealtimeProviderRepository(api),
+        viewModel: RealtimeProviderSettingsViewModel(
+          LocalRealtimeProviderRepository(api),
+        ),
       ),
     ),
   ),

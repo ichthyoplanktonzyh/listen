@@ -57,6 +57,23 @@ abstract interface class LearningRepository {
     String capability, {
     String? conclusion,
   });
+
+  Future<Diagnosis> diagnose(String sentenceId);
+
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  });
+
+  Future<L1SpecialtyView> l1SpecialtyOccurrences({
+    required String difficultyKind,
+    required String language,
+    String? trackId,
+  });
 }
 
 /// Local-core implementation. The supplier lets the long-lived coordinator
@@ -161,6 +178,37 @@ class LocalLearningRepository implements LearningRepository {
       conclusion: conclusion,
     );
   }
+
+  @override
+  Future<Diagnosis> diagnose(String sentenceId) => _api.diagnose(sentenceId);
+
+  @override
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) => _api.recordReadingMarking(
+    lexicalEntryId: lexicalEntryId,
+    sentenceId: sentenceId,
+    surfaceForm: surfaceForm,
+    mediaId: mediaId,
+    translationVisible: translationVisible,
+    understood: understood,
+  );
+
+  @override
+  Future<L1SpecialtyView> l1SpecialtyOccurrences({
+    required String difficultyKind,
+    required String language,
+    String? trackId,
+  }) => _api.l1SpecialtyOccurrences(
+    difficultyKind: difficultyKind,
+    language: language,
+    trackId: trackId,
+  );
 }
 
 /// Null object for workflows that only use the request-generation helpers.
@@ -237,5 +285,25 @@ class UnavailableLearningRepository implements LearningRepository {
     String? status, {
     required String language,
     Map<String, dynamic>? source,
+  }) => _unavailable();
+
+  @override
+  Future<Diagnosis> diagnose(String sentenceId) => _unavailable();
+
+  @override
+  Future<void> recordReadingMarking({
+    required String lexicalEntryId,
+    String? sentenceId,
+    required String surfaceForm,
+    String? mediaId,
+    required bool translationVisible,
+    required bool understood,
+  }) => _unavailable();
+
+  @override
+  Future<L1SpecialtyView> l1SpecialtyOccurrences({
+    required String difficultyKind,
+    required String language,
+    String? trackId,
   }) => _unavailable();
 }

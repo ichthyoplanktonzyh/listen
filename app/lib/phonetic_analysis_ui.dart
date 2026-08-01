@@ -1,10 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import 'controllers/phonetic_analysis_view_model.dart';
 import 'localization.dart';
-import 'data/repositories/phonetic_analysis_repository.dart';
-import 'models/named_failure.dart';
 import 'models/runtime_resources.dart';
 import 'theme/icon_size.dart';
 import 'theme/radii.dart';
@@ -16,129 +13,86 @@ import 'widgets/common/listen_error_state.dart';
 import 'widgets/common/listen_loading.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
-  const PhoneticAnalysisCenter({required this.repository, super.key});
+  const PhoneticAnalysisCenter({required this.viewModel, super.key});
 
-  final PhoneticAnalysisRepository repository;
+  final PhoneticAnalysisViewModel viewModel;
 
   @override
   State<PhoneticAnalysisCenter> createState() => _PhoneticAnalysisCenterState();
 }
 
 class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
-  List<PhoneticProviderView> providers = const [];
-  List<PhoneticModelView> models = const [];
-  List<PhoneticJobView> jobs = const [];
-  Timer? timer;
-
-  /// The last failure, as a *key* plus typed detail — see `NamedFailure`.
-  ///
-  /// This was a `String? error` holding `value.toString()`, rendered verbatim
-  /// as the whole panel's body. Only one of the two sites that filled it was
-  /// visible to the source gate: `_refresh` catches into a variable called
-  /// `value`, which is not a name the gate recognises as an exception. The
-  /// leak was the same either way.
-  NamedFailure? failure;
-
-  bool get _hasActiveJobs => jobs.any((job) => _isActive(job.status));
-  bool get _hasTerminalJobs => jobs.any((job) => _isTerminal(job.status));
-
   @override
   void initState() {
     super.initState();
-    unawaited(_refresh());
-    _scheduleTimer();
-  }
-
-  @override
-  void dispose() {
-    timer?.cancel();
-    super.dispose();
-  }
-
-  void _scheduleTimer() {
-    timer?.cancel();
-    final interval = _hasActiveJobs
-        ? const Duration(seconds: 1)
-        : const Duration(seconds: 5);
-    timer = Timer.periodic(interval, (_) => _refresh());
-  }
-
-  Future<void> _refresh() async {
-    try {
-      final providerValues = await widget.repository.providers();
-      final modelValues = await widget.repository.models();
-      final jobValues = await widget.repository.jobs();
-      if (!mounted) return;
-      final hadActive = _hasActiveJobs;
-      setState(() {
-        providers = providerValues;
-        models = modelValues;
-        jobs = jobValues;
-        failure = null;
-      });
-      if (hadActive != _hasActiveJobs) _scheduleTimer();
-    } catch (error) {
-      if (!mounted) return;
-      setState(
-        () => failure = NamedFailure(
-          'phoneticAnalysisLoadFailed',
-          detail: widget.repository.failureDetail(error),
-        ),
-      );
-    }
+    widget.viewModel.start();
   }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(l.text('phoneticAnalysisCenter')),
-          bottom: TabBar(
-            tabs: [
-              Tab(text: l.text('models')),
-              Tab(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(l.text('jobs')),
-                    if (jobs.isNotEmpty) ...[
-                      const SizedBox(width: ListenSpacing.gap6),
-                      _jobCountBadge(),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          ],
-        ),
-        body: failure != null
-            ? ListenErrorState(
-                message: l.text(failure!.messageKey),
-                action: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton(
-                      onPressed: _refresh,
-                      child: Text(l.text('retry')),
+    return ListenableBuilder(
+      listenable: widget.viewModel,
+      builder: (context, _) {
+        final state = widget.viewModel.state;
+        return DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(l.text('phoneticAnalysisCenter')),
+              bottom: TabBar(
+                tabs: [
+                  Tab(text: l.text('models')),
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(l.text('jobs')),
+                        if (state.jobs.isNotEmpty) ...[
+                          const SizedBox(width: ListenSpacing.gap6),
+                          _jobCountBadge(),
+                        ],
+                      ],
                     ),
-                    if (ApiFailureDisclosure.hasDetail(failure!.detail))
-                      ApiFailureDisclosure(failure: failure!.detail!),
-                  ],
+                  ),
+                ],
+              ),
+              actions: [
+                IconButton(
+                  onPressed: widget.viewModel.refresh,
+                  icon: const Icon(Icons.refresh),
                 ),
-              )
-            : TabBarView(children: [_models(l), _jobs(l)]),
-      ),
+              ],
+            ),
+            body: state.failure != null
+                ? ListenErrorState(
+                    message: l.text(state.failure!.messageKey),
+                    action: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          onPressed: widget.viewModel.refresh,
+                          child: Text(l.text('retry')),
+                        ),
+                        if (ApiFailureDisclosure.hasDetail(
+                          state.failure!.detail,
+                        ))
+                          ApiFailureDisclosure(failure: state.failure!.detail!),
+                      ],
+                    ),
+                  )
+                : TabBarView(children: [_models(l), _jobs(l)]),
+          ),
+        );
+      },
     );
   }
 
   Widget _jobCountBadge() {
-    final active = jobs.where((job) => _isActive(job.status)).length;
+    final jobs = widget.viewModel.state.jobs;
+    final active = jobs
+        .where((job) => PhoneticAnalysisViewModel.isActive(job.status))
+        .length;
     final failed = jobs.where((job) => job.status == 'failed').length;
     final color = failed > 0
         ? Theme.of(context).colorScheme.error
@@ -169,23 +123,12 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   }
 
   Future<void> _installModel(String modelId) async {
-    try {
-      await widget.repository.installModel(modelId);
-      await _refresh();
-    } catch (error) {
-      if (!mounted) return;
-      setState(
-        () => failure = NamedFailure(
-          'phoneticModelInstallFailed',
-          detail: widget.repository.failureDetail(error),
-        ),
-      );
-    }
+    await widget.viewModel.installModel(modelId);
   }
 
   Widget _models(AppLocalizations l) => ListView(
     children: [
-      for (final provider in providers)
+      for (final provider in widget.viewModel.state.providers)
         ListTile(
           leading: Icon(
             provider.available ? Icons.science_outlined : Icons.error_outline,
@@ -199,7 +142,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
                 '${provider.runtimeId} ${provider.runtimeVersion}',
           ),
         ),
-      for (final model in models)
+      for (final model in widget.viewModel.state.models)
         ListTile(
           leading: const Icon(Icons.memory_outlined),
           title: Text('${model.displayName} · ${model.state}'),
@@ -262,6 +205,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
   // --- Jobs tab ---
 
   Widget _jobs(AppLocalizations l) {
+    final jobs = widget.viewModel.state.jobs;
     if (jobs.isEmpty) {
       return ListenEmptyState(
         icon: Icons.graphic_eq,
@@ -270,7 +214,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     }
     return Column(
       children: [
-        if (_hasTerminalJobs)
+        if (widget.viewModel.hasTerminalJobs)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
@@ -300,8 +244,8 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Widget _jobTile(PhoneticJobView job, AppLocalizations l) {
     final status = job.status;
-    final active = _isActive(status);
-    final terminal = _isTerminal(status);
+    final active = PhoneticAnalysisViewModel.isActive(status);
+    final terminal = PhoneticAnalysisViewModel.isTerminal(status);
     final progress = job.phaseProgress / 100;
     final errorMsg = job.errorMessage;
     final scope = job.scope;
@@ -458,10 +402,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
     if (active) {
       return IconButton(
         tooltip: l.text('cancel'),
-        onPressed: () async {
-          await widget.repository.cancelJob(id);
-          await _refresh();
-        },
+        onPressed: () => widget.viewModel.cancelJob(id),
         icon: const Icon(Icons.stop_circle_outlined),
       );
     }
@@ -472,10 +413,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
           if (status != 'completed')
             IconButton(
               tooltip: l.text('retry'),
-              onPressed: () async {
-                await widget.repository.retryJob(id);
-                await _refresh();
-              },
+              onPressed: () => widget.viewModel.retryJob(id),
               icon: const Icon(Icons.refresh, size: ListenIconSize.control),
             ),
           IconButton(
@@ -517,8 +455,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       ),
     );
     if (confirmed == true) {
-      await widget.repository.deleteJob(id);
-      await _refresh();
+      await widget.viewModel.deleteJob(id);
     }
   }
 
@@ -544,27 +481,11 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       ),
     );
     if (confirmed == true) {
-      await widget.repository.clearTerminalJobs();
-      await _refresh();
+      await widget.viewModel.clearTerminalJobs();
     }
   }
 
   // --- Helpers ---
-
-  static bool _isActive(String status) => const {
-    'queued',
-    'extracting',
-    'recognizing_phones',
-    'aligning',
-    'analyzing',
-  }.contains(status);
-
-  static bool _isTerminal(String status) => const {
-    'completed',
-    'cancelled',
-    'failed',
-    'interrupted',
-  }.contains(status);
 
   String _formatTimestamp(int ms) {
     final dt = DateTime.fromMillisecondsSinceEpoch(ms);

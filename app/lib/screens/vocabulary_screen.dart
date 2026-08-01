@@ -7,8 +7,7 @@ import '../controllers/hunting_controller.dart';
 import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/slice_player_controller.dart';
 import '../controllers/vocabulary_view_model.dart';
-import '../data/repositories/lexical_repository.dart';
-import '../data/repositories/semantic_search_repository.dart';
+import '../controllers/semantic_search_view_model.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
 import '../models/production_corpus.dart';
@@ -34,13 +33,14 @@ import '../widgets/vocabulary/vocabulary_gap_panel.dart';
 /// `BuildContext` — dialogs, the bottom sheet, SnackBar sentences and the
 /// in-page slice player. State, request sequencing and degradation policy live
 /// in [VocabularyViewModel]; the backend is reached only through
-/// [LexicalRepository].
+/// its injected [VocabularyViewModel].
 ///
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({
     super.key,
-    required this.repository,
-    required this.semanticSearchRepository,
+    required this.viewModel,
+    required this.semanticSearchViewModel,
+    required this.slicePlayer,
     required this.language,
     required this.onExport,
     required this.onImport,
@@ -52,8 +52,9 @@ class VocabularyScreen extends StatefulWidget {
     this.onStartShadowing,
   });
 
-  final LexicalRepository repository;
-  final SemanticSearchRepository semanticSearchRepository;
+  final VocabularyViewModel viewModel;
+  final SemanticSearchViewModel semanticSearchViewModel;
+  final SlicePlayerController slicePlayer;
   final String language;
   final Future<void> Function() onExport;
   final Future<void> Function() onImport;
@@ -76,13 +77,13 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   static const capabilities = ['reading', 'listening', 'speaking', 'writing'];
   static const assessmentFilters = ['acquired', 'not_acquired', 'unassessed'];
 
-  late final VocabularyViewModel viewModel;
+  VocabularyViewModel get viewModel => widget.viewModel;
 
   /// The dictionary hosts its own second-decoder slice playback so playing an
   /// example never leaves this screen or touches the primary player. It stays
   /// with the View: it is handed straight to the entry view, which subscribes
   /// to it directly.
-  final SlicePlayerController slicePlayer = SlicePlayerController();
+  SlicePlayerController get slicePlayer => widget.slicePlayer;
   HuntingController get hunting => widget.huntingController;
 
   /// The current snapshot the build methods render from.
@@ -91,10 +92,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   @override
   void initState() {
     super.initState();
-    viewModel = VocabularyViewModel(
-      repository: widget.repository,
-      language: widget.language,
-    );
     unawaited(viewModel.load());
     // The gap instrument room is the default right pane, so its two sources
     // load up front (best-effort, each caught) rather than behind a click.
@@ -121,8 +118,6 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   @override
   void dispose() {
     unawaited(widget.auxiliaryAudio.stop());
-    slicePlayer.dispose();
-    viewModel.dispose();
     super.dispose();
   }
 
@@ -224,7 +219,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       showDialog<void>(
         context: context,
         builder: (_) => SemanticSearchDialog(
-          repository: widget.semanticSearchRepository,
+          viewModel: widget.semanticSearchViewModel,
           language: widget.language,
         ),
       ),

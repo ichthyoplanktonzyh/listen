@@ -3,6 +3,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/controllers/semantic_search_view_model.dart';
+import 'package:llplayer_next/controllers/slice_player_controller.dart';
+import 'package:llplayer_next/controllers/vocabulary_view_model.dart';
 import 'package:llplayer_next/data/repositories/lexical_repository.dart';
 import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/localization.dart';
@@ -97,8 +100,14 @@ void main() {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: VocabularyScreen(
-        repository: LexicalRepository(service),
-        semanticSearchRepository: LocalSemanticSearchRepository(service),
+        viewModel: VocabularyViewModel(
+          repository: LexicalRepository(service),
+          language: 'en',
+        ),
+        semanticSearchViewModel: SemanticSearchViewModel(
+          LocalSemanticSearchRepository(service),
+        ),
+        slicePlayer: SlicePlayerController(),
         language: 'en',
         onExport: () async {},
         onImport: () async {},
@@ -198,11 +207,13 @@ void main() {
         ],
         home: Scaffold(
           body: SemanticSearchDialog(
-            repository: LocalSemanticSearchRepository(
-              api(
-                (method, path) => path.contains('/semantic-embedding/')
-                    ? (statusCode: 503, body: envelope)
-                    : null,
+            viewModel: SemanticSearchViewModel(
+              LocalSemanticSearchRepository(
+                api(
+                  (method, path) => path.contains('/semantic-embedding/')
+                      ? (statusCode: 503, body: envelope)
+                      : null,
+                ),
               ),
             ),
             language: 'en',

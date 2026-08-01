@@ -5,6 +5,23 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/personal_expression_repository.dart';
 import '../models/api_failure.dart';
 import '../models/personal_expression.dart';
+import '../services/file_transfer_service.dart';
+
+@immutable
+class PersonalExpressionExportOutcome {
+  const PersonalExpressionExportOutcome({
+    this.path,
+    this.patternCount,
+    this.failure,
+  });
+
+  final String? path;
+  final int? patternCount;
+  final ApiFailure? failure;
+
+  bool get cancelled => path == null && failure == null;
+  bool get succeeded => path != null;
+}
 
 PersonalExpressionAttemptView? _latestWriting(
   List<PersonalExpressionAttemptView> attempts,
@@ -19,15 +36,25 @@ PersonalExpressionAttemptView? _latestWriting(
   return latest;
 }
 
+typedef PersonalExpressionDetailViewModelFactory =
+    PersonalExpressionDetailViewModel Function(
+      SentencePatternAssetView pattern,
+    );
+
 /// Owns the list query and the state derived from its results.
 class PersonalExpressionViewModel extends ChangeNotifier {
   PersonalExpressionViewModel(
     this._repository, {
     required this.language,
     this.searchDebounce = const Duration(milliseconds: 300),
-  });
+    PersonalExpressionExportFileService exportFileService =
+        const LocalPersonalExpressionExportFileService(),
+  }) : // Keep the public dependency name stable while storing it privately.
+       // ignore: prefer_initializing_formals
+       _exportFileService = exportFileService;
 
   final PersonalExpressionRepository _repository;
+  final PersonalExpressionExportFileService _exportFileService;
   final String language;
   final Duration searchDebounce;
 
@@ -106,8 +133,23 @@ class PersonalExpressionViewModel extends ChangeNotifier {
     }
   }
 
-  Future<PersonalExpressionExportBundleView> export() =>
-      _repository.export(language: language);
+  Future<PersonalExpressionExportOutcome> exportToFile() async {
+    try {
+      final bundle = await _repository.export(language: language);
+      final path = await _exportFileService.write(
+        suggestedName: 'llplayer-personal-expression.json',
+        document: bundle.toJson(),
+      );
+      return PersonalExpressionExportOutcome(
+        path: path,
+        patternCount: path == null ? null : bundle.patternCount,
+      );
+    } catch (thrown) {
+      return PersonalExpressionExportOutcome(
+        failure: thrown is ApiFailure ? thrown : const ApiFailure(raw: ''),
+      );
+    }
+  }
 
   Future<void> create({
     required PersonalExpressionSourceView source,

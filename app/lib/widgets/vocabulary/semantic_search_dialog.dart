@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/semantic_search_view_model.dart';
-import '../../data/repositories/semantic_search_repository.dart';
 import '../../localization.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
@@ -12,14 +11,12 @@ import '../common/listen_empty_state.dart';
 class SemanticSearchDialog extends StatefulWidget {
   const SemanticSearchDialog({
     super.key,
-    required this.repository,
+    required this.viewModel,
     required this.language,
-    this.viewModel,
   });
 
   final String language;
-  final SemanticSearchRepository repository;
-  final SemanticSearchViewModel? viewModel;
+  final SemanticSearchViewModel viewModel;
 
   @override
   State<SemanticSearchDialog> createState() => _SemanticSearchDialogState();
@@ -27,21 +24,17 @@ class SemanticSearchDialog extends StatefulWidget {
 
 class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
   final query = TextEditingController();
-  late final SemanticSearchViewModel _viewModel;
-  late final bool _ownsViewModel;
+  SemanticSearchViewModel get _viewModel => widget.viewModel;
 
   @override
   void initState() {
     super.initState();
-    _ownsViewModel = widget.viewModel == null;
-    _viewModel = widget.viewModel ?? SemanticSearchViewModel(widget.repository);
-    if (_ownsViewModel) unawaited(_viewModel.loadCapability());
+    unawaited(_viewModel.loadCapability());
   }
 
   @override
   void dispose() {
     query.dispose();
-    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 

@@ -11,6 +11,46 @@ import '../models/syntax_capability.dart';
 
 enum LlmProbeStatus { probing, supported, unsupported, failed }
 
+@immutable
+class LlmProviderFormInput {
+  LlmProviderFormInput({
+    required this.displayName,
+    required this.adapterKind,
+    required this.baseUrl,
+    required this.modelId,
+    required List<String> allowedUses,
+    required this.secret,
+  }) : allowedUses = List.unmodifiable(allowedUses);
+
+  final String displayName;
+  final String adapterKind;
+  final String baseUrl;
+  final String modelId;
+  final List<String> allowedUses;
+  final String secret;
+}
+
+@immutable
+class LlmProviderSettingsState {
+  LlmProviderSettingsState({
+    required List<LlmProviderProfileView> providers,
+    required this.loading,
+    required this.submitting,
+    required this.failure,
+    required Map<String, LlmProbeStatus> probeStatuses,
+    required Set<String> deletingIds,
+  }) : providers = List.unmodifiable(providers),
+       probeStatuses = Map.unmodifiable(probeStatuses),
+       deletingIds = Set.unmodifiable(deletingIds);
+
+  final List<LlmProviderProfileView> providers;
+  final bool loading;
+  final bool submitting;
+  final NamedFailure? failure;
+  final Map<String, LlmProbeStatus> probeStatuses;
+  final Set<String> deletingIds;
+}
+
 class LlmProviderSettingsViewModel extends ChangeNotifier {
   LlmProviderSettingsViewModel(this._repository);
 
@@ -24,13 +64,14 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
   bool _disposed = false;
   int _loadGeneration = 0;
 
-  List<LlmProviderProfileView> get providers => List.unmodifiable(_providers);
-  bool get loading => _loading;
-  bool get submitting => _submitting;
-  NamedFailure? get failure => _failure;
-  Map<String, LlmProbeStatus> get probeStatuses =>
-      Map.unmodifiable(_probeStatuses);
-  Set<String> get deletingIds => Set.unmodifiable(_deletingIds);
+  LlmProviderSettingsState get state => LlmProviderSettingsState(
+    providers: _providers,
+    loading: _loading,
+    submitting: _submitting,
+    failure: _failure,
+    probeStatuses: _probeStatuses,
+    deletingIds: _deletingIds,
+  );
 
   Future<void> load() async {
     final generation = ++_loadGeneration;
@@ -52,13 +93,22 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(LlmProviderDraft draft) async {
+  Future<bool> register(LlmProviderFormInput input) async {
     if (_submitting) return false;
     _submitting = true;
     _failure = null;
     _notify();
     try {
-      await _repository.register(draft);
+      await _repository.register(
+        LlmProviderDraft(
+          displayName: input.displayName,
+          adapterKind: input.adapterKind,
+          baseUrl: input.baseUrl,
+          modelId: input.modelId,
+          allowedUses: List.unmodifiable(input.allowedUses),
+          secret: input.secret,
+        ),
+      );
       if (_disposed) return false;
       await load();
       return true;
@@ -118,6 +168,43 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
   }
 }
 
+@immutable
+class RealtimeProviderFormInput {
+  const RealtimeProviderFormInput({
+    required this.displayName,
+    required this.adapterKind,
+    required this.baseUrl,
+    required this.modelId,
+    required this.voice,
+    required this.secret,
+  });
+
+  final String displayName;
+  final String adapterKind;
+  final String baseUrl;
+  final String modelId;
+  final String voice;
+  final String secret;
+}
+
+@immutable
+class RealtimeProviderSettingsState {
+  RealtimeProviderSettingsState({
+    required List<RealtimeProviderProfileView> profiles,
+    required this.loading,
+    required this.submitting,
+    required this.failure,
+    required Set<String> deletingIds,
+  }) : profiles = List.unmodifiable(profiles),
+       deletingIds = Set.unmodifiable(deletingIds);
+
+  final List<RealtimeProviderProfileView> profiles;
+  final bool loading;
+  final bool submitting;
+  final NamedFailure? failure;
+  final Set<String> deletingIds;
+}
+
 class RealtimeProviderSettingsViewModel extends ChangeNotifier {
   RealtimeProviderSettingsViewModel(this._repository);
 
@@ -130,12 +217,13 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
   bool _disposed = false;
   int _loadGeneration = 0;
 
-  List<RealtimeProviderProfileView> get profiles =>
-      List.unmodifiable(_profiles);
-  bool get loading => _loading;
-  bool get submitting => _submitting;
-  NamedFailure? get failure => _failure;
-  Set<String> get deletingIds => Set.unmodifiable(_deletingIds);
+  RealtimeProviderSettingsState get state => RealtimeProviderSettingsState(
+    profiles: _profiles,
+    loading: _loading,
+    submitting: _submitting,
+    failure: _failure,
+    deletingIds: _deletingIds,
+  );
 
   Future<void> load() async {
     final generation = ++_loadGeneration;
@@ -157,13 +245,22 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> register(RealtimeProviderDraft draft) async {
+  Future<bool> register(RealtimeProviderFormInput input) async {
     if (_submitting) return false;
     _submitting = true;
     _failure = null;
     _notify();
     try {
-      await _repository.register(draft);
+      await _repository.register(
+        RealtimeProviderDraft(
+          displayName: input.displayName,
+          adapterKind: input.adapterKind,
+          baseUrl: input.baseUrl,
+          modelId: input.modelId,
+          voice: input.voice,
+          secret: input.secret,
+        ),
+      );
       if (_disposed) return false;
       await load();
       return true;
@@ -207,6 +304,21 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
   }
 }
 
+@immutable
+class SyntaxCapabilitySettingsState {
+  const SyntaxCapabilitySettingsState({
+    required this.capability,
+    required this.track,
+    required this.failure,
+    required this.busy,
+  });
+
+  final SyntaxCapabilityView? capability;
+  final TrackSyntaxAnalysisView? track;
+  final NamedFailure? failure;
+  final bool busy;
+}
+
 class SyntaxCapabilitySettingsViewModel extends ChangeNotifier {
   SyntaxCapabilitySettingsViewModel(
     this._repository, {
@@ -225,10 +337,12 @@ class SyntaxCapabilitySettingsViewModel extends ChangeNotifier {
   bool _disposed = false;
   int _refreshGeneration = 0;
 
-  SyntaxCapabilityView? get capability => _capability;
-  TrackSyntaxAnalysisView? get track => _track;
-  NamedFailure? get failure => _failure;
-  bool get busy => _busy;
+  SyntaxCapabilitySettingsState get state => SyntaxCapabilitySettingsState(
+    capability: _capability,
+    track: _track,
+    failure: _failure,
+    busy: _busy,
+  );
 
   Future<void> refresh() async {
     final generation = ++_refreshGeneration;
@@ -312,6 +426,13 @@ class SyntaxCapabilitySettingsViewModel extends ChangeNotifier {
   }
 }
 
+@immutable
+class LearnerSettingsState {
+  const LearnerSettingsState({required this.l1Language});
+
+  final String l1Language;
+}
+
 class LearnerSettingsViewModel extends ChangeNotifier {
   LearnerSettingsViewModel(this._repository);
 
@@ -319,7 +440,8 @@ class LearnerSettingsViewModel extends ChangeNotifier {
   String _l1Language = '';
   bool _disposed = false;
 
-  String get l1Language => _l1Language;
+  LearnerSettingsState get state =>
+      LearnerSettingsState(l1Language: _l1Language);
 
   /// Profile settings are optional when the sidecar is unavailable. The
   /// dialog still opens with an unset language, preserving the existing

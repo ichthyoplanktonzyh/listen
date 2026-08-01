@@ -5,8 +5,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/learning_assets_ui.dart';
+import 'package:llplayer_next/controllers/learning_assets_view_models.dart';
 import 'package:llplayer_next/data/repositories/learning_assets_repository.dart';
-import 'package:llplayer_next/data/repositories/personal_expression_repository.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -181,23 +181,18 @@ void main() {
   ) async {
     Widget screen(Locale locale) => localized(
       LearningAssetsScreen(
-        repository: LocalLearningAssetsRepository(
-          LocalApi.withTransport(
-            baseUrl: 'http://test',
-            token: 'token',
-            transport: (method, path, body) async =>
-                (statusCode: 200, body: '[]'),
+        viewModel: LearningAssetsViewModel(
+          LocalLearningAssetsRepository(
+            LocalApi.withTransport(
+              baseUrl: 'http://test',
+              token: 'token',
+              transport: (method, path, body) async =>
+                  (statusCode: 200, body: '[]'),
+            ),
           ),
+          language: 'en',
         ),
-        personalExpressionRepository: LocalPersonalExpressionRepository(
-          LocalApi.withTransport(
-            baseUrl: 'http://test',
-            token: 'token',
-            transport: (method, path, body) async =>
-                (statusCode: 200, body: '[]'),
-          ),
-        ),
-        language: 'en',
+        personalExpressionBuilder: (_) => const SizedBox.shrink(),
       ),
       locale: locale,
     );

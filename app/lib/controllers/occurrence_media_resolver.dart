@@ -21,6 +21,7 @@ class ResolvedOccurrenceMedia extends OccurrenceMediaResolution {
 enum OccurrenceMediaResolutionFailure {
   coreUnavailable,
   invalidSnapshot,
+  linkedMediaUnavailable,
   cancelled,
   fingerprintMismatch,
   registrationFailed,
@@ -39,6 +40,8 @@ class UnresolvedOccurrenceMedia extends OccurrenceMediaResolution {
       'Connect the local core before playing a source clip',
     OccurrenceMediaResolutionFailure.invalidSnapshot =>
       'This source clip has no usable media fingerprint',
+    OccurrenceMediaResolutionFailure.linkedMediaUnavailable =>
+      'The linked source media is unavailable',
     OccurrenceMediaResolutionFailure.cancelled =>
       'Source media was not selected',
     OccurrenceMediaResolutionFailure.fingerprintMismatch =>
@@ -95,6 +98,25 @@ class OccurrenceMediaResolver {
       return (await repository.readMedia(mediaId)).fingerprint;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Resolves a known media id without opening a picker. Review activities use
+  /// this path because their source media is already durably linked.
+  Future<OccurrenceMediaResolution> resolveLinkedMedia(String mediaId) async {
+    try {
+      final media = await repository.readMedia(mediaId);
+      if (!await fileService.exists(media.path)) {
+        return const UnresolvedOccurrenceMedia(
+          OccurrenceMediaResolutionFailure.linkedMediaUnavailable,
+        );
+      }
+      return ResolvedOccurrenceMedia(path: media.path, usesCurrentMedia: false);
+    } catch (error) {
+      return UnresolvedOccurrenceMedia(
+        OccurrenceMediaResolutionFailure.coreUnavailable,
+        error: error,
+      );
     }
   }
 

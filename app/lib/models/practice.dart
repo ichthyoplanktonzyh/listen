@@ -1,5 +1,16 @@
 import 'types.dart';
 
+/// Platform-independent microphone authorization state used by practice and
+/// conversation features. Platform services translate native values into this
+/// model; presentation code never depends on the recorder implementation.
+enum MicrophonePermissionStatus {
+  granted,
+  denied,
+  restricted,
+  notDetermined,
+  unavailable,
+}
+
 class PracticeSession {
   const PracticeSession({
     required this.id,

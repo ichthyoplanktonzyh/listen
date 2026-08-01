@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/provider_settings_view_models.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -70,7 +71,11 @@ void main() {
   ) async {
     await pump(
       tester,
-      LlmProviderSettings(repository: LocalLlmProviderRepository(api())),
+      LlmProviderSettings(
+        viewModel: LlmProviderSettingsViewModel(
+          LocalLlmProviderRepository(api()),
+        ),
+      ),
     );
 
     expect(
@@ -89,7 +94,9 @@ void main() {
     await pump(
       tester,
       RealtimeProviderSettings(
-        repository: LocalRealtimeProviderRepository(api()),
+        viewModel: RealtimeProviderSettingsViewModel(
+          LocalRealtimeProviderRepository(api()),
+        ),
       ),
     );
 
@@ -101,13 +108,19 @@ void main() {
     // that mismatch is invisible in either panel read on its own.
     await pump(
       tester,
-      LlmProviderSettings(repository: LocalLlmProviderRepository(api())),
+      LlmProviderSettings(
+        viewModel: LlmProviderSettingsViewModel(
+          LocalLlmProviderRepository(api()),
+        ),
+      ),
     );
     final llm = noticePadding(tester, Icons.privacy_tip_outlined);
     await pump(
       tester,
       RealtimeProviderSettings(
-        repository: LocalRealtimeProviderRepository(api()),
+        viewModel: RealtimeProviderSettingsViewModel(
+          LocalRealtimeProviderRepository(api()),
+        ),
       ),
     );
     expect(noticePadding(tester, Icons.hearing_outlined), llm);
@@ -119,14 +132,16 @@ void main() {
     await pump(
       tester,
       SyntaxCapabilitySettings(
-        repository: LocalSyntaxCapabilityRepository(
-          api(
-            ok: {
-              '/v1/syntax/capability':
-                  '{"status":"not_installed",'
-                  '"enabled":false,"runtime_version":"3.7",'
-                  '"model_version":"en_core_web_sm"}',
-            },
+        viewModel: SyntaxCapabilitySettingsViewModel(
+          LocalSyntaxCapabilityRepository(
+            api(
+              ok: {
+                '/v1/syntax/capability':
+                    '{"status":"not_installed",'
+                    '"enabled":false,"runtime_version":"3.7",'
+                    '"model_version":"en_core_web_sm"}',
+              },
+            ),
           ),
         ),
       ),

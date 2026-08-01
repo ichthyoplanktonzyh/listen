@@ -1,18 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 
-import '../../controllers/download_controller.dart';
-import '../../controllers/media_session_coordinator.dart';
-import '../../controllers/player_controller.dart';
-import '../../controllers/settings_controller.dart';
-import '../../controllers/subtitle_controller.dart';
-import '../../data/repositories/learning_assets_repository.dart';
+import '../../controllers/media_import_flow_controller.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
-import '../../models/api_failure.dart';
-import '../../player_adapter.dart';
-import '../../services/external_tools.dart';
-import '../../services/media_import_file_service.dart';
+import '../../models/embedded_subtitle.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 
@@ -182,14 +173,8 @@ class _OnlineSourceDialogState extends State<OnlineSourceDialog> {
 
 Future<void> openOnlineMediaFlow({
   required BuildContext context,
-  required DesktopPlayerAdapter adapter,
-  required PlayerController playerController,
-  required SubtitleController subtitleController,
-  required DownloadController downloadController,
-  required ExternalTools tools,
+  required MediaImportFlowController controller,
   required void Function() onMediaSwitched,
-  ApiFailure Function(Object error) failureMapper = _genericFailure,
-  MediaImportFileService fileService = const LocalMediaImportFileService(),
 }) async {
   final l = AppLocalizations.of(context);
   final source = await showDialog<OnlineSourceChoice>(
@@ -198,185 +183,151 @@ Future<void> openOnlineMediaFlow({
   );
   if (source == null || !context.mounted) return;
   if (source.action == OnlineSourceAction.download) {
-    await _downloadOnline(
-      context: context,
-      pageUrl: source.url,
-      playerController: playerController,
-      downloadController: downloadController,
-      tools: tools,
-      failureMapper: failureMapper,
-      fileService: fileService,
+    controller.reportStatus(l.text('startingDownload'));
+    final outcome = await controller.startDownload(
+      source.url,
+      confirmButtonText: l.text('downloadHere'),
+      completedStatus: (path) => '${l.text('downloadComplete')}: $path',
+      failedStatus: l.text('downloadFailed'),
     );
+    if (!context.mounted) return;
+    switch (outcome) {
+      case MediaImportSucceeded():
+        controller.reportStatus(l.text('downloadingInBackground'));
+      case MediaImportCancelled():
+      case MediaImportUnavailable():
+      case MediaImportEmpty():
+        return;
+      case MediaImportFailed(:final failure):
+        controller.reportStatus(
+          l.text('downloadFailed'),
+          error: true,
+          failure: failure,
+        );
+      case EmbeddedSubtitleChoices():
+        return;
+    }
     return;
   }
-  playerController.setStatus(l.text('statusResolvingOnlineMedia'));
-  try {
-    final resolved = await tools.resolveOnlineMedia(source.url);
-    await adapter.open(resolved);
-    playerController.clearMedia();
-    playerController.setMediaPath(source.url);
-    subtitleController.setPrimaryTrack(null);
-    subtitleController.setSecondaryTrack(null);
-    subtitleController.setCurrentPrimaryCue(null);
-    subtitleController.setCurrentSecondaryCue(null);
-    subtitleController.clearSpeechEnhancements();
-    subtitleController.setCurrentPrimaryCue(null);
-    subtitleController.setCurrentSecondaryCue(null);
-    playerController.setStatus(
-      l.text('statusPlayingOnlineMedia'),
-      playback: true,
-    );
-    onMediaSwitched();
-  } catch (error) {
-    playerController.setStatus(
-      l.text('statusOnlineMediaFailed'),
-      error: true,
-      failure: failureMapper(error),
-    );
-  }
-}
-
-Future<void> _downloadOnline({
-  required BuildContext context,
-  required String pageUrl,
-  required PlayerController playerController,
-  required DownloadController downloadController,
-  required ExternalTools tools,
-  required ApiFailure Function(Object error) failureMapper,
-  required MediaImportFileService fileService,
-}) async {
-  final l = AppLocalizations.of(context);
-  final directory = await fileService.pickDownloadDirectory(
-    confirmButtonText: l.text('downloadHere'),
-  );
-  // Legitimate silence: the user dismissed the directory picker themselves.
-  if (directory == null) return;
-  downloadController.starting();
-  playerController.setStatus(l.text('startingDownload'));
-  try {
-    final download = await tools.downloadOnlineMedia(pageUrl, directory);
-    if (!context.mounted) {
-      download.cancel();
-      return;
-    }
-    downloadController.attach(
-      progress: download.progress,
-      completed: download.completed,
-      cancel: download.cancel,
-      onCompleted: (path) =>
-          playerController.setStatus('${l.text('downloadComplete')}: $path'),
-      onFailed: (failure) => playerController.setStatus(
-        l.text('downloadFailed'),
-        error: true,
-        failure: failure,
-      ),
-    );
-    playerController.setStatus(l.text('downloadingInBackground'));
-  } catch (error) {
-    if (context.mounted) {
-      final failure = failureMapper(error);
-      downloadController.fail(failure);
-      playerController.setStatus(
-        l.text('downloadFailed'),
+  controller.reportStatus(l.text('statusResolvingOnlineMedia'));
+  final outcome = await controller.playOnline(source.url);
+  if (!context.mounted) return;
+  switch (outcome) {
+    case MediaImportSucceeded():
+      controller.reportStatus(
+        l.text('statusPlayingOnlineMedia'),
+        playback: true,
+      );
+      onMediaSwitched();
+    case MediaImportFailed(:final failure):
+      controller.reportStatus(
+        l.text('statusOnlineMediaFailed'),
         error: true,
         failure: failure,
       );
-    }
+    case MediaImportCancelled():
+    case MediaImportUnavailable():
+    case MediaImportEmpty():
+    case EmbeddedSubtitleChoices():
+      return;
   }
 }
 
 Future<void> importEmbeddedSubtitleFlow({
   required BuildContext context,
-  required PlayerController playerController,
-  required MediaSessionCoordinator mediaSession,
-  required ExternalTools tools,
-  required bool backendAvailable,
-  required bool Function(String path) isMediaPath,
-  ApiFailure Function(Object error) failureMapper = _genericFailure,
+  required MediaImportFlowController controller,
 }) async {
   final l = AppLocalizations.of(context);
-  final path = playerController.mediaPath;
-  if (path == null ||
-      !isMediaPath(path) ||
-      playerController.mediaId == null ||
-      !backendAvailable) {
-    playerController.setStatus(l.text('statusOpenLocalMediaFirst'));
-    return;
-  }
-  playerController.setStatus(l.text('statusInspectingEmbedded'));
-  try {
-    final subtitles = await tools.probeSubtitles(path);
-    if (!context.mounted) return;
-    if (subtitles.isEmpty) {
-      playerController.setStatus(l.text('statusNoEmbeddedSubtitles'));
+  controller.reportStatus(l.text('statusInspectingEmbedded'));
+  final inspection = await controller.inspectEmbedded();
+  if (!context.mounted) return;
+  switch (inspection) {
+    case MediaImportUnavailable():
+      controller.reportStatus(l.text('statusOpenLocalMediaFirst'));
       return;
-    }
-    final choice = await showDialog<(EmbeddedSubtitle, bool)>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: Text(l.text('importEmbeddedText')),
-        children: [
-          for (final subtitle in subtitles)
-            ListTile(
-              enabled: subtitle.isText,
-              title: Text(subtitle.label),
-              subtitle: Text(
-                subtitle.isText
-                    ? 'Import as an interactive learning subtitle'
-                    : 'Bitmap subtitle: learning interaction is deferred',
+    case MediaImportEmpty():
+      controller.reportStatus(l.text('statusNoEmbeddedSubtitles'));
+      return;
+    case MediaImportFailed(:final failure):
+      controller.reportStatus(
+        l.text('statusEmbeddedImportFailed'),
+        error: true,
+        failure: failure,
+      );
+      return;
+    case EmbeddedSubtitleChoices(:final values):
+      final subtitles = values;
+      final choice = await showDialog<(EmbeddedSubtitle, bool)>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: Text(l.text('importEmbeddedText')),
+          children: [
+            for (final subtitle in subtitles)
+              ListTile(
+                enabled: subtitle.isText,
+                title: Text(subtitle.label),
+                subtitle: Text(
+                  subtitle.isText
+                      ? 'Import as an interactive learning subtitle'
+                      : 'Bitmap subtitle: learning interaction is deferred',
+                ),
+                trailing: subtitle.isText
+                    ? PopupMenuButton<bool>(
+                        onSelected: (secondary) =>
+                            Navigator.pop(context, (subtitle, secondary)),
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: false,
+                            child: Text(l.text('usePrimary')),
+                          ),
+                          PopupMenuItem(
+                            value: true,
+                            child: Text(l.text('useSecondary')),
+                          ),
+                        ],
+                      )
+                    : null,
               ),
-              trailing: subtitle.isText
-                  ? PopupMenuButton<bool>(
-                      onSelected: (secondary) =>
-                          Navigator.pop(context, (subtitle, secondary)),
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: false,
-                          child: Text(l.text('usePrimary')),
-                        ),
-                        PopupMenuItem(
-                          value: true,
-                          child: Text(l.text('useSecondary')),
-                        ),
-                      ],
-                    )
-                  : null,
-            ),
-        ],
-      ),
-    );
-    if (choice == null) {
-      playerController.setStatus(l.text('statusEmbeddedImportCancelled'));
+          ],
+        ),
+      );
+      if (choice == null) {
+        controller.reportStatus(l.text('statusEmbeddedImportCancelled'));
+        return;
+      }
+      controller.reportStatus(l.text('statusExtractingEmbedded'));
+      final extraction = await controller.extractEmbedded(
+        choice.$1,
+        secondary: choice.$2,
+      );
+      if (!context.mounted) return;
+      if (extraction case MediaImportFailed(:final failure)) {
+        controller.reportStatus(
+          l.text('statusEmbeddedImportFailed'),
+          error: true,
+          failure: failure,
+        );
+      }
+    case MediaImportSucceeded():
+    case MediaImportCancelled():
       return;
-    }
-    playerController.setStatus(l.text('statusExtractingEmbedded'));
-    final extracted = await tools.extractTextSubtitle(path, choice.$1);
-    await mediaSession.openSubtitlePath(extracted, secondary: choice.$2);
-  } catch (error) {
-    playerController.setStatus(
-      l.text('statusEmbeddedImportFailed'),
-      error: true,
-      failure: failureMapper(error),
-    );
   }
 }
 
 Future<void> searchOpenSubtitlesFlow({
   required BuildContext context,
-  required PlayerController playerController,
-  required SettingsController settingsController,
-  required MediaSessionCoordinator mediaSession,
-  required LearningAssetsRepository? repository,
+  required OpenSubtitlesFlowController controller,
   required bool secondary,
 }) async {
   final l = AppLocalizations.of(context);
-  if (repository == null) {
+  var preparation = controller.prepare();
+  if (preparation is OpenSubtitlesUnavailable) {
     // Unavailable State (CONTEXT.md): the OpenSubtitles search is a user menu
     // entry; report the missing core instead of swallowing the click.
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+    controller.reportStatus(l.text('statusConnectLocalCoreFirst'));
     return;
   }
-  if (playerController.mediaId == null) {
+  if (preparation is OpenSubtitlesNoMedia) {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -392,8 +343,8 @@ Future<void> searchOpenSubtitlesFlow({
     );
     return;
   }
-  if (settingsController.openSubtitlesApiKey.isEmpty) {
-    final controller = TextEditingController();
+  if (preparation is OpenSubtitlesNeedsApiKey) {
+    final apiKeyController = TextEditingController();
     final configured = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -404,7 +355,7 @@ Future<void> searchOpenSubtitlesFlow({
           children: [
             Text(l.text('configureOpenSubtitlesNow')),
             TextField(
-              controller: controller,
+              controller: apiKeyController,
               obscureText: true,
               autofocus: true,
               decoration: InputDecoration(
@@ -419,33 +370,32 @@ Future<void> searchOpenSubtitlesFlow({
             child: Text(l.text('cancel')),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            onPressed: () =>
+                Navigator.pop(context, apiKeyController.text.trim()),
             child: Text(l.text('save')),
           ),
         ],
       ),
     );
-    controller.dispose();
+    apiKeyController.dispose();
     // Legitimate silence: the user cancelled the API-key dialog themselves.
     if (configured == null || configured.isEmpty) return;
-    await settingsController.update(
-      settingsController.settings.copyWith(openSubtitlesApiKey: configured),
-    );
+    preparation = await controller.configureApiKey(configured);
   }
   if (!context.mounted) return;
+  if (preparation case OpenSubtitlesSetupFailed(:final failure)) {
+    controller.reportStatus(
+      l.text('statusSubtitleImportFailed'),
+      error: true,
+      failure: failure,
+    );
+    return;
+  }
+  if (preparation is! OpenSubtitlesReady) return;
   final path = await showOpenSubtitlesSearch(
     context: context,
-    repository: repository,
-    apiKey: settingsController.openSubtitlesApiKey,
-    initialTitle: playerController.mediaTitle ?? '',
-    initialFilename: playerController.mediaPath == null
-        ? ''
-        : playerController.mediaPath!.split(RegExp(r'[/\\]')).last,
-    mediaPath: playerController.mediaPath,
+    viewModel: preparation.viewModel,
   );
   if (path == null || !context.mounted) return;
-  await mediaSession.openSubtitlePath(path, secondary: secondary);
+  await controller.openDownloaded(path, secondary: secondary);
 }
-
-ApiFailure _genericFailure(Object error) =>
-    ApiFailure(message: 'The operation failed.', raw: error.toString());

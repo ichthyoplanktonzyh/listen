@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/cold_start_marking_view_model.dart';
-import '../../data/repositories/cold_start_marking_repository.dart';
 import '../../localization.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
@@ -14,47 +13,31 @@ import '../common/listen_loading.dart';
 class ColdStartMarkingSheet extends StatefulWidget {
   const ColdStartMarkingSheet({
     super.key,
-    required this.repository,
-    required this.trackId,
-    required this.language,
+    required this.viewModel,
     required this.onDone,
-    this.viewModel,
   });
 
-  final String trackId;
-  final String language;
   final VoidCallback onDone;
-  final ColdStartMarkingRepository repository;
-  final ColdStartMarkingViewModel? viewModel;
+  final ColdStartMarkingViewModel viewModel;
 
   @override
   State<ColdStartMarkingSheet> createState() => _ColdStartMarkingSheetState();
 }
 
 class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
-  late final ColdStartMarkingViewModel _viewModel;
-  late final bool _ownsViewModel;
+  ColdStartMarkingViewModel get _viewModel => widget.viewModel;
   bool _didFinish = false;
 
   @override
   void initState() {
     super.initState();
-    _ownsViewModel = widget.viewModel == null;
-    _viewModel =
-        widget.viewModel ??
-        ColdStartMarkingViewModel(
-          widget.repository,
-          trackId: widget.trackId,
-          language: widget.language,
-        );
     _viewModel.addListener(_handleViewModelChange);
-    if (_ownsViewModel) unawaited(_viewModel.load());
+    unawaited(_viewModel.load());
   }
 
   @override
   void dispose() {
     _viewModel.removeListener(_handleViewModelChange);
-    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 

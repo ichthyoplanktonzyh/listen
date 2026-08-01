@@ -1,34 +1,18 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
-import 'data/repositories/transcription_repository.dart';
+import 'controllers/transcription_view_models.dart';
 import 'localization.dart';
-import 'models/runtime_resources.dart';
-import 'models/timeline.dart';
-import 'models/named_failure.dart';
-import 'services/transcription_file_service.dart';
 import 'widgets/common/api_failure_disclosure.dart';
 import 'widgets/common/listen_empty_state.dart';
 import 'widgets/common/listen_error_state.dart';
 
-typedef LoadGeneratedTrack =
-    Future<void> Function(SubtitleTrack track, bool secondary);
-
 Future<bool> showGenerateSubtitles({
   required BuildContext context,
-  required TranscriptionRepository repository,
-  required String mediaId,
-  required bool secondary,
-  String preferredQuality = 'balanced',
-  String preferredLanguage = 'auto',
-  bool force = false,
+  required GenerateSubtitlesViewModel viewModel,
 }) async {
   final l = AppLocalizations.of(context);
-  final models = await repository.models();
-  final installed = models
-      .where((model) => model.state == 'installed' || model.state == 'custom')
-      .toList(growable: false);
+  await viewModel.load();
+  final installed = viewModel.state.installedModels;
   if (!context.mounted) return false;
   if (installed.isEmpty) {
     await showDialog<void>(
@@ -46,12 +30,6 @@ Future<bool> showGenerateSubtitles({
     );
     return false;
   }
-  final preferred = installed
-      .where((model) => model.quality == preferredQuality)
-      .firstOrNull;
-  var modelId = (preferred ?? installed.first).id;
-  var language = preferredLanguage;
-  var translate = false;
   var created = false;
   await showDialog<void>(
     context: context,
@@ -64,7 +42,7 @@ Future<bool> showGenerateSubtitles({
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
-                initialValue: modelId,
+                initialValue: viewModel.state.modelId,
                 decoration: InputDecoration(labelText: l.text('model')),
                 items: installed
                     .map(
@@ -74,10 +52,12 @@ Future<bool> showGenerateSubtitles({
                       ),
                     )
                     .toList(growable: false),
-                onChanged: (value) => refresh(() => modelId = value ?? modelId),
+                onChanged: (value) {
+                  if (value != null) refresh(() => viewModel.setModel(value));
+                },
               ),
               DropdownButtonFormField<String>(
-                initialValue: language,
+                initialValue: viewModel.state.language,
                 decoration: InputDecoration(
                   labelText: l.text('transcriptionLanguage'),
                 ),
@@ -89,15 +69,17 @@ Future<bool> showGenerateSubtitles({
                   const DropdownMenuItem(value: 'en', child: Text('English')),
                   const DropdownMenuItem(value: 'zh', child: Text('中文')),
                 ],
-                onChanged: (value) => refresh(() => language = value ?? 'auto'),
+                onChanged: (value) =>
+                    refresh(() => viewModel.setLanguage(value ?? 'auto')),
               ),
               SwitchListTile(
-                value: translate,
+                value: viewModel.state.translate,
                 title: Text(l.text('translateEnglish')),
-                onChanged: (value) => refresh(() => translate = value),
+                onChanged: (value) =>
+                    refresh(() => viewModel.setTranslate(value)),
               ),
               Text(
-                secondary
+                viewModel.secondary
                     ? l.text('generateSecondaryHint')
                     : l.text('generatePrimaryHint'),
               ),
@@ -111,15 +93,7 @@ Future<bool> showGenerateSubtitles({
           ),
           FilledButton(
             onPressed: () async {
-              await repository.createJob(
-                mediaId: mediaId,
-                modelId: modelId,
-                secondary: secondary,
-                translate: translate,
-                language: language == 'auto' ? null : language,
-                force: force,
-              );
-              created = true;
+              created = await viewModel.create();
               if (context.mounted) Navigator.pop(context);
             },
             child: Text(l.text('generateWholeMedia')),
@@ -131,105 +105,73 @@ Future<bool> showGenerateSubtitles({
   return created;
 }
 
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}
-
 class TranscriptionCenter extends StatefulWidget {
   const TranscriptionCenter({
-    required this.repository,
-    required this.loadTrack,
-    this.fileService = const LocalTranscriptionFileService(),
+    required this.viewModel,
+    required this.onRegenerate,
     super.key,
   });
 
-  final TranscriptionRepository repository;
-  final LoadGeneratedTrack loadTrack;
-  final TranscriptionFileService fileService;
+  final TranscriptionCenterViewModel viewModel;
+  final RegenerateTranscriptionJob onRegenerate;
 
   @override
   State<TranscriptionCenter> createState() => _TranscriptionCenterState();
 }
 
 class _TranscriptionCenterState extends State<TranscriptionCenter> {
-  List<TranscriptionModelView> models = const [];
-  List<TranscriptionJobView> jobs = const [];
-  List<TranscriptionProviderView> providers = const [];
-  Timer? timer;
-  NamedFailure? failure;
-
   @override
   void initState() {
     super.initState();
-    unawaited(_refresh());
-    timer = Timer.periodic(const Duration(seconds: 1), (_) => _refresh());
-  }
-
-  Future<void> _refresh() async {
-    try {
-      final providerValues = await widget.repository.providers();
-      final modelValues = await widget.repository.models();
-      final jobValues = await widget.repository.jobs();
-      if (!mounted) return;
-      setState(() {
-        providers = providerValues;
-        models = modelValues;
-        jobs = jobValues;
-        failure = null;
-      });
-    } catch (error) {
-      if (mounted) {
-        setState(
-          () => failure = NamedFailure(
-            'transcriptionLoadFailed',
-            detail: widget.repository.failureDetail(error),
-          ),
-        );
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    timer?.cancel();
-    super.dispose();
+    widget.viewModel.start();
   }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(l.text('transcriptionCenter')),
-          bottom: TabBar(
-            tabs: [
-              Tab(text: l.text('models')),
-              Tab(text: l.text('jobs')),
-            ],
-          ),
-          actions: [
-            IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
-          ],
-        ),
-        body: failure != null
-            ? ListenErrorState(
-                message: l.text(failure!.messageKey),
-                action: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    OutlinedButton(
-                      onPressed: _refresh,
-                      child: Text(l.text('retry')),
-                    ),
-                    if (ApiFailureDisclosure.hasDetail(failure!.detail))
-                      ApiFailureDisclosure(failure: failure!.detail!),
-                  ],
+    return ListenableBuilder(
+      listenable: widget.viewModel,
+      builder: (context, _) {
+        final state = widget.viewModel.state;
+        return DefaultTabController(
+          length: 2,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(l.text('transcriptionCenter')),
+              bottom: TabBar(
+                tabs: [
+                  Tab(text: l.text('models')),
+                  Tab(text: l.text('jobs')),
+                ],
+              ),
+              actions: [
+                IconButton(
+                  onPressed: widget.viewModel.refresh,
+                  icon: const Icon(Icons.refresh),
                 ),
-              )
-            : TabBarView(children: [_models(l), _jobs(l)]),
-      ),
+              ],
+            ),
+            body: state.failure != null
+                ? ListenErrorState(
+                    message: l.text(state.failure!.messageKey),
+                    action: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          onPressed: widget.viewModel.refresh,
+                          child: Text(l.text('retry')),
+                        ),
+                        if (ApiFailureDisclosure.hasDetail(
+                          state.failure!.detail,
+                        ))
+                          ApiFailureDisclosure(failure: state.failure!.detail!),
+                      ],
+                    ),
+                  )
+                : TabBarView(children: [_models(l), _jobs(l)]),
+          ),
+        );
+      },
     );
   }
 
@@ -240,19 +182,13 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
         child: Align(
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
-            onPressed: () async {
-              final path = await widget.fileService.pickCustomModel();
-              if (path != null) {
-                await widget.repository.registerCustomModel(path);
-                await _refresh();
-              }
-            },
+            onPressed: widget.viewModel.registerCustomModel,
             icon: const Icon(Icons.add_link),
             label: Text(l.text('registerCustomModel')),
           ),
         ),
       ),
-      for (final provider in providers)
+      for (final provider in widget.viewModel.state.providers)
         ListTile(
           leading: Icon(
             provider.available
@@ -268,9 +204,9 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
         ),
       Expanded(
         child: ListView.builder(
-          itemCount: models.length,
+          itemCount: widget.viewModel.state.models.length,
           itemBuilder: (context, index) {
-            final model = models[index];
+            final model = widget.viewModel.state.models[index];
             final state = model.state;
             final installed = model.installedBytes;
             final size = model.sizeBytes;
@@ -293,24 +229,21 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                 'downloadable' || 'failed' => IconButton(
                   tooltip: l.text('install'),
                   onPressed: () async {
-                    await widget.repository.installModel(model.id);
-                    await _refresh();
+                    await widget.viewModel.installModel(model.id);
                   },
                   icon: const Icon(Icons.download),
                 ),
                 'installing' => IconButton(
                   tooltip: l.text('cancel'),
                   onPressed: () async {
-                    await widget.repository.cancelModelInstall(model.id);
-                    await _refresh();
+                    await widget.viewModel.cancelModelInstall(model.id);
                   },
                   icon: const Icon(Icons.cancel_outlined),
                 ),
                 _ => IconButton(
                   tooltip: l.text('remove'),
                   onPressed: () async {
-                    await widget.repository.deleteModel(model.id);
-                    await _refresh();
+                    await widget.viewModel.deleteModel(model.id);
                   },
                   icon: const Icon(Icons.delete_outline),
                 ),
@@ -322,15 +255,15 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
     ],
   );
 
-  Widget _jobs(AppLocalizations l) => jobs.isEmpty
+  Widget _jobs(AppLocalizations l) => widget.viewModel.state.jobs.isEmpty
       ? ListenEmptyState(
           icon: Icons.subtitles_outlined,
           message: l.text('noTranscriptionJobs'),
         )
       : ListView.builder(
-          itemCount: jobs.length,
+          itemCount: widget.viewModel.state.jobs.length,
           itemBuilder: (context, index) {
-            final job = jobs[index];
+            final job = widget.viewModel.state.jobs[index];
             final status = job.status;
             final active = const {
               'queued',
@@ -356,15 +289,14 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                   if (active)
                     IconButton(
                       tooltip: l.text('cancel'),
-                      onPressed: () => widget.repository.cancelJob(job.id),
+                      onPressed: () => widget.viewModel.cancelJob(job.id),
                       icon: const Icon(Icons.stop_circle_outlined),
                     ),
                   if (status == 'failed' || status == 'cancelled')
                     IconButton(
                       tooltip: l.text('retry'),
                       onPressed: () async {
-                        await widget.repository.retryJob(job.id);
-                        await _refresh();
+                        await widget.viewModel.retryJob(job.id);
                       },
                       icon: const Icon(Icons.replay),
                     ),
@@ -372,13 +304,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                     IconButton(
                       tooltip: l.text('loadGeneratedSubtitle'),
                       onPressed: () async {
-                        final track = await widget.repository.readSubtitle(
-                          job.generatedTrackId!,
-                        );
-                        await widget.loadTrack(
-                          track,
-                          job.destination == 'secondary',
-                        );
+                        await widget.viewModel.loadGenerated(job);
                       },
                       icon: const Icon(Icons.subtitles),
                     ),
@@ -386,36 +312,21 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                     IconButton(
                       tooltip: l.text('exportSrt'),
                       onPressed: () async {
-                        final content = await widget.repository
-                            .exportSubtitleSrt(job.generatedTrackId!);
-                        await widget.fileService.saveSrt(
-                          suggestedName: '${job.mediaTitle}.generated.srt',
-                          content: content,
-                        );
+                        await widget.viewModel.exportSrt(job);
                       },
                       icon: const Icon(Icons.file_download_outlined),
                     ),
                   if (status == 'completed')
                     IconButton(
                       tooltip: l.text('regenerate'),
-                      onPressed: () async {
-                        final created = await showGenerateSubtitles(
-                          context: context,
-                          repository: widget.repository,
-                          mediaId: job.mediaId,
-                          secondary: job.destination == 'secondary',
-                          force: true,
-                        );
-                        if (created) await _refresh();
-                      },
+                      onPressed: () => widget.onRegenerate(job),
                       icon: const Icon(Icons.auto_fix_high),
                     ),
                   if (!active)
                     IconButton(
                       tooltip: l.text('archive'),
                       onPressed: () async {
-                        await widget.repository.archiveJob(job.id);
-                        await _refresh();
+                        await widget.viewModel.archiveJob(job.id);
                       },
                       icon: const Icon(Icons.archive_outlined),
                     ),

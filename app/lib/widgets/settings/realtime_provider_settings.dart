@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/provider_settings_view_models.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../models/realtime_conversation.dart';
 import '../../theme/icon_size.dart';
@@ -25,11 +24,9 @@ const qwenRealtimeBaselineModel = 'qwen3.5-omni-plus-realtime';
 /// and released in [dispose] (#27) — an inline form has no exit transition to
 /// race, so the lifecycle that fix protected is preserved by construction.
 class RealtimeProviderSettings extends StatefulWidget {
-  const RealtimeProviderSettings({super.key, this.repository, this.viewModel})
-    : assert(repository != null || viewModel != null);
+  const RealtimeProviderSettings({super.key, required this.viewModel});
 
-  final RealtimeProviderRepository? repository;
-  final RealtimeProviderSettingsViewModel? viewModel;
+  final RealtimeProviderSettingsViewModel viewModel;
 
   @override
   State<RealtimeProviderSettings> createState() =>
@@ -37,8 +34,7 @@ class RealtimeProviderSettings extends StatefulWidget {
 }
 
 class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
-  late final RealtimeProviderSettingsViewModel _viewModel;
-  late final bool _ownsViewModel;
+  RealtimeProviderSettingsViewModel get _viewModel => widget.viewModel;
 
   final _name = TextEditingController();
   final _endpoint = TextEditingController(
@@ -56,10 +52,6 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
   @override
   void initState() {
     super.initState();
-    _ownsViewModel = widget.viewModel == null;
-    _viewModel =
-        widget.viewModel ??
-        RealtimeProviderSettingsViewModel(widget.repository!);
     _viewModel.load();
   }
 
@@ -74,7 +66,6 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
     _voice.dispose();
     _secret.dispose();
     _qwenWorkspace.dispose();
-    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 
@@ -95,7 +86,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       return;
     }
     final saved = await _viewModel.register(
-      RealtimeProviderDraft(
+      RealtimeProviderFormInput(
         displayName: _name.text.trim().isEmpty
             ? 'Realtime provider'
             : _name.text.trim(),
@@ -147,6 +138,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
   Widget _buildContent(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
+    final state = _viewModel.state;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -175,23 +167,23 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
           ),
         ),
         const SizedBox(height: ListenSpacing.gap12),
-        if (_viewModel.failure != null)
+        if (state.failure != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: ApiFailureNotice(
-              message: l.text(_viewModel.failure!.messageKey),
-              failure: _viewModel.failure!.detail,
+              message: l.text(state.failure!.messageKey),
+              failure: state.failure!.detail,
             ),
           ),
-        if (_viewModel.loading)
+        if (state.loading)
           const Padding(
             padding: EdgeInsets.all(8),
             child: Center(child: ListenLoading()),
           )
-        else if (_viewModel.profiles.isEmpty)
+        else if (state.profiles.isEmpty)
           Text(l.text('realtimeNoProviders'), style: theme.textTheme.bodyMedium)
         else
-          ..._viewModel.profiles.map((profile) => _profileTile(profile, l)),
+          ...state.profiles.map((profile) => _profileTile(profile, l)),
         const Divider(height: 28),
         _addForm(l),
       ],
@@ -200,6 +192,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
 
   Widget _profileTile(RealtimeProviderProfileView profile, AppLocalizations l) {
     final theme = Theme.of(context);
+    final state = _viewModel.state;
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Padding(
@@ -226,7 +219,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
                 IconButton(
                   tooltip: l.text('realtimeRemove'),
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: _viewModel.deletingIds.contains(profile.id)
+                  onPressed: state.deletingIds.contains(profile.id)
                       ? null
                       : () => _remove(profile),
                 ),
@@ -352,7 +345,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       Align(
         alignment: Alignment.centerRight,
         child: FilledButton(
-          onPressed: _viewModel.submitting ? null : () => _register(l),
+          onPressed: _viewModel.state.submitting ? null : () => _register(l),
           child: Text(l.text('realtimeSaveProvider')),
         ),
       ),

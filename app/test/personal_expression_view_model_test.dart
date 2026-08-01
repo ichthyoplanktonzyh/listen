@@ -5,6 +5,7 @@ import 'package:llplayer_next/controllers/personal_expression_view_model.dart';
 import 'package:llplayer_next/data/repositories/personal_expression_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/personal_expression.dart';
+import 'package:llplayer_next/services/file_transfer_service.dart';
 
 SentencePatternAssetView _pattern(String id) => SentencePatternAssetView(
   id: id,
@@ -28,6 +29,7 @@ class _FakeRepository implements PersonalExpressionRepository {
   final queryResults = <String, Completer<List<SentencePatternAssetView>>>{};
   Object? detailFailure;
   var detailLoads = 0;
+  Object? exportFailure;
 
   @override
   Future<List<SentencePatternAssetView>> listPatterns({
@@ -67,7 +69,15 @@ class _FakeRepository implements PersonalExpressionRepository {
   @override
   Future<PersonalExpressionExportBundleView> export({
     required String language,
-  }) => throw UnimplementedError();
+  }) async {
+    if (exportFailure case final failure?) throw failure;
+    return const PersonalExpressionExportBundleView(
+      schema: 'listen.personal_expression.v1',
+      exportedAtMs: 1,
+      patternCount: 2,
+      json: {'patterns': <Object>[]},
+    );
+  }
 
   @override
   Future<PersonalExpressionAttemptView> recordAttempt({
@@ -90,8 +100,66 @@ class _FakeRepository implements PersonalExpressionRepository {
   }) => throw UnimplementedError();
 }
 
+class _FakeExportFileService implements PersonalExpressionExportFileService {
+  _FakeExportFileService({this.path});
+
+  final String? path;
+  String? suggestedName;
+  Map<String, dynamic>? document;
+
+  @override
+  Future<String?> write({
+    required String suggestedName,
+    required Map<String, dynamic> document,
+  }) async {
+    this.suggestedName = suggestedName;
+    this.document = document;
+    return path;
+  }
+}
+
 void main() {
   group('PersonalExpressionViewModel', () {
+    test('export owns the repository read and file write', () async {
+      final fileService = _FakeExportFileService(path: '/tmp/export.json');
+      final viewModel = PersonalExpressionViewModel(
+        _FakeRepository(),
+        language: 'en',
+        exportFileService: fileService,
+      );
+      addTearDown(viewModel.dispose);
+
+      final outcome = await viewModel.exportToFile();
+
+      expect(outcome.succeeded, isTrue);
+      expect(outcome.path, '/tmp/export.json');
+      expect(outcome.patternCount, 2);
+      expect(fileService.suggestedName, 'llplayer-personal-expression.json');
+      expect(fileService.document, {'patterns': <Object>[]});
+    });
+
+    test(
+      'export returns a typed failure instead of leaking an exception',
+      () async {
+        final repository = _FakeRepository()
+          ..exportFailure = const ApiFailure(
+            raw: 'private transport text',
+            correlationId: 'ref-1',
+          );
+        final viewModel = PersonalExpressionViewModel(
+          repository,
+          language: 'en',
+          exportFileService: _FakeExportFileService(path: '/tmp/export.json'),
+        );
+        addTearDown(viewModel.dispose);
+
+        final outcome = await viewModel.exportToFile();
+
+        expect(outcome.succeeded, isFalse);
+        expect(outcome.failure?.correlationId, 'ref-1');
+      },
+    );
+
     test(
       'an older search response cannot replace the newest results',
       () async {

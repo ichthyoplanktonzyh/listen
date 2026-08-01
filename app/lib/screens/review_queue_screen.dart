@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/review_controller.dart';
 import '../controllers/slice_player_controller.dart';
-import '../data/repositories/review_repository.dart';
 import '../localization.dart';
 import '../models/practice.dart';
 import '../state/builder.dart';
@@ -19,13 +18,12 @@ import '../widgets/common/listen_loading.dart';
 class ReviewQueueScreen extends StatefulWidget {
   const ReviewQueueScreen({
     super.key,
-    required this.repository,
+    required this.controller,
+    required this.resolver,
+    required this.slicePlayer,
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
     this.onPauseBackgroundPlayback,
-    this.controller,
-    this.resolver,
-    this.createSlicePlaybackAdapter,
   });
 
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
@@ -36,36 +34,25 @@ class ReviewQueueScreen extends StatefulWidget {
   /// completely independent of the main player (S5 · R1).
   final Future<void> Function()? onPauseBackgroundPlayback;
 
-  final ReviewRepository repository;
-  final ReviewController? controller;
+  final ReviewController controller;
 
-  /// The clip resolver. Production builds one from [repository] exactly like the
-  /// vocabulary dictionary's; tests inject a stub so a clip can resolve
-  /// without a real file on disk.
-  final OccurrenceMediaResolver? resolver;
-
-  /// The second-decoder adapter factory, overridable so tests inject a fake
-  /// instead of opening a real video_player instance.
-  final CreateSlicePlaybackAdapter? createSlicePlaybackAdapter;
+  /// Resolves review occurrences without exposing the repository to the View.
+  final OccurrenceMediaResolver resolver;
+  final SlicePlayerController slicePlayer;
 
   @override
   State<ReviewQueueScreen> createState() => _ReviewQueueScreenState();
 }
 
 class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
-  late final ReviewController controller =
-      widget.controller ?? ReviewController(widget.repository);
-  late final bool _ownsController = widget.controller == null;
+  ReviewController get controller => widget.controller;
 
   /// The review card plays its source clip on its own decoder, so a card is
   /// reviewable even when no media (or a different one) is loaded in the main
   /// player — the fix for the whole-queue "clip unavailable" state (S5 · R1).
-  late final SlicePlayerController _slicePlayer = SlicePlayerController(
-    createAdapter: widget.createSlicePlaybackAdapter,
-  );
+  SlicePlayerController get _slicePlayer => widget.slicePlayer;
 
-  late final OccurrenceMediaResolver _resolver =
-      widget.resolver ?? OccurrenceMediaResolver(repository: widget.repository);
+  OccurrenceMediaResolver get _resolver => widget.resolver;
 
   @override
   void initState() {
@@ -75,8 +62,6 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
 
   @override
   void dispose() {
-    _slicePlayer.dispose();
-    if (_ownsController) controller.dispose();
     super.dispose();
   }
 

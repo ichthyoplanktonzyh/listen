@@ -2,58 +2,33 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'controllers/learning_assets_view_models.dart';
 import 'localization.dart';
-import 'data/repositories/learning_assets_repository.dart';
-import 'data/repositories/personal_expression_repository.dart';
-import 'models/personal_expression.dart';
 import 'models/runtime_resources.dart';
 import 'models/types.dart';
-import 'screens/personal_expression_screen.dart';
 import 'theme/spacing.dart';
 import 'widgets/common/listen_loading.dart';
+import 'widgets/common/api_failure_disclosure.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
     super.key,
-    required this.repository,
-    required this.personalExpressionRepository,
-    required this.language,
-    this.onPlayExpressionSource,
-    this.onStartExpressionSpeaking,
+    required this.viewModel,
+    required this.personalExpressionBuilder,
   });
 
-  final LearningAssetsRepository repository;
-  final PersonalExpressionRepository personalExpressionRepository;
-  final String language;
-  final Future<void> Function(PersonalExpressionSourceView source)?
-  onPlayExpressionSource;
-  final Future<void> Function(SentencePatternAssetView pattern)?
-  onStartExpressionSpeaking;
+  final LearningAssetsViewModel viewModel;
+  final WidgetBuilder personalExpressionBuilder;
 
   @override
   State<LearningAssetsScreen> createState() => _LearningAssetsScreenState();
 }
 
 class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
-  List<LexicalEntryDetails> values = const [];
-  String kind = 'phrase';
-  String? status;
-  String search = '';
-
   @override
   void initState() {
     super.initState();
-    unawaited(_refresh());
-  }
-
-  Future<void> _refresh() async {
-    final next = await widget.repository.lexicalEntries(
-      language: widget.language,
-      kind: kind,
-      status: status,
-      search: search,
-    );
-    if (mounted) setState(() => values = next);
+    unawaited(widget.viewModel.load());
   }
 
   Future<void> _details(LexicalEntryDetails details) async {
@@ -130,17 +105,13 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
           actions: [
             FilledButton(
               onPressed: () async {
-                await widget.repository.upsertLexicalEntry({
-                  'language': entry.language,
-                  'kind': entry.kind,
-                  'canonical_form': entry.normalizedForm,
-                  'display_form': entry.displayForm,
-                  'status': selectedStatus,
-                  'user_definition': definition.text,
-                  'personal_note': note.text,
-                });
+                await widget.viewModel.saveEntry(
+                  entry: entry,
+                  status: selectedStatus,
+                  definition: definition.text,
+                  note: note.text,
+                );
                 if (context.mounted) Navigator.pop(context);
-                await _refresh();
               },
               child: Text(AppLocalizations.of(context).text('save')),
             ),
@@ -155,138 +126,121 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return Scaffold(
-      appBar: AppBar(title: Text(l.text('learningAssets'))),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            child: Card(
-              child: ListTile(
-                leading: const Icon(Icons.auto_stories_outlined),
-                // Both strings already existed in `localization.dart` for
-                // this same destination — the compact home card reads them —
-                // so this tile was showing a second, hand-written subtitle for
-                // one place. Reading the keys fixes the i18n hole and makes the
-                // two surfaces agree on what 我的表达 is for.
-                title: Text(l.text('personalExpressions')),
-                subtitle: Text(l.text('personalExpressionSummary')),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () async {
-                  await Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) => PersonalExpressionScreen(
-                        repository: widget.personalExpressionRepository,
-                        language: widget.language,
-                        onPlaySource: widget.onPlayExpressionSource,
-                        onStartSpeaking: widget.onStartExpressionSpeaking,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(value: 'word', label: Text(l.text('words'))),
-                    ButtonSegment(
-                      value: 'phrase',
-                      label: Text(l.text('phrases')),
-                    ),
-                  ],
-                  selected: {kind},
-                  onSelectionChanged: (value) {
-                    setState(() => kind = value.first);
-                    unawaited(_refresh());
-                  },
-                ),
-                const SizedBox(width: ListenSpacing.gap12),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      labelText: l.text('searchVocabulary'),
-                    ),
-                    onChanged: (value) {
-                      search = value;
-                      unawaited(_refresh());
+    return ListenableBuilder(
+      listenable: widget.viewModel,
+      builder: (context, _) {
+        final state = widget.viewModel.state;
+        return Scaffold(
+          appBar: AppBar(title: Text(l.text('learningAssets'))),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.auto_stories_outlined),
+                    // Both strings already existed in `localization.dart` for
+                    // this same destination — the compact home card reads them —
+                    // so this tile was showing a second, hand-written subtitle for
+                    // one place. Reading the keys fixes the i18n hole and makes the
+                    // two surfaces agree on what 我的表达 is for.
+                    title: Text(l.text('personalExpressions')),
+                    subtitle: Text(l.text('personalExpressionSummary')),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () async {
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: widget.personalExpressionBuilder,
+                        ),
+                      );
                     },
                   ),
                 ),
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    SegmentedButton<String>(
+                      segments: [
+                        ButtonSegment(
+                          value: 'word',
+                          label: Text(l.text('words')),
+                        ),
+                        ButtonSegment(
+                          value: 'phrase',
+                          label: Text(l.text('phrases')),
+                        ),
+                      ],
+                      selected: {state.kind},
+                      onSelectionChanged: (value) {
+                        unawaited(widget.viewModel.setKind(value.first));
+                      },
+                    ),
+                    const SizedBox(width: ListenSpacing.gap12),
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          labelText: l.text('searchVocabulary'),
+                        ),
+                        onChanged: (value) =>
+                            unawaited(widget.viewModel.setSearch(value)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  children: [
+                    for (final details in state.values)
+                      LearningAssetTile(
+                        details: details,
+                        onTap: () => _details(details),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: ListView(
-              children: [
-                for (final details in values)
-                  LearningAssetTile(
-                    details: details,
-                    onTap: () => _details(details),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
 class LearningResourceScreen extends StatefulWidget {
-  const LearningResourceScreen({super.key, required this.repository});
-  final LearningAssetsRepository repository;
+  const LearningResourceScreen({super.key, required this.viewModel});
+  final LearningResourcesViewModel viewModel;
 
   @override
   State<LearningResourceScreen> createState() => _LearningResourceScreenState();
 }
 
 class _LearningResourceScreenState extends State<LearningResourceScreen> {
-  List<LearningResourceDescriptor> resources = const [];
-  String? busy;
-
   @override
   void initState() {
     super.initState();
-    unawaited(_refresh());
-  }
-
-  Future<void> _refresh() async {
-    final values = await widget.repository.learningResources();
-    if (mounted) setState(() => resources = values);
-  }
-
-  Future<void> _toggle(LearningResourceDescriptor value) async {
-    final id = value.id;
-    setState(() => busy = id);
-    try {
-      if (value.state == 'installed') {
-        await widget.repository.removeLearningResource(id);
-      } else {
-        await widget.repository.installLearningResource(id);
-      }
-      await _refresh();
-    } finally {
-      if (mounted) setState(() => busy = null);
-    }
+    unawaited(widget.viewModel.load());
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(AppLocalizations.of(context).text('resources'))),
-    body: ListView(
-      children: [
-        for (final value in resources)
-          LearningResourceTile(
-            value: value,
-            busy: busy == value.id,
-            onToggle: () => _toggle(value),
-          ),
-      ],
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.viewModel,
+    builder: (context, _) => Scaffold(
+      appBar: AppBar(
+        title: Text(AppLocalizations.of(context).text('resources')),
+      ),
+      body: ListView(
+        children: [
+          for (final value in widget.viewModel.state.resources)
+            LearningResourceTile(
+              value: value,
+              busy: widget.viewModel.state.busyId == value.id,
+              onToggle: () => widget.viewModel.toggle(value),
+            ),
+        ],
+      ),
     ),
   );
 }
@@ -352,18 +306,15 @@ class LearningResourceTile extends StatelessWidget {
 
 Future<LexicalEntryDetails?> showPhraseCandidate({
   required BuildContext context,
-  required LearningAssetsRepository repository,
-  required PhraseCandidate candidate,
-  required Map<String, dynamic> source,
-  String? initialStatus,
+  required PhraseCandidateViewModel viewModel,
 }) async {
-  var status = initialStatus ?? 'known_not_recognized';
   LexicalEntryDetails? saved;
   await showDialog<void>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: Text(candidate.displayForm),
+    builder: (context) => ListenableBuilder(
+      listenable: viewModel,
+      builder: (context, _) => AlertDialog(
+        title: Text(viewModel.candidate.displayForm),
         content: SizedBox(
           width: 480,
           child: Column(
@@ -372,10 +323,10 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
             children: [
               Text(AppLocalizations.of(context).text('phraseCandidatesHint')),
               const SizedBox(height: ListenSpacing.gap12),
-              Text(candidate.reason ?? ''),
+              Text(viewModel.candidate.reason ?? ''),
               const SizedBox(height: ListenSpacing.gap12),
               DropdownButtonFormField<String>(
-                initialValue: status,
+                initialValue: viewModel.status,
                 items: [
                   for (final value in const [
                     'unknown_meaning',
@@ -387,7 +338,9 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
                       child: Text(AppLocalizations.of(context).status(value)),
                     ),
                 ],
-                onChanged: (value) => setState(() => status = value ?? status),
+                onChanged: (value) {
+                  if (value != null) viewModel.setStatus(value);
+                },
               ),
             ],
           ),
@@ -399,19 +352,7 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
           ),
           FilledButton(
             onPressed: () async {
-              saved = await repository.upsertLexicalEntry({
-                'language': source['language'] as String? ?? 'en',
-                'kind': 'phrase',
-                'canonical_form': candidate.canonicalForm,
-                'display_form': candidate.displayForm,
-                'status': status,
-                'source': {
-                  ...source,
-                  'original_form': candidate.displayForm,
-                  'token_start': candidate.tokenStart,
-                  'token_end': candidate.tokenEnd,
-                },
-              });
+              saved = await viewModel.save();
               if (context.mounted) Navigator.pop(context);
             },
             child: Text(AppLocalizations.of(context).text('confirmPhrase')),
@@ -420,27 +361,21 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
       ),
     ),
   );
+  viewModel.dispose();
   return saved;
 }
 
 Future<String?> showOpenSubtitlesSearch({
   required BuildContext context,
-  required LearningAssetsRepository repository,
-  required String apiKey,
-  required String initialTitle,
-  required String initialFilename,
-  required String? mediaPath,
+  required OpenSubtitlesSearchViewModel viewModel,
 }) async {
-  final controller = TextEditingController(text: initialTitle);
-  var values = <OpenSubtitleCandidate>[];
-  var loading = false;
-  var mode = 'title';
-  String? error;
+  final controller = TextEditingController(text: viewModel.state.query);
   String? selected;
   await showDialog<void>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
+    builder: (context) => ListenableBuilder(
+      listenable: viewModel,
+      builder: (context, _) => AlertDialog(
         title: Text(AppLocalizations.of(context).text('openSubtitles')),
         content: SizedBox(
           width: 680,
@@ -448,7 +383,7 @@ Future<String?> showOpenSubtitlesSearch({
           child: Column(
             children: [
               DropdownButtonFormField<String>(
-                initialValue: mode,
+                initialValue: viewModel.state.mode,
                 items: [
                   DropdownMenuItem(
                     value: 'title',
@@ -464,53 +399,45 @@ Future<String?> showOpenSubtitlesSearch({
                   ),
                 ],
                 onChanged: (value) {
-                  setState(() => mode = value ?? mode);
-                  if (mode == 'title') controller.text = initialTitle;
-                  if (mode == 'filename') controller.text = initialFilename;
+                  if (value == null) return;
+                  viewModel.setMode(value);
+                  controller.text = viewModel.state.query;
                 },
               ),
-              if (mode != 'hash') TextField(controller: controller),
+              if (viewModel.state.mode != 'hash')
+                TextField(
+                  controller: controller,
+                  onChanged: viewModel.setQuery,
+                ),
               FilledButton(
-                onPressed: loading
-                    ? null
-                    : () async {
-                        setState(() => loading = true);
-                        try {
-                          final hash = mode == 'hash' && mediaPath != null
-                              ? await repository.openSubtitlesMovieHash(
-                                  mediaPath,
-                                )
-                              : null;
-                          values = await repository.searchOpenSubtitles(
-                            apiKey: apiKey,
-                            query: mode == 'hash' ? null : controller.text,
-                            moviehash: hash,
-                          );
-                          error = null;
-                        } catch (value) {
-                          error = value.toString();
-                        } finally {
-                          setState(() => loading = false);
-                        }
-                      },
+                onPressed: viewModel.state.loading ? null : viewModel.search,
                 child: Text(AppLocalizations.of(context).text('search')),
               ),
-              if (loading) const LinearProgressIndicator(),
-              if (error != null) Text(error!),
+              if (viewModel.state.loading) const LinearProgressIndicator(),
+              if (viewModel.state.failure != null) ...[
+                Text(
+                  AppLocalizations.of(
+                    context,
+                  ).text(viewModel.state.failure!.messageKey),
+                ),
+                if (ApiFailureDisclosure.hasDetail(
+                  viewModel.state.failure!.detail,
+                ))
+                  ApiFailureDisclosure(
+                    failure: viewModel.state.failure!.detail!,
+                  ),
+              ],
               Expanded(
                 child: ListView(
                   children: [
-                    for (final value in values)
+                    for (final value in viewModel.state.values)
                       ListTile(
                         title: Text(value.release),
                         subtitle: Text(
                           '${value.language} · rating ${value.rating} · ${value.downloadCount} downloads',
                         ),
                         onTap: () async {
-                          selected = await repository.downloadOpenSubtitle(
-                            apiKey: apiKey,
-                            fileId: value.fileId,
-                          );
+                          selected = await viewModel.download(value.fileId);
                           if (context.mounted) Navigator.pop(context);
                         },
                       ),
@@ -524,5 +451,6 @@ Future<String?> showOpenSubtitlesSearch({
     ),
   );
   controller.dispose();
+  viewModel.dispose();
   return selected;
 }

@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../controllers/provider_settings_view_models.dart';
 import '../../localization.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../player/shortcut_cheat_sheet.dart';
@@ -16,10 +16,9 @@ import 'syntax_capability_settings.dart';
 class SettingsDialog extends StatefulWidget {
   const SettingsDialog({
     super.key,
-    this.llmRepository,
-    this.realtimeRepository,
-    this.syntaxRepository,
-    this.currentTrackId,
+    this.llmViewModel,
+    this.realtimeViewModel,
+    this.syntaxViewModel,
     required this.language,
     required this.themeMode,
     required this.subtitlePreset,
@@ -97,10 +96,9 @@ class SettingsDialog extends StatefulWidget {
   // Current values
   /// Phase 3.12: when a sidecar is connected, the AI-providers section can
   /// manage vendor-neutral LLM providers. Null keeps that section inert.
-  final LlmProviderRepository? llmRepository;
-  final RealtimeProviderRepository? realtimeRepository;
-  final SyntaxCapabilityRepository? syntaxRepository;
-  final String? currentTrackId;
+  final LlmProviderSettingsViewModel? llmViewModel;
+  final RealtimeProviderSettingsViewModel? realtimeViewModel;
+  final SyntaxCapabilitySettingsViewModel? syntaxViewModel;
   final String language;
   final String themeMode;
   final String subtitlePreset;
@@ -1013,10 +1011,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: ListenSpacing.gap8),
-                    if (widget.syntaxRepository != null)
+                    if (widget.syntaxViewModel != null)
                       SyntaxCapabilitySettings(
-                        repository: widget.syntaxRepository!,
-                        currentTrackId: widget.currentTrackId,
+                        viewModel: widget.syntaxViewModel!,
                       )
                     else
                       Text(l.text('syntaxCoreUnavailable')),
@@ -1058,8 +1055,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: ListenSpacing.gap8),
-                    if (widget.llmRepository != null)
-                      LlmProviderSettings(repository: widget.llmRepository!)
+                    if (widget.llmViewModel != null)
+                      LlmProviderSettings(viewModel: widget.llmViewModel!)
                     else
                       Text(l.text('llmSidecarUnavailable')),
                     const Divider(),
@@ -1069,9 +1066,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: ListenSpacing.gap8),
-                    if (widget.realtimeRepository != null)
+                    if (widget.realtimeViewModel != null)
                       RealtimeProviderSettings(
-                        repository: widget.realtimeRepository!,
+                        viewModel: widget.realtimeViewModel!,
                       )
                     else
                       Text(l.text('realtimeSidecarUnavailable')),

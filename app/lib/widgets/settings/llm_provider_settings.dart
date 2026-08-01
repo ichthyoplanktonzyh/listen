@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/provider_settings_view_models.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../models/llm_provider.dart';
 import '../../theme/icon_size.dart';
@@ -19,19 +18,16 @@ import '../common/listen_loading.dart';
 /// says so explicitly so a configured provider is never mistaken for verified
 /// assistance.
 class LlmProviderSettings extends StatefulWidget {
-  const LlmProviderSettings({super.key, this.repository, this.viewModel})
-    : assert(repository != null || viewModel != null);
+  const LlmProviderSettings({super.key, required this.viewModel});
 
-  final LlmProviderRepository? repository;
-  final LlmProviderSettingsViewModel? viewModel;
+  final LlmProviderSettingsViewModel viewModel;
 
   @override
   State<LlmProviderSettings> createState() => _LlmProviderSettingsState();
 }
 
 class _LlmProviderSettingsState extends State<LlmProviderSettings> {
-  late final LlmProviderSettingsViewModel _viewModel;
-  late final bool _ownsViewModel;
+  LlmProviderSettingsViewModel get _viewModel => widget.viewModel;
 
   final _nameCtrl = TextEditingController();
   final _baseUrlCtrl = TextEditingController();
@@ -44,10 +40,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   @override
   void initState() {
     super.initState();
-    _ownsViewModel = widget.viewModel == null;
-    _viewModel =
-        widget.viewModel ?? LlmProviderSettingsViewModel(widget.repository!);
-    _viewModel.load();
+    widget.viewModel.load();
   }
 
   @override
@@ -56,7 +49,6 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     _baseUrlCtrl.dispose();
     _modelCtrl.dispose();
     _secretCtrl.dispose();
-    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 
@@ -71,7 +63,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
       return;
     }
     final saved = await _viewModel.register(
-      LlmProviderDraft(
+      LlmProviderFormInput(
         displayName: _nameCtrl.text.trim().isEmpty
             ? _modelCtrl.text.trim()
             : _nameCtrl.text.trim(),
@@ -94,12 +86,14 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: _viewModel,
+      listenable: widget.viewModel,
       builder: (context, _) => _buildContent(context),
     );
   }
 
   Widget _buildContent(BuildContext context) {
+    final viewModel = widget.viewModel;
+    final state = viewModel.state;
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     return Column(
@@ -135,23 +129,23 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmNotQualified'), style: theme.textTheme.bodySmall),
         const SizedBox(height: ListenSpacing.gap12),
-        if (_viewModel.failure != null)
+        if (state.failure != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: ApiFailureNotice(
-              message: l.text(_viewModel.failure!.messageKey),
-              failure: _viewModel.failure!.detail,
+              message: l.text(state.failure!.messageKey),
+              failure: state.failure!.detail,
             ),
           ),
-        if (_viewModel.loading)
+        if (state.loading)
           const Padding(
             padding: EdgeInsets.all(8),
             child: Center(child: ListenLoading()),
           )
-        else if (_viewModel.providers.isEmpty)
+        else if (state.providers.isEmpty)
           Text(l.text('llmNoProviders'), style: theme.textTheme.bodyMedium)
         else
-          ..._viewModel.providers.map(_providerTile),
+          ...state.providers.map(_providerTile),
         const Divider(height: 28),
         _addForm(l),
       ],
@@ -160,7 +154,8 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
 
   Widget _providerTile(LlmProviderProfileView p) {
     final l = AppLocalizations.of(context);
-    final probe = _viewModel.probeStatuses[p.id];
+    final state = _viewModel.state;
+    final probe = state.probeStatuses[p.id];
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Padding(
@@ -191,7 +186,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
                 IconButton(
                   tooltip: l.text('llmRemove'),
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: _viewModel.deletingIds.contains(p.id)
+                  onPressed: state.deletingIds.contains(p.id)
                       ? null
                       : () => _viewModel.delete(p.id),
                 ),
@@ -307,7 +302,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton(
-            onPressed: _viewModel.submitting ? null : _register,
+            onPressed: _viewModel.state.submitting ? null : _register,
             child: Text(l.text('llmRegister')),
           ),
         ),

@@ -3,11 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../controllers/personal_expression_view_model.dart';
-import '../data/repositories/personal_expression_repository.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
 import '../models/personal_expression.dart';
-import '../services/file_transfer_service.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/listen_theme.dart';
@@ -24,6 +22,14 @@ import '../widgets/common/listen_loading.dart';
 /// or two cards the column is ~85% blank, and blank space that follows content
 /// reads as "that's all there is" rather than "here is how you get more".
 const _starterGuideThreshold = 3;
+
+enum PersonalExpressionDetailOutcome { closed, edit }
+
+typedef OpenPersonalExpressionPattern =
+    Future<PersonalExpressionDetailOutcome> Function(
+      BuildContext context,
+      SentencePatternAssetView pattern,
+    );
 
 /// The scaffolding ladder — four assistance rungs, ordered most help → least.
 ///
@@ -324,18 +330,16 @@ class _AssistanceLadder extends StatelessWidget {
 class PersonalExpressionScreen extends StatefulWidget {
   const PersonalExpressionScreen({
     super.key,
-    required this.repository,
-    this.viewModel,
-    this.exportFileService = const LocalPersonalExpressionExportFileService(),
+    required this.viewModel,
+    required this.onOpenPattern,
     required this.language,
     this.initialSource,
     this.onPlaySource,
     this.onStartSpeaking,
   });
 
-  final PersonalExpressionRepository repository;
-  final PersonalExpressionViewModel? viewModel;
-  final PersonalExpressionExportFileService exportFileService;
+  final PersonalExpressionViewModel viewModel;
+  final OpenPersonalExpressionPattern onOpenPattern;
   final String language;
   final PersonalExpressionSourceView? initialSource;
   final Future<void> Function(PersonalExpressionSourceView source)?
@@ -349,10 +353,7 @@ class PersonalExpressionScreen extends StatefulWidget {
 }
 
 class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
-  late final PersonalExpressionViewModel _viewModel =
-      widget.viewModel ??
-      PersonalExpressionViewModel(widget.repository, language: widget.language);
-  late final bool _ownsViewModel = widget.viewModel == null;
+  PersonalExpressionViewModel get _viewModel => widget.viewModel;
 
   @override
   void initState() {
@@ -368,41 +369,36 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
 
   @override
   void dispose() {
-    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
   }
 
   Future<void> _export() async {
     try {
-      final bundle = await _viewModel.export();
-      final path = await widget.exportFileService.write(
-        suggestedName: 'llplayer-personal-expression.json',
-        document: bundle.toJson(),
-      );
-      if (path == null) return;
+      final outcome = await _viewModel.exportToFile();
+      if (outcome.cancelled) return;
       if (!mounted) return;
       final l = AppLocalizations.of(context);
+      if (!outcome.succeeded) {
+        final reference = outcome.failure?.correlationId;
+        _notify(
+          reference == null
+              ? l.text('expressionExportFailed')
+              : '${l.text('expressionExportFailed')} '
+                    '${l.text('failureReference').replaceAll('{id}', reference)}',
+          isError: true,
+        );
+        return;
+      }
       _notify(
         l
             .text('expressionExported')
-            .replaceAll('{count}', '${bundle.patternCount}')
-            .replaceAll('{path}', path),
+            .replaceAll('{count}', '${outcome.patternCount}')
+            .replaceAll('{path}', outcome.path!),
       );
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
-      // The export can fail in the API *or* in the file write, and neither
-      // exception says anything a learner can use. One named state, and the
-      // reference id only when the backend supplied one.
       final l = AppLocalizations.of(context);
-      final detail = error is ApiFailure ? error : null;
-      final reference = detail?.correlationId;
-      _notify(
-        reference == null
-            ? l.text('expressionExportFailed')
-            : '${l.text('expressionExportFailed')} '
-                  '${l.text('failureReference').replaceAll('{id}', reference)}',
-        isError: true,
-      );
+      _notify(l.text('expressionExportFailed'), isError: true);
     }
   }
 
@@ -584,25 +580,10 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
   }
 
   Future<void> _open(SentencePatternAssetView pattern) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => _PatternDetail(
-          repository: widget.repository,
-          pattern: pattern,
-          onEdit: () async {
-            Navigator.of(context).pop();
-            await _edit(pattern: pattern);
-          },
-          onPlaySource: widget.onPlaySource,
-          onStartSpeaking: widget.onStartSpeaking == null
-              ? null
-              : (value) async {
-                  Navigator.of(context).pop();
-                  await widget.onStartSpeaking!(value);
-                },
-        ),
-      ),
-    );
+    final outcome = await widget.onOpenPattern(context, pattern);
+    if (outcome == PersonalExpressionDetailOutcome.edit && mounted) {
+      await _edit(pattern: pattern);
+    }
     await _viewModel.refresh();
   }
 
@@ -901,42 +882,33 @@ class _PatternCard extends StatelessWidget {
   }
 }
 
-class _PatternDetail extends StatefulWidget {
-  const _PatternDetail({
-    required this.repository,
+class PersonalExpressionDetailScreen extends StatefulWidget {
+  const PersonalExpressionDetailScreen({
+    super.key,
+    required this.viewModel,
     required this.pattern,
-    required this.onEdit,
     this.onPlaySource,
     this.onStartSpeaking,
   });
-  final PersonalExpressionRepository repository;
+  final PersonalExpressionDetailViewModel viewModel;
   final SentencePatternAssetView pattern;
-  final Future<void> Function() onEdit;
   final Future<void> Function(PersonalExpressionSourceView source)?
   onPlaySource;
   final Future<void> Function(SentencePatternAssetView pattern)?
   onStartSpeaking;
   @override
-  State<_PatternDetail> createState() => _PatternDetailState();
+  State<PersonalExpressionDetailScreen> createState() =>
+      _PersonalExpressionDetailScreenState();
 }
 
-class _PatternDetailState extends State<_PatternDetail> {
-  late final PersonalExpressionDetailViewModel _viewModel =
-      PersonalExpressionDetailViewModel(
-        widget.repository,
-        pattern: widget.pattern,
-      );
+class _PersonalExpressionDetailScreenState
+    extends State<PersonalExpressionDetailScreen> {
+  PersonalExpressionDetailViewModel get _viewModel => widget.viewModel;
 
   @override
   void initState() {
     super.initState();
     unawaited(_viewModel.load());
-  }
-
-  @override
-  void dispose() {
-    _viewModel.dispose();
-    super.dispose();
   }
 
   /// 弹窗死刑: the writing flow is a page (the writing desk), not a dialog.
@@ -998,7 +970,8 @@ class _PatternDetailState extends State<_PatternDetail> {
         title: Text(widget.pattern.currentVersion.name),
         actions: [
           IconButton(
-            onPressed: () => unawaited(widget.onEdit()),
+            onPressed: () =>
+                Navigator.of(context).pop(PersonalExpressionDetailOutcome.edit),
             icon: const Icon(Icons.edit_outlined),
           ),
         ],

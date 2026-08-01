@@ -1,11 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/media_import_flow_controller.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/embedded_subtitle.dart';
 import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
 
 void main() {
+  test('embedded subtitle choices expose an immutable snapshot', () {
+    final source = <EmbeddedSubtitle>[
+      const EmbeddedSubtitle(
+        ordinal: 0,
+        codec: 'srt',
+        title: 'English',
+        language: 'en',
+        isText: true,
+      ),
+    ];
+    final outcome = EmbeddedSubtitleChoices(source);
+    source.clear();
+
+    expect(outcome.values, hasLength(1));
+    expect(() => outcome.values.clear(), throwsUnsupportedError);
+  });
+
   testWidgets('add source validates URL and identifies YouTube', (
     tester,
   ) async {

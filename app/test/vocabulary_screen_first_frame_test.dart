@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/controllers/semantic_search_view_model.dart';
+import 'package:llplayer_next/controllers/slice_player_controller.dart';
+import 'package:llplayer_next/controllers/vocabulary_view_model.dart';
 import 'package:llplayer_next/data/repositories/lexical_repository.dart';
 import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/screens/vocabulary_screen.dart';
@@ -31,6 +34,17 @@ void main() {
       addTearDown(hunting.dispose);
       final auxiliaryAudio = AuxiliaryAudioController();
       addTearDown(auxiliaryAudio.dispose);
+      final vocabularyViewModel = VocabularyViewModel(
+        repository: LexicalRepository(api),
+        language: 'en',
+      );
+      addTearDown(vocabularyViewModel.dispose);
+      final semanticSearchViewModel = SemanticSearchViewModel(
+        LocalSemanticSearchRepository(api),
+      );
+      addTearDown(semanticSearchViewModel.dispose);
+      final slicePlayer = SlicePlayerController();
+      addTearDown(slicePlayer.dispose);
 
       // Mirrors the app shell: main.dart wraps the Navigator in a
       // ListenableBuilder that is already subscribed to the shared hunting
@@ -48,10 +62,9 @@ void main() {
                     context,
                     MaterialPageRoute(
                       builder: (_) => VocabularyScreen(
-                        repository: LexicalRepository(api),
-                        semanticSearchRepository: LocalSemanticSearchRepository(
-                          api,
-                        ),
+                        viewModel: vocabularyViewModel,
+                        semanticSearchViewModel: semanticSearchViewModel,
+                        slicePlayer: slicePlayer,
                         language: 'en',
                         onExport: () async {},
                         onImport: () async {},
@@ -76,8 +89,13 @@ void main() {
         reason: 'route mount must not notify shared listeners during build',
       );
 
-      await tester.pumpAndSettle();
+      // The workbench contains ambient animation, so settling the entire tree
+      // is not a meaningful completion signal. Pump the request microtasks and
+      // assert the injected state owners themselves have settled.
+      await tester.pump(const Duration(milliseconds: 100));
       expect(tester.takeException(), isNull);
+      expect(vocabularyViewModel.state.loading, isFalse);
+      expect(vocabularyViewModel.state.gapLoading, isFalse);
       expect(hunting.state.busy, isFalse);
     },
   );

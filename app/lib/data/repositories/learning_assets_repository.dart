@@ -1,8 +1,10 @@
 import '../../models/runtime_resources.dart';
 import '../../models/types.dart';
+import '../../models/api_failure.dart';
 import '../../services/api_service.dart';
 
 abstract interface class LearningAssetsRepository {
+  ApiFailure failureDetail(Object error);
   Future<List<LexicalEntryDetails>> lexicalEntries({
     required String language,
     required String kind,
@@ -36,6 +38,9 @@ final class LocalLearningAssetsRepository implements LearningAssetsRepository {
   const LocalLearningAssetsRepository(this._api);
 
   final LocalApi _api;
+
+  @override
+  ApiFailure failureDetail(Object error) => describeApiFailure(error);
 
   @override
   Future<List<LexicalEntryDetails>> lexicalEntries({

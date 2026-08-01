@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/coach_dashboard_controller.dart';
-import '../../data/repositories/coach_dashboard_repository.dart';
 import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
 import '../../theme/motion.dart';
@@ -47,14 +46,12 @@ class _PortraitFocus {
 class CoachDashboardScreen extends StatefulWidget {
   const CoachDashboardScreen({
     super.key,
-    required this.repository,
+    required this.controller,
     required this.language,
     required this.onNavigate,
-    this.controller,
   });
   final String language;
-  final CoachDashboardRepository repository;
-  final CoachDashboardController? controller;
+  final CoachDashboardController controller;
   final Future<void> Function(
     CoachSuggestionDestination destination,
     CoachReturnContext returnContext,
@@ -65,8 +62,7 @@ class CoachDashboardScreen extends StatefulWidget {
 }
 
 class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
-  late final CoachDashboardController controller;
-  late final bool _ownsController;
+  CoachDashboardController get controller => widget.controller;
   final scrollController = ScrollController();
   final _channelKeys = {
     for (final channel in _channelOrder) channel: GlobalKey(),
@@ -77,15 +73,11 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _ownsController = widget.controller == null;
-    controller =
-        widget.controller ?? CoachDashboardController(widget.repository);
     controller.load(language: widget.language);
   }
 
   @override
   void dispose() {
-    if (_ownsController) controller.dispose();
     scrollController.dispose();
     super.dispose();
   }

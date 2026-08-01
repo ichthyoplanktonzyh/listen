@@ -7,7 +7,6 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/provider_settings_view_models.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
-import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../theme/listen_theme.dart';
 import 'settings_dialog.dart';
@@ -23,30 +22,24 @@ Future<void> showAppSettings({
   required PlayerController playerController,
   required LearningController learningController,
   required Future<void> Function() saveSettings,
-  LearnerSettingsRepository? learnerRepository,
-  LlmProviderRepository? llmRepository,
-  RealtimeProviderRepository? realtimeRepository,
-  SyntaxCapabilityRepository? syntaxRepository,
+  LearnerSettingsViewModel? learnerViewModel,
+  LlmProviderSettingsViewModel? llmViewModel,
+  RealtimeProviderSettingsViewModel? realtimeViewModel,
+  SyntaxCapabilitySettingsViewModel? syntaxViewModel,
 }) async {
   // The L1 setting is a backend asset (Phase 3.9), not a local file setting.
   // Best-effort read: with no sidecar the field shows unset and stays inert.
-  final profileRepository = learnerRepository;
-  final profileViewModel = profileRepository == null
-      ? null
-      : LearnerSettingsViewModel(profileRepository);
-  await profileViewModel?.load();
-  final l1Language = profileViewModel?.l1Language ?? '';
+  await learnerViewModel?.load();
+  final l1Language = learnerViewModel?.state.l1Language ?? '';
   if (!context.mounted) {
-    profileViewModel?.dispose();
     return;
   }
   await showDialog<void>(
     context: context,
     builder: (_) => SettingsDialog(
-      llmRepository: llmRepository,
-      realtimeRepository: realtimeRepository,
-      syntaxRepository: syntaxRepository,
-      currentTrackId: subtitleController.primaryTrack?.id,
+      llmViewModel: llmViewModel,
+      realtimeViewModel: realtimeViewModel,
+      syntaxViewModel: syntaxViewModel,
       language: settingsController.language,
       themeMode: settingsController.themeMode,
       subtitlePreset: subtitleController.preset,
@@ -86,9 +79,9 @@ Future<void> showAppSettings({
       availableLanguages: learningController.availableLanguages,
       l1Language: l1Language,
       onL1LanguageChanged: (v) {
-        if (profileViewModel == null) return;
+        if (learnerViewModel == null) return;
         unawaited(
-          profileViewModel.updateL1Language(
+          learnerViewModel.updateL1Language(
             v,
             uiLanguage: settingsController.language,
           ),
@@ -297,5 +290,4 @@ Future<void> showAppSettings({
           },
     ),
   );
-  profileViewModel?.dispose();
 }

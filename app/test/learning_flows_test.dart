@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
+import 'package:llplayer_next/controllers/learning_flow_view_models.dart';
 import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/practice_actions_coordinator.dart';
@@ -60,12 +61,14 @@ void main() {
       _Harness(
         onPressed: (context) => correctCurrentLemmaFlow(
           context: context,
-          lexicalRepository: LexicalRepository(
-            _fakeApi((m, p, b) => (statusCode: 200, body: '{}')),
+          viewModel: LemmaCorrectionViewModel(
+            LexicalRepository(
+              _fakeApi((m, p, b) => (statusCode: 200, body: '{}')),
+            ),
+            original: 'ran',
+            language: 'en',
           ),
           playerController: PlayerController(),
-          subtitleController: SubtitleController(),
-          settingsController: SettingsController(),
           learningController: learning,
         ),
       ),
@@ -102,10 +105,12 @@ void main() {
       _Harness(
         onPressed: (context) => correctCurrentLemmaFlow(
           context: context,
-          lexicalRepository: LexicalRepository(api),
+          viewModel: LemmaCorrectionViewModel(
+            LexicalRepository(api),
+            original: 'ran',
+            language: 'en',
+          ),
           playerController: player,
-          subtitleController: SubtitleController(),
-          settingsController: SettingsController(),
           learningController: learning,
         ),
       ),
@@ -133,7 +138,7 @@ void main() {
         _Harness(
           onPressed: (context) => openLearningResourcesFlow(
             context: context,
-            repository: null,
+            viewModel: null,
             playerController: player,
           ),
         ),
@@ -192,11 +197,9 @@ void main() {
       _Harness(
         onPressed: (context) => showVocabularyFlow(
           context: context,
-          lexicalRepository: null,
-          semanticSearchRepository: null,
+          viewModel: null,
+          semanticSearchViewModel: null,
           playerController: player,
-          settingsController: SettingsController(),
-          subtitleController: subtitle,
           playbackActions: playback,
           practiceActions: practiceActions,
           huntingController: hunting,
@@ -224,7 +227,8 @@ void main() {
       _Harness(
         onPressed: (context) => openReviewQueueFlow(
           context: context,
-          repository: null,
+          controller: null,
+          resolver: null,
           playerController: player,
           pauseBackgroundPlayback: () async {},
           startReviewShadowing: (_) async {},

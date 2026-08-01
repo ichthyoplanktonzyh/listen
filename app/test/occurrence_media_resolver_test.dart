@@ -56,6 +56,52 @@ Map<String, dynamic> occurrence({String? mediaId}) {
 }
 
 void main() {
+  test('resolves linked review media without opening the picker', () async {
+    var pickerCalled = false;
+    final resolver = OccurrenceMediaResolver(
+      repository: _Repository(
+        onRead: (_) async => mediaAt('/linked/review.mp4'),
+        onFingerprint: (_) async => throw StateError('not needed'),
+        onRegister: (_) async => throw StateError('not needed'),
+      ),
+      fileService: _FileService(
+        onPick: (_) async {
+          pickerCalled = true;
+          return null;
+        },
+        onExists: (path) async => path == '/linked/review.mp4',
+      ),
+    );
+
+    final result = await resolver.resolveLinkedMedia('media-1');
+
+    expect(result, isA<ResolvedOccurrenceMedia>());
+    expect((result as ResolvedOccurrenceMedia).path, '/linked/review.mp4');
+    expect(pickerCalled, isFalse);
+  });
+
+  test('returns a typed failure when linked review media is missing', () async {
+    final resolver = OccurrenceMediaResolver(
+      repository: _Repository(
+        onRead: (_) async => mediaAt('/missing/review.mp4'),
+        onFingerprint: (_) async => throw StateError('not needed'),
+        onRegister: (_) async => throw StateError('not needed'),
+      ),
+      fileService: _FileService(
+        onPick: (_) async => throw StateError('must not pick'),
+        onExists: (_) async => false,
+      ),
+    );
+
+    final result = await resolver.resolveLinkedMedia('media-1');
+
+    expect(result, isA<UnresolvedOccurrenceMedia>());
+    expect(
+      (result as UnresolvedOccurrenceMedia).failure,
+      OccurrenceMediaResolutionFailure.linkedMediaUnavailable,
+    );
+  });
+
   test(
     'uses an existing linked media path without asking for a file',
     () async {

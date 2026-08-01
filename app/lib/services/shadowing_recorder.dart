@@ -3,13 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 
-enum MicrophonePermissionStatus {
-  granted,
-  denied,
-  restricted,
-  notDetermined,
-  unavailable,
-}
+import '../models/practice.dart';
 
 class CapturedRecording {
   const CapturedRecording({

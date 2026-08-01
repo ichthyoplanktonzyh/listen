@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/occurrence_media_resolver.dart';
+import 'package:llplayer_next/controllers/review_controller.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/data/repositories/occurrence_media_repository.dart';
 import 'package:llplayer_next/data/repositories/review_repository.dart';
@@ -222,7 +223,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ReviewQueueScreen(
-            repository: LocalReviewRepository(api),
+            controller: ReviewController(LocalReviewRepository(api)),
+            resolver: _fakeResolver(),
+            slicePlayer: SlicePlayerController(),
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async {},
           ),
@@ -291,7 +294,9 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ReviewQueueScreen(
-            repository: LocalReviewRepository(api),
+            controller: ReviewController(LocalReviewRepository(api)),
+            resolver: _fakeResolver(),
+            slicePlayer: SlicePlayerController(),
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async => launched = true,
           ),
@@ -317,6 +322,9 @@ void main() {
     'toggles in place',
     (tester) async {
       final adapter = _FakeSlicePlaybackAdapter();
+      final slicePlayer = SlicePlayerController(
+        createAdapter: (_) async => adapter,
+      );
       final api = LocalApi.withTransport(
         baseUrl: 'http://test',
         token: 'tok',
@@ -348,11 +356,11 @@ void main() {
           // No currentMediaId is even accepted anymore: the clip is decoupled
           // from the main player entirely.
           home: ReviewQueueScreen(
-            repository: LocalReviewRepository(api),
+            controller: ReviewController(LocalReviewRepository(api)),
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async {},
             resolver: _fakeResolver(),
-            createSlicePlaybackAdapter: (_) async => adapter,
+            slicePlayer: slicePlayer,
           ),
         ),
       );
@@ -374,6 +382,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
       expect(adapter.playing, isFalse);
       expect(find.byIcon(Icons.volume_up_outlined), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      slicePlayer.dispose();
     },
   );
 
@@ -381,6 +391,9 @@ void main() {
     tester,
   ) async {
     final adapter = _FakeSlicePlaybackAdapter();
+    final slicePlayer = SlicePlayerController(
+      createAdapter: (_) async => adapter,
+    );
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'tok',
@@ -407,11 +420,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ReviewQueueScreen(
-          repository: LocalReviewRepository(api),
+          controller: ReviewController(LocalReviewRepository(api)),
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
           resolver: _fakeResolver(reachable: false),
-          createSlicePlaybackAdapter: (_) async => adapter,
+          slicePlayer: slicePlayer,
         ),
       ),
     );
@@ -423,6 +436,8 @@ void main() {
     expect(adapter.playing, isFalse);
     // Honest in-place failure, not a grayed-out whole card.
     expect(find.text('Source media was not selected'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    slicePlayer.dispose();
   });
 
   testWidgets('R5: pressing Easy submits the fourth rating to the backend', (
@@ -458,7 +473,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ReviewQueueScreen(
-          repository: LocalReviewRepository(api),
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
         ),
@@ -503,7 +520,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ReviewQueueScreen(
-          repository: LocalReviewRepository(api),
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
         ),

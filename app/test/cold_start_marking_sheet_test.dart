@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/cold_start_marking_view_model.dart';
 import 'package:llplayer_next/data/repositories/cold_start_marking_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -33,9 +34,11 @@ Widget _host(LocalApi api) => MaterialApp(
   supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: ColdStartMarkingSheet(
-      repository: LocalColdStartMarkingRepository(api),
-      trackId: 'track-1',
-      language: 'en',
+      viewModel: ColdStartMarkingViewModel(
+        LocalColdStartMarkingRepository(api),
+        trackId: 'track-1',
+        language: 'en',
+      ),
       onDone: () {},
     ),
   ),

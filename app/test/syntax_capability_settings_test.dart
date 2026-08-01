@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/provider_settings_view_models.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -38,7 +39,9 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SyntaxCapabilitySettings(
-            repository: LocalSyntaxCapabilityRepository(api),
+            viewModel: SyntaxCapabilitySettingsViewModel(
+              LocalSyntaxCapabilityRepository(api),
+            ),
           ),
         ),
       ),
@@ -96,8 +99,10 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: SyntaxCapabilitySettings(
-            repository: LocalSyntaxCapabilityRepository(api),
-            currentTrackId: 'track-1',
+            viewModel: SyntaxCapabilitySettingsViewModel(
+              LocalSyntaxCapabilityRepository(api),
+              currentTrackId: 'track-1',
+            ),
           ),
         ),
       ),

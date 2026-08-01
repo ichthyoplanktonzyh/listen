@@ -7,6 +7,7 @@ abstract interface class MediaSessionRepository {
   bool get isAvailable;
   ApiFailure failureDetail(Object error);
   Future<void> saveProgress(String mediaId, Duration position);
+  Future<SubtitleTrack> readSubtitle(String trackId);
   Future<MediaItem> registerMedia(String path);
   Future<Duration?> readProgress(String mediaId);
   Future<SubtitleTrack> importSubtitle(String mediaId, String path);
@@ -29,6 +30,9 @@ class LocalMediaSessionRepository implements MediaSessionRepository {
   @override
   Future<void> saveProgress(String mediaId, Duration position) =>
       _api.saveProgress(mediaId, position);
+  @override
+  Future<SubtitleTrack> readSubtitle(String trackId) =>
+      _api.readSubtitle(trackId);
   @override
   Future<MediaItem> registerMedia(String path) => _api.registerMedia(path);
   @override
