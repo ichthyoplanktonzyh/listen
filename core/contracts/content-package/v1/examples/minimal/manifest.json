@@ -1,0 +1,60 @@
+{
+  "schema": "listen.resource-package.v1",
+  "created_at_ms": 1785542406000,
+  "content_document": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "title": "Listen resource package example",
+    "media_kind": "video",
+    "duration_ms": 2500
+  },
+  "resources": [
+    {
+      "resource_id": "sha256:ae4a8de0ef71495050e33cf928c6012c0e52a3c9f2688829bb99ba4d4a6d6fca",
+      "path": "resources/subtitle-text-track.json",
+      "size_bytes": 1449,
+      "kind": "subtitle_text_track",
+      "schema": "listen.resource.subtitle-text-track.v1",
+      "required": true
+    },
+    {
+      "resource_id": "sha256:b9223d3d5859d178ada70644363aa6f48b1330e3d21b02b8119721f385bed432",
+      "path": "resources/word-timeline.json",
+      "size_bytes": 1121,
+      "kind": "word_timeline",
+      "schema": "listen.resource.word-timeline.v1",
+      "required": false
+    },
+    {
+      "resource_id": "sha256:f0886f0cb0c1a10e9d881198fb57e6d059bd35e9b7f11279d448e9b1aba467c2",
+      "path": "resources/phone-timeline.json",
+      "size_bytes": 1089,
+      "kind": "phone_timeline",
+      "schema": "listen.resource.phone-timeline.v1",
+      "required": false
+    },
+    {
+      "resource_id": "sha256:5825748c776a8179d57c1989b4984fe3fc6c2161cbb0312c9819e449c5623790",
+      "path": "resources/sense-group-analysis.json",
+      "size_bytes": 1136,
+      "kind": "sense_group_analysis",
+      "schema": "listen.resource.sense-group-analysis.v1",
+      "required": false
+    },
+    {
+      "resource_id": "sha256:37e9c54224215990d57177605310e44c3a74fa88153e2bf255347622f43fec04",
+      "path": "resources/word-acoustics.json",
+      "size_bytes": 1416,
+      "kind": "word_acoustics",
+      "schema": "listen.resource.word-acoustics.v1",
+      "required": false
+    },
+    {
+      "resource_id": "sha256:02132b6a60a8aede2d7b5a98e288294afcee090993358cb90a4f331a74cef813",
+      "path": "resources/prosody-analysis.json",
+      "size_bytes": 1411,
+      "kind": "prosody_analysis",
+      "schema": "listen.resource.prosody-analysis.v1",
+      "required": false
+    }
+  ]
+}

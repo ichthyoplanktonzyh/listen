@@ -1,0 +1,32 @@
+{
+  "schema": "listen.resource.sense-group-analysis.v1",
+  "kind": "sense_group_analysis",
+  "subject": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependencies": [
+    { "resource_id": "sha256:ae4a8de0ef71495050e33cf928c6012c0e52a3c9f2688829bb99ba4d4a6d6fca", "kind": "subtitle_text_track" }
+  ],
+  "provenance": {
+    "created_at_ms": 1785542403000,
+    "tool": { "id": "listen-gen", "version": "0.1.0" },
+    "provider": { "id": "example-language-analysis", "version": "1" },
+    "model": { "id": "example-sense-group-model", "version": "2026-08" },
+    "config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "quality": { "review_status": "unreviewed", "confidence": 0.91, "warnings": [] },
+  "payload": {
+    "groups": [
+      {
+        "sentence_id": "sentence-000000",
+        "group_index": 0,
+        "start_token_index": 0,
+        "end_token_index_exclusive": 4,
+        "label": null,
+        "head_token_index": 2,
+        "confidence": 0.91,
+        "sources": ["language_model", "punctuation"]
+      }
+    ]
+  }
+}

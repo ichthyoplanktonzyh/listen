@@ -56,6 +56,7 @@ pub mod batch_governor;
 mod chunks;
 mod coach_dashboard;
 mod content_fit;
+mod content_package_import;
 mod corpus;
 mod diagnosis;
 mod dictionary;
@@ -102,6 +103,10 @@ pub use coach_dashboard::{
     CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
     CoachSuggestion, CoachSuggestionDestination,
+};
+pub use content_package_import::{
+    ContentPackageImportReceipt, PreparedContentPackageImport, ResourceImportDisposition,
+    ResourceImportOutcome, prepare_content_package_document,
 };
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;

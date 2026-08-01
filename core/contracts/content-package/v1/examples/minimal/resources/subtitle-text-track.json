@@ -1,0 +1,40 @@
+{
+  "schema": "listen.resource.subtitle-text-track.v1",
+  "kind": "subtitle_text_track",
+  "subject": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependencies": [],
+  "provenance": {
+    "created_at_ms": 1785542400000,
+    "tool": { "id": "listen-gen", "version": "0.1.0" },
+    "provider": { "id": "example-asr", "version": "1" },
+    "model": { "id": "example-transcriber", "version": "2026-08" },
+    "config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "quality": {
+    "review_status": "machine_checked",
+    "confidence": 0.96,
+    "warnings": []
+  },
+  "payload": {
+    "language": "en",
+    "source_kind": "asr",
+    "sentences": [
+      {
+        "id": "sentence-000000",
+        "index": 0,
+        "start_ms": 1000,
+        "end_ms": 2200,
+        "original_text": "Hello world.",
+        "display_text": "Hello world.",
+        "tokens": [
+          { "index": 0, "kind": "word", "text": "Hello", "normalized": "hello", "start_char": 0, "end_char": 5 },
+          { "index": 1, "kind": "whitespace", "text": " ", "normalized": null, "start_char": 5, "end_char": 6 },
+          { "index": 2, "kind": "word", "text": "world", "normalized": "world", "start_char": 6, "end_char": 11 },
+          { "index": 3, "kind": "punctuation", "text": ".", "normalized": null, "start_char": 11, "end_char": 12 }
+        ]
+      }
+    ]
+  }
+}

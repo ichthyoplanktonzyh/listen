@@ -120,6 +120,7 @@ name = "application"
 version = "0.7.0"
 dependencies = [
  "async-trait",
+ "content-package",
  "diagnosis-core",
  "domain",
  "fsrs",
@@ -560,6 +561,18 @@ dependencies = [
  "libc",
  "unicode-width",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "content-package"
+version = "0.7.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "zip",
 ]
 
 [[package]]

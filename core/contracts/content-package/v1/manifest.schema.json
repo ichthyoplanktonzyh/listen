@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v1/manifest.schema.json",
+  "title": "Listen Resource Package Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "created_at_ms", "content_document", "resources"],
+  "properties": {
+    "schema": { "const": "listen.resource-package.v1" },
+    "created_at_ms": { "type": "integer", "minimum": 0 },
+    "content_document": { "$ref": "#/$defs/contentDocument" },
+    "resources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/resourceEntry" }
+    }
+  },
+  "allOf": [
+    { "$ref": "#/$defs/requiredSubtitleTextTrack" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "contentDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["media_fingerprint", "title", "media_kind", "duration_ms"],
+      "properties": {
+        "media_fingerprint": { "$ref": "#/$defs/sha256" },
+        "title": { "type": "string", "minLength": 1 },
+        "media_kind": { "enum": ["audio", "video"] },
+        "duration_ms": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "resourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "path", "size_bytes", "kind", "schema", "required"],
+      "properties": {
+        "resource_id": { "$ref": "#/$defs/sha256" },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "kind": { "type": "string", "minLength": 1 },
+        "schema": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" }
+      }
+    },
+    "requiredSubtitleTextTrack": {
+      "properties": {
+        "resources": {
+          "contains": {
+            "type": "object",
+            "required": ["kind", "schema", "required"],
+            "properties": {
+              "kind": { "const": "subtitle_text_track" },
+              "schema": { "const": "listen.resource.subtitle-text-track.v1" },
+              "required": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  }
+}

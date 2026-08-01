@@ -6,6 +6,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+content-package = { path = "../content-package" }
 domain = { path = "../domain" }
 diagnosis-core = { path = "../diagnosis-core" }
 fsrs.workspace = true

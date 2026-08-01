@@ -16,12 +16,31 @@ contracts / HTTP / events
 scripts/timeline-production and evaluation tools
           |
  versioned LLTimeline/resource artifacts
+          |
+ deterministic .listenpkg content resource packages
 ```
 
 `domain` owns stable concepts. `application` owns use cases and ports.
 `api-http` adapts loopback HTTP/SSE/WebSocket requests. Persistence and provider
 crates implement ports. Python tooling produces/evaluates resources but is not
 embedded in the lightweight consumer runtime.
+
+The first portable content-resource contract lives under
+`contracts/content-package/v1`. A deterministic `.listenpkg` ZIP binds one
+Content Document descriptor to immutable, raw-byte-SHA-addressed resource
+files. Its common typed envelope carries subject, closed hash dependencies,
+provenance, quality, and a kind-specific payload. At least one Subtitle Text
+Track is required in v1; every Analysis Resource is optional so the package can
+represent partial generation honestly. Package data excludes core-local
+identity and lifecycle state as well as all learner facts.
+
+`content-package` owns bounded directory/ZIP inspection, raw-byte identity
+verification, compatibility checks, and typed decoding. The application
+adapter projects supported package resources into candidate-only LLTimeline
+records and reports unsupported-but-preserved resources explicitly. This first
+slice stops before persistence: attaching candidates without changing an
+existing active selection requires a dedicated atomic repository operation and
+must not reuse the legacy import behavior that can replace active choices.
 
 Concrete LLM and realtime protocol selection is assembled in the HTTP
 composition root through application-owned factories. Forced alignment uses an

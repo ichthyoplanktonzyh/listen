@@ -122,10 +122,31 @@ A replaceable, provenance-bearing analysis derived from a Content Document,
 such as word timing, sound grouping, syntax, or rhythm structure.
 _Avoid_: Subtitle Text Track, learner history, user authority
 
+**Resource Package**:
+A portable, immutable exchange bundle for one Content Document's Subtitle Text
+Track and content-bound Analysis Resources, linked by strong content hashes.
+It contains neither core runtime state nor learner facts.
+_Avoid_: Database export, learner archive, model bundle
+
+**Resource Identity**:
+The lowercase SHA-256 of one resource file's exact bytes, used to bind package
+entries and Analysis Resource dependencies without local database identities.
+_Avoid_: Filename, core ID, mutable alias
+
 **Word Timeline**:
 A replaceable alignment of the word tokens in one Subtitle Text Track to media
 time; it is derived from the text track and is not the subtitle itself.
 _Avoid_: Subtitle Text Track, transcript, standalone subtitle resource
+
+**Word Acoustics**:
+Replaceable word-anchored observations of energy, pitch, duration, and voicing
+for one recording, retaining units, comparison baselines, and provenance.
+_Avoid_: Prosody Analysis, sentence stress judgment, raw feature frames
+
+**Prosody Analysis**:
+A replaceable interpretation of acoustic and linguistic evidence into
+word-anchored prominence, stress realization, and utterance roles.
+_Avoid_: Word Acoustics, lexical stress dictionary, learner performance
 
 **Foundation Resource Set**:
 The minimum content-bound sources and analyses required for standard learning
