@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../controllers/cold_start_marking_view_model.dart';
+import '../../data/repositories/cold_start_marking_repository.dart';
 import '../../localization.dart';
-import '../../models/types.dart';
 import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
@@ -16,119 +19,104 @@ class ColdStartMarkingSheet extends StatefulWidget {
     required this.trackId,
     required this.language,
     required this.onDone,
+    this.repository,
+    this.viewModel,
   });
 
   final LocalApi api;
   final String trackId;
   final String language;
   final VoidCallback onDone;
+  final ColdStartMarkingRepository? repository;
+  final ColdStartMarkingViewModel? viewModel;
 
   @override
   State<ColdStartMarkingSheet> createState() => _ColdStartMarkingSheetState();
 }
 
 class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
-  List<ColdStartWordCandidate>? _candidates;
-  int _currentIndex = 0;
-  bool _loading = true;
-  bool _submitting = false;
+  late final ColdStartMarkingViewModel _viewModel;
+  late final bool _ownsViewModel;
+  bool _didFinish = false;
 
   @override
   void initState() {
     super.initState();
-    _load();
+    _ownsViewModel = widget.viewModel == null;
+    _viewModel =
+        widget.viewModel ??
+        ColdStartMarkingViewModel(
+          widget.repository ?? LocalColdStartMarkingRepository(widget.api),
+          trackId: widget.trackId,
+          language: widget.language,
+        );
+    _viewModel.addListener(_handleViewModelChange);
+    if (_ownsViewModel) unawaited(_viewModel.load());
   }
 
-  Future<void> _load() async {
-    try {
-      final candidates = await widget.api.coldStartWords(widget.trackId);
+  @override
+  void dispose() {
+    _viewModel.removeListener(_handleViewModelChange);
+    if (_ownsViewModel) _viewModel.dispose();
+    super.dispose();
+  }
+
+  void _handleViewModelChange() {
+    if (!_viewModel.state.finished || _didFinish || !mounted) return;
+    _didFinish = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() {
-        _candidates = candidates;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _candidates = const [];
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _mark(String status) async {
-    if (_submitting) return;
-    final candidate = _candidates![_currentIndex];
-    setState(() => _submitting = true);
-    try {
-      await widget.api.upsertWordLexicalEntry(
-        candidate.displayForm,
-        candidate.displayForm,
-        status,
-        language: widget.language,
-      );
-    } catch (_) {}
-    if (!mounted) return;
-    _advance();
-  }
-
-  void _skip() {
-    _advance();
-  }
-
-  void _advance() {
-    if (_currentIndex + 1 >= _candidates!.length) {
-      _finish();
-    } else {
-      setState(() {
-        _currentIndex += 1;
-        _submitting = false;
-      });
-    }
+      widget.onDone();
+      Navigator.of(context).pop();
+    });
   }
 
   void _finish() {
-    widget.onDone();
-    Navigator.of(context).pop();
+    _viewModel.finish();
   }
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
-    return Dialog(
-      child: ConstrainedBox(
-        // A column of decisions, not of reading: one word and three verdicts.
-        // `maxHeight` is a viewport budget rather than a column measure, so it
-        // stays a literal.
-        constraints: const BoxConstraints(
-          maxWidth: ListenBreakpoints.formColumnMax,
-          maxHeight: 420,
-        ),
-        child: Padding(
-          padding: ListenPadding.card,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l.text('coldStartQuickMarking'),
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) => Dialog(
+        child: ConstrainedBox(
+          // A column of decisions, not of reading: one word and three verdicts.
+          // `maxHeight` is a viewport budget rather than a column measure, so it
+          // stays a literal.
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.formColumnMax,
+            maxHeight: 420,
+          ),
+          child: Padding(
+            padding: ListenPadding.card,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l.text('coldStartQuickMarking'),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: ListenIconSize.control),
-                    onPressed: _finish,
-                  ),
-                ],
-              ),
-              const SizedBox(height: ListenSpacing.gap16),
-              Expanded(child: _body(context, l, colors)),
-            ],
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close,
+                        size: ListenIconSize.control,
+                      ),
+                      onPressed: _finish,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: ListenSpacing.gap16),
+                Expanded(child: _body(context, l, colors)),
+              ],
+            ),
           ),
         ),
       ),
@@ -136,20 +124,21 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
   }
 
   Widget _body(BuildContext context, AppLocalizations l, ColorScheme colors) {
-    if (_loading) {
+    final state = _viewModel.state;
+    if (state.loading) {
       return const Center(child: ListenLoading());
     }
-    final candidates = _candidates!;
+    final candidates = state.candidates;
     if (candidates.isEmpty) {
       return ListenEmptyState(
         icon: Icons.checklist,
         message: l.text('coldStartEmpty'),
       );
     }
-    final candidate = candidates[_currentIndex];
+    final candidate = state.current!;
     final progress = l
         .text('coldStartProgress')
-        .replaceAll('{current}', '${_currentIndex + 1}')
+        .replaceAll('{current}', '${state.currentIndex + 1}')
         .replaceAll('{total}', '${candidates.length}');
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -172,23 +161,29 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
         _ActionButton(
           label: l.text('coldStartKnownRecognized'),
           color: colors.primary,
-          onPressed: _submitting ? null : () => _mark('known_recognized'),
+          onPressed: state.submitting
+              ? null
+              : () => _viewModel.mark('known_recognized'),
         ),
         const SizedBox(height: ListenSpacing.gap8),
         _ActionButton(
           label: l.text('coldStartKnownNotRecognized'),
           color: colors.tertiary,
-          onPressed: _submitting ? null : () => _mark('known_not_recognized'),
+          onPressed: state.submitting
+              ? null
+              : () => _viewModel.mark('known_not_recognized'),
         ),
         const SizedBox(height: ListenSpacing.gap8),
         _ActionButton(
           label: l.text('coldStartUnknownMeaning'),
           color: colors.error,
-          onPressed: _submitting ? null : () => _mark('unknown_meaning'),
+          onPressed: state.submitting
+              ? null
+              : () => _viewModel.mark('unknown_meaning'),
         ),
         const SizedBox(height: ListenSpacing.gap8),
         TextButton(
-          onPressed: _submitting ? null : _skip,
+          onPressed: state.submitting ? null : _viewModel.skip,
           child: Text(l.text('coldStartSkip')),
         ),
       ],

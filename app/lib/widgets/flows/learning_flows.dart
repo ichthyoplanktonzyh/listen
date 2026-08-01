@@ -12,6 +12,7 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/practice_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../data/repositories/lexical_repository.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
 import '../../models/personal_expression.dart';
@@ -201,7 +202,7 @@ class _LemmaCorrectionDialogState extends State<_LemmaCorrectionDialog> {
 
 Future<void> correctCurrentLemmaFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required LexicalRepository? lexicalRepository,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required SettingsController settingsController,
@@ -209,7 +210,7 @@ Future<void> correctCurrentLemmaFlow({
 }) async {
   final l = AppLocalizations.of(context);
   final token = learningController.selectedToken;
-  if (api == null) {
+  if (lexicalRepository == null) {
     // Unavailable State (CONTEXT.md): the correct-lemma button is a user
     // action; report the missing core instead of swallowing the click.
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
@@ -226,7 +227,7 @@ Future<void> correctCurrentLemmaFlow({
   );
   // Legitimate silence: the user cancelled the dialog or cleared the field.
   if (corrected == null || corrected.isEmpty) return;
-  await api.correctLemma(
+  await lexicalRepository.correctLemma(
     token!.normalized!,
     corrected,
     language: settingsController.resolveLearningLanguage(

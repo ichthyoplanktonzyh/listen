@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../controllers/personal_expression_view_model.dart';
+import '../data/repositories/personal_expression_repository.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
 import '../models/personal_expression.dart';
@@ -325,14 +327,20 @@ class _AssistanceLadder extends StatelessWidget {
 class PersonalExpressionScreen extends StatefulWidget {
   const PersonalExpressionScreen({
     super.key,
-    required this.api,
+    this.api,
+    this.repository,
+    this.viewModel,
     required this.language,
     this.initialSource,
     this.onPlaySource,
     this.onStartSpeaking,
-  });
+  }) : assert(api != null || repository != null);
 
-  final LocalApi api;
+  /// [api] keeps existing composition roots source-compatible. New callers
+  /// should inject the narrow [repository] boundary directly.
+  final LocalApi? api;
+  final PersonalExpressionRepository? repository;
+  final PersonalExpressionViewModel? viewModel;
   final String language;
   final PersonalExpressionSourceView? initialSource;
   final Future<void> Function(PersonalExpressionSourceView source)?
@@ -346,31 +354,18 @@ class PersonalExpressionScreen extends StatefulWidget {
 }
 
 class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
-  List<SentencePatternAssetView> _patterns = const [];
-
-  /// The most recent `writing` sentence per pattern, for the E3 list card
-  /// ("↳ 你上次写：…"). Populated lazily after patterns load; a pattern with no
-  /// writing history simply stays absent.
-  Map<String, PersonalExpressionAttemptView> _lastWritten = const {};
-  String _query = '';
-  bool _busy = true;
-
-  /// Whether the last load failed, and the diagnostics that came with it.
-  ///
-  /// This used to be `String? _error = '$error'`, which put an `HttpException`
-  /// — internal error code, `correlation_id`, loopback port, internal route —
-  /// straight into the page's error notice. The page has exactly one failure
-  /// mode a learner can act on ("your expressions did not load, try again"),
-  /// so it gets one named state; [_loadDetail] is never rendered beyond its
-  /// reference id.
-  bool _loadFailed = false;
-  ApiFailure? _loadDetail;
+  late final PersonalExpressionRepository _repository =
+      widget.repository ?? LocalPersonalExpressionRepository(widget.api!);
+  late final PersonalExpressionViewModel _viewModel =
+      widget.viewModel ??
+      PersonalExpressionViewModel(_repository, language: widget.language);
+  late final bool _ownsViewModel = widget.viewModel == null;
 
   @override
   void initState() {
     super.initState();
     unawaited(
-      _refresh().then((_) {
+      _viewModel.load().then((_) {
         if (mounted && widget.initialSource != null) {
           unawaited(_edit(source: widget.initialSource));
         }
@@ -378,62 +373,15 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
     );
   }
 
-  Future<void> _refresh() async {
-    setState(() {
-      _busy = true;
-      _loadFailed = false;
-      _loadDetail = null;
-    });
-    try {
-      final values = await widget.api.sentencePatterns(
-        language: widget.language,
-        query: _query,
-      );
-      if (!mounted) return;
-      setState(() => _patterns = values);
-      await _loadLastWritten(values);
-    } catch (error) {
-      if (mounted) {
-        final detail = describeApiFailure(error);
-        setState(() {
-          _loadFailed = true;
-          _loadDetail = detail;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Reads existing attempts per pattern (no new backend semantics) to surface
-  /// the learner's last written sentence on each list card.
-  Future<void> _loadLastWritten(List<SentencePatternAssetView> patterns) async {
-    final entries = await Future.wait(
-      patterns.map((pattern) async {
-        try {
-          final attempts = await widget.api.personalExpressionAttempts(
-            pattern.id,
-          );
-          return MapEntry(pattern.id, _lastWriting(attempts));
-        } catch (_) {
-          return MapEntry(pattern.id, null);
-        }
-      }),
-    );
-    if (!mounted) return;
-    setState(() {
-      _lastWritten = {
-        for (final entry in entries)
-          if (entry.value != null) entry.key: entry.value!,
-      };
-    });
+  @override
+  void dispose() {
+    if (_ownsViewModel) _viewModel.dispose();
+    super.dispose();
   }
 
   Future<void> _export() async {
     try {
-      final bundle = await widget.api.exportPersonalExpression(
-        language: widget.language,
-      );
+      final bundle = await _viewModel.export();
       final location = await getSaveLocation(
         suggestedName: 'llplayer-personal-expression.json',
       );
@@ -472,7 +420,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
   /// off screen entirely.
   String _loadNotice(AppLocalizations l) {
     final sentence = l.text('expressionListFailed');
-    final reference = _loadDetail?.correlationId;
+    final reference = _viewModel.failure?.correlationId;
     if (reference == null) return sentence;
     return '$sentence '
         '${l.text('failureReference').replaceAll('{id}', reference)}';
@@ -601,8 +549,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                 return;
               }
               if (pattern == null) {
-                await widget.api.createSentencePattern(
-                  language: widget.language,
+                await _viewModel.create(
                   source: PersonalExpressionSourceView(
                     kind: effectiveSource.kind,
                     text: sourceText.text.trim(),
@@ -622,13 +569,12 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
                   note: note.text.trim().isEmpty ? null : note.text.trim(),
                 );
               } else {
-                await widget.api.reviseSentencePattern(
-                  id: pattern.id,
+                await _viewModel.revise(
+                  pattern: pattern,
                   name: name.text.trim(),
                   patternText: patternText.text.trim(),
                   slots: _slots(slotNames.text),
                   note: note.text.trim().isEmpty ? null : note.text.trim(),
-                  systemConstructionId: current?.systemConstructionId,
                 );
               }
               if (context.mounted) Navigator.pop(context, true);
@@ -643,14 +589,14 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
     slotNames.dispose();
     note.dispose();
     sourceText.dispose();
-    if (saved == true) await _refresh();
+    if (saved == true) await _viewModel.refresh();
   }
 
   Future<void> _open(SentencePatternAssetView pattern) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _PatternDetail(
-          api: widget.api,
+          repository: _repository,
           pattern: pattern,
           onEdit: () async {
             Navigator.of(context).pop();
@@ -666,7 +612,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
         ),
       ),
     );
-    await _refresh();
+    await _viewModel.refresh();
   }
 
   @override
@@ -694,37 +640,37 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
       // as chrome belonging to some other screen. The cap now wraps search,
       // error and list together, which makes "same width" structural rather
       // than a number repeated in three places (§1.3).
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: ListenBreakpoints.contentColumnMax,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: ListenPadding.pageCompact.copyWith(bottom: 0),
-                child: TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(
-                      Icons.search,
-                      size: ListenIconSize.control,
-                    ),
-                    hintText: l.text('search'),
-                  ),
-                  onChanged: (value) {
-                    _query = value;
-                    unawaited(_refresh());
-                  },
-                ),
-              ),
-              if (_loadFailed)
+      body: ListenableBuilder(
+        listenable: _viewModel,
+        builder: (context, _) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.contentColumnMax,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Padding(
                   padding: ListenPadding.pageCompact.copyWith(bottom: 0),
-                  child: ListenErrorNotice(message: _loadNotice(l)),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        size: ListenIconSize.control,
+                      ),
+                      hintText: l.text('search'),
+                    ),
+                    onChanged: _viewModel.setQuery,
+                  ),
                 ),
-              Expanded(child: _list(l)),
-            ],
+                if (_viewModel.failure != null)
+                  Padding(
+                    padding: ListenPadding.pageCompact.copyWith(bottom: 0),
+                    child: ListenErrorNotice(message: _loadNotice(l)),
+                  ),
+                Expanded(child: _list(l)),
+              ],
+            ),
           ),
         ),
       ),
@@ -732,8 +678,8 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
   }
 
   Widget _list(AppLocalizations l) {
-    if (_busy) return const Center(child: ListenLoading());
-    if (_patterns.isEmpty) {
+    if (_viewModel.loading) return const Center(child: ListenLoading());
+    if (_viewModel.patterns.isEmpty) {
       return ListenEmptyState(
         icon: Icons.edit_note,
         message:
@@ -749,19 +695,19 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
     // The guide is a tail item of the same list rather than a sibling below
     // it, so a short list scrolls as one thing and the guide is never pinned
     // to the bottom of a mostly empty page.
-    final showGuide = _patterns.length < _starterGuideThreshold;
+    final showGuide = _viewModel.patterns.length < _starterGuideThreshold;
     return ListView.separated(
       padding: ListenPadding.pageCompact.copyWith(top: ListenSpacing.gap16),
-      itemCount: _patterns.length + (showGuide ? 1 : 0),
+      itemCount: _viewModel.patterns.length + (showGuide ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: ListenSpacing.gap8),
       itemBuilder: (context, index) {
-        if (index == _patterns.length) {
+        if (index == _viewModel.patterns.length) {
           return _StarterGuide(onCreate: () => unawaited(_edit()));
         }
-        final pattern = _patterns[index];
+        final pattern = _viewModel.patterns[index];
         return _PatternCard(
           pattern: pattern,
-          lastWritten: _lastWritten[pattern.id],
+          lastWritten: _viewModel.lastWritten[pattern.id],
           onTap: () => unawaited(_open(pattern)),
         );
       },
@@ -966,13 +912,13 @@ class _PatternCard extends StatelessWidget {
 
 class _PatternDetail extends StatefulWidget {
   const _PatternDetail({
-    required this.api,
+    required this.repository,
     required this.pattern,
     required this.onEdit,
     this.onPlaySource,
     this.onStartSpeaking,
   });
-  final LocalApi api;
+  final PersonalExpressionRepository repository;
   final SentencePatternAssetView pattern;
   final Future<void> Function() onEdit;
   final Future<void> Function(PersonalExpressionSourceView source)?
@@ -984,25 +930,22 @@ class _PatternDetail extends StatefulWidget {
 }
 
 class _PatternDetailState extends State<_PatternDetail> {
-  List<PersonalExpressionAttemptView> attempts = const [];
-  List<SentencePatternVersionView> versions = const [];
+  late final PersonalExpressionDetailViewModel _viewModel =
+      PersonalExpressionDetailViewModel(
+        widget.repository,
+        pattern: widget.pattern,
+      );
+
   @override
   void initState() {
     super.initState();
-    unawaited(_refresh());
+    unawaited(_viewModel.load());
   }
 
-  Future<void> _refresh() async {
-    final values = await Future.wait([
-      widget.api.personalExpressionAttempts(widget.pattern.id),
-      widget.api.sentencePatternVersions(widget.pattern.id),
-    ]);
-    if (mounted) {
-      setState(() {
-        attempts = values[0] as List<PersonalExpressionAttemptView>;
-        versions = values[1] as List<SentencePatternVersionView>;
-      });
-    }
+  @override
+  void dispose() {
+    _viewModel.dispose();
+    super.dispose();
   }
 
   /// 弹窗死刑: the writing flow is a page (the writing desk), not a dialog.
@@ -1010,13 +953,13 @@ class _PatternDetailState extends State<_PatternDetail> {
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _WritingDeskPage(
-          api: widget.api,
+          viewModel: _viewModel,
           pattern: widget.pattern,
-          attempts: attempts,
+          attempts: _viewModel.attempts,
         ),
       ),
     );
-    if (saved == true) await _refresh();
+    if (saved == true) await _viewModel.load();
   }
 
   /// E1: deletion states its blast radius (N versions + M usage records) before
@@ -1030,8 +973,8 @@ class _PatternDetailState extends State<_PatternDetail> {
         content: Text(
           l
               .text('expressionDeleteBody')
-              .replaceAll('{versions}', '${versions.length}')
-              .replaceAll('{attempts}', '${attempts.length}'),
+              .replaceAll('{versions}', '${_viewModel.versions.length}')
+              .replaceAll('{attempts}', '${_viewModel.attempts.length}'),
         ),
         actions: [
           TextButton(
@@ -1050,7 +993,7 @@ class _PatternDetailState extends State<_PatternDetail> {
       ),
     );
     if (confirmed != true) return;
-    await widget.api.deleteSentencePattern(widget.pattern.id);
+    await _viewModel.delete();
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -1069,141 +1012,170 @@ class _PatternDetailState extends State<_PatternDetail> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: ListenBreakpoints.contentColumnMax,
-          ),
-          child: ListView(
-            padding: ListenPadding.pageCompact,
-            children: [
-              Text(
-                cleanLearningText(
-                  widget.pattern.currentVersion.patternText,
-                  language: widget.pattern.language,
-                ),
-                // The page title lives in the AppBar's name, so the pattern
-                // itself is this page's hero (titleLarge = ListenType.hero);
-                // `headlineSmall` was an unmapped Material slot at 24px w400,
-                // a size the ladder never defined.
-                style: textTheme.titleLarge,
+      body: ListenableBuilder(
+        listenable: _viewModel,
+        builder: (context, _) {
+          if (_viewModel.loading) {
+            return const Center(child: ListenLoading());
+          }
+          if (_viewModel.failure != null) {
+            final reference = _viewModel.failure?.correlationId;
+            final message = reference == null
+                ? l.text('expressionListFailed')
+                : '${l.text('expressionListFailed')} '
+                      '${l.text('failureReference').replaceAll('{id}', reference)}';
+            return ListenErrorState(
+              message: message,
+              action: TextButton.icon(
+                key: const ValueKey('personal-expression-detail-retry'),
+                onPressed: () => unawaited(_viewModel.load()),
+                icon: const Icon(Icons.refresh),
+                label: Text(l.text('retry')),
               ),
-              const SizedBox(height: ListenSpacing.gap8),
-              Text(
-                l
-                    .text('expressionSourceSnapshot')
-                    .replaceAll(
-                      '{text}',
-                      cleanLearningText(
-                        widget.pattern.source.text,
-                        language: widget.pattern.language,
-                      ),
+            );
+          }
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: ListenBreakpoints.contentColumnMax,
+              ),
+              child: ListView(
+                padding: ListenPadding.pageCompact,
+                children: [
+                  Text(
+                    cleanLearningText(
+                      widget.pattern.currentVersion.patternText,
+                      language: widget.pattern.language,
                     ),
-                style: textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              if (widget.pattern.currentVersion.note != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: ListenSpacing.gap4),
-                  child: Text(
+                    // The page title lives in the AppBar's name, so the pattern
+                    // itself is this page's hero (titleLarge = ListenType.hero);
+                    // `headlineSmall` was an unmapped Material slot at 24px w400,
+                    // a size the ladder never defined.
+                    style: textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: ListenSpacing.gap8),
+                  Text(
                     l
-                        .text('expressionNoteLine')
+                        .text('expressionSourceSnapshot')
                         .replaceAll(
                           '{text}',
-                          '${widget.pattern.currentVersion.note}',
+                          cleanLearningText(
+                            widget.pattern.source.text,
+                            language: widget.pattern.language,
+                          ),
                         ),
-                  ),
-                ),
-              const SizedBox(height: ListenSpacing.gap8),
-              Wrap(
-                spacing: ListenSpacing.gap8,
-                children: [
-                  for (final slot in widget.pattern.currentVersion.slots)
-                    Chip(label: Text(slot.name)),
-                ],
-              ),
-              const SizedBox(height: ListenSpacing.gap16),
-              Wrap(
-                spacing: ListenSpacing.gap8,
-                runSpacing: ListenSpacing.gap8,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _write,
-                    icon: const Icon(Icons.edit_note),
-                    label: Text(l.text('expressionWriteYourOwn')),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: widget.onStartSpeaking == null
-                        ? null
-                        : () async {
-                            Navigator.pop(context);
-                            await widget.onStartSpeaking!(widget.pattern);
-                          },
-                    icon: const Icon(Icons.mic_none),
-                    label: Text(l.text('expressionSpeakUnscripted')),
-                  ),
-                  if (widget.onPlaySource != null)
-                    OutlinedButton.icon(
-                      onPressed:
-                          widget.pattern.source.mediaId == null ||
-                              widget.pattern.source.mediaFingerprint == null
-                          ? null
-                          : () => widget.onPlaySource!(widget.pattern.source),
-                      icon: const Icon(Icons.volume_up_outlined),
-                      label: Text(l.text('expressionPlaySource')),
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
                     ),
-                ],
-              ),
-              const Divider(height: 40),
-              // A section title inside the page, not a second hero.
-              Text(
-                l.text('expressionUsageHistory'),
-                style: textTheme.titleMedium,
-              ),
-              if (attempts.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: ListenSpacing.gap16,
                   ),
-                  child: Text(l.text('expressionNoUsageYet')),
-                ),
-              for (final attempt in attempts) _HistoryRow(attempt: attempt),
-              const Divider(height: 40),
-              ExpansionTile(
-                title: Text(
-                  l
-                      .text('expressionVersionHistory')
-                      .replaceAll('{count}', '${versions.length}'),
-                ),
-                children: [
-                  for (final version in versions)
-                    ListTile(
-                      title: Text(
+                  if (widget.pattern.currentVersion.note != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: ListenSpacing.gap4),
+                      child: Text(
                         l
-                            .text('expressionVersionLine')
-                            .replaceAll('{version}', '${version.version}')
-                            .replaceAll('{name}', version.name),
-                      ),
-                      subtitle: Text(
-                        cleanLearningText(
-                          version.patternText,
-                          language: widget.pattern.language,
-                        ),
+                            .text('expressionNoteLine')
+                            .replaceAll(
+                              '{text}',
+                              '${widget.pattern.currentVersion.note}',
+                            ),
                       ),
                     ),
+                  const SizedBox(height: ListenSpacing.gap8),
+                  Wrap(
+                    spacing: ListenSpacing.gap8,
+                    children: [
+                      for (final slot in widget.pattern.currentVersion.slots)
+                        Chip(label: Text(slot.name)),
+                    ],
+                  ),
+                  const SizedBox(height: ListenSpacing.gap16),
+                  Wrap(
+                    spacing: ListenSpacing.gap8,
+                    runSpacing: ListenSpacing.gap8,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _write,
+                        icon: const Icon(Icons.edit_note),
+                        label: Text(l.text('expressionWriteYourOwn')),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: widget.onStartSpeaking == null
+                            ? null
+                            : () async {
+                                Navigator.pop(context);
+                                await widget.onStartSpeaking!(widget.pattern);
+                              },
+                        icon: const Icon(Icons.mic_none),
+                        label: Text(l.text('expressionSpeakUnscripted')),
+                      ),
+                      if (widget.onPlaySource != null)
+                        OutlinedButton.icon(
+                          onPressed:
+                              widget.pattern.source.mediaId == null ||
+                                  widget.pattern.source.mediaFingerprint == null
+                              ? null
+                              : () =>
+                                    widget.onPlaySource!(widget.pattern.source),
+                          icon: const Icon(Icons.volume_up_outlined),
+                          label: Text(l.text('expressionPlaySource')),
+                        ),
+                    ],
+                  ),
+                  const Divider(height: 40),
+                  // A section title inside the page, not a second hero.
+                  Text(
+                    l.text('expressionUsageHistory'),
+                    style: textTheme.titleMedium,
+                  ),
+                  if (_viewModel.attempts.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: ListenSpacing.gap16,
+                      ),
+                      child: Text(l.text('expressionNoUsageYet')),
+                    ),
+                  for (final attempt in _viewModel.attempts)
+                    _HistoryRow(attempt: attempt),
+                  const Divider(height: 40),
+                  ExpansionTile(
+                    title: Text(
+                      l
+                          .text('expressionVersionHistory')
+                          .replaceAll(
+                            '{count}',
+                            '${_viewModel.versions.length}',
+                          ),
+                    ),
+                    children: [
+                      for (final version in _viewModel.versions)
+                        ListTile(
+                          title: Text(
+                            l
+                                .text('expressionVersionLine')
+                                .replaceAll('{version}', '${version.version}')
+                                .replaceAll('{name}', version.name),
+                          ),
+                          subtitle: Text(
+                            cleanLearningText(
+                              version.patternText,
+                              language: widget.pattern.language,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: ListenSpacing.gap24),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(foregroundColor: scheme.error),
+                    onPressed: () => unawaited(_confirmDelete()),
+                    icon: const Icon(Icons.delete_outline),
+                    label: Text(l.text('expressionDeleteAction')),
+                  ),
                 ],
               ),
-              const SizedBox(height: ListenSpacing.gap24),
-              TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: scheme.error),
-                onPressed: () => unawaited(_confirmDelete()),
-                icon: const Icon(Icons.delete_outline),
-                label: Text(l.text('expressionDeleteAction')),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1271,12 +1243,12 @@ class _HistoryRow extends StatelessWidget {
 /// signal teal. Saving records a `writing` attempt — no new backend semantics.
 class _WritingDeskPage extends StatefulWidget {
   const _WritingDeskPage({
-    required this.api,
+    required this.viewModel,
     required this.pattern,
     required this.attempts,
   });
 
-  final LocalApi api;
+  final PersonalExpressionDetailViewModel viewModel;
   final SentencePatternAssetView pattern;
   final List<PersonalExpressionAttemptView> attempts;
 
@@ -1336,10 +1308,7 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
     if (_response.text.trim().isEmpty || _saving) return;
     setState(() => _saving = true);
     try {
-      await widget.api.recordPersonalExpressionAttempt(
-        patternId: widget.pattern.id,
-        patternVersionId: widget.pattern.currentVersion.id,
-        channel: 'writing',
+      await widget.viewModel.recordWritingAttempt(
         assistance: _assistance,
         responseText: _response.text.trim(),
         selfAssessment: _assessment,

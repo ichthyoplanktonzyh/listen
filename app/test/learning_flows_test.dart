@@ -11,6 +11,7 @@ import 'package:llplayer_next/controllers/practice_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/lexical_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
@@ -59,7 +60,9 @@ void main() {
       _Harness(
         onPressed: (context) => correctCurrentLemmaFlow(
           context: context,
-          api: _fakeApi((m, p, b) => (statusCode: 200, body: '{}')),
+          lexicalRepository: LexicalRepository(
+            _fakeApi((m, p, b) => (statusCode: 200, body: '{}')),
+          ),
           playerController: PlayerController(),
           subtitleController: SubtitleController(),
           settingsController: SettingsController(),
@@ -99,7 +102,7 @@ void main() {
       _Harness(
         onPressed: (context) => correctCurrentLemmaFlow(
           context: context,
-          api: api,
+          lexicalRepository: LexicalRepository(api),
           playerController: player,
           subtitleController: SubtitleController(),
           settingsController: SettingsController(),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/coach_dashboard_controller.dart';
+import 'package:llplayer_next/data/repositories/coach_dashboard_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 void main() {
@@ -104,9 +105,11 @@ void main() {
           );
         },
       );
-      final controller = CoachDashboardController();
+      final controller = CoachDashboardController(
+        LocalCoachDashboardRepository(api),
+      );
       addTearDown(controller.dispose);
-      await controller.load(api);
+      await controller.load();
       expect(requestedPaths.single, '/v1/coach/dashboard?days=7&language=en');
       expect(controller.state.dashboard!.channels[1].status, 'unassessed');
       expect(
@@ -117,10 +120,13 @@ void main() {
         controller.state.dashboard!.materials.single.graduationCandidate,
         isTrue,
       );
-      await api.graduateCoachMaterial('media-1');
-      expect(requestedPaths.last, '/v1/coach/materials/media-1/graduate');
-      final evidence = await api.coachEvidence('practice_attempts');
-      expect(evidence.single.id, 'attempt-1');
+      await controller.graduateMaterial('media-1');
+      expect(requestedPaths, contains('/v1/coach/materials/media-1/graduate'));
+      await controller.loadEvidencePage('practice_attempts');
+      expect(
+        controller.state.evidence['practice_attempts']!.items.single.id,
+        'attempt-1',
+      );
     },
   );
 }

@@ -1,0 +1,2291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>listen · 对话 Live 态生命周期建模 (Direction B)</title>
+  <style>
+    :root {
+      --ground: #1a2420;
+      --ground2: #141d1a;
+      --raised: #212e29;
+      --hair: #2e3a35;
+      --ink: #e9efec;
+      --muted: #9aa9a2;
+      --faint: #6d7c75;
+      --teal: #4db8a8;
+      --teal-dim: #2f8578;
+      --amber: #e6b45c;
+      --moon: #c7d4cf;
+      --sans: "Helvetica Neue", Arial, system-ui, -apple-system, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+      /* Motion Tokens */
+      --dur-tap: 90ms;
+      --dur-hover: 160ms;
+      --dur-base: 240ms;
+      --dur-slow: 360ms;
+      --dur-ambient: 2600ms;
+      --ease-enter: cubic-bezier(.2, .8, .2, 1);
+      --ease-exit: cubic-bezier(.4, 0, 1, 1);
+      --ease-move: cubic-bezier(.4, 0, .2, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--ground);
+      color: var(--ink);
+      font-family: var(--sans);
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout structure */
+    .container {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr);
+      width: 100%;
+      height: 100vh;
+    }
+
+    @media (max-width: 1024px) {
+      .container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        height: auto;
+      }
+    }
+
+    /* Left Side: Mock Device Viewport */
+    .viewport-panel {
+      background: var(--ground2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      position: relative;
+      border-right: 1px solid var(--hair);
+      height: 100%;
+    }
+
+    @media (max-width: 1024px) {
+      .viewport-panel {
+        height: 640px;
+        padding: 20px;
+      }
+    }
+
+    /* Mock Phone Container */
+    .mock-device {
+      width: 375px;
+      height: 720px;
+      border-radius: 40px;
+      background: var(--ground);
+      border: 12px solid #2d3b35;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(77, 184, 168, 0.05);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    @media (max-width: 400px) {
+      .mock-device {
+        width: 100%;
+        height: 100%;
+        border-radius: 0;
+        border: none;
+      }
+    }
+
+    /* Right Side: Control & Simulation Dashboard */
+    .dashboard-panel {
+      padding: 30px;
+      overflow-y: auto;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Header styling */
+    .eyebrow {
+      font-size: 11px;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+      color: var(--teal);
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 8px 0 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .lede {
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    /* Custom UI Components */
+    .card {
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .card-title span.badge {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: var(--ground2);
+      border: 1px solid var(--hair);
+    }
+
+    /* Simulation Control Buttons */
+    .btn-group {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .btn {
+      background: var(--ground2);
+      border: 1px solid var(--hair);
+      color: var(--ink);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--dur-hover) var(--ease-enter);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: var(--raised);
+      border-color: var(--faint);
+    }
+
+    .btn.active {
+      background: var(--teal-dim);
+      border-color: var(--teal);
+      box-shadow: 0 0 12px rgba(77, 184, 168, 0.2);
+    }
+
+    .btn-primary {
+      background: var(--teal);
+      color: var(--ground2);
+      border: none;
+      font-weight: 700;
+      grid-column: span 2;
+      padding: 12px;
+    }
+
+    .btn-primary:hover {
+      background: #5cc2b2;
+      box-shadow: 0 0 16px rgba(77, 184, 168, 0.4);
+    }
+
+    .btn-amber {
+      background: transparent;
+      border: 1px solid var(--amber);
+      color: var(--amber);
+    }
+
+    .btn-amber:hover {
+      background: rgba(230, 180, 92, 0.1);
+    }
+
+    .btn-disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* State diagram list in dashboard */
+    .state-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .state-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      background: var(--ground2);
+      border: 1px solid transparent;
+      color: var(--muted);
+      transition: all var(--dur-base) var(--ease-enter);
+    }
+
+    .state-item.current {
+      color: var(--ink);
+      background: rgba(77, 184, 168, 0.08);
+      border-color: rgba(77, 184, 168, 0.3);
+      font-weight: 600;
+    }
+
+    .state-item .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--faint);
+    }
+
+    .state-item.current .dot {
+      background: var(--teal);
+      box-shadow: 0 0 8px var(--teal);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; }
+    }
+
+    /* Explanation Section */
+    .expl-box {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .expl-box dt {
+      font-weight: 700;
+      color: var(--ink);
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .expl-box dt::before {
+      content: "";
+      width: 4px;
+      height: 12px;
+      background: var(--teal);
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .expl-box dd {
+      margin: 4px 0 0 10px;
+    }
+
+    .expl-box dd b {
+      color: var(--ink);
+    }
+
+    /* Mock Device States inside Phone Frame */
+    .device-screen {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      transition: opacity var(--dur-slow) var(--ease-move), transform var(--dur-slow) var(--ease-move);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px);
+    }
+
+    .device-screen.active {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    /* Screen 1: Lobby (门厅) */
+    .screen-lobby {
+      padding: 30px 24px;
+      justify-content: flex-start;
+      background: var(--ground);
+      overflow-y: auto;
+    }
+
+    .lobby-history-divider {
+      margin: 24px 0 16px;
+      border-top: 1px solid var(--hair);
+    }
+
+    .lobby-history-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .history-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-item {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      cursor: pointer;
+      transition: all var(--dur-hover) var(--ease-enter);
+    }
+
+    .history-item:hover {
+      border-color: var(--teal);
+      background: rgba(77, 184, 168, 0.04);
+    }
+
+    .history-item-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12.5px;
+      color: var(--muted);
+      flex-wrap: wrap;
+    }
+
+    .history-bullet {
+      color: var(--teal);
+      font-weight: bold;
+    }
+
+    .history-time {
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .history-item.failed {
+      opacity: 0.65;
+    }
+
+    .history-item.failed:hover {
+      border-color: var(--hair);
+      background: var(--raised);
+      cursor: default;
+    }
+
+    .history-item.failed .history-bullet {
+      color: var(--faint);
+    }
+
+    /* Segmented Tabs Layout */
+    .lobby-tabs {
+      display: flex;
+      background: var(--ground2);
+      border: 1px solid var(--hair);
+      border-radius: 10px;
+      padding: 3px;
+      margin: 16px 0 24px;
+      width: 100%;
+    }
+
+    .lobby-tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px 0;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all var(--dur-hover);
+    }
+
+    .lobby-tab.active {
+      background: var(--raised);
+      color: var(--ink);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Option 3 Header styling */
+    .lobby-nav-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 12px;
+      z-index: 11;
+    }
+
+    .btn-history-trigger {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--dur-hover);
+    }
+
+    .btn-history-trigger:hover {
+      color: var(--teal);
+      border-color: var(--teal);
+      background: rgba(77, 184, 168, 0.04);
+    }
+
+    /* Option 3 Drawer overlay styling */
+    .history-drawer-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(20, 29, 26, 0.4);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur-base) var(--ease-enter);
+    }
+
+    .history-drawer-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .history-drawer-content {
+      position: absolute;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 80%;
+      height: 100%;
+      background: rgba(33, 46, 41, 0.95);
+      border-left: 1px solid var(--hair);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transform: translateX(100%);
+      transition: transform var(--dur-base) var(--ease-move);
+      box-shadow: -8px 0 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .history-drawer-overlay.open .history-drawer-content {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--ink);
+      border-bottom: 1px solid var(--hair);
+      padding-bottom: 12px;
+    }
+
+    .btn-close-drawer {
+      font-size: 20px;
+      color: var(--muted);
+      cursor: pointer;
+      line-height: 1;
+      transition: color var(--dur-hover);
+    }
+
+    .btn-close-drawer:hover {
+      color: var(--ink);
+    }
+
+    /* Segmented / drawer visibility controllers */
+    .lobby-start-panel, .lobby-history-panel {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .lobby-history-panel {
+      display: none;
+    }
+
+    .lobby-history-panel.show {
+      display: flex;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .lobby-header {
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    .lobby-logo {
+      width: 64px;
+      height: 64px;
+      border-radius: 18px;
+      background: radial-gradient(circle, var(--teal-dim) 0%, var(--ground2) 100%);
+      border: 1px solid var(--hair);
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--teal);
+      font-weight: 800;
+      font-size: 24px;
+      box-shadow: 0 8px 24px rgba(77, 184, 168, 0.15);
+    }
+
+    .lobby-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--ink);
+      margin: 0 0 8px;
+    }
+
+    .lobby-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    .lobby-settings {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin: 40px 0;
+    }
+
+    .setting-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      padding: 14px 18px;
+      border-radius: 14px;
+    }
+
+    .setting-label {
+      font-size: 13.5px;
+      font-weight: 600;
+    }
+
+    .setting-desc {
+      font-size: 11px;
+      color: var(--faint);
+      margin-top: 2px;
+    }
+
+    /* Switch styling */
+    .switch-btn {
+      width: 44px;
+      height: 24px;
+      background: var(--ground2);
+      border: 1px solid var(--hair);
+      border-radius: 99px;
+      position: relative;
+      cursor: pointer;
+      transition: background var(--dur-base) var(--ease-enter);
+    }
+
+    .switch-btn::after {
+      content: "";
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--muted);
+      top: 2px;
+      left: 2px;
+      transition: all var(--dur-base) var(--ease-enter);
+    }
+
+    .switch-btn.on {
+      background: var(--teal-dim);
+      border-color: var(--teal);
+    }
+
+    .switch-btn.on::after {
+      left: 22px;
+      background: var(--ink);
+    }
+
+    .select-dropdown {
+      background: var(--ground2);
+      border: 1px solid var(--hair);
+      color: var(--ink);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .lobby-footer {
+      margin-bottom: 20px;
+    }
+
+    /* Screen 2: Connecting (连接中) */
+    .screen-connecting {
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, #1b2a24 0%, var(--ground2) 80%);
+      padding: 30px;
+    }
+
+    .conn-status {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: var(--teal);
+      margin-top: 24px;
+      text-transform: uppercase;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .conn-ring {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      border: 1px solid var(--hair);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .conn-ring::before {
+      content: "";
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 2px solid var(--teal);
+      opacity: 0;
+      animation: conn-ripple 2s cubic-bezier(.2,.8,.2,1) infinite;
+    }
+
+    .conn-center {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 20px var(--teal);
+    }
+
+    @keyframes conn-ripple {
+      0% { transform: scale(0.6); opacity: 0.8; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+
+    /* Screen 3: Live Stage (舞台态) */
+    .screen-live {
+      background: var(--ground2);
+      justify-content: space-between;
+      position: relative;
+    }
+
+    /* Small header inside active live stage */
+    .live-hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      z-index: 10;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(33, 46, 41, 0.8);
+      border: 1px solid var(--hair);
+      padding: 6px 12px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--muted);
+      backdrop-filter: blur(8px);
+    }
+
+    .live-badge .indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 6px var(--teal);
+    }
+
+    .live-badge.thinking .indicator {
+      background: var(--moon);
+      box-shadow: 0 0 6px var(--moon);
+    }
+
+    .live-badge.assistantSpeaking .indicator {
+      background: var(--moon);
+      box-shadow: 0 0 6px var(--moon);
+    }
+
+    .btn-quit {
+      background: rgba(33, 46, 41, 0.8);
+      border: 1px solid var(--hair);
+      color: var(--ink);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background var(--dur-hover);
+      backdrop-filter: blur(8px);
+    }
+
+    .btn-quit:hover {
+      background: #c94a4a44;
+      border-color: #c94a4a88;
+    }
+
+    /* Canvas wave container */
+    .wave-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    #waveCanvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Subtitles / Caption bar (Only assistant's voice caption) */
+    .caption-overlay {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: 55%; /* Directly below the waterline */
+      text-align: center;
+      z-index: 10;
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+
+    .caption-text {
+      display: inline-block;
+      max-width: 100%;
+      font-size: 13.5px;
+      color: var(--moon);
+      line-height: 1.5;
+      padding: 10px 16px;
+      background: rgba(20, 29, 26, 0.75);
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(203, 212, 207, 0.08);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity var(--dur-slow) var(--ease-enter), transform var(--dur-slow) var(--ease-enter);
+    }
+
+    .caption-text.show {
+      opacity: 0.85;
+      transform: translateY(0);
+    }
+
+    .caption-text.sink-fade {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 1.2s ease-in, transform 1.2s ease-in;
+    }
+
+    /* Bottom tools overlay */
+    .live-controls-bar {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      padding: 30px;
+      z-index: 10;
+    }
+
+    .action-circle-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(33, 46, 41, 0.8);
+      border: 1px solid var(--hair);
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 18px;
+      transition: all var(--dur-hover) var(--ease-enter);
+      backdrop-filter: blur(8px);
+    }
+
+    .action-circle-btn:hover {
+      background: var(--raised);
+      border-color: var(--faint);
+    }
+
+    .action-circle-btn.mute-active {
+      background: rgba(230, 180, 92, 0.15);
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    .action-circle-btn.finish-active {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: var(--ground2);
+      box-shadow: 0 0 16px rgba(77, 184, 168, 0.3);
+    }
+
+    .action-circle-btn.finish-active:hover {
+      background: #5cc2b2;
+    }
+
+    /* Screen 4: Post Processing (后处理) */
+    .screen-processing {
+      justify-content: center;
+      align-items: center;
+      background: var(--ground);
+      padding: 30px;
+    }
+
+    .process-loader {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--hair);
+      border-top-color: var(--teal);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 24px;
+    }
+
+    .process-status {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 0 0 8px;
+    }
+
+    .process-bar-bg {
+      width: 180px;
+      height: 4px;
+      background: var(--raised);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 12px;
+    }
+
+    .process-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--teal);
+      transition: width var(--dur-base) linear;
+    }
+
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Screen 5: Debrief (结束页 - 闭环的「回」) */
+    .screen-debrief {
+      background: var(--ground);
+      overflow-y: auto;
+      padding: 24px 20px;
+      justify-content: flex-start;
+      display: block; /* Overrides flex in standard device-screen */
+    }
+
+    /* Small capability echo bar mockup inside debrief */
+    .debrief-header-viz {
+      margin: 16px 0 24px;
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      border-radius: 16px;
+      padding: 16px;
+    }
+
+    .viz-title {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--faint);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .viz-title span.res-badge {
+      color: var(--teal);
+    }
+
+    /* Static Echo Bar mapping the Direction B outcome */
+    .echo-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .echo-bar-row {
+      display: grid;
+      grid-template-columns: 60px 1fr 32px;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+    }
+
+    .echo-label {
+      font-weight: 700;
+      color: var(--muted);
+      font-family: var(--sans);
+    }
+
+    .echo-track {
+      height: 6px;
+      background: var(--ground2);
+      border-radius: 99px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .echo-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--teal);
+    }
+
+    .echo-fill.assistant {
+      background: var(--moon);
+    }
+
+    .echo-fill.gain {
+      background: var(--teal);
+      box-shadow: 0 0 8px var(--teal);
+      position: relative;
+      transition: width 1s var(--ease-enter);
+    }
+
+    /* Transcripts List */
+    .debrief-sec-title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin: 24px 0 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .transcript-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .chat-bubble {
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 85%;
+      position: relative;
+    }
+
+    .chat-bubble.assistant {
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      color: var(--ink);
+      align-self: flex-start;
+      border-top-left-radius: 2px;
+    }
+
+    .chat-bubble.learner {
+      background: rgba(77, 184, 168, 0.08);
+      border: 1px solid var(--hair);
+      border-left: 3px solid var(--teal);
+      color: var(--ink);
+      align-self: flex-end;
+      border-top-right-radius: 2px;
+    }
+
+    .guidance-toggle {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--faint);
+      cursor: pointer;
+      display: inline-block;
+      margin-top: 6px;
+      border-bottom: 1px dotted var(--hair);
+      user-select: none;
+    }
+
+    .guidance-toggle:hover {
+      color: var(--muted);
+    }
+
+    .guidance-box {
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: var(--ground2);
+      border-radius: 6px;
+      border: 1px solid var(--hair);
+      font-size: 11px;
+      color: var(--faint);
+      display: none;
+    }
+
+    .guidance-box.show {
+      display: block;
+    }
+
+    /* Targets (卡壳/求助) */
+    .targets-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .target-card {
+      background: var(--raised);
+      border: 1px solid var(--hair);
+      border-left: 3px solid var(--amber);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .target-info {
+      flex: 1;
+    }
+
+    .target-vocab {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .target-desc {
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .target-action {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: 1px solid var(--hair);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--amber);
+      cursor: pointer;
+      font-size: 13px;
+      transition: all var(--dur-hover);
+    }
+
+    .target-action:hover {
+      background: rgba(230, 180, 92, 0.15);
+      border-color: var(--amber);
+    }
+
+    /* Return action button */
+    .debrief-action-box {
+      margin: 32px 0 20px;
+    }
+
+    /* Ambient breath keyframes matching stage guidelines */
+    @keyframes ambient-breath {
+      0%, 100% { opacity: 0.8; }
+      50% { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Left Column: Interactive Prototype inside Mock Screen -->
+  <div class="viewport-panel">
+    <div class="mock-device">
+
+      <!-- SCREEN 1: LOBBY (门厅 - IDLE) -->
+      <div id="screen-lobby" class="device-screen screen-lobby active">
+        <!-- Option 3 navigation header (clock icon) -->
+        <div class="lobby-nav-header hidden" id="lobby-nav-header">
+          <div></div>
+          <div class="btn-history-trigger" onclick="toggleHistoryDrawer(true)" title="查看历史">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+        </div>
+
+        <!-- Option 1 tabs switcher -->
+        <div class="lobby-tabs" id="lobby-tabs-bar">
+          <div class="lobby-tab active" onclick="switchLobbyTab('start')">开始新对话</div>
+          <div class="lobby-tab" onclick="switchLobbyTab('history')">历史记录</div>
+        </div>
+
+        <!-- Lobby Start Panel (Voice settings + Start button) -->
+        <div class="lobby-start-panel" id="lobby-start-panel">
+          <div class="lobby-header">
+            <div class="lobby-logo">L</div>
+            <h2 class="lobby-title">对话 · Live 态</h2>
+            <p class="lobby-subtitle">全屏沉浸式实时语音对话</p>
+          </div>
+
+          <div class="lobby-settings">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">对话角色音色</div>
+                <div class="setting-desc">对方说话的声音风格</div>
+              </div>
+              <select id="voice-select" class="select-dropdown">
+                <option value="Fen">Fen (温柔月白)</option>
+                <option value="Hale">Hale (稳重月亮)</option>
+                <option value="Aria">Aria (清脆晓风)</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">余音字幕</div>
+                <div class="setting-desc">对方说话时显示淡出字幕</div>
+              </div>
+              <div id="caption-toggle-btn" class="switch-btn" onclick="toggleCaptionSetting()"></div>
+            </div>
+          </div>
+
+          <div class="lobby-footer">
+            <button class="btn btn-primary" onclick="startConnectingState()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v4M8 23h8"/></svg>
+              开始对话
+            </button>
+          </div>
+        </div>
+
+        <!-- Lobby History Panel (Option 1 panel view) -->
+        <div class="lobby-history-panel" id="lobby-history-panel">
+          <div class="lobby-history-section">
+            <div class="history-title">最近的对话</div>
+            <div class="history-list" id="lobby-history-list">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Option 3 absolute Drawer overlay -->
+        <div class="history-drawer-overlay" id="history-drawer" onclick="toggleHistoryDrawer(false)">
+          <div class="history-drawer-content" onclick="event.stopPropagation()">
+            <div class="drawer-header">
+              <span>最近的对话</span>
+              <span class="btn-close-drawer" onclick="toggleHistoryDrawer(false)">&times;</span>
+            </div>
+            <div class="history-list" id="drawer-history-list">
+              <!-- Populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN 2: CONNECTING (连接中) -->
+      <div id="screen-connecting" class="device-screen screen-connecting">
+        <div class="conn-ring">
+          <div class="conn-center"></div>
+        </div>
+        <div class="conn-status" id="connecting-text">连接实时服务器...</div>
+      </div>
+
+      <!-- SCREEN 3: LIVE STAGE (舞台态) -->
+      <div id="screen-live" class="device-screen screen-live">
+        <!-- HUD overlay -->
+        <div class="live-hud">
+          <div class="live-badge" id="live-badge-status">
+            <div class="indicator"></div>
+            <span id="live-status-text">系统在听</span>
+          </div>
+          <div class="btn-quit" onclick="startDrainingState()" title="结束对话">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </div>
+        </div>
+
+        <!-- Waterline and waveforms canvas -->
+        <div class="wave-container">
+          <canvas id="waveCanvas"></canvas>
+        </div>
+
+        <!-- Captions Overlay -->
+        <div class="caption-overlay">
+          <div id="live-caption-element" class="caption-text">“…so how did the interview go?”</div>
+        </div>
+
+        <!-- Bottom tools bar -->
+        <div class="live-controls-bar">
+          <div class="action-circle-btn" id="btn-mock-mute" onclick="toggleMockMute()" title="静音">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v6a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+          </div>
+          <div class="action-circle-btn finish-active" onclick="startDrainingState()" title="结束对话">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect width="14" height="14" x="5" y="5" rx="2"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN 4: POST PROCESSING (后处理) -->
+      <div id="screen-processing" class="device-screen screen-processing">
+        <div class="process-loader"></div>
+        <div class="process-status">生成对话回顾...</div>
+        <div class="process-status" id="process-percentage" style="font-family:var(--mono); color:var(--teal); font-size:14px;">0%</div>
+        <div class="process-bar-bg">
+          <div id="process-bar-fill" class="process-bar-fill"></div>
+        </div>
+      </div>
+
+      <!-- SCREEN 5: DEBRIEF (结束页 - 闭环的「回」) -->
+      <div id="screen-debrief" class="device-screen screen-debrief">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2 style="font-size:20px; font-weight:800; margin:0;">对话总结</h2>
+          <span style="font-size:12px; color:var(--faint); font-family:var(--mono);">3m 42s · 12轮</span>
+        </div>
+
+        <!-- Capability Echo Bars Viz (Direction B End State) -->
+        <div class="debrief-header-viz">
+          <div class="viz-title">
+            <span>说通道能力回流</span>
+            <span class="res-badge">+5 词条更新</span>
+          </div>
+          <div class="echo-bars">
+            <div class="echo-bar-row">
+              <span class="echo-label">接收</span>
+              <div class="echo-track">
+                <div class="echo-fill assistant" style="width: 78%;"></div>
+              </div>
+              <span style="font-family:var(--mono); text-align:right;">78%</span>
+            </div>
+            <div class="echo-bar-row">
+              <span class="echo-label">产出</span>
+              <div class="echo-track">
+                <div class="echo-fill gain" id="echo-gain-fill" style="width: 52%;"></div>
+              </div>
+              <span style="font-family:var(--mono); text-align:right; color:var(--teal);">+12%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 1: Transcripts -->
+        <div class="debrief-sec-title">对话实录</div>
+        <div class="transcript-feed" id="debrief-feed">
+          <!-- Populated dynamically to reflect simulated path -->
+        </div>
+
+        <!-- Section 2: Targets -->
+        <div class="debrief-sec-title">这场对话的靶子 (卡壳/求助)</div>
+        <div class="targets-list">
+          <div class="target-card">
+            <div class="target-info">
+              <div class="target-vocab">interviewer <span style="font-size:11px; font-weight:normal; color:var(--muted); margin-left:6px;">名词 / 面试官</span></div>
+              <div class="target-desc">你在说话中发生了卡壳（2.8秒），并借助提示说出了此词。</div>
+            </div>
+            <div class="target-action" onclick="alert('已加入生词本!')" title="加入生词本">★</div>
+          </div>
+          <div class="target-card">
+            <div class="target-info">
+              <div class="target-vocab">project background <span style="font-size:11px; font-weight:normal; color:var(--muted); margin-left:6px;">词组 / 项目背景</span></div>
+              <div class="target-desc">你在 2 分 10 秒求助了“项目背景怎么说”。</div>
+            </div>
+            <div class="target-action" onclick="alert('已加入生词本!')" title="加入生词本">★</div>
+          </div>
+        </div>
+
+        <!-- Action Box -->
+        <div class="debrief-action-box">
+          <button class="btn btn-primary" onclick="resetToLobby()">返回门厅</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Right Column: Control Dashboard & Interactive Simulation -->
+  <div class="dashboard-panel">
+    <div>
+      <div class="eyebrow">listen · #70 · 交互原型</div>
+      <h1>对话生命周期生命线</h1>
+      <p class="lede">
+        本原型用于模拟对话页的完整生命周期，以<b>方案 B（回声水面）</b>为默认建模基础。
+        通过右侧的控制器手动改变状态，或者启动自动模拟，观察左侧物理“水面”以及字幕的响应。
+      </p>
+    </div>
+
+    <!-- IA / UX Layout Comparison Selector -->
+    <div class="card">
+      <div class="card-title">IA / UX 布局方案对比</div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <p style="font-size:12.5px; color:var(--muted); margin:0 0 6px; line-height:1.5;">
+          在此切换不同的<b>历史记录放置方案</b>，可在左侧模拟器中交互对比其 IA（信息架构）优劣：
+        </p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button class="btn btn-primary" id="btn-ia-tabs" onclick="switchIALayout('tabs')" style="justify-content: flex-start; padding: 12px 14px; width: 100%;">
+            方案一：分栏切换 (Segmented Tabs)
+          </button>
+          <button class="btn" id="btn-ia-drawer" onclick="switchIALayout('drawer')" style="justify-content: flex-start; padding: 12px 14px; width: 100%;">
+            方案三：右上角侧边抽屉 (Drawer)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- State Machine Status Cards -->
+    <div class="card">
+      <div class="card-title">
+        <span>生命周期状态机</span>
+        <span class="badge" id="dash-state-badge">IDLE</span>
+      </div>
+      <div class="state-flow">
+        <div class="state-item current" id="flow-idle"><span class="dot"></span><span>idle (门厅)</span></div>
+        <div class="state-item" id="flow-connecting"><span class="dot"></span><span>connecting (连接中)</span></div>
+        <div class="state-item" id="flow-live"><span class="dot"></span><span>live (实时对话循环)</span></div>
+        <div class="state-item" id="flow-draining"><span class="dot"></span><span>draining (数据排出中)</span></div>
+        <div class="state-item" id="flow-postProcessing"><span class="dot"></span><span>postProcessing (后处理/汇总)</span></div>
+        <div class="state-item" id="flow-debrief"><span class="dot"></span><span>debrief (结束页)</span></div>
+      </div>
+    </div>
+
+    <!-- Simulator Controller Actions -->
+    <div class="card">
+      <div class="card-title">仿真调试台</div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-run-sim" onclick="runAutoSimulation()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          一键自动对话演示
+        </button>
+
+        <div style="grid-column: span 2; margin: 8px 0; border-top: 1px solid var(--hair);"></div>
+
+        <button class="btn btn-disabled" id="btn-ctrl-listen" onclick="setLiveSubState('listening')">Listening (等你开口)</button>
+        <button class="btn btn-disabled" id="btn-ctrl-speak" onmousedown="startSpokenMock()" onmouseup="stopSpokenMock()" ontouchstart="startSpokenMock()" ontouchend="stopSpokenMock()">Speak (按住模拟你开口)</button>
+        <button class="btn btn-disabled" id="btn-ctrl-think" onclick="setLiveSubState('thinking')">Thinking (对方思考)</button>
+        <button class="btn btn-disabled" id="btn-ctrl-reply" onclick="triggerAssistantMockSpeech()">Assistant Speak (对方说话)</button>
+
+        <div style="grid-column: span 2; margin: 8px 0; border-top: 1px solid var(--hair);"></div>
+
+        <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size:11.5px; color:var(--muted); font-family:var(--mono);">对方语音字幕模拟文本:</label>
+          <input type="text" id="mock-subtitle-input" value="Welcome to the interview practice. Tell me about your background." style="background:var(--ground2); border:1px solid var(--hair); color:var(--ink); padding:8px 10px; border-radius:8px; font-size:12.5px; outline:none;">
+        </div>
+
+        <button class="btn btn-amber btn-disabled" id="btn-ctrl-interrupt" onclick="triggerInterruptMock()" style="grid-column: span 2; margin-top: 8px;">
+          ⚡ 模拟你在此时突然开口 (打断退让 90ms)
+        </button>
+      </div>
+    </div>
+
+    <!-- Design notes explanation -->
+    <div class="card">
+      <div class="card-title">方案 B 生命周期设计备忘</div>
+      <dl class="expl-box">
+        <dt>门厅与配置迁出</dt>
+        <dd>
+          为确保“舞台态全屏沉浸”，语音引擎提供商管理已迁至通用设置。
+          门厅只剩下“音色”与“字幕开关”两个选项，按下“开始对话”后，门厅以 <b>exit</b> 曲线淡出退场。
+        </dd>
+        <dt>打断响应 (Interrupt Latency)</dt>
+        <dd>
+          在 <b>assistantSpeaking</b> 状态下，用户一旦开口（由系统声音输入捕获），
+          代表对方声音的月白波必须在 <b>90ms</b> 内降为零（一线月白退让）。物理隐喻：
+          你说话的青波升起把水面占满了。
+        </dd>
+        <dt>字幕的物理沉降 (Caption Sinking)</dt>
+        <dd>
+          余音字幕不累积历史，仅贴在水面线上方展示。
+          当对方停止说话后，字幕静止 <b>2.6秒</b>，随后像尘埃般“下沉并淡出”，
+          不给用户照着屏幕阅读的视觉压力。
+        </dd>
+        <dt>本地 Whisper 与诚信分层</dt>
+        <dd>
+          在 Live 状态下，用户自己的话<b>绝不上屏</b>（避免诱导念读）。
+          本地 Whisper 在后台静默转写，在结束页以 <b>learner output</b>（信号青左缘）形式在对话实录里显示。
+        </dd>
+        <dt>结束页的物理闭环</dt>
+        <dd>
+          结束时，水平的水面徐徐收窄退场，缩短并定格为顶部的静态回声条，
+          承载说通道回流 evidence 的物理可视化。
+        </dd>
+      </dl>
+    </div>
+  </div>
+</div>
+
+<script>
+  // UI State Variables
+  let isCaptionEnabled = false;
+  let currentGlobalState = 'idle'; // idle, connecting, live, draining, postProcessing, debrief
+  let liveSubState = 'listening'; // listening, learnerSpeaking, thinking, assistantSpeaking
+  let isMuted = false;
+
+  // Simulator Scripting Data
+  let simulatedTranscript = []; // Collected speech during conversation
+
+  // Historical conversation records (最近的对话)
+  let historyConversations = [
+    {
+      id: 0,
+      time: "7月29日 21:20",
+      duration: "4分钟",
+      turns: "15轮",
+      failed: false,
+      transcript: [
+        { sender: 'assistant', text: "Hello! Ready for your tech mock today?" },
+        { sender: 'learner', text: "Yes, let's practice basic network protocols." },
+        { sender: 'assistant', text: "Great. Can you explain the three-way handshake in TCP?" },
+        { sender: 'learner', text: "Sure! First, the client sends a SYN packet to the server..." }
+      ]
+    },
+    {
+      id: 1,
+      time: "7月29日 18:45",
+      duration: "3分钟",
+      turns: "8轮",
+      failed: false,
+      transcript: [
+        { sender: 'assistant', text: "Hi Aria, let's discuss some common travel phrases." },
+        { sender: 'learner', text: "Good. How do I ask for directions politely?" },
+        { sender: 'assistant', text: "You can say: 'Excuse me, could you tell me how to get to...'" }
+      ]
+    },
+    {
+      id: 2,
+      time: "7月28日 14:31",
+      duration: "未录到内容",
+      turns: "0轮",
+      failed: true,
+      transcript: []
+    }
+  ];
+
+  function renderHistoryList() {
+    const listEl = document.getElementById('lobby-history-list');
+    const drawerListEl = document.getElementById('drawer-history-list');
+    
+    const populate = (el) => {
+      if (!el) return;
+      el.innerHTML = '';
+      historyConversations.forEach(session => {
+        const item = document.createElement('div');
+        item.className = `history-item ${session.failed ? 'failed' : ''}`;
+        if (!session.failed) {
+          item.onclick = () => {
+            if (currentIALayout === 'drawer') {
+              toggleHistoryDrawer(false);
+            }
+            loadHistoryDebrief(session.id);
+          };
+        }
+        
+        item.innerHTML = `
+          <div class="history-item-meta">
+            <span class="history-bullet">▸</span>
+            <span class="history-time">${session.time}</span>
+            <span class="history-dot">·</span>
+            <span class="history-duration">${session.duration}</span>
+            <span class="history-dot">·</span>
+            <span class="history-turns">${session.turns}</span>
+          </div>
+        `;
+        el.appendChild(item);
+      });
+    };
+
+    populate(listEl);
+    populate(drawerListEl);
+  }
+
+  function loadHistoryDebrief(id) {
+    const session = historyConversations.find(c => c.id === id);
+    if (!session || session.failed) return;
+
+    // Load transcript
+    simulatedTranscript = [...session.transcript];
+    
+    // Switch directly to debrief screen
+    enterDebriefState();
+  }
+
+  // Call on script load
+  setTimeout(renderHistoryList, 50);
+
+  // Wave rendering parameters
+  const canvas = document.getElementById('waveCanvas');
+  const ctx = canvas.getContext('2d');
+  let animationFrameId = null;
+
+  // Wave phase offsets for scrolling wave effect
+  let primaryPhase = 0;
+  let assistantPhase = 0;
+  let rippleRadius = 0;
+  let waveAmplitude = 1.0;
+  let micVolume = 0; // Simulated volume from 0 to 1
+  let targetMicVolume = 0;
+  let assistantVolume = 0;
+  let targetAssistantVolume = 0;
+
+  // Water level Y coordinate
+  let waterY = 0;
+
+  // Init canvas size
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    waterY = rect.height / 2;
+  }
+  
+  window.addEventListener('resize', resizeCanvas);
+  // Initial size check
+  setTimeout(resizeCanvas, 100);
+
+  // IA Layout configurations
+  let currentIALayout = 'tabs'; // tabs, drawer
+
+  function switchIALayout(layout) {
+    currentIALayout = layout;
+    
+    // Update dashboard buttons active states
+    const btnTabs = document.getElementById('btn-ia-tabs');
+    const btnDrawer = document.getElementById('btn-ia-drawer');
+    
+    if (layout === 'tabs') {
+      btnTabs.className = "btn btn-primary";
+      btnTabs.style.justifyContent = "flex-start";
+      btnDrawer.className = "btn";
+      btnDrawer.style.justifyContent = "flex-start";
+      
+      // Option 1 UI Setup: Show tabs switcher, hide drawer button, ensure normal view flow
+      document.getElementById('lobby-tabs-bar').classList.remove('hidden');
+      document.getElementById('lobby-nav-header').classList.add('hidden');
+      
+      // Default to start view in tabs
+      switchLobbyTab('start');
+    } else {
+      btnTabs.className = "btn";
+      btnTabs.style.justifyContent = "flex-start";
+      btnDrawer.className = "btn btn-primary";
+      btnDrawer.style.justifyContent = "flex-start";
+      
+      // Option 3 UI Setup: Hide tabs switcher, show drawer button, show all settings
+      document.getElementById('lobby-tabs-bar').classList.add('hidden');
+      document.getElementById('lobby-nav-header').classList.remove('hidden');
+      
+      // Ensure start view is visible
+      document.getElementById('lobby-start-panel').classList.remove('hidden');
+      document.getElementById('lobby-history-panel').classList.add('hidden');
+    }
+  }
+
+  let currentLobbyTab = 'start';
+  function switchLobbyTab(tab) {
+    if (currentIALayout !== 'tabs') return;
+    
+    currentLobbyTab = tab;
+    
+    // Toggle active classes on tabs
+    document.querySelectorAll('.lobby-tab').forEach(el => el.classList.remove('active'));
+    if (tab === 'start') {
+      document.querySelector('.lobby-tab[onclick*="start"]').classList.add('active');
+      document.getElementById('lobby-start-panel').classList.remove('hidden');
+      document.getElementById('lobby-history-panel').classList.add('hidden');
+    } else {
+      document.querySelector('.lobby-tab[onclick*="history"]').classList.add('active');
+      document.getElementById('lobby-start-panel').classList.add('hidden');
+      document.getElementById('lobby-history-panel').classList.add('show');
+      document.getElementById('lobby-history-panel').classList.remove('hidden');
+      
+      // Render list
+      renderHistoryList();
+    }
+  }
+
+  function toggleHistoryDrawer(open) {
+    if (currentIALayout !== 'drawer') return;
+    const drawer = document.getElementById('history-drawer');
+    if (open) {
+      drawer.classList.add('open');
+      renderHistoryList();
+    } else {
+      drawer.classList.remove('open');
+    }
+  }
+
+  // Toggle caption switch in lobby
+  function toggleCaptionSetting() {
+    isCaptionEnabled = !isCaptionEnabled;
+    const btn = document.getElementById('caption-toggle-btn');
+    if (isCaptionEnabled) {
+      btn.classList.add('on');
+    } else {
+      btn.classList.remove('on');
+    }
+  }
+
+  // Set visual global state
+  function setGlobalState(state) {
+    currentGlobalState = state;
+
+    // 1. Update dashboard state flow view
+    document.querySelectorAll('.state-item').forEach(item => item.classList.remove('current'));
+    const currentItem = document.getElementById(`flow-${state}`);
+    if (currentItem) currentItem.classList.add('current');
+
+    document.getElementById('dash-state-badge').innerText = state.toUpperCase();
+
+    // 2. Manage device screens visibility
+    document.querySelectorAll('.device-screen').forEach(screen => screen.classList.remove('active'));
+    
+    // View transitions support
+    const targetScreen = document.getElementById(`screen-${state === 'live' ? 'live' : state}`);
+    
+    if (document.startViewTransition) {
+      document.startViewTransition(() => {
+        if (targetScreen) targetScreen.classList.add('active');
+      });
+    } else {
+      if (targetScreen) targetScreen.classList.add('active');
+    }
+
+    // 3. Manage controller button enabled states
+    const isLive = (state === 'live');
+    toggleBtnState('btn-ctrl-listen', isLive);
+    toggleBtnState('btn-ctrl-speak', isLive);
+    toggleBtnState('btn-ctrl-think', isLive);
+    toggleBtnState('btn-ctrl-reply', isLive);
+    toggleBtnState('btn-ctrl-interrupt', isLive && (liveSubState === 'assistantSpeaking'));
+
+    // Handle animations starting/stopping based on state
+    if (isLive) {
+      startWaveAnimation();
+      setLiveSubState('listening');
+    } else {
+      stopWaveAnimation();
+    }
+  }
+
+  function toggleBtnState(id, enable) {
+    const btn = document.getElementById(id);
+    if (enable) {
+      btn.classList.remove('btn-disabled');
+    } else {
+      btn.classList.add('btn-disabled');
+    }
+  }
+
+  // Connect Transition
+  function startConnectingState() {
+    setGlobalState('connecting');
+    document.getElementById('connecting-text').innerText = "正在寻找空闲声音管道...";
+    
+    setTimeout(() => {
+      document.getElementById('connecting-text').innerText = "建立加密音频信道...";
+      setTimeout(() => {
+        setGlobalState('live');
+      }, 1200);
+    }, 1000);
+  }
+
+  // Set sub-states inside the live conversation
+  function setLiveSubState(subState) {
+    if (currentGlobalState !== 'live') return;
+    
+    liveSubState = subState;
+    const badge = document.getElementById('live-badge-status');
+    const badgeText = document.getElementById('live-status-text');
+
+    badge.className = "live-badge";
+    
+    // Manage state-specific parameters
+    if (subState === 'listening') {
+      badgeText.innerText = "系统在听";
+      targetMicVolume = 0.05; // tiny ambient noise
+      targetAssistantVolume = 0;
+    } else if (subState === 'learnerSpeaking') {
+      badgeText.className = "live-badge learner";
+      badgeText.innerText = "你在说";
+      targetMicVolume = 0.6; // speaking level
+      targetAssistantVolume = 0;
+    } else if (subState === 'thinking') {
+      badge.classList.add('thinking');
+      badgeText.innerText = "对方思考中";
+      targetMicVolume = 0;
+      targetAssistantVolume = 0;
+      rippleRadius = 0; // reset thinking ripple
+    } else if (subState === 'assistantSpeaking') {
+      badge.classList.add('assistantSpeaking');
+      badgeText.innerText = "对方在说";
+      targetMicVolume = 0;
+      targetAssistantVolume = 0.5;
+    }
+
+    // Interrupt button state
+    toggleBtnState('btn-ctrl-interrupt', currentGlobalState === 'live' && (subState === 'assistantSpeaking'));
+  }
+
+  // Simulating user holding down "speak" button
+  let speakVolumeTimer = null;
+  function startSpokenMock() {
+    if (currentGlobalState !== 'live') return;
+    
+    // Clear assistant speech timers if any
+    clearTimeout(assistantSpeechEndTimer);
+    clearTimeout(captionSinkTimer);
+
+    // If assistant was speaking, trigger immediate interrupt
+    if (liveSubState === 'assistantSpeaking') {
+      triggerInterruptMock();
+      return;
+    }
+
+    setLiveSubState('learnerSpeaking');
+    speakVolumeTimer = setInterval(() => {
+      // simulate volume flutter
+      targetMicVolume = 0.3 + Math.random() * 0.5;
+    }, 150);
+  }
+
+  function stopSpokenMock() {
+    if (currentGlobalState !== 'live' || liveSubState !== 'learnerSpeaking') return;
+    clearInterval(speakVolumeTimer);
+    
+    // Save mock user text to simulated transcript
+    simulatedTranscript.push({
+      sender: 'learner',
+      text: "Yeah, I've done a couple of mock runs, but I'm still nervous about the system architecture questions."
+    });
+
+    setLiveSubState('thinking');
+    
+    // Auto transition to reply after thinking for 1.8s
+    setTimeout(() => {
+      if (liveSubState === 'thinking') {
+        triggerAssistantMockSpeech();
+      }
+    }, 1800);
+  }
+
+  // Simulating assistant replying
+  let assistantSpeechEndTimer = null;
+  let captionSinkTimer = null;
+  
+  function triggerAssistantMockSpeech() {
+    if (currentGlobalState !== 'live') return;
+    
+    setLiveSubState('assistantSpeaking');
+    
+    const subtitleText = document.getElementById('mock-subtitle-input').value;
+    
+    // Save to transcript
+    simulatedTranscript.push({
+      sender: 'assistant',
+      text: subtitleText
+    });
+
+    // Handle caption rendering if setting is ON
+    const captionEl = document.getElementById('live-caption-element');
+    captionEl.innerText = subtitleText;
+    captionEl.className = "caption-text";
+    
+    if (isCaptionEnabled) {
+      setTimeout(() => {
+        captionEl.classList.add('show');
+      }, 50);
+    }
+
+    // Wave volume flutter
+    let ticks = 0;
+    const flutterInterval = setInterval(() => {
+      if (liveSubState !== 'assistantSpeaking') {
+        clearInterval(flutterInterval);
+        return;
+      }
+      targetAssistantVolume = 0.2 + Math.sin(ticks * 0.5) * 0.3 + Math.random() * 0.2;
+      ticks++;
+    }, 100);
+
+    // End speech after 5 seconds automatically unless interrupted
+    assistantSpeechEndTimer = setTimeout(() => {
+      if (liveSubState === 'assistantSpeaking') {
+        clearInterval(flutterInterval);
+        targetAssistantVolume = 0;
+        setLiveSubState('listening');
+
+        // After assistant stops speaking, caption sits for 2.6s before sinking and fading out
+        captionSinkTimer = setTimeout(() => {
+          if (liveSubState === 'listening') {
+            captionEl.classList.add('sink-fade');
+          }
+        }, 2600);
+      }
+    }, 5000);
+  }
+
+  // 90ms Instant Interrupt simulation
+  function triggerInterruptMock() {
+    if (currentGlobalState !== 'live' || liveSubState !== 'assistantSpeaking') return;
+    
+    // Fast fade out of assistant volume (90ms)
+    targetAssistantVolume = 0;
+    assistantVolume = 0; // immediate drop
+    
+    // Settle caption state quickly
+    const captionEl = document.getElementById('live-caption-element');
+    captionEl.className = "caption-text sink-fade";
+
+    // Immediate switch to learner speaking state
+    setLiveSubState('learnerSpeaking');
+    targetMicVolume = 0.7;
+
+    // Add interrupt comment to transcript
+    simulatedTranscript.push({
+      sender: 'learner',
+      text: "(打断对方) Actually, speaking of that, can we focus on the database lock scenarios?"
+    });
+
+    // Start simulating spoken flutter
+    let ticks = 0;
+    const voiceFlutter = setInterval(() => {
+      if (liveSubState !== 'learnerSpeaking') {
+        clearInterval(voiceFlutter);
+        return;
+      }
+      targetMicVolume = 0.2 + Math.random() * 0.6;
+      ticks++;
+      if (ticks > 25) { // Stop after ~2.5s
+        clearInterval(voiceFlutter);
+        stopSpokenMock();
+      }
+    }, 100);
+  }
+
+  // Draining / Ending dialog stream state
+  function startDrainingState() {
+    setGlobalState('draining');
+    targetMicVolume = 0;
+    targetAssistantVolume = 0;
+    
+    setTimeout(() => {
+      startPostProcessingState();
+    }, 1000);
+  }
+
+  // Post processing mock progress bar
+  function startPostProcessingState() {
+    setGlobalState('postProcessing');
+    let pct = 0;
+    const bar = document.getElementById('process-bar-fill');
+    const label = document.getElementById('process-percentage');
+    
+    const interval = setInterval(() => {
+      pct += Math.floor(Math.random() * 15) + 5;
+      if (pct >= 100) {
+        pct = 100;
+        clearInterval(interval);
+        setTimeout(() => {
+          enterDebriefState();
+        }, 400);
+      }
+      bar.style.width = `${pct}%`;
+      label.innerText = `${pct}%`;
+    }, 150);
+  }
+
+  // Generate Debrief View
+  function enterDebriefState() {
+    // Populate chat feeds based on simulated transcript
+    const feed = document.getElementById('debrief-feed');
+    feed.innerHTML = '';
+    
+    // Seed default dialog if transcript was empty
+    let isDefaultMock = false;
+    if (simulatedTranscript.length === 0) {
+      isDefaultMock = true;
+      simulatedTranscript = [
+        { sender: 'assistant', text: "Hi! Welcome back to Listen Live room. What subject are we focusing on today?" },
+        { sender: 'learner', text: "I want to practice my system architecture interview skills. Let's do a mock simulation." },
+        { sender: 'assistant', text: "Perfect. Tell me, how do you handle state persistence across microservices?" },
+        { sender: 'learner', text: "Normally, we would use a... uh... distributed cache or write back to database." }
+      ];
+    }
+
+    // Save newly completed conversation to history (unless it is default seed or already loaded from history)
+    if (simulatedTranscript.length > 0 && !isDefaultMock) {
+      const alreadyExists = historyConversations.some(c => JSON.stringify(c.transcript) === JSON.stringify(simulatedTranscript));
+      if (!alreadyExists) {
+        const now = new Date();
+        const timeStr = `${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        // Count learner speech items to determine turns
+        const learnerTurnsCount = simulatedTranscript.filter(t => t.sender === 'learner').length;
+        const totalTurns = learnerTurnsCount * 2; // approximation of turns
+        
+        historyConversations.unshift({
+          id: historyConversations.length + 100, // unique id
+          time: timeStr,
+          duration: `${Math.max(1, Math.round(simulatedTranscript.length * 0.4))}分钟`,
+          turns: `${totalTurns}轮`,
+          failed: false,
+          transcript: [...simulatedTranscript]
+        });
+        renderHistoryList();
+      }
+    }
+
+    simulatedTranscript.forEach((msg, idx) => {
+      const bubble = document.createElement('div');
+      bubble.className = `chat-bubble ${msg.sender}`;
+      bubble.innerText = msg.text;
+      
+      // If assistant, provide the folded guidance provider captions
+      if (msg.sender === 'assistant') {
+        const toggle = document.createElement('span');
+        toggle.className = "guidance-toggle";
+        toggle.innerText = " [展开 Provider 字幕对照]";
+        toggle.onclick = () => {
+          const box = bubble.querySelector('.guidance-box');
+          box.classList.toggle('show');
+        };
+        
+        const gBox = document.createElement('div');
+        gBox.className = "guidance-box";
+        gBox.innerText = `[Provider Guidance Version]: ${msg.text.replace("(打断对方) ", "")}`;
+        
+        bubble.appendChild(toggle);
+        bubble.appendChild(gBox);
+      }
+      
+      feed.appendChild(bubble);
+    });
+
+    setGlobalState('debrief');
+    
+    // Animate capability echo bar gain indicator
+    setTimeout(() => {
+      const fill = document.getElementById('echo-gain-fill');
+      fill.style.width = '64%';
+    }, 300);
+  }
+
+  function resetToLobby() {
+    simulatedTranscript = [];
+    setGlobalState('idle');
+    if (currentIALayout === 'tabs') {
+      switchLobbyTab('start');
+    }
+  }
+
+  function toggleMockMute() {
+    isMuted = !isMuted;
+    const btn = document.getElementById('btn-mock-mute');
+    if (isMuted) {
+      btn.classList.add('mute-active');
+    } else {
+      btn.classList.remove('mute-active');
+    }
+  }
+
+  // Animation Loop for Waterline Wave Canvas (Direction B)
+  function startWaveAnimation() {
+    if (animationFrameId) return;
+    
+    function draw() {
+      if (currentGlobalState !== 'live') {
+        animationFrameId = null;
+        return;
+      }
+      
+      const width = canvas.width / window.devicePixelRatio;
+      const height = canvas.height / window.devicePixelRatio;
+      
+      // Interpolate volumes smoothly (exponential damping for natural feel)
+      micVolume += (targetMicVolume - micVolume) * 0.15;
+      assistantVolume += (targetAssistantVolume - assistantVolume) * 0.15;
+      
+      // Clear viewport screen
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw dark vignetting gradient background
+      const bgGrad = ctx.createRadialGradient(width/2, height*0.35, 10, width/2, height/2, width*0.7);
+      bgGrad.addColorStop(0, '#212f29');
+      bgGrad.addColorStop(0.8, '#141d1a');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Define waterline baseline
+      const centerY = waterY;
+
+      // 1. Draw static grid baseline behind waves
+      ctx.strokeStyle = 'rgba(46, 58, 53, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(30, centerY);
+      ctx.lineTo(width - 30, centerY);
+      ctx.stroke();
+
+      if (liveSubState === 'thinking') {
+        // Draw Thinking Ripple effect
+        rippleRadius += 1.5;
+        if (rippleRadius > 220) rippleRadius = 0;
+        
+        ctx.strokeStyle = 'rgba(199, 212, 207, 0.4)';
+        ctx.lineWidth = 1.5;
+        
+        // Draw concentric ovals radiating out from center
+        for (let i = 0; i < 3; i++) {
+          let r = rippleRadius - i * 50;
+          if (r > 0) {
+            let opacity = Math.max(0, 1 - r / 200) * 0.4;
+            ctx.strokeStyle = `rgba(199, 212, 207, ${opacity})`;
+            ctx.beginPath();
+            ctx.ellipse(width/2, centerY, r, r * 0.25, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw scrollable wave path formulas
+      primaryPhase += 0.04;
+      assistantPhase -= 0.05;
+
+      // 2. Draw Learner waves (Teal, signals UPWARD and BELOW waterline)
+      if (micVolume > 0.01) {
+        ctx.beginPath();
+        ctx.moveTo(30, centerY);
+        
+        for (let x = 30; x <= width - 30; x++) {
+          // Combination of sin/cos waves modulated by speech volume
+          let wave = Math.sin(x * 0.025 + primaryPhase) * Math.cos(x * 0.01 + primaryPhase * 0.5);
+          let envelope = Math.sin((x - 30) / (width - 60) * Math.PI); // drop off at edges
+          
+          let y = centerY + Math.abs(wave) * 35 * micVolume * envelope; // force down/below line
+          ctx.lineTo(x, y);
+        }
+        
+        ctx.strokeStyle = 'rgba(77, 184, 168, 0.85)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        
+        // Second faint fill wave
+        ctx.beginPath();
+        ctx.moveTo(30, centerY);
+        for (let x = 30; x <= width - 30; x++) {
+          let wave = Math.cos(x * 0.035 - primaryPhase * 0.8) * Math.sin(x * 0.015 + primaryPhase * 0.3);
+          let envelope = Math.sin((x - 30) / (width - 60) * Math.PI);
+          let y = centerY + Math.abs(wave) * 20 * micVolume * envelope;
+          ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = 'rgba(47, 133, 120, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // 3. Draw Assistant waves (Moon white, signals DOWNWARD and ABOVE waterline)
+      if (assistantVolume > 0.01) {
+        ctx.beginPath();
+        ctx.moveTo(30, centerY);
+        
+        for (let x = 30; x <= width - 30; x++) {
+          let wave = Math.sin(x * 0.02 + assistantPhase) * Math.cos(x * 0.008 - assistantPhase * 0.4);
+          let envelope = Math.sin((x - 30) / (width - 60) * Math.PI);
+          
+          let y = centerY - Math.abs(wave) * 35 * assistantVolume * envelope; // force up/above line
+          ctx.lineTo(x, y);
+        }
+        
+        ctx.strokeStyle = 'rgba(199, 212, 207, 0.9)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Echo secondary ripple
+        ctx.beginPath();
+        ctx.moveTo(30, centerY);
+        for (let x = 30; x <= width - 30; x++) {
+          let wave = Math.cos(x * 0.04 + assistantPhase * 1.2) * Math.sin(x * 0.012 - assistantPhase * 0.6);
+          let envelope = Math.sin((x - 30) / (width - 60) * Math.PI);
+          let y = centerY - Math.abs(wave) * 20 * assistantVolume * envelope;
+          ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = 'rgba(109, 124, 117, 0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+
+      // 4. Draw Calm micro-waves when state is quiet (listening / idle ambient breathing)
+      if (micVolume <= 0.05 && assistantVolume <= 0.05 && liveSubState === 'listening') {
+        ctx.beginPath();
+        ctx.moveTo(30, centerY);
+        
+        for (let x = 30; x <= width - 30; x++) {
+          let wave = Math.sin(x * 0.035 + primaryPhase) * 1.5; // very small 1.5px swell
+          ctx.lineTo(x, centerY + wave);
+        }
+        ctx.strokeStyle = 'rgba(77, 184, 168, 0.4)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+
+      animationFrameId = requestAnimationFrame(draw);
+    }
+    
+    animationFrameId = requestAnimationFrame(draw);
+  }
+
+  function stopWaveAnimation() {
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+  }
+
+  // -------------------------------------------------------------
+  // Automatic Simulation Walking Script
+  // -------------------------------------------------------------
+  let autoSimTimeout = null;
+  
+  function clearAllSimTimers() {
+    clearTimeout(autoSimTimeout);
+    clearTimeout(assistantSpeechEndTimer);
+    clearTimeout(captionSinkTimer);
+  }
+
+  function runAutoSimulation() {
+    clearAllSimTimers();
+    resetToLobby();
+    
+    const steps = [
+      // 1. Enter Lobby and enable subtitle to let them see visual caption effects
+      {
+        action: () => {
+          isCaptionEnabled = true;
+          document.getElementById('caption-toggle-btn').classList.add('on');
+          document.getElementById('btn-run-sim').innerText = "⚡ 自动演示播放中...";
+          document.getElementById('btn-run-sim').classList.add('btn-amber');
+        },
+        delay: 500
+      },
+      // 2. Start Connecting
+      {
+        action: () => {
+          startConnectingState();
+        },
+        delay: 800
+      },
+      // 3. Connect success -> Start Live -> Show listening
+      {
+        action: () => {
+          // Trigger automatic reply from assistant welcome
+          document.getElementById('mock-subtitle-input').value = "Welcome to the simulation! Let's do a mock tech interview. Introduce yourself.";
+          triggerAssistantMockSpeech();
+        },
+        delay: 3500
+      },
+      // 4. Assistant finished speaking -> transition to user speaking mock
+      {
+        action: () => {
+          // Settle assistant wave, start user speaking mock
+          startSpokenMock();
+        },
+        delay: 6000
+      },
+      // 5. User speaking holds for 3.5s -> release
+      {
+        action: () => {
+          stopSpokenMock();
+        },
+        delay: 3500
+      },
+      // 6. Thinking state completes -> assistant replies again
+      {
+        action: () => {
+          document.getElementById('mock-subtitle-input').value = "Good background! Now, how do you solve performance bottlenecks in database lock scenarios?";
+          triggerAssistantMockSpeech();
+        },
+        delay: 2000
+      },
+      // 7. Middle of assistant reply -> User interrupts assistant (demonstrates 90ms latency)
+      {
+        action: () => {
+          triggerInterruptMock();
+        },
+        delay: 2500
+      },
+      // 8. User finished interrupting speech -> draining -> postProcessing -> debrief
+      {
+        action: () => {
+          startDrainingState();
+        },
+        delay: 4500
+      },
+      // 9. Reset simulation play button state
+      {
+        action: () => {
+          document.getElementById('btn-run-sim').innerText = "一键自动对话演示";
+          document.getElementById('btn-run-sim').classList.remove('btn-amber');
+        },
+        delay: 3500
+      }
+    ];
+
+    let currentStep = 0;
+    
+    function executeNextStep() {
+      if (currentStep >= steps.length) return;
+      
+      const step = steps[currentStep];
+      autoSimTimeout = setTimeout(() => {
+        step.action();
+        currentStep++;
+        executeNextStep();
+      }, step.delay);
+    }
+    
+    executeNextStep();
+  }
+</script>
+</body>
+</html>

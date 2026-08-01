@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 
+import '../data/repositories/occurrence_media_repository.dart';
 import '../models/types.dart';
 
 typedef ReadOccurrenceMedia = Future<MediaItem> Function(String mediaId);
@@ -97,6 +98,18 @@ class OccurrenceMediaResolver {
     OccurrenceFileExists? fileExists,
   }) : fileExists = fileExists ?? _fileExists;
 
+  factory OccurrenceMediaResolver.fromRepository({
+    required OccurrenceMediaRepository repository,
+    required PickOccurrenceMedia pickFile,
+    OccurrenceFileExists? fileExists,
+  }) => OccurrenceMediaResolver(
+    readMedia: repository.readMedia,
+    fingerprintFile: repository.fingerprintFile,
+    registerMedia: repository.registerMedia,
+    pickFile: pickFile,
+    fileExists: fileExists,
+  );
+
   final ReadOccurrenceMedia readMedia;
   final FingerprintOccurrenceMedia fingerprintFile;
   final RegisterOccurrenceMedia registerMedia;
@@ -104,6 +117,17 @@ class OccurrenceMediaResolver {
   final OccurrenceFileExists fileExists;
 
   static Future<bool> _fileExists(String path) => File(path).exists();
+
+  /// Reads only the durable identifier needed to construct a clip snapshot.
+  /// A stale media link is recoverable later through [resolve], so it is null
+  /// rather than an exception at this boundary.
+  Future<String?> mediaFingerprint(String mediaId) async {
+    try {
+      return (await readMedia(mediaId)).fingerprint;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<OccurrenceMediaResolution> resolve(
     Map<String, dynamic> occurrence, {

@@ -20,8 +20,13 @@ String? pickLlmProviderId(List<LlmProviderProfileView> providers, String use) {
 
 extension CoachLlmApi on LocalApi {
   /// Lists configured provider profiles (secret-free views).
-  Future<List<dynamic>> listLlmProviders() async =>
-      (await _request('GET', '/v1/llm/providers')) as List<dynamic>;
+  Future<List<LlmProviderProfileView>> listLlmProviders() async =>
+      ((await _request('GET', '/v1/llm/providers')) as List<dynamic>)
+          .map(
+            (value) =>
+                LlmProviderProfileView.fromJson(value as Map<String, dynamic>),
+          )
+          .toList(growable: false);
 
   /// Resolves the provider to use for [use] (e.g. `semantic_judgment`), or
   /// null when none is configured or the listing fails — a provider-listing
@@ -35,12 +40,7 @@ extension CoachLlmApi on LocalApi {
   }
 
   /// Typed provider list (secret-free), convenience over [listLlmProviders].
-  Future<List<LlmProviderProfileView>> llmProviders() async =>
-      (await listLlmProviders())
-          .map(
-            (e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>),
-          )
-          .toList(growable: false);
+  Future<List<LlmProviderProfileView>> llmProviders() => listLlmProviders();
 
   /// Generates a rubric draft (information points only) for one source segment
   /// through the provider (Phase 3.12.2). The draft is not persisted; the

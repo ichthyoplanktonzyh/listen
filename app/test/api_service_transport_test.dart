@@ -185,8 +185,15 @@ void main() {
 
       final exported = await api.exportVocabulary();
 
-      expect(exported, document);
+      expect(exported.version, 7);
+      expect(exported.exportedAtMs, 42);
+      expect(exported.lexicalEntries, isEmpty);
+      expect(exported.toJson(), document);
       expect(exported['future_extension'], {'preserved': true});
+      expect(
+        () => exported.toJson()['new_field'] = true,
+        throwsUnsupportedError,
+      );
     });
 
     test('production corpus search builds the query and decodes hits', () async {

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/review_repository.dart';
 import '../models/practice.dart';
-import '../services/api_service.dart';
 import '../state/store.dart';
 
 class ReviewState {
@@ -48,26 +48,36 @@ class ReviewState {
 }
 
 class ReviewController extends ChangeNotifier {
-  ReviewController() : _store = Store(const ReviewState()) {
+  ReviewController(this._repository) : _store = Store(const ReviewState()) {
     _store.addListener(notifyListeners);
   }
 
+  final ReviewRepository _repository;
   final Store<ReviewState> _store;
+  bool _disposed = false;
+  int _loadGeneration = 0;
 
   Store<ReviewState> get store => _store;
   ReviewState get state => _store.state;
   ReviewQueueEntry? get current => state.current;
 
-  Future<bool> load(LocalApi api, {int limit = 20}) async {
-    _store.update((state) => state.copyWith(busy: true, clearError: true));
+  void _set(ReviewState Function(ReviewState) update) {
+    if (_disposed) return;
+    _store.update(update);
+  }
+
+  Future<bool> load({int limit = 20}) async {
+    final generation = ++_loadGeneration;
+    _set((state) => state.copyWith(busy: true, clearError: true));
     try {
-      final queue = await api.dueReviewItems(limit: limit);
+      final queue = await _repository.dueItems(limit: limit);
       List<UpgradeSuggestion> suggestions;
       try {
-        suggestions = await api.upgradeSuggestions();
+        suggestions = await _repository.pendingUpgradeSuggestions();
       } catch (_) {
         suggestions = const [];
       }
+      if (_disposed || generation != _loadGeneration) return false;
       _store.replace(
         ReviewState(
           queue: queue,
@@ -78,7 +88,8 @@ class ReviewController extends ChangeNotifier {
       );
       return true;
     } catch (error) {
-      _store.update(
+      if (_disposed || generation != _loadGeneration) return false;
+      _set(
         (state) =>
             state.copyWith(busy: false, error: 'Could not load review queue'),
       );
@@ -86,19 +97,22 @@ class ReviewController extends ChangeNotifier {
     }
   }
 
-  void reveal() => _store.update(
+  void reveal() => _set(
     (state) => state.current == null
         ? state
         : state.copyWith(revealed: true, clearError: true),
   );
 
-  Future<bool> rate(LocalApi api, String rating) async {
+  Future<bool> rate(String rating) async {
     final current = state.current;
     if (current == null || state.busy) return false;
-    _store.update((state) => state.copyWith(busy: true, clearError: true));
+    _set((state) => state.copyWith(busy: true, clearError: true));
     try {
-      final submission = await api.submitReviewAttempt(current.item.id, rating);
-      _store.update(
+      final submission = await _repository.submitRating(
+        current.item.id,
+        rating,
+      );
+      _set(
         (state) => state.copyWith(
           index: state.index + 1,
           revealed: false,
@@ -112,7 +126,7 @@ class ReviewController extends ChangeNotifier {
       );
       return true;
     } catch (error) {
-      _store.update(
+      _set(
         (state) =>
             state.copyWith(busy: false, error: 'Could not save review result'),
       );
@@ -121,19 +135,14 @@ class ReviewController extends ChangeNotifier {
   }
 
   Future<bool> resolveUpgradeSuggestion(
-    LocalApi api,
     String id, {
     required bool confirm,
   }) async {
     if (state.busy) return false;
-    _store.update((state) => state.copyWith(busy: true, clearError: true));
+    _set((state) => state.copyWith(busy: true, clearError: true));
     try {
-      if (confirm) {
-        await api.confirmUpgradeSuggestion(id);
-      } else {
-        await api.rejectUpgradeSuggestion(id);
-      }
-      _store.update(
+      await _repository.resolveUpgradeSuggestion(id, confirm: confirm);
+      _set(
         (state) => state.copyWith(
           busy: false,
           upgradeSuggestions: state.upgradeSuggestions
@@ -143,7 +152,7 @@ class ReviewController extends ChangeNotifier {
       );
       return true;
     } catch (error) {
-      _store.update(
+      _set(
         (state) => state.copyWith(
           busy: false,
           error: 'Could not update recognition status',
@@ -155,6 +164,8 @@ class ReviewController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _loadGeneration++;
     _store.dispose();
     super.dispose();
   }

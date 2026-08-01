@@ -329,9 +329,9 @@ class PlaybackActionsCoordinator {
     );
     if (location == null) return;
     final bundle = await service.exportVocabulary();
-    await File(
-      location.path,
-    ).writeAsString(const JsonEncoder.withIndent('  ').convert(bundle));
+    await File(location.path).writeAsString(
+      const JsonEncoder.withIndent('  ').convert(bundle.toJson()),
+    );
     player.setStatus(_t('statusVocabularyExported'));
   }
 

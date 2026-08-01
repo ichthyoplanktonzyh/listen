@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/provider_settings_view_models.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
-import '../../models/named_failure.dart';
 import '../../models/realtime_conversation.dart';
 import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
@@ -25,9 +26,11 @@ const qwenRealtimeBaselineModel = 'qwen3.5-omni-plus-realtime';
 /// and released in [dispose] (#27) — an inline form has no exit transition to
 /// race, so the lifecycle that fix protected is preserved by construction.
 class RealtimeProviderSettings extends StatefulWidget {
-  const RealtimeProviderSettings({super.key, required this.api});
+  const RealtimeProviderSettings({super.key, this.api, this.viewModel})
+    : assert(api != null || viewModel != null);
 
-  final LocalApi api;
+  final LocalApi? api;
+  final RealtimeProviderSettingsViewModel? viewModel;
 
   @override
   State<RealtimeProviderSettings> createState() =>
@@ -35,13 +38,8 @@ class RealtimeProviderSettings extends StatefulWidget {
 }
 
 class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
-  List<RealtimeProviderProfileView> _profiles = const [];
-  bool _loading = true;
-  bool _submitting = false;
-
-  /// The last failure, as a *key* plus typed detail — see
-  /// `NamedFailure`. This was a `String? _error = '$error'`, rendered verbatim.
-  NamedFailure? _failure;
+  late final RealtimeProviderSettingsViewModel _viewModel;
+  late final bool _ownsViewModel;
 
   final _name = TextEditingController();
   final _endpoint = TextEditingController(
@@ -59,7 +57,13 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _ownsViewModel = widget.viewModel == null;
+    _viewModel =
+        widget.viewModel ??
+        RealtimeProviderSettingsViewModel(
+          LocalRealtimeProviderRepository(widget.api!),
+        );
+    _viewModel.load();
   }
 
   @override
@@ -73,31 +77,8 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
     _voice.dispose();
     _secret.dispose();
     _qwenWorkspace.dispose();
+    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _failure = null;
-    });
-    try {
-      final profiles = await widget.api.realtimeProfiles();
-      if (!mounted) return;
-      setState(() {
-        _profiles = profiles;
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _failure = NamedFailure(
-          'realtimeProvidersLoadFailed',
-          detail: describeApiFailure(error),
-        );
-        _loading = false;
-      });
-    }
   }
 
   void _applyQwenEndpoint() {
@@ -116,12 +97,8 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       setState(() => _workspaceError = l.text('realtimeWorkspaceMissing'));
       return;
     }
-    setState(() {
-      _submitting = true;
-      _failure = null;
-    });
-    try {
-      await widget.api.registerRealtimeProfile(
+    final saved = await _viewModel.register(
+      RealtimeProviderDraft(
         displayName: _name.text.trim().isEmpty
             ? 'Realtime provider'
             : _name.text.trim(),
@@ -130,22 +107,12 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
         modelId: _model.text.trim(),
         voice: _voice.text.trim(),
         secret: _secret.text,
-      );
-      if (!mounted) return;
+      ),
+    );
+    if (saved && mounted) {
       // The secret leaves this widget the moment it is submitted.
       _secret.clear();
       _name.clear();
-      setState(() => _submitting = false);
-      await _load();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _failure = NamedFailure(
-          'realtimeProviderSaveFailed',
-          detail: describeApiFailure(error),
-        );
-        _submitting = false;
-      });
     }
   }
 
@@ -169,23 +136,18 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       ),
     );
     if (confirmed != true) return;
-    try {
-      await widget.api.deleteRealtimeProfile(profile.id);
-      if (!mounted) return;
-      await _load();
-    } catch (error) {
-      if (!mounted) return;
-      setState(
-        () => _failure = NamedFailure(
-          'realtimeProviderRemoveFailed',
-          detail: describeApiFailure(error),
-        ),
-      );
-    }
+    await _viewModel.delete(profile.id);
   }
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     return Column(
@@ -216,23 +178,23 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
           ),
         ),
         const SizedBox(height: ListenSpacing.gap12),
-        if (_failure != null)
+        if (_viewModel.failure != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: ApiFailureNotice(
-              message: l.text(_failure!.messageKey),
-              failure: _failure!.detail,
+              message: l.text(_viewModel.failure!.messageKey),
+              failure: _viewModel.failure!.detail,
             ),
           ),
-        if (_loading)
+        if (_viewModel.loading)
           const Padding(
             padding: EdgeInsets.all(8),
             child: Center(child: ListenLoading()),
           )
-        else if (_profiles.isEmpty)
+        else if (_viewModel.profiles.isEmpty)
           Text(l.text('realtimeNoProviders'), style: theme.textTheme.bodyMedium)
         else
-          ..._profiles.map((profile) => _profileTile(profile, l)),
+          ..._viewModel.profiles.map((profile) => _profileTile(profile, l)),
         const Divider(height: 28),
         _addForm(l),
       ],
@@ -267,7 +229,9 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
                 IconButton(
                   tooltip: l.text('realtimeRemove'),
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _remove(profile),
+                  onPressed: _viewModel.deletingIds.contains(profile.id)
+                      ? null
+                      : () => _remove(profile),
                 ),
               ],
             ),
@@ -391,7 +355,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       Align(
         alignment: Alignment.centerRight,
         child: FilledButton(
-          onPressed: _submitting ? null : () => _register(l),
+          onPressed: _viewModel.submitting ? null : () => _register(l),
           child: Text(l.text('realtimeSaveProvider')),
         ),
       ),

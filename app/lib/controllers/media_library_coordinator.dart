@@ -105,13 +105,7 @@ class MediaLibraryCoordinator {
     // matching the failure policy documented above.
     if (service == null) return;
     try {
-      final entries = (await service.listMediaLibrary())
-          .whereType<Map<Object?, Object?>>()
-          .map(
-            (value) =>
-                MediaLibraryEntry.fromJson(Map<String, dynamic>.from(value)),
-          )
-          .toList();
+      final entries = await service.listMediaLibrary();
       if (isMounted()) {
         mediaLibrary = entries;
         requestRebuild();

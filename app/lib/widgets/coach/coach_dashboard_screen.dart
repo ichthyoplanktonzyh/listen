@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../controllers/coach_dashboard_controller.dart';
+import '../../data/repositories/coach_dashboard_repository.dart';
 import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
-import '../../models/named_failure.dart';
 import '../../services/api_service.dart';
 import '../../theme/motion.dart';
 import '../../theme/radii.dart';
@@ -34,9 +34,6 @@ const _starterDestinations = <String, String>{
   'review_due_items': 'review_queue',
 };
 
-/// How many source facts one inline drill-down shows before "More".
-const _evidencePageSize = 5;
-
 /// What the portrait last pointed at. Presentation-only: highlighting a
 /// channel changes nothing about the judgment behind it.
 class _PortraitFocus {
@@ -48,38 +45,19 @@ class _PortraitFocus {
   final String? gapSource;
 }
 
-/// One metric's inline evidence feed (K2: the drill-down is an expansion, not
-/// a dialog). Paged so opening a metric never pulls a whole period at once.
-class _EvidenceFeed {
-  const _EvidenceFeed({
-    this.items = const [],
-    this.loading = false,
-    this.failure,
-    this.exhausted = false,
-  });
-
-  final List<CoachEvidenceItem> items;
-  final bool loading;
-
-  /// Why the page could not be fetched, as a *key* plus typed detail.
-  ///
-  /// This was `String? error` filled with `'$error'` and rendered as the
-  /// panel's only line, so opening a metric on a bad connection printed the
-  /// whole `HttpException` — envelope, `correlation_id`, loopback URI and all
-  /// — inside the evidence drill-down.
-  final NamedFailure? failure;
-  final bool exhausted;
-}
-
 class CoachDashboardScreen extends StatefulWidget {
   const CoachDashboardScreen({
     super.key,
     required this.api,
     required this.language,
     required this.onNavigate,
+    this.repository,
+    this.controller,
   });
   final LocalApi api;
   final String language;
+  final CoachDashboardRepository? repository;
+  final CoachDashboardController? controller;
   final Future<void> Function(
     CoachSuggestionDestination destination,
     CoachReturnContext returnContext,
@@ -90,24 +68,30 @@ class CoachDashboardScreen extends StatefulWidget {
 }
 
 class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
-  final controller = CoachDashboardController();
+  late final CoachDashboardController controller;
+  late final bool _ownsController;
   final scrollController = ScrollController();
   final _channelKeys = {
     for (final channel in _channelOrder) channel: GlobalKey(),
   };
-  final _evidence = <String, _EvidenceFeed>{};
   _PortraitFocus? _focus;
   String? _openMetric;
 
   @override
   void initState() {
     super.initState();
-    controller.load(widget.api, language: widget.language);
+    _ownsController = widget.controller == null;
+    controller =
+        widget.controller ??
+        CoachDashboardController(
+          widget.repository ?? LocalCoachDashboardRepository(widget.api),
+        );
+    controller.load(language: widget.language);
   }
 
   @override
   void dispose() {
-    controller.dispose();
+    if (_ownsController) controller.dispose();
     scrollController.dispose();
     super.dispose();
   }
@@ -126,10 +110,9 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
         }
         if (state.error != null) {
           return ListenErrorState(
-            message: state.error!,
+            message: AppLocalizations.of(context).text(state.error!),
             action: OutlinedButton(
-              onPressed: () =>
-                  controller.load(widget.api, language: widget.language),
+              onPressed: () => controller.load(language: widget.language),
               child: Text(AppLocalizations.of(context).text('retry')),
             ),
           );
@@ -274,7 +257,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
           focused: _focus?.channels.contains(channel) ?? false,
           gapSource: _focus?.gapSource == channel,
           openMetric: _openMetric,
-          feeds: _evidence,
+          feeds: controller.state.evidence,
           onToggleMetric: _toggleEvidence,
           onMore: (metric) => _loadEvidencePage(metric.key),
         ),
@@ -461,7 +444,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       ),
     );
     if (!mounted) return;
-    await controller.load(widget.api, language: widget.language);
+    await controller.load(language: widget.language);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && scrollController.hasClients) {
         scrollController.jumpTo(
@@ -494,10 +477,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       ),
     );
     if (confirmed != true) return;
-    await widget.api.graduateCoachMaterial(material.mediaId);
-    if (mounted) {
-      await controller.load(widget.api, language: widget.language);
-    }
+    await controller.graduateMaterial(material.mediaId);
   }
 
   Future<void> _setIntent(CoachMaterialInsight material) async {
@@ -523,13 +503,10 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
       ),
     );
     if (confirmed != true) return;
-    await widget.api.setMediaTriageIntent(
+    await controller.setMaterialIntent(
       material.mediaId,
       material.recommendedIntent,
     );
-    if (mounted) {
-      await controller.load(widget.api, language: widget.language);
-    }
   }
 
   Future<void> _toggleEvidence(CoachMetric metric) async {
@@ -539,45 +516,12 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
     }
     setState(() => _openMetric = metric.key);
     // Already fetched once this visit: reopening must not re-hit the core.
-    if (_evidence.containsKey(metric.key)) return;
+    if (controller.state.evidence.containsKey(metric.key)) return;
     await _loadEvidencePage(metric.key);
   }
 
-  Future<void> _loadEvidencePage(String metricKey) async {
-    final current = _evidence[metricKey] ?? const _EvidenceFeed();
-    if (current.loading) return;
-    setState(
-      () => _evidence[metricKey] = _EvidenceFeed(
-        items: current.items,
-        loading: true,
-      ),
-    );
-    try {
-      final page = await widget.api.coachEvidence(
-        metricKey,
-        limit: _evidencePageSize,
-        offset: current.items.length,
-      );
-      if (!mounted) return;
-      setState(
-        () => _evidence[metricKey] = _EvidenceFeed(
-          items: [...current.items, ...page],
-          exhausted: page.length < _evidencePageSize,
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(
-        () => _evidence[metricKey] = _EvidenceFeed(
-          items: current.items,
-          failure: NamedFailure(
-            'coachEvidenceFailed',
-            detail: describeApiFailure(error),
-          ),
-        ),
-      );
-    }
-  }
+  Future<void> _loadEvidencePage(String metricKey) =>
+      controller.loadEvidencePage(metricKey);
 }
 
 /// "Do this next" as one verb-first sentence plus one door — the evidence
@@ -701,7 +645,7 @@ class _ChannelSection extends StatelessWidget {
   final bool focused;
   final bool gapSource;
   final String? openMetric;
-  final Map<String, _EvidenceFeed> feeds;
+  final Map<String, CoachEvidenceFeed> feeds;
   final Future<void> Function(CoachMetric metric) onToggleMetric;
   final void Function(CoachMetric metric) onMore;
 
@@ -770,7 +714,7 @@ class _MetricRow extends StatelessWidget {
 
   final CoachMetric metric;
   final bool expanded;
-  final _EvidenceFeed? feed;
+  final CoachEvidenceFeed? feed;
   final VoidCallback onToggle;
   final VoidCallback onMore;
 
@@ -850,7 +794,7 @@ class _MetricRow extends StatelessWidget {
 class _EvidencePanel extends StatelessWidget {
   const _EvidencePanel({required this.feed, required this.onMore});
 
-  final _EvidenceFeed? feed;
+  final CoachEvidenceFeed? feed;
   final VoidCallback onMore;
 
   @override

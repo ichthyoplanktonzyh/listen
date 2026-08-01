@@ -50,6 +50,12 @@ class LexicalRepository {
   Future<LexicalEntryDetails> upsertEntry(Map<String, dynamic> value) =>
       _api.upsertLexicalEntry(value);
 
+  Future<LexicalNormalization> correctLemma(
+    String original,
+    String corrected, {
+    required String language,
+  }) => _api.correctLemma(original, corrected, language: language);
+
   // ── The open entry's decorations ──
 
   Future<List<UpgradeSuggestion>> upgradeSuggestions({
@@ -112,10 +118,8 @@ class LexicalRepository {
   Future<ProjectionProposalView> decideProjectionProposal({
     required String proposalId,
     required String decision,
-  }) => _api.decideProjectionProposal(
-    proposalId: proposalId,
-    decision: decision,
-  );
+  }) =>
+      _api.decideProjectionProposal(proposalId: proposalId, decision: decision);
 
   // ── Media behind a slice ──
 

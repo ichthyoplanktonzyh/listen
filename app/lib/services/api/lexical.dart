@@ -257,8 +257,11 @@ extension LexicalApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<Map<String, dynamic>> exportVocabulary() async =>
-      (await _request('GET', '/v1/vocabulary/export')) as Map<String, dynamic>;
+  Future<VocabularyExportBundle> exportVocabulary() async =>
+      VocabularyExportBundle.fromJson(
+        (await _request('GET', '/v1/vocabulary/export'))
+            as Map<String, dynamic>,
+      );
 
   /// Total saved vocabulary for [language], aggregated client-side across the
   /// learning statuses. Each status page is capped by the backend, so very

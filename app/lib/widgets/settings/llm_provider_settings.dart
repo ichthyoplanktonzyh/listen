@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/provider_settings_view_models.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../models/llm_provider.dart';
-import '../../models/named_failure.dart';
 import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
@@ -19,23 +20,19 @@ import '../common/listen_loading.dart';
 /// says so explicitly so a configured provider is never mistaken for verified
 /// assistance.
 class LlmProviderSettings extends StatefulWidget {
-  const LlmProviderSettings({super.key, required this.api});
+  const LlmProviderSettings({super.key, this.api, this.viewModel})
+    : assert(api != null || viewModel != null);
 
-  final LocalApi api;
+  final LocalApi? api;
+  final LlmProviderSettingsViewModel? viewModel;
 
   @override
   State<LlmProviderSettings> createState() => _LlmProviderSettingsState();
 }
 
 class _LlmProviderSettingsState extends State<LlmProviderSettings> {
-  List<LlmProviderProfileView> _providers = const [];
-  bool _loading = true;
-
-  /// The last failure, as a *key* plus typed detail. It used to be a
-  /// `String? _error = '$e'`, which is how a `correlation_id` and the sidecar's
-  /// loopback URI ended up in this panel's red line.
-  NamedFailure? _failure;
-  bool _submitting = false;
+  late final LlmProviderSettingsViewModel _viewModel;
+  late final bool _ownsViewModel;
 
   final _nameCtrl = TextEditingController();
   final _baseUrlCtrl = TextEditingController();
@@ -45,12 +42,14 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
   bool _useRubric = false;
   bool _useJudgment = true;
 
-  final Map<String, String> _probeLabels = {};
-
   @override
   void initState() {
     super.initState();
-    _load();
+    _ownsViewModel = widget.viewModel == null;
+    _viewModel =
+        widget.viewModel ??
+        LlmProviderSettingsViewModel(LocalLlmProviderRepository(widget.api!));
+    _viewModel.load();
   }
 
   @override
@@ -59,36 +58,8 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     _baseUrlCtrl.dispose();
     _modelCtrl.dispose();
     _secretCtrl.dispose();
+    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _failure = null;
-    });
-    try {
-      final raw = await widget.api.listLlmProviders();
-      final providers = raw
-          .map(
-            (e) => LlmProviderProfileView.fromJson(e as Map<String, dynamic>),
-          )
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _providers = providers;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _failure = NamedFailure(
-          'llmProvidersLoadFailed',
-          detail: describeApiFailure(e),
-        );
-        _loading = false;
-      });
-    }
   }
 
   Future<void> _register() async {
@@ -101,12 +72,8 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         uses.isEmpty) {
       return;
     }
-    setState(() {
-      _submitting = true;
-      _failure = null;
-    });
-    try {
-      await widget.api.registerLlmProvider(
+    final saved = await _viewModel.register(
+      LlmProviderDraft(
         displayName: _nameCtrl.text.trim().isEmpty
             ? _modelCtrl.text.trim()
             : _nameCtrl.text.trim(),
@@ -115,63 +82,26 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         modelId: _modelCtrl.text.trim(),
         allowedUses: uses,
         secret: _secretCtrl.text,
-      );
-      if (!mounted) return;
+      ),
+    );
+    if (saved && mounted) {
       // The secret leaves this widget the moment it is submitted.
       _secretCtrl.clear();
       _nameCtrl.clear();
       _baseUrlCtrl.clear();
       _modelCtrl.clear();
-      setState(() => _submitting = false);
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _failure = NamedFailure(
-          'llmProviderSaveFailed',
-          detail: describeApiFailure(e),
-        );
-        _submitting = false;
-      });
-    }
-  }
-
-  Future<void> _delete(String id) async {
-    try {
-      await widget.api.deleteLlmProvider(id);
-      if (!mounted) return;
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      setState(
-        () => _failure = NamedFailure(
-          'llmProviderRemoveFailed',
-          detail: describeApiFailure(e),
-        ),
-      );
-    }
-  }
-
-  Future<void> _probe(String id) async {
-    final l = AppLocalizations.of(context);
-    setState(() => _probeLabels[id] = l.text('llmProbing'));
-    try {
-      final result = await widget.api.probeLlmProvider(id);
-      if (!mounted) return;
-      final claim = result.structuredOutput;
-      setState(() {
-        _probeLabels[id] = claim.isProbedSupported
-            ? l.text('llmProbeSupported')
-            : l.text('llmProbeUnsupported');
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _probeLabels[id] = l.text('llmProbeFailed'));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     return Column(
@@ -207,23 +137,23 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         const SizedBox(height: ListenSpacing.gap8),
         Text(l.text('llmNotQualified'), style: theme.textTheme.bodySmall),
         const SizedBox(height: ListenSpacing.gap12),
-        if (_failure != null)
+        if (_viewModel.failure != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: ApiFailureNotice(
-              message: l.text(_failure!.messageKey),
-              failure: _failure!.detail,
+              message: l.text(_viewModel.failure!.messageKey),
+              failure: _viewModel.failure!.detail,
             ),
           ),
-        if (_loading)
+        if (_viewModel.loading)
           const Padding(
             padding: EdgeInsets.all(8),
             child: Center(child: ListenLoading()),
           )
-        else if (_providers.isEmpty)
+        else if (_viewModel.providers.isEmpty)
           Text(l.text('llmNoProviders'), style: theme.textTheme.bodyMedium)
         else
-          ..._providers.map(_providerTile),
+          ..._viewModel.providers.map(_providerTile),
         const Divider(height: 28),
         _addForm(l),
       ],
@@ -232,7 +162,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
 
   Widget _providerTile(LlmProviderProfileView p) {
     final l = AppLocalizations.of(context);
-    final probe = _probeLabels[p.id];
+    final probe = _viewModel.probeStatuses[p.id];
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Padding(
@@ -257,13 +187,15 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
                     ),
                   ),
                 TextButton(
-                  onPressed: () => _probe(p.id),
+                  onPressed: () => _viewModel.probe(p.id),
                   child: Text(l.text('llmTest')),
                 ),
                 IconButton(
                   tooltip: l.text('llmRemove'),
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _delete(p.id),
+                  onPressed: _viewModel.deletingIds.contains(p.id)
+                      ? null
+                      : () => _viewModel.delete(p.id),
                 ),
               ],
             ),
@@ -276,7 +208,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  probe,
+                  _probeLabel(l, probe),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -285,6 +217,14 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
       ),
     );
   }
+
+  String _probeLabel(AppLocalizations l, LlmProbeStatus status) =>
+      switch (status) {
+        LlmProbeStatus.probing => l.text('llmProbing'),
+        LlmProbeStatus.supported => l.text('llmProbeSupported'),
+        LlmProbeStatus.unsupported => l.text('llmProbeUnsupported'),
+        LlmProbeStatus.failed => l.text('llmProbeFailed'),
+      };
 
   Widget _addForm(AppLocalizations l) {
     return Column(
@@ -369,7 +309,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton(
-            onPressed: _submitting ? null : _register,
+            onPressed: _viewModel.submitting ? null : _register,
             child: Text(l.text('llmRegister')),
           ),
         ),

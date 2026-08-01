@@ -128,6 +128,31 @@ LocalApi _api({
   );
 }
 
+LocalApi _apiWithOneDetailFailure() {
+  var versionLoads = 0;
+  return LocalApi.withTransport(
+    baseUrl: 'http://test',
+    token: 'token',
+    transport: (method, path, body) async {
+      if (path.startsWith('/v1/personal-expression/patterns?') ||
+          path == '/v1/personal-expression/patterns') {
+        return (statusCode: 200, body: jsonEncode([_asset]));
+      }
+      if (path.endsWith('/attempts')) {
+        return (statusCode: 200, body: jsonEncode(const []));
+      }
+      if (path.endsWith('/versions')) {
+        versionLoads++;
+        if (versionLoads == 1) {
+          return (statusCode: 503, body: '{"code":"temporarily_unavailable"}');
+        }
+        return (statusCode: 200, body: jsonEncode([_asset['current_version']]));
+      }
+      throw StateError('$method $path was not expected');
+    },
+  );
+}
+
 /// The strings under test, read the way the screen reads them.
 ///
 /// Before S6 (#7) this file asserted Chinese literals while pumping an `en`
@@ -204,6 +229,30 @@ Future<void> _openWritingDesk(WidgetTester tester) async {
 final _han = RegExp(r'[一-鿿]');
 
 void main() {
+  testWidgets('详情加载失败显示可重试状态，重试后恢复详情', (tester) async {
+    await _pumpScreen(tester, _apiWithOneDetailFailure());
+
+    await tester.tap(find.text('Ended up'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('personal-expression-detail-retry')),
+      findsOneWidget,
+    );
+    expect(find.text(l.text('retry')), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('personal-expression-detail-retry')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('personal-expression-detail-retry')),
+      findsNothing,
+    );
+    expect(find.text(l.text('expressionUsageHistory')), findsOneWidget);
+  });
+
   testWidgets('#7: the screen speaks the interface language, in both '
       'directions', (tester) async {
     // The regression this slice exists for. 我的表达 had 65 Chinese literals

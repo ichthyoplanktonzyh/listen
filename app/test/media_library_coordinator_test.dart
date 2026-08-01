@@ -106,6 +106,21 @@ void main() {
     expect(w.rebuilds, isNotEmpty);
   });
 
+  test('LocalApi exposes media-library rows as typed models', () async {
+    final api = _fakeApi((method, path, body) {
+      if (method == 'GET' && path == '/v1/media') {
+        return (statusCode: 200, body: jsonEncode([_libraryEntryJson()]));
+      }
+      throw StateError('unexpected $method $path');
+    });
+
+    final entries = await api.listMediaLibrary();
+
+    expect(entries, hasLength(1));
+    expect(entries.single, isA<MediaLibraryEntry>());
+    expect(entries.single.media.id, 'media-1');
+  });
+
   test('loadMediaLibrary failure keeps the previous entries', () async {
     final api = _fakeApi(
       (method, path, body) => (statusCode: 500, body: 'boom'),

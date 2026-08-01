@@ -44,6 +44,7 @@ import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
+import 'data/repositories/lexical_repository.dart';
 import 'localization.dart';
 import 'models/capability_readiness.dart';
 import 'models/content_activity.dart';
@@ -1091,7 +1092,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _correctCurrentLemma() => correctCurrentLemmaFlow(
     context: context,
-    api: api,
+    lexicalRepository: api == null ? null : LexicalRepository(api!),
     playerController: playerController,
     subtitleController: subtitleController,
     settingsController: settingsController,

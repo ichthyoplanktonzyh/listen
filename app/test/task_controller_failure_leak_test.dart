@@ -6,6 +6,8 @@ import 'package:llplayer_next/controllers/hunting_session_controller.dart';
 import 'package:llplayer_next/controllers/reading_diff_controller.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
 import 'package:llplayer_next/controllers/review_controller.dart';
+import 'package:llplayer_next/data/repositories/review_repository.dart';
+import 'package:llplayer_next/data/repositories/coach_dashboard_repository.dart';
 import 'package:llplayer_next/controllers/speaking_task_controller.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
@@ -154,24 +156,23 @@ void main() {
 
   test('a review queue that cannot be loaded names the state', () async {
     // GET /v1/review/items?limit=20 → 500.
-    final controller = ReviewController();
+    final controller = ReviewController(LocalReviewRepository(failingApi()));
     addTearDown(controller.dispose);
 
-    await controller.load(failingApi());
+    await controller.load();
 
     expectNamedState(controller.state.error, 'Could not load review queue');
   });
 
   test('a coach view that cannot be loaded names the state', () async {
-    final controller = CoachDashboardController();
+    final controller = CoachDashboardController(
+      LocalCoachDashboardRepository(failingApi()),
+    );
     addTearDown(controller.dispose);
 
-    await controller.load(failingApi());
+    await controller.load();
 
-    expectNamedState(
-      controller.state.error,
-      'Your coach view could not be loaded',
-    );
+    expectNamedState(controller.state.error, 'coachDashboardLoadFailed');
   });
 
   test('a hunting list that cannot be loaded names the state', () async {

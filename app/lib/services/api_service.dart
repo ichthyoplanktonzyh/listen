@@ -21,6 +21,7 @@ import '../models/speech_synthesis.dart';
 import '../models/syntax_capability.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
+import '../models/vocabulary_transfer.dart';
 
 part 'api/media.dart';
 part 'api/subtitles.dart';

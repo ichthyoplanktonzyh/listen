@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/review_controller.dart';
 import '../controllers/slice_player_controller.dart';
+import '../data/repositories/review_repository.dart';
 import '../localization.dart';
 import '../models/practice.dart';
 import '../services/api_service.dart';
@@ -24,6 +25,8 @@ class ReviewQueueScreen extends StatefulWidget {
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
     this.onPauseBackgroundPlayback,
+    this.repository,
+    this.controller,
     this.resolver,
     this.createSlicePlaybackAdapter,
   });
@@ -36,6 +39,9 @@ class ReviewQueueScreen extends StatefulWidget {
   /// clip runs on a second decoder ([SlicePlayerController]) that is otherwise
   /// completely independent of the main player (S5 · R1).
   final Future<void> Function()? onPauseBackgroundPlayback;
+
+  final ReviewRepository? repository;
+  final ReviewController? controller;
 
   /// The clip resolver. Production builds one from [api] exactly like the
   /// vocabulary dictionary's; tests inject a stub so a clip can resolve
@@ -51,7 +57,11 @@ class ReviewQueueScreen extends StatefulWidget {
 }
 
 class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
-  final controller = ReviewController();
+  late final ReviewRepository _repository =
+      widget.repository ?? LocalReviewRepository(widget.api);
+  late final ReviewController controller =
+      widget.controller ?? ReviewController(_repository);
+  late final bool _ownsController = widget.controller == null;
 
   /// The review card plays its source clip on its own decoder, so a card is
   /// reviewable even when no media (or a different one) is loaded in the main
@@ -62,25 +72,21 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
 
   late final OccurrenceMediaResolver _resolver =
       widget.resolver ??
-      OccurrenceMediaResolver(
-        readMedia: widget.api.readMedia,
-        fingerprintFile: widget.api.fingerprintFile,
-        registerMedia: (path) async {
-          await widget.api.registerMedia(path);
-        },
+      OccurrenceMediaResolver.fromRepository(
+        repository: _repository,
         pickFile: (groups) => openFile(acceptedTypeGroups: groups),
       );
 
   @override
   void initState() {
     super.initState();
-    unawaited(controller.load(widget.api));
+    unawaited(controller.load());
   }
 
   @override
   void dispose() {
     _slicePlayer.dispose();
-    controller.dispose();
+    if (_ownsController) controller.dispose();
     super.dispose();
   }
 
@@ -145,12 +151,9 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
           if (state.current == null) {
             return _Finished(
               state: state,
-              onRetry: () => controller.load(widget.api),
-              onResolve: (id, confirm) => controller.resolveUpgradeSuggestion(
-                widget.api,
-                id,
-                confirm: confirm,
-              ),
+              onRetry: controller.load,
+              onResolve: (id, confirm) =>
+                  controller.resolveUpgradeSuggestion(id, confirm: confirm),
             );
           }
           final entry = state.current!;
@@ -177,7 +180,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
             onReveal: controller.reveal,
             onRate: (rating) async {
               await _slicePlayer.close();
-              return controller.rate(widget.api, rating);
+              return controller.rate(rating);
             },
           );
         },
@@ -216,12 +219,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
     // The source snapshot needs the media fingerprint for the resolver to
     // locate the local file. Read it through the resolver's own `readMedia`
     // so production and tests share a single media source.
-    String? fingerprint;
-    try {
-      fingerprint = (await _resolver.readMedia(mediaId)).fingerprint;
-    } catch (_) {
-      fingerprint = null;
-    }
+    final fingerprint = await _resolver.mediaFingerprint(mediaId);
     if (!mounted) return;
     final occurrence = currentMediaSliceOccurrence(
       mediaId: mediaId,

@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/learning_controller.dart';
 import '../../controllers/player_controller.dart';
+import '../../controllers/provider_settings_view_models.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../services/api_service.dart';
 import '../../theme/listen_theme.dart';
@@ -23,19 +25,22 @@ Future<void> showAppSettings({
   required LearningController learningController,
   required Future<void> Function() saveSettings,
   LocalApi? api,
+  LearnerSettingsRepository? learnerRepository,
 }) async {
   // The L1 setting is a backend asset (Phase 3.9), not a local file setting.
   // Best-effort read: with no sidecar the field shows unset and stays inert.
-  var l1Language = '';
-  if (api != null) {
-    try {
-      final profile = await api.learnerProfile();
-      l1Language = profile.l1Language ?? '';
-    } catch (_) {
-      // Sidecar unavailable — the dialog still opens with L1 unset.
-    }
+  final profileRepository =
+      learnerRepository ??
+      (api == null ? null : LocalLearnerSettingsRepository(api));
+  final profileViewModel = profileRepository == null
+      ? null
+      : LearnerSettingsViewModel(profileRepository);
+  await profileViewModel?.load();
+  final l1Language = profileViewModel?.l1Language ?? '';
+  if (!context.mounted) {
+    profileViewModel?.dispose();
+    return;
   }
-  if (!context.mounted) return;
   await showDialog<void>(
     context: context,
     builder: (_) => SettingsDialog(
@@ -80,13 +85,11 @@ Future<void> showAppSettings({
       availableLanguages: learningController.availableLanguages,
       l1Language: l1Language,
       onL1LanguageChanged: (v) {
-        if (api == null) return;
+        if (profileViewModel == null) return;
         unawaited(
-          api.updateLearnerProfile(
-            l1Language: v.isEmpty ? null : v,
-            uiLanguage: settingsController.language == 'system'
-                ? null
-                : settingsController.language,
+          profileViewModel.updateL1Language(
+            v,
+            uiLanguage: settingsController.language,
           ),
         );
       },
@@ -293,4 +296,5 @@ Future<void> showAppSettings({
           },
     ),
   );
+  profileViewModel?.dispose();
 }

@@ -1,10 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../../controllers/provider_settings_view_models.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
-import '../../models/named_failure.dart';
-import '../../models/syntax_capability.dart';
 import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -14,11 +12,13 @@ import '../common/listen_error_state.dart';
 class SyntaxCapabilitySettings extends StatefulWidget {
   const SyntaxCapabilitySettings({
     super.key,
-    required this.api,
+    this.api,
+    this.viewModel,
     this.currentTrackId,
-  });
+  }) : assert(api != null || viewModel != null);
 
-  final LocalApi api;
+  final LocalApi? api;
+  final SyntaxCapabilitySettingsViewModel? viewModel;
   final String? currentTrackId;
 
   @override
@@ -27,119 +27,39 @@ class SyntaxCapabilitySettings extends StatefulWidget {
 }
 
 class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
-  SyntaxCapabilityView? _capability;
-  TrackSyntaxAnalysisView? _track;
-
-  /// The last failure, as a *key* plus typed detail — see `NamedFailure`.
-  /// This was a `String? _error = '$error'`, handed straight to
-  /// [ListenErrorNotice], so a failed install printed the whole exception.
-  NamedFailure? _failure;
-  bool _busy = false;
-  Timer? _poller;
+  late final SyntaxCapabilitySettingsViewModel _viewModel;
+  late final bool _ownsViewModel;
 
   @override
   void initState() {
     super.initState();
-    _refresh();
+    _ownsViewModel = widget.viewModel == null;
+    _viewModel =
+        widget.viewModel ??
+        SyntaxCapabilitySettingsViewModel(
+          LocalSyntaxCapabilityRepository(widget.api!),
+          currentTrackId: widget.currentTrackId,
+        );
+    _viewModel.refresh();
   }
 
   @override
   void dispose() {
-    _poller?.cancel();
+    if (_ownsViewModel) _viewModel.dispose();
     super.dispose();
-  }
-
-  Future<void> _refresh() async {
-    try {
-      final next = await widget.api.syntaxCapability();
-      if (!mounted) return;
-      final becameReady = _capability?.isReady != true && next.isReady;
-      setState(() {
-        _capability = next;
-        _failure = null;
-      });
-      if (next.isDownloading) {
-        _poller ??= Timer.periodic(
-          const Duration(seconds: 1),
-          (_) => _refresh(),
-        );
-      } else {
-        _poller?.cancel();
-        _poller = null;
-      }
-      if (becameReady && widget.currentTrackId != null) {
-        await _analyze(force: false);
-      }
-    } catch (error) {
-      if (mounted) {
-        setState(
-          () => _failure = NamedFailure(
-            'syntaxCapabilityLoadFailed',
-            detail: describeApiFailure(error),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _action(String action) async {
-    setState(() {
-      _busy = true;
-      _failure = null;
-    });
-    try {
-      final next = await widget.api.syntaxCapabilityAction(action);
-      if (!mounted) return;
-      setState(() {
-        _capability = next;
-        _busy = false;
-      });
-      await _refresh();
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _failure = NamedFailure(
-          'syntaxCapabilityActionFailed',
-          detail: describeApiFailure(error),
-        );
-      });
-    }
-  }
-
-  Future<void> _analyze({required bool force}) async {
-    final trackId = widget.currentTrackId;
-    if (trackId == null || _busy) return;
-    setState(() {
-      _busy = true;
-      _failure = null;
-    });
-    try {
-      final result = await widget.api.runTrackSyntaxAnalysis(
-        trackId,
-        force: force,
-      );
-      if (!mounted) return;
-      setState(() {
-        _track = result;
-        _busy = false;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _failure = NamedFailure(
-          'syntaxTrackAnalysisFailed',
-          detail: describeApiFailure(error),
-        );
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _viewModel,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final capability = _capability;
+    final capability = _viewModel.capability;
     if (capability == null) {
       return const LinearProgressIndicator();
     }
@@ -178,11 +98,11 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
           const SizedBox(height: ListenSpacing.gap6),
           ListenErrorNotice(message: capability.error!),
         ],
-        if (_failure != null) ...[
+        if (_viewModel.failure != null) ...[
           const SizedBox(height: ListenSpacing.gap6),
           ApiFailureNotice(
-            message: l.text(_failure!.messageKey),
-            failure: _failure!.detail,
+            message: l.text(_viewModel.failure!.messageKey),
+            failure: _viewModel.failure!.detail,
           ),
         ],
         const SizedBox(height: ListenSpacing.gap8),
@@ -192,33 +112,43 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
           children: [
             if (capability.status == 'not_installed')
               FilledButton.icon(
-                onPressed: _busy ? null : () => _action('install'),
+                onPressed: _viewModel.busy
+                    ? null
+                    : () => _viewModel.runAction('install'),
                 icon: const Icon(Icons.download_outlined),
                 label: Text(l.text('install')),
               ),
             if (capability.isDownloading)
               OutlinedButton(
-                onPressed: () => _action('cancel'),
+                onPressed: () => _viewModel.runAction('cancel'),
                 child: Text(l.text('syntaxCancel')),
               ),
             if ({'failed', 'partial'}.contains(capability.status))
               FilledButton(
-                onPressed: _busy ? null : () => _action('install'),
+                onPressed: _viewModel.busy
+                    ? null
+                    : () => _viewModel.runAction('install'),
                 child: Text(l.text('retry')),
               ),
             if (capability.isInstalled && !capability.isDownloading) ...[
               OutlinedButton(
-                onPressed: _busy ? null : () => _action('validate'),
+                onPressed: _viewModel.busy
+                    ? null
+                    : () => _viewModel.runAction('validate'),
                 child: Text(l.text('syntaxVerify')),
               ),
               OutlinedButton(
-                onPressed: _busy ? null : () => _action('update'),
+                onPressed: _viewModel.busy
+                    ? null
+                    : () => _viewModel.runAction('update'),
                 child: Text(l.text('syntaxUpdate')),
               ),
               OutlinedButton(
-                onPressed: _busy
+                onPressed: _viewModel.busy
                     ? null
-                    : () => _action(capability.enabled ? 'disable' : 'enable'),
+                    : () => _viewModel.runAction(
+                        capability.enabled ? 'disable' : 'enable',
+                      ),
                 child: Text(
                   capability.enabled
                       ? l.text('syntaxDisable')
@@ -226,7 +156,9 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
                 ),
               ),
               TextButton(
-                onPressed: _busy ? null : () => _action('uninstall'),
+                onPressed: _viewModel.busy
+                    ? null
+                    : () => _viewModel.runAction('uninstall'),
                 child: Text(l.text('syntaxUninstall')),
               ),
             ],
@@ -238,15 +170,17 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
             children: [
               Expanded(
                 child: Text(
-                  _track == null
+                  _viewModel.track == null
                       ? l.text('syntaxTrackBackground')
-                      : '${_statusLabel(l, _track!.status)} · ${_track!.analyzedSentenceCount}/'
-                            '${_track!.sentenceCount} ${l.text('syntaxSentences')}'
-                            '${_track!.cacheHit ? ' · ${l.text('syntaxCacheReused')}' : ''}',
+                      : '${_statusLabel(l, _viewModel.track!.status)} · ${_viewModel.track!.analyzedSentenceCount}/'
+                            '${_viewModel.track!.sentenceCount} ${l.text('syntaxSentences')}'
+                            '${_viewModel.track!.cacheHit ? ' · ${l.text('syntaxCacheReused')}' : ''}',
                 ),
               ),
               TextButton(
-                onPressed: _busy ? null : () => _analyze(force: true),
+                onPressed: _viewModel.busy
+                    ? null
+                    : () => _viewModel.analyze(force: true),
                 child: Text(l.text('syntaxRebuild')),
               ),
             ],
