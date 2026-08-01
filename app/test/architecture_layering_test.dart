@@ -218,6 +218,150 @@ void main() {
           'constructor:\n${offenders.join('\n')}',
     );
   });
+
+  test('raw transport maps outside services stay at the ratchet baseline', () {
+    _expectDebtAtRatchetBaseline(
+      files: <File>[
+        ..._dartFilesUnder('lib/controllers'),
+        ..._dartFilesUnder('lib/data/repositories'),
+        ..._presentationFiles(),
+      ],
+      pattern: RegExp(r'Map<String,\s*(?:dynamic|Object\?)>'),
+      baseline: _rawTransportMapBaseline,
+      debtName: 'raw transport Map',
+    );
+  });
+
+  test('model wire-format coupling stays at the ratchet baseline', () {
+    _expectDebtAtRatchetBaseline(
+      files: _dartFilesUnder('lib/models'),
+      pattern: RegExp(
+        r'\b(?:fromJson|toJson)\s*\(|Map<String,\s*(?:dynamic|Object\?)>',
+      ),
+      baseline: _modelWireCouplingBaseline,
+      debtName: 'model wire-format coupling',
+    );
+  });
+}
+
+/// Known debt is recorded as an exact count, rather than an allow-list.
+///
+/// A new occurrence fails. A removed occurrence also fails until its ceiling is
+/// lowered here, preventing a later change from silently restoring old debt.
+const _rawTransportMapBaseline = <String, int>{
+  'lib/controllers/backend_event_coordinator.dart': 1,
+  'lib/controllers/core_session_controller.dart': 2,
+  'lib/controllers/learning_assets_view_models.dart': 3,
+  'lib/controllers/learning_controller.dart': 1,
+  'lib/controllers/learning_flow_view_models.dart': 3,
+  'lib/controllers/learning_workflow_controller.dart': 6,
+  'lib/controllers/manual_review_controller.dart': 1,
+  'lib/controllers/media_session_coordinator.dart': 3,
+  'lib/controllers/occurrence_media_resolver.dart': 2,
+  'lib/controllers/playback_actions_coordinator.dart': 1,
+  'lib/controllers/practice_actions_coordinator.dart': 1,
+  'lib/controllers/reading_channel_coordinator.dart': 2,
+  'lib/controllers/realtime_conversation_controller.dart': 2,
+  'lib/controllers/slice_player_controller.dart': 2,
+  'lib/controllers/vocabulary_actions_coordinator.dart': 1,
+  'lib/controllers/vocabulary_view_model.dart': 2,
+  'lib/controllers/writing_channel_coordinator.dart': 2,
+  'lib/controllers/writing_task_controller.dart': 1,
+  'lib/data/repositories/core_session_repository.dart': 2,
+  'lib/data/repositories/external_vocabulary_repository.dart': 2,
+  'lib/data/repositories/learning_assets_repository.dart': 2,
+  'lib/data/repositories/learning_repository.dart': 6,
+  'lib/data/repositories/lexical_repository.dart': 2,
+  'lib/data/repositories/manual_review_repository.dart': 2,
+  'lib/data/repositories/media_session_repository.dart': 2,
+  'lib/data/repositories/playback_repository.dart': 3,
+  'lib/data/repositories/reading_task_repository.dart': 2,
+  'lib/data/repositories/realtime_conversation_repository.dart': 7,
+  'lib/data/repositories/speaking_task_repository.dart': 2,
+  'lib/data/repositories/writing_task_repository.dart': 4,
+  'lib/screens/vocabulary_screen.dart': 2,
+  'lib/widgets/channels/reading_channel.dart': 1,
+  'lib/widgets/flows/learning_flows.dart': 2,
+  'lib/widgets/layout/side_panel.dart': 1,
+  'lib/widgets/panels/reading_word_inspector.dart': 1,
+  'lib/widgets/panels/word_learning_panel.dart': 1,
+  'lib/widgets/vocabulary/vocabulary_details_view.dart': 4,
+};
+
+const _modelWireCouplingBaseline = <String, int>{
+  'lib/models/api_failure.dart': 1,
+  'lib/models/backend_event.dart': 27,
+  'lib/models/coach_dashboard.dart': 32,
+  'lib/models/listening.dart': 12,
+  'lib/models/llm_provider.dart': 14,
+  'lib/models/personal_expression.dart': 33,
+  'lib/models/practice.dart': 132,
+  'lib/models/production_corpus.dart': 26,
+  'lib/models/projection_review.dart': 10,
+  'lib/models/reading.dart': 2,
+  'lib/models/realtime_conversation.dart': 10,
+  'lib/models/runtime_resources.dart': 30,
+  'lib/models/semantic_embedding.dart': 18,
+  'lib/models/semantic_task.dart': 67,
+  'lib/models/speech_synthesis.dart': 12,
+  'lib/models/syntax_capability.dart': 4,
+  'lib/models/timeline/display.dart': 6,
+  'lib/models/timeline/document.dart': 51,
+  'lib/models/timeline/rhythm.dart': 107,
+  'lib/models/timeline/sound.dart': 50,
+  'lib/models/timeline/subtitle.dart': 10,
+  'lib/models/timeline/word_chunk.dart': 44,
+  'lib/models/types.dart': 1,
+  'lib/models/types/diagnosis.dart': 26,
+  'lib/models/types/dictionary.dart': 46,
+  'lib/models/types/lexical.dart': 91,
+  'lib/models/types/media_fit.dart': 56,
+  'lib/models/types/pronunciation.dart': 60,
+  'lib/models/vocabulary_transfer.dart': 7,
+};
+
+void _expectDebtAtRatchetBaseline({
+  required Iterable<File> files,
+  required RegExp pattern,
+  required Map<String, int> baseline,
+  required String debtName,
+}) {
+  final current = <String, int>{};
+  for (final file in files) {
+    final count = pattern.allMatches(file.readAsStringSync()).length;
+    if (count > 0) current[file.path] = count;
+  }
+
+  final findings = <String>[];
+  for (final entry in current.entries) {
+    final ceiling = baseline[entry.key];
+    if (ceiling == null) {
+      findings.add('${entry.key} → new debt (${entry.value})');
+    } else if (entry.value > ceiling) {
+      findings.add('${entry.key} → grew from $ceiling to ${entry.value}');
+    } else if (entry.value < ceiling) {
+      findings.add(
+        '${entry.key} → reduced from $ceiling to ${entry.value}; '
+        'lower the baseline now',
+      );
+    }
+  }
+  for (final entry in baseline.entries) {
+    if (!current.containsKey(entry.key)) {
+      findings.add(
+        '${entry.key} → removed all ${entry.value}; remove the baseline entry',
+      );
+    }
+  }
+
+  expect(
+    findings,
+    isEmpty,
+    reason:
+        'The $debtName baseline is a one-way ratchet. New/increased debt is '
+        'forbidden; when debt is removed, lower the exact baseline in the same '
+        'change so it cannot return:\n${findings.join('\n')}',
+  );
 }
 
 typedef _StateBlock = ({String name, String source, int line});
