@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/auxiliary_audio_controller.dart';
@@ -13,6 +11,12 @@ import '../../controllers/practice_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../data/repositories/lexical_repository.dart';
+import '../../data/repositories/learning_assets_repository.dart';
+import '../../data/repositories/external_vocabulary_repository.dart';
+import '../../data/repositories/personal_expression_repository.dart';
+import '../../data/repositories/review_repository.dart';
+import '../../data/repositories/coach_dashboard_repository.dart';
+import '../../data/repositories/semantic_search_repository.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
 import '../../models/personal_expression.dart';
@@ -22,8 +26,7 @@ import '../../models/types.dart';
 import '../../screens/personal_expression_screen.dart';
 import '../../screens/review_queue_screen.dart';
 import '../../screens/vocabulary_screen.dart';
-import '../../services/api_service.dart';
-import '../../utils/word_list_parser.dart';
+import '../../services/file_transfer_service.dart';
 import '../coach/coach_dashboard_screen.dart';
 
 /// Dialog- and navigation-driven vocabulary/learning flows extracted from the
@@ -33,7 +36,8 @@ import '../coach/coach_dashboard_screen.dart';
 
 Future<void> openLearningAssetsFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required LearningAssetsRepository? repository,
+  required PersonalExpressionRepository? personalExpressionRepository,
   required PlayerController playerController,
   required SettingsController settingsController,
   required SubtitleController subtitleController,
@@ -44,7 +48,7 @@ Future<void> openLearningAssetsFlow({
   Future<void> Function(SentencePatternAssetView pattern)?
   onStartExpressionSpeaking,
 }) async {
-  if (api == null) {
+  if (repository == null || personalExpressionRepository == null) {
     // Unavailable State (CONTEXT.md): opening the assets screen is
     // user-triggered, so name the cause and recovery instead of swallowing
     // the click.
@@ -55,7 +59,8 @@ Future<void> openLearningAssetsFlow({
   final occurrence = await Navigator.of(context).push<Map<String, dynamic>>(
     MaterialPageRoute(
       builder: (_) => LearningAssetsScreen(
-        api: api,
+        repository: repository,
+        personalExpressionRepository: personalExpressionRepository,
         language: settingsController.resolveLearningLanguage(
           subtitleController.primaryTrack?.language,
         ),
@@ -69,14 +74,14 @@ Future<void> openLearningAssetsFlow({
 
 Future<void> openPersonalExpressionFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required PersonalExpressionRepository? repository,
   required PlayerController playerController,
   required String language,
   PersonalExpressionSourceView? initialSource,
   Future<void> Function(PersonalExpressionSourceView source)? onPlaySource,
   Future<void> Function(SentencePatternAssetView pattern)? onStartSpeaking,
 }) async {
-  if (api == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): the expressions screen is a standing
     // user destination; a dead click would hide why it will not open.
     final l = AppLocalizations.of(context);
@@ -86,7 +91,7 @@ Future<void> openPersonalExpressionFlow({
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
       builder: (_) => PersonalExpressionScreen(
-        api: api,
+        repository: repository,
         language: language,
         initialSource: initialSource,
         onPlaySource: onPlaySource,
@@ -98,10 +103,10 @@ Future<void> openPersonalExpressionFlow({
 
 Future<void> openLearningResourcesFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required LearningAssetsRepository? repository,
   required PlayerController playerController,
 }) async {
-  if (api == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): user-triggered menu entry — report the
     // missing core instead of doing nothing.
     final l = AppLocalizations.of(context);
@@ -109,13 +114,15 @@ Future<void> openLearningResourcesFlow({
     return;
   }
   await Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => LearningResourceScreen(api: api)),
+    MaterialPageRoute(
+      builder: (_) => LearningResourceScreen(repository: repository),
+    ),
   );
 }
 
 Future<void> openPhraseFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required LearningAssetsRepository? repository,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required SettingsController settingsController,
@@ -124,7 +131,7 @@ Future<void> openPhraseFlow({
   required Cue cue,
 }) async {
   final l = AppLocalizations.of(context);
-  if (api == null || playerController.mediaFingerprint == null) {
+  if (repository == null || playerController.mediaFingerprint == null) {
     // Unavailable State (CONTEXT.md): the phrase chip is a user tap; saving a
     // phrase needs both the core and an open, fingerprinted media source.
     playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
@@ -133,7 +140,7 @@ Future<void> openPhraseFlow({
   final canonical = candidate.canonicalForm;
   final details = await showPhraseCandidate(
     context: context,
-    api: api,
+    repository: repository,
     candidate: candidate,
     initialStatus: learningController.phraseEntries[canonical]?.entry.status,
     source: {
@@ -241,7 +248,8 @@ Future<void> correctCurrentLemmaFlow({
 
 Future<void> showVocabularyFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required LexicalRepository? lexicalRepository,
+  required SemanticSearchRepository? semanticSearchRepository,
   required PlayerController playerController,
   required SettingsController settingsController,
   required SubtitleController subtitleController,
@@ -253,8 +261,7 @@ Future<void> showVocabularyFlow({
   String? initialEntryId,
   bool openCrossModalReview = false,
 }) async {
-  final service = api;
-  if (service == null) {
+  if (lexicalRepository == null || semanticSearchRepository == null) {
     // Unavailable State (CONTEXT.md): the vocabulary entry points (rail item,
     // asset card, app-bar menu) are user clicks — a silent return here reads
     // as a dead button when the core is disconnected.
@@ -268,7 +275,8 @@ Future<void> showVocabularyFlow({
     context,
     MaterialPageRoute(
       builder: (_) => VocabularyScreen(
-        api: service,
+        repository: lexicalRepository,
+        semanticSearchRepository: semanticSearchRepository,
         language: settingsController.resolveLearningLanguage(
           subtitleController.primaryTrack?.language,
         ),
@@ -287,14 +295,13 @@ Future<void> showVocabularyFlow({
 
 Future<void> openReviewQueueFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required ReviewRepository? repository,
   required PlayerController playerController,
   required Future<void> Function() pauseBackgroundPlayback,
   required Future<void> Function(ReviewQueueEntry entry) startReviewShadowing,
   required Future<void> Function(ReviewQueueEntry entry) startDelayedRetelling,
 }) async {
-  final service = api;
-  if (service == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): the review queue is a user destination;
     // report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -307,7 +314,7 @@ Future<void> openReviewQueueFlow({
       // The card plays its source clip on its own decoder (S5 · R1); it only
       // needs a way to silence the primary player so the clip owns audio.
       builder: (_) => ReviewQueueScreen(
-        api: service,
+        repository: repository,
         onPauseBackgroundPlayback: pauseBackgroundPlayback,
         onStartShadowing: startReviewShadowing,
         onStartDelayedRetelling: startDelayedRetelling,
@@ -318,15 +325,14 @@ Future<void> openReviewQueueFlow({
 
 Future<void> openCoachDashboardFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required CoachDashboardRepository? repository,
   required PlayerController playerController,
   required String language,
   required Future<void> Function() openReviewQueue,
   required Future<void> Function({bool openCrossModalReview}) openVocabulary,
   required Future<void> Function() openPersonalExpression,
 }) async {
-  final service = api;
-  if (service == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): the coach dashboard is a user
     // destination; report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -337,7 +343,7 @@ Future<void> openCoachDashboardFlow({
     context,
     MaterialPageRoute(
       builder: (_) => CoachDashboardScreen(
-        api: service,
+        repository: repository,
         language: language,
         onNavigate: (destination, _) => switch (destination.kind) {
           'review_queue' => openReviewQueue(),
@@ -353,39 +359,31 @@ Future<void> openCoachDashboardFlow({
 
 Future<void> importWordListFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required ExternalVocabularyRepository? repository,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required SettingsController settingsController,
   required Future<void> Function() reloadWordEntries,
+  ExternalWordListFileService wordListFileService =
+      const LocalExternalWordListFileService(),
 }) async {
   final l = AppLocalizations.of(context);
-  final service = api;
-  if (service == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): importing a word list is user-triggered
     // and cannot proceed without the core — say so before opening a picker.
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
     return;
   }
-  const group = XTypeGroup(label: 'word list', extensions: ['txt', 'csv']);
-  final file = await openFile(acceptedTypeGroups: [group]);
+  final readResult = await wordListFileService.pickAndRead();
   // Legitimate silence: the user dismissed the file picker themselves.
-  if (file == null) return;
-  final content = await File(file.path).readAsString();
-  final entries = <Map<String, dynamic>>[];
-  var defaultStatus = 'known_recognized';
-  var overwrite = false;
-  try {
-    entries.addAll(
-      parseExternalWordList(
-        content,
-        csv: file.path.toLowerCase().endsWith('.csv'),
-      ),
-    );
-  } on FormatException catch (error) {
-    playerController.setStatus(error.message);
+  if (readResult == null) return;
+  if (readResult case ExternalWordListFormatFailure(:final message)) {
+    playerController.setStatus(message);
     return;
   }
+  final entries = (readResult as ExternalWordListReadSuccess).entries;
+  var defaultStatus = 'known_recognized';
+  var overwrite = false;
   if (!context.mounted) return;
   final confirmed = await showDialog<bool>(
     context: context,
@@ -439,7 +437,7 @@ Future<void> importWordListFlow({
     ),
   );
   if (confirmed != true) return;
-  final result = await service.importExternalVocabulary(
+  final result = await repository.importEntries(
     entries,
     language: settingsController.resolveLearningLanguage(
       subtitleController.primaryTrack?.language,

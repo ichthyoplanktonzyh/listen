@@ -1,5 +1,4 @@
 import '../models/listening.dart';
-import '../services/api_service.dart';
 import 'extensive_listening_controller.dart';
 import 'playback_actions_coordinator.dart';
 import 'player_controller.dart';
@@ -22,18 +21,15 @@ class ListeningInboxCoordinator {
   final SubtitleController subtitle;
   final PlaybackActionsCoordinator playbackActions;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   String Function(String key)? text;
 
   String _t(String key) => text?.call(key) ?? key;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     String Function(String key)? text,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
   }
@@ -41,7 +37,6 @@ class ListeningInboxCoordinator {
   Future<void> captureListeningInbox() async {
     final cue = subtitle.currentPrimaryCue;
     final captured = await extensiveListening.captureCurrentCue(
-      api: getApi(),
       cue: cue,
       previousCue: subtitle.primaryCursor.previous(cue),
       nextCue: subtitle.primaryCursor.next(cue),
@@ -55,7 +50,7 @@ class ListeningInboxCoordinator {
   }
 
   Future<void> refreshListeningInbox() async {
-    await extensiveListening.refreshInbox(getApi());
+    await extensiveListening.refreshInbox();
   }
 
   Future<void> replayListeningInboxItem(ListeningInboxItem item) async {
@@ -77,11 +72,7 @@ class ListeningInboxCoordinator {
     ListeningInboxItem item,
     String resolution,
   ) async {
-    final processed = await extensiveListening.processItem(
-      getApi(),
-      item,
-      resolution,
-    );
+    final processed = await extensiveListening.processItem(item, resolution);
     if (processed == null || !isMounted()) return;
     switch (resolution) {
       case 'review_item':

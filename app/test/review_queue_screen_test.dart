@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/occurrence_media_resolver.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
+import 'package:llplayer_next/data/repositories/occurrence_media_repository.dart';
+import 'package:llplayer_next/data/repositories/review_repository.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/screens/review_queue_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/services/occurrence_media_file_service.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
 import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/theme/spacing.dart';
-import 'package:video_player/video_player.dart';
 
 /// A no-op second decoder so a review clip can "play" without opening a real
 /// video_player instance.
@@ -19,7 +21,7 @@ class _FakeSlicePlaybackAdapter implements SlicePlaybackAdapter {
   bool disposed = false;
 
   @override
-  VideoPlayerController? get videoController => null;
+  SlicePlaybackRenderHandle? get renderHandle => null;
   @override
   bool get isPlaying => playing;
   @override
@@ -36,26 +38,48 @@ class _FakeSlicePlaybackAdapter implements SlicePlaybackAdapter {
   Future<void> setRate(double rate) async {}
 }
 
+class _ResolverRepository implements OccurrenceMediaRepository {
+  @override
+  Future<MediaItem> readMedia(String id) async => MediaItem(
+    id: id,
+    path: '/fake/$id.mp4',
+    fingerprint: 'fp-$id',
+    title: 'Source $id',
+    kind: 'video',
+    durationMs: 12000,
+    availability: 'available',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  );
+
+  @override
+  Future<String> fingerprintFile(String path) async => 'fp';
+
+  @override
+  Future<void> registerMedia(String path) async {}
+}
+
+class _ResolverFileService implements OccurrenceMediaFileService {
+  _ResolverFileService(this.reachable);
+
+  final bool reachable;
+
+  @override
+  Future<bool> exists(String path) async => reachable;
+
+  @override
+  Future<String?> pickSourceMedia({
+    required bool filterMediaExtensions,
+  }) async => null;
+}
+
 /// A resolver that never touches the disk. [reachable] decides whether the
 /// linked media's file is found (resolves) or not (falls through to the file
 /// picker, which returns null → an explicit "not selected" failure).
 OccurrenceMediaResolver _fakeResolver({bool reachable = true}) =>
     OccurrenceMediaResolver(
-      readMedia: (id) async => MediaItem(
-        id: id,
-        path: '/fake/$id.mp4',
-        fingerprint: 'fp-$id',
-        title: 'Source $id',
-        kind: 'video',
-        durationMs: 12000,
-        availability: 'available',
-        createdAtMs: 1,
-        updatedAtMs: 1,
-      ),
-      fingerprintFile: (_) async => 'fp',
-      registerMedia: (_) async {},
-      pickFile: (_) async => null,
-      fileExists: (_) async => reachable,
+      repository: _ResolverRepository(),
+      fileService: _ResolverFileService(reachable),
     );
 
 Map<String, dynamic> _reviewItem({
@@ -198,7 +222,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ReviewQueueScreen(
-            api: api,
+            repository: LocalReviewRepository(api),
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async {},
           ),
@@ -267,7 +291,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ReviewQueueScreen(
-            api: api,
+            repository: LocalReviewRepository(api),
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async => launched = true,
           ),
@@ -324,7 +348,7 @@ void main() {
           // No currentMediaId is even accepted anymore: the clip is decoupled
           // from the main player entirely.
           home: ReviewQueueScreen(
-            api: api,
+            repository: LocalReviewRepository(api),
             onStartShadowing: (_) async {},
             onStartDelayedRetelling: (_) async {},
             resolver: _fakeResolver(),
@@ -383,7 +407,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ReviewQueueScreen(
-          api: api,
+          repository: LocalReviewRepository(api),
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
           resolver: _fakeResolver(reachable: false),
@@ -434,7 +458,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ReviewQueueScreen(
-          api: api,
+          repository: LocalReviewRepository(api),
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
         ),
@@ -479,7 +503,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ReviewQueueScreen(
-          api: api,
+          repository: LocalReviewRepository(api),
           onStartShadowing: (_) async {},
           onStartDelayedRetelling: (_) async {},
         ),

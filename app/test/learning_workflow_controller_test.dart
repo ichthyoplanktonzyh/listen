@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/learning_workflow_controller.dart';
+import 'package:llplayer_next/data/repositories/learning_repository.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -19,7 +20,6 @@ Cue _cue(String id) => Cue(
 void main() {
   group('LearningWorkflowController.openWord', () {
     test('switches to the word learning panel before lookups finish', () async {
-      final controller = LearningWorkflowController();
       final learning = LearningController()..selectSidePanel(0);
       final firstResponse = Completer<ApiResponse>();
       final api = LocalApi.withTransport(
@@ -53,6 +53,9 @@ void main() {
           ));
         },
       );
+      final controller = LearningWorkflowController(
+        repository: LocalLearningRepository(() => api),
+      );
       const token = SubtitleToken(
         index: 0,
         kind: 'word',
@@ -62,7 +65,6 @@ void main() {
       final cue = _cue('A');
 
       final future = controller.openWord(
-        api: api,
         token: token,
         cue: cue,
         language: 'en',
@@ -87,7 +89,6 @@ void main() {
     });
 
     test('keeps word details visible when optional lookups fail', () async {
-      final controller = LearningWorkflowController();
       final learning = LearningController()..selectSidePanel(0);
       final api = LocalApi.withTransport(
         baseUrl: 'http://test',
@@ -103,6 +104,9 @@ void main() {
           return (statusCode: 503, body: 'optional service unavailable');
         },
       );
+      final controller = LearningWorkflowController(
+        repository: LocalLearningRepository(() => api),
+      );
       const token = SubtitleToken(
         index: 0,
         kind: 'word',
@@ -111,7 +115,6 @@ void main() {
       );
 
       await controller.openWord(
-        api: api,
         token: token,
         cue: _cue('A'),
         language: 'en',
@@ -126,7 +129,6 @@ void main() {
     });
 
     test('falls back to cached word entry when details lookup fails', () async {
-      final controller = LearningWorkflowController();
       final learning = LearningController()
         ..setWordEntries(const {
           'hello': LexicalEntry(
@@ -144,6 +146,9 @@ void main() {
         transport: (method, path, body) async =>
             (statusCode: 503, body: 'lookup unavailable'),
       );
+      final controller = LearningWorkflowController(
+        repository: LocalLearningRepository(() => api),
+      );
       const token = SubtitleToken(
         index: 0,
         kind: 'word',
@@ -152,7 +157,6 @@ void main() {
       );
 
       await controller.openWord(
-        api: api,
         token: token,
         cue: _cue('A'),
         language: 'en',
@@ -171,7 +175,6 @@ void main() {
     test(
       'shows cached word entry before full details lookup completes',
       () async {
-        final controller = LearningWorkflowController();
         final learning = LearningController()
           ..setWordEntries(const {
             'hello': LexicalEntry(
@@ -196,6 +199,9 @@ void main() {
             ));
           },
         );
+        final controller = LearningWorkflowController(
+          repository: LocalLearningRepository(() => api),
+        );
         const token = SubtitleToken(
           index: 0,
           kind: 'word',
@@ -204,7 +210,6 @@ void main() {
         );
 
         final future = controller.openWord(
-          api: api,
           token: token,
           cue: _cue('A'),
           language: 'en',
@@ -334,7 +339,6 @@ void main() {
 
   group('LearningWorkflowController.loadPhraseCandidates (via A1 seam)', () {
     test('loads phrase candidates through the LocalApi transport seam', () async {
-      final controller = LearningWorkflowController();
       final learning = LearningController();
       var seenPath = '';
       final api = LocalApi.withTransport(
@@ -349,9 +353,11 @@ void main() {
           );
         },
       );
+      final controller = LearningWorkflowController(
+        repository: LocalLearningRepository(() => api),
+      );
 
       await controller.loadPhraseCandidates(
-        api: api,
         cue: _cue('A'),
         learning: learning,
         isMounted: () => true,
@@ -376,7 +382,6 @@ void main() {
         ]);
 
       await controller.loadPhraseCandidates(
-        api: null,
         cue: _cue('A'),
         learning: learning,
         isMounted: () => true,

@@ -9,7 +9,6 @@ import '../../controllers/practice_actions_coordinator.dart';
 import '../../controllers/practice_controller.dart';
 import '../../controllers/slice_player_controller.dart';
 import '../../controllers/subtitle_controller.dart';
-import '../../services/api_service.dart';
 import '../panels/hunting_prompt_card.dart';
 import '../panels/intensive_practice_window.dart';
 import '../panels/slice_playback_window.dart';
@@ -30,7 +29,6 @@ import '../panels/slice_playback_window.dart';
 class PlayerOverlays extends StatelessWidget {
   const PlayerOverlays({
     super.key,
-    required this.api,
     required this.practiceController,
     required this.slicePlayerController,
     required this.huntingSessionController,
@@ -41,7 +39,6 @@ class PlayerOverlays extends StatelessWidget {
     required this.onCloseSlicePlayback,
   });
 
-  final LocalApi? api;
   final PracticeController practiceController;
   final SlicePlayerController slicePlayerController;
   final HuntingSessionController huntingSessionController;
@@ -128,7 +125,7 @@ class PlayerOverlays extends StatelessWidget {
     onPlayReference: practiceActions.playShadowingReferenceOnce,
     onPlayRecording: practiceActions.playShadowingRecording,
     onPlayAba: practiceActions.playShadowingAba,
-    onDeleteRecording: () => practiceController.deleteCurrentRecording(api),
+    onDeleteRecording: practiceController.deleteCurrentRecording,
     onShadowingRateChanged: practiceActions.setShadowingRate,
     onShadowingStepChanged: practiceActions.setShadowingStep,
     onClose: practiceActions.closePracticeWindow,

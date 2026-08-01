@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
-import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
 import 'package:llplayer_next/widgets/common/capability_viz.dart';
@@ -26,7 +25,7 @@ void main() {
     expect(readout.settled, isFalse);
 
     final done = conversationDebriefReadoutOf(
-      const RealtimeConversationState(
+      RealtimeConversationState(
         phase: RealtimeConversationPhase.done,
         items: [
           RealtimeConversationItem(
@@ -145,7 +144,7 @@ void main() {
     tester,
   ) async {
     final controller = _controller(
-      const RealtimeConversationState(
+      RealtimeConversationState(
         phase: RealtimeConversationPhase.done,
         items: [
           RealtimeConversationItem(
@@ -323,7 +322,7 @@ void main() {
 /// One conversation with every learner outcome in it: output, still
 /// transcribing, failed, interrupted — plus an assistant turn the learner cut
 /// into.
-RealtimeConversationState _state() => const RealtimeConversationState(
+RealtimeConversationState _state() => RealtimeConversationState(
   phase: RealtimeConversationPhase.postProcessing,
   postProcessingCount: 1,
   items: [
@@ -415,7 +414,6 @@ Future<void> _pumpDebrief(
     MaterialApp(
       home: RealtimeConversationPanel(
         controller: controller,
-        api: _api(),
         launch: RealtimeConversationLaunch.free(
           language: 'en',
           modelId: 'asr-model',
@@ -430,20 +428,6 @@ Future<void> _pumpDebrief(
   await tester.pump();
   await tester.pump(const Duration(seconds: 1));
 }
-
-LocalApi _api() => LocalApi.withTransport(
-  baseUrl: 'http://test',
-  token: 'token',
-  transport: (method, path, body) async {
-    if (method == 'GET' && path == '/v1/realtime/providers') {
-      return (statusCode: 200, body: '[]');
-    }
-    if (method == 'GET' && path == '/v1/realtime/sessions') {
-      return (statusCode: 200, body: '[]');
-    }
-    throw StateError('Unexpected request: $method $path ${body ?? ''}');
-  },
-);
 
 class _FakeAudio implements RealtimeAudioSession {
   @override

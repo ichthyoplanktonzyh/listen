@@ -1,6 +1,45 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/occurrence_media_resolver.dart';
+import 'package:llplayer_next/data/repositories/occurrence_media_repository.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/services/occurrence_media_file_service.dart';
+
+class _Repository implements OccurrenceMediaRepository {
+  @override
+  Future<MediaItem> readMedia(String mediaId) async => MediaItem(
+    id: 'media-1',
+    path: '/library/cnn10.mp4',
+    fingerprint: 'fp-current',
+    title: 'CNN10',
+    kind: 'video',
+    durationMs: 1000,
+    availability: 'available',
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  );
+
+  @override
+  Future<String> fingerprintFile(String path) async => 'fp-current';
+
+  @override
+  Future<void> registerMedia(String path) async {}
+}
+
+class _FileService implements OccurrenceMediaFileService {
+  _FileService(this.onPicker);
+
+  final void Function() onPicker;
+
+  @override
+  Future<bool> exists(String path) async =>
+      path == '/library/cnn10.mp4' || path == '/current/cnn10.mp4';
+
+  @override
+  Future<String?> pickSourceMedia({required bool filterMediaExtensions}) async {
+    onPicker();
+    return null;
+  }
+}
 
 /// Phase 3.13 GUI QA regression: the reading-posture replay chips ("听整段"
 /// and per-sentence chips) and the listening-check play button build a slice
@@ -12,25 +51,8 @@ import 'package:llplayer_next/models/types.dart';
 void main() {
   OccurrenceMediaResolver resolver({required void Function() onPicker}) =>
       OccurrenceMediaResolver(
-        readMedia: (_) async => MediaItem(
-          id: 'media-1',
-          path: '/library/cnn10.mp4',
-          fingerprint: 'fp-current',
-          title: 'CNN10',
-          kind: 'video',
-          durationMs: 1000,
-          availability: 'available',
-          createdAtMs: 1,
-          updatedAtMs: 1,
-        ),
-        fingerprintFile: (_) async => 'fp-current',
-        registerMedia: (_) async {},
-        pickFile: (_) async {
-          onPicker();
-          return null;
-        },
-        fileExists: (path) async =>
-            path == '/library/cnn10.mp4' || path == '/current/cnn10.mp4',
+        repository: _Repository(),
+        fileService: _FileService(onPicker),
       );
 
   Map<String, dynamic> readingOccurrence({required String? fingerprint}) =>

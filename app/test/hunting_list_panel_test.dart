@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/vocabulary/hunting_list_panel.dart';
@@ -41,9 +42,11 @@ void main() {
           throw StateError('unexpected $method $path');
         },
       );
-      final controller = HuntingController();
+      final controller = HuntingController(
+        repository: LocalHuntingRepository(() => api),
+      );
       addTearDown(controller.dispose);
-      await controller.load(api);
+      await controller.load();
 
       await tester.pumpWidget(
         MaterialApp(
@@ -59,7 +62,7 @@ void main() {
               controller: controller,
               onRefresh: () async {},
               onPromoteCandidate: (candidate) async {
-                await controller.promoteCandidate(api, candidate);
+                await controller.promoteCandidate(candidate);
               },
               onArchiveTarget: (_) async {},
             ),

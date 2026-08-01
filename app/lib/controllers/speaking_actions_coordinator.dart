@@ -8,7 +8,6 @@ import '../models/reading.dart';
 import '../models/semantic_task.dart';
 import '../models/timeline.dart';
 import '../player_adapter.dart';
-import '../services/api_service.dart';
 import 'player_controller.dart';
 import 'settings_controller.dart';
 import 'slice_player_controller.dart';
@@ -50,8 +49,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
   SpeakingTaskSource? get source => _source;
   bool get isOpen => _source != null;
 
-  Future<void> openRetelling(
-    LocalApi api, {
+  Future<void> openRetelling({
     required List<RubricPointView> fixedRubricPoints,
     required Future<void> Function() closeReading,
   }) async {
@@ -73,7 +71,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     _source = source;
     notifyListeners();
     unawaited(
-      task.openTask(api, source: source, fixedRubricPoints: fixedRubricPoints),
+      task.openTask(source: source, fixedRubricPoints: fixedRubricPoints),
     );
   }
 
@@ -125,12 +123,12 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     );
   }
 
-  Future<void> close(LocalApi? api, {bool restorePosition = true}) async {
+  Future<void> close({bool restorePosition = true}) async {
     _audioGeneration++;
     await adapter.pause();
     await recordingAdapter.pause();
     await slicePlayer.close();
-    await task.closeTask(api);
+    await task.closeTask();
     final returnPosition = _returnPosition;
     if (restorePosition && returnPosition != null) {
       await adapter.seek(returnPosition);
@@ -164,8 +162,7 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> openDelayedRetelling(
-    LocalApi api, {
+  Future<void> openDelayedRetelling({
     required ReviewQueueEntry entry,
     required String mediaPath,
     required List<RubricPointView> fixedRubricPoints,
@@ -194,15 +191,10 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     _returnPosition = player.position;
     _source = source;
     notifyListeners();
-    await task.openTask(
-      api,
-      source: source,
-      fixedRubricPoints: fixedRubricPoints,
-    );
+    await task.openTask(source: source, fixedRubricPoints: fixedRubricPoints);
   }
 
-  Future<void> openPersonalPattern(
-    LocalApi api, {
+  Future<void> openPersonalPattern({
     required String patternId,
     required String language,
     required String sourceText,
@@ -233,7 +225,6 @@ class SpeakingActionsCoordinator extends ChangeNotifier {
     _source = source;
     notifyListeners();
     await task.openTask(
-      api,
       source: source,
       fixedRubricPoints: fixedRubricPoints,
       kind: SpeakingTaskController.patternProductionKind,

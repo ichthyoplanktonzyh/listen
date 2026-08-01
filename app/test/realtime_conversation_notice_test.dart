@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
@@ -66,12 +67,9 @@ void main() {
 
   testWidgets('a voice list that fails to load says so — it does not print '
       'the exception', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
-    await _pump(
-      tester,
-      controller,
-      _api(onProviders: () => (statusCode: 500, body: envelope)),
-    );
+    final api = _api(onProviders: () => (statusCode: 500, body: envelope));
+    final controller = _controller(api);
+    await _pump(tester, controller, api);
 
     expect(
       find.text('The realtime voices could not be loaded.'),
@@ -86,12 +84,9 @@ void main() {
   });
 
   testWidgets('a history list that fails to load says so', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
-    await _pump(
-      tester,
-      controller,
-      _api(onSessions: () => (statusCode: 503, body: envelope)),
-    );
+    final api = _api(onSessions: () => (statusCode: 503, body: envelope));
+    final controller = _controller(api);
+    await _pump(tester, controller, api);
 
     expect(
       find.text('Your past conversations could not be loaded.'),
@@ -103,11 +98,11 @@ void main() {
   });
 
   testWidgets('a past conversation that fails to open says so', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
     final api = _api(onTurns: () => (statusCode: 500, body: envelope));
+    final controller = _controller(api);
     await _pump(tester, controller, api);
 
-    await controller.openHistorySession(api, 'session-1');
+    await controller.openHistorySession('session-1');
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
@@ -118,15 +113,14 @@ void main() {
   });
 
   testWidgets('a conversation that cannot start says so', (tester) async {
-    final controller = RealtimeConversationController(
-      audio: _FakeAudio(),
+    final api = _api();
+    final controller = _controller(
+      api,
       connect: (uri, headers) async => throw const HttpException(envelope),
     );
-    final api = _api();
     await _pump(tester, controller, api);
 
     await controller.start(
-      api,
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async {},
     );
@@ -142,15 +136,14 @@ void main() {
 
   testWidgets('a socket that errors mid-conversation says so', (tester) async {
     final connection = _FakeConnection();
-    final controller = RealtimeConversationController(
-      audio: _FakeAudio(),
+    final api = _api();
+    final controller = _controller(
+      api,
       connect: (uri, headers) async => connection,
     );
-    final api = _api();
     await _pump(tester, controller, api);
 
     await controller.start(
-      api,
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async {},
     );
@@ -176,15 +169,14 @@ void main() {
     tester,
   ) async {
     final connection = _FakeConnection();
-    final controller = RealtimeConversationController(
-      audio: _FakeAudio(),
+    final api = _api();
+    final controller = _controller(
+      api,
       connect: (uri, headers) async => connection,
     );
-    final api = _api();
     await _pump(tester, controller, api);
 
     await controller.start(
-      api,
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async {},
     );
@@ -211,17 +203,14 @@ void main() {
   testWidgets('a notice with no reference id shows only the sentence', (
     tester,
   ) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
+    final api = _api(
+      onProviders: () =>
+          (statusCode: 502, body: '<html>502 Bad Gateway</html>'),
+    );
+    final controller = _controller(api);
     // A body that is not the envelope at all: nothing is typed out of it, so
     // there is nothing to reference — and still nothing to leak.
-    await _pump(
-      tester,
-      controller,
-      _api(
-        onProviders: () =>
-            (statusCode: 502, body: '<html>502 Bad Gateway</html>'),
-      ),
-    );
+    await _pump(tester, controller, api);
 
     expect(
       find.text('The realtime voices could not be loaded.'),
@@ -254,6 +243,15 @@ Future<void> _emit(WidgetTester tester, VoidCallback emit) async {
   await tester.pump(const Duration(seconds: 1));
 }
 
+RealtimeConversationController _controller(
+  LocalApi api, {
+  RealtimeConnectionFactory? connect,
+}) => RealtimeConversationController(
+  repository: LocalRealtimeConversationRepository(() => api),
+  audio: _FakeAudio(),
+  connect: connect,
+);
+
 Future<void> _pump(
   WidgetTester tester,
   RealtimeConversationController controller,
@@ -263,7 +261,6 @@ Future<void> _pump(
     MaterialApp(
       home: RealtimeConversationPanel(
         controller: controller,
-        api: api,
         launch: RealtimeConversationLaunch.free(
           language: 'en',
           modelId: 'asr-model',

@@ -1,53 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/realtime_conversation_repository.dart';
 import '../models/api_failure.dart';
 import '../models/practice.dart';
 import '../models/realtime_conversation.dart';
-import '../services/api_service.dart';
 import '../services/realtime_audio_bridge.dart';
+import '../services/realtime_transport_service.dart';
 import '../services/shadowing_recorder.dart';
 import 'realtime_turn_assembler.dart';
 
-abstract interface class RealtimeConnection {
-  Stream<Object?> get messages;
-  bool get isOpen;
-  void send(Object data);
-  Future<void> close();
-}
-
-typedef RealtimeConnectionFactory =
-    Future<RealtimeConnection> Function(Uri uri, Map<String, dynamic> headers);
-
-class _IoRealtimeConnection implements RealtimeConnection {
-  _IoRealtimeConnection(this._socket);
-
-  final WebSocket _socket;
-
-  @override
-  Stream<Object?> get messages => _socket;
-
-  @override
-  bool get isOpen => _socket.readyState == WebSocket.open;
-
-  @override
-  void send(Object data) => _socket.add(data);
-
-  @override
-  Future<void> close() async {
-    await _socket.close();
-  }
-}
-
-Future<RealtimeConnection> _connectRealtime(
-  Uri uri,
-  Map<String, dynamic> headers,
-) async => _IoRealtimeConnection(
-  await WebSocket.connect(uri.toString(), headers: headers),
-);
+export '../services/realtime_transport_service.dart'
+    show RealtimeConnection, RealtimeConnectionFactory;
 
 class RealtimeConversationLaunch {
   const RealtimeConversationLaunch({
@@ -112,14 +77,12 @@ class RealtimeConversationAnchor {
 /// already been released.
 class _LearnerTurnJob {
   const _LearnerTurnJob({
-    required this.api,
     required this.launch,
     required this.sessionId,
     required this.captured,
     required this.endedAt,
   });
 
-  final LocalApi api;
   final RealtimeConversationLaunch launch;
   final String sessionId;
   final CapturedRecording captured;
@@ -145,31 +108,41 @@ enum RealtimeConversationActivity {
 }
 
 class RealtimeConversationState {
-  const RealtimeConversationState({
+  RealtimeConversationState({
     this.phase = RealtimeConversationPhase.idle,
     this.activity = RealtimeConversationActivity.inactive,
-    this.profiles = const [],
+    List<RealtimeProviderProfileView> profiles = const [],
     this.selectedProfileId,
     this.mode = RealtimeConversationMode.topicAnchored,
-    this.items = const [],
+    List<RealtimeConversationItem> items = const [],
     this.postProcessingCount = 0,
-    this.historySessions = const [],
-    this.historyItems = const [],
+    List<RealtimeConversationSessionView> historySessions = const [],
+    List<RealtimeConversationItem> historyItems = const [],
     this.selectedHistorySessionId,
     this.historyLoading = false,
     this.historyError,
     this.error,
-  });
+  }) : _profiles = List.unmodifiable(profiles),
+       _items = List.unmodifiable(items),
+       _historySessions = List.unmodifiable(historySessions),
+       _historyItems = List.unmodifiable(historyItems);
 
   final RealtimeConversationPhase phase;
   final RealtimeConversationActivity activity;
-  final List<RealtimeProviderProfileView> profiles;
+  final List<RealtimeProviderProfileView> _profiles;
+  List<RealtimeProviderProfileView> get profiles =>
+      List.unmodifiable(_profiles);
   final String? selectedProfileId;
   final RealtimeConversationMode mode;
-  final List<RealtimeConversationItem> items;
+  final List<RealtimeConversationItem> _items;
+  List<RealtimeConversationItem> get items => List.unmodifiable(_items);
   final int postProcessingCount;
-  final List<RealtimeConversationSessionView> historySessions;
-  final List<RealtimeConversationItem> historyItems;
+  final List<RealtimeConversationSessionView> _historySessions;
+  List<RealtimeConversationSessionView> get historySessions =>
+      List.unmodifiable(_historySessions);
+  final List<RealtimeConversationItem> _historyItems;
+  List<RealtimeConversationItem> get historyItems =>
+      List.unmodifiable(_historyItems);
   final String? selectedHistorySessionId;
   final bool historyLoading;
 
@@ -255,30 +228,37 @@ const _unset = Object();
 
 class RealtimeConversationController extends ChangeNotifier {
   RealtimeConversationController({
+    RealtimeConversationRepository repository =
+        const UnavailableRealtimeConversationRepository(),
     RealtimeAudioSession? audio,
+    RealtimeTransportService? transport,
     RealtimeConnectionFactory? connect,
     Future<void> Function(Duration)? delay,
     int Function()? nowMs,
     this.providerDrainTimeout = const Duration(seconds: 15),
-  }) : _audio = audio ?? RealtimeAudioBridge(),
-       _connect = connect ?? _connectRealtime,
+  }) : assert(transport == null || connect == null),
+       // Repository is deliberately named publicly while stored privately.
+       // ignore: prefer_initializing_formals
+       _repository = repository,
+       _audio = audio ?? RealtimeAudioBridge(),
+       _transport = transport ?? IoRealtimeTransportService(connect: connect),
        _delay = delay ?? Future<void>.delayed,
        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
+  final RealtimeConversationRepository _repository;
   final RealtimeAudioSession _audio;
-  final RealtimeConnectionFactory _connect;
+  final RealtimeTransportService _transport;
   final Future<void> Function(Duration) _delay;
   final int Function() _nowMs;
   final Duration providerDrainTimeout;
 
-  RealtimeConversationState state = const RealtimeConversationState();
+  RealtimeConversationState state = RealtimeConversationState();
   RealtimeConnection? _connection;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<Object?>? _connectionSubscription;
   int _generation = 0;
   String? _sessionId;
   int? _sessionStartedAtMs;
-  LocalApi? _activeApi;
   RealtimeConversationLaunch? _launch;
   Completer<void>? _responseDone;
   bool _providerResponseActive = false;
@@ -293,9 +273,9 @@ class RealtimeConversationController extends ChangeNotifier {
   /// client cannot perform.
   final Map<int, _LearnerTurnJob> _retryableTurns = {};
 
-  Future<void> loadProfiles(LocalApi api) async {
+  Future<void> loadProfiles() async {
     try {
-      final profiles = await api.realtimeProfiles();
+      final profiles = await _repository.profiles();
       state = state.copyWith(
         profiles: profiles,
         selectedProfileId:
@@ -307,22 +287,22 @@ class RealtimeConversationController extends ChangeNotifier {
       state = state.copyWith(
         error: RealtimeConversationNotice(
           kind: 'providers_not_loaded',
-          detail: describeApiFailure(error),
+          detail: _transport.describeFailure(error),
         ),
       );
     }
     notifyListeners();
   }
 
-  Future<void> loadHistory(LocalApi api) async {
+  Future<void> loadHistory() async {
     state = state.copyWith(historyLoading: true, historyError: null);
     notifyListeners();
     try {
-      final sessions = await api.realtimeSessions();
+      final sessions = await _repository.sessions();
       final sessionsWithTurns = await Future.wait(
         sessions.map((session) async {
           try {
-            return session.withTurns(await api.realtimeTurns(session.id));
+            return session.withTurns(await _repository.turns(session.id));
           } catch (_) {
             return session;
           }
@@ -338,14 +318,14 @@ class RealtimeConversationController extends ChangeNotifier {
         historyLoading: false,
         historyError: RealtimeConversationNotice(
           kind: 'history_not_loaded',
-          detail: describeApiFailure(error),
+          detail: _transport.describeFailure(error),
         ),
       );
     }
     notifyListeners();
   }
 
-  Future<void> openHistorySession(LocalApi api, String sessionId) async {
+  Future<void> openHistorySession(String sessionId) async {
     state = state.copyWith(
       selectedHistorySessionId: sessionId,
       historyItems: const [],
@@ -354,7 +334,7 @@ class RealtimeConversationController extends ChangeNotifier {
     );
     notifyListeners();
     try {
-      final items = await api.realtimeTurns(sessionId);
+      final items = await _repository.turns(sessionId);
       state = state.copyWith(
         historyItems: items,
         historyLoading: false,
@@ -365,7 +345,7 @@ class RealtimeConversationController extends ChangeNotifier {
         historyLoading: false,
         historyError: RealtimeConversationNotice(
           kind: 'turns_not_loaded',
-          detail: describeApiFailure(error),
+          detail: _transport.describeFailure(error),
         ),
       );
     }
@@ -386,8 +366,7 @@ class RealtimeConversationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> registerProfile(
-    LocalApi api, {
+  Future<void> registerProfile({
     required String displayName,
     required String adapterKind,
     required String baseUrl,
@@ -395,7 +374,7 @@ class RealtimeConversationController extends ChangeNotifier {
     required String voice,
     required String secret,
   }) async {
-    final saved = await api.registerRealtimeProfile(
+    final saved = await _repository.registerProfile(
       displayName: displayName,
       adapterKind: adapterKind,
       baseUrl: baseUrl,
@@ -403,7 +382,7 @@ class RealtimeConversationController extends ChangeNotifier {
       voice: voice,
       secret: secret,
     );
-    final profiles = await api.realtimeProfiles();
+    final profiles = await _repository.profiles();
     state = state.copyWith(
       profiles: profiles,
       selectedProfileId: saved.id,
@@ -413,7 +392,6 @@ class RealtimeConversationController extends ChangeNotifier {
   }
 
   Future<void> start(
-    LocalApi api,
     RealtimeConversationLaunch launch, {
     required Future<void> Function() acquireAudioFocus,
   }) async {
@@ -456,14 +434,12 @@ class RealtimeConversationController extends ChangeNotifier {
             ? 16000
             : 24000,
       );
-      final connection = await _connect(
-        api.realtimeSocketUri(
-          profileId: profileId,
-          language: launch.language,
-          instructions: _instructions(launch),
-        ),
-        {HttpHeaders.authorizationHeader: 'Bearer ${api.token}'},
+      final request = _repository.connectionRequest(
+        profileId: profileId,
+        language: launch.language,
+        instructions: _instructions(launch),
       );
+      final connection = await _transport.connect(request.uri, request.headers);
       if (generation != _generation) {
         await connection.close();
         return;
@@ -476,7 +452,7 @@ class RealtimeConversationController extends ChangeNotifier {
             _failAndCleanup(
               RealtimeConversationNotice(
                 kind: 'connection_failed',
-                detail: describeApiFailure(error),
+                detail: _transport.describeFailure(error),
               ),
             ),
           );
@@ -500,9 +476,8 @@ class RealtimeConversationController extends ChangeNotifier {
       final now = _nowMs();
       _sessionId = 'realtime-$now-${DateTime.now().microsecondsSinceEpoch}';
       _sessionStartedAtMs = now;
-      _activeApi = api;
       _launch = launch;
-      await api.saveRealtimeSession(
+      await _repository.saveSession(
         _sessionJson(
           launch: launch,
           profileId: profileId,
@@ -522,7 +497,7 @@ class RealtimeConversationController extends ChangeNotifier {
         activity: RealtimeConversationActivity.inactive,
         error: RealtimeConversationNotice(
           kind: 'start_failed',
-          detail: describeApiFailure(error),
+          detail: _transport.describeFailure(error),
         ),
       );
       notifyListeners();
@@ -538,13 +513,14 @@ class RealtimeConversationController extends ChangeNotifier {
   }
 
   void _onConnectionMessage(Object? message) {
-    if (message is List<int>) {
-      unawaited(_audio.play(Uint8List.fromList(message)));
-      return;
-    }
-    if (message is! String) return;
     try {
-      final value = jsonDecode(message) as Map<String, dynamic>;
+      final event = _transport.decode(message);
+      if (event case RealtimeAudioEvent(:final bytes)) {
+        unawaited(_audio.play(bytes));
+        return;
+      }
+      if (event is! RealtimeJsonEvent) return;
+      final value = event.value;
       switch (value['type']) {
         case 'speech_started':
           state = state.copyWith(
@@ -616,7 +592,7 @@ class RealtimeConversationController extends ChangeNotifier {
         _failAndCleanup(
           RealtimeConversationNotice(
             kind: 'provider_event_invalid',
-            detail: describeApiFailure(error),
+            detail: _transport.describeFailure(error),
           ),
         ),
       );
@@ -662,7 +638,7 @@ class RealtimeConversationController extends ChangeNotifier {
           status: 'failed',
           failure: RealtimeTurnFailure(
             kind: 'learner_audio_capture_failed',
-            detail: describeApiFailure(error),
+            detail: _transport.describeFailure(error),
           ),
         ),
       );
@@ -685,13 +661,11 @@ class RealtimeConversationController extends ChangeNotifier {
           endedAtMs: endedAt,
         ),
       );
-      final api = _activeApi;
       final launch = _launch;
       final sessionId = _sessionId;
-      if (api == null || launch == null || sessionId == null) return;
+      if (launch == null || sessionId == null) return;
       _track(
         _LearnerTurnJob(
-          api: api,
           launch: launch,
           sessionId: sessionId,
           captured: captured,
@@ -707,7 +681,7 @@ class RealtimeConversationController extends ChangeNotifier {
           endedAtMs: _nowMs(),
           failure: RealtimeTurnFailure(
             kind: 'learner_audio_capture_failed',
-            detail: describeApiFailure(error),
+            detail: _transport.describeFailure(error),
           ),
         ),
       );
@@ -768,7 +742,6 @@ class RealtimeConversationController extends ChangeNotifier {
     _LearnerTurnJob job,
     int generation,
   ) async {
-    final api = job.api;
     final launch = job.launch;
     final sessionId = job.sessionId;
     final captured = job.captured;
@@ -776,7 +749,7 @@ class RealtimeConversationController extends ChangeNotifier {
     RecordingAsset? asset;
     try {
       final anchor = launch.anchor;
-      asset = await api.createRecordingAsset(
+      asset = await _repository.createRecordingAsset(
         CreateRecordingAsset(
           filePath: captured.path,
           durationMs: captured.durationMs,
@@ -814,12 +787,12 @@ class RealtimeConversationController extends ChangeNotifier {
       );
       if (generation != _generation) {
         try {
-          await api.deleteRecordingAsset(asset.id);
+          await _repository.deleteRecordingAsset(asset.id);
         } catch (_) {}
         return;
       }
       _recordingAssetIds[sequence] = asset.id;
-      await api.saveRealtimeTurn(
+      await _repository.saveTurn(
         _learnerTurnJson(
           sequence,
           sessionId: sessionId,
@@ -829,7 +802,7 @@ class RealtimeConversationController extends ChangeNotifier {
         ),
       );
       if (generation != _generation) return;
-      var transcription = await api.createRecordingTranscription(
+      var transcription = await _repository.createTranscription(
         recordingId: asset.id,
         modelId: launch.modelId,
         language: launch.language,
@@ -840,14 +813,14 @@ class RealtimeConversationController extends ChangeNotifier {
           generation == _generation) {
         await _delay(const Duration(milliseconds: 150));
         if (generation != _generation) return;
-        transcription = await api.recordingTranscriptionJob(transcription.id);
+        transcription = await _repository.transcriptionJob(transcription.id);
       }
       if (generation != _generation) return;
       final local = transcription.status == 'completed'
           ? (transcription.rawTranscript?.trim() ?? '')
           : '';
       if (local.isEmpty) {
-        await api.saveRealtimeTurn(
+        await _repository.saveTurn(
           _learnerTurnJson(
             sequence,
             sessionId: sessionId,
@@ -878,7 +851,7 @@ class RealtimeConversationController extends ChangeNotifier {
         return;
       }
       final completedAt = _nowMs();
-      await api.saveRealtimeTurn(
+      await _repository.saveTurn(
         _learnerTurnJson(
           sequence,
           sessionId: sessionId,
@@ -898,7 +871,7 @@ class RealtimeConversationController extends ChangeNotifier {
       if (generation != _generation) return;
       if (asset != null) {
         try {
-          await api.saveRealtimeTurn(
+          await _repository.saveTurn(
             _learnerTurnJson(
               sequence,
               sessionId: sessionId,
@@ -916,7 +889,7 @@ class RealtimeConversationController extends ChangeNotifier {
       // turn: $error'`) is exactly what leaked an error code, a
       // correlation id, a sidecar URI and an internal route into the card
       // that shows what the learner said.
-      final detail = describeApiFailure(error);
+      final detail = _transport.describeFailure(error);
       // Only the backend may authorise a retry, and only by saying so.
       // Holding the job here is what makes the affordance real rather than a
       // button that reruns nothing: a conversation that already finished has
@@ -1008,12 +981,11 @@ class RealtimeConversationController extends ChangeNotifier {
       endedAt,
     );
     _syncItems();
-    final api = _activeApi;
     final sessionId = _sessionId;
-    if (sequence == null || api == null || sessionId == null) return;
+    if (sequence == null || sessionId == null) return;
     final item = _item(sequence);
     try {
-      await api.saveRealtimeTurn({
+      await _repository.saveTurn({
         'id': '$sessionId-assistant-$sequence',
         'session_id': sessionId,
         'sequence': sequence,
@@ -1040,7 +1012,7 @@ class RealtimeConversationController extends ChangeNotifier {
           status: 'failed',
           failure: RealtimeTurnFailure(
             kind: 'assistant_history_not_saved',
-            detail: describeApiFailure(error),
+            detail: _transport.describeFailure(error),
           ),
         ),
       );
@@ -1049,11 +1021,8 @@ class RealtimeConversationController extends ChangeNotifier {
   }
 
   Future<void> finish() async {
-    final api = _activeApi;
     final launch = _launch;
-    if (state.phase != RealtimeConversationPhase.live ||
-        api == null ||
-        launch == null) {
+    if (state.phase != RealtimeConversationPhase.live || launch == null) {
       return;
     }
     state = state.copyWith(
@@ -1069,9 +1038,7 @@ class RealtimeConversationController extends ChangeNotifier {
       await _audioSubscription?.cancel();
       _audioSubscription = null;
       final sessionRecording = await _audio.stop();
-      try {
-        await File(sessionRecording.path).delete();
-      } catch (_) {}
+      await _transport.deleteTemporaryRecording(sessionRecording.path);
       var providerDrained = true;
       if (_providerResponseActive && _responseDone != null) {
         providerDrained = await _responseDone!.future
@@ -1116,7 +1083,7 @@ class RealtimeConversationController extends ChangeNotifier {
         endedAtMs: endedAt,
       );
       state = state.copyWith(phase: RealtimeConversationPhase.done);
-      await loadHistory(api);
+      await loadHistory();
     } catch (error) {
       await _persistTerminalSession(
         status: 'failed',
@@ -1128,7 +1095,7 @@ class RealtimeConversationController extends ChangeNotifier {
         activity: RealtimeConversationActivity.inactive,
         error: RealtimeConversationNotice(
           kind: 'finish_failed',
-          detail: describeApiFailure(error),
+          detail: _transport.describeFailure(error),
         ),
       );
     }
@@ -1192,12 +1159,11 @@ class RealtimeConversationController extends ChangeNotifier {
     RealtimeConversationItem item, {
     required String failureKind,
   }) async {
-    final api = _activeApi;
     final sessionId = _sessionId;
-    if (api == null || sessionId == null) return;
+    if (sessionId == null) return;
     final endedAt = item.endedAtMs ?? _nowMs();
     try {
-      await api.saveRealtimeTurn({
+      await _repository.saveTurn({
         'id': '$sessionId-${item.role}-${item.sequence}',
         'session_id': sessionId,
         'sequence': item.sequence,
@@ -1227,7 +1193,7 @@ class RealtimeConversationController extends ChangeNotifier {
         (current) => current.copyWith(
           failure: RealtimeTurnFailure(
             kind: 'interrupted_turn_not_saved',
-            detail: describeApiFailure(error),
+            detail: _transport.describeFailure(error),
           ),
         ),
       );
@@ -1272,17 +1238,15 @@ class RealtimeConversationController extends ChangeNotifier {
     required String? failureKind,
     required int endedAtMs,
   }) async {
-    final api = _activeApi;
     final launch = _launch;
     final startedAt = _sessionStartedAtMs;
     final profileId = state.selectedProfileId;
-    if (api != null &&
-        launch != null &&
+    if (launch != null &&
         _sessionId != null &&
         startedAt != null &&
         profileId != null) {
       try {
-        await api.saveRealtimeSession(
+        await _repository.saveSession(
           _sessionJson(
             launch: launch,
             profileId: profileId,
@@ -1298,7 +1262,6 @@ class RealtimeConversationController extends ChangeNotifier {
     }
     _sessionId = null;
     _sessionStartedAtMs = null;
-    _activeApi = null;
     _launch = null;
   }
 

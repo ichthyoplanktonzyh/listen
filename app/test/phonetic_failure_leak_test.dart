@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
+import 'package:llplayer_next/data/repositories/phonetic_analysis_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 /// The analysis centre, driven by requests that really fail.
@@ -88,7 +89,9 @@ void main() {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        home: PhoneticAnalysisCenter(api: service),
+        home: PhoneticAnalysisCenter(
+          repository: LocalPhoneticAnalysisRepository(service),
+        ),
       ),
     );
     await tester.pump();

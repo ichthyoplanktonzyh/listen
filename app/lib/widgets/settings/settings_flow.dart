@@ -9,7 +9,6 @@ import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/listen_theme.dart';
 import 'settings_dialog.dart';
 
@@ -24,14 +23,14 @@ Future<void> showAppSettings({
   required PlayerController playerController,
   required LearningController learningController,
   required Future<void> Function() saveSettings,
-  LocalApi? api,
   LearnerSettingsRepository? learnerRepository,
+  LlmProviderRepository? llmRepository,
+  RealtimeProviderRepository? realtimeRepository,
+  SyntaxCapabilityRepository? syntaxRepository,
 }) async {
   // The L1 setting is a backend asset (Phase 3.9), not a local file setting.
   // Best-effort read: with no sidecar the field shows unset and stays inert.
-  final profileRepository =
-      learnerRepository ??
-      (api == null ? null : LocalLearnerSettingsRepository(api));
+  final profileRepository = learnerRepository;
   final profileViewModel = profileRepository == null
       ? null
       : LearnerSettingsViewModel(profileRepository);
@@ -44,7 +43,9 @@ Future<void> showAppSettings({
   await showDialog<void>(
     context: context,
     builder: (_) => SettingsDialog(
-      api: api,
+      llmRepository: llmRepository,
+      realtimeRepository: realtimeRepository,
+      syntaxRepository: syntaxRepository,
       currentTrackId: subtitleController.primaryTrack?.id,
       language: settingsController.language,
       themeMode: settingsController.themeMode,

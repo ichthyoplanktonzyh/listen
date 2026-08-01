@@ -394,7 +394,8 @@ void main() {
         ..setTimelineResourceError('Timeline resource refresh warning');
 
       expect(controller.llTimelineDocument, same(document));
-      expect(controller.wordTimelineSummaries, same(summaries));
+      expect(controller.wordTimelineSummaries, orderedEquals(summaries));
+      expect(controller.wordTimelineSummaries, isNot(same(summaries)));
       expect(
         controller.timelineResourceError,
         'Timeline resource refresh warning',

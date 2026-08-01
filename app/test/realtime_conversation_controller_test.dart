@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
@@ -376,10 +377,9 @@ void main() {
       'a failed provider connection can retry without stale session state',
       () async {
         final harness = _Harness(transcripts: const [], connectFailures: 1);
-        await harness.controller.loadProfiles(harness.api);
+        await harness.controller.loadProfiles();
 
         await harness.controller.start(
-          harness.api,
           RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
           acquireAudioFocus: () async {},
         );
@@ -389,7 +389,6 @@ void main() {
         );
 
         await harness.controller.start(
-          harness.api,
           RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
           acquireAudioFocus: () async {},
         );
@@ -409,10 +408,9 @@ void main() {
       'a failed microphone start can retry without stale session state',
       () async {
         final harness = _Harness(transcripts: const [], audioStartFailures: 1);
-        await harness.controller.loadProfiles(harness.api);
+        await harness.controller.loadProfiles();
 
         await harness.controller.start(
-          harness.api,
           RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
           acquireAudioFocus: () async {},
         );
@@ -423,7 +421,6 @@ void main() {
         expect(harness.lifecycle, isNot(contains('provider_connect')));
 
         await harness.controller.start(
-          harness.api,
           RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
           acquireAudioFocus: () async {},
         );
@@ -505,6 +502,7 @@ class _Harness {
       startFailures: audioStartFailures,
     );
     controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
       audio: audio,
       connect: (_, _) async {
         lifecycle.add('provider_connect');
@@ -551,9 +549,8 @@ class _Harness {
       savedSessions.isEmpty ? null : savedSessions.last['status'] as String?;
 
   Future<void> start() async {
-    await controller.loadProfiles(api);
+    await controller.loadProfiles();
     await controller.start(
-      api,
       RealtimeConversationLaunch.free(language: 'en', modelId: 'asr-model'),
       acquireAudioFocus: () async => lifecycle.add('audio_focus'),
     );

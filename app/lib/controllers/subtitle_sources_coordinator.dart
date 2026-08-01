@@ -1,7 +1,6 @@
-import '../models/runtime_resources.dart';
+import '../data/repositories/subtitle_analysis_repository.dart';
 import '../models/task_status.dart';
 import '../models/timeline.dart';
-import '../services/api_service.dart';
 import 'player_controller.dart';
 import 'settings_controller.dart';
 import 'subtitle_controller.dart';
@@ -16,13 +15,14 @@ class SubtitleSourcesCoordinator {
     required this.player,
     required this.subtitle,
     required this.settings,
+    required this.repository,
   });
 
   final PlayerController player;
   final SubtitleController subtitle;
   final SettingsController settings;
+  final SubtitleAnalysisRepository repository;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   String Function(String key)? text;
 
@@ -34,7 +34,6 @@ class SubtitleSourcesCoordinator {
   openSubtitlePath;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     String Function(String key)? text,
     required void Function(String message) showSnackBar,
@@ -43,7 +42,6 @@ class SubtitleSourcesCoordinator {
     required Future<void> Function(String path, {required bool secondary})
     openSubtitlePath,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.showSnackBar = showSnackBar;
@@ -60,12 +58,10 @@ class SubtitleSourcesCoordinator {
   /// ready, runs whole-track analysis for the current primary track exactly
   /// once per track.
   Future<void> checkSyntaxCapability() async {
-    final service = getApi();
-    if (service == null || _syntaxCapabilityCheckBusy) return;
+    if (!repository.isAvailable || _syntaxCapabilityCheckBusy) return;
     _syntaxCapabilityCheckBusy = true;
     try {
-      final capability = await service.syntaxCapability();
-      final ready = capability.isReady;
+      final ready = await repository.syntaxReady();
       if (!ready) {
         _syntaxCapabilityWasReady = false;
         _syntaxAnalyzedTrackId = null;
@@ -76,7 +72,7 @@ class SubtitleSourcesCoordinator {
       if (!_syntaxCapabilityWasReady || _syntaxAnalyzedTrackId != trackId) {
         _syntaxCapabilityWasReady = true;
         _syntaxAnalyzedTrackId = trackId;
-        await service.runTrackSyntaxAnalysis(trackId);
+        await repository.analyzeTrackSyntax(trackId);
       }
     } catch (_) {
       // Optional capability monitoring never changes core playback state.
@@ -86,14 +82,13 @@ class SubtitleSourcesCoordinator {
   }
 
   Future<void> ensureCurrentPronunciation(Cue? cue) async {
-    final service = getApi();
     if (cue == null ||
-        service == null ||
+        !repository.isAvailable ||
         subtitle.pronunciationBySentence.containsKey(cue.id)) {
       return;
     }
     try {
-      final analysis = await service.analyzePronunciation(cue.id);
+      final analysis = await repository.analyzePronunciation(cue.id);
       if (isMounted() && subtitle.currentPrimaryCue?.id == cue.id) {
         subtitle.setSentencePronunciation(cue.id, analysis);
       }
@@ -103,43 +98,31 @@ class SubtitleSourcesCoordinator {
   }
 
   Future<void> analyzePhonetics({required bool wholeTrack}) async {
-    final service = getApi();
     final track = subtitle.primaryTrack;
     final cue = subtitle.currentPrimaryCue;
-    if (service == null || track == null || (!wholeTrack && cue == null)) {
+    if (!repository.isAvailable ||
+        track == null ||
+        (!wholeTrack && cue == null)) {
       showSnackBar('No media or subtitle loaded');
       return;
     }
     try {
-      final models = await service.phoneticAnalysisModels();
-      final preferred = settings.settings.phoneticModelId;
-      final model = models.cast<PhoneticModelView?>().firstWhere(
-        (value) =>
-            value != null &&
-            (value.id == preferred ||
-                (preferred.isEmpty &&
-                    (value.state == 'installed' || value.state == 'custom'))),
-        orElse: () => null,
-      );
-      if (model == null) {
-        throw StateError('No compatible phonetic analysis model is available');
-      }
-      final job = await service.createPhoneticAnalysisJob(
+      final status = await repository.startPhoneticAnalysis(
         trackId: track.id,
         sentenceId: wholeTrack ? null : cue!.id,
-        modelId: model.id,
+        preferredModelId: settings.settings.phoneticModelId,
       );
       if (isMounted()) {
         setTaskStatus(
           UserTaskStatus(
             kind: UserTaskKind.audioAnalysis,
             state: UserTaskState.working,
-            rawStatus: job.status,
+            rawStatus: status,
             progress: 0,
             targetId: track.id,
           ),
         );
-        showSnackBar('Audio analysis ${job.status}');
+        showSnackBar('Audio analysis $status');
       }
     } catch (error) {
       if (isMounted()) {
@@ -162,7 +145,7 @@ class SubtitleSourcesCoordinator {
     final subtitles = paths.where(isSubtitlePath).toList(growable: false);
     if (media.isNotEmpty) await openMediaPath(media.first);
     for (final path in subtitles) {
-      if (player.mediaId == null || getApi() == null) {
+      if (player.mediaId == null || !repository.isAvailable) {
         player.setStatus(_t('statusDropMediaFirst'));
         return;
       }

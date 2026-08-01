@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
@@ -96,7 +97,7 @@ void main() {
     test('an empty provider caption is not a line', () {
       expect(
         conversationAfterglowLineOf(
-          const RealtimeConversationState(
+          RealtimeConversationState(
             phase: RealtimeConversationPhase.live,
             items: [
               RealtimeConversationItem(
@@ -217,7 +218,7 @@ void main() {
 
   testWidgets('the lobby switch is off by default and reports the change so '
       'the host can remember it', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
+    final controller = _controller();
     bool? persisted;
     await tester.pumpWidget(
       _panel(controller, onCaptionEnabledChanged: (v) => persisted = v),
@@ -248,8 +249,8 @@ void main() {
 }
 
 RealtimeConversationController _liveController() {
-  final controller = RealtimeConversationController(audio: _FakeAudio());
-  controller.state = const RealtimeConversationState(
+  final controller = _controller();
+  controller.state = RealtimeConversationState(
     phase: RealtimeConversationPhase.live,
     activity: RealtimeConversationActivity.listening,
     selectedProfileId: 'profile-1',
@@ -280,7 +281,6 @@ Widget _panel(
 }) => MaterialApp(
   home: RealtimeConversationPanel(
     controller: controller,
-    api: _api(),
     launch: RealtimeConversationLaunch.free(
       language: 'en',
       modelId: 'asr-model',
@@ -290,6 +290,11 @@ Widget _panel(
     captionEnabled: captionEnabled,
     onCaptionEnabledChanged: onCaptionEnabledChanged,
   ),
+);
+
+RealtimeConversationController _controller() => RealtimeConversationController(
+  repository: LocalRealtimeConversationRepository(_api),
+  audio: _FakeAudio(),
 );
 
 LocalApi _api() => LocalApi.withTransport(

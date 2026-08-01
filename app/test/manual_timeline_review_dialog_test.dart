@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/manual_review_controller.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/manual_timeline_review_dialog.dart';
@@ -212,7 +211,7 @@ void main() {
         'empty","correlation_id":"api-853","retryable":false}';
     final draft = await pump(
       tester,
-      onSave: (draft) async => throw const HttpException(body, uri: null),
+      onSave: (draft) async => throw ApiFailure.parse(body),
     );
     final l = AppLocalizations(const Locale('en'));
 
@@ -258,7 +257,7 @@ void main() {
   testWidgets('editing again clears a stale failure message', (tester) async {
     final draft = await pump(
       tester,
-      onSave: (draft) async => throw const HttpException('boom', uri: null),
+      onSave: (draft) async => throw const ApiFailure(raw: 'boom'),
     );
     final l = AppLocalizations(const Locale('en'));
 

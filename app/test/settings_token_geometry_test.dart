@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/theme/icon_size.dart';
@@ -67,7 +68,10 @@ void main() {
   testWidgets('the AI provider privacy notice insets and sizes from tokens', (
     tester,
   ) async {
-    await pump(tester, LlmProviderSettings(api: api()));
+    await pump(
+      tester,
+      LlmProviderSettings(repository: LocalLlmProviderRepository(api())),
+    );
 
     expect(
       iconSize(tester, Icons.privacy_tip_outlined),
@@ -82,7 +86,12 @@ void main() {
   testWidgets('the speech provider honesty notice matches it step for step', (
     tester,
   ) async {
-    await pump(tester, RealtimeProviderSettings(api: api()));
+    await pump(
+      tester,
+      RealtimeProviderSettings(
+        repository: LocalRealtimeProviderRepository(api()),
+      ),
+    );
 
     expect(iconSize(tester, Icons.hearing_outlined), ListenIconSize.control);
     expect(noticePadding(tester, Icons.hearing_outlined), ListenPadding.row);
@@ -90,9 +99,17 @@ void main() {
     // The point of the migration: the two provider panels no longer open at
     // two different insets. Kept as an explicit cross-panel assertion because
     // that mismatch is invisible in either panel read on its own.
-    await pump(tester, LlmProviderSettings(api: api()));
+    await pump(
+      tester,
+      LlmProviderSettings(repository: LocalLlmProviderRepository(api())),
+    );
     final llm = noticePadding(tester, Icons.privacy_tip_outlined);
-    await pump(tester, RealtimeProviderSettings(api: api()));
+    await pump(
+      tester,
+      RealtimeProviderSettings(
+        repository: LocalRealtimeProviderRepository(api()),
+      ),
+    );
     expect(noticePadding(tester, Icons.hearing_outlined), llm);
   });
 
@@ -102,13 +119,15 @@ void main() {
     await pump(
       tester,
       SyntaxCapabilitySettings(
-        api: api(
-          ok: {
-            '/v1/syntax/capability':
-                '{"status":"not_installed",'
-                '"enabled":false,"runtime_version":"3.7",'
-                '"model_version":"en_core_web_sm"}',
-          },
+        repository: LocalSyntaxCapabilityRepository(
+          api(
+            ok: {
+              '/v1/syntax/capability':
+                  '{"status":"not_installed",'
+                  '"enabled":false,"runtime_version":"3.7",'
+                  '"model_version":"en_core_web_sm"}',
+            },
+          ),
         ),
       ),
     );

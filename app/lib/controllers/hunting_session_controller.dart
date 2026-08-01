@@ -1,36 +1,40 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/hunting_repository.dart';
+import '../models/named_failure.dart';
 import '../models/practice.dart';
-import '../services/api_service.dart';
 import '../state/store.dart';
 
 const _unset = Object();
 
 class HuntingSessionState {
-  const HuntingSessionState({
+  HuntingSessionState({
     this.enabled = false,
     this.loaded = false,
     this.indexed = false,
-    this.occurrences = const [],
+    List<HuntingOccurrence> occurrences = const [],
     this.current,
     this.phase = 'idle',
     this.promptedCount = 0,
     this.recognizedCount = 0,
     this.notRecognizedCount = 0,
     this.notNoticedCount = 0,
-    this.perTargetPromptCount = const {},
-    this.handledOccurrenceIds = const {},
+    Map<String, int> perTargetPromptCount = const {},
+    Set<String> handledOccurrenceIds = const {},
     this.sessionId,
     this.mediaId,
     this.trackId,
     this.busy = false,
     this.error,
-  });
+  }) : _occurrences = List.unmodifiable(occurrences),
+       _perTargetPromptCount = Map.unmodifiable(perTargetPromptCount),
+       _handledOccurrenceIds = Set.unmodifiable(handledOccurrenceIds);
 
   final bool enabled;
   final bool loaded;
   final bool indexed;
-  final List<HuntingOccurrence> occurrences;
+  final List<HuntingOccurrence> _occurrences;
+  List<HuntingOccurrence> get occurrences => List.unmodifiable(_occurrences);
   final HuntingOccurrence? current;
 
   /// idle | priming | check
@@ -39,13 +43,17 @@ class HuntingSessionState {
   final int recognizedCount;
   final int notRecognizedCount;
   final int notNoticedCount;
-  final Map<String, int> perTargetPromptCount;
-  final Set<String> handledOccurrenceIds;
+  final Map<String, int> _perTargetPromptCount;
+  Map<String, int> get perTargetPromptCount =>
+      Map.unmodifiable(_perTargetPromptCount);
+  final Set<String> _handledOccurrenceIds;
+  Set<String> get handledOccurrenceIds =>
+      Set.unmodifiable(_handledOccurrenceIds);
   final String? sessionId;
   final String? mediaId;
   final String? trackId;
   final bool busy;
-  final String? error;
+  final NamedFailure? error;
 
   int get remainingBudget => (5 - promptedCount).clamp(0, 5);
 
@@ -88,22 +96,28 @@ class HuntingSessionState {
     mediaId: identical(mediaId, _unset) ? this.mediaId : mediaId as String?,
     trackId: identical(trackId, _unset) ? this.trackId : trackId as String?,
     busy: busy ?? this.busy,
-    error: identical(error, _unset) ? this.error : error as String?,
+    error: identical(error, _unset) ? this.error : error as NamedFailure?,
   );
 }
 
 class HuntingSessionController extends ChangeNotifier {
-  HuntingSessionController() : _store = Store(const HuntingSessionState()) {
+  factory HuntingSessionController({
+    HuntingRepository repository = const UnavailableHuntingRepository(),
+  }) => HuntingSessionController._(repository);
+
+  HuntingSessionController._(this._repository)
+    : _store = Store(HuntingSessionState()) {
     _store.addListener(notifyListeners);
   }
 
   final Store<HuntingSessionState> _store;
+  final HuntingRepository _repository;
 
   Store<HuntingSessionState> get store => _store;
   HuntingSessionState get state => _store.state;
+  bool get repositoryAvailable => _repository.isAvailable;
 
   Future<bool> start({
-    required LocalApi api,
     required String sessionId,
     required String mediaId,
     String? trackId,
@@ -117,18 +131,18 @@ class HuntingSessionController extends ChangeNotifier {
         busy: true,
       ),
     );
-    return _loadOccurrences(api);
+    return _loadOccurrences();
   }
 
-  Future<bool> reload(LocalApi api) async {
+  Future<bool> reload() async {
     if (!state.enabled || state.mediaId == null) return false;
     _store.update((state) => state.copyWith(busy: true, error: null));
-    return _loadOccurrences(api);
+    return _loadOccurrences();
   }
 
-  Future<bool> _loadOccurrences(LocalApi api) async {
+  Future<bool> _loadOccurrences() async {
     try {
-      final result = await api.huntingOccurrences(
+      final result = await _repository.occurrences(
         mediaId: state.mediaId!,
         trackId: state.trackId,
       );
@@ -152,14 +166,17 @@ class HuntingSessionController extends ChangeNotifier {
         (state) => state.copyWith(
           loaded: true,
           busy: false,
-          error: 'Could not locate hunting targets',
+          error: NamedFailure(
+            'huntingOccurrencesFailed',
+            detail: huntingFailureDetail(error),
+          ),
         ),
       );
       return false;
     }
   }
 
-  void stop() => _store.replace(const HuntingSessionState());
+  void stop() => _store.replace(HuntingSessionState());
 
   void updatePosition(Duration position) {
     final state = this.state;
@@ -212,7 +229,7 @@ class HuntingSessionController extends ChangeNotifier {
     }
   }
 
-  Future<bool> answer(LocalApi api, String answer) async {
+  Future<bool> answer(String answer) async {
     final current = state.current;
     final sessionId = state.sessionId;
     if (current == null || state.phase != 'check' || sessionId == null) {
@@ -220,7 +237,7 @@ class HuntingSessionController extends ChangeNotifier {
     }
     _store.update((state) => state.copyWith(busy: true, error: null));
     try {
-      await api.submitHuntingCheck(
+      await _repository.submitCheck(
         sessionId: sessionId,
         targetId: current.targetId,
         occurrenceId: current.occurrence.id,
@@ -246,8 +263,13 @@ class HuntingSessionController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) =>
-            state.copyWith(busy: false, error: 'Could not save hunting answer'),
+        (state) => state.copyWith(
+          busy: false,
+          error: NamedFailure(
+            'huntingAnswerFailed',
+            detail: huntingFailureDetail(error),
+          ),
+        ),
       );
       return false;
     }

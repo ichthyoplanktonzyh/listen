@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/cold_start_marking_view_model.dart';
 import '../../data/repositories/cold_start_marking_repository.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -15,19 +14,17 @@ import '../common/listen_loading.dart';
 class ColdStartMarkingSheet extends StatefulWidget {
   const ColdStartMarkingSheet({
     super.key,
-    required this.api,
+    required this.repository,
     required this.trackId,
     required this.language,
     required this.onDone,
-    this.repository,
     this.viewModel,
   });
 
-  final LocalApi api;
   final String trackId;
   final String language;
   final VoidCallback onDone;
-  final ColdStartMarkingRepository? repository;
+  final ColdStartMarkingRepository repository;
   final ColdStartMarkingViewModel? viewModel;
 
   @override
@@ -46,7 +43,7 @@ class _ColdStartMarkingSheetState extends State<ColdStartMarkingSheet> {
     _viewModel =
         widget.viewModel ??
         ColdStartMarkingViewModel(
-          widget.repository ?? LocalColdStartMarkingRepository(widget.api),
+          widget.repository,
           trackId: widget.trackId,
           language: widget.language,
         );

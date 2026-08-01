@@ -4,7 +4,6 @@ import '../../controllers/manual_review_controller.dart';
 import '../../localization.dart';
 import '../../models/api_failure.dart';
 import '../../models/timeline.dart';
-import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -345,8 +344,10 @@ class _ManualTimelineReviewDialogState
     } catch (error) {
       if (!mounted) return;
       // The exception becomes a typed diagnostic and a named state. Nothing
-      // from `describeApiFailure`'s result is rendered except the reference id.
-      final detail = describeApiFailure(error);
+      // from the repository's typed failure is rendered except the reference id.
+      final detail = error is ApiFailure
+          ? error
+          : const ApiFailure(raw: 'untyped failure');
       setState(() {
         _saving = false;
         _saveFailure = ManualTimingSaveFailure.of(detail);

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -16,7 +15,6 @@ class ReadingTaskStudio extends StatelessWidget {
   const ReadingTaskStudio({
     super.key,
     required this.controller,
-    required this.api,
     required this.source,
     required this.audioPlayCount,
     required this.onClose,
@@ -24,7 +22,6 @@ class ReadingTaskStudio extends StatelessWidget {
   });
 
   final ReadingTaskController controller;
-  final LocalApi api;
   final ReadingTaskSource source;
   final int Function() audioPlayCount;
   final VoidCallback onClose;
@@ -54,7 +51,6 @@ class ReadingTaskStudio extends StatelessWidget {
                   );
                   final taskPane = ReadingTaskSheet(
                     controller: controller,
-                    api: api,
                     audioPlayCount: audioPlayCount,
                     onPlaySegment: onPlaySegment,
                     onClose: onClose,

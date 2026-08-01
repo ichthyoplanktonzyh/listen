@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 void main() {
@@ -47,18 +48,17 @@ void main() {
           throw StateError('unexpected $method $path');
         },
       );
-      final controller = HuntingController();
+      final controller = HuntingController(
+        repository: LocalHuntingRepository(() => api),
+      );
       addTearDown(controller.dispose);
 
-      expect(await controller.load(api), isTrue);
+      expect(await controller.load(), isTrue);
       expect(controller.state.targets.single.targetSnapshot, 'notice');
       expect(controller.state.candidates.single.failureCount, 3);
 
       expect(
-        await controller.promoteCandidate(
-          api,
-          controller.state.candidates.single,
-        ),
+        await controller.promoteCandidate(controller.state.candidates.single),
         isTrue,
       );
       expect(controller.state.targets.length, 2);
@@ -69,10 +69,7 @@ void main() {
         'source_id': 'candidate-1',
       });
 
-      expect(
-        await controller.archive(api, controller.state.targets.first),
-        isTrue,
-      );
+      expect(await controller.archive(controller.state.targets.first), isTrue);
       expect(controller.state.targets.single.id, 'target-2');
       expect(requests.last.path, '/v1/hunting/targets/target-1');
     },

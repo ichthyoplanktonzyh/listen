@@ -5,6 +5,7 @@ import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -25,8 +26,8 @@ ResourceActionsCoordinator _resourceActions(LocalApi? Function() getApi) =>
       player: PlayerController(),
       subtitle: SubtitleController(),
       speechEnhancement: SpeechEnhancementWorkflowController(),
+      repository: LocalResourceRepository(getApi),
     )..bind(
-      getApi: getApi,
       isMounted: () => true,
       reloadSpeechEnhancements: (_) async {},
       activatePrimaryTrack: (_, {required nextStatus}) async {},
@@ -117,7 +118,6 @@ void main() {
       _Harness(
         onPressed: (context) => exportSubtitleResourceFlow(
           context: context,
-          api: null,
           playerController: player,
           resourceActions: _resourceActions(() => null),
           track: _track,
@@ -146,7 +146,6 @@ void main() {
       _Harness(
         onPressed: (context) => exportSubtitleResourceFlow(
           context: context,
-          api: api,
           playerController: PlayerController(),
           resourceActions: _resourceActions(() => api),
           track: _track,

@@ -1,6 +1,7 @@
+import '../data/repositories/learning_repository.dart';
+import '../models/api_failure.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
 import 'learning_controller.dart';
 
 class LearningWordStatusUpdate {
@@ -10,19 +11,37 @@ class LearningWordStatusUpdate {
 }
 
 class LearningWorkflowController {
+  factory LearningWorkflowController({
+    LearningRepository repository = const UnavailableLearningRepository(),
+  }) => LearningWorkflowController._(repository);
+
+  LearningWorkflowController._(this._repository);
+
+  final LearningRepository _repository;
+
+  bool get hasRepository => _repository is! UnavailableLearningRepository;
+  bool get repositoryAvailable => _repository.isAvailable;
+
+  ApiFailure failureDetail(Object error) => _repository.failureDetail(error);
+
+  /// Returns an equivalent workflow with its data dependency injected.
+  /// Request generations intentionally start fresh because this is used only
+  /// while wiring the long-lived coordinator, before requests can begin.
+  LearningWorkflowController withRepository(LearningRepository repository) =>
+      LearningWorkflowController(repository: repository);
+
   int _diagnosisGeneration = 0;
   int _phraseCandidateGeneration = 0;
   int _openWordGeneration = 0;
 
   Future<void> loadPhraseCandidates({
-    required LocalApi? api,
     required Cue? cue,
     required LearningController learning,
     required bool Function() isMounted,
     required String? Function() currentCueId,
   }) async {
     final generation = ++_phraseCandidateGeneration;
-    if (api == null || cue == null) {
+    if (!_repository.isAvailable || cue == null) {
       if (isMounted()) learning.setPhraseCandidates(const []);
       return;
     }
@@ -31,7 +50,7 @@ class LearningWorkflowController {
           _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
         learning.setPhraseCandidates(const []);
       }
-      final candidates = await api.phraseCandidates(cue.id);
+      final candidates = await _repository.phraseCandidates(cue.id);
       if (isMounted() &&
           _isCurrentPhraseRequest(generation, cue.id, currentCueId())) {
         learning.setPhraseCandidates(candidates);
@@ -45,7 +64,6 @@ class LearningWorkflowController {
   }
 
   Future<void> loadWordEntries({
-    required LocalApi? api,
     required SubtitleTrack? track,
     required String language,
     required LearningController learning,
@@ -59,8 +77,8 @@ class LearningWorkflowController {
         .toList();
     // Background sync after a track or language change; a missing core or
     // track is not a user action, so silence is correct here.
-    if (lemmas == null || api == null) return;
-    final values = await api.readLexicalEntriesBatch(
+    if (lemmas == null || !_repository.isAvailable) return;
+    final values = await _repository.readWordEntries(
       lemmas,
       language: language,
     );
@@ -72,14 +90,13 @@ class LearningWorkflowController {
   }
 
   Future<void> loadPhraseEntries({
-    required LocalApi? api,
     required String language,
     required LearningController learning,
     required bool Function() isMounted,
   }) async {
     // Background sync path, mirroring [loadWordEntries]: silence is correct.
-    if (api == null) return;
-    final values = await api.lexicalEntries(kind: 'phrase', language: language);
+    if (!_repository.isAvailable) return;
+    final values = await _repository.readPhraseEntries(language: language);
     if (!isMounted()) return;
     final entries = Map<String, LexicalEntryDetails>.fromEntries(
       values.map((details) => MapEntry(details.entry.normalizedForm, details)),
@@ -88,7 +105,6 @@ class LearningWorkflowController {
   }
 
   Future<void> openWord({
-    required LocalApi? api,
     required SubtitleToken token,
     required Cue cue,
     required String language,
@@ -107,11 +123,11 @@ class LearningWorkflowController {
     }
     // User feedback for a missing core is owned by VocabularyActionsCoordinator,
     // which guards before delegating; this stays a pure workflow.
-    if (api == null) return;
+    if (!_repository.isAvailable) return;
     final source = sourceFor?.call(token, cue);
     var entry = learning.wordEntries[lemma];
     if (entry == null) {
-      final details = await api.upsertWordLexicalEntry(
+      final details = await _repository.upsertWord(
         lemma,
         token.text,
         null,
@@ -131,7 +147,7 @@ class LearningWorkflowController {
       // sentence can be missing from the panel until the word is reopened.
       if (source != null) {
         try {
-          await api.upsertWordLexicalEntry(
+          await _repository.upsertWord(
             lemma,
             token.text,
             null,
@@ -142,7 +158,7 @@ class LearningWorkflowController {
       }
       if (!_isCurrentOpenWord(generation, isMounted)) return;
       learning.selectWord(LexicalEntryDetails(entry: entry));
-      final details = await _loadExistingWordDetails(api, entry);
+      final details = await _loadExistingWordDetails(entry);
       if (!_isCurrentOpenWord(generation, isMounted)) return;
       entry = details.entry;
       learning.updateSingleWordEntry(lemma, entry);
@@ -153,14 +169,14 @@ class LearningWorkflowController {
     }
 
     final dictionary = await _tryLoad(
-      () => api.lookupDictionary(lemma, language: language),
+      () => _repository.lookupDictionary(lemma, language: language),
     );
     if (dictionary != null && _isCurrentOpenWord(generation, isMounted)) {
       learning.setSelectedDictionary(dictionary);
     }
 
     final pronunciation = await _tryLoad(
-      () => api.lookupPronunciation(token.text),
+      () => _repository.lookupPronunciation(token.text),
     );
     if (pronunciation != null && _isCurrentOpenWord(generation, isMounted)) {
       learning.setSelectedPronunciation(pronunciation);
@@ -168,7 +184,7 @@ class LearningWorkflowController {
 
     if (learning.languageProfileFor(language) != null) return;
     final languageProfile = await _tryLoad(
-      () => api.lookupLanguageProfile(language),
+      () => _repository.lookupLanguageProfile(language),
     );
     if (languageProfile != null && _isCurrentOpenWord(generation, isMounted)) {
       learning.setLanguageProfile(languageProfile);
@@ -179,11 +195,10 @@ class LearningWorkflowController {
       isMounted() && generation == _openWordGeneration;
 
   Future<LexicalEntryDetails> _loadExistingWordDetails(
-    LocalApi api,
     LexicalEntry entry,
   ) async {
     try {
-      return await api.lexicalEntryDetails(entry.id);
+      return await _repository.entryDetails(entry.id);
     } catch (_) {
       return LexicalEntryDetails(entry: entry);
     }
@@ -198,7 +213,6 @@ class LearningWorkflowController {
   }
 
   Future<LexicalEntryDetails?> markFirstWord({
-    required LocalApi? api,
     required Cue? cue,
     required String? wordStatus,
     required String language,
@@ -207,13 +221,13 @@ class LearningWorkflowController {
     required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
     sourceFor,
   }) async {
-    if (cue == null || api == null) return null;
+    if (cue == null || !_repository.isAvailable) return null;
     final tokens = cue.tokens
         .where((value) => value.kind == 'word' && value.normalized != null)
         .toList(growable: false);
     final token = tokens.isEmpty ? null : tokens.first;
     if (token == null) return null;
-    final details = await api.upsertWordLexicalEntry(
+    final details = await _repository.upsertWord(
       token.normalized!,
       token.text,
       wordStatus,
@@ -227,7 +241,6 @@ class LearningWorkflowController {
   }
 
   Future<LearningWordStatusUpdate?> setSelectedWordStatus({
-    required LocalApi? api,
     required String? selected,
     required String language,
     required LearningController learning,
@@ -237,8 +250,10 @@ class LearningWorkflowController {
   }) async {
     final token = learning.selectedToken;
     final cue = learning.selectedCue;
-    if (token?.normalized == null || cue == null || api == null) return null;
-    final details = await api.upsertWordLexicalEntry(
+    if (token?.normalized == null || cue == null || !_repository.isAvailable) {
+      return null;
+    }
+    final details = await _repository.upsertWord(
       token!.normalized!,
       token.text,
       selected,
@@ -252,7 +267,6 @@ class LearningWorkflowController {
   }
 
   Future<void> saveSelectedLearningContent({
-    required LocalApi? api,
     required String? definition,
     required String? note,
     required LearningController learning,
@@ -261,8 +275,8 @@ class LearningWorkflowController {
     final entry = learning.selectedLexicalDetails?.entry;
     // Missing-core feedback is owned by VocabularyActionsCoordinator; a null
     // entry means no word is selected, which the editor UI already gates.
-    if (entry == null || api == null) return;
-    final details = await api.updateLexicalLearningContent(
+    if (entry == null || !_repository.isAvailable) return;
+    final details = await _repository.updateLearningContent(
       entry.id,
       userDefinition: definition,
       personalNote: note,
@@ -271,7 +285,6 @@ class LearningWorkflowController {
   }
 
   Future<bool> observeSelected({
-    required LocalApi? api,
     required bool heard,
     required LearningController learning,
     required Map<String, dynamic>? Function(SubtitleToken token, Cue cue)
@@ -280,10 +293,13 @@ class LearningWorkflowController {
     final token = learning.selectedToken;
     final cue = learning.selectedCue;
     final entry = learning.selectedLexicalDetails?.entry;
-    if (token == null || cue == null || entry == null || api == null) {
+    if (token == null ||
+        cue == null ||
+        entry == null ||
+        !_repository.isAvailable) {
       return false;
     }
-    await api.createLexicalObservation(
+    await _repository.createObservation(
       lexicalEntryId: entry.id,
       sentenceId: cue.id,
       originalForm: token.text,
@@ -294,7 +310,6 @@ class LearningWorkflowController {
   }
 
   Future<void> setCapabilityOverride({
-    required LocalApi? api,
     required String capability,
     required String? conclusion,
     required LearningController learning,
@@ -304,8 +319,8 @@ class LearningWorkflowController {
     final entry = learning.selectedLexicalDetails?.entry;
     // Same ownership split as [saveSelectedLearningContent]: silence here,
     // feedback in the coordinator.
-    if (entry == null || api == null) return;
-    await api.setCapabilityOverride(
+    if (entry == null || !_repository.isAvailable) return;
+    await _repository.setCapabilityOverride(
       entry.id,
       capability,
       conclusion: conclusion,
@@ -320,7 +335,7 @@ class LearningWorkflowController {
           // below reflects it; wrapped so a failed occurrence write never
           // discards the capability override that already succeeded.
           try {
-            await api.upsertWordLexicalEntry(
+            await _repository.upsertWord(
               token.normalized!,
               token.text,
               null,
@@ -331,7 +346,7 @@ class LearningWorkflowController {
         }
       }
     }
-    final details = await api.lexicalEntryDetails(entry.id);
+    final details = await _repository.entryDetails(entry.id);
     if (!isMounted()) return;
     final lemma = entry.normalizedForm;
     learning.updateSingleWordEntry(lemma, details.entry);
@@ -365,7 +380,6 @@ class LearningWorkflowController {
   }
 
   Future<void> recordCurrentSource({
-    required LocalApi? api,
     required String language,
     required LearningController learning,
     required bool Function() isMounted,
@@ -376,10 +390,12 @@ class LearningWorkflowController {
     final cue = learning.selectedCue;
     // Same ownership split as [saveSelectedLearningContent]: silence here,
     // feedback in the coordinator.
-    if (token?.normalized == null || cue == null || api == null) return;
+    if (token?.normalized == null || cue == null || !_repository.isAvailable) {
+      return;
+    }
     final source = sourceFor(token!, cue);
     if (source == null) return;
-    final details = await api.upsertWordLexicalEntry(
+    final details = await _repository.upsertWord(
       token.normalized!,
       token.text,
       null,

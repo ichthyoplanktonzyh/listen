@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/extensive_listening_controller.dart';
+import 'package:llplayer_next/data/repositories/listening_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -52,8 +53,11 @@ void main() {
   testWidgets('the listening inbox row insets and leads with tokens', (
     tester,
   ) async {
-    final controller = ExtensiveListeningController();
-    await controller.refreshInbox(_inboxApi());
+    final api = _inboxApi();
+    final controller = ExtensiveListeningController(
+      repository: LocalListeningRepository(() => api),
+    );
+    await controller.refreshInbox();
 
     await tester.pumpWidget(
       _host(

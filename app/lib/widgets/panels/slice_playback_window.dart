@@ -41,7 +41,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
     final size = MediaQuery.sizeOf(context);
     final state = widget.controller.state;
     final wantsVideo =
-        state.showVideo && widget.controller.videoController != null;
+        state.showVideo && widget.controller.renderHandle != null;
     final width = math.min(560.0, math.max(320.0, size.width - 32));
     final targetHeight = wantsVideo ? 500.0 : 318.0;
     final height = math.min(targetHeight, math.max(270.0, size.height - 32));
@@ -147,7 +147,7 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
         ),
         const SizedBox(height: ListenSpacing.gap16),
         if (wantsVideo)
-          _videoSurface(widget.controller.videoController!)
+          _videoSurface(widget.controller.renderHandle!)
         else
           _audioSurface(),
       ],
@@ -181,13 +181,18 @@ class _SlicePlaybackWindowState extends State<SlicePlaybackWindow> {
     ),
   );
 
-  Widget _videoSurface(VideoPlayerController controller) => AspectRatio(
-    aspectRatio: controller.value.aspectRatio,
+  Widget _videoSurface(SlicePlaybackRenderHandle handle) => AspectRatio(
+    aspectRatio: handle.aspectRatio,
     child: ClipRRect(
       borderRadius: ListenRadii.surfaceBorder,
       child: ColoredBox(
         color: ListenColors.videoBackdrop,
-        child: VideoPlayer(controller),
+        child: switch (handle) {
+          VideoPlayerSliceRenderHandle(:final controller) => VideoPlayer(
+            controller,
+          ),
+          _ => const SizedBox.shrink(),
+        },
       ),
     ),
   );

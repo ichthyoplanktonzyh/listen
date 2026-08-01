@@ -5,10 +5,10 @@ import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../data/repositories/manual_review_repository.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../player_adapter.dart';
-import '../../services/api_service.dart';
 import '../panels/manual_timeline_review_dialog.dart';
 
 /// Opens the sentence-level manual word-timing review dialog for the active
@@ -18,7 +18,7 @@ import '../panels/manual_timeline_review_dialog.dart';
 /// flow invocation, so it is a local here rather than host state.
 Future<void> openManualReviewFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required ManualReviewRepository? repository,
   required DesktopPlayerAdapter adapter,
   required PlayerController playerController,
   required SubtitleController subtitleController,
@@ -26,11 +26,10 @@ Future<void> openManualReviewFlow({
   required MediaSessionCoordinator mediaSession,
 }) async {
   final l = AppLocalizations.of(context);
-  final service = api;
   final track = subtitleController.primaryTrack;
   // Unavailable State (CONTEXT.md): manual review is a user row action; each
   // missing prerequisite names its own recovery action.
-  if (service == null) {
+  if (repository == null) {
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
     return;
   }
@@ -62,7 +61,7 @@ Future<void> openManualReviewFlow({
     }
     playerController.setStatus(l.text('statusManualReviewSaving'));
     statusPristine = false;
-    await service.createTrackWordTimeline(trackId, draft.createPayload());
+    await repository.saveTimeline(trackId, draft.createPayload());
     if (!context.mounted) return;
     // Reload enhancements only while the reviewed track is still current;
     // the save itself succeeded either way, so the confirmation still shows.
@@ -90,7 +89,7 @@ Future<void> openManualReviewFlow({
       }
       return;
     }
-    final timeline = await service.wordTimeline(activeTimelineId);
+    final timeline = await repository.wordTimeline(activeTimelineId);
     final initialCue = _initialCue(subtitleController, track, timeline);
     if (initialCue == null) {
       if (context.mounted) {
@@ -127,7 +126,7 @@ Future<void> openManualReviewFlow({
       playerController.setStatus(
         l.text('statusManualReviewFailed'),
         error: true,
-        failure: describeApiFailure(error),
+        failure: repository.failureDetail(error),
       );
     }
   }

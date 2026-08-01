@@ -20,6 +20,11 @@ import 'package:llplayer_next/controllers/vocabulary_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/learning_workflow_controller.dart';
 import 'package:llplayer_next/controllers/writing_channel_coordinator.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
+import 'package:llplayer_next/data/repositories/reading_session_repository.dart';
+import 'package:llplayer_next/data/repositories/speaking_task_repository.dart';
+import 'package:llplayer_next/data/repositories/speaking_session_repository.dart';
+import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/content_channel.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -80,35 +85,30 @@ class _Harness {
   _Harness() {
     subtitle.setPrimaryTrack(_track());
     readingChannel.bind(
-      getApi: () => api,
       isMounted: () => true,
       openSlicePlayback: (_) async {},
       openWord: (_, _) async {},
     );
     writingChannel.bind(
-      getApi: () => api,
       isMounted: () => true,
       openSlicePlayback: (_) async {},
       closeOtherChannels: () async {
         speakingChannel.closeL1Check();
-        if (speakingActions.isOpen) await speakingActions.close(api);
+        if (speakingActions.isOpen) await speakingActions.close();
         await readingChannel.close();
       },
     );
     speakingChannel.bind(
-      getApi: () => api,
       isMounted: () => true,
       askPersonalExpressionAssessment: () async => null,
       onReturnToReview: () {},
       onReturnToPersonalExpression: () {},
     );
     channels.bind(
-      getApi: () => api,
       speakingAvailable: () => true,
-      openSpeaking: (service) async {
+      openSpeaking: () async {
         speakingEntryEvents.add('open-speaking-choice');
         await speakingActions.openRetelling(
-          service,
           fixedRubricPoints: const [],
           closeReading: readingChannel.close,
         );
@@ -131,10 +131,22 @@ class _Harness {
   final slicePlayer = SlicePlayerController();
   final auxiliaryAudio = AuxiliaryAudioController();
   final reading = ReadingController();
-  final readingTask = ReadingTaskController();
-  final readingDiff = ReadingDiffController();
-  final speakingTask = SpeakingTaskController();
-  final writingTask = WritingTaskController();
+  late final readingTaskRepository = LocalReadingTaskRepository(() => api);
+  late final readingTask = ReadingTaskController(
+    repository: readingTaskRepository,
+  );
+  late final readingDiff = ReadingDiffController(
+    repository: readingTaskRepository,
+  );
+  late final readingSessionRepository = LocalReadingSessionRepository(
+    () => api,
+  );
+  late final speakingTask = SpeakingTaskController(
+    repository: LocalSpeakingTaskRepository(() => api),
+  );
+  late final writingTask = WritingTaskController(
+    repository: LocalWritingTaskRepository(() => api),
+  );
   final List<String> speakingEntryEvents = [];
 
   late final vocabulary = VocabularyActionsCoordinator(
@@ -153,6 +165,7 @@ class _Harness {
     reading: reading,
     readingTask: readingTask,
     readingDiff: readingDiff,
+    repository: readingSessionRepository,
   );
 
   late final speakingActions = SpeakingActionsCoordinator(
@@ -174,6 +187,7 @@ class _Harness {
     readingTask: readingTask,
     learning: learning,
     player: player,
+    repository: LocalSpeakingSessionRepository(() => api),
   );
 
   late final writingChannel = WritingChannelCoordinator(
@@ -220,19 +234,16 @@ class _Harness {
           onChannelSelected: (channel) => channels.select(channel),
           immersiveStage: switch (channels.selected) {
             ContentChannel.writing => WritingChannelHost(
-              api: api,
               writingChannel: writingChannel,
               writingTaskController: writingTask,
             ),
             ContentChannel.speaking => SpeakingChannelHost(
-              api: api,
               speakingChannel: speakingChannel,
               speakingActions: speakingActions,
               speakingTaskController: speakingTask,
               readingTaskController: readingTask,
             ),
             ContentChannel.reading => ReadingChannelHost(
-              api: api,
               readingChannel: readingChannel,
               readingController: reading,
               readingTaskController: readingTask,

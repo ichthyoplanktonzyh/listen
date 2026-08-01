@@ -10,19 +10,22 @@ const _unset = Object();
 /// from playback: it anchors to a cue id (paragraph identity from the derived
 /// read model) and never follows the player (Phase 3.13).
 class ReadingState {
-  const ReadingState({
+  ReadingState({
     this.open = false,
     this.trackId,
-    this.paragraphs = const [],
+    List<ReadingParagraph> paragraphs = const [],
     this.anchorCueId,
     this.translationVisible = false,
-    this.translationByAnchor = const {},
-    this.slicePlayCounts = const {},
-  });
+    Map<String, String> translationByAnchor = const {},
+    Map<String, int> slicePlayCounts = const {},
+  }) : _paragraphs = List.unmodifiable(paragraphs),
+       _translationByAnchor = Map.unmodifiable(translationByAnchor),
+       _slicePlayCounts = Map.unmodifiable(slicePlayCounts);
 
   final bool open;
   final String? trackId;
-  final List<ReadingParagraph> paragraphs;
+  final List<ReadingParagraph> _paragraphs;
+  List<ReadingParagraph> get paragraphs => List.unmodifiable(_paragraphs);
 
   /// First cue id of the paragraph the reader is at (reading cursor).
   final String? anchorCueId;
@@ -34,12 +37,15 @@ class ReadingState {
 
   /// Paragraph anchor cue id → secondary-track text overlapping the
   /// paragraph's time range. Empty when no secondary track is loaded.
-  final Map<String, String> translationByAnchor;
+  final Map<String, String> _translationByAnchor;
+  Map<String, String> get translationByAnchor =>
+      Map.unmodifiable(_translationByAnchor);
 
   /// Paragraph anchor cue id → slice replays started while reading it.
   /// Feeds the honest `audio_play_count` condition on paragraph-task
   /// attempts; in-memory only, resets per reading session.
-  final Map<String, int> slicePlayCounts;
+  final Map<String, int> _slicePlayCounts;
+  Map<String, int> get slicePlayCounts => Map.unmodifiable(_slicePlayCounts);
 
   int get anchorParagraphIndex {
     if (anchorCueId == null) return 0;
@@ -71,7 +77,7 @@ class ReadingState {
 }
 
 class ReadingController extends ChangeNotifier {
-  ReadingController() : _store = Store(const ReadingState()) {
+  ReadingController() : _store = Store(ReadingState()) {
     _store.addListener(notifyListeners);
   }
 

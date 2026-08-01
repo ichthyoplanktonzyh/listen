@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/personal_expression_view_model.dart';
 import 'package:llplayer_next/data/repositories/personal_expression_repository.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/personal_expression.dart';
 
 SentencePatternAssetView _pattern(String id) => SentencePatternAssetView(
@@ -125,7 +126,11 @@ void main() {
 
   group('PersonalExpressionDetailViewModel', () {
     test('a failed detail load is named and can be retried', () async {
-      final repository = _FakeRepository()..detailFailure = StateError('down');
+      final repository = _FakeRepository()
+        ..detailFailure = const ApiFailure(
+          raw: 'down',
+          code: 'temporarily_unavailable',
+        );
       final viewModel = PersonalExpressionDetailViewModel(
         repository,
         pattern: _pattern('detail'),

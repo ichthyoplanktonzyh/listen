@@ -5,19 +5,19 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/coach_dashboard_repository.dart';
 import '../models/coach_dashboard.dart';
 import '../models/named_failure.dart';
-import '../services/api_service.dart' show describeApiFailure;
 import '../state/store.dart';
 
 @immutable
 class CoachEvidenceFeed {
-  const CoachEvidenceFeed({
-    this.items = const [],
+  CoachEvidenceFeed({
+    List<CoachEvidenceItem> items = const [],
     this.loading = false,
     this.failure,
     this.exhausted = false,
-  });
+  }) : _items = List.unmodifiable(items);
 
-  final List<CoachEvidenceItem> items;
+  final List<CoachEvidenceItem> _items;
+  List<CoachEvidenceItem> get items => List.unmodifiable(_items);
   final bool loading;
   final NamedFailure? failure;
   final bool exhausted;
@@ -25,24 +25,25 @@ class CoachEvidenceFeed {
 
 @immutable
 class CoachDashboardState {
-  const CoachDashboardState({
+  CoachDashboardState({
     this.dashboard,
     this.loading = false,
     this.error,
-    this.evidence = const {},
+    Map<String, CoachEvidenceFeed> evidence = const {},
     this.materialFailure,
-  });
+  }) : _evidence = Map.unmodifiable(evidence);
 
   final CoachDashboard? dashboard;
   final bool loading;
   final String? error;
-  final Map<String, CoachEvidenceFeed> evidence;
+  final Map<String, CoachEvidenceFeed> _evidence;
+  Map<String, CoachEvidenceFeed> get evidence => Map.unmodifiable(_evidence);
   final NamedFailure? materialFailure;
 }
 
 class CoachDashboardController extends ChangeNotifier {
   CoachDashboardController(this._repository)
-    : store = Store(const CoachDashboardState()) {
+    : store = Store(CoachDashboardState()) {
     store.addListener(notifyListeners);
   }
 
@@ -123,7 +124,9 @@ class CoachDashboardController extends ChangeNotifier {
           evidence: state.evidence,
           materialFailure: NamedFailure(
             'coachMaterialActionFailed',
-            detail: describeApiFailure(thrown),
+            detail: thrown is CoachDashboardRepositoryFailure
+                ? thrown.detail
+                : null,
           ),
         ),
       );
@@ -132,7 +135,7 @@ class CoachDashboardController extends ChangeNotifier {
   }
 
   Future<void> loadEvidencePage(String metricKey, {int pageSize = 5}) async {
-    final current = state.evidence[metricKey] ?? const CoachEvidenceFeed();
+    final current = state.evidence[metricKey] ?? CoachEvidenceFeed();
     if (current.loading || current.exhausted) return;
     final dashboardGeneration = _generation;
     final metricGeneration = (_evidenceGenerations[metricKey] ?? 0) + 1;
@@ -176,7 +179,9 @@ class CoachDashboardController extends ChangeNotifier {
           items: current.items,
           failure: NamedFailure(
             'coachEvidenceFailed',
-            detail: describeApiFailure(thrown),
+            detail: thrown is CoachDashboardRepositoryFailure
+                ? thrown.detail
+                : null,
           ),
         ),
       );

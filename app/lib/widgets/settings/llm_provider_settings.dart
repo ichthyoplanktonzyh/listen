@@ -4,7 +4,6 @@ import '../../controllers/provider_settings_view_models.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../models/llm_provider.dart';
-import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -20,10 +19,10 @@ import '../common/listen_loading.dart';
 /// says so explicitly so a configured provider is never mistaken for verified
 /// assistance.
 class LlmProviderSettings extends StatefulWidget {
-  const LlmProviderSettings({super.key, this.api, this.viewModel})
-    : assert(api != null || viewModel != null);
+  const LlmProviderSettings({super.key, this.repository, this.viewModel})
+    : assert(repository != null || viewModel != null);
 
-  final LocalApi? api;
+  final LlmProviderRepository? repository;
   final LlmProviderSettingsViewModel? viewModel;
 
   @override
@@ -47,8 +46,7 @@ class _LlmProviderSettingsState extends State<LlmProviderSettings> {
     super.initState();
     _ownsViewModel = widget.viewModel == null;
     _viewModel =
-        widget.viewModel ??
-        LlmProviderSettingsViewModel(LocalLlmProviderRepository(widget.api!));
+        widget.viewModel ?? LlmProviderSettingsViewModel(widget.repository!);
     _viewModel.load();
   }
 

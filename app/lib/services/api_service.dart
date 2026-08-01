@@ -14,6 +14,7 @@ import '../models/production_corpus.dart';
 import '../models/projection_review.dart';
 import '../models/reading.dart';
 import '../models/realtime_conversation.dart';
+import '../models/saved_vocabulary_count.dart';
 import '../models/runtime_resources.dart';
 import '../models/semantic_embedding.dart';
 import '../models/semantic_task.dart';
@@ -68,16 +69,6 @@ Future<String> computeOpenSubtitlesMovieHash(String path) async {
   }
 }
 
-/// Aggregate saved-vocabulary total for the home readiness surface. [capped]
-/// signals that at least one status page hit the backend limit, so [total]
-/// under-reports very large collections.
-class SavedVocabularyCount {
-  const SavedVocabularyCount({required this.total, required this.capped});
-
-  final int total;
-  final bool capped;
-}
-
 /// Raw HTTP exchange result used by the [LocalApi] transport seam.
 typedef ApiResponse = ({int statusCode, String body});
 
@@ -94,7 +85,9 @@ typedef ApiResponse = ({int statusCode, String body});
 ///
 /// Lives here rather than in `models/` because recognising `HttpException` is
 /// transport knowledge; [ApiFailure.parse] itself stays a pure body parser.
-ApiFailure describeApiFailure(Object error) => error is HttpException
+ApiFailure describeApiFailure(Object error) => error is ApiFailure
+    ? error
+    : error is HttpException
     ? ApiFailure.parse(error.message)
     : ApiFailure(raw: '$error');
 

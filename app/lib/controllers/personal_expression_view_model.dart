@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/personal_expression_repository.dart';
 import '../models/api_failure.dart';
 import '../models/personal_expression.dart';
-import '../services/api_service.dart' show describeApiFailure;
 
 PersonalExpressionAttemptView? _latestWriting(
   List<PersonalExpressionAttemptView> attempts,
@@ -96,9 +95,9 @@ class PersonalExpressionViewModel extends ChangeNotifier {
         for (final entry in entries)
           if (entry.value != null) entry.key: entry.value!,
       };
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed || generation != _generation) return;
-      _failure = describeApiFailure(error);
+      _failure = failure;
     } finally {
       if (!_disposed && generation == _generation) {
         _loading = false;
@@ -185,9 +184,9 @@ class PersonalExpressionDetailViewModel extends ChangeNotifier {
       if (_disposed || generation != _generation) return;
       _attempts = values[0] as List<PersonalExpressionAttemptView>;
       _versions = values[1] as List<SentencePatternVersionView>;
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed || generation != _generation) return;
-      _failure = describeApiFailure(error);
+      _failure = failure;
     } finally {
       if (!_disposed && generation == _generation) {
         _loading = false;

@@ -6,6 +6,8 @@ import 'package:llplayer_next/controllers/hunting_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/hunting_session_controller.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
+import 'package:llplayer_next/data/repositories/listening_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 /// Localization stub: returns templates carrying the placeholders the
@@ -61,21 +63,21 @@ LocalApi _fakeApi(_Handler handler) => LocalApi.withTransport(
   ExtensiveListeningController extensive,
 })
 _wire({LocalApi? Function()? getApi, bool Function()? isMounted}) {
+  final apiProvider = getApi ?? () => null;
+  final huntingRepository = LocalHuntingRepository(apiProvider);
   final player = PlayerController();
-  final hunting = HuntingSessionController();
-  final extensive = ExtensiveListeningController();
+  final hunting = HuntingSessionController(repository: huntingRepository);
+  final extensive = ExtensiveListeningController(
+    repository: LocalListeningRepository(apiProvider),
+  );
   final subtitle = SubtitleController();
-  final coordinator =
-      HuntingActionsCoordinator(
-        huntingSession: hunting,
-        player: player,
-        extensiveListening: extensive,
-        subtitle: subtitle,
-      )..bind(
-        getApi: getApi ?? () => null,
-        isMounted: isMounted ?? () => true,
-        text: _text,
-      );
+  final coordinator = HuntingActionsCoordinator(
+    huntingSession: hunting,
+    player: player,
+    extensiveListening: extensive,
+    subtitle: subtitle,
+    repository: huntingRepository,
+  )..bind(isMounted: isMounted ?? () => true, text: _text);
   return (
     coordinator: coordinator,
     player: player,
@@ -161,7 +163,6 @@ void main() {
     // Bring the session into the enabled state directly.
     expect(
       await w.hunting.start(
-        api: api,
         sessionId: 'session-1',
         mediaId: 'media-1',
         trackId: 'track-1',

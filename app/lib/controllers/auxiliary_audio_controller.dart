@@ -1,51 +1,22 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:video_player/video_player.dart';
 
+import '../data/repositories/speech_synthesis_repository.dart';
 import '../models/speech_synthesis.dart';
-import '../services/api_service.dart';
-
-abstract interface class AuxiliaryAudioPlayer {
-  Future<void> initialize();
-  Future<void> play();
-  Future<void> pause();
-  Future<void> dispose();
-}
-
-typedef AuxiliaryAudioPlayerFactory =
-    AuxiliaryAudioPlayer Function(Uri source, bool local);
-
-class _VideoAuxiliaryAudioPlayer implements AuxiliaryAudioPlayer {
-  _VideoAuxiliaryAudioPlayer(Uri source, bool local)
-    : _controller = local
-          ? VideoPlayerController.file(File.fromUri(source))
-          : VideoPlayerController.networkUrl(source);
-
-  final VideoPlayerController _controller;
-
-  @override
-  Future<void> initialize() => _controller.initialize();
-
-  @override
-  Future<void> play() => _controller.play();
-
-  @override
-  Future<void> pause() => _controller.pause();
-
-  @override
-  Future<void> dispose() => _controller.dispose();
-}
+import '../services/auxiliary_audio_player.dart';
 
 /// Owns short auxiliary audio from dictionary providers and speech synthesis.
 /// It is intentionally independent of any one surface; callers supply the
 /// surrounding audio-focus action immediately before playback starts.
 class AuxiliaryAudioController extends ChangeNotifier {
-  AuxiliaryAudioController({AuxiliaryAudioPlayerFactory? playerFactory})
-    : _playerFactory = playerFactory ?? _VideoAuxiliaryAudioPlayer.new;
+  AuxiliaryAudioController({
+    this.speechRepository = const UnavailableSpeechSynthesisRepository(),
+    this.playbackService = const VideoAuxiliaryAudioPlaybackService(),
+  });
 
-  final AuxiliaryAudioPlayerFactory _playerFactory;
+  final SpeechSynthesisRepository speechRepository;
+  final AuxiliaryAudioPlaybackService playbackService;
   AuxiliaryAudioPlayer? _player;
   int _generation = 0;
   bool _busy = false;
@@ -60,15 +31,13 @@ class AuxiliaryAudioController extends ChangeNotifier {
     String url, {
     required Future<void> Function() acquireAudioFocus,
   }) => _play(
-    Uri.parse(url),
-    local: false,
+    remoteSource: Uri.parse(url),
     acquireAudioFocus: acquireAudioFocus,
     syntheticAsset: null,
   );
 
   Future<SpeechSynthesisAssetView?> speak(
-    LocalApi api, {
-    required String text,
+    String text, {
     required String language,
     required String purpose,
     required Future<void> Function() acquireAudioFocus,
@@ -77,15 +46,14 @@ class AuxiliaryAudioController extends ChangeNotifier {
     _setBusy(true);
     _error = null;
     try {
-      final asset = await api.synthesizeSpeech(
+      final asset = await speechRepository.synthesize(
         text: text,
         language: language,
         purpose: purpose,
       );
       if (generation != _generation) return null;
       final played = await _play(
-        File(asset.audioPath).uri,
-        local: true,
+        localPath: asset.audioPath,
         acquireAudioFocus: acquireAudioFocus,
         syntheticAsset: asset,
         generation: generation,
@@ -102,9 +70,9 @@ class AuxiliaryAudioController extends ChangeNotifier {
     }
   }
 
-  Future<bool> _play(
-    Uri source, {
-    required bool local,
+  Future<bool> _play({
+    Uri? remoteSource,
+    String? localPath,
     required Future<void> Function() acquireAudioFocus,
     required SpeechSynthesisAssetView? syntheticAsset,
     int? generation,
@@ -120,7 +88,9 @@ class AuxiliaryAudioController extends ChangeNotifier {
       await previous?.pause();
       await previous?.dispose();
       if (currentGeneration != _generation) return false;
-      final next = _playerFactory(source, local);
+      final next = localPath == null
+          ? playbackService.createRemote(remoteSource!)
+          : playbackService.createLocalFile(localPath);
       _player = next;
       await next.initialize();
       if (currentGeneration != _generation) {

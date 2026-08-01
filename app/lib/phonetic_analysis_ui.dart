@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'localization.dart';
+import 'data/repositories/phonetic_analysis_repository.dart';
 import 'models/named_failure.dart';
 import 'models/runtime_resources.dart';
-import 'services/api_service.dart';
 import 'theme/icon_size.dart';
 import 'theme/radii.dart';
 import 'theme/spacing.dart';
@@ -16,22 +16,9 @@ import 'widgets/common/listen_error_state.dart';
 import 'widgets/common/listen_loading.dart';
 
 class PhoneticAnalysisCenter extends StatefulWidget {
-  const PhoneticAnalysisCenter({
-    this.api,
-    this.loadProviders,
-    this.loadModels,
-    this.loadJobs,
-    this.cancelJob,
-    this.retryJob,
-    super.key,
-  });
+  const PhoneticAnalysisCenter({required this.repository, super.key});
 
-  final LocalApi? api;
-  final Future<List<PhoneticProviderView>> Function()? loadProviders;
-  final Future<List<PhoneticModelView>> Function()? loadModels;
-  final Future<List<PhoneticJobView>> Function()? loadJobs;
-  final Future<PhoneticJobView> Function(String id)? cancelJob;
-  final Future<PhoneticJobView> Function(String id)? retryJob;
+  final PhoneticAnalysisRepository repository;
 
   @override
   State<PhoneticAnalysisCenter> createState() => _PhoneticAnalysisCenterState();
@@ -78,14 +65,9 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Future<void> _refresh() async {
     try {
-      final providerValues =
-          await (widget.loadProviders?.call() ??
-              widget.api!.phoneticAnalysisProviders());
-      final modelValues =
-          await (widget.loadModels?.call() ??
-              widget.api!.phoneticAnalysisModels());
-      final jobValues =
-          await (widget.loadJobs?.call() ?? widget.api!.phoneticAnalysisJobs());
+      final providerValues = await widget.repository.providers();
+      final modelValues = await widget.repository.models();
+      final jobValues = await widget.repository.jobs();
       if (!mounted) return;
       final hadActive = _hasActiveJobs;
       setState(() {
@@ -100,7 +82,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       setState(
         () => failure = NamedFailure(
           'phoneticAnalysisLoadFailed',
-          detail: describeApiFailure(error),
+          detail: widget.repository.failureDetail(error),
         ),
       );
     }
@@ -188,14 +170,14 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
 
   Future<void> _installModel(String modelId) async {
     try {
-      await (widget.api?.installPhoneticAnalysisModel(modelId));
+      await widget.repository.installModel(modelId);
       await _refresh();
     } catch (error) {
       if (!mounted) return;
       setState(
         () => failure = NamedFailure(
           'phoneticModelInstallFailed',
-          detail: describeApiFailure(error),
+          detail: widget.repository.failureDetail(error),
         ),
       );
     }
@@ -477,8 +459,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       return IconButton(
         tooltip: l.text('cancel'),
         onPressed: () async {
-          await (widget.cancelJob?.call(id) ??
-              widget.api!.cancelPhoneticAnalysisJob(id));
+          await widget.repository.cancelJob(id);
           await _refresh();
         },
         icon: const Icon(Icons.stop_circle_outlined),
@@ -492,8 +473,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
             IconButton(
               tooltip: l.text('retry'),
               onPressed: () async {
-                await (widget.retryJob?.call(id) ??
-                    widget.api!.retryPhoneticAnalysisJob(id));
+                await widget.repository.retryJob(id);
                 await _refresh();
               },
               icon: const Icon(Icons.refresh, size: ListenIconSize.control),
@@ -537,7 +517,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       ),
     );
     if (confirmed == true) {
-      await widget.api?.deletePhoneticAnalysisJob(id);
+      await widget.repository.deleteJob(id);
       await _refresh();
     }
   }
@@ -564,7 +544,7 @@ class _PhoneticAnalysisCenterState extends State<PhoneticAnalysisCenter> {
       ),
     );
     if (confirmed == true) {
-      await widget.api?.clearTerminalPhoneticAnalysisJobs();
+      await widget.repository.clearTerminalJobs();
       await _refresh();
     }
   }

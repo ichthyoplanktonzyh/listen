@@ -1,22 +1,26 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/hunting_repository.dart';
+import '../models/named_failure.dart';
 import '../models/practice.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
 import '../state/store.dart';
 
 class HuntingState {
-  const HuntingState({
-    this.targets = const [],
-    this.candidates = const [],
+  HuntingState({
+    List<HuntingTarget> targets = const [],
+    List<HuntingCandidate> candidates = const [],
     this.busy = false,
     this.error,
-  });
+  }) : _targets = List.unmodifiable(targets),
+       _candidates = List.unmodifiable(candidates);
 
-  final List<HuntingTarget> targets;
-  final List<HuntingCandidate> candidates;
+  final List<HuntingTarget> _targets;
+  List<HuntingTarget> get targets => List.unmodifiable(_targets);
+  final List<HuntingCandidate> _candidates;
+  List<HuntingCandidate> get candidates => List.unmodifiable(_candidates);
   final bool busy;
-  final String? error;
+  final NamedFailure? error;
 
   bool containsLexicalEntry(String id) =>
       targets.any((target) => target.lexicalEntryId == id);
@@ -25,7 +29,7 @@ class HuntingState {
     List<HuntingTarget>? targets,
     List<HuntingCandidate>? candidates,
     bool? busy,
-    String? error,
+    NamedFailure? error,
     bool clearError = false,
   }) => HuntingState(
     targets: targets ?? this.targets,
@@ -36,44 +40,51 @@ class HuntingState {
 }
 
 class HuntingController extends ChangeNotifier {
-  HuntingController() : _store = Store(const HuntingState()) {
+  factory HuntingController({
+    HuntingRepository repository = const UnavailableHuntingRepository(),
+  }) => HuntingController._(repository);
+
+  HuntingController._(this._repository) : _store = Store(HuntingState()) {
     _store.addListener(notifyListeners);
   }
 
   final Store<HuntingState> _store;
+  final HuntingRepository _repository;
 
   Store<HuntingState> get store => _store;
   HuntingState get state => _store.state;
 
-  Future<bool> load(LocalApi api) async {
+  Future<bool> load() async {
     _store.update((state) => state.copyWith(busy: true, clearError: true));
     try {
-      final targets = await api.huntingTargets();
-      final candidates = await api.huntingCandidates();
+      final targets = await _repository.targets();
+      final candidates = await _repository.candidates();
       _store.replace(HuntingState(targets: targets, candidates: candidates));
       return true;
     } catch (error) {
       _store.update(
-        (state) =>
-            state.copyWith(busy: false, error: 'Could not load hunting list'),
+        (state) => state.copyWith(
+          busy: false,
+          error: NamedFailure(
+            'huntingLoadFailed',
+            detail: huntingFailureDetail(error),
+          ),
+        ),
       );
       return false;
     }
   }
 
-  Future<bool> addManual(LocalApi api, LexicalEntry entry) =>
-      _create(api, lexicalEntryId: entry.id, sourceKind: 'manual');
+  Future<bool> addManual(LexicalEntry entry) =>
+      _create(lexicalEntryId: entry.id, sourceKind: 'manual');
 
-  Future<bool> promoteCandidate(LocalApi api, HuntingCandidate candidate) =>
-      _create(
-        api,
-        lexicalEntryId: candidate.lexicalEntryId,
-        sourceKind: 'review_candidate',
-        sourceId: candidate.id,
-      );
+  Future<bool> promoteCandidate(HuntingCandidate candidate) => _create(
+    lexicalEntryId: candidate.lexicalEntryId,
+    sourceKind: 'review_candidate',
+    sourceId: candidate.id,
+  );
 
-  Future<bool> _create(
-    LocalApi api, {
+  Future<bool> _create({
     required String lexicalEntryId,
     required String sourceKind,
     String? sourceId,
@@ -81,7 +92,7 @@ class HuntingController extends ChangeNotifier {
     if (state.busy || state.containsLexicalEntry(lexicalEntryId)) return false;
     _store.update((state) => state.copyWith(busy: true, clearError: true));
     try {
-      final target = await api.createHuntingTarget(
+      final target = await _repository.createTarget(
         lexicalEntryId: lexicalEntryId,
         sourceKind: sourceKind,
         sourceId: sourceId,
@@ -100,18 +111,23 @@ class HuntingController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) =>
-            state.copyWith(busy: false, error: 'Could not update hunting list'),
+        (state) => state.copyWith(
+          busy: false,
+          error: NamedFailure(
+            'huntingUpdateFailed',
+            detail: huntingFailureDetail(error),
+          ),
+        ),
       );
       return false;
     }
   }
 
-  Future<bool> archive(LocalApi api, HuntingTarget target) async {
+  Future<bool> archive(HuntingTarget target) async {
     if (state.busy) return false;
     _store.update((state) => state.copyWith(busy: true, clearError: true));
     try {
-      await api.archiveHuntingTarget(target.id);
+      await _repository.archiveTarget(target.id);
       _store.update(
         (state) => state.copyWith(
           busy: false,
@@ -123,8 +139,13 @@ class HuntingController extends ChangeNotifier {
       return true;
     } catch (error) {
       _store.update(
-        (state) =>
-            state.copyWith(busy: false, error: 'Could not update hunting list'),
+        (state) => state.copyWith(
+          busy: false,
+          error: NamedFailure(
+            'huntingUpdateFailed',
+            detail: huntingFailureDetail(error),
+          ),
+        ),
       );
       return false;
     }

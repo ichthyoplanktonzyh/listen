@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/download_controller.dart';
 import 'package:llplayer_next/models/api_failure.dart';
-import 'package:llplayer_next/widgets/player/download_status_bar.dart';
 
 void main() {
   group('DownloadController', () {

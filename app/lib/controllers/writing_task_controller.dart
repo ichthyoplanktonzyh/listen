@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/writing_task_repository.dart';
 import '../models/semantic_task.dart';
-import '../services/api_service.dart';
 import '../state/store.dart';
 
 const _unset = Object();
@@ -31,7 +31,7 @@ class WritingTaskSource {
 }
 
 class WritingTaskState {
-  const WritingTaskState({
+  WritingTaskState({
     this.phase = 'idle',
     this.kind = WritingTaskController.summaryKind,
     this.promptSnapshot = '',
@@ -41,15 +41,17 @@ class WritingTaskState {
     this.revisionDraft = '',
     this.initialAttempt,
     this.revisedAttempt,
-    this.findings = const [],
-    this.decisions = const {},
+    List<WritingFeedbackFindingView> findings = const [],
+    Map<String, String> decisions = const {},
     this.feedbackProviderId,
     this.llmFeedback,
-    this.pastAttempts = const [],
+    List<SemanticAttemptView> pastAttempts = const [],
     this.pastAttemptCount = 0,
     this.busy = false,
     this.error,
-  });
+  }) : _findings = List.unmodifiable(findings),
+       _decisions = Map.unmodifiable(decisions),
+       _pastAttempts = List.unmodifiable(pastAttempts);
 
   /// idle | drafting | submitted | revising | done
   final String phase;
@@ -61,11 +63,13 @@ class WritingTaskState {
   final String revisionDraft;
   final SemanticAttemptView? initialAttempt;
   final SemanticAttemptView? revisedAttempt;
-  final List<WritingFeedbackFindingView> findings;
+  final List<WritingFeedbackFindingView> _findings;
+  List<WritingFeedbackFindingView> get findings => List.unmodifiable(_findings);
 
   /// finding id → accepted/rejected. Acceptance is persisted only after the
   /// learner submits the revised text; provider text is never applied here.
-  final Map<String, String> decisions;
+  final Map<String, String> _decisions;
+  Map<String, String> get decisions => Map.unmodifiable(_decisions);
 
   /// Optional teacher-style free-text LLM feedback (issue #9), distinct from
   /// the Harper surface findings. The provider sees the full source context
@@ -73,7 +77,9 @@ class WritingTaskState {
   /// is written.
   final String? feedbackProviderId;
   final String? llmFeedback;
-  final List<SemanticAttemptView> pastAttempts;
+  final List<SemanticAttemptView> _pastAttempts;
+  List<SemanticAttemptView> get pastAttempts =>
+      List.unmodifiable(_pastAttempts);
   final int pastAttemptCount;
   final bool busy;
   final String? error;
@@ -133,7 +139,11 @@ class WritingTaskState {
 /// revision-bound feedback, and explicit learner dispositions only. It has no
 /// learning-observation or capability-projection dependency.
 class WritingTaskController extends ChangeNotifier {
-  WritingTaskController() : _store = Store(const WritingTaskState()) {
+  WritingTaskController({required WritingTaskRepository repository})
+    // Keep the dependency private behind the ViewModel boundary.
+    // ignore: prefer_initializing_formals
+    : _repository = repository,
+      _store = Store(WritingTaskState()) {
     _store.addListener(notifyListeners);
   }
 
@@ -142,17 +152,17 @@ class WritingTaskController extends ChangeNotifier {
   static const opinionKind = 'opinion_response';
   static const dictoglossKind = 'dictogloss';
 
+  final WritingTaskRepository _repository;
   final Store<WritingTaskState> _store;
   final Map<String, String> _drafts = {};
-  LocalApi? _api;
   Timer? _draftSaveTimer;
   int _startedAtMs = 0;
 
   Store<WritingTaskState> get store => _store;
   WritingTaskState get state => _store.state;
+  bool get repositoryAvailable => _repository.isAvailable;
 
-  Future<void> openTask(
-    LocalApi api, {
+  Future<void> openTask({
     required WritingTaskSource source,
     required String kind,
     required String promptSnapshot,
@@ -160,7 +170,6 @@ class WritingTaskController extends ChangeNotifier {
   }) async {
     _draftSaveTimer?.cancel();
     await _persistDraft();
-    _api = api;
     final key = _draftKey(source, kind, promptSnapshot);
     _startedAtMs = DateTime.now().millisecondsSinceEpoch;
     _store.replace(
@@ -174,33 +183,22 @@ class WritingTaskController extends ChangeNotifier {
       ),
     );
     try {
-      var rubric = await _lookup(api, source, kind);
-      if (rubric == null) {
-        try {
-          rubric = await api.createSemanticRubric(
-            purpose: kind,
-            source: RubricSourceView(
-              mediaId: source.mediaId,
-              trackId: source.trackId,
-              startMs: source.startMs,
-              endMs: source.endMs,
-              language: source.sourceLanguage,
-              transcriptSnapshot: source.transcriptSnapshot,
-            ),
-            responseLanguage: source.responseLanguage,
-            points: fixedRubricPoints,
-            provenance: const SemanticProvenanceView(
-              kind: 'manual',
-              detail: 'writing studio fixed task rubric',
-            ),
-          );
-        } catch (_) {
-          rubric = await _lookup(api, source, kind);
-          if (rubric == null) rethrow;
-        }
-      }
-      final attempts = await api.semanticRubricAttempts(rubric.id);
-      final durableDraft = await api.writingDraft(rubric.id);
+      final opened = await _repository.openTask(
+        purpose: kind,
+        source: RubricSourceView(
+          mediaId: source.mediaId,
+          trackId: source.trackId,
+          startMs: source.startMs,
+          endMs: source.endMs,
+          language: source.sourceLanguage,
+          transcriptSnapshot: source.transcriptSnapshot,
+        ),
+        responseLanguage: source.responseLanguage,
+        points: fixedRubricPoints,
+      );
+      final rubric = opened.rubric;
+      final attempts = opened.attempts;
+      final durableDraft = opened.draft;
       var latestSubmissionMs = 0;
       for (final attempt in attempts) {
         final endedAt = attempt.endedAtMs ?? attempt.startedAtMs;
@@ -245,14 +243,14 @@ class WritingTaskController extends ChangeNotifier {
     }
   }
 
-  Future<void> submitDraft(LocalApi api, {int? audioPlayCount}) async {
+  Future<void> submitDraft({int? audioPlayCount}) async {
     final source = state.source;
     final rubric = state.rubric;
     final text = state.draft.trim();
     if (source == null || rubric == null || text.isEmpty) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final attempt = await api.createWritingAttempt(
+      final submission = await _repository.submitDraft(
         kind: state.kind,
         target: _target(source),
         rubricId: rubric.id,
@@ -262,19 +260,14 @@ class WritingTaskController extends ChangeNotifier {
             ? (audioPlayCount ?? 0)
             : null,
         promptSnapshot: state.promptSnapshot,
-        revisions: [text],
+        transcript: text,
         responseLanguage: source.responseLanguage,
         startedAtMs: _startedAtMs,
         endedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
+      final attempt = submission.attempt;
       _drafts.remove(_draftKey(source, state.kind, state.promptSnapshot));
       _draftSaveTimer?.cancel();
-      try {
-        await api.deleteWritingDraft(rubric.id);
-      } catch (_) {
-        // The immutable attempt is authoritative. A stale scratch row is
-        // harmless and will be replaced by the next deliberate edit.
-      }
       _store.update(
         (s) => s.copyWith(
           phase: 'submitted',
@@ -287,7 +280,7 @@ class WritingTaskController extends ChangeNotifier {
       // Resolve the (optional) feedback provider now that an attempt exists —
       // the assist entry only appears once there is something to comment on,
       // and the task flow never depends on any provider.
-      final providerId = await api.preferredLlmProviderId('semantic_judgment');
+      final providerId = submission.feedbackProviderId;
       if (providerId != null && state.feedbackProviderId != providerId) {
         _store.update((s) => s.copyWith(feedbackProviderId: providerId));
       }
@@ -304,15 +297,15 @@ class WritingTaskController extends ChangeNotifier {
   /// transcript, task prompt, and learner text; the reply is ephemeral assist
   /// — nothing is stored, and on any provider failure only the error
   /// surfaces.
-  Future<void> requestLlmFeedback(LocalApi api) async {
+  Future<void> requestLlmFeedback() async {
     final attempt = state.revisedAttempt ?? state.initialAttempt;
     final providerId = state.feedbackProviderId;
     if (attempt == null || providerId == null) return;
     final response = attempt.responses.last;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final feedback = await api.feedbackViaLlmProvider(
-        providerId,
+      final feedback = await _repository.requestLlmFeedback(
+        providerId: providerId,
         attemptId: attempt.id,
         responseRevision: response.revision,
       );
@@ -327,12 +320,15 @@ class WritingTaskController extends ChangeNotifier {
     }
   }
 
-  Future<void> requestLocalFeedback(LocalApi api) async {
+  Future<void> requestLocalFeedback() async {
     final attempt = state.initialAttempt;
     if (attempt == null) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final findings = await api.generateLocalWritingFindings(attempt.id, 1);
+      final findings = await _repository.requestLocalFeedback(
+        attemptId: attempt.id,
+        responseRevision: 1,
+      );
       _store.update(
         (s) => s.copyWith(
           phase: 'revising',
@@ -368,7 +364,7 @@ class WritingTaskController extends ChangeNotifier {
     );
   }
 
-  Future<void> submitRevision(LocalApi api, {int? audioPlayCount}) async {
+  Future<void> submitRevision({int? audioPlayCount}) async {
     final source = state.source;
     final rubric = state.rubric;
     final original = state.draft.trim();
@@ -382,7 +378,7 @@ class WritingTaskController extends ChangeNotifier {
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
-      final attempt = await api.createWritingAttempt(
+      final attempt = await _repository.submitRevision(
         kind: state.kind,
         target: _target(source),
         rubricId: rubric.id,
@@ -392,21 +388,14 @@ class WritingTaskController extends ChangeNotifier {
             ? (audioPlayCount ?? 0)
             : null,
         promptSnapshot: state.promptSnapshot,
-        revisions: [original, revised],
+        original: original,
+        revised: revised,
         responseLanguage: source.responseLanguage,
         startedAtMs: now,
         endedAtMs: now + 1,
+        decisions: state.decisions,
+        findings: state.findings,
       );
-      for (final finding in state.findings) {
-        final decision = state.decisions[finding.id];
-        if (decision == null) continue;
-        await api.createWritingDisposition(
-          findingId: finding.id,
-          decision: decision,
-          resultingAttemptId: decision == 'accepted' ? attempt.id : null,
-          resultingRevision: decision == 'accepted' ? 2 : null,
-        );
-      }
       // Any earlier LLM feedback cited the initial attempt's revision; the
       // revised attempt gets a fresh, honest request instead of a carry-over.
       _store.update(
@@ -430,21 +419,17 @@ class WritingTaskController extends ChangeNotifier {
   void closeTask() {
     _draftSaveTimer?.cancel();
     unawaited(_persistDraft());
-    _store.replace(const WritingTaskState());
+    _store.replace(WritingTaskState());
   }
 
   Future<void> _persistDraft() async {
-    final api = _api;
     final rubric = state.rubric;
     final transcript = state.draft.trim();
-    if (api == null ||
-        rubric == null ||
-        transcript.isEmpty ||
-        state.phase != 'drafting') {
+    if (rubric == null || transcript.isEmpty || state.phase != 'drafting') {
       return;
     }
     try {
-      await api.saveWritingDraft(
+      await _repository.saveDraft(
         rubricId: rubric.id,
         promptSnapshot: state.promptSnapshot,
         transcript: transcript,
@@ -460,19 +445,6 @@ class WritingTaskController extends ChangeNotifier {
     _draftSaveTimer?.cancel();
     super.dispose();
   }
-
-  Future<SemanticRubricView?> _lookup(
-    LocalApi api,
-    WritingTaskSource source,
-    String kind,
-  ) => api.lookupSemanticRubric(
-    mediaId: source.mediaId,
-    startMs: source.startMs,
-    endMs: source.endMs,
-    purpose: kind,
-    responseLanguage: source.responseLanguage,
-    transcriptSnapshot: source.transcriptSnapshot,
-  );
 
   Map<String, dynamic> _target(WritingTaskSource source) => {
     'kind': 'segment',

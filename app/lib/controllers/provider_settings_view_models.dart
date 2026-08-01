@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/repositories/settings_repository.dart';
+import '../models/api_failure.dart';
 import '../models/llm_provider.dart';
 import '../models/named_failure.dart';
 import '../models/realtime_conversation.dart';
 import '../models/syntax_capability.dart';
-import '../services/api_service.dart' show describeApiFailure;
 
 enum LlmProbeStatus { probing, supported, unsupported, failed }
 
@@ -24,7 +24,7 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
   bool _disposed = false;
   int _loadGeneration = 0;
 
-  List<LlmProviderProfileView> get providers => _providers;
+  List<LlmProviderProfileView> get providers => List.unmodifiable(_providers);
   bool get loading => _loading;
   bool get submitting => _submitting;
   NamedFailure? get failure => _failure;
@@ -41,12 +41,9 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
       final providers = await _repository.list();
       if (_disposed || generation != _loadGeneration) return;
       _providers = List.unmodifiable(providers);
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed || generation != _loadGeneration) return;
-      _failure = NamedFailure(
-        'llmProvidersLoadFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('llmProvidersLoadFailed', detail: failure);
     } finally {
       if (!_disposed && generation == _loadGeneration) {
         _loading = false;
@@ -65,12 +62,9 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
       if (_disposed) return false;
       await load();
       return true;
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed) return false;
-      _failure = NamedFailure(
-        'llmProviderSaveFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('llmProviderSaveFailed', detail: failure);
       return false;
     } finally {
       if (!_disposed) {
@@ -88,12 +82,9 @@ class LlmProviderSettingsViewModel extends ChangeNotifier {
       await _repository.delete(id);
       if (_disposed) return;
       await load();
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed) return;
-      _failure = NamedFailure(
-        'llmProviderRemoveFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('llmProviderRemoveFailed', detail: failure);
     } finally {
       _deletingIds.remove(id);
       _notify();
@@ -139,7 +130,8 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
   bool _disposed = false;
   int _loadGeneration = 0;
 
-  List<RealtimeProviderProfileView> get profiles => _profiles;
+  List<RealtimeProviderProfileView> get profiles =>
+      List.unmodifiable(_profiles);
   bool get loading => _loading;
   bool get submitting => _submitting;
   NamedFailure? get failure => _failure;
@@ -154,12 +146,9 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
       final profiles = await _repository.list();
       if (_disposed || generation != _loadGeneration) return;
       _profiles = List.unmodifiable(profiles);
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed || generation != _loadGeneration) return;
-      _failure = NamedFailure(
-        'realtimeProvidersLoadFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('realtimeProvidersLoadFailed', detail: failure);
     } finally {
       if (!_disposed && generation == _loadGeneration) {
         _loading = false;
@@ -178,12 +167,9 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
       if (_disposed) return false;
       await load();
       return true;
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed) return false;
-      _failure = NamedFailure(
-        'realtimeProviderSaveFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('realtimeProviderSaveFailed', detail: failure);
       return false;
     } finally {
       if (!_disposed) {
@@ -201,12 +187,9 @@ class RealtimeProviderSettingsViewModel extends ChangeNotifier {
       await _repository.delete(id);
       if (_disposed) return;
       await load();
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed) return;
-      _failure = NamedFailure(
-        'realtimeProviderRemoveFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('realtimeProviderRemoveFailed', detail: failure);
     } finally {
       _deletingIds.remove(id);
       _notify();
@@ -260,12 +243,9 @@ class SyntaxCapabilitySettingsViewModel extends ChangeNotifier {
       if (becameReady && currentTrackId != null) {
         await analyze(force: false);
       }
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed || generation != _refreshGeneration) return;
-      _failure = NamedFailure(
-        'syntaxCapabilityLoadFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('syntaxCapabilityLoadFailed', detail: failure);
       _notify();
     }
   }
@@ -283,13 +263,10 @@ class SyntaxCapabilitySettingsViewModel extends ChangeNotifier {
       _busy = false;
       _notify();
       await refresh();
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed) return;
       _busy = false;
-      _failure = NamedFailure(
-        'syntaxCapabilityActionFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('syntaxCapabilityActionFailed', detail: failure);
       _notify();
     }
   }
@@ -306,13 +283,10 @@ class SyntaxCapabilitySettingsViewModel extends ChangeNotifier {
       _track = track;
       _busy = false;
       _notify();
-    } catch (error) {
+    } on ApiFailure catch (failure) {
       if (_disposed) return;
       _busy = false;
-      _failure = NamedFailure(
-        'syntaxTrackAnalysisFailed',
-        detail: describeApiFailure(error),
-      );
+      _failure = NamedFailure('syntaxTrackAnalysisFailed', detail: failure);
       _notify();
     }
   }

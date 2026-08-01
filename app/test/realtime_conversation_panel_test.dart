@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -115,7 +116,6 @@ void main() {
     tester,
   ) async {
     var manageVoicesTaps = 0;
-    final controller = RealtimeConversationController(audio: _FakeAudio());
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -143,12 +143,15 @@ void main() {
         throw StateError('Unexpected request: $method $path ${body ?? ''}');
       },
     );
+    final controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
+      audio: _FakeAudio(),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
         home: RealtimeConversationPanel(
           controller: controller,
-          api: api,
           launch: RealtimeConversationLaunch.free(
             language: 'en',
             modelId: 'asr-model',
@@ -204,7 +207,6 @@ void main() {
 
   testWidgets('under a Chinese UI the lobby is Chinese — no mixed-language '
       'screen', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -232,6 +234,10 @@ void main() {
         throw StateError('Unexpected request: $method $path ${body ?? ''}');
       },
     );
+    final controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
+      audio: _FakeAudio(),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -243,7 +249,6 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: RealtimeConversationPanel(
           controller: controller,
-          api: api,
           launch: RealtimeConversationLaunch.free(
             language: 'en',
             modelId: 'asr-model',
@@ -275,7 +280,6 @@ void main() {
 
   testWidgets('the lobby shows the last five conversations and folds the '
       'rest behind 全部对话', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -317,12 +321,15 @@ void main() {
         throw StateError('Unexpected request: $method $path ${body ?? ''}');
       },
     );
+    final controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
+      audio: _FakeAudio(),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
         home: RealtimeConversationPanel(
           controller: controller,
-          api: api,
           launch: RealtimeConversationLaunch.free(
             language: 'en',
             modelId: 'asr-model',
@@ -349,7 +356,6 @@ void main() {
 
   testWidgets('with no voice configured the lobby points at settings instead '
       'of dead-ending', (tester) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -363,12 +369,15 @@ void main() {
         throw StateError('Unexpected request: $method $path ${body ?? ''}');
       },
     );
+    final controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
+      audio: _FakeAudio(),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
         home: RealtimeConversationPanel(
           controller: controller,
-          api: api,
           launch: RealtimeConversationLaunch.free(
             language: 'en',
             modelId: 'asr-model',

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/hunting_session_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
@@ -27,10 +28,11 @@ void main() {
         }),
       ),
     );
-    final controller = HuntingSessionController();
+    final controller = HuntingSessionController(
+      repository: LocalHuntingRepository(() => api),
+    );
     addTearDown(controller.dispose);
     await controller.start(
-      api: api,
       sessionId: 'session-1',
       mediaId: 'media-1',
       trackId: 'track-1',

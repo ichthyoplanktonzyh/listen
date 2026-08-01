@@ -1,7 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../controllers/download_controller.dart';
@@ -9,11 +6,13 @@ import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../data/repositories/learning_assets_repository.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
+import '../../models/api_failure.dart';
 import '../../player_adapter.dart';
-import '../../services/api_service.dart';
 import '../../services/external_tools.dart';
+import '../../services/media_import_file_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 
@@ -189,6 +188,8 @@ Future<void> openOnlineMediaFlow({
   required DownloadController downloadController,
   required ExternalTools tools,
   required void Function() onMediaSwitched,
+  ApiFailure Function(Object error) failureMapper = _genericFailure,
+  MediaImportFileService fileService = const LocalMediaImportFileService(),
 }) async {
   final l = AppLocalizations.of(context);
   final source = await showDialog<OnlineSourceChoice>(
@@ -203,6 +204,8 @@ Future<void> openOnlineMediaFlow({
       playerController: playerController,
       downloadController: downloadController,
       tools: tools,
+      failureMapper: failureMapper,
+      fileService: fileService,
     );
     return;
   }
@@ -228,7 +231,7 @@ Future<void> openOnlineMediaFlow({
     playerController.setStatus(
       l.text('statusOnlineMediaFailed'),
       error: true,
-      failure: describeApiFailure(error),
+      failure: failureMapper(error),
     );
   }
 }
@@ -239,9 +242,11 @@ Future<void> _downloadOnline({
   required PlayerController playerController,
   required DownloadController downloadController,
   required ExternalTools tools,
+  required ApiFailure Function(Object error) failureMapper,
+  required MediaImportFileService fileService,
 }) async {
   final l = AppLocalizations.of(context);
-  final directory = await getDirectoryPath(
+  final directory = await fileService.pickDownloadDirectory(
     confirmButtonText: l.text('downloadHere'),
   );
   // Legitimate silence: the user dismissed the directory picker themselves.
@@ -269,7 +274,7 @@ Future<void> _downloadOnline({
     playerController.setStatus(l.text('downloadingInBackground'));
   } catch (error) {
     if (context.mounted) {
-      final failure = describeApiFailure(error);
+      final failure = failureMapper(error);
       downloadController.fail(failure);
       playerController.setStatus(
         l.text('downloadFailed'),
@@ -285,15 +290,16 @@ Future<void> importEmbeddedSubtitleFlow({
   required PlayerController playerController,
   required MediaSessionCoordinator mediaSession,
   required ExternalTools tools,
-  required LocalApi? api,
+  required bool backendAvailable,
   required bool Function(String path) isMediaPath,
+  ApiFailure Function(Object error) failureMapper = _genericFailure,
 }) async {
   final l = AppLocalizations.of(context);
   final path = playerController.mediaPath;
   if (path == null ||
       !isMediaPath(path) ||
       playerController.mediaId == null ||
-      api == null) {
+      !backendAvailable) {
     playerController.setStatus(l.text('statusOpenLocalMediaFirst'));
     return;
   }
@@ -350,7 +356,7 @@ Future<void> importEmbeddedSubtitleFlow({
     playerController.setStatus(
       l.text('statusEmbeddedImportFailed'),
       error: true,
-      failure: describeApiFailure(error),
+      failure: failureMapper(error),
     );
   }
 }
@@ -360,11 +366,11 @@ Future<void> searchOpenSubtitlesFlow({
   required PlayerController playerController,
   required SettingsController settingsController,
   required MediaSessionCoordinator mediaSession,
-  required LocalApi? api,
+  required LearningAssetsRepository? repository,
   required bool secondary,
 }) async {
   final l = AppLocalizations.of(context);
-  if (api == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): the OpenSubtitles search is a user menu
     // entry; report the missing core instead of swallowing the click.
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
@@ -429,14 +435,17 @@ Future<void> searchOpenSubtitlesFlow({
   if (!context.mounted) return;
   final path = await showOpenSubtitlesSearch(
     context: context,
-    api: api,
+    repository: repository,
     apiKey: settingsController.openSubtitlesApiKey,
     initialTitle: playerController.mediaTitle ?? '',
     initialFilename: playerController.mediaPath == null
         ? ''
-        : playerController.mediaPath!.split(Platform.pathSeparator).last,
+        : playerController.mediaPath!.split(RegExp(r'[/\\]')).last,
     mediaPath: playerController.mediaPath,
   );
   if (path == null || !context.mounted) return;
   await mediaSession.openSubtitlePath(path, secondary: secondary);
 }
+
+ApiFailure _genericFailure(Object error) =>
+    ApiFailure(message: 'The operation failed.', raw: error.toString());

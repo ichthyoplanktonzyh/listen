@@ -6,7 +6,6 @@ import '../models/reading.dart';
 import '../models/semantic_task.dart';
 import '../models/timeline.dart';
 import '../player_adapter.dart';
-import '../services/api_service.dart';
 import 'auxiliary_audio_controller.dart';
 import 'occurrence_media_resolver.dart';
 import 'player_controller.dart';
@@ -44,7 +43,6 @@ class WritingChannelCoordinator extends ChangeNotifier {
   final AuxiliaryAudioController auxiliaryAudio;
   final WritingTaskController task;
 
-  LocalApi? Function()? _getApi;
   bool Function()? _isMounted;
   Future<void> Function(Map<String, dynamic> occurrence)? _openSlicePlayback;
   Future<void> Function()? _closeOtherChannels;
@@ -52,13 +50,11 @@ class WritingChannelCoordinator extends ChangeNotifier {
   /// Host seams. [closeOtherChannels] runs the listening/reading/speaking
   /// teardown the composition root owns, right before the studio opens.
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required Future<void> Function(Map<String, dynamic> occurrence)
     openSlicePlayback,
     required Future<void> Function() closeOtherChannels,
   }) {
-    _getApi = getApi;
     _isMounted = isMounted;
     _openSlicePlayback = openSlicePlayback;
     _closeOtherChannels = closeOtherChannels;
@@ -83,11 +79,10 @@ class WritingChannelCoordinator extends ChangeNotifier {
     required String promptSnapshot,
     required List<RubricPointView> fixedRubricPoints,
   }) async {
-    final service = _getApi?.call();
     final track = subtitle.primaryTrack;
     // Defensive backstop: the channel switcher already disables Writing (with
     // a tooltip) without a transcript, and the workbench requires a core.
-    if (service == null || track == null) return;
+    if (!task.repositoryAvailable || track == null) return;
     final paragraphs = deriveReadingParagraphs(
       track.cues,
     ).where((paragraph) => !paragraph.nonSpeech).toList(growable: false);
@@ -133,7 +128,6 @@ class WritingChannelCoordinator extends ChangeNotifier {
     notifyListeners();
     unawaited(
       task.openTask(
-        service,
         source: source,
         kind: kind,
         promptSnapshot: promptSnapshot,
@@ -155,12 +149,10 @@ class WritingChannelCoordinator extends ChangeNotifier {
   /// Reads the learner's own text back to them. Returns false when synthesis
   /// was unavailable, so the host can surface that where it has a context.
   Future<bool> speakText(String text) async {
-    final service = _getApi?.call();
     final source = _studioSource;
-    if (service == null || source == null || text.trim().isEmpty) return true;
+    if (source == null || text.trim().isEmpty) return true;
     final asset = await auxiliaryAudio.speak(
-      service,
-      text: text,
+      text,
       language: source.responseLanguage,
       purpose: 'writing_readback',
       acquireAudioFocus: () async {

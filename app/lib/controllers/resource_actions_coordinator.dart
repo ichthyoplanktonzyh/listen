@@ -1,12 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:file_selector/file_selector.dart';
-
+import '../data/repositories/resource_repository.dart';
 import '../models/api_failure.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
+import '../services/resource_export_file_service.dart';
 import 'player_controller.dart';
 import 'speech_enhancement_workflow_controller.dart';
 import 'subtitle_controller.dart';
@@ -23,13 +19,16 @@ class ResourceActionsCoordinator {
     required this.player,
     required this.subtitle,
     required this.speechEnhancement,
+    required this.repository,
+    this.exportFiles = const LocalResourceExportFileService(),
   });
 
   final PlayerController player;
   final SubtitleController subtitle;
   final SpeechEnhancementWorkflowController speechEnhancement;
+  final ResourceRepository repository;
+  final ResourceExportFileService exportFiles;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   String Function(String key)? text;
 
@@ -40,7 +39,6 @@ class ResourceActionsCoordinator {
   late Future<void> Function() reloadLearningEntries;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     String Function(String key)? text,
     required Future<void> Function(String trackId) reloadSpeechEnhancements,
@@ -51,7 +49,6 @@ class ResourceActionsCoordinator {
     activatePrimaryTrack,
     required Future<void> Function() reloadLearningEntries,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.reloadSpeechEnhancements = reloadSpeechEnhancements;
@@ -62,10 +59,8 @@ class ResourceActionsCoordinator {
   // ── Timeline resource loading ──
 
   Future<void> loadTimelineResource(String trackId) async {
-    final service = getApi();
-    if (service == null) return;
+    if (!speechEnhancement.repository.isAvailable) return;
     final result = await speechEnhancement.loadTimelineResource(
-      service: service,
       trackId: trackId,
       previous: existingTimelineResourceState(),
     );
@@ -77,11 +72,10 @@ class ResourceActionsCoordinator {
   /// Content fit is decoration, never a gate (ADR 0018): failures clear the
   /// card silently instead of surfacing as a resource error.
   Future<void> loadContentFit(String trackId) async {
-    final service = getApi();
-    if (service == null) return;
+    if (!repository.isAvailable) return;
     ContentDifficultyProfile? profile;
     try {
-      profile = await service.trackContentFit(trackId);
+      profile = await repository.contentFit(trackId);
     } catch (_) {
       profile = null;
     }
@@ -117,7 +111,7 @@ class ResourceActionsCoordinator {
     // The user-facing refresh arrives via [refreshSubtitleResources], whose
     // loadSubtitleResources step already reported a missing core/media; this
     // guard only keeps the "refreshed" claim below honest, so it stays silent.
-    if (getApi() == null) return;
+    if (!repository.isAvailable) return;
     final trackId = subtitle.primaryTrack?.id;
     // Without a primary track there is no timeline section to refresh; the
     // panel renders no timeline rows in that state, so the click stays silent.
@@ -129,9 +123,8 @@ class ResourceActionsCoordinator {
   // ── Subtitle resource list / capabilities ──
 
   Future<void> loadSubtitleResources({bool updateStatus = true}) async {
-    final service = getApi();
     final mediaId = player.mediaId;
-    if (service == null || mediaId == null) {
+    if (!repository.isAvailable || mediaId == null) {
       subtitle.setSubtitleResources(const []);
       subtitle.setSubtitleResourceCapabilities(const {});
       // [updateStatus] marks the user-triggered refresh path; internal
@@ -140,11 +133,8 @@ class ResourceActionsCoordinator {
       return;
     }
     try {
-      final tracks = await service.mediaSubtitles(mediaId);
-      final capabilities = await _loadSubtitleResourceCapabilities(
-        service,
-        tracks,
-      );
+      final tracks = await repository.mediaSubtitles(mediaId);
+      final capabilities = await _loadSubtitleResourceCapabilities(tracks);
       if (!isMounted() || player.mediaId != mediaId) return;
       subtitle.setSubtitleResources(tracks);
       subtitle.setSubtitleResourceCapabilities(capabilities);
@@ -156,30 +146,27 @@ class ResourceActionsCoordinator {
         player.setStatus(
           _t('statusSubtitleResourcesUnavailable'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
   }
 
   Future<Map<String, SubtitleResourceCapabilities>>
-  _loadSubtitleResourceCapabilities(
-    LocalApi service,
-    List<SubtitleTrack> tracks,
-  ) async {
+  _loadSubtitleResourceCapabilities(List<SubtitleTrack> tracks) async {
     final entries = await Future.wait(
       tracks.map((track) async {
         final failures = <ApiFailure>[];
         final wordTimings = await _loadOptionalResourceCapability(
-          () => service.trackWordTimings(track.id),
+          () => repository.wordTimings(track.id),
           failures,
         );
         final phoneSummaries = await _loadOptionalResourceCapability(
-          () => service.trackPhoneTimelineSummaries(track.id),
+          () => repository.phoneTimelineSummaries(track.id),
           failures,
         );
         final chunkSummaries = await _loadOptionalResourceCapability(
-          () => service.trackChunkTimelineSummaries(track.id),
+          () => repository.chunkTimelineSummaries(track.id),
           failures,
         );
         return MapEntry(
@@ -219,7 +206,7 @@ class ResourceActionsCoordinator {
     try {
       return await loader();
     } catch (error) {
-      failures.add(describeApiFailure(error));
+      failures.add(repository.failureDetail(error));
       return const [];
     }
   }
@@ -243,22 +230,21 @@ class ResourceActionsCoordinator {
         player.setStatus(
           _t('statusSubtitleActivationFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> archiveSubtitleResource(SubtitleTrack track) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       // Unavailable State (CONTEXT.md): all the panel row actions below are
       // direct clicks, so a missing core is reported, never swallowed.
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      await service.archiveSubtitle(track.id);
+      await repository.archiveSubtitle(track.id);
       _clearPrimaryTrackIfMatches(track);
       await loadSubtitleResources(updateStatus: false);
       if (isMounted()) player.setStatus(_t('statusSubtitleArchived'));
@@ -267,20 +253,19 @@ class ResourceActionsCoordinator {
         player.setStatus(
           _t('statusSubtitleArchiveFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> restoreSubtitleResource(SubtitleTrack track) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      await service.restoreSubtitle(track.id);
+      await repository.restoreSubtitle(track.id);
       await loadSubtitleResources(updateStatus: false);
       if (isMounted()) player.setStatus(_t('statusSubtitleRestored'));
     } catch (error) {
@@ -288,7 +273,7 @@ class ResourceActionsCoordinator {
         player.setStatus(
           _t('statusSubtitleRestoreFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
@@ -297,13 +282,12 @@ class ResourceActionsCoordinator {
   /// Deletion is destructive; the host must confirm with the user before
   /// calling this.
   Future<void> deleteSubtitleResource(SubtitleTrack track) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      await service.deleteSubtitle(track.id);
+      await repository.deleteSubtitle(track.id);
       _clearPrimaryTrackIfMatches(track);
       await loadSubtitleResources(updateStatus: false);
       if (isMounted()) player.setStatus(_t('statusSubtitleDeleted'));
@@ -312,7 +296,7 @@ class ResourceActionsCoordinator {
         player.setStatus(
           _t('statusSubtitleDeleteFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
@@ -326,65 +310,62 @@ class ResourceActionsCoordinator {
   }
 
   Future<void> exportSubtitleSrt(SubtitleTrack track) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      final location = await getSaveLocation(
+      final srt = await repository.exportSubtitleSrt(track.id);
+      if (!await exportFiles.saveText(
         suggestedName: '${track.source}-${track.id}.srt',
-      );
-      if (location == null) return;
-      final srt = await service.exportSubtitleSrt(track.id);
-      await File(location.path).writeAsString(srt);
+        content: srt,
+      )) {
+        return;
+      }
       if (isMounted()) player.setStatus(_t('statusSubtitleExportedSrt'));
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
           _t('statusSubtitleExportFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> exportLLTimelineResource(SubtitleTrack track) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      final location = await getSaveLocation(
+      final document = await repository.exportTimeline(track.id);
+      if (!await exportFiles.saveJson(
         suggestedName: '${track.source}-${track.id}.lltimeline.json',
-      );
-      if (location == null) return;
-      final document = await service.exportTrackLLTimeline(track.id);
-      await File(location.path).writeAsString(
-        const JsonEncoder.withIndent('  ').convert(document.toJson()),
-      );
+        document: document.toJson(),
+      )) {
+        return;
+      }
       if (isMounted()) player.setStatus(_t('statusLLTimelineExported'));
     } catch (error) {
       if (isMounted()) {
         player.setStatus(
           _t('statusLLTimelineExportFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> changeTrackLanguage(SubtitleTrack track, String language) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      await service.updateTrackLanguage(track.id, language);
+      await repository.updateTrackLanguage(track.id, language);
       await loadSubtitleResources(updateStatus: false);
       if (subtitle.primaryTrack?.id == track.id) {
         final updated = subtitle.subtitleResources
@@ -405,7 +386,7 @@ class ResourceActionsCoordinator {
         player.setStatus(
           _t('statusLanguageUpdateFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
@@ -419,7 +400,7 @@ class ResourceActionsCoordinator {
       doneStatus: 'WordTimeline activated',
       failurePrefix: 'WordTimeline activation failed',
       refreshResources: false,
-      action: (service, _) => service.activateWordTimeline(timelineId),
+      action: (_) => repository.activateWordTimeline(timelineId),
     );
   }
 
@@ -428,8 +409,7 @@ class ResourceActionsCoordinator {
       workingStatus: 'Generating ChunkTimeline...',
       doneStatus: 'ChunkTimeline generated',
       failurePrefix: 'ChunkTimeline generation failed',
-      action: (service, trackId) =>
-          service.generateChunkTimeline(trackId, status: 'active'),
+      action: repository.generateChunkTimeline,
     );
   }
 
@@ -438,7 +418,7 @@ class ResourceActionsCoordinator {
       workingStatus: 'Activating ChunkTimeline...',
       doneStatus: 'ChunkTimeline activated',
       failurePrefix: 'ChunkTimeline activation failed',
-      action: (service, _) => service.activateChunkTimeline(timelineId),
+      action: (_) => repository.activateChunkTimeline(timelineId),
     );
   }
 
@@ -446,7 +426,7 @@ class ResourceActionsCoordinator {
     await _runTimelineAction(
       doneStatus: 'ChunkTimeline archived',
       failurePrefix: 'ChunkTimeline archive failed',
-      action: (service, _) => service.archiveChunkTimeline(timelineId),
+      action: (_) => repository.archiveChunkTimeline(timelineId),
     );
   }
 
@@ -454,7 +434,7 @@ class ResourceActionsCoordinator {
     await _runTimelineAction(
       doneStatus: 'ChunkTimeline deleted',
       failurePrefix: 'ChunkTimeline delete failed',
-      action: (service, _) => service.deleteChunkTimeline(timelineId),
+      action: (_) => repository.deleteChunkTimeline(timelineId),
     );
   }
 
@@ -463,7 +443,7 @@ class ResourceActionsCoordinator {
       workingStatus: 'Activating PhoneTimeline...',
       doneStatus: 'PhoneTimeline activated',
       failurePrefix: 'PhoneTimeline activation failed',
-      action: (service, _) => service.activatePhoneTimeline(timelineId),
+      action: (_) => repository.activatePhoneTimeline(timelineId),
     );
   }
 
@@ -471,7 +451,7 @@ class ResourceActionsCoordinator {
     await _runTimelineAction(
       doneStatus: 'PhoneTimeline archived',
       failurePrefix: 'PhoneTimeline archive failed',
-      action: (service, _) => service.archivePhoneTimeline(timelineId),
+      action: (_) => repository.archivePhoneTimeline(timelineId),
     );
   }
 
@@ -479,7 +459,7 @@ class ResourceActionsCoordinator {
     await _runTimelineAction(
       doneStatus: 'PhoneTimeline deleted',
       failurePrefix: 'PhoneTimeline delete failed',
-      action: (service, _) => service.deletePhoneTimeline(timelineId),
+      action: (_) => repository.deletePhoneTimeline(timelineId),
     );
   }
 
@@ -492,10 +472,9 @@ class ResourceActionsCoordinator {
     required String doneStatus,
     required String failurePrefix,
     bool refreshResources = true,
-    required Future<void> Function(LocalApi service, String trackId) action,
+    required Future<void> Function(String trackId) action,
   }) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       // Timeline lifecycle buttons are direct clicks; report the missing core.
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
@@ -506,7 +485,7 @@ class ResourceActionsCoordinator {
     if (trackId == null) return;
     try {
       if (workingStatus != null) player.setStatus(workingStatus);
-      await action(service, trackId);
+      await action(trackId);
       if (!isMounted() || subtitle.primaryTrack?.id != trackId) return;
       await reloadSpeechEnhancements(trackId);
       if (refreshResources) {
@@ -518,7 +497,7 @@ class ResourceActionsCoordinator {
         player.setStatus(
           failurePrefix,
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }

@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:video_player/video_player.dart';
 
+import '../services/slice_playback_service.dart';
 import '../state/store.dart';
+
+export '../services/slice_playback_service.dart';
 
 const _unset = Object();
 
@@ -86,68 +87,32 @@ class SlicePlayerState {
   );
 }
 
-abstract interface class SlicePlaybackAdapter {
-  VideoPlayerController? get videoController;
-  bool get isPlaying;
-  Future<Duration?> readPosition();
-  Future<void> play();
-  Future<void> pause();
-  Future<void> seek(Duration position);
-  Future<void> setRate(double rate);
-  Future<void> dispose();
-}
-
-class VideoPlayerSlicePlaybackAdapter implements SlicePlaybackAdapter {
-  VideoPlayerSlicePlaybackAdapter._(this._controller);
-
-  final VideoPlayerController _controller;
-
-  static Future<VideoPlayerSlicePlaybackAdapter> create(String path) async {
-    final controller = VideoPlayerController.file(File(path));
-    await controller.initialize();
-    return VideoPlayerSlicePlaybackAdapter._(controller);
-  }
-
-  @override
-  VideoPlayerController get videoController => _controller;
-  @override
-  bool get isPlaying => _controller.value.isPlaying;
-  @override
-  Future<Duration?> readPosition() => _controller.position;
-  @override
-  Future<void> play() => _controller.play();
-  @override
-  Future<void> pause() => _controller.pause();
-  @override
-  Future<void> seek(Duration position) => _controller.seekTo(position);
-  @override
-  Future<void> setRate(double rate) => _controller.setPlaybackSpeed(rate);
-  @override
-  Future<void> dispose() => _controller.dispose();
-}
-
-typedef CreateSlicePlaybackAdapter =
-    Future<SlicePlaybackAdapter> Function(String path);
-
 /// Owns the second fvp/video_player instance used only for a lexical source
 /// slice. It deliberately has no connection to primary-player state.
 class SlicePlayerController extends ChangeNotifier {
-  SlicePlayerController({CreateSlicePlaybackAdapter? createAdapter})
-    : _createAdapter = createAdapter ?? VideoPlayerSlicePlaybackAdapter.create,
-      _store = Store(const SlicePlayerState()) {
+  SlicePlayerController({
+    SlicePlaybackService? service,
+    CreateSlicePlaybackAdapter? createAdapter,
+  }) : assert(service == null || createAdapter == null),
+       _service =
+           service ??
+           (createAdapter == null
+               ? const VideoPlayerSlicePlaybackService()
+               : CallbackSlicePlaybackService(createAdapter)),
+       _store = Store(const SlicePlayerState()) {
     _store.addListener(notifyListeners);
   }
 
-  final CreateSlicePlaybackAdapter _createAdapter;
+  final SlicePlaybackService _service;
   final Store<SlicePlayerState> _store;
-  SlicePlaybackAdapter? _adapter;
+  SlicePlaybackSession? _adapter;
   Timer? _positionTimer;
   int _generation = 0;
   double _rate = 1.0;
 
   Store<SlicePlayerState> get store => _store;
   SlicePlayerState get state => _store.state;
-  VideoPlayerController? get videoController => _adapter?.videoController;
+  SlicePlaybackRenderHandle? get renderHandle => _adapter?.renderHandle;
 
   Future<void> open({
     required Map<String, dynamic> occurrence,
@@ -179,7 +144,7 @@ class SlicePlayerController extends ChangeNotifier {
         wordForm: occurrence['original_form'] as String?,
         mediaTitle:
             occurrence['media_title_snapshot'] as String? ??
-            File(path).uri.pathSegments.last,
+            _service.displayName(path),
         sentence: occurrence['sentence_text_snapshot'] as String?,
         start: start,
         end: end,
@@ -187,7 +152,7 @@ class SlicePlayerController extends ChangeNotifier {
       ),
     );
     try {
-      final adapter = await _createAdapter(path);
+      final adapter = await _service.open(path);
       if (generation != _generation) {
         await adapter.dispose();
         return;

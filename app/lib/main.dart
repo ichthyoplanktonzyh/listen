@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
 
-import 'controllers/app_controllers.dart';
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/content_channel_coordinator.dart';
@@ -44,7 +43,35 @@ import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
+import 'data/repositories/realtime_conversation_repository.dart';
+import 'data/repositories/hunting_repository.dart';
+import 'data/repositories/coach_dashboard_repository.dart';
+import 'data/repositories/cold_start_marking_repository.dart';
+import 'data/repositories/external_vocabulary_repository.dart';
 import 'data/repositories/lexical_repository.dart';
+import 'data/repositories/learning_assets_repository.dart';
+import 'data/repositories/learning_repository.dart';
+import 'data/repositories/listening_repository.dart';
+import 'data/repositories/media_library_repository.dart';
+import 'data/repositories/media_session_repository.dart';
+import 'data/repositories/manual_review_repository.dart';
+import 'data/repositories/playback_repository.dart';
+import 'data/repositories/phonetic_analysis_repository.dart';
+import 'data/repositories/personal_expression_repository.dart';
+import 'data/repositories/review_repository.dart';
+import 'data/repositories/semantic_search_repository.dart';
+import 'data/repositories/resource_repository.dart';
+import 'data/repositories/settings_repository.dart';
+import 'data/repositories/practice_repository.dart';
+import 'data/repositories/reading_task_repository.dart';
+import 'data/repositories/reading_session_repository.dart';
+import 'data/repositories/speech_synthesis_repository.dart';
+import 'data/repositories/speaking_task_repository.dart';
+import 'data/repositories/speaking_session_repository.dart';
+import 'data/repositories/speech_enhancement_repository.dart';
+import 'data/repositories/subtitle_analysis_repository.dart';
+import 'data/repositories/transcription_repository.dart';
+import 'data/repositories/writing_task_repository.dart';
 import 'localization.dart';
 import 'models/capability_readiness.dart';
 import 'models/content_activity.dart';
@@ -62,6 +89,7 @@ import 'services/fullscreen_window.dart';
 import 'settings.dart';
 import 'theme/listen_theme.dart';
 import 'theme/spacing.dart';
+import 'ui/core/app_controller_scope.dart';
 import 'utils/format_duration.dart';
 import 'widgets/app_bar/app_bar_capabilities.dart';
 import 'widgets/app_bar/macos_menu_bar.dart';
@@ -179,37 +207,78 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? progressTimer;
   Timer? syntaxCapabilityTimer;
   LocalApi? api;
+  late final mediaSessionRepository = LocalMediaSessionRepository(() => api);
+  late final subtitleAnalysisRepository = LocalSubtitleAnalysisRepository(
+    () => api,
+  );
 
   // ── Controllers ──
   final playerController = PlayerController();
   final subtitleController = SubtitleController();
   final learningController = LearningController();
-  final practiceController = PracticeController();
+  late final practiceController = PracticeController(
+    repository: LocalPracticeRepository(() => api),
+  );
   final slicePlayerController = SlicePlayerController();
-  final auxiliaryAudioController = AuxiliaryAudioController();
+  late final auxiliaryAudioController = AuxiliaryAudioController(
+    speechRepository: LocalSpeechSynthesisRepository(() => api),
+  );
   final readingController = ReadingController();
-  final readingTaskController = ReadingTaskController();
-  final speakingTaskController = SpeakingTaskController();
-  final realtimeConversationController = RealtimeConversationController();
-  final writingTaskController = WritingTaskController();
-  final readingDiffController = ReadingDiffController();
-  final extensiveListeningController = ExtensiveListeningController();
-  final huntingController = HuntingController();
-  final huntingSessionController = HuntingSessionController();
-  final learningWorkflowController = LearningWorkflowController();
-  final speechEnhancementWorkflowController =
-      SpeechEnhancementWorkflowController();
+  late final readingTaskRepository = LocalReadingTaskRepository(() => api);
+  late final readingSessionRepository = LocalReadingSessionRepository(
+    () => api,
+  );
+  late final readingTaskController = ReadingTaskController(
+    repository: readingTaskRepository,
+  );
+  late final speakingTaskController = SpeakingTaskController(
+    repository: LocalSpeakingTaskRepository(() => api),
+  );
+  late final speakingSessionRepository = LocalSpeakingSessionRepository(
+    () => api,
+  );
+  late final realtimeConversationController = RealtimeConversationController(
+    repository: LocalRealtimeConversationRepository(() => api!),
+  );
+  late final writingTaskController = WritingTaskController(
+    repository: LocalWritingTaskRepository(() => api),
+  );
+  late final readingDiffController = ReadingDiffController(
+    repository: readingTaskRepository,
+  );
+  late final huntingRepository = LocalHuntingRepository(() => api);
+  late final listeningRepository = LocalListeningRepository(() => api);
+  late final extensiveListeningController = ExtensiveListeningController(
+    repository: listeningRepository,
+  );
+  late final huntingController = HuntingController(
+    repository: huntingRepository,
+  );
+  late final huntingSessionController = HuntingSessionController(
+    repository: huntingRepository,
+  );
+  late final learningWorkflowController = LearningWorkflowController(
+    repository: LocalLearningRepository(() => api),
+  );
+  late final speechEnhancementWorkflowController =
+      SpeechEnhancementWorkflowController(
+        repository: LocalSpeechEnhancementRepository(() => api),
+      );
   final settingsController = SettingsController();
-  final downloadController = DownloadController();
+  final downloadController = DownloadController(
+    failureMapper: describeApiFailure,
+  );
   late final resourceActions = ResourceActionsCoordinator(
     player: playerController,
     subtitle: subtitleController,
     speechEnhancement: speechEnhancementWorkflowController,
+    repository: LocalResourceRepository(() => api),
   );
   late final playbackActions = PlaybackActionsCoordinator(
     adapter: adapter,
     player: playerController,
     subtitle: subtitleController,
+    repository: LocalPlaybackRepository(() => api),
   );
   late final mediaSession = MediaSessionCoordinator(
     adapter: adapter,
@@ -219,12 +288,15 @@ class _PlayerScreenState extends State<PlayerScreen>
     settings: settingsController,
     speechEnhancement: speechEnhancementWorkflowController,
     resourceActions: resourceActions,
+    repository: mediaSessionRepository,
+    subtitleAnalysis: subtitleAnalysisRepository,
   );
   late final huntingActions = HuntingActionsCoordinator(
     huntingSession: huntingSessionController,
     player: playerController,
     extensiveListening: extensiveListeningController,
     subtitle: subtitleController,
+    repository: huntingRepository,
   );
   late final inboxActions = ListeningInboxCoordinator(
     extensiveListening: extensiveListeningController,
@@ -267,11 +339,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     learning: learningController,
     settings: settingsController,
     extensiveListening: extensiveListeningController,
+    repository: LocalMediaLibraryRepository(() => api),
   );
   late final subtitleSources = SubtitleSourcesCoordinator(
     player: playerController,
     subtitle: subtitleController,
     settings: settingsController,
+    repository: subtitleAnalysisRepository,
   );
   late final readingChannel = ReadingChannelCoordinator(
     adapter: adapter,
@@ -281,6 +355,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     reading: readingController,
     readingTask: readingTaskController,
     readingDiff: readingDiffController,
+    repository: readingSessionRepository,
   );
   late final writingChannel = WritingChannelCoordinator(
     adapter: adapter,
@@ -298,6 +373,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     readingTask: readingTaskController,
     learning: learningController,
     player: playerController,
+    repository: speakingSessionRepository,
   );
   late final contentChannels = ContentChannelCoordinator(
     reading: readingChannel,
@@ -380,7 +456,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           ),
         );
     resourceActions.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       reloadSpeechEnhancements: (trackId) async {
@@ -398,7 +473,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       },
     );
     mediaSession.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       confirmLLTimelineMismatch: _confirmLLTimelineMismatch,
@@ -406,7 +480,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         unawaited(slicePlayerController.close());
         if (speakingActions.isOpen) {
           speakingChannel.closeL1Check();
-          unawaited(speakingActions.close(api, restorePosition: false));
+          unawaited(speakingActions.close(restorePosition: false));
         }
         huntingSessionController.stop();
         setState(() {
@@ -423,7 +497,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       generatedPrimaryStatus: _generatedPrimarySubtitleStatus,
     );
     playbackActions.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       reloadLearningEntries: () async {
@@ -431,31 +504,20 @@ class _PlayerScreenState extends State<PlayerScreen>
         await vocabularyActions.loadPhraseEntries();
       },
     );
-    huntingActions.bind(
-      getApi: () => api,
-      isMounted: () => mounted,
-      text: (key) => l.text(key),
-    );
-    inboxActions.bind(
-      getApi: () => api,
-      isMounted: () => mounted,
-      text: (key) => l.text(key),
-    );
+    huntingActions.bind(isMounted: () => mounted, text: (key) => l.text(key));
+    inboxActions.bind(isMounted: () => mounted, text: (key) => l.text(key));
     practiceActions.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       refreshDiagnosis: _refreshDiagnosis,
       seekCue: _seekCue,
     );
     vocabularyActions.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       refreshDiagnosis: _refreshDiagnosis,
     );
     mediaLibraryActions.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       requestRebuild: () => setState(() {}),
@@ -463,14 +525,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       openMedia: mediaSession.openMedia,
     );
     readingChannel.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       openSlicePlayback: _openSlicePlayback,
       openWord: vocabularyActions.openWord,
     );
     contentChannels.bind(
-      getApi: () => api,
-      speakingAvailable: () => Platform.isMacOS,
+      speakingAvailable: () => api != null && Platform.isMacOS,
       openSpeaking: _openContentSpeakingActivity,
       openWriting: () => writingChannel.openTask(
         writingChannel.kind,
@@ -480,24 +540,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     speakingChannel.text = (key) => l.text(key);
     speakingChannel.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       askPersonalExpressionAssessment: _askPersonalExpressionAssessment,
       onReturnToReview: () => unawaited(_openReviewQueue()),
       onReturnToPersonalExpression: () => unawaited(_openPersonalExpression()),
     );
     writingChannel.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       openSlicePlayback: _openSlicePlayback,
       closeOtherChannels: () async {
         speakingChannel.closeL1Check();
-        if (speakingActions.isOpen) await speakingActions.close(api);
+        if (speakingActions.isOpen) await speakingActions.close();
         await readingChannel.close();
       },
     );
     subtitleSources.bind(
-      getApi: () => api,
       isMounted: () => mounted,
       text: (key) => l.text(key),
       showSnackBar: _showSnackBar,
@@ -810,7 +867,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _exportSubtitleResource(SubtitleTrack track) =>
       exportSubtitleResourceFlow(
         context: context,
-        api: api,
         playerController: playerController,
         resourceActions: resourceActions,
         track: track,
@@ -818,7 +874,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openManualReviewTimeline() => openManualReviewFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalManualReviewRepository(api!),
     adapter: adapter,
     playerController: playerController,
     subtitleController: subtitleController,
@@ -835,7 +891,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _generateSubtitles({required bool secondary}) =>
       generateSubtitlesFlow(
         context: context,
-        api: api,
+        repository: api == null ? null : LocalTranscriptionRepository(api!),
         playerController: playerController,
         settingsController: settingsController,
         secondary: secondary,
@@ -848,14 +904,14 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openTranscriptionCenter() => openTranscriptionCenterFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalTranscriptionRepository(api!),
     playerController: playerController,
     loadTrack: mediaSession.loadGeneratedTrack,
   );
 
   Future<void> _openPhoneticAnalysisCenter() => openPhoneticAnalysisCenterFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalPhoneticAnalysisRepository(api!),
     playerController: playerController,
   );
 
@@ -866,6 +922,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleController: subtitleController,
     downloadController: downloadController,
     tools: tools,
+    failureMapper: describeApiFailure,
     onMediaSwitched: () {
       setState(() {
         taskStatuses.clear();
@@ -880,27 +937,41 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController: playerController,
     mediaSession: mediaSession,
     tools: tools,
-    api: api,
+    backendAvailable: api != null,
     isMediaPath: subtitleSources.isMediaPath,
+    failureMapper: describeApiFailure,
   );
 
-  Future<void> _openSettings() => showAppSettings(
-    context: context,
-    settingsController: settingsController,
-    subtitleController: subtitleController,
-    playerController: playerController,
-    learningController: learningController,
-    saveSettings: _saveSettings,
-    api: api,
-  );
+  Future<void> _openSettings() {
+    final service = api;
+    return showAppSettings(
+      context: context,
+      settingsController: settingsController,
+      subtitleController: subtitleController,
+      playerController: playerController,
+      learningController: learningController,
+      saveSettings: _saveSettings,
+      learnerRepository: service == null
+          ? null
+          : LocalLearnerSettingsRepository(service),
+      llmRepository: service == null
+          ? null
+          : LocalLlmProviderRepository(service),
+      realtimeRepository: service == null
+          ? null
+          : LocalRealtimeProviderRepository(service),
+      syntaxRepository: service == null
+          ? null
+          : LocalSyntaxCapabilityRepository(service),
+    );
+  }
 
-  Future<void> _openContentSpeakingActivity(LocalApi service) async {
+  Future<void> _openContentSpeakingActivity() async {
     final activity = await showContentSpeakingActivityDialog(context);
     if (!mounted || activity == null) return;
     switch (activity) {
       case ContentSpeakingActivity.retelling:
         await speakingActions.openRetelling(
-          service,
           fixedRubricPoints: listeningRetellTemplate(l),
           closeReading: readingChannel.close,
         );
@@ -961,7 +1032,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         reduceMotion: MediaQuery.disableAnimationsOf(context),
         builder: (routeContext) => RealtimeConversationPanel(
           controller: realtimeConversationController,
-          api: service,
           launch: selection == null
               ? RealtimeConversationLaunch.free(
                   language: language,
@@ -1006,7 +1076,10 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openLearningAssets() => openLearningAssetsFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalLearningAssetsRepository(api!),
+    personalExpressionRepository: api == null
+        ? null
+        : LocalPersonalExpressionRepository(api!),
     playerController: playerController,
     settingsController: settingsController,
     subtitleController: subtitleController,
@@ -1044,7 +1117,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _workbenchExpanded = true);
     _workbenchAnimController.forward();
     await speakingActions.openPersonalPattern(
-      service,
       patternId: pattern.id,
       language: pattern.language,
       sourceText: pattern.source.text,
@@ -1062,7 +1134,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     PersonalExpressionSourceView? source,
   }) => openPersonalExpressionFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalPersonalExpressionRepository(api!),
     playerController: playerController,
     language: settingsController.resolveLearningLanguage(
       subtitleController.primaryTrack?.language,
@@ -1074,14 +1146,14 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openLearningResources() => openLearningResourcesFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalLearningAssetsRepository(api!),
     playerController: playerController,
   );
 
   Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) =>
       openPhraseFlow(
         context: context,
-        api: api,
+        repository: api == null ? null : LocalLearningAssetsRepository(api!),
         playerController: playerController,
         subtitleController: subtitleController,
         settingsController: settingsController,
@@ -1105,7 +1177,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         playerController: playerController,
         settingsController: settingsController,
         mediaSession: mediaSession,
-        api: api,
+        repository: api == null ? null : LocalLearningAssetsRepository(api!),
         secondary: secondary,
       );
 
@@ -1234,7 +1306,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _toggleExtensiveListening() async {
     if (!extensiveListeningController.active) {
       final started = await extensiveListeningController.startSession(
-        api: api,
         mediaId: playerController.mediaId,
         trackId: subtitleController.primaryTrack?.id,
       );
@@ -1306,7 +1377,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     if (!mounted) return;
     final finished = await extensiveListeningController.finishSession(
-      api,
       comprehensionReport: report,
       huntingSummary: huntingSummary,
     );
@@ -1349,7 +1419,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     bool openCrossModalReview = false,
   }) => showVocabularyFlow(
     context: context,
-    api: api,
+    lexicalRepository: api == null ? null : LexicalRepository(api!),
+    semanticSearchRepository: api == null
+        ? null
+        : LocalSemanticSearchRepository(api!),
     playerController: playerController,
     settingsController: settingsController,
     subtitleController: subtitleController,
@@ -1364,7 +1437,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openReviewQueue() => openReviewQueueFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalReviewRepository(api!),
     playerController: playerController,
     pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
     startReviewShadowing: _startReviewShadowing,
@@ -1373,7 +1446,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openCoachDashboard() => openCoachDashboardFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalCoachDashboardRepository(api!),
     playerController: playerController,
     language: settingsController.resolveLearningLanguage(
       subtitleController.primaryTrack?.language,
@@ -1434,7 +1507,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     setState(() => _workbenchExpanded = true);
     _workbenchAnimController.forward();
     await speakingActions.openDelayedRetelling(
-      service,
       entry: entry,
       mediaPath: path,
       fixedRubricPoints: listeningRetellTemplate(l),
@@ -1465,7 +1537,10 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _openSubtitleResources() => openSubtitleResourcesFlow(
     context: context,
-    api: api,
+    backendAvailable: api != null,
+    coldStartRepository: api == null
+        ? null
+        : LocalColdStartMarkingRepository(api!),
     playerController: playerController,
     subtitleController: subtitleController,
     learningController: learningController,
@@ -1476,7 +1551,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _openColdStartMarking() => openColdStartMarkingFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalColdStartMarkingRepository(api!),
     playerController: playerController,
     subtitleController: subtitleController,
     resourceActions: resourceActions,
@@ -1523,7 +1598,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _importWordList() => importWordListFlow(
     context: context,
-    api: api,
+    repository: api == null ? null : LocalExternalVocabularyRepository(api!),
     playerController: playerController,
     subtitleController: subtitleController,
     settingsController: settingsController,
@@ -1709,14 +1784,13 @@ class _PlayerScreenState extends State<PlayerScreen>
               vocabularyActions.markFirstWord('known_recognized'),
           'showCheatSheet': () => unawaited(showShortcutCheatSheet(context)),
         };
-        return AppControllers(
+        return AppControllerScope(
           player: playerController,
           subtitle: subtitleController,
           learning: learningController,
           extensiveListening: extensiveListeningController,
           practice: practiceController,
           settings: settingsController,
-          api: api!,
           child: PlayerGlobalShortcuts(
             bindings: buildPlayerShortcutBindings(
               markKeysEnabled: settingsController.markKeysEnabled,
@@ -2010,7 +2084,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   .selected) {
                                                 ContentChannel.writing =>
                                                   WritingChannelHost(
-                                                    api: api!,
                                                     writingChannel:
                                                         writingChannel,
                                                     writingTaskController:
@@ -2018,7 +2091,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   ),
                                                 ContentChannel.speaking =>
                                                   SpeakingChannelHost(
-                                                    api: api!,
                                                     speakingChannel:
                                                         speakingChannel,
                                                     speakingActions:
@@ -2030,7 +2102,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   ),
                                                 ContentChannel.reading =>
                                                   ReadingChannelHost(
-                                                    api: api!,
                                                     readingChannel:
                                                         readingChannel,
                                                     readingController:
@@ -2078,7 +2149,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                             ),
                                           ),
                                         PlayerOverlays(
-                                          api: api,
                                           practiceController:
                                               practiceController,
                                           slicePlayerController:
@@ -2162,7 +2232,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       children: [
         _playerStage(),
         PlayerOverlays(
-          api: api,
           practiceController: practiceController,
           slicePlayerController: slicePlayerController,
           huntingSessionController: huntingSessionController,

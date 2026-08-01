@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
+import 'package:llplayer_next/data/repositories/speech_enhancement_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -14,7 +15,6 @@ import 'package:llplayer_next/services/api_service.dart';
 void main() {
   group('SpeechEnhancementWorkflowController.loadTimelineResource', () {
     test('reports unavailable when all four sub-resources fail', () async {
-      final controller = SpeechEnhancementWorkflowController();
       // The body and address the field actually reported (#62), so the
       // exception's own `toString` carries the sidecar URI.
       final api = LocalApi.withTransport(
@@ -27,11 +27,11 @@ void main() {
               'not be empty","correlation_id":"api-853","retryable":false}',
         ),
       );
+      final controller = _controller(api);
 
       final result = await controller.loadTimelineResource(
-        service: api,
         trackId: 't1',
-        previous: const ExistingTimelineResourceState(),
+        previous: ExistingTimelineResourceState(),
       );
 
       expect(result.unavailable, isTrue);
@@ -59,7 +59,6 @@ void main() {
     });
 
     test('degrades to a warning when only some sub-resources fail', () async {
-      final controller = SpeechEnhancementWorkflowController();
       // Summaries decode as empty lists (200 `[]`); the LLTimeline export
       // decode fails, so exactly one sub-resource errors.
       final api = LocalApi.withTransport(
@@ -67,11 +66,11 @@ void main() {
         token: 'tok',
         transport: (method, path, body) async => (statusCode: 200, body: '[]'),
       );
+      final controller = _controller(api);
 
       final result = await controller.loadTimelineResource(
-        service: api,
         trackId: 't1',
-        previous: const ExistingTimelineResourceState(),
+        previous: ExistingTimelineResourceState(),
       );
 
       expect(result.unavailable, isFalse);
@@ -85,7 +84,6 @@ void main() {
     test(
       'keeps fresh rhythm frames while preserving imported artifacts',
       () async {
-        final controller = SpeechEnhancementWorkflowController();
         final exported =
             jsonDecode(
                   File(
@@ -120,9 +118,9 @@ void main() {
               ? (statusCode: 200, body: jsonEncode(exported))
               : (statusCode: 200, body: '[]'),
         );
+        final controller = _controller(api);
 
         final result = await controller.loadTimelineResource(
-          service: api,
           trackId: 't1',
           previous: ExistingTimelineResourceState(document: previous),
         );
@@ -172,10 +170,7 @@ void main() {
           },
         );
 
-        final result = await _loadSpeechEnhancements(
-          SpeechEnhancementWorkflowController(),
-          api,
-        );
+        final result = await _loadSpeechEnhancements(api);
 
         expect(result.senseGroupsBySentence['sentence-1'], hasLength(1));
         expect(senseGroupLoads, 2);
@@ -205,10 +200,10 @@ void main() {
           return (statusCode: 200, body: '[]');
         },
       );
-      final controller = SpeechEnhancementWorkflowController();
+      final controller = _controller(api);
 
-      final first = await _loadSpeechEnhancements(controller, api);
-      final second = await _loadSpeechEnhancements(controller, api);
+      final first = await _loadSpeechEnhancements(api, controller: controller);
+      final second = await _loadSpeechEnhancements(api, controller: controller);
 
       expect(first.senseGroupsBySentence, isEmpty);
       // The failure is recorded as a typed ApiFailure, not as
@@ -241,10 +236,7 @@ void main() {
         },
       );
 
-      final result = await _loadSpeechEnhancements(
-        SpeechEnhancementWorkflowController(),
-        api,
-      );
+      final result = await _loadSpeechEnhancements(api);
 
       expect(result.senseGroupsBySentence['sentence-1'], hasLength(1));
       expect(
@@ -258,13 +250,17 @@ void main() {
 }
 
 Future<SpeechEnhancementLoadResult> _loadSpeechEnhancements(
-  SpeechEnhancementWorkflowController controller,
-  LocalApi api,
-) => controller.loadSpeechEnhancements(
-  service: api,
+  LocalApi api, {
+  SpeechEnhancementWorkflowController? controller,
+}) => (controller ?? _controller(api)).loadSpeechEnhancements(
   trackId: 't1',
-  previousTimeline: const ExistingTimelineResourceState(),
+  previousTimeline: ExistingTimelineResourceState(),
 );
+
+SpeechEnhancementWorkflowController _controller(LocalApi api) =>
+    SpeechEnhancementWorkflowController(
+      repository: LocalSpeechEnhancementRepository(() => api),
+    );
 
 Map<String, dynamic> _senseGroupAnalysisJson({required String status}) => {
   'id': 'analysis-1',

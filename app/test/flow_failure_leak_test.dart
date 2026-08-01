@@ -8,6 +8,11 @@ import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/speech_enhancement_repository.dart';
+import 'package:llplayer_next/data/repositories/resource_repository.dart';
+import 'package:llplayer_next/data/repositories/media_session_repository.dart';
+import 'package:llplayer_next/data/repositories/manual_review_repository.dart';
+import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
@@ -140,8 +145,9 @@ void main() {
         playerController: harness.player,
         mediaSession: harness.mediaSession,
         tools: ExternalTools(ffprobePath: '/usr/bin/false'),
-        api: harness.api,
+        backendAvailable: true,
         isMediaPath: (_) => true,
+        failureMapper: describeApiFailure,
       ),
     );
 
@@ -179,7 +185,7 @@ void main() {
     final context = await host(tester);
     final flow = openManualReviewFlow(
       context: context,
-      api: harness.api,
+      repository: LocalManualReviewRepository(harness.api),
       adapter: harness.adapter,
       playerController: harness.player,
       subtitleController: harness.subtitle,
@@ -219,14 +225,16 @@ _harness(LocalApi service) {
   final subtitle = SubtitleController();
   final learning = LearningController();
   final settings = SettingsController();
-  final speech = SpeechEnhancementWorkflowController();
+  final speech = SpeechEnhancementWorkflowController(
+    repository: LocalSpeechEnhancementRepository(() => service),
+  );
   final resourceActions =
       ResourceActionsCoordinator(
         player: player,
         subtitle: subtitle,
         speechEnhancement: speech,
+        repository: LocalResourceRepository(() => service),
       )..bind(
-        getApi: () => service,
         isMounted: () => true,
         text: (key) => const AppLocalizations(Locale('en')).text(key),
         reloadSpeechEnhancements: (_) async {},
@@ -242,8 +250,9 @@ _harness(LocalApi service) {
         settings: settings,
         speechEnhancement: speech,
         resourceActions: resourceActions,
+        repository: LocalMediaSessionRepository(() => service),
+        subtitleAnalysis: LocalSubtitleAnalysisRepository(() => service),
       )..bind(
-        getApi: () => service,
         isMounted: () => true,
         text: (key) => const AppLocalizations(Locale('en')).text(key),
         confirmLLTimelineMismatch:

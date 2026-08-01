@@ -1,24 +1,25 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/listening_repository.dart';
 import '../models/listening.dart';
 import '../models/practice.dart';
 import '../models/timeline.dart';
-import '../services/api_service.dart';
 import '../state/store.dart';
 
 const _unset = Object();
 
 class ExtensiveListeningState {
-  const ExtensiveListeningState({
+  ExtensiveListeningState({
     this.session,
-    this.items = const [],
+    List<ListeningInboxItem> items = const [],
     this.busy = false,
     this.error,
     this.lastCapturedAtMs,
-  });
+  }) : _items = List.unmodifiable(items);
 
   final PracticeSession? session;
-  final List<ListeningInboxItem> items;
+  final List<ListeningInboxItem> _items;
+  List<ListeningInboxItem> get items => List.unmodifiable(_items);
   final bool busy;
   final String? error;
   final int? lastCapturedAtMs;
@@ -47,13 +48,18 @@ class ExtensiveListeningState {
 }
 
 class ExtensiveListeningController extends ChangeNotifier {
-  ExtensiveListeningController({DateTime Function()? clock})
-    : _clock = clock ?? DateTime.now,
-      _store = Store(const ExtensiveListeningState()) {
+  factory ExtensiveListeningController({
+    ListeningRepository repository = const UnavailableListeningRepository(),
+    DateTime Function()? clock,
+  }) => ExtensiveListeningController._(repository, clock ?? DateTime.now);
+
+  ExtensiveListeningController._(this._repository, this._clock)
+    : _store = Store(ExtensiveListeningState()) {
     _store.addListener(notifyListeners);
   }
 
   final Store<ExtensiveListeningState> _store;
+  final ListeningRepository _repository;
 
   /// Injectable wall clock so played-time accumulation is testable.
   final DateTime Function() _clock;
@@ -75,6 +81,7 @@ class ExtensiveListeningController extends ChangeNotifier {
   bool get busy => _store.state.busy;
   String? get error => _store.state.error;
   int get activeItemCount => _store.state.activeItemCount;
+  bool get repositoryAvailable => _repository.isAvailable;
 
   ValueNotifier<R> select<R>(R Function(ExtensiveListeningState) selector) =>
       _store.select(selector);
@@ -115,24 +122,23 @@ class ExtensiveListeningController extends ChangeNotifier {
   }
 
   Future<bool> startSession({
-    required LocalApi? api,
     required String? mediaId,
     required String? trackId,
   }) async {
-    if (api == null) return _fail('API is not connected.');
+    if (!_repository.isAvailable) return _fail('API is not connected.');
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final session = await api.createPracticeSession(
-        CreatePracticeSession(
-          mode: 'extensive',
-          mediaId: mediaId,
-          trackId: trackId,
-          source: 'extensive_listening',
-        ),
+      final snapshot = await _repository.startSession(
+        mediaId: mediaId,
+        trackId: trackId,
+        source: 'extensive_listening',
       );
-      final items = await api.listeningInboxItems();
       _store.update(
-        (s) => s.copyWith(session: session, items: items, busy: false),
+        (s) => s.copyWith(
+          session: snapshot.session,
+          items: snapshot.items,
+          busy: false,
+        ),
       );
       _beginPlayedTracking();
       return true;
@@ -141,13 +147,12 @@ class ExtensiveListeningController extends ChangeNotifier {
     }
   }
 
-  Future<bool> finishSession(
-    LocalApi? api, {
+  Future<bool> finishSession({
     String? comprehensionReport,
     HuntingCompletionSummary? huntingSummary,
   }) async {
     final current = session;
-    if (api == null || current == null) {
+    if (!_repository.isAvailable || current == null) {
       return _fail('No extensive listening session is active.');
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
@@ -155,16 +160,15 @@ class ExtensiveListeningController extends ChangeNotifier {
     // until the next session resets it.
     _flushPlayed();
     try {
-      final session = await api.completeListeningSession(
-        current.id,
+      final snapshot = await _repository.finishSession(
+        sessionId: current.id,
         comprehensionReport: comprehensionReport,
         huntingSummary: huntingSummary,
       );
-      final items = await api.listeningInboxItems();
       _store.update(
         (s) => s.copyWith(
-          session: session,
-          items: items,
+          session: snapshot.session,
+          items: snapshot.items,
           busy: false,
           error: null,
         ),
@@ -175,10 +179,10 @@ class ExtensiveListeningController extends ChangeNotifier {
     }
   }
 
-  Future<bool> refreshInbox(LocalApi? api, {String status = 'active'}) async {
-    if (api == null) return false;
+  Future<bool> refreshInbox({String status = 'active'}) async {
+    if (!_repository.isAvailable) return false;
     try {
-      final items = await api.listeningInboxItems(status: status);
+      final items = await _repository.inboxItems(status: status);
       _store.update((s) => s.copyWith(items: items, error: null));
       return true;
     } catch (error) {
@@ -187,7 +191,6 @@ class ExtensiveListeningController extends ChangeNotifier {
   }
 
   Future<bool> captureCurrentCue({
-    required LocalApi? api,
     required Cue? cue,
     required Cue? previousCue,
     required Cue? nextCue,
@@ -195,25 +198,23 @@ class ExtensiveListeningController extends ChangeNotifier {
     required String? trackId,
     required int Function(Duration subtitleTime) mediaTimeMs,
   }) async {
-    if (api == null || cue == null) {
+    if (!_repository.isAvailable || cue == null) {
       return _fail('Open media and subtitles before marking Listening Inbox.');
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final wasActive = active;
-      final currentSession = wasActive
-          ? session!
-          : await api.createPracticeSession(
-              CreatePracticeSession(
-                mode: 'extensive',
-                mediaId: mediaId,
-                trackId: trackId,
-                source: 'soft_interrupt',
-              ),
+      final startSnapshot = wasActive
+          ? null
+          : await _repository.startSession(
+              mediaId: mediaId,
+              trackId: trackId,
+              source: 'soft_interrupt',
             );
+      final currentSession = wasActive ? session! : startSnapshot!.session;
       final startMs = mediaTimeMs(cue.start);
       final endMs = mediaTimeMs(cue.end);
-      final captured = await api.captureListeningInboxItem(
+      final captured = await _repository.captureItem(
         CaptureListeningInboxItemInput(
           sessionId: currentSession.id,
           target: PracticeTarget(
@@ -263,19 +264,18 @@ class ExtensiveListeningController extends ChangeNotifier {
   }
 
   Future<ListeningInboxItem?> processItem(
-    LocalApi? api,
     ListeningInboxItem item,
     String resolution,
   ) async {
-    if (api == null) {
+    if (!_repository.isAvailable) {
       _fail('API is not connected.');
       return null;
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final processed = await api.processListeningInboxItem(
-        item.id,
-        ProcessListeningInboxItemInput(resolution: resolution),
+      final processed = await _repository.processItem(
+        itemId: item.id,
+        resolution: resolution,
       );
       final nextItems = items
           .where((value) => value.id != processed.id)

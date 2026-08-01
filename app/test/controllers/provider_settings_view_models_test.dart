@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/provider_settings_view_models.dart';
 import 'package:llplayer_next/data/repositories/settings_repository.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/llm_provider.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/models/syntax_capability.dart';
@@ -56,13 +57,18 @@ void main() {
   });
 
   test('realtime provider failure is exposed as a named state', () async {
-    final repository = _RealtimeRepository()..loadError = StateError('down');
+    final repository = _RealtimeRepository()
+      ..loadError = const ApiFailure(
+        raw: 'down',
+        code: 'temporarily_unavailable',
+      );
     final viewModel = RealtimeProviderSettingsViewModel(repository);
 
     await viewModel.load();
 
     expect(viewModel.loading, isFalse);
     expect(viewModel.failure?.messageKey, 'realtimeProvidersLoadFailed');
+    expect(viewModel.failure?.detail?.code, 'temporarily_unavailable');
     viewModel.dispose();
   });
 

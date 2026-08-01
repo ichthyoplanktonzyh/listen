@@ -133,7 +133,7 @@ void main() {
         _Harness(
           onPressed: (context) => openLearningResourcesFlow(
             context: context,
-            api: null,
+            repository: null,
             playerController: player,
           ),
         ),
@@ -158,16 +158,11 @@ void main() {
     final recordingAdapter = DesktopPlayerAdapter();
     addTearDown(adapter.dispose);
     addTearDown(recordingAdapter.dispose);
-    final playback =
-        PlaybackActionsCoordinator(
-          adapter: adapter,
-          player: player,
-          subtitle: subtitle,
-        )..bind(
-          getApi: () => null,
-          isMounted: () => true,
-          reloadLearningEntries: () async {},
-        );
+    final playback = PlaybackActionsCoordinator(
+      adapter: adapter,
+      player: player,
+      subtitle: subtitle,
+    )..bind(isMounted: () => true, reloadLearningEntries: () async {});
     final practice = PracticeController();
     final slicePlayer = SlicePlayerController();
     addTearDown(practice.dispose);
@@ -184,7 +179,6 @@ void main() {
           adapter: adapter,
           recordingAdapter: recordingAdapter,
         )..bind(
-          getApi: () => null,
           isMounted: () => true,
           refreshDiagnosis: () async {},
           seekCue: (_) async {},
@@ -198,7 +192,8 @@ void main() {
       _Harness(
         onPressed: (context) => showVocabularyFlow(
           context: context,
-          api: null,
+          lexicalRepository: null,
+          semanticSearchRepository: null,
           playerController: player,
           settingsController: SettingsController(),
           subtitleController: subtitle,
@@ -229,7 +224,7 @@ void main() {
       _Harness(
         onPressed: (context) => openReviewQueueFlow(
           context: context,
-          api: null,
+          repository: null,
           playerController: player,
           pauseBackgroundPlayback: () async {},
           startReviewShadowing: (_) async {},

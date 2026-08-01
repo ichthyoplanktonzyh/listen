@@ -11,6 +11,8 @@ import 'package:llplayer_next/controllers/reading_task_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/vocabulary_actions_coordinator.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
+import 'package:llplayer_next/data/repositories/reading_session_repository.dart';
 import 'package:llplayer_next/controllers/learning_workflow_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -68,7 +70,6 @@ class _Harness {
   _Harness() {
     subtitle.setPrimaryTrack(_track());
     coordinator.bind(
-      getApi: () => api,
       isMounted: () => true,
       openSlicePlayback: (_) async {},
       openWord: (_, _) async {},
@@ -80,8 +81,16 @@ class _Harness {
   final subtitle = SubtitleController();
   final player = PlayerController();
   final reading = ReadingController();
-  final readingTask = ReadingTaskController();
-  final readingDiff = ReadingDiffController();
+  late final readingTaskRepository = LocalReadingTaskRepository(() => api);
+  late final readingTask = ReadingTaskController(
+    repository: readingTaskRepository,
+  );
+  late final readingDiff = ReadingDiffController(
+    repository: readingTaskRepository,
+  );
+  late final readingSessionRepository = LocalReadingSessionRepository(
+    () => api,
+  );
   final settings = SettingsController();
   final learning = LearningController();
   final workflow = LearningWorkflowController();
@@ -102,6 +111,7 @@ class _Harness {
     reading: reading,
     readingTask: readingTask,
     readingDiff: readingDiff,
+    repository: readingSessionRepository,
   );
 
   Widget get widget => MaterialApp(
@@ -110,7 +120,6 @@ class _Harness {
     supportedLocales: AppLocalizations.supportedLocales,
     home: Scaffold(
       body: ReadingChannelHost(
-        api: api,
         readingChannel: coordinator,
         readingController: reading,
         readingTaskController: readingTask,

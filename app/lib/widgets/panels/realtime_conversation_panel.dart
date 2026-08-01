@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/realtime_conversation_controller.dart';
 import '../../localization.dart';
 import '../../models/realtime_conversation.dart';
-import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
@@ -96,7 +95,6 @@ class RealtimeConversationPanel extends StatefulWidget {
   const RealtimeConversationPanel({
     super.key,
     required this.controller,
-    required this.api,
     required this.launch,
     required this.acquireAudioFocus,
     required this.onClose,
@@ -107,7 +105,6 @@ class RealtimeConversationPanel extends StatefulWidget {
     this.onSaveExpression,
   });
   final RealtimeConversationController controller;
-  final LocalApi api;
   final RealtimeConversationLaunch launch;
   final Future<void> Function() acquireAudioFocus;
   final VoidCallback onClose;
@@ -170,8 +167,8 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.controller.loadProfiles(widget.api);
-      widget.controller.loadHistory(widget.api);
+      widget.controller.loadProfiles();
+      widget.controller.loadHistory();
     });
   }
 
@@ -387,8 +384,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
       for (final session in visible)
         _HistorySessionTile(
           session: session,
-          onTap: () =>
-              widget.controller.openHistorySession(widget.api, session.id),
+          onTap: () => widget.controller.openHistorySession(session.id),
         ),
       if (!_historyExpanded && sessions.length > _lobbyHistoryPreviewCount)
         Align(
@@ -605,7 +601,6 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   void _startConversation() {
     setState(() => _debriefDismissed = false);
     widget.controller.start(
-      widget.api,
       widget.launch,
       acquireAudioFocus: widget.acquireAudioFocus,
     );
@@ -668,7 +663,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   Future<void> _manageVoices() async {
     await widget.onManageVoices!();
     if (!mounted) return;
-    await widget.controller.loadProfiles(widget.api);
+    await widget.controller.loadProfiles();
   }
 }
 

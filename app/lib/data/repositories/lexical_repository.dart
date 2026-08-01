@@ -1,3 +1,4 @@
+import '../../models/api_failure.dart';
 import '../../models/practice.dart';
 import '../../models/production_corpus.dart';
 import '../../models/projection_review.dart';
@@ -5,6 +6,7 @@ import '../../models/semantic_embedding.dart';
 import '../../models/semantic_task.dart';
 import '../../models/types.dart';
 import '../../services/api_service.dart';
+import 'occurrence_media_repository.dart';
 
 /// The vocabulary workbench's data boundary.
 ///
@@ -25,10 +27,14 @@ import '../../services/api_service.dart';
 /// per-source degradation (a gap source that is down, a dictionary provider
 /// that is not answering) is a *policy* decision about what the user should
 /// see, and lives with the state, not here.
-class LexicalRepository {
+class LexicalRepository implements OccurrenceMediaRepository {
   LexicalRepository(this._api);
 
   final LocalApi _api;
+
+  /// Translates transport failures at the data boundary so presentation code
+  /// never depends on the concrete API client or its exception types.
+  ApiFailure failureDetail(Object error) => describeApiFailure(error);
 
   // ── The book ──
 
@@ -123,10 +129,13 @@ class LexicalRepository {
 
   // ── Media behind a slice ──
 
+  @override
   Future<MediaItem> readMedia(String mediaId) => _api.readMedia(mediaId);
 
+  @override
   Future<String> fingerprintFile(String path) => _api.fingerprintFile(path);
 
+  @override
   Future<void> registerMedia(String path) async {
     await _api.registerMedia(path);
   }

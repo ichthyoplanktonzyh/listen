@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import '../models/timeline.dart';
 import '../player_adapter.dart';
-import '../services/api_service.dart';
-import '../services/external_tools.dart';
+import '../services/practice_file_service.dart';
 import 'learning_controller.dart';
 import 'playback_actions_coordinator.dart';
 import 'player_controller.dart';
@@ -31,6 +28,7 @@ class PracticeActionsCoordinator {
     required this.settings,
     required this.adapter,
     required this.recordingAdapter,
+    this.fileService = const LocalPracticeFileService(),
     this.stopAuxiliaryAudio,
   });
 
@@ -43,9 +41,9 @@ class PracticeActionsCoordinator {
   final SettingsController settings;
   final DesktopPlayerAdapter adapter;
   final DesktopPlayerAdapter recordingAdapter;
+  final PracticeFileService fileService;
   final Future<void> Function()? stopAuxiliaryAudio;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   String Function(String key)? text;
 
@@ -54,29 +52,20 @@ class PracticeActionsCoordinator {
   late Future<void> Function(Cue? cue) seekCue;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     String Function(String key)? text,
     required Future<void> Function() refreshDiagnosis,
     required Future<void> Function(Cue? cue) seekCue,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.refreshDiagnosis = refreshDiagnosis;
     this.seekCue = seekCue;
   }
 
-  ExternalTools get _tools => ExternalTools(
-    ffmpegPath: settings.ffmpegPath,
-    ffprobePath: settings.ffprobePath,
-    ytDlpPath: settings.ytDlpPath,
-  );
-
   Future<void> startClozePractice() async {
     final cue = subtitle.currentPrimaryCue;
     await practice.startCloze(
-      api: getApi(),
       cue: cue,
       mediaId: player.mediaId,
       trackId: subtitle.primaryTrack?.id,
@@ -93,7 +82,6 @@ class PracticeActionsCoordinator {
 
   Future<void> startChunkDictationPractice() async {
     await practice.startChunkDictation(
-      api: getApi(),
       cue: subtitle.currentPrimaryCue,
       chunk: playbackActions.currentPracticeChunk(),
       mediaId: player.mediaId,
@@ -107,7 +95,6 @@ class PracticeActionsCoordinator {
 
   Future<void> startSentenceDictationPractice() async {
     await practice.startSentenceDictation(
-      api: getApi(),
       cue: subtitle.currentPrimaryCue,
       mediaId: player.mediaId,
       trackId: subtitle.primaryTrack?.id,
@@ -120,7 +107,6 @@ class PracticeActionsCoordinator {
 
   Future<void> startShadowingPractice() async {
     await practice.startShadowing(
-      api: getApi(),
       cue: subtitle.currentPrimaryCue,
       chunk: playbackActions.currentPracticeChunk(),
       chunks: playbackActions.currentPracticeChunks(),
@@ -146,9 +132,9 @@ class PracticeActionsCoordinator {
           'start_ms_snapshot': draft.playbackStartMs,
           'end_ms_snapshot': draft.playbackEndMs,
           'sentence_text_snapshot': draft.expectedText,
-          'media_title_snapshot': draft.referenceMediaPath!
-              .split(Platform.pathSeparator)
-              .last,
+          'media_title_snapshot': fileService.basename(
+            draft.referenceMediaPath!,
+          ),
           'original_form': draft.focusLabel,
         },
       );
@@ -166,7 +152,7 @@ class PracticeActionsCoordinator {
   }
 
   Future<void> submitPractice() async {
-    await practice.submit(getApi());
+    await practice.submit();
     final attempt = practice.attempt;
     if (attempt != null && isMounted()) {
       player.setStatus(
@@ -194,15 +180,17 @@ class PracticeActionsCoordinator {
     final draft = practice.draft;
     if (path == null || draft == null) return;
     await practice.stopShadowingRecording(
-      api: getApi(),
       language: settings.resolveLearningLanguage(
         subtitle.primaryTrack?.language,
       ),
       mediaId: draft.sourceMediaId ?? player.mediaId,
-      extractReferenceWav: () => _tools.extractPcm16AudioSegment(
+      extractReferenceWav: () => fileService.extractReferenceWav(
         path,
         startMs: draft.playbackStartMs,
         endMs: draft.playbackEndMs,
+        ffmpegPath: settings.ffmpegPath,
+        ffprobePath: settings.ffprobePath,
+        ytDlpPath: settings.ytDlpPath,
       ),
     );
   }
@@ -269,7 +257,6 @@ class PracticeActionsCoordinator {
 
   Future<void> setShadowingStep(int index) async {
     await practice.selectShadowingStep(
-      api: getApi(),
       index: index,
       mediaId: player.mediaId,
       trackId: subtitle.primaryTrack?.id,
@@ -294,7 +281,6 @@ class PracticeActionsCoordinator {
     final prompt = occurrence['sentence_text_snapshot'];
     if (startMs is! int || endMs is! int || prompt is! String) return;
     await practice.startExternalShadowing(
-      api: getApi(),
       mediaPath: path,
       mediaId: occurrence['media_id'] as String?,
       trackId: occurrence['track_id'] as String?,
@@ -321,7 +307,7 @@ class PracticeActionsCoordinator {
   }
 
   Future<void> savePracticeReview() async {
-    await practice.saveCurrentFailureToReview(getApi());
+    await practice.saveCurrentFailureToReview();
     if (practice.attempt?.generatedReviewItemIds.isNotEmpty == true &&
         isMounted()) {
       player.setStatus(_t('statusPracticeFailureSaved'));

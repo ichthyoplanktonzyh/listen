@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/occurrence_media_resolver.dart';
@@ -9,7 +8,6 @@ import '../controllers/slice_player_controller.dart';
 import '../data/repositories/review_repository.dart';
 import '../localization.dart';
 import '../models/practice.dart';
-import '../services/api_service.dart';
 import '../state/builder.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
@@ -21,17 +19,15 @@ import '../widgets/common/listen_loading.dart';
 class ReviewQueueScreen extends StatefulWidget {
   const ReviewQueueScreen({
     super.key,
-    required this.api,
+    required this.repository,
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
     this.onPauseBackgroundPlayback,
-    this.repository,
     this.controller,
     this.resolver,
     this.createSlicePlaybackAdapter,
   });
 
-  final LocalApi api;
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
   final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
 
@@ -40,10 +36,10 @@ class ReviewQueueScreen extends StatefulWidget {
   /// completely independent of the main player (S5 · R1).
   final Future<void> Function()? onPauseBackgroundPlayback;
 
-  final ReviewRepository? repository;
+  final ReviewRepository repository;
   final ReviewController? controller;
 
-  /// The clip resolver. Production builds one from [api] exactly like the
+  /// The clip resolver. Production builds one from [repository] exactly like the
   /// vocabulary dictionary's; tests inject a stub so a clip can resolve
   /// without a real file on disk.
   final OccurrenceMediaResolver? resolver;
@@ -57,10 +53,8 @@ class ReviewQueueScreen extends StatefulWidget {
 }
 
 class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
-  late final ReviewRepository _repository =
-      widget.repository ?? LocalReviewRepository(widget.api);
   late final ReviewController controller =
-      widget.controller ?? ReviewController(_repository);
+      widget.controller ?? ReviewController(widget.repository);
   late final bool _ownsController = widget.controller == null;
 
   /// The review card plays its source clip on its own decoder, so a card is
@@ -71,11 +65,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
   );
 
   late final OccurrenceMediaResolver _resolver =
-      widget.resolver ??
-      OccurrenceMediaResolver.fromRepository(
-        repository: _repository,
-        pickFile: (groups) => openFile(acceptedTypeGroups: groups),
-      );
+      widget.resolver ?? OccurrenceMediaResolver(repository: widget.repository);
 
   @override
   void initState() {

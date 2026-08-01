@@ -1,36 +1,53 @@
+import '../data/repositories/speech_enhancement_repository.dart';
 import '../models/api_failure.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
 
 class ExistingTimelineResourceState {
-  const ExistingTimelineResourceState({
-    this.wordSummaries = const [],
-    this.phoneSummaries = const [],
-    this.chunkSummaries = const [],
+  ExistingTimelineResourceState({
+    List<WordTimelineSummary> wordSummaries = const [],
+    List<PhoneTimelineSummary> phoneSummaries = const [],
+    List<ChunkTimelineSummary> chunkSummaries = const [],
     this.document,
-  });
+  }) : _wordSummaries = List.unmodifiable(wordSummaries),
+       _phoneSummaries = List.unmodifiable(phoneSummaries),
+       _chunkSummaries = List.unmodifiable(chunkSummaries);
 
-  final List<WordTimelineSummary> wordSummaries;
-  final List<PhoneTimelineSummary> phoneSummaries;
-  final List<ChunkTimelineSummary> chunkSummaries;
+  final List<WordTimelineSummary> _wordSummaries;
+  List<WordTimelineSummary> get wordSummaries =>
+      List.unmodifiable(_wordSummaries);
+  final List<PhoneTimelineSummary> _phoneSummaries;
+  List<PhoneTimelineSummary> get phoneSummaries =>
+      List.unmodifiable(_phoneSummaries);
+  final List<ChunkTimelineSummary> _chunkSummaries;
+  List<ChunkTimelineSummary> get chunkSummaries =>
+      List.unmodifiable(_chunkSummaries);
   final LLTimelineDocument? document;
 }
 
 class TimelineResourceLoadResult {
-  const TimelineResourceLoadResult({
-    this.wordSummaries = const [],
-    this.phoneSummaries = const [],
-    this.chunkSummaries = const [],
+  TimelineResourceLoadResult({
+    List<WordTimelineSummary> wordSummaries = const [],
+    List<PhoneTimelineSummary> phoneSummaries = const [],
+    List<ChunkTimelineSummary> chunkSummaries = const [],
     this.document,
     this.error,
-    this.failures = const [],
+    List<ApiFailure> failures = const [],
     this.unavailable = false,
-  });
+  }) : _wordSummaries = List.unmodifiable(wordSummaries),
+       _phoneSummaries = List.unmodifiable(phoneSummaries),
+       _chunkSummaries = List.unmodifiable(chunkSummaries),
+       _failures = List.unmodifiable(failures);
 
-  final List<WordTimelineSummary> wordSummaries;
-  final List<PhoneTimelineSummary> phoneSummaries;
-  final List<ChunkTimelineSummary> chunkSummaries;
+  final List<WordTimelineSummary> _wordSummaries;
+  List<WordTimelineSummary> get wordSummaries =>
+      List.unmodifiable(_wordSummaries);
+  final List<PhoneTimelineSummary> _phoneSummaries;
+  List<PhoneTimelineSummary> get phoneSummaries =>
+      List.unmodifiable(_phoneSummaries);
+  final List<ChunkTimelineSummary> _chunkSummaries;
+  List<ChunkTimelineSummary> get chunkSummaries =>
+      List.unmodifiable(_chunkSummaries);
   final LLTimelineDocument? document;
 
   /// The named state, or null when nothing failed. One sentence — the four
@@ -39,76 +56,105 @@ class TimelineResourceLoadResult {
   final String? error;
 
   /// What each failed loader answered with, kept typed and off screen.
-  final List<ApiFailure> failures;
+  final List<ApiFailure> _failures;
+  List<ApiFailure> get failures => List.unmodifiable(_failures);
   final bool unavailable;
 }
 
 class SpeechEnhancementLoadResult {
-  const SpeechEnhancementLoadResult({
+  SpeechEnhancementLoadResult({
     required this.timeline,
-    this.timingsBySentence = const {},
-    this.chunkPartitionsBySentence = const {},
-    this.senseGroupsBySentence = const {},
-    this.pronunciationBySentence = const {},
-    this.pronunciationProviders = const [],
-    this.phoneticAnalysisBySentence = const {},
-    this.errors = const [],
-  });
+    Map<String, List<WordTiming>> timingsBySentence = const {},
+    Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
+    Map<String, List<SenseGroup>> senseGroupsBySentence = const {},
+    Map<String, PronunciationAnalysis> pronunciationBySentence = const {},
+    List<PronunciationProvider> pronunciationProviders = const [],
+    Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
+    List<ApiFailure> errors = const [],
+  }) : _timingsBySentence = Map.unmodifiable({
+         for (final entry in timingsBySentence.entries)
+           entry.key: List<WordTiming>.unmodifiable(entry.value),
+       }),
+       _chunkPartitionsBySentence = Map.unmodifiable(chunkPartitionsBySentence),
+       _senseGroupsBySentence = Map.unmodifiable({
+         for (final entry in senseGroupsBySentence.entries)
+           entry.key: List<SenseGroup>.unmodifiable(entry.value),
+       }),
+       _pronunciationBySentence = Map.unmodifiable(pronunciationBySentence),
+       _pronunciationProviders = List.unmodifiable(pronunciationProviders),
+       _phoneticAnalysisBySentence = Map.unmodifiable(
+         phoneticAnalysisBySentence,
+       ),
+       _errors = List.unmodifiable(errors);
 
   final TimelineResourceLoadResult timeline;
-  final Map<String, List<WordTiming>> timingsBySentence;
-  final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
-  final Map<String, List<SenseGroup>> senseGroupsBySentence;
-  final Map<String, PronunciationAnalysis> pronunciationBySentence;
-  final List<PronunciationProvider> pronunciationProviders;
-  final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
+  final Map<String, List<WordTiming>> _timingsBySentence;
+  Map<String, List<WordTiming>> get timingsBySentence => Map.unmodifiable({
+    for (final entry in _timingsBySentence.entries)
+      entry.key: List<WordTiming>.unmodifiable(entry.value),
+  });
+  final Map<String, SentenceChunkPartition> _chunkPartitionsBySentence;
+  Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
+      Map.unmodifiable(_chunkPartitionsBySentence);
+  final Map<String, List<SenseGroup>> _senseGroupsBySentence;
+  Map<String, List<SenseGroup>> get senseGroupsBySentence => Map.unmodifiable({
+    for (final entry in _senseGroupsBySentence.entries)
+      entry.key: List<SenseGroup>.unmodifiable(entry.value),
+  });
+  final Map<String, PronunciationAnalysis> _pronunciationBySentence;
+  Map<String, PronunciationAnalysis> get pronunciationBySentence =>
+      Map.unmodifiable(_pronunciationBySentence);
+  final List<PronunciationProvider> _pronunciationProviders;
+  List<PronunciationProvider> get pronunciationProviders =>
+      List.unmodifiable(_pronunciationProviders);
+  final Map<String, PhoneticAnalysis> _phoneticAnalysisBySentence;
+  Map<String, PhoneticAnalysis> get phoneticAnalysisBySentence =>
+      Map.unmodifiable(_phoneticAnalysisBySentence);
 
   /// Every optional loader that failed, as a typed failure rather than as a
   /// sentence. Callers report *that* some enhancements are missing; what the
   /// backend said about each one stays here.
-  final List<ApiFailure> errors;
+  final List<ApiFailure> _errors;
+  List<ApiFailure> get errors => List.unmodifiable(_errors);
 }
 
 class SpeechEnhancementWorkflowController {
+  SpeechEnhancementWorkflowController({
+    this.repository = const UnavailableSpeechEnhancementRepository(),
+  });
+
+  final SpeechEnhancementRepository repository;
   final Set<String> _senseGroupFallbackAttemptedTrackIds = {};
 
   Future<SpeechEnhancementLoadResult> loadSpeechEnhancements({
-    required LocalApi service,
     required String trackId,
     required ExistingTimelineResourceState previousTimeline,
   }) async {
     final timeline = await loadTimelineResource(
-      service: service,
       trackId: trackId,
       previous: previousTimeline,
     );
     final errors = <ApiFailure>[];
     final timings = await _loadOptionalResourceCapability(
-      () => service.trackWordTimings(trackId),
+      () => repository.wordTimings(trackId),
       errors,
     );
     final providers = await _loadOptionalResourceCapability(
-      service.pronunciationProviders,
+      repository.pronunciationProviders,
       errors,
     );
     final soundPatterns = await _loadSoundPatternAnalyses(
-      service,
       trackId,
       timeline.phoneSummaries,
       errors,
     );
     final partitions = await _loadChunkPartitions(
-      service,
       trackId,
       timeline.chunkSummaries,
       errors,
     );
-    final senseGroups = await _loadSenseGroups(service, trackId, errors);
-    final analyses = await _loadPronunciationEnhancements(
-      service,
-      trackId,
-      errors,
-    );
+    final senseGroups = await _loadSenseGroups(trackId, errors);
+    final analyses = await _loadPronunciationEnhancements(trackId, errors);
     return SpeechEnhancementLoadResult(
       timeline: timeline,
       timingsBySentence: _groupWordTimings(timings),
@@ -124,7 +170,6 @@ class SpeechEnhancementWorkflowController {
   }
 
   Future<TimelineResourceLoadResult> loadTimelineResource({
-    required LocalApi service,
     required String trackId,
     required ExistingTimelineResourceState previous,
   }) async {
@@ -135,28 +180,28 @@ class SpeechEnhancementWorkflowController {
     LLTimelineDocument? document;
 
     try {
-      summaries = await service.trackWordTimelineSummaries(trackId);
+      summaries = await repository.wordTimelineSummaries(trackId);
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       summaries = previous.wordSummaries;
     }
 
     try {
-      phoneSummaries = await service.trackPhoneTimelineSummaries(trackId);
+      phoneSummaries = await repository.phoneTimelineSummaries(trackId);
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       phoneSummaries = previous.phoneSummaries;
     }
 
     try {
-      chunkSummaries = await service.trackChunkTimelineSummaries(trackId);
+      chunkSummaries = await repository.chunkTimelineSummaries(trackId);
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       chunkSummaries = previous.chunkSummaries;
     }
 
     try {
-      final exportedDocument = await service.exportTrackLLTimeline(trackId);
+      final exportedDocument = await repository.exportTimeline(trackId);
       final preservedArtifacts = previous.document?.artifacts ?? const [];
       // The export endpoint derives fresh rhythm frames from the current word
       // timeline. An older imported document may still carry artifacts that
@@ -176,7 +221,7 @@ class SpeechEnhancementWorkflowController {
             )
           : exportedDocument;
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       document = previous.document;
     }
 
@@ -207,7 +252,6 @@ class SpeechEnhancementWorkflowController {
   }
 
   Future<Map<String, PhoneticAnalysis>> _loadSoundPatternAnalyses(
-    LocalApi service,
     String trackId,
     List<PhoneTimelineSummary> phoneSummaries,
     List<ApiFailure> errors,
@@ -217,7 +261,7 @@ class SpeechEnhancementWorkflowController {
         .firstOrNull;
     if (active != null) {
       try {
-        final timeline = await service.phoneTimeline(active.id);
+        final timeline = await repository.phoneTimeline(active.id);
         final sentenceId = timeline.sentenceId;
         if (sentenceId != null) {
           return {
@@ -227,11 +271,11 @@ class SpeechEnhancementWorkflowController {
           };
         }
       } catch (error) {
-        errors.add(describeApiFailure(error));
+        errors.add(repository.failureDetail(error));
       }
     }
     final phoneticAnalyses = await _loadOptionalResourceCapability(
-      () => service.trackPhoneticAnalyses(trackId),
+      () => repository.phoneticAnalyses(trackId),
       errors,
     );
     final latest = <String, PhoneticAnalysis>{};
@@ -243,20 +287,18 @@ class SpeechEnhancementWorkflowController {
   }
 
   Future<List<PronunciationAnalysis>> _loadPronunciationEnhancements(
-    LocalApi service,
     String trackId,
     List<ApiFailure> errors,
   ) async {
     try {
-      return await service.trackPronunciation(trackId);
+      return await repository.pronunciationAnalyses(trackId);
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       return const [];
     }
   }
 
   Future<Map<String, SentenceChunkPartition>> _loadChunkPartitions(
-    LocalApi service,
     String trackId,
     List<ChunkTimelineSummary> chunkSummaries,
     List<ApiFailure> errors,
@@ -267,14 +309,14 @@ class SpeechEnhancementWorkflowController {
     if (active != null) {
       try {
         return chunkPartitionsFromTimeline(
-          await service.chunkTimeline(active.id),
+          await repository.chunkTimeline(active.id),
         );
       } catch (error) {
-        errors.add(describeApiFailure(error));
+        errors.add(repository.failureDetail(error));
       }
     }
     final partitions = await _loadOptionalResourceCapability(
-      () => service.trackChunkPartitions(trackId),
+      () => repository.chunkPartitions(trackId),
       errors,
     );
     return {
@@ -283,15 +325,14 @@ class SpeechEnhancementWorkflowController {
   }
 
   Future<Map<String, List<SenseGroup>>> _loadSenseGroups(
-    LocalApi service,
     String trackId,
     List<ApiFailure> errors,
   ) async {
     late List<SenseGroupAnalysis> analyses;
     try {
-      analyses = await service.trackSenseGroupAnalyses(trackId);
+      analyses = await repository.senseGroupAnalyses(trackId);
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       return const {};
     }
 
@@ -302,13 +343,13 @@ class SpeechEnhancementWorkflowController {
     }
 
     try {
-      final generated = await service.generateSenseGroupAnalysis(trackId);
-      await service.activateSenseGroupAnalysis(generated.id);
+      final generated = await repository.generateSenseGroups(trackId);
+      await repository.activateSenseGroups(generated.id);
       return _activeSenseGroupsBySentence(
-        await service.trackSenseGroupAnalyses(trackId),
+        await repository.senseGroupAnalyses(trackId),
       );
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       return const {};
     }
   }
@@ -332,7 +373,7 @@ class SpeechEnhancementWorkflowController {
     try {
       return await loader();
     } catch (error) {
-      errors.add(describeApiFailure(error));
+      errors.add(repository.failureDetail(error));
       return const [];
     }
   }

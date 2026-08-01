@@ -6,6 +6,7 @@ import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/writing_channel_coordinator.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
+import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
@@ -52,7 +53,6 @@ class _Harness {
   _Harness() {
     subtitle.setPrimaryTrack(_track());
     coordinator.bind(
-      getApi: () => api,
       isMounted: () => true,
       openSlicePlayback: (occurrence) async {
         slicePlaybacks.add(occurrence);
@@ -86,7 +86,9 @@ class _Harness {
   final settings = SettingsController();
   final slicePlayer = SlicePlayerController();
   final auxiliaryAudio = AuxiliaryAudioController();
-  final task = WritingTaskController();
+  late final task = WritingTaskController(
+    repository: LocalWritingTaskRepository(() => api),
+  );
 
   late final coordinator = WritingChannelCoordinator(
     adapter: DesktopPlayerAdapter(),

@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/api_failure.dart';
-import '../services/api_service.dart';
-import '../widgets/player/download_status_bar.dart';
+import '../models/download_status.dart';
+
+export '../models/download_status.dart';
 
 /// Owns the full online-download lifecycle as a single source of truth.
 ///
@@ -27,7 +28,12 @@ import '../widgets/player/download_status_bar.dart';
 /// checks). The controller depends only on plain `Stream`/`Future` primitives,
 /// not on the concrete download service, so it is unit-testable.
 class DownloadController extends ChangeNotifier {
-  DownloadController({this.failedAutoDismiss = const Duration(seconds: 10)});
+  DownloadController({
+    DownloadFailureMapper? failureMapper,
+    this.failedAutoDismiss = const Duration(seconds: 10),
+  }) : _failureMapper = failureMapper ?? _fallbackFailure;
+
+  final DownloadFailureMapper _failureMapper;
 
   /// How long a `failed` bar stays before it auto-dismisses. A `completed` bar
   /// intentionally persists so its "Open" action stays available (opening the
@@ -98,7 +104,7 @@ class DownloadController extends ChangeNotifier {
       onError: (Object error) {
         if (_stale(generation)) return;
         _cancelActive = null;
-        final failure = describeApiFailure(error);
+        final failure = _failureMapper(error);
         _setSnapshot(DownloadStatusSnapshot.failed(failure));
         _scheduleFailedAutoDismiss();
         onFailed?.call(failure);
@@ -160,3 +166,8 @@ class DownloadController extends ChangeNotifier {
     super.dispose();
   }
 }
+
+typedef DownloadFailureMapper = ApiFailure Function(Object error);
+
+ApiFailure _fallbackFailure(Object error) =>
+    error is ApiFailure ? error : ApiFailure(raw: '$error');

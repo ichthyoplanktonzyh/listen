@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/writing_channel_coordinator.dart';
 import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../flows/writing_flows.dart';
 import '../panels/writing_task_studio.dart';
 
@@ -16,12 +15,10 @@ import '../panels/writing_task_studio.dart';
 class WritingChannelHost extends StatelessWidget {
   const WritingChannelHost({
     super.key,
-    required this.api,
     required this.writingChannel,
     required this.writingTaskController,
   });
 
-  final LocalApi api;
   final WritingChannelCoordinator writingChannel;
   final WritingTaskController writingTaskController;
 
@@ -30,7 +27,6 @@ class WritingChannelHost extends StatelessWidget {
     listenable: writingChannel,
     builder: (context, _) => WritingTaskStudio(
       controller: writingTaskController,
-      api: api,
       audioPlayCount: () => writingChannel.playCount,
       onKindChanged: (kind) => unawaited(_openKind(context, kind)),
       onPlaySource: writingChannel.playSource,

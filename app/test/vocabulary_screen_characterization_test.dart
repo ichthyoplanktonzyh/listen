@@ -7,6 +7,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
+import 'package:llplayer_next/data/repositories/lexical_repository.dart';
+import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/vocabulary_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -127,10 +130,8 @@ typedef Reply = ({int statusCode, String body});
 
 Reply ok(Object? json) => (statusCode: 200, body: jsonEncode(json));
 
-Reply fail(String body, {int statusCode = 500}) => (
-  statusCode: statusCode,
-  body: body,
-);
+Reply fail(String body, {int statusCode = 500}) =>
+    (statusCode: statusCode, body: body);
 
 /// The backend's JSON error envelope. Only an envelope carries the fields
 /// `ApiFailureDisclosure.hasDetail` looks for, so only an envelope earns the
@@ -160,8 +161,7 @@ class Workbench {
 
   /// Exact-path count. `hits` would also match a sub-resource of the same
   /// entry (`…/entry-1/capability/reading`), which is not the same request.
-  int exact(String path) =>
-      calls.where((call) => call.path == path).length;
+  int exact(String path) => calls.where((call) => call.path == path).length;
 
   LocalApi build() => LocalApi.withTransport(
     baseUrl: 'http://127.0.0.1:62645',
@@ -210,7 +210,9 @@ Widget host({
   // Teardown order matters: the screen's dispose fires an unawaited
   // auxiliaryAudio.stop(), so the unmount must run before the controllers are
   // disposed. LIFO teardown gives that if the unmount is registered last.
-  final hunting = HuntingController();
+  final hunting = HuntingController(
+    repository: LocalHuntingRepository(() => api),
+  );
   addTearDown(hunting.dispose);
   final audio = AuxiliaryAudioController();
   addTearDown(audio.dispose);
@@ -234,7 +236,8 @@ Widget host({
       GlobalCupertinoLocalizations.delegate,
     ],
     home: VocabularyScreen(
-      api: api,
+      repository: LexicalRepository(api),
+      semanticSearchRepository: LocalSemanticSearchRepository(api),
       language: 'en',
       onExport: () async {},
       onImport: () async {},
@@ -351,9 +354,8 @@ void main() {
         setSize(tester, const Size(1200, 900));
         final bench = Workbench(
           words: [entryWire('entry-1', 'rather')],
-          route: (method, path) => path == '/v1/lexical-entries/entry-1'
-              ? fail(envelope)
-              : null,
+          route: (method, path) =>
+              path == '/v1/lexical-entries/entry-1' ? fail(envelope) : null,
         );
         await tester.pumpWidget(host(api: bench.build(), tester: tester));
         await tester.pumpAndSettle();
@@ -369,10 +371,7 @@ void main() {
         // names what went wrong.
         expect(find.byType(VocabularyGapPanel), findsOneWidget);
         expect(find.byType(SnackBar), findsNothing);
-        expect(
-          find.byKey(const Key('dictionary-identity-card')),
-          findsNothing,
-        );
+        expect(find.byKey(const Key('dictionary-identity-card')), findsNothing);
       },
     );
 
@@ -438,30 +437,27 @@ void main() {
       },
     );
 
-    testWidgets(
-      'a corpus reindex that fails names the failure and keeps the '
-      'diagnostics one tap away',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(
-          route: (method, path) =>
-              path.startsWith('/v1/corpus/reindex') ? fail(envelope) : null,
-        );
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
+    testWidgets('a corpus reindex that fails names the failure and keeps the '
+        'diagnostics one tap away', (tester) async {
+      setSize(tester, const Size(1200, 900));
+      final bench = Workbench(
+        route: (method, path) =>
+            path.startsWith('/v1/corpus/reindex') ? fail(envelope) : null,
+      );
+      await tester.pumpWidget(host(api: bench.build(), tester: tester));
+      await tester.pumpAndSettle();
 
-        await openTools(tester);
-        await tapTool(tester, 'Rebuild library index');
+      await openTools(tester);
+      await tapTool(tester, 'Rebuild library index');
 
-        expect(find.text('Could not rebuild the index'), findsOneWidget);
-        expect(find.text('Details'), findsOneWidget);
-        // The envelope's own fields never reach the bar itself.
-        final text = rendered(tester);
-        expect(text, isNot(contains('api-853')));
-        expect(text, isNot(contains('the index is locked')));
-        expect(text, isNot(contains('127.0.0.1')));
-      },
-    );
+      expect(find.text('Could not rebuild the index'), findsOneWidget);
+      expect(find.text('Details'), findsOneWidget);
+      // The envelope's own fields never reach the bar itself.
+      final text = rendered(tester);
+      expect(text, isNot(contains('api-853')));
+      expect(text, isNot(contains('the index is locked')));
+      expect(text, isNot(contains('127.0.0.1')));
+    });
 
     testWidgets(
       'a failure whose body is not the error envelope offers no details at all',
@@ -623,32 +619,26 @@ void main() {
       },
     );
 
-    testWidgets(
-      'an entry whose dictionary lookup fails settles on synthetic '
-      'pronunciation instead of waiting',
-      (tester) async {
-        setSize(tester, const Size(1200, 900));
-        final bench = Workbench(
-          words: [entryWire('entry-1', 'rather')],
-          route: (method, path) =>
-              path.startsWith('/v1/dictionary') ? fail('provider down') : null,
-        );
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('rather'));
-        await tester.pumpAndSettle();
+    testWidgets('an entry whose dictionary lookup fails settles on synthetic '
+        'pronunciation instead of waiting', (tester) async {
+      setSize(tester, const Size(1200, 900));
+      final bench = Workbench(
+        words: [entryWire('entry-1', 'rather')],
+        route: (method, path) =>
+            path.startsWith('/v1/dictionary') ? fail('provider down') : null,
+      );
+      await tester.pumpWidget(host(api: bench.build(), tester: tester));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('rather'));
+      await tester.pumpAndSettle();
 
-        // The identity card is up, the pronunciation slot resolved to "no
-        // provider audio", and the synthetic fallback is offered — the card is
-        // never held hostage by a dead provider.
-        expect(
-          find.byKey(const Key('dictionary-identity-card')),
-          findsOneWidget,
-        );
-        expect(find.byTooltip('Play synthetic pronunciation'), findsOneWidget);
-        expect(find.byTooltip('Play pronunciation'), findsNothing);
-      },
-    );
+      // The identity card is up, the pronunciation slot resolved to "no
+      // provider audio", and the synthetic fallback is offered — the card is
+      // never held hostage by a dead provider.
+      expect(find.byKey(const Key('dictionary-identity-card')), findsOneWidget);
+      expect(find.byTooltip('Play synthetic pronunciation'), findsOneWidget);
+      expect(find.byTooltip('Play pronunciation'), findsNothing);
+    });
 
     testWidgets(
       'a capability override that fails names the failure and leaves the open '
@@ -714,7 +704,8 @@ void main() {
         expect(
           bench.hits('/v1/vocabulary?'),
           listBefore + 1,
-          reason: 'the list re-queries because its filters read the same '
+          reason:
+              'the list re-queries because its filters read the same '
               'channels',
         );
       },
@@ -878,54 +869,53 @@ void main() {
       },
     );
 
-    testWidgets(
-      'a stale vocabulary list response overwrites the fresher one',
-      (tester) async {
-        // SUSPECTED DEFECT D4. The detail path has a sequence guard; the list
-        // path (`_load`, vocabulary_screen.dart:202) has none. Two searches in
-        // flight publish in arrival order, so a slower older query wins and
-        // the column shows results for a query the user already replaced.
-        setSize(tester, const Size(1200, 900));
-        final slowFirstQuery = Completer<void>();
-        addTearDown(() {
-          if (!slowFirstQuery.isCompleted) slowFirstQuery.complete();
-        });
-        final bench = Workbench(
-          route: (method, path) async {
-            if (!path.startsWith('/v1/vocabulary?')) return null;
-            if (path.contains('search=gi&')) {
-              await slowFirstQuery.future;
-              return ok([entryWire('entry-stale', 'STALE')]);
-            }
-            if (path.contains('search=gist&')) {
-              return ok([entryWire('entry-fresh', 'FRESH')]);
-            }
-            return ok(const <dynamic>[]);
-          },
-        );
+    testWidgets('a stale vocabulary list response overwrites the fresher one', (
+      tester,
+    ) async {
+      // SUSPECTED DEFECT D4. The detail path has a sequence guard; the list
+      // path (`_load`, vocabulary_screen.dart:202) has none. Two searches in
+      // flight publish in arrival order, so a slower older query wins and
+      // the column shows results for a query the user already replaced.
+      setSize(tester, const Size(1200, 900));
+      final slowFirstQuery = Completer<void>();
+      addTearDown(() {
+        if (!slowFirstQuery.isCompleted) slowFirstQuery.complete();
+      });
+      final bench = Workbench(
+        route: (method, path) async {
+          if (!path.startsWith('/v1/vocabulary?')) return null;
+          if (path.contains('search=gi&')) {
+            await slowFirstQuery.future;
+            return ok([entryWire('entry-stale', 'STALE')]);
+          }
+          if (path.contains('search=gist&')) {
+            return ok([entryWire('entry-fresh', 'FRESH')]);
+          }
+          return ok(const <dynamic>[]);
+        },
+      );
 
-        await tester.pumpWidget(host(api: bench.build(), tester: tester));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(host(api: bench.build(), tester: tester));
+      await tester.pumpAndSettle();
 
-        await tester.enterText(find.byType(TextField), 'gi');
-        await tester.pump();
-        await tester.enterText(find.byType(TextField), 'gist');
-        await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'gi');
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'gist');
+      await tester.pumpAndSettle();
 
-        // The fresher query has landed and is on screen.
-        expect(find.text('FRESH'), findsOneWidget);
+      // The fresher query has landed and is on screen.
+      expect(find.text('FRESH'), findsOneWidget);
 
-        // The older query now lands — and wins.
-        slowFirstQuery.complete();
-        await tester.pumpAndSettle();
-        expect(
-          find.text('STALE'),
-          findsOneWidget,
-          reason: 'today the older response overwrites the newer list',
-        );
-        expect(find.text('FRESH'), findsNothing);
-      },
-    );
+      // The older query now lands — and wins.
+      slowFirstQuery.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('STALE'),
+        findsOneWidget,
+        reason: 'today the older response overwrites the newer list',
+      );
+      expect(find.text('FRESH'), findsNothing);
+    });
 
     testWidgets(
       'the previously opened entry stays on screen while the next one loads',

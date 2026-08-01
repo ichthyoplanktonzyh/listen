@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import 'reading_task_sheet.dart';
@@ -15,14 +14,12 @@ class ListeningCheckPanel extends StatelessWidget {
   const ListeningCheckPanel({
     super.key,
     required this.controller,
-    required this.api,
     required this.audioPlayCount,
     required this.onPlaySegment,
     required this.onClose,
   });
 
   final ReadingTaskController controller;
-  final LocalApi api;
   final int Function() audioPlayCount;
   final VoidCallback onPlaySegment;
   final VoidCallback onClose;
@@ -70,7 +67,6 @@ class ListeningCheckPanel extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: ReadingTaskSheet(
                 controller: controller,
-                api: api,
                 audioPlayCount: audioPlayCount,
                 onPlaySegment: onPlaySegment,
               ),

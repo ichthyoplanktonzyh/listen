@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/writing_task_controller.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -16,7 +15,6 @@ class WritingTaskStudio extends StatefulWidget {
   const WritingTaskStudio({
     super.key,
     required this.controller,
-    required this.api,
     required this.audioPlayCount,
     required this.onKindChanged,
     required this.onPlaySource,
@@ -25,7 +23,6 @@ class WritingTaskStudio extends StatefulWidget {
   });
 
   final WritingTaskController controller;
-  final LocalApi api;
   final int Function() audioPlayCount;
   final ValueChanged<String> onKindChanged;
   final VoidCallback onPlaySource;
@@ -184,11 +181,9 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                       ? null
                       : () => revising
                             ? widget.controller.submitRevision(
-                                widget.api,
                                 audioPlayCount: widget.audioPlayCount(),
                               )
                             : widget.controller.submitDraft(
-                                widget.api,
                                 audioPlayCount: widget.audioPlayCount(),
                               ),
                   icon: state.busy
@@ -207,10 +202,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
       ),
       if (revising) ...[
         const SizedBox(width: ListenSpacing.gap16),
-        Expanded(
-          flex: 2,
-          child: _FeedbackList(controller: widget.controller, api: widget.api),
-        ),
+        Expanded(flex: 2, child: _FeedbackList(controller: widget.controller)),
       ],
     ],
   );
@@ -262,7 +254,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
                 key: const Key('writing-request-feedback'),
                 onPressed: state.busy
                     ? null
-                    : () => widget.controller.requestLocalFeedback(widget.api),
+                    : () => widget.controller.requestLocalFeedback(),
                 icon: const Icon(Icons.rule),
                 label: Text(l.text('writingRequestFeedback')),
               ),
@@ -305,7 +297,7 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
       _RevisionDiff(original: state.draft, revised: state.revisionDraft),
       const SizedBox(height: ListenSpacing.gap12),
       Text(l.text('writingEvidenceNotice')),
-      _WritingLlmAssist(controller: widget.controller, api: widget.api),
+      _WritingLlmAssist(controller: widget.controller),
     ],
   );
 }
@@ -314,10 +306,9 @@ class _WritingTaskStudioState extends State<WritingTaskStudio> {
 /// provider is configured. Distinct from the Harper surface findings; nothing
 /// is stored and no verdicts are assigned.
 class _WritingLlmAssist extends StatelessWidget {
-  const _WritingLlmAssist({required this.controller, required this.api});
+  const _WritingLlmAssist({required this.controller});
 
   final WritingTaskController controller;
-  final LocalApi api;
 
   @override
   Widget build(BuildContext context) {
@@ -327,7 +318,7 @@ class _WritingLlmAssist extends StatelessWidget {
       feedback: state.llmFeedback,
       busy: state.busy,
       keyPrefix: 'writing-task',
-      onRequest: () => unawaited(controller.requestLlmFeedback(api)),
+      onRequest: () => unawaited(controller.requestLlmFeedback()),
     );
   }
 }
@@ -468,10 +459,9 @@ class _SourceCard extends StatelessWidget {
 }
 
 class _FeedbackList extends StatelessWidget {
-  const _FeedbackList({required this.controller, required this.api});
+  const _FeedbackList({required this.controller});
 
   final WritingTaskController controller;
-  final LocalApi api;
 
   @override
   Widget build(BuildContext context) {
@@ -536,7 +526,7 @@ class _FeedbackList extends StatelessWidget {
                 ),
               ),
             ),
-        _WritingLlmAssist(controller: controller, api: api),
+        _WritingLlmAssist(controller: controller),
       ],
     );
   }

@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
-
+import '../data/repositories/media_session_repository.dart';
+import '../data/repositories/subtitle_analysis_repository.dart';
 import '../models/timeline.dart';
 import '../player_adapter.dart';
-import '../services/api_service.dart';
+import '../services/media_import_file_service.dart';
 import 'learning_controller.dart';
 import 'player_controller.dart';
 import 'resource_actions_coordinator.dart';
@@ -27,6 +25,9 @@ class MediaSessionCoordinator {
     required this.settings,
     required this.speechEnhancement,
     required this.resourceActions,
+    required this.repository,
+    required this.subtitleAnalysis,
+    this.importFiles = const LocalMediaImportFileService(),
   });
 
   final DesktopPlayerAdapter adapter;
@@ -36,8 +37,10 @@ class MediaSessionCoordinator {
   final SettingsController settings;
   final SpeechEnhancementWorkflowController speechEnhancement;
   final ResourceActionsCoordinator resourceActions;
+  final MediaSessionRepository repository;
+  final SubtitleAnalysisRepository subtitleAnalysis;
+  final MediaImportFileService importFiles;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   late String Function(String key) text;
   late Future<bool> Function({
@@ -52,7 +55,6 @@ class MediaSessionCoordinator {
   generatedPrimaryStatus;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required String Function(String key) text,
     required Future<bool> Function({
@@ -66,7 +68,6 @@ class MediaSessionCoordinator {
     required String Function(SpeechEnhancementLoadResult? result)
     generatedPrimaryStatus,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.confirmLLTimelineMismatch = confirmLLTimelineMismatch;
@@ -79,27 +80,23 @@ class MediaSessionCoordinator {
   // ── Media open ──
 
   Future<void> openMedia() async {
-    const group = XTypeGroup(
-      label: 'media',
-      extensions: ['mp4', 'mkv', 'mov', 'webm', 'm4a', 'mp3', 'wav', 'flac'],
-    );
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file == null) return;
-    await openMediaPath(file.path);
+    final path = await importFiles.pickMedia();
+    if (path == null) return;
+    await openMediaPath(path);
   }
 
   Future<void> openMediaPath(String path) async {
-    final api = getApi();
     final previousMediaId = player.mediaId;
     final previousPosition = player.position;
     final previousProgressSave = previousMediaId == null
         ? Future<void>.value()
-        : api?.saveProgress(previousMediaId, previousPosition) ??
-              Future<void>.value();
+        : repository.isAvailable
+        ? repository.saveProgress(previousMediaId, previousPosition)
+        : Future<void>.value();
     player.setStatus(
       text(
         'statusOpeningFile',
-      ).replaceAll('{name}', path.split(Platform.pathSeparator).last),
+      ).replaceAll('{name}', importFiles.basename(path)),
     );
     onMediaSwitched();
     player.clearMedia();
@@ -121,7 +118,7 @@ class MediaSessionCoordinator {
         player.setStatus(
           text('statusPlaybackFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
       return;
@@ -129,10 +126,10 @@ class MediaSessionCoordinator {
     Object? coreError;
     try {
       await previousProgressSave;
-      final media = await api?.registerMedia(path);
-      if (media != null) {
+      if (repository.isAvailable) {
+        final media = await repository.registerMedia(path);
         final id = media.id;
-        final saved = await api?.readProgress(id);
+        final saved = await repository.readProgress(id);
         player.setMedia(
           id: id,
           path: path,
@@ -157,14 +154,16 @@ class MediaSessionCoordinator {
           coreError == null
               ? text(
                   'statusPlayingFile',
-                ).replaceAll('{name}', path.split(Platform.pathSeparator).last)
+                ).replaceAll('{name}', importFiles.basename(path))
               : text('statusPlayingCoreUnavailable'),
           playback: coreError == null,
           // The file is playing; only the core round-trip failed. The sentence
           // says that much, and the exception behind it — which was being
           // interpolated into the status line one `catch` away from where it
           // was raised — stays typed.
-          failure: coreError == null ? null : describeApiFailure(coreError),
+          failure: coreError == null
+              ? null
+              : repository.failureDetail(coreError),
         );
       }
     } catch (error) {
@@ -172,7 +171,7 @@ class MediaSessionCoordinator {
         player.setStatus(
           text('statusPlaybackFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
@@ -181,19 +180,18 @@ class MediaSessionCoordinator {
   // ── Subtitle import ──
 
   Future<void> openSubtitle({required bool secondary}) async {
-    if (player.mediaId == null || getApi() == null) {
+    if (player.mediaId == null || !repository.isAvailable) {
       player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;
     }
-    const group = XTypeGroup(label: 'subtitles', extensions: ['srt', 'vtt']);
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file == null) return;
-    await openSubtitlePath(file.path, secondary: secondary);
+    final path = await importFiles.pickSubtitle();
+    if (path == null) return;
+    await openSubtitlePath(path, secondary: secondary);
   }
 
   Future<void> openSubtitlePath(String path, {required bool secondary}) async {
     try {
-      final imported = await getApi()!.importSubtitle(player.mediaId!, path);
+      final imported = await repository.importSubtitle(player.mediaId!, path);
       await adapter.disableNativeSubtitles();
       if (secondary) {
         subtitle.setSecondaryTrack(imported);
@@ -203,14 +201,12 @@ class MediaSessionCoordinator {
         player.setStatus(
           text(
             'statusSecondarySubtitleLoaded',
-          ).replaceAll('{name}', path.split(Platform.pathSeparator).last),
+          ).replaceAll('{name}', importFiles.basename(path)),
         );
       } else {
         await usePrimarySubtitleTrack(
           imported,
-          nextStatus:
-              'Loaded primary subtitle: '
-              '${path.split(Platform.pathSeparator).last}',
+          nextStatus: 'Loaded primary subtitle: ${importFiles.basename(path)}',
         );
       }
       await resourceActions.loadSubtitleResources(updateStatus: false);
@@ -218,7 +214,7 @@ class MediaSessionCoordinator {
       player.setStatus(
         text('statusSubtitleImportFailed'),
         error: true,
-        failure: describeApiFailure(error),
+        failure: repository.failureDetail(error),
       );
     }
   }
@@ -226,21 +222,16 @@ class MediaSessionCoordinator {
   // ── LLTimeline import ──
 
   Future<void> openLLTimelineResource() async {
-    final service = getApi();
     final mediaId = player.mediaId;
-    if (service == null || mediaId == null) {
+    if (!repository.isAvailable || mediaId == null) {
       player.setStatus(text('statusOpenMediaAndCoreFirst'));
       return;
     }
-    const group = XTypeGroup(label: 'LLTimeline', extensions: ['json']);
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file == null) return;
     try {
       player.setStatus(text('statusImportingLLTimeline'));
-      final decoded = jsonDecode(await File(file.path).readAsString());
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('LLTimeline JSON must be an object');
-      }
+      final selected = await importFiles.pickTimeline();
+      if (selected == null) return;
+      final decoded = selected.document;
       final resourceFingerprint = _llTimelineMediaFingerprint(decoded);
       final currentFingerprint = player.mediaFingerprint;
       var allowMismatch = false;
@@ -258,16 +249,15 @@ class MediaSessionCoordinator {
           return;
         }
       }
-      final imported = await service.importLLTimelineForMedia(
-        mediaId,
-        decoded,
+      final imported = await repository.importTimeline(
+        mediaId: mediaId,
+        document: decoded,
         allowMismatch: allowMismatch,
       );
       await usePrimarySubtitleTrack(
         imported,
         nextStatus:
-            'Imported LLTimeline resource: '
-            '${file.path.split(Platform.pathSeparator).last}',
+            'Imported LLTimeline resource: ${importFiles.basename(selected.path)}',
       );
       subtitle.setTimelineResource(
         summaries: subtitle.wordTimelineSummaries,
@@ -282,7 +272,7 @@ class MediaSessionCoordinator {
       player.setStatus(
         text('statusLLTimelineImportFailed'),
         error: true,
-        failure: describeApiFailure(error),
+        failure: repository.failureDetail(error),
       );
     }
   }
@@ -319,12 +309,10 @@ class MediaSessionCoordinator {
   }
 
   Future<void> _analyzeSyntaxWhenAvailable(String trackId) async {
-    final service = getApi();
-    if (service == null) return;
+    if (!subtitleAnalysis.isAvailable) return;
     try {
-      final capability = await service.syntaxCapability();
-      if (capability.isReady) {
-        await service.runTrackSyntaxAnalysis(trackId);
+      if (await subtitleAnalysis.syntaxReady()) {
+        await subtitleAnalysis.analyzeTrackSyntax(trackId);
       }
     } catch (_) {
       // Optional enhancement: never disturb subtitle import or playback.
@@ -358,10 +346,8 @@ class MediaSessionCoordinator {
   Future<SpeechEnhancementLoadResult?> loadSpeechEnhancements(
     String trackId,
   ) async {
-    final service = getApi();
-    if (service == null) return null;
+    if (!speechEnhancement.repository.isAvailable) return null;
     final result = await speechEnhancement.loadSpeechEnhancements(
-      service: service,
       trackId: trackId,
       previousTimeline: resourceActions.existingTimelineResourceState(),
     );

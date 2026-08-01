@@ -1,43 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
-import '../../models/api_failure.dart';
+import '../../models/download_status.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
 
-enum DownloadStatusKind { downloading, completed, failed }
-
-class DownloadStatusSnapshot {
-  const DownloadStatusSnapshot.downloading({required this.progress})
-    : kind = DownloadStatusKind.downloading,
-      downloadedMediaPath = null,
-      failure = null;
-
-  const DownloadStatusSnapshot.completed(this.downloadedMediaPath)
-    : kind = DownloadStatusKind.completed,
-      progress = 1.0,
-      failure = null;
-
-  /// A failed download carries a *typed* [ApiFailure], not the tool's own text.
-  ///
-  /// This used to be `String? error`, filled with `error.toString()`, and the
-  /// bar below built `'${l.text('downloadFailed')}: ${status.error}'` out of
-  /// it — so a failed download printed yt-dlp's raw stderr, or a whole
-  /// `ProcessException` with the executable path in it, where a sentence
-  /// belongs. Typing the field is what makes that unrepresentable: the only
-  /// way to render the detail now is to reach into a named diagnostic field,
-  /// and [ApiFailure.raw] is documented as never rendered.
-  const DownloadStatusSnapshot.failed(this.failure)
-    : kind = DownloadStatusKind.failed,
-      progress = 1.0,
-      downloadedMediaPath = null;
-
-  final DownloadStatusKind kind;
-  final double progress;
-  final String? downloadedMediaPath;
-  final ApiFailure? failure;
-}
+// Compatibility export for callers that historically imported this widget to
+// construct a status. New code should import models/download_status.dart (or
+// download_controller.dart) instead.
+export '../../models/download_status.dart';
 
 class DownloadStatusBar extends StatelessWidget {
   const DownloadStatusBar({

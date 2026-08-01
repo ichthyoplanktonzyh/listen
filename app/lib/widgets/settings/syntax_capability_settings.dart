@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/provider_settings_view_models.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
@@ -12,12 +11,12 @@ import '../common/listen_error_state.dart';
 class SyntaxCapabilitySettings extends StatefulWidget {
   const SyntaxCapabilitySettings({
     super.key,
-    this.api,
+    this.repository,
     this.viewModel,
     this.currentTrackId,
-  }) : assert(api != null || viewModel != null);
+  }) : assert(repository != null || viewModel != null);
 
-  final LocalApi? api;
+  final SyntaxCapabilityRepository? repository;
   final SyntaxCapabilitySettingsViewModel? viewModel;
   final String? currentTrackId;
 
@@ -37,7 +36,7 @@ class _SyntaxCapabilitySettingsState extends State<SyntaxCapabilitySettings> {
     _viewModel =
         widget.viewModel ??
         SyntaxCapabilitySettingsViewModel(
-          LocalSyntaxCapabilityRepository(widget.api!),
+          widget.repository!,
           currentTrackId: widget.currentTrackId,
         );
     _viewModel.refresh();

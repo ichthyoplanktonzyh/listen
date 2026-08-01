@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/speaking_task_controller.dart';
+import 'package:llplayer_next/data/repositories/speaking_task_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -309,12 +310,11 @@ void main() {
   test('permission rejection happens before audio focus handoff', () async {
     final backend = _FakeBackend();
     final recorder = _FakeRecorder(MicrophonePermissionStatus.denied);
-    final controller = SpeakingTaskController(recorder: recorder);
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
+    final controller = SpeakingTaskController(
+      repository: LocalSpeakingTaskRepository(() => backend.api),
+      recorder: recorder,
     );
+    await controller.openTask(source: _source, fixedRubricPoints: _points);
     var focusAcquired = false;
     final started = await controller.beginRecording(
       acquireAudioFocus: () async => focusAcquired = true,
@@ -331,14 +331,11 @@ void main() {
     final backend = _FakeBackend();
     final recorder = _FakeRecorder(MicrophonePermissionStatus.granted);
     final controller = SpeakingTaskController(
+      repository: LocalSpeakingTaskRepository(() => backend.api),
       recorder: recorder,
       delay: (_) async {},
     );
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
-    );
+    await controller.openTask(source: _source, fixedRubricPoints: _points);
     controller.noteSourcePlayback();
     var focusAcquired = false;
     expect(
@@ -350,7 +347,7 @@ void main() {
     expect(focusAcquired, isTrue);
     expect(controller.state.phase, 'recording');
 
-    await controller.stopRecording(backend.api);
+    await controller.stopRecording();
     expect(controller.state.phase, 'reviewing');
     expect(controller.state.audioFacts?.pauses, hasLength(1));
     expect(controller.state.audioFacts?.totalPauseMs, 400);
@@ -361,18 +358,14 @@ void main() {
     final requestCountBeforeClose = backend.requests.length;
     await controller.closeTask();
     expect(controller.state.phase, 'idle');
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
-    );
+    await controller.openTask(source: _source, fixedRubricPoints: _points);
     expect(controller.state.phase, 'reviewing');
     expect(backend.requests, hasLength(requestCountBeforeClose));
     controller.updateCorrectedTranscript(
       'The storm delayed the ferry until Tuesday.',
     );
     controller.setAsrReliability('suspect');
-    await controller.acceptTranscript(backend.api);
+    await controller.acceptTranscript();
 
     expect(controller.state.phase, 'ready_feedback');
     final attemptBody = backend.requests
@@ -392,7 +385,6 @@ void main() {
     // No rubric self-assessment (issue #9): confirming a target and
     // finishing are all that remains after the attempt is saved.
     await controller.confirmSpeakingTarget(
-      backend.api,
       lexicalEntryId: 'lexical-until-tuesday',
       surfaceForm: 'until Tuesday',
     );
@@ -411,7 +403,7 @@ void main() {
     expect(controller.state.phase, 'done');
     expect(controller.state.canRetry, isTrue);
 
-    await controller.scheduleDelayedRetelling(backend.api);
+    await controller.scheduleDelayedRetelling();
     expect(controller.state.delayedReviewItemId, 'review-speaking-1');
     final reviewBody = backend.requests
         .firstWhere((request) => request.$2 == '/v1/review/items')
@@ -432,10 +424,10 @@ void main() {
     () async {
       final backend = _FakeBackend();
       final controller = SpeakingTaskController(
+        repository: LocalSpeakingTaskRepository(() => backend.api),
         recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
       );
       await controller.openTask(
-        backend.api,
         source: const SpeakingTaskSource(
           anchorCueId: 'pattern-1',
           startMs: 0,
@@ -461,23 +453,20 @@ void main() {
     () async {
       final backend = _FakeBackend()..providers = [_providerJson()];
       final controller = SpeakingTaskController(
+        repository: LocalSpeakingTaskRepository(() => backend.api),
         recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
         delay: (_) async {},
       );
-      await controller.openTask(
-        backend.api,
-        source: _source,
-        fixedRubricPoints: _points,
-      );
+      await controller.openTask(source: _source, fixedRubricPoints: _points);
       await controller.beginRecording(acquireAudioFocus: () async {});
-      await controller.stopRecording(backend.api);
-      await controller.acceptTranscript(backend.api);
+      await controller.stopRecording();
+      await controller.acceptTranscript();
       // A capable provider was discovered, but no feedback yet.
       expect(controller.state.phase, 'ready_feedback');
       expect(controller.state.feedbackProviderId, 'prov-1');
       expect(controller.state.llmFeedback, isNull);
 
-      await controller.requestLlmFeedback(backend.api);
+      await controller.requestLlmFeedback();
       expect(
         controller.state.llmFeedback,
         'Clear retelling; add the timing detail next time.',
@@ -507,21 +496,18 @@ void main() {
         _providerJson(allowedUses: ['rubric_generation']),
       ];
     final controller = SpeakingTaskController(
+      repository: LocalSpeakingTaskRepository(() => backend.api),
       recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
       delay: (_) async {},
     );
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
-    );
+    await controller.openTask(source: _source, fixedRubricPoints: _points);
     await controller.beginRecording(acquireAudioFocus: () async {});
-    await controller.stopRecording(backend.api);
-    await controller.acceptTranscript(backend.api);
+    await controller.stopRecording();
+    await controller.acceptTranscript();
     expect(controller.state.phase, 'ready_feedback');
     expect(controller.state.feedbackProviderId, isNull);
     // Requesting without a provider is a no-op; no feedback call is recorded.
-    await controller.requestLlmFeedback(backend.api);
+    await controller.requestLlmFeedback();
     expect(controller.state.llmFeedback, isNull);
     expect(backend.requests.where((r) => r.$2.endsWith('/feedback')), isEmpty);
   });
@@ -529,14 +515,11 @@ void main() {
   test('future-stage intents cannot skip recording and review', () async {
     final backend = _FakeBackend();
     final controller = SpeakingTaskController(
+      repository: LocalSpeakingTaskRepository(() => backend.api),
       recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
     );
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
-    );
-    await controller.acceptTranscript(backend.api);
+    await controller.openTask(source: _source, fixedRubricPoints: _points);
+    await controller.acceptTranscript();
     controller.finishTask();
 
     expect(controller.state.phase, 'listening');
@@ -553,13 +536,10 @@ void main() {
   ) async {
     final backend = _FakeBackend();
     final controller = SpeakingTaskController(
+      repository: LocalSpeakingTaskRepository(() => backend.api),
       recorder: _FakeRecorder(MicrophonePermissionStatus.granted),
     );
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      fixedRubricPoints: _points,
-    );
+    await controller.openTask(source: _source, fixedRubricPoints: _points);
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
@@ -568,7 +548,6 @@ void main() {
         home: Scaffold(
           body: SpeakingTaskStudio(
             controller: controller,
-            api: backend.api,
             onPlaySource: () async {},
             onPlayRecording: () async {},
             onAcquireRecordingFocus: () async {},

@@ -5,7 +5,6 @@ import 'package:llplayer_next/controllers/semantic_search_view_model.dart';
 import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_embedding.dart';
-import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/vocabulary/semantic_search_dialog.dart';
 
 const _ready = SemanticEmbeddingCapabilityView(
@@ -61,13 +60,6 @@ class _Repository implements SemanticSearchRepository {
   Future<SemanticEmbeddingCapabilityView> uninstall() async => _ready;
 }
 
-LocalApi _unusedApi() => LocalApi.withTransport(
-  baseUrl: 'http://unused',
-  token: 'token',
-  transport: (method, path, body) async =>
-      (statusCode: 500, body: 'must not be called'),
-);
-
 void main() {
   testWidgets('renders and searches through an injected view model', (
     tester,
@@ -88,7 +80,7 @@ void main() {
         ],
         home: Scaffold(
           body: SemanticSearchDialog(
-            api: _unusedApi(),
+            repository: repository,
             language: 'en',
             viewModel: viewModel,
           ),

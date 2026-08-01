@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/reading.dart';
+import '../data/repositories/reading_session_repository.dart';
 import '../models/semantic_task.dart';
 import '../models/timeline.dart';
 import '../player_adapter.dart';
-import '../services/api_service.dart';
 import 'occurrence_media_resolver.dart';
 import 'player_controller.dart';
 import 'reading_controller.dart';
@@ -32,6 +32,7 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     required this.reading,
     required this.readingTask,
     required this.readingDiff,
+    required this.repository,
   }) {
     reading.addListener(_scheduleReadingPositionSave);
   }
@@ -43,8 +44,8 @@ class ReadingChannelCoordinator extends ChangeNotifier {
   final ReadingController reading;
   final ReadingTaskController readingTask;
   final ReadingDiffController readingDiff;
+  final ReadingSessionRepository repository;
 
-  LocalApi? Function()? _getApi;
   bool Function()? _isMounted;
   Future<void> Function(Map<String, dynamic> occurrence)? _openSlicePlayback;
   Future<void> Function(SubtitleToken token, Cue cue)? _openWord;
@@ -53,13 +54,11 @@ class ReadingChannelCoordinator extends ChangeNotifier {
   /// primary playback position never moves while reading; [openWord] hands
   /// lexical selection back to the vocabulary coordinator.
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required Future<void> Function(Map<String, dynamic> occurrence)
     openSlicePlayback,
     required Future<void> Function(SubtitleToken token, Cue cue) openWord,
   }) {
-    _getApi = getApi;
     _isMounted = isMounted;
     _openSlicePlayback = openSlicePlayback;
     _openWord = openWord;
@@ -105,7 +104,9 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     // top (the cursor is a convenience, never a gate).
     String? resumeAnchor;
     try {
-      final saved = await _getApi?.call()?.readingPosition(track.id);
+      final saved = repository.isAvailable
+          ? await repository.readingPosition(track.id)
+          : null;
       resumeAnchor = saved?.anchorCueId;
     } catch (_) {}
     _lastSavedAnchor = resumeAnchor;
@@ -165,7 +166,8 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     if (trackId == null || anchor == null) return;
     if (anchor == _lastSavedAnchor) return;
     try {
-      await _getApi?.call()?.saveReadingPosition(
+      if (!repository.isAvailable) return;
+      await repository.saveReadingPosition(
         trackId: trackId,
         mediaId: subtitle.primaryTrack?.mediaId,
         anchorCueId: anchor,
@@ -183,14 +185,12 @@ class ReadingChannelCoordinator extends ChangeNotifier {
   /// falling back to the track language when L1 was never set.
   Future<ReadingTaskSource?> taskSource(ReadingParagraph paragraph) async {
     final track = subtitle.primaryTrack;
-    final service = _getApi?.call();
-    if (track == null || service == null) return null;
+    if (track == null || !repository.isAvailable) return null;
     final cursor = subtitle.primaryCursor;
     final sourceLanguage = settings.resolveLearningLanguage(track.language);
     var responseLanguage = sourceLanguage;
     try {
-      final profile = await service.learnerProfile();
-      final l1 = profile.l1Language;
+      final l1 = await repository.learnerL1Language();
       if (l1 != null && l1.isNotEmpty) responseLanguage = l1;
     } catch (_) {}
     final anchor = Cue(
@@ -222,17 +222,12 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     required List<RubricPointView> templatePoints,
   }) async {
     final source = await taskSource(paragraph);
-    final service = _getApi?.call();
-    if (source == null || service == null || !_mounted) return;
+    if (source == null || !readingTask.repositoryAvailable || !_mounted) return;
     await adapter.pause();
     _taskStudioSource = source;
     notifyListeners();
     unawaited(
-      readingTask.openTask(
-        service,
-        source: source,
-        templatePoints: templatePoints,
-      ),
+      readingTask.openTask(source: source, templatePoints: templatePoints),
     );
   }
 
@@ -246,12 +241,11 @@ class ReadingChannelCoordinator extends ChangeNotifier {
   /// the same segment, reduced independently — never a causal claim.
   Future<void> openDiff(ReadingParagraph paragraph) async {
     final source = await taskSource(paragraph);
-    final service = _getApi?.call();
-    if (source == null || service == null || !_mounted) return;
+    if (source == null || !_mounted) return;
     _diffSource = source;
     _diffParagraph = paragraph;
     notifyListeners();
-    unawaited(readingDiff.loadDiff(service, source));
+    unawaited(readingDiff.loadDiff(source));
   }
 
   void closeDiff() {
@@ -268,10 +262,7 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     ReadingTaskSource source, {
     required List<RubricPointView> fallbackTemplatePoints,
   }) {
-    final service = _getApi?.call();
-    // Defensive backstop: the reading surface only exists once the core is
-    // connected (the workbench renders behind the root api gate).
-    if (service == null) return;
+    if (!readingTask.repositoryAvailable) return;
     final readingPoints = readingDiff.state.read.rubric?.points;
     final template = readingPoints == null || readingPoints.isEmpty
         ? fallbackTemplatePoints
@@ -281,7 +272,6 @@ class ReadingChannelCoordinator extends ChangeNotifier {
     notifyListeners();
     unawaited(
       readingTask.openTask(
-        service,
         source: source,
         templatePoints: template,
         purpose: ReadingTaskController.listeningPurpose,

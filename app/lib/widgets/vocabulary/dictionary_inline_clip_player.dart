@@ -35,7 +35,7 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
     builder: (context, _) {
       final l = AppLocalizations.of(context);
       final state = controller.state;
-      final video = controller.videoController;
+      final renderHandle = controller.renderHandle;
       return Card(
         margin: const EdgeInsets.only(bottom: 12),
         clipBehavior: Clip.antiAlias,
@@ -79,16 +79,20 @@ class DictionaryInlineClipPlayer extends StatelessWidget {
                   state.error!,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 )
-              else if (state.showVideo && video != null)
+              else if (state.showVideo && renderHandle != null)
                 SizedBox(
                   height: 320,
                   width: double.infinity,
                   child: Center(
                     child: AspectRatio(
-                      aspectRatio: video.value.aspectRatio,
+                      aspectRatio: renderHandle.aspectRatio,
                       child: ColoredBox(
                         color: ListenColors.videoBackdrop,
-                        child: VideoPlayer(video),
+                        child: switch (renderHandle) {
+                          VideoPlayerSliceRenderHandle(:final controller) =>
+                            VideoPlayer(controller),
+                          _ => const SizedBox.shrink(),
+                        },
                       ),
                     ),
                   ),

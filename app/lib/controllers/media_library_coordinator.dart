@@ -1,8 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
+import '../data/repositories/media_library_repository.dart';
+import '../models/saved_vocabulary_count.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
+import '../services/media_file_service.dart';
 import 'extensive_listening_controller.dart';
 import 'learning_controller.dart';
 import 'player_controller.dart';
@@ -21,6 +22,8 @@ class MediaLibraryCoordinator {
     required this.learning,
     required this.settings,
     required this.extensiveListening,
+    required this.repository,
+    this.fileService = const LocalMediaFileService(),
   });
 
   final PlayerController player;
@@ -28,8 +31,9 @@ class MediaLibraryCoordinator {
   final LearningController learning;
   final SettingsController settings;
   final ExtensiveListeningController extensiveListening;
+  final MediaLibraryRepository repository;
+  final MediaFileService fileService;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   late String Function(String key) text;
   late void Function() requestRebuild;
@@ -42,14 +46,12 @@ class MediaLibraryCoordinator {
   List<MediaLibraryEntry>? mediaLibrary;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required String Function(String key) text,
     required void Function() requestRebuild,
     required Future<void> Function(String path) openMediaPath,
     required Future<void> Function() openMedia,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.requestRebuild = requestRebuild;
@@ -64,7 +66,7 @@ class MediaLibraryCoordinator {
     if (path == null || path.isEmpty) return;
     settings.recordRecentMedia(
       path: path,
-      title: player.mediaTitle ?? path.split(Platform.pathSeparator).last,
+      title: player.mediaTitle ?? fileService.basename(path),
       positionMs: player.position.inMilliseconds,
       durationMs: player.duration.inMilliseconds,
       subtitleCount: subtitle.subtitleResources.length,
@@ -74,14 +76,13 @@ class MediaLibraryCoordinator {
   /// Prefetch global learning totals (vocabulary, listening inbox) so the home
   /// readiness strip reflects real state instead of cold-start zeros.
   Future<void> prefetchHomeSummary() async {
-    final service = getApi();
     // Passive prefetch (runs on connect, not on a user action): before the
     // core is up the home simply keeps its neutral placeholders.
-    if (service == null) return;
-    unawaited(extensiveListening.refreshInbox(service));
+    if (!repository.isAvailable) return;
+    unawaited(extensiveListening.refreshInbox());
     unawaited(loadMediaLibrary());
     try {
-      final count = await service.savedVocabularyCount(
+      final count = await repository.savedVocabularyCount(
         language: settings.resolveLearningLanguage(
           subtitle.primaryTrack?.language,
         ),
@@ -100,14 +101,13 @@ class MediaLibraryCoordinator {
   /// section on its previous state: the library is a suggestion surface,
   /// never a gate on playback or learning.
   Future<void> loadMediaLibrary() async {
-    final service = getApi();
     // Background summary refresh; a missing core keeps the previous list,
     // matching the failure policy documented above.
-    if (service == null) return;
+    if (!repository.isAvailable) return;
     try {
-      final entries = await service.listMediaLibrary();
+      final entries = await repository.listMediaLibrary();
       if (isMounted()) {
-        mediaLibrary = entries;
+        mediaLibrary = List.unmodifiable(entries);
         requestRebuild();
       }
     } catch (_) {
@@ -118,7 +118,7 @@ class MediaLibraryCoordinator {
   /// Opens a library row like any other media — triage never changes what
   /// opening a file does.
   Future<void> openLibraryEntry(MediaLibraryEntry entry) async {
-    if (!File(entry.media.path).existsSync()) {
+    if (!fileService.exists(entry.media.path)) {
       player.setStatus(text('mediaFileMissing'));
       return;
     }
@@ -128,14 +128,13 @@ class MediaLibraryCoordinator {
   /// One-click extensive listening: open the media, then start the ambient
   /// session with the loaded primary track.
   Future<void> startExtensiveFromLibrary(MediaLibraryEntry entry) async {
-    if (!File(entry.media.path).existsSync()) {
+    if (!fileService.exists(entry.media.path)) {
       player.setStatus(text('mediaFileMissing'));
       return;
     }
     await openMediaPath(entry.media.path);
     if (!isMounted() || extensiveListening.active) return;
     final started = await extensiveListening.startSession(
-      api: getApi(),
       mediaId: player.mediaId,
       trackId: subtitle.primaryTrack?.id ?? entry.primaryTrackId,
     );
@@ -147,7 +146,7 @@ class MediaLibraryCoordinator {
   /// One-click intensive listening opens the material; a concrete current
   /// sentence is still required before the user chooses a practice type.
   Future<void> startIntensiveFromLibrary(MediaLibraryEntry entry) async {
-    if (!File(entry.media.path).existsSync()) {
+    if (!fileService.exists(entry.media.path)) {
       player.setStatus(text('mediaFileMissing'));
       return;
     }
@@ -159,32 +158,34 @@ class MediaLibraryCoordinator {
     MediaLibraryEntry entry,
     String? intent,
   ) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       // Unavailable State (CONTEXT.md): triage is a direct click on a library
       // row, so report the missing core instead of silently doing nothing.
       player.setStatus(text('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      final updated = await service.setMediaTriageIntent(
-        entry.media.id,
-        intent,
-      );
+      final updated = await repository.setTriageIntent(entry.media.id, intent);
       if (!isMounted()) return;
       final library = mediaLibrary;
       if (library != null) {
         final index = library.indexWhere(
           (item) => item.media.id == updated.media.id,
         );
-        if (index >= 0) library[index] = updated;
+        if (index >= 0) {
+          mediaLibrary = List.unmodifiable([
+            ...library.take(index),
+            updated,
+            ...library.skip(index + 1),
+          ]);
+        }
       }
       requestRebuild();
     } catch (error) {
       player.setStatus(
         text('statusTriageIntentFailed'),
         error: true,
-        failure: describeApiFailure(error),
+        failure: repository.failureDetail(error),
       );
     }
   }
@@ -203,7 +204,7 @@ class MediaLibraryCoordinator {
       await openMedia();
       return;
     }
-    if (!File(path).existsSync()) {
+    if (!fileService.exists(path)) {
       player.setStatus(text('statusRecentMediaMissing'), error: true);
       await openMedia();
       return;

@@ -5,22 +5,26 @@ import '../models/practice.dart';
 import '../state/store.dart';
 
 class ReviewState {
-  const ReviewState({
-    this.queue = const [],
+  ReviewState({
+    List<ReviewQueueEntry> queue = const [],
     this.index = 0,
     this.revealed = false,
     this.busy = false,
     this.completedCount = 0,
-    this.upgradeSuggestions = const [],
+    List<UpgradeSuggestion> upgradeSuggestions = const [],
     this.error,
-  });
+  }) : _queue = List.unmodifiable(queue),
+       _upgradeSuggestions = List.unmodifiable(upgradeSuggestions);
 
-  final List<ReviewQueueEntry> queue;
+  final List<ReviewQueueEntry> _queue;
+  List<ReviewQueueEntry> get queue => List.unmodifiable(_queue);
   final int index;
   final bool revealed;
   final bool busy;
   final int completedCount;
-  final List<UpgradeSuggestion> upgradeSuggestions;
+  final List<UpgradeSuggestion> _upgradeSuggestions;
+  List<UpgradeSuggestion> get upgradeSuggestions =>
+      List.unmodifiable(_upgradeSuggestions);
   final String? error;
 
   ReviewQueueEntry? get current => index < queue.length ? queue[index] : null;
@@ -48,7 +52,7 @@ class ReviewState {
 }
 
 class ReviewController extends ChangeNotifier {
-  ReviewController(this._repository) : _store = Store(const ReviewState()) {
+  ReviewController(this._repository) : _store = Store(ReviewState()) {
     _store.addListener(notifyListeners);
   }
 

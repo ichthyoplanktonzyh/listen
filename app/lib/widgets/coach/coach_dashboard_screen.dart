@@ -4,7 +4,6 @@ import '../../controllers/coach_dashboard_controller.dart';
 import '../../data/repositories/coach_dashboard_repository.dart';
 import '../../localization.dart';
 import '../../models/coach_dashboard.dart';
-import '../../services/api_service.dart';
 import '../../theme/motion.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -48,15 +47,13 @@ class _PortraitFocus {
 class CoachDashboardScreen extends StatefulWidget {
   const CoachDashboardScreen({
     super.key,
-    required this.api,
+    required this.repository,
     required this.language,
     required this.onNavigate,
-    this.repository,
     this.controller,
   });
-  final LocalApi api;
   final String language;
-  final CoachDashboardRepository? repository;
+  final CoachDashboardRepository repository;
   final CoachDashboardController? controller;
   final Future<void> Function(
     CoachSuggestionDestination destination,
@@ -82,10 +79,7 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
     super.initState();
     _ownsController = widget.controller == null;
     controller =
-        widget.controller ??
-        CoachDashboardController(
-          widget.repository ?? LocalCoachDashboardRepository(widget.api),
-        );
+        widget.controller ?? CoachDashboardController(widget.repository);
     controller.load(language: widget.language);
   }
 

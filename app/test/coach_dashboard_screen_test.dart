@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/data/repositories/coach_dashboard_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/coach/coach_dashboard_screen.dart';
@@ -145,7 +146,7 @@ Future<void> _pump(
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: CoachDashboardScreen(
-        api: api,
+        repository: LocalCoachDashboardRepository(api),
         language: 'en',
         onNavigate: (destination, _) async =>
             navigations?.add(destination.kind),

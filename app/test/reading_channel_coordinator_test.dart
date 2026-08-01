@@ -8,6 +8,8 @@ import 'package:llplayer_next/controllers/reading_diff_controller.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
+import 'package:llplayer_next/data/repositories/reading_session_repository.dart';
 import 'package:llplayer_next/models/reading.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -81,9 +83,12 @@ class _FakeBackend {
 
 class _Harness {
   _Harness({LocalApi? api}) {
+    final taskRepository = LocalReadingTaskRepository(() => api);
+    readingTask = ReadingTaskController(repository: taskRepository);
+    readingDiff = ReadingDiffController(repository: taskRepository);
+    readingSession = LocalReadingSessionRepository(() => api);
     subtitle.setPrimaryTrack(_track());
     coordinator.bind(
-      getApi: () => api,
       isMounted: () => true,
       openSlicePlayback: (occurrence) async {
         slicePlaybacks.add(occurrence);
@@ -97,8 +102,9 @@ class _Harness {
   final subtitle = SubtitleController();
   final player = PlayerController();
   final reading = ReadingController();
-  final readingTask = ReadingTaskController();
-  final readingDiff = ReadingDiffController();
+  late final ReadingTaskController readingTask;
+  late final ReadingDiffController readingDiff;
+  late final ReadingSessionRepository readingSession;
   final settings = SettingsController();
   final slicePlaybacks = <Map<String, dynamic>>[];
   final openedWords = <String>[];
@@ -111,6 +117,7 @@ class _Harness {
     reading: reading,
     readingTask: readingTask,
     readingDiff: readingDiff,
+    repository: readingSession,
   );
 
   ReadingParagraph get firstParagraph => reading.state.paragraphs.first;

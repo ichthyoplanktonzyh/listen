@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/phonetic_analysis_ui.dart';
+import 'package:llplayer_next/data/repositories/phonetic_analysis_repository.dart';
+import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
 import 'package:llplayer_next/theme/icon_size.dart';
 
@@ -38,43 +40,43 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         home: PhoneticAnalysisCenter(
-          loadProviders: () async => [
-            const PhoneticProviderView(
-              id: 'fixture',
-              displayName: 'Research fixture',
-              runtimeId: 'fixture-runtime',
-              runtimeVersion: 'v1',
-              available: false,
-              experimental: true,
-              diagnostic: 'Disabled outside verification',
-            ),
-          ],
-          loadModels: () async => [
-            const PhoneticModelView(
-              id: 'fixture-model',
-              providerId: 'fixture',
-              displayName: 'Fixture model',
-              revision: 'v1',
-              sizeBytes: 0,
-              state: 'custom',
-              installedBytes: 0,
-              license: 'Research only',
-              trainingDataProvenance: 'Synthetic',
-              distributionAllowed: false,
-              applicationVerified: false,
-            ),
-          ],
-          loadJobs: () async => jobs,
-          cancelJob: (id) async {
-            cancelled = id;
-            jobs = [];
-            return phoneticJob(id: id, status: 'cancelled');
-          },
-          retryJob: (id) async {
-            retried = id;
-            jobs = [];
-            return phoneticJob(id: id, status: 'queued');
-          },
+          repository: _FakePhoneticRepository(
+            loadProviders: () async => [
+              const PhoneticProviderView(
+                id: 'fixture',
+                displayName: 'Research fixture',
+                runtimeId: 'fixture-runtime',
+                runtimeVersion: 'v1',
+                available: false,
+                experimental: true,
+                diagnostic: 'Disabled outside verification',
+              ),
+            ],
+            loadModels: () async => [
+              const PhoneticModelView(
+                id: 'fixture-model',
+                providerId: 'fixture',
+                displayName: 'Fixture model',
+                revision: 'v1',
+                sizeBytes: 0,
+                state: 'custom',
+                installedBytes: 0,
+                license: 'Research only',
+                trainingDataProvenance: 'Synthetic',
+                distributionAllowed: false,
+                applicationVerified: false,
+              ),
+            ],
+            loadJobs: () async => jobs,
+            cancelJobCallback: (id) async {
+              cancelled = id;
+              jobs = [];
+            },
+            retryJobCallback: (id) async {
+              retried = id;
+              jobs = [];
+            },
+          ),
         ),
       ),
     );
@@ -127,6 +129,41 @@ void main() {
     await pumpAnalysisCenterFrame(tester);
     expect(retried, 'failed-job');
   });
+}
+
+final class _FakePhoneticRepository implements PhoneticAnalysisRepository {
+  _FakePhoneticRepository({
+    required this.loadProviders,
+    required this.loadModels,
+    required this.loadJobs,
+    required this.cancelJobCallback,
+    required this.retryJobCallback,
+  });
+
+  final Future<List<PhoneticProviderView>> Function() loadProviders;
+  final Future<List<PhoneticModelView>> Function() loadModels;
+  final Future<List<PhoneticJobView>> Function() loadJobs;
+  final Future<void> Function(String id) cancelJobCallback;
+  final Future<void> Function(String id) retryJobCallback;
+
+  @override
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: error.toString());
+  @override
+  Future<List<PhoneticProviderView>> providers() => loadProviders();
+  @override
+  Future<List<PhoneticModelView>> models() => loadModels();
+  @override
+  Future<List<PhoneticJobView>> jobs() => loadJobs();
+  @override
+  Future<void> cancelJob(String id) => cancelJobCallback(id);
+  @override
+  Future<void> retryJob(String id) => retryJobCallback(id);
+  @override
+  Future<void> installModel(String id) async {}
+  @override
+  Future<void> deleteJob(String id) async {}
+  @override
+  Future<void> clearTerminalJobs() async {}
 }
 
 PhoneticJobView phoneticJob({

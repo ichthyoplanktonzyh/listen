@@ -7,10 +7,16 @@ import 'package:llplayer_next/controllers/reading_diff_controller.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
 import 'package:llplayer_next/controllers/review_controller.dart';
 import 'package:llplayer_next/data/repositories/review_repository.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
+import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/data/repositories/coach_dashboard_repository.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
+import 'package:llplayer_next/data/repositories/listening_repository.dart';
 import 'package:llplayer_next/controllers/speaking_task_controller.dart';
+import 'package:llplayer_next/data/repositories/speaking_task_repository.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
+import 'package:llplayer_next/models/named_failure.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 /// The task controllers' `state.error`, which panels render verbatim.
@@ -53,11 +59,12 @@ void main() {
     transport: (method, path, body) async => (statusCode: 500, body: envelope),
   );
 
-  void expectNamedState(String? error, String expected) {
-    expect(error, expected);
+  void expectNamedState(Object? error, String expected) {
+    final message = error is NamedFailure ? error.messageKey : error as String?;
+    expect(message, expected);
     for (final leak in leaks) {
       expect(
-        error,
+        message,
         isNot(contains(leak)),
         reason:
             '"$leak" is transport detail; a task studio notice is not a place '
@@ -96,14 +103,13 @@ void main() {
 
   test('a reading task whose rubric lookup fails names the state', () async {
     // GET /v1/semantic/rubrics?… → 500.
-    final controller = ReadingTaskController();
+    final api = failingApi();
+    final controller = ReadingTaskController(
+      repository: LocalReadingTaskRepository(() => api),
+    );
     addTearDown(controller.dispose);
 
-    await controller.openTask(
-      failingApi(),
-      source: readingSource,
-      templatePoints: points,
-    );
+    await controller.openTask(source: readingSource, templatePoints: points);
 
     expectNamedState(
       controller.state.error,
@@ -113,11 +119,13 @@ void main() {
   });
 
   test('a writing task that cannot be opened names the state', () async {
-    final controller = WritingTaskController();
+    final api = failingApi();
+    final controller = WritingTaskController(
+      repository: LocalWritingTaskRepository(() => api),
+    );
     addTearDown(controller.dispose);
 
     await controller.openTask(
-      failingApi(),
       source: writingSource,
       kind: 'summary',
       promptSnapshot: 'Summarise the report.',
@@ -131,11 +139,13 @@ void main() {
   });
 
   test('a speaking task that cannot be opened names the state', () async {
-    final controller = SpeakingTaskController();
+    final api = failingApi();
+    final controller = SpeakingTaskController(
+      repository: LocalSpeakingTaskRepository(() => api),
+    );
     addTearDown(controller.dispose);
 
     await controller.openTask(
-      failingApi(),
       source: const SpeakingTaskSource(
         anchorCueId: 'cue-1',
         mediaId: 'media-1',
@@ -176,41 +186,39 @@ void main() {
   });
 
   test('a hunting list that cannot be loaded names the state', () async {
-    final controller = HuntingController();
+    final api = failingApi();
+    final controller = HuntingController(
+      repository: LocalHuntingRepository(() => api),
+    );
     addTearDown(controller.dispose);
 
-    await controller.load(failingApi());
+    await controller.load();
 
-    expectNamedState(controller.state.error, 'Could not load hunting list');
+    expectNamedState(controller.state.error, 'huntingLoadFailed');
   });
 
   test('hunting targets that cannot be located name the state', () async {
-    final controller = HuntingSessionController();
+    final api = failingApi();
+    final controller = HuntingSessionController(
+      repository: LocalHuntingRepository(() => api),
+    );
     addTearDown(controller.dispose);
 
-    await controller.start(
-      api: failingApi(),
-      sessionId: 'session-1',
-      mediaId: 'media-1',
-    );
+    await controller.start(sessionId: 'session-1', mediaId: 'media-1');
 
-    expectNamedState(
-      controller.state.error,
-      'Could not locate hunting targets',
-    );
+    expectNamedState(controller.state.error, 'huntingOccurrencesFailed');
   });
 
   test(
     'an extensive-listening session that cannot start names the state',
     () async {
-      final controller = ExtensiveListeningController();
+      final api = failingApi();
+      final controller = ExtensiveListeningController(
+        repository: LocalListeningRepository(() => api),
+      );
       addTearDown(controller.dispose);
 
-      await controller.startSession(
-        api: failingApi(),
-        mediaId: 'media-1',
-        trackId: 'track-1',
-      );
+      await controller.startSession(mediaId: 'media-1', trackId: 'track-1');
 
       expectNamedState(
         controller.state.error,
@@ -220,10 +228,13 @@ void main() {
   );
 
   test('a comparison that cannot be built names the state', () async {
-    final controller = ReadingDiffController();
+    final api = failingApi();
+    final controller = ReadingDiffController(
+      repository: LocalReadingTaskRepository(() => api),
+    );
     addTearDown(controller.dispose);
 
-    await controller.loadDiff(failingApi(), readingSource);
+    await controller.loadDiff(readingSource);
 
     expectNamedState(
       controller.state.error,

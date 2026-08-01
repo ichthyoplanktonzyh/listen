@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -119,16 +120,12 @@ LocalApi _fakeApi() => LocalApi.withTransport(
   },
 );
 
-Widget _host(ReadingTaskController controller, LocalApi api) => MaterialApp(
+Widget _host(ReadingTaskController controller) => MaterialApp(
   locale: const Locale('en'),
   localizationsDelegates: const [AppLocalizations.delegate],
   supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
-    body: ReadingTaskSheet(
-      controller: controller,
-      api: api,
-      audioPlayCount: () => 0,
-    ),
+    body: ReadingTaskSheet(controller: controller, audioPlayCount: () => 0),
   ),
 );
 
@@ -137,12 +134,10 @@ void main() {
     'draft answer and rubric edits restore after leaving the scene',
     () async {
       final api = _fakeApi();
-      final controller = ReadingTaskController();
-      await controller.openTask(
-        api,
-        source: _source,
-        templatePoints: _template,
+      final controller = ReadingTaskController(
+        repository: LocalReadingTaskRepository(() => api),
       );
+      await controller.openTask(source: _source, templatePoints: _template);
       controller.updateDraftPoint(
         0,
         const RubricPointView(
@@ -154,11 +149,7 @@ void main() {
       controller.updateAnswerDraft('Unsubmitted answer');
       controller.closeTask();
 
-      await controller.openTask(
-        api,
-        source: _source,
-        templatePoints: _template,
-      );
+      await controller.openTask(source: _source, templatePoints: _template);
       expect(
         controller.state.draftPoints.single.statement,
         'Edited checkpoint',
@@ -171,8 +162,10 @@ void main() {
     tester,
   ) async {
     final api = _fakeApi();
-    final controller = ReadingTaskController();
-    await controller.openTask(api, source: _source, templatePoints: _template);
+    final controller = ReadingTaskController(
+      repository: LocalReadingTaskRepository(() => api),
+    );
+    await controller.openTask(source: _source, templatePoints: _template);
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en'),
@@ -181,7 +174,6 @@ void main() {
         home: Scaffold(
           body: ReadingTaskStudio(
             controller: controller,
-            api: api,
             source: _source,
             audioPlayCount: () => 0,
             onClose: () {},
@@ -220,9 +212,11 @@ void main() {
 
   testWidgets('the sheet body insets like a dialog body', (tester) async {
     final api = _fakeApi();
-    final controller = ReadingTaskController();
-    await controller.openTask(api, source: _source, templatePoints: _template);
-    await tester.pumpWidget(_host(controller, api));
+    final controller = ReadingTaskController(
+      repository: LocalReadingTaskRepository(() => api),
+    );
+    await controller.openTask(source: _source, templatePoints: _template);
+    await tester.pumpWidget(_host(controller));
 
     // 20/14 was neither a card nor a page; a sheet body is a dialog body. The
     // keyboard inset is added on top of the role rather than folded into it,
@@ -242,9 +236,11 @@ void main() {
 
   testWidgets('walks editing → answering → assessing → done', (tester) async {
     final api = _fakeApi();
-    final controller = ReadingTaskController();
-    await controller.openTask(api, source: _source, templatePoints: _template);
-    await tester.pumpWidget(_host(controller, api));
+    final controller = ReadingTaskController(
+      repository: LocalReadingTaskRepository(() => api),
+    );
+    await controller.openTask(source: _source, templatePoints: _template);
+    await tester.pumpWidget(_host(controller));
 
     // Editing: template point visible, save creates rubric v1.
     expect(find.text('Main idea point'), findsOneWidget);

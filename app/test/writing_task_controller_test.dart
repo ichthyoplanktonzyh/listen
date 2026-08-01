@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
+import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -195,9 +196,10 @@ void main() {
     'requested feedback never mutates text and acceptance cites new attempt',
     () async {
       final backend = _Backend();
-      final controller = WritingTaskController();
+      final controller = WritingTaskController(
+        repository: LocalWritingTaskRepository(() => backend.api),
+      );
       await controller.openTask(
-        backend.api,
         source: _source,
         kind: WritingTaskController.summaryKind,
         promptSnapshot: 'Summarize this passage.',
@@ -206,9 +208,9 @@ void main() {
       expect(controller.state.phase, 'drafting');
 
       controller.updateDraft('This is an useful summary.');
-      await controller.submitDraft(backend.api);
+      await controller.submitDraft();
       expect(controller.state.phase, 'submitted');
-      await controller.requestLocalFeedback(backend.api);
+      await controller.requestLocalFeedback();
       expect(controller.state.phase, 'revising');
       expect(controller.state.revisionDraft, 'This is an useful summary.');
       expect(controller.state.findings.single.providerId, 'harper');
@@ -217,7 +219,7 @@ void main() {
       // Accepting a suggestion records intent only; text remains learner-owned.
       expect(controller.state.revisionDraft, 'This is an useful summary.');
       controller.updateRevision('This is a useful summary.');
-      await controller.submitRevision(backend.api);
+      await controller.submitRevision();
       expect(controller.state.phase, 'done');
       // No rubric self-assessment exists anymore (issue #9): submitting the
       // revision writes the attempt and dispositions, never a judgment.
@@ -249,21 +251,22 @@ void main() {
     'LLM feedback cites the latest revision and resets across attempts',
     () async {
       final backend = _Backend()..providers = [_providerJson()];
-      final controller = WritingTaskController();
+      final controller = WritingTaskController(
+        repository: LocalWritingTaskRepository(() => backend.api),
+      );
       await controller.openTask(
-        backend.api,
         source: _source,
         kind: WritingTaskController.summaryKind,
         promptSnapshot: 'Summarize this passage.',
         fixedRubricPoints: _points,
       );
       controller.updateDraft('First version.');
-      await controller.submitDraft(backend.api);
+      await controller.submitDraft();
       // A capable provider was discovered, but no feedback yet.
       expect(controller.state.feedbackProviderId, 'prov-1');
       expect(controller.state.llmFeedback, isNull);
 
-      await controller.requestLlmFeedback(backend.api);
+      await controller.requestLlmFeedback();
       expect(
         controller.state.llmFeedback,
         'Good summary of attempt-original rev 1.',
@@ -273,11 +276,11 @@ void main() {
       // revision 1 of the initial attempt) never carries over.
       controller.startRevisionWithoutFeedback();
       controller.updateRevision('Second version.');
-      await controller.submitRevision(backend.api);
+      await controller.submitRevision();
       expect(controller.state.phase, 'done');
       expect(controller.state.llmFeedback, isNull);
 
-      await controller.requestLlmFeedback(backend.api);
+      await controller.requestLlmFeedback();
       expect(
         controller.state.llmFeedback,
         'Good summary of attempt-revised rev 2.',
@@ -290,18 +293,19 @@ void main() {
       ..providers = [
         _providerJson(allowedUses: ['rubric_generation']),
       ];
-    final controller = WritingTaskController();
+    final controller = WritingTaskController(
+      repository: LocalWritingTaskRepository(() => backend.api),
+    );
     await controller.openTask(
-      backend.api,
       source: _source,
       kind: WritingTaskController.summaryKind,
       promptSnapshot: 'Summarize this passage.',
       fixedRubricPoints: _points,
     );
     controller.updateDraft('First version.');
-    await controller.submitDraft(backend.api);
+    await controller.submitDraft();
     expect(controller.state.feedbackProviderId, isNull);
-    await controller.requestLlmFeedback(backend.api);
+    await controller.requestLlmFeedback();
     expect(controller.state.llmFeedback, isNull);
     expect(backend.requests.where((r) => r.$2.endsWith('/feedback')), isEmpty);
   });
@@ -309,20 +313,50 @@ void main() {
   test('autosaved draft survives a new controller instance', () async {
     final backend = _Backend();
     Future<void> open(WritingTaskController controller) => controller.openTask(
-      backend.api,
       source: _source,
       kind: WritingTaskController.summaryKind,
       promptSnapshot: 'Summarize this passage.',
       fixedRubricPoints: _points,
     );
-    final first = WritingTaskController();
+    final first = WritingTaskController(
+      repository: LocalWritingTaskRepository(() => backend.api),
+    );
     await open(first);
     first.updateDraft('unfinished learner text');
     await Future<void>.delayed(const Duration(milliseconds: 650));
     expect(backend.draft?['transcript'], 'unfinished learner text');
 
-    final restored = WritingTaskController();
+    final restored = WritingTaskController(
+      repository: LocalWritingTaskRepository(() => backend.api),
+    );
     await open(restored);
     expect(restored.state.draft, 'unfinished learner text');
+  });
+
+  test('repository converts transport errors into typed failures', () async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async =>
+          (statusCode: 500, body: '{"code":"writing_failed"}'),
+    );
+    final repository = LocalWritingTaskRepository(() => api);
+
+    await expectLater(
+      repository.openTask(
+        purpose: WritingTaskController.summaryKind,
+        source: const RubricSourceView(
+          mediaId: 'media-1',
+          trackId: 'track-1',
+          startMs: 1000,
+          endMs: 9000,
+          language: 'en',
+          transcriptSnapshot: 'source',
+        ),
+        responseLanguage: 'en',
+        points: _points,
+      ),
+      throwsA(isA<WritingTaskRepositoryFailure>()),
+    );
   });
 }

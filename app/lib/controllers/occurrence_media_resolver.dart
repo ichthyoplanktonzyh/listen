@@ -1,16 +1,5 @@
-import 'dart:io';
-
-import 'package:file_selector/file_selector.dart';
-
 import '../data/repositories/occurrence_media_repository.dart';
-import '../models/types.dart';
-
-typedef ReadOccurrenceMedia = Future<MediaItem> Function(String mediaId);
-typedef FingerprintOccurrenceMedia = Future<String> Function(String path);
-typedef RegisterOccurrenceMedia = Future<void> Function(String path);
-typedef PickOccurrenceMedia =
-    Future<XFile?> Function(List<XTypeGroup> acceptedTypeGroups);
-typedef OccurrenceFileExists = Future<bool> Function(String path);
+import '../services/occurrence_media_file_service.dart';
 
 sealed class OccurrenceMediaResolution {
   const OccurrenceMediaResolution();
@@ -85,45 +74,25 @@ Map<String, dynamic> currentMediaSliceOccurrence({
 
 /// Resolves a lexical occurrence's media snapshot to a playable local path.
 ///
-/// It is intentionally UI-framework-light except for [XTypeGroup], so both
+/// Platform file operations and data access are injected boundaries, so both
 /// the existing source-loop action and the independent slice player follow
-/// exactly the same linked-media, file-picker, fingerprint, and registration
-/// path.
+/// exactly the same recovery path without this controller knowing plugins or
+/// transport APIs.
 class OccurrenceMediaResolver {
   OccurrenceMediaResolver({
-    required this.readMedia,
-    required this.fingerprintFile,
-    required this.registerMedia,
-    required this.pickFile,
-    OccurrenceFileExists? fileExists,
-  }) : fileExists = fileExists ?? _fileExists;
+    required this.repository,
+    this.fileService = const LocalOccurrenceMediaFileService(),
+  });
 
-  factory OccurrenceMediaResolver.fromRepository({
-    required OccurrenceMediaRepository repository,
-    required PickOccurrenceMedia pickFile,
-    OccurrenceFileExists? fileExists,
-  }) => OccurrenceMediaResolver(
-    readMedia: repository.readMedia,
-    fingerprintFile: repository.fingerprintFile,
-    registerMedia: repository.registerMedia,
-    pickFile: pickFile,
-    fileExists: fileExists,
-  );
-
-  final ReadOccurrenceMedia readMedia;
-  final FingerprintOccurrenceMedia fingerprintFile;
-  final RegisterOccurrenceMedia registerMedia;
-  final PickOccurrenceMedia pickFile;
-  final OccurrenceFileExists fileExists;
-
-  static Future<bool> _fileExists(String path) => File(path).exists();
+  final OccurrenceMediaRepository repository;
+  final OccurrenceMediaFileService fileService;
 
   /// Reads only the durable identifier needed to construct a clip snapshot.
   /// A stale media link is recoverable later through [resolve], so it is null
   /// rather than an exception at this boundary.
   Future<String?> mediaFingerprint(String mediaId) async {
     try {
-      return (await readMedia(mediaId)).fingerprint;
+      return (await repository.readMedia(mediaId)).fingerprint;
     } catch (_) {
       return null;
     }
@@ -144,7 +113,7 @@ class OccurrenceMediaResolver {
 
     if (expectedFingerprint == currentMediaFingerprint &&
         currentMediaPath != null &&
-        await fileExists(currentMediaPath)) {
+        await fileService.exists(currentMediaPath)) {
       return ResolvedOccurrenceMedia(
         path: currentMediaPath,
         usesCurrentMedia: true,
@@ -154,9 +123,9 @@ class OccurrenceMediaResolver {
     final linkedMediaId = occurrence['media_id'] as String?;
     if (linkedMediaId != null) {
       try {
-        final linkedMedia = await readMedia(linkedMediaId);
+        final linkedMedia = await repository.readMedia(linkedMediaId);
         final linkedPath = linkedMedia.path;
-        if (await fileExists(linkedPath)) {
+        if (await fileService.exists(linkedPath)) {
           return ResolvedOccurrenceMedia(
             path: linkedPath,
             usesCurrentMedia: false,
@@ -167,40 +136,27 @@ class OccurrenceMediaResolver {
       }
     }
 
-    final group = filterMediaExtensions
-        ? const XTypeGroup(
-            label: 'source media',
-            extensions: [
-              'mp4',
-              'mkv',
-              'mov',
-              'webm',
-              'm4a',
-              'mp3',
-              'wav',
-              'flac',
-            ],
-          )
-        : const XTypeGroup(label: 'source media');
-    final file = await pickFile([group]);
-    if (file == null) {
+    final path = await fileService.pickSourceMedia(
+      filterMediaExtensions: filterMediaExtensions,
+    );
+    if (path == null) {
       return const UnresolvedOccurrenceMedia(
         OccurrenceMediaResolutionFailure.cancelled,
       );
     }
-    if (await fingerprintFile(file.path) != expectedFingerprint) {
+    if (await repository.fingerprintFile(path) != expectedFingerprint) {
       return const UnresolvedOccurrenceMedia(
         OccurrenceMediaResolutionFailure.fingerprintMismatch,
       );
     }
     try {
-      await registerMedia(file.path);
+      await repository.registerMedia(path);
     } catch (error) {
       return UnresolvedOccurrenceMedia(
         OccurrenceMediaResolutionFailure.registrationFailed,
         error: error,
       );
     }
-    return ResolvedOccurrenceMedia(path: file.path, usesCurrentMedia: false);
+    return ResolvedOccurrenceMedia(path: path, usesCurrentMedia: false);
   }
 }

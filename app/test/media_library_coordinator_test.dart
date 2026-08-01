@@ -8,6 +8,7 @@ import 'package:llplayer_next/controllers/media_library_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/media_library_repository.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -70,8 +71,8 @@ _wire(LocalApi? Function() getApi) {
         learning: learning,
         settings: settings,
         extensiveListening: extensive,
+        repository: LocalMediaLibraryRepository(getApi),
       )..bind(
-        getApi: getApi,
         isMounted: () => true,
         text: (key) => key,
         requestRebuild: () => rebuilds.add(1),

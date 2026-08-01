@@ -69,7 +69,7 @@ class HuntingListPanel extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               child: Text(
-                state.error!,
+                l.text(state.error!.messageKey),
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),

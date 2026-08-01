@@ -3,24 +3,27 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'localization.dart';
+import 'data/repositories/learning_assets_repository.dart';
+import 'data/repositories/personal_expression_repository.dart';
 import 'models/personal_expression.dart';
 import 'models/runtime_resources.dart';
 import 'models/types.dart';
 import 'screens/personal_expression_screen.dart';
-import 'services/api_service.dart';
 import 'theme/spacing.dart';
 import 'widgets/common/listen_loading.dart';
 
 class LearningAssetsScreen extends StatefulWidget {
   const LearningAssetsScreen({
     super.key,
-    required this.api,
+    required this.repository,
+    required this.personalExpressionRepository,
     required this.language,
     this.onPlayExpressionSource,
     this.onStartExpressionSpeaking,
   });
 
-  final LocalApi api;
+  final LearningAssetsRepository repository;
+  final PersonalExpressionRepository personalExpressionRepository;
   final String language;
   final Future<void> Function(PersonalExpressionSourceView source)?
   onPlayExpressionSource;
@@ -44,7 +47,7 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
   }
 
   Future<void> _refresh() async {
-    final next = await widget.api.lexicalEntries(
+    final next = await widget.repository.lexicalEntries(
       language: widget.language,
       kind: kind,
       status: status,
@@ -127,7 +130,7 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
           actions: [
             FilledButton(
               onPressed: () async {
-                await widget.api.upsertLexicalEntry({
+                await widget.repository.upsertLexicalEntry({
                   'language': entry.language,
                   'kind': entry.kind,
                   'canonical_form': entry.normalizedForm,
@@ -173,7 +176,7 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
                   await Navigator.of(context).push<void>(
                     MaterialPageRoute(
                       builder: (_) => PersonalExpressionScreen(
-                        api: widget.api,
+                        repository: widget.personalExpressionRepository,
                         language: widget.language,
                         onPlaySource: widget.onPlayExpressionSource,
                         onStartSpeaking: widget.onStartExpressionSpeaking,
@@ -235,8 +238,8 @@ class _LearningAssetsScreenState extends State<LearningAssetsScreen> {
 }
 
 class LearningResourceScreen extends StatefulWidget {
-  const LearningResourceScreen({super.key, required this.api});
-  final LocalApi api;
+  const LearningResourceScreen({super.key, required this.repository});
+  final LearningAssetsRepository repository;
 
   @override
   State<LearningResourceScreen> createState() => _LearningResourceScreenState();
@@ -253,7 +256,7 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
   }
 
   Future<void> _refresh() async {
-    final values = await widget.api.learningResources();
+    final values = await widget.repository.learningResources();
     if (mounted) setState(() => resources = values);
   }
 
@@ -262,9 +265,9 @@ class _LearningResourceScreenState extends State<LearningResourceScreen> {
     setState(() => busy = id);
     try {
       if (value.state == 'installed') {
-        await widget.api.removeLearningResource(id);
+        await widget.repository.removeLearningResource(id);
       } else {
-        await widget.api.installLearningResource(id);
+        await widget.repository.installLearningResource(id);
       }
       await _refresh();
     } finally {
@@ -349,7 +352,7 @@ class LearningResourceTile extends StatelessWidget {
 
 Future<LexicalEntryDetails?> showPhraseCandidate({
   required BuildContext context,
-  required LocalApi api,
+  required LearningAssetsRepository repository,
   required PhraseCandidate candidate,
   required Map<String, dynamic> source,
   String? initialStatus,
@@ -396,7 +399,7 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
           ),
           FilledButton(
             onPressed: () async {
-              saved = await api.upsertLexicalEntry({
+              saved = await repository.upsertLexicalEntry({
                 'language': source['language'] as String? ?? 'en',
                 'kind': 'phrase',
                 'canonical_form': candidate.canonicalForm,
@@ -422,7 +425,7 @@ Future<LexicalEntryDetails?> showPhraseCandidate({
 
 Future<String?> showOpenSubtitlesSearch({
   required BuildContext context,
-  required LocalApi api,
+  required LearningAssetsRepository repository,
   required String apiKey,
   required String initialTitle,
   required String initialFilename,
@@ -474,9 +477,11 @@ Future<String?> showOpenSubtitlesSearch({
                         setState(() => loading = true);
                         try {
                           final hash = mode == 'hash' && mediaPath != null
-                              ? await api.openSubtitlesMovieHash(mediaPath)
+                              ? await repository.openSubtitlesMovieHash(
+                                  mediaPath,
+                                )
                               : null;
-                          values = await api.searchOpenSubtitles(
+                          values = await repository.searchOpenSubtitles(
                             apiKey: apiKey,
                             query: mode == 'hash' ? null : controller.text,
                             moviehash: hash,
@@ -502,7 +507,7 @@ Future<String?> showOpenSubtitlesSearch({
                           '${value.language} · rating ${value.rating} · ${value.downloadCount} downloads',
                         ),
                         onTap: () async {
-                          selected = await api.downloadOpenSubtitle(
+                          selected = await repository.downloadOpenSubtitle(
                             apiKey: apiKey,
                             fileId: value.fileId,
                           );

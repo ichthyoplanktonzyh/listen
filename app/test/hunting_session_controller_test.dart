@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/hunting_session_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 void main() {
@@ -45,11 +46,12 @@ void main() {
         throw StateError('unexpected $method $path');
       },
     );
-    final controller = HuntingSessionController();
+    final controller = HuntingSessionController(
+      repository: LocalHuntingRepository(() => api),
+    );
     addTearDown(controller.dispose);
     expect(
       await controller.start(
-        api: api,
         sessionId: 'session-1',
         mediaId: 'media-1',
         trackId: 'track-1',
@@ -69,7 +71,7 @@ void main() {
       expect(controller.state.phase, 'priming', reason: entry.$1);
       controller.updatePosition(Duration(milliseconds: entry.$2 + 1000));
       expect(controller.state.phase, 'check', reason: entry.$1);
-      expect(await controller.answer(api, entry.$3), isTrue);
+      expect(await controller.answer(entry.$3), isTrue);
     }
 
     expect(controller.state.promptedCount, 5);

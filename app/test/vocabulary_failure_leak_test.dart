@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/data/repositories/lexical_repository.dart';
+import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/vocabulary_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -95,7 +97,8 @@ void main() {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: VocabularyScreen(
-        api: service,
+        repository: LexicalRepository(service),
+        semanticSearchRepository: LocalSemanticSearchRepository(service),
         language: 'en',
         onExport: () async {},
         onImport: () async {},
@@ -195,10 +198,12 @@ void main() {
         ],
         home: Scaffold(
           body: SemanticSearchDialog(
-            api: api(
-              (method, path) => path.contains('/semantic-embedding/')
-                  ? (statusCode: 503, body: envelope)
-                  : null,
+            repository: LocalSemanticSearchRepository(
+              api(
+                (method, path) => path.contains('/semantic-embedding/')
+                    ? (statusCode: 503, body: envelope)
+                    : null,
+              ),
             ),
             language: 'en',
           ),

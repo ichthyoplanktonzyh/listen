@@ -22,12 +22,12 @@ guards, focus and cancellation. Services own I/O and map wire payloads into
 typed client models. `backend_event_coordinator` connects event envelopes to
 client state.
 
-The repository row is optional and appears where a surface would otherwise
-depend on the whole of `LocalApi`. `lib/data/repositories/lexical_repository.dart`
-is the first: it names the ~30 endpoints the listening dictionary uses, takes a
-non-nullable `LocalApi` by constructor and returns the same typed client models.
-It is a boundary, not a second model layer — no cache, no domain types of its
-own, and sequencing stays with the state that owns it.
+Every presentation feature reaches backend data through a narrow repository.
+Concrete `LocalApi`-backed implementations are created only in
+`lib/main.dart`, the composition root; screens, widgets, controllers and flow
+helpers receive repository interfaces. Repositories map transport failures to
+typed failures and return typed client models. They are boundaries, not a
+second model layer: UI sequencing remains in its view model/controller.
 
 A screen that grew its own state and I/O is split into view / view model /
 repository. `VocabularyViewModel` is the worked example: it owns an immutable
@@ -35,7 +35,12 @@ repository. `VocabularyViewModel` is the worked example: it owns an immutable
 `BuildContext` and no localized text, and returns outcomes for anything whose
 only visible result is a dialog or a SnackBar. View models live beside the other
 controllers in `lib/controllers`; dependencies are wired by hand at the
-composition site, as everywhere else in this app.
+composition root. Platform file access and pickers are likewise hidden behind
+injected services in `lib/services`.
+
+`test/architecture_layering_test.dart` enforces the dependency direction. In
+particular, presentation cannot import `LocalApi`, `dart:io`, or
+`file_selector`, and it cannot construct concrete local repositories.
 
 Playback frame/position, subtitle cursor, current word, seeking and loops stay
 inside the app/player layer. Backend requests are for durable/application work,

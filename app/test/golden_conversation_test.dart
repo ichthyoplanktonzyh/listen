@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
@@ -141,8 +142,24 @@ class _Lobby extends StatefulWidget {
 }
 
 class _LobbyState extends State<_Lobby> {
+  late final LocalApi _api = LocalApi.withTransport(
+    baseUrl: 'http://golden',
+    token: 'token',
+    transport: (method, path, body) async {
+      if (method == 'GET' && path == '/v1/realtime/providers') {
+        return (statusCode: 200, body: jsonEncode(widget.profiles));
+      }
+      if (method == 'GET' && path == '/v1/realtime/sessions') {
+        return (statusCode: 200, body: '[]');
+      }
+      throw StateError('Unexpected request: $method $path ${body ?? ''}');
+    },
+  );
   late final RealtimeConversationController _controller =
-      RealtimeConversationController(audio: _SilentAudio());
+      RealtimeConversationController(
+        repository: LocalRealtimeConversationRepository(() => _api),
+        audio: _SilentAudio(),
+      );
 
   @override
   void dispose() {
@@ -153,19 +170,6 @@ class _LobbyState extends State<_Lobby> {
   @override
   Widget build(BuildContext context) => RealtimeConversationPanel(
     controller: _controller,
-    api: LocalApi.withTransport(
-      baseUrl: 'http://golden',
-      token: 'token',
-      transport: (method, path, body) async {
-        if (method == 'GET' && path == '/v1/realtime/providers') {
-          return (statusCode: 200, body: jsonEncode(widget.profiles));
-        }
-        if (method == 'GET' && path == '/v1/realtime/sessions') {
-          return (statusCode: 200, body: '[]');
-        }
-        throw StateError('Unexpected request: $method $path ${body ?? ''}');
-      },
-    ),
     launch: RealtimeConversationLaunch.free(
       language: 'en',
       modelId: 'asr-model',

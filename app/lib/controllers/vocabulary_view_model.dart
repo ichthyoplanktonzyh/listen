@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 
 import '../data/repositories/lexical_repository.dart';
@@ -11,10 +10,6 @@ import '../models/projection_review.dart';
 import '../models/semantic_embedding.dart';
 import '../models/semantic_task.dart';
 import '../models/types.dart';
-// `describeApiFailure` is the transport's own error → typed-failure
-// translation; the repository passes errors through untouched, so the policy
-// that turns one into a named failure lives here.
-import '../services/api_service.dart' show describeApiFailure;
 import '../services/external_link_opener.dart';
 import '../state/store.dart';
 import 'occurrence_media_resolver.dart';
@@ -28,15 +23,15 @@ import 'occurrence_media_resolver.dart';
 /// notification when the new state equals the old one, and identity equality
 /// is what makes every `copyWith` publish — the same contract `setState` had.
 class VocabularyState {
-  const VocabularyState({
+  VocabularyState({
     this.capability = 'listening',
     this.assessment,
     this.search = '',
     this.loading = true,
-    this.words = const [],
+    List<LexicalEntryDetails> words = const [],
     this.details,
     this.gapLoading = true,
-    this.gapCandidates,
+    List<CrossModalReviewCandidateView>? gapCandidates,
     this.gapCandidatesError,
     this.gapProduction,
     this.gapProductionError,
@@ -44,17 +39,28 @@ class VocabularyState {
     this.narrowGapOpen = false,
     this.semanticCanSearch = false,
     this.semanticMode = false,
-    this.semanticHits = const [],
+    List<SemanticSearchHitView> semanticHits = const [],
     this.semanticSearching = false,
-    this.suggestions = const [],
+    List<UpgradeSuggestion> suggestions = const [],
     this.suggestionsLoading = false,
     this.pronunciationAudioUrl,
     this.pronunciationLoading = false,
-    this.productionHits,
+    List<ProductionCorpusHitView>? productionHits,
     this.productionLoadFailed = false,
-    this.homeResults,
+    List<CorpusOccurrence>? homeResults,
     this.homeSearching = false,
-  });
+  }) : _words = List.unmodifiable(words),
+       _gapCandidates = gapCandidates == null
+           ? null
+           : List.unmodifiable(gapCandidates),
+       _semanticHits = List.unmodifiable(semanticHits),
+       _suggestions = List.unmodifiable(suggestions),
+       _productionHits = productionHits == null
+           ? null
+           : List.unmodifiable(productionHits),
+       _homeResults = homeResults == null
+           ? null
+           : List.unmodifiable(homeResults);
 
   /// The four-channel capability axis is the primary lens. [capability] picks
   /// the channel; [assessment] `null` means "all" (no capability filter).
@@ -67,7 +73,8 @@ class VocabularyState {
   /// The book query is in flight. There is no matching failure field: a failed
   /// list has no state at all today (contract D1).
   final bool loading;
-  final List<LexicalEntryDetails> words;
+  final List<LexicalEntryDetails> _words;
+  List<LexicalEntryDetails> get words => List.unmodifiable(_words);
 
   /// Non-null while the in-page entry detail is open (master → detail).
   final LexicalEntryDetails? details;
@@ -76,7 +83,9 @@ class VocabularyState {
   /// best-effort sources are juxtaposed here; each degrades to a notice
   /// instead of failing the workbench, and one switch covers both.
   final bool gapLoading;
-  final List<CrossModalReviewCandidateView>? gapCandidates;
+  final List<CrossModalReviewCandidateView>? _gapCandidates;
+  List<CrossModalReviewCandidateView>? get gapCandidates =>
+      _gapCandidates == null ? null : List.unmodifiable(_gapCandidates);
   final ApiFailure? gapCandidatesError;
   final ProductionGapReviewView? gapProduction;
   final ApiFailure? gapProductionError;
@@ -92,22 +101,29 @@ class VocabularyState {
   /// Whether semantic search can run, so the search box can offer a toggle.
   final bool semanticCanSearch;
   final bool semanticMode;
-  final List<SemanticSearchHitView> semanticHits;
+  final List<SemanticSearchHitView> _semanticHits;
+  List<SemanticSearchHitView> get semanticHits =>
+      List.unmodifiable(_semanticHits);
   final bool semanticSearching;
 
   /// The open entry's three decorations, each on its own clock (V6).
-  final List<UpgradeSuggestion> suggestions;
+  final List<UpgradeSuggestion> _suggestions;
+  List<UpgradeSuggestion> get suggestions => List.unmodifiable(_suggestions);
   final bool suggestionsLoading;
   final String? pronunciationAudioUrl;
   final bool pronunciationLoading;
 
   /// `null` = still loading; empty + [productionLoadFailed] = unavailable;
   /// empty alone = nothing produced yet. The three stay distinct.
-  final List<ProductionCorpusHitView>? productionHits;
+  final List<ProductionCorpusHitView>? _productionHits;
+  List<ProductionCorpusHitView>? get productionHits =>
+      _productionHits == null ? null : List.unmodifiable(_productionHits);
   final bool productionLoadFailed;
 
   /// Corpus fallback when the vocabulary list has no match for [search].
-  final List<CorpusOccurrence>? homeResults;
+  final List<CorpusOccurrence>? _homeResults;
+  List<CorpusOccurrence>? get homeResults =>
+      _homeResults == null ? null : List.unmodifiable(_homeResults);
   final bool homeSearching;
 
   VocabularyState copyWith({
@@ -227,16 +243,10 @@ class VocabularyViewModel extends ChangeNotifier {
     ExternalLinkOpener linkOpener = const ExternalLinkOpener(),
     OccurrenceMediaResolver? mediaResolver,
   }) : _repository = repository,
-       _store = Store(const VocabularyState()) {
+       _store = Store(VocabularyState()) {
     _linkOpener = linkOpener;
     _mediaResolver =
-        mediaResolver ??
-        OccurrenceMediaResolver(
-          readMedia: repository.readMedia,
-          fingerprintFile: repository.fingerprintFile,
-          registerMedia: repository.registerMedia,
-          pickFile: (groups) => openFile(acceptedTypeGroups: groups),
-        );
+        mediaResolver ?? OccurrenceMediaResolver(repository: repository);
     _store.addListener(notifyListeners);
   }
 
@@ -439,8 +449,9 @@ class VocabularyViewModel extends ChangeNotifier {
       (state) => state.copyWith(
         clearDetails: true,
         narrowGapOpen: true,
-        gapHighlightCandidates:
-            highlightCandidates ? true : state.gapHighlightCandidates,
+        gapHighlightCandidates: highlightCandidates
+            ? true
+            : state.gapHighlightCandidates,
       ),
     );
   }
@@ -460,7 +471,7 @@ class VocabularyViewModel extends ChangeNotifier {
     try {
       candidates = await _repository.crossModalReviewGaps(language: language);
     } catch (error) {
-      candidatesError = describeApiFailure(error);
+      candidatesError = _repository.failureDetail(error);
     }
     ProductionGapReviewView? production;
     ApiFailure? productionError;
@@ -474,7 +485,7 @@ class VocabularyViewModel extends ChangeNotifier {
       try {
         production = await _repository.productionGapReview(language: language);
       } catch (error) {
-        productionError = describeApiFailure(error);
+        productionError = _repository.failureDetail(error);
       }
     }
     // One switch for both sources: the pane either waits or arrives whole.
@@ -505,9 +516,7 @@ class VocabularyViewModel extends ChangeNotifier {
   }
 
   void setSemanticMode(bool on) {
-    _set(
-      (state) => state.copyWith(semanticMode: on, semanticHits: const []),
-    );
+    _set((state) => state.copyWith(semanticMode: on, semanticHits: const []));
     if (on) {
       if (state.search.trim().isNotEmpty) unawaited(runSemanticSearch());
     } else {
@@ -534,8 +543,7 @@ class VocabularyViewModel extends ChangeNotifier {
       hits = const [];
     }
     _set(
-      (state) =>
-          state.copyWith(semanticHits: hits, semanticSearching: false),
+      (state) => state.copyWith(semanticHits: hits, semanticSearching: false),
     );
   }
 
@@ -548,7 +556,7 @@ class VocabularyViewModel extends ChangeNotifier {
         failure: null,
       );
     } catch (error) {
-      return (proposals: null, failure: describeApiFailure(error));
+      return (proposals: null, failure: _repository.failureDetail(error));
     }
   }
 
@@ -641,7 +649,7 @@ class VocabularyViewModel extends ChangeNotifier {
       await openEntry(entry.id);
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -658,16 +666,14 @@ class VocabularyViewModel extends ChangeNotifier {
     } catch (_) {
       results = const [];
     }
-    _set(
-      (state) => state.copyWith(homeSearching: false, homeResults: results),
-    );
+    _set((state) => state.copyWith(homeSearching: false, homeResults: results));
   }
 
   Future<ReindexOutcome> reindexCorpus() async {
     try {
       return (count: await _repository.reindexCorpus(), failure: null);
     } catch (error) {
-      return (count: null, failure: describeApiFailure(error));
+      return (count: null, failure: _repository.failureDetail(error));
     }
   }
 
@@ -692,7 +698,7 @@ class VocabularyViewModel extends ChangeNotifier {
       unawaited(load());
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -710,7 +716,7 @@ class VocabularyViewModel extends ChangeNotifier {
       await openEntry(entry.id);
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -787,7 +793,7 @@ class VocabularyViewModel extends ChangeNotifier {
       _set((state) => state.copyWith(details: value));
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -801,7 +807,7 @@ class VocabularyViewModel extends ChangeNotifier {
       unawaited(load());
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -816,7 +822,7 @@ class VocabularyViewModel extends ChangeNotifier {
       await openEntry(entry.id);
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -877,7 +883,7 @@ class VocabularyViewModel extends ChangeNotifier {
       );
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -896,7 +902,7 @@ class VocabularyViewModel extends ChangeNotifier {
       );
       return null;
     } catch (error) {
-      return describeApiFailure(error);
+      return _repository.failureDetail(error);
     }
   }
 
@@ -928,7 +934,7 @@ class VocabularyViewModel extends ChangeNotifier {
       );
       return (attempted: true, failure: null);
     } catch (error) {
-      return (attempted: true, failure: describeApiFailure(error));
+      return (attempted: true, failure: _repository.failureDetail(error));
     }
   }
 

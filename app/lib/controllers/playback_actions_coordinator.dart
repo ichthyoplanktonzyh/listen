@@ -1,12 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:file_selector/file_selector.dart';
-
+import '../data/repositories/playback_repository.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
 import '../player_adapter.dart';
-import '../services/api_service.dart';
+import '../services/vocabulary_transfer_file_service.dart';
 import 'occurrence_media_resolver.dart';
 import 'player_controller.dart';
 import 'subtitle_controller.dart';
@@ -33,13 +29,16 @@ class PlaybackActionsCoordinator {
     required this.adapter,
     required this.player,
     required this.subtitle,
+    this.repository = const UnavailablePlaybackRepository(),
+    this.transferFiles = const LocalVocabularyTransferFileService(),
   });
 
   final DesktopPlayerAdapter adapter;
   final PlayerController player;
   final SubtitleController subtitle;
+  final PlaybackRepository repository;
+  final VocabularyTransferFileService transferFiles;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   String Function(String key)? text;
 
@@ -47,12 +46,10 @@ class PlaybackActionsCoordinator {
   late Future<void> Function() reloadLearningEntries;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     String Function(String key)? text,
     required Future<void> Function() reloadLearningEntries,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.reloadLearningEntries = reloadLearningEntries;
@@ -265,20 +262,12 @@ class PlaybackActionsCoordinator {
     Map<String, dynamic> occurrence, {
     bool filterMediaExtensions = false,
   }) async {
-    final api = getApi();
-    if (api == null) {
+    if (!repository.isAvailable) {
       return const UnresolvedOccurrenceMedia(
         OccurrenceMediaResolutionFailure.coreUnavailable,
       );
     }
-    return OccurrenceMediaResolver(
-      readMedia: api.readMedia,
-      fingerprintFile: api.fingerprintFile,
-      registerMedia: (path) async {
-        await api.registerMedia(path);
-      },
-      pickFile: (groups) => openFile(acceptedTypeGroups: groups),
-    ).resolve(
+    return OccurrenceMediaResolver(repository: repository).resolve(
       occurrence,
       currentMediaFingerprint: player.mediaFingerprint,
       currentMediaPath: player.mediaPath,
@@ -292,13 +281,12 @@ class PlaybackActionsCoordinator {
     PhoneticFinding finding,
     String value,
   ) async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
     try {
-      await service.updatePhoneticFindingFeedback(
+      await repository.updatePhoneticFindingFeedback(
         findingId: finding.id,
         value: value,
       );
@@ -312,56 +300,43 @@ class PlaybackActionsCoordinator {
         player.setStatus(
           _t('statusAudioFindingFeedbackFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: repository.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> exportVocabulary() async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
-    final location = await getSaveLocation(
-      suggestedName: 'listen-vocabulary-v1.json',
-    );
-    if (location == null) return;
-    final bundle = await service.exportVocabulary();
-    await File(location.path).writeAsString(
-      const JsonEncoder.withIndent('  ').convert(bundle.toJson()),
-    );
+    final bundle = await repository.exportVocabulary();
+    if (!await transferFiles.exportDocument(bundle.toJson())) return;
     player.setStatus(_t('statusVocabularyExported'));
   }
 
   Future<void> importVocabulary() async {
-    final service = getApi();
-    if (service == null) {
+    if (!repository.isAvailable) {
       player.setStatus(_t('statusConnectLocalCoreFirst'));
       return;
     }
-    const group = XTypeGroup(label: 'JSON', extensions: ['json']);
-    final file = await openFile(acceptedTypeGroups: [group]);
-    if (file == null) return;
-    final bundle =
-        jsonDecode(await File(file.path).readAsString())
-            as Map<String, dynamic>;
-    await service.importVocabulary(bundle);
+    final bundle = await transferFiles.importDocument();
+    if (bundle == null) return;
+    await repository.importVocabulary(bundle);
     await reloadLearningEntries();
     player.setStatus(_t('statusVocabularyImported'));
   }
 
   Future<void> archiveCurrentMedia() async {
-    final service = getApi();
-    if (service == null || player.mediaId == null) {
+    if (!repository.isAvailable || player.mediaId == null) {
       // Unavailable State (CONTEXT.md): name the cause and the recovery
       // action instead of silently doing nothing (#24). The menu item is
       // disabled in this state, but other entry paths still land here.
       player.setStatus(_t('statusOpenMediaAndCoreFirst'));
       return;
     }
-    await service.setMediaAvailability(player.mediaId!, 'archived');
+    await repository.archiveMedia(player.mediaId!);
     player.setStatus(_t('statusMediaArchived'));
   }
 }

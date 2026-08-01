@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/reading_diff_controller.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
 import 'package:llplayer_next/models/reading_diff.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -236,8 +237,11 @@ void main() {
     test(
       'read side reduces to yes, absent listen side stays unassessed',
       () async {
-        final controller = ReadingDiffController();
-        await controller.loadDiff(fakeApi(), source);
+        final api = fakeApi();
+        final controller = ReadingDiffController(
+          repository: LocalReadingTaskRepository(() => api),
+        );
+        await controller.loadDiff(source);
         expect(controller.state.read.outcome, SideOutcome.yes);
         expect(controller.state.listen.outcome, SideOutcome.unassessed);
         expect(controller.state.explanationKey, 'diffUnknown');
@@ -245,8 +249,11 @@ void main() {
     );
 
     test('listen rubric without judgments is still unassessed', () async {
-      final controller = ReadingDiffController();
-      await controller.loadDiff(fakeApi(withListenSide: true), source);
+      final api = fakeApi(withListenSide: true);
+      final controller = ReadingDiffController(
+        repository: LocalReadingTaskRepository(() => api),
+      );
+      await controller.loadDiff(source);
       expect(controller.state.listen.rubric, isNotNull);
       expect(controller.state.listen.outcome, SideOutcome.unassessed);
     });

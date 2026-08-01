@@ -8,11 +8,11 @@ import '../controllers/occurrence_media_resolver.dart';
 import '../controllers/slice_player_controller.dart';
 import '../controllers/vocabulary_view_model.dart';
 import '../data/repositories/lexical_repository.dart';
+import '../data/repositories/semantic_search_repository.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
 import '../models/production_corpus.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/spacing.dart';
@@ -36,15 +36,11 @@ import '../widgets/vocabulary/vocabulary_gap_panel.dart';
 /// in [VocabularyViewModel]; the backend is reached only through
 /// [LexicalRepository].
 ///
-/// The constructor still takes a [LocalApi] because the app shell wires this
-/// route by hand and because three collaborators own their own transport
-/// (the shared [HuntingController], [AuxiliaryAudioController] and the
-/// semantic-index dialog). The screen itself no longer calls a single endpoint
-/// on it.
 class VocabularyScreen extends StatefulWidget {
   const VocabularyScreen({
     super.key,
-    required this.api,
+    required this.repository,
+    required this.semanticSearchRepository,
     required this.language,
     required this.onExport,
     required this.onImport,
@@ -56,7 +52,8 @@ class VocabularyScreen extends StatefulWidget {
     this.onStartShadowing,
   });
 
-  final LocalApi api;
+  final LexicalRepository repository;
+  final SemanticSearchRepository semanticSearchRepository;
   final String language;
   final Future<void> Function() onExport;
   final Future<void> Function() onImport;
@@ -95,7 +92,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   void initState() {
     super.initState();
     viewModel = VocabularyViewModel(
-      repository: LexicalRepository(widget.api),
+      repository: widget.repository,
       language: widget.language,
     );
     unawaited(viewModel.load());
@@ -108,7 +105,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     // is in progress — load() notifies synchronously, so defer it past the
     // frame (same pattern as realtime_conversation_panel).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(hunting.load(widget.api));
+      if (mounted) unawaited(hunting.load());
     });
     final initialEntryId = widget.initialEntryId;
     if (initialEntryId != null) {
@@ -155,8 +152,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
 
   Future<void> _speakSynthetic(String text, String purpose) async {
     final asset = await widget.auxiliaryAudio.speak(
-      widget.api,
-      text: text,
+      text,
       language: state.details?.entry.language ?? widget.language,
       purpose: purpose,
       acquireAudioFocus: _acquireAuxiliaryAudioFocus,
@@ -227,8 +223,10 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     unawaited(
       showDialog<void>(
         context: context,
-        builder: (_) =>
-            SemanticSearchDialog(api: widget.api, language: widget.language),
+        builder: (_) => SemanticSearchDialog(
+          repository: widget.semanticSearchRepository,
+          language: widget.language,
+        ),
       ),
     );
   }
@@ -239,10 +237,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final proposals = outcome.proposals;
     if (proposals == null) {
       if (mounted) {
-        _snack(
-          l.text('projectionReviewUnavailable'),
-          failure: outcome.failure,
-        );
+        _snack(l.text('projectionReviewUnavailable'), failure: outcome.failure);
       }
       return;
     }
@@ -328,7 +323,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
   }
 
   Future<void> _openHuntingList() async {
-    await hunting.load(widget.api);
+    await hunting.load();
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -340,19 +335,16 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
           child: HuntingListPanel(
             controller: hunting,
             onRefresh: () async {
-              await hunting.load(widget.api);
+              await hunting.load();
             },
             onPromoteCandidate: (candidate) async {
-              final saved = await hunting.promoteCandidate(
-                widget.api,
-                candidate,
-              );
+              final saved = await hunting.promoteCandidate(candidate);
               if (mounted && saved) {
                 _snack(AppLocalizations.of(context).text('huntingAdded'));
               }
             },
             onArchiveTarget: (target) async {
-              final saved = await hunting.archive(widget.api, target);
+              final saved = await hunting.archive(target);
               if (mounted && saved) {
                 _snack(AppLocalizations.of(context).text('huntingArchived'));
               }
@@ -373,7 +365,7 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
       _snack(l.text('huntingAlreadyAdded'));
       return;
     }
-    final saved = await hunting.addManual(widget.api, entry);
+    final saved = await hunting.addManual(entry);
     if (!mounted) return;
     if (saved) {
       _snack(l.text('huntingAdded'));

@@ -13,7 +13,6 @@ import '../../controllers/subtitle_controller.dart';
 import '../../controllers/vocabulary_actions_coordinator.dart';
 import '../../localization.dart';
 import '../../models/personal_expression.dart';
-import '../../services/api_service.dart';
 import '../flows/reading_flows.dart';
 import '../panels/listening_check_panel.dart';
 import '../panels/reading_diff_panel.dart';
@@ -33,7 +32,6 @@ import '../panels/reading_word_inspector.dart';
 class ReadingChannelHost extends StatelessWidget {
   const ReadingChannelHost({
     super.key,
-    required this.api,
     required this.readingChannel,
     required this.readingController,
     required this.readingTaskController,
@@ -51,7 +49,6 @@ class ReadingChannelHost extends StatelessWidget {
     required this.onCorrectLemma,
   });
 
-  final LocalApi api;
   final ReadingChannelCoordinator readingChannel;
   final ReadingController readingController;
   final ReadingTaskController readingTaskController;
@@ -91,7 +88,6 @@ class ReadingChannelHost extends StatelessWidget {
     if (taskSource != null) {
       return ReadingTaskStudio(
         controller: readingTaskController,
-        api: api,
         source: taskSource,
         audioPlayCount: () =>
             readingController.slicePlayCount(taskSource.anchorCueId),
@@ -125,7 +121,6 @@ class ReadingChannelHost extends StatelessWidget {
     if (readingChannel.listeningCheckSource != null) {
       return ListeningCheckPanel(
         controller: readingTaskController,
-        api: api,
         audioPlayCount: () => readingChannel.listeningPlayCount,
         onPlaySegment: readingChannel.playListeningCheckSegment,
         onClose: readingChannel.closeListeningCheck,

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/data/repositories/realtime_conversation_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
@@ -12,12 +13,6 @@ void main() {
   testWidgets('route back confirms before cancelling an active conversation', (
     tester,
   ) async {
-    final controller = RealtimeConversationController(audio: _FakeAudio());
-    controller.state = const RealtimeConversationState(
-      phase: RealtimeConversationPhase.live,
-      activity: RealtimeConversationActivity.listening,
-      selectedProfileId: 'profile-1',
-    );
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -31,6 +26,15 @@ void main() {
         throw StateError('Unexpected request: $method $path ${body ?? ''}');
       },
     );
+    final controller = RealtimeConversationController(
+      repository: LocalRealtimeConversationRepository(() => api),
+      audio: _FakeAudio(),
+    );
+    controller.state = RealtimeConversationState(
+      phase: RealtimeConversationPhase.live,
+      activity: RealtimeConversationActivity.listening,
+      selectedProfileId: 'profile-1',
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -41,7 +45,6 @@ void main() {
               MaterialPageRoute<void>(
                 builder: (routeContext) => RealtimeConversationPanel(
                   controller: controller,
-                  api: api,
                   launch: RealtimeConversationLaunch.free(
                     language: 'en',
                     modelId: 'asr-model',

@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/content_channel.dart';
-import '../services/api_service.dart';
 import 'reading_channel_coordinator.dart';
 import 'speaking_actions_coordinator.dart';
 import 'speaking_channel_coordinator.dart';
@@ -27,21 +26,18 @@ class ContentChannelCoordinator {
   final SpeakingActionsCoordinator speakingActions;
   final WritingChannelCoordinator writing;
 
-  LocalApi? Function()? _getApi;
   bool Function()? _speakingAvailable;
-  Future<void> Function(LocalApi api)? _openSpeaking;
+  Future<void> Function()? _openSpeaking;
   Future<void> Function()? _openWriting;
 
   /// Host seams. The two opens stay with the composition root because they
   /// need localized rubric templates; [speakingAvailable] keeps the platform
   /// gate out of this class.
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() speakingAvailable,
-    required Future<void> Function(LocalApi api) openSpeaking,
+    required Future<void> Function() openSpeaking,
     required Future<void> Function() openWriting,
   }) {
-    _getApi = getApi;
     _speakingAvailable = speakingAvailable;
     _openSpeaking = openSpeaking;
     _openWriting = openWriting;
@@ -83,12 +79,11 @@ class ContentChannelCoordinator {
         await _closeSpeaking();
         await reading.open();
       case ContentChannel.speaking:
-        final service = _getApi?.call();
         // Defensive backstop: the channel switcher already disables Speaking
         // (with a tooltip) when the core or the platform is missing.
-        if (service == null || !(_speakingAvailable?.call() ?? false)) return;
+        if (!(_speakingAvailable?.call() ?? false)) return;
         await speakingActions.acquireRecordingFocus();
-        await _openSpeaking?.call(service);
+        await _openSpeaking?.call();
       case ContentChannel.writing:
         await _openWriting?.call();
     }
@@ -96,6 +91,6 @@ class ContentChannelCoordinator {
 
   Future<void> _closeSpeaking() async {
     speaking.closeL1Check();
-    if (speakingActions.isOpen) await speakingActions.close(_getApi?.call());
+    if (speakingActions.isOpen) await speakingActions.close();
   }
 }

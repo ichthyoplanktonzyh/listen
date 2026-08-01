@@ -3,6 +3,7 @@ import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/occurrence_media_resolver.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
+import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -20,7 +21,6 @@ void main() {
         subtitle: subtitle ?? SubtitleController(),
       );
       coordinator.bind(
-        getApi: () => null,
         isMounted: () => true,
         reloadLearningEntries: () async {},
       );
@@ -103,9 +103,9 @@ void main() {
         player: player,
         subtitle: subtitle,
         speechEnhancement: SpeechEnhancementWorkflowController(),
+        repository: LocalResourceRepository(() => null),
       );
       coordinator.bind(
-        getApi: () => null,
         isMounted: () => true,
         reloadSpeechEnhancements: (_) async {},
         activatePrimaryTrack: (_, {required nextStatus}) async {},
@@ -130,9 +130,9 @@ void main() {
         player: player,
         subtitle: SubtitleController(),
         speechEnhancement: SpeechEnhancementWorkflowController(),
+        repository: LocalResourceRepository(() => null),
       );
       coordinator.bind(
-        getApi: () => null,
         isMounted: () => true,
         reloadSpeechEnhancements: (_) async {},
         activatePrimaryTrack: (_, {required nextStatus}) async {},
@@ -157,9 +157,9 @@ void main() {
           player: PlayerController(),
           subtitle: SubtitleController(),
           speechEnhancement: SpeechEnhancementWorkflowController(),
+          repository: LocalResourceRepository(() => null),
         );
         coordinator.bind(
-          getApi: () => null,
           isMounted: () => true,
           reloadSpeechEnhancements: (_) async {},
           activatePrimaryTrack: (track, {required nextStatus}) async {

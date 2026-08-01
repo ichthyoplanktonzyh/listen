@@ -21,16 +21,11 @@ _wire() {
   final subtitle = SubtitleController();
   final adapter = DesktopPlayerAdapter();
   final recordingAdapter = DesktopPlayerAdapter();
-  final playback =
-      PlaybackActionsCoordinator(
-        adapter: adapter,
-        player: player,
-        subtitle: subtitle,
-      )..bind(
-        getApi: () => null,
-        isMounted: () => true,
-        reloadLearningEntries: () async {},
-      );
+  final playback = PlaybackActionsCoordinator(
+    adapter: adapter,
+    player: player,
+    subtitle: subtitle,
+  )..bind(isMounted: () => true, reloadLearningEntries: () async {});
   final practice = PracticeController();
   final slicePlayer = SlicePlayerController();
   var diagnosis = 0;
@@ -47,7 +42,6 @@ _wire() {
         adapter: adapter,
         recordingAdapter: recordingAdapter,
       )..bind(
-        getApi: () => null,
         isMounted: () => true,
         refreshDiagnosis: () async => diagnosis++,
         seekCue: (cue) async => seeks.add(cue),

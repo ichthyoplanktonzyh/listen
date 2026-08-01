@@ -1,8 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../controllers/personal_expression_view_model.dart';
@@ -10,7 +7,7 @@ import '../data/repositories/personal_expression_repository.dart';
 import '../localization.dart';
 import '../models/api_failure.dart';
 import '../models/personal_expression.dart';
-import '../services/api_service.dart';
+import '../services/file_transfer_service.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/listen_theme.dart';
@@ -327,20 +324,18 @@ class _AssistanceLadder extends StatelessWidget {
 class PersonalExpressionScreen extends StatefulWidget {
   const PersonalExpressionScreen({
     super.key,
-    this.api,
-    this.repository,
+    required this.repository,
     this.viewModel,
+    this.exportFileService = const LocalPersonalExpressionExportFileService(),
     required this.language,
     this.initialSource,
     this.onPlaySource,
     this.onStartSpeaking,
-  }) : assert(api != null || repository != null);
+  });
 
-  /// [api] keeps existing composition roots source-compatible. New callers
-  /// should inject the narrow [repository] boundary directly.
-  final LocalApi? api;
-  final PersonalExpressionRepository? repository;
+  final PersonalExpressionRepository repository;
   final PersonalExpressionViewModel? viewModel;
+  final PersonalExpressionExportFileService exportFileService;
   final String language;
   final PersonalExpressionSourceView? initialSource;
   final Future<void> Function(PersonalExpressionSourceView source)?
@@ -354,11 +349,9 @@ class PersonalExpressionScreen extends StatefulWidget {
 }
 
 class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
-  late final PersonalExpressionRepository _repository =
-      widget.repository ?? LocalPersonalExpressionRepository(widget.api!);
   late final PersonalExpressionViewModel _viewModel =
       widget.viewModel ??
-      PersonalExpressionViewModel(_repository, language: widget.language);
+      PersonalExpressionViewModel(widget.repository, language: widget.language);
   late final bool _ownsViewModel = widget.viewModel == null;
 
   @override
@@ -382,20 +375,18 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
   Future<void> _export() async {
     try {
       final bundle = await _viewModel.export();
-      final location = await getSaveLocation(
+      final path = await widget.exportFileService.write(
         suggestedName: 'llplayer-personal-expression.json',
+        document: bundle.toJson(),
       );
-      if (location == null) return;
-      await File(location.path).writeAsString(
-        const JsonEncoder.withIndent('  ').convert(bundle.toJson()),
-      );
+      if (path == null) return;
       if (!mounted) return;
       final l = AppLocalizations.of(context);
       _notify(
         l
             .text('expressionExported')
             .replaceAll('{count}', '${bundle.patternCount}')
-            .replaceAll('{path}', location.path),
+            .replaceAll('{path}', path),
       );
     } catch (error) {
       if (!mounted) return;
@@ -403,8 +394,8 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
       // exception says anything a learner can use. One named state, and the
       // reference id only when the backend supplied one.
       final l = AppLocalizations.of(context);
-      final detail = describeApiFailure(error);
-      final reference = detail.correlationId;
+      final detail = error is ApiFailure ? error : null;
+      final reference = detail?.correlationId;
       _notify(
         reference == null
             ? l.text('expressionExportFailed')
@@ -596,7 +587,7 @@ class _PersonalExpressionScreenState extends State<PersonalExpressionScreen> {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _PatternDetail(
-          repository: _repository,
+          repository: widget.repository,
           pattern: pattern,
           onEdit: () async {
             Navigator.of(context).pop();
@@ -1321,7 +1312,7 @@ class _WritingDeskPageState extends State<_WritingDeskPage> {
       // transport text on an `ApiFailure` that is never rendered; only the
       // reference id travels, and only when the backend supplied one.
       final l = AppLocalizations.of(context);
-      final reference = describeApiFailure(error).correlationId;
+      final reference = error is ApiFailure ? error.correlationId : null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(

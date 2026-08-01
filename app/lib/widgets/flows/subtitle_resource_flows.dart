@@ -6,12 +6,14 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../data/repositories/cold_start_marking_repository.dart';
+import '../../data/repositories/phonetic_analysis_repository.dart';
+import '../../data/repositories/transcription_repository.dart';
 import '../../localization.dart';
 import '../../models/task_status.dart';
 import '../../models/timeline.dart';
 import '../../phonetic_analysis_ui.dart';
 import '../../screens/subtitle_resources_screen.dart';
-import '../../services/api_service.dart';
 import '../../transcription_ui.dart';
 import '../panels/cold_start_marking_sheet.dart';
 
@@ -49,13 +51,12 @@ Future<void> deleteSubtitleResourceFlow({
 
 Future<void> exportSubtitleResourceFlow({
   required BuildContext context,
-  required LocalApi? api,
   required PlayerController playerController,
   required ResourceActionsCoordinator resourceActions,
   required SubtitleTrack track,
 }) async {
   final l = AppLocalizations.of(context);
-  if (api == null) {
+  if (!resourceActions.repository.isAvailable) {
     // Unavailable State (CONTEXT.md): exporting is a user row action; report
     // the missing core instead of swallowing the click.
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
@@ -96,20 +97,20 @@ Future<void> exportSubtitleResourceFlow({
 
 Future<void> generateSubtitlesFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required TranscriptionRepository? repository,
   required PlayerController playerController,
   required SettingsController settingsController,
   required bool secondary,
   required void Function(UserTaskStatus value) recordTaskStatus,
 }) async {
   final l = AppLocalizations.of(context);
-  if (api == null || playerController.mediaId == null) {
+  if (repository == null || playerController.mediaId == null) {
     playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
     return;
   }
   final created = await showGenerateSubtitles(
     context: context,
-    api: api,
+    repository: repository,
     mediaId: playerController.mediaId!,
     secondary: secondary,
     preferredQuality: settingsController.transcriptionQuality,
@@ -135,11 +136,11 @@ Future<void> generateSubtitlesFlow({
 
 Future<void> openTranscriptionCenterFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required TranscriptionRepository? repository,
   required PlayerController playerController,
   required LoadGeneratedTrack loadTrack,
 }) async {
-  if (api == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): the transcription center is a user menu
     // entry; report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -148,17 +149,18 @@ Future<void> openTranscriptionCenterFlow({
   }
   await Navigator.of(context).push<void>(
     MaterialPageRoute(
-      builder: (_) => TranscriptionCenter(api: api, loadTrack: loadTrack),
+      builder: (_) =>
+          TranscriptionCenter(repository: repository, loadTrack: loadTrack),
     ),
   );
 }
 
 Future<void> openPhoneticAnalysisCenterFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required PhoneticAnalysisRepository? repository,
   required PlayerController playerController,
 }) async {
-  if (api == null) {
+  if (repository == null) {
     // Unavailable State (CONTEXT.md): the analysis center is a user menu
     // entry; report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -166,25 +168,26 @@ Future<void> openPhoneticAnalysisCenterFlow({
     return;
   }
   await Navigator.of(context).push<void>(
-    MaterialPageRoute(builder: (_) => PhoneticAnalysisCenter(api: api)),
+    MaterialPageRoute(
+      builder: (_) => PhoneticAnalysisCenter(repository: repository),
+    ),
   );
 }
 
 void openColdStartMarkingFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required ColdStartMarkingRepository? repository,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required ResourceActionsCoordinator resourceActions,
 }) {
   final l = AppLocalizations.of(context);
-  final service = api;
   final trackId = subtitleController.primaryTrack?.id;
   final language = subtitleController.primaryTrack?.language;
   // Unavailable State (CONTEXT.md): the cold-start button renders whenever
   // the content-fit card does, so each missing prerequisite names its own
   // recovery action instead of leaving a dead button.
-  if (service == null) {
+  if (repository == null) {
     playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
     return;
   }
@@ -199,7 +202,7 @@ void openColdStartMarkingFlow({
   showDialog<void>(
     context: context,
     builder: (_) => ColdStartMarkingSheet(
-      api: service,
+      repository: repository,
       trackId: trackId,
       language: language,
       onDone: () => resourceActions.loadContentFit(trackId),
@@ -209,7 +212,8 @@ void openColdStartMarkingFlow({
 
 Future<void> openSubtitleResourcesFlow({
   required BuildContext context,
-  required LocalApi? api,
+  required bool backendAvailable,
+  required ColdStartMarkingRepository? coldStartRepository,
   required PlayerController playerController,
   required SubtitleController subtitleController,
   required LearningController learningController,
@@ -217,7 +221,7 @@ Future<void> openSubtitleResourcesFlow({
   required MediaSessionCoordinator mediaSession,
   required Future<void> Function() onManualReviewTimeline,
 }) async {
-  if (api == null) {
+  if (!backendAvailable) {
     // Unavailable State (CONTEXT.md): the resources screen is a user
     // destination; report the missing core instead of swallowing the click.
     final l = AppLocalizations.of(context);
@@ -245,7 +249,6 @@ Future<void> openSubtitleResourcesFlow({
         ),
         onExportSubtitle: (track) => exportSubtitleResourceFlow(
           context: context,
-          api: api,
           playerController: playerController,
           resourceActions: resourceActions,
           track: track,
@@ -264,7 +267,7 @@ Future<void> openSubtitleResourcesFlow({
         onDeleteChunkTimeline: resourceActions.deleteChunkTimeline,
         onStartColdStart: () => openColdStartMarkingFlow(
           context: context,
-          api: api,
+          repository: coldStartRepository,
           playerController: playerController,
           subtitleController: subtitleController,
           resourceActions: resourceActions,

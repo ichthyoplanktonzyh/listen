@@ -9,7 +9,7 @@ const _wordHighlightGapTolerance = Duration(milliseconds: 220);
 
 /// Immutable snapshot of subtitle-related state.
 class SubtitleState {
-  const SubtitleState({
+  SubtitleState({
     this.primaryTrack,
     this.secondaryTrack,
     this.currentPrimaryCue,
@@ -29,21 +29,42 @@ class SubtitleState {
     this.positionX = 0.5,
     this.positionY = 0.82,
     this.backgroundOpacity = 0.72,
-    this.pronunciationBySentence = const {},
-    this.timingsBySentence = const {},
-    this.chunkPartitionsBySentence = const {},
-    this.senseGroupsBySentence = const {},
-    this.pronunciationProviders = const [],
-    this.subtitleResources = const [],
-    this.subtitleResourceCapabilities = const {},
-    this.wordTimelineSummaries = const [],
-    this.phoneTimelineSummaries = const [],
-    this.chunkTimelineSummaries = const [],
+    Map<String, PronunciationAnalysis> pronunciationBySentence = const {},
+    Map<String, List<WordTiming>> timingsBySentence = const {},
+    Map<String, SentenceChunkPartition> chunkPartitionsBySentence = const {},
+    Map<String, List<SenseGroup>> senseGroupsBySentence = const {},
+    List<PronunciationProvider> pronunciationProviders = const [],
+    List<SubtitleTrack> subtitleResources = const [],
+    Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities =
+        const {},
+    List<WordTimelineSummary> wordTimelineSummaries = const [],
+    List<PhoneTimelineSummary> phoneTimelineSummaries = const [],
+    List<ChunkTimelineSummary> chunkTimelineSummaries = const [],
     this.llTimelineDocument,
     this.timelineResourceError,
-    this.phoneticAnalysisBySentence = const {},
+    Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
     this.contentFit,
-  });
+  }) : _pronunciationBySentence = Map.unmodifiable(pronunciationBySentence),
+       _timingsBySentence = Map.unmodifiable({
+         for (final entry in timingsBySentence.entries)
+           entry.key: List<WordTiming>.unmodifiable(entry.value),
+       }),
+       _chunkPartitionsBySentence = Map.unmodifiable(chunkPartitionsBySentence),
+       _senseGroupsBySentence = Map.unmodifiable({
+         for (final entry in senseGroupsBySentence.entries)
+           entry.key: List<SenseGroup>.unmodifiable(entry.value),
+       }),
+       _pronunciationProviders = List.unmodifiable(pronunciationProviders),
+       _subtitleResources = List.unmodifiable(subtitleResources),
+       _subtitleResourceCapabilities = Map.unmodifiable(
+         subtitleResourceCapabilities,
+       ),
+       _wordTimelineSummaries = List.unmodifiable(wordTimelineSummaries),
+       _phoneTimelineSummaries = List.unmodifiable(phoneTimelineSummaries),
+       _chunkTimelineSummaries = List.unmodifiable(chunkTimelineSummaries),
+       _phoneticAnalysisBySentence = Map.unmodifiable(
+         phoneticAnalysisBySentence,
+       );
 
   final SubtitleTrack? primaryTrack;
   final SubtitleTrack? secondaryTrack;
@@ -64,19 +85,45 @@ class SubtitleState {
   final double positionX;
   final double positionY;
   final double backgroundOpacity;
-  final Map<String, PronunciationAnalysis> pronunciationBySentence;
-  final Map<String, List<WordTiming>> timingsBySentence;
-  final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
-  final Map<String, List<SenseGroup>> senseGroupsBySentence;
-  final List<PronunciationProvider> pronunciationProviders;
-  final List<SubtitleTrack> subtitleResources;
-  final Map<String, SubtitleResourceCapabilities> subtitleResourceCapabilities;
-  final List<WordTimelineSummary> wordTimelineSummaries;
-  final List<PhoneTimelineSummary> phoneTimelineSummaries;
-  final List<ChunkTimelineSummary> chunkTimelineSummaries;
+  final Map<String, PronunciationAnalysis> _pronunciationBySentence;
+  Map<String, PronunciationAnalysis> get pronunciationBySentence =>
+      Map.unmodifiable(_pronunciationBySentence);
+  final Map<String, List<WordTiming>> _timingsBySentence;
+  Map<String, List<WordTiming>> get timingsBySentence => Map.unmodifiable({
+    for (final entry in _timingsBySentence.entries)
+      entry.key: List<WordTiming>.unmodifiable(entry.value),
+  });
+  final Map<String, SentenceChunkPartition> _chunkPartitionsBySentence;
+  Map<String, SentenceChunkPartition> get chunkPartitionsBySentence =>
+      Map.unmodifiable(_chunkPartitionsBySentence);
+  final Map<String, List<SenseGroup>> _senseGroupsBySentence;
+  Map<String, List<SenseGroup>> get senseGroupsBySentence => Map.unmodifiable({
+    for (final entry in _senseGroupsBySentence.entries)
+      entry.key: List<SenseGroup>.unmodifiable(entry.value),
+  });
+  final List<PronunciationProvider> _pronunciationProviders;
+  List<PronunciationProvider> get pronunciationProviders =>
+      List.unmodifiable(_pronunciationProviders);
+  final List<SubtitleTrack> _subtitleResources;
+  List<SubtitleTrack> get subtitleResources =>
+      List.unmodifiable(_subtitleResources);
+  final Map<String, SubtitleResourceCapabilities> _subtitleResourceCapabilities;
+  Map<String, SubtitleResourceCapabilities> get subtitleResourceCapabilities =>
+      Map.unmodifiable(_subtitleResourceCapabilities);
+  final List<WordTimelineSummary> _wordTimelineSummaries;
+  List<WordTimelineSummary> get wordTimelineSummaries =>
+      List.unmodifiable(_wordTimelineSummaries);
+  final List<PhoneTimelineSummary> _phoneTimelineSummaries;
+  List<PhoneTimelineSummary> get phoneTimelineSummaries =>
+      List.unmodifiable(_phoneTimelineSummaries);
+  final List<ChunkTimelineSummary> _chunkTimelineSummaries;
+  List<ChunkTimelineSummary> get chunkTimelineSummaries =>
+      List.unmodifiable(_chunkTimelineSummaries);
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
-  final Map<String, PhoneticAnalysis> phoneticAnalysisBySentence;
+  final Map<String, PhoneticAnalysis> _phoneticAnalysisBySentence;
+  Map<String, PhoneticAnalysis> get phoneticAnalysisBySentence =>
+      Map.unmodifiable(_phoneticAnalysisBySentence);
   final ContentDifficultyProfile? contentFit;
 
   SubtitleState copyWith({
@@ -199,7 +246,7 @@ class SubtitleController extends ChangeNotifier {
     null,
   );
 
-  SubtitleController() : _store = Store(const SubtitleState()) {
+  SubtitleController() : _store = Store(SubtitleState()) {
     _store.addListener(notifyListeners);
   }
 

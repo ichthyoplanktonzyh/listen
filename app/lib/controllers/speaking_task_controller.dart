@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/speaking_task_repository.dart';
 import '../models/practice.dart';
 import '../models/runtime_resources.dart';
 import '../models/semantic_task.dart';
-import '../services/api_service.dart';
 import '../services/shadowing_recorder.dart';
 import '../state/store.dart';
 
@@ -45,7 +45,7 @@ class SpeakingTaskSource {
 }
 
 class SpeakingTaskState {
-  const SpeakingTaskState({
+  SpeakingTaskState({
     this.phase = 'idle',
     this.kind = SpeakingTaskController.retellingKind,
     this.source,
@@ -65,12 +65,12 @@ class SpeakingTaskState {
     this.llmFeedback,
     this.delayedReviewItemId,
     this.delayedReviewCompleted = false,
-    this.confirmedTargetIds = const {},
+    Set<String> confirmedTargetIds = const {},
     this.retryCount = 0,
     this.busy = false,
     this.microphonePermission,
     this.error,
-  });
+  }) : _confirmedTargetIds = Set.unmodifiable(confirmedTargetIds);
 
   /// idle | listening | recording | transcribing | reviewing | ready_feedback
   /// | done
@@ -97,7 +97,8 @@ class SpeakingTaskState {
   final String? llmFeedback;
   final String? delayedReviewItemId;
   final bool delayedReviewCompleted;
-  final Set<String> confirmedTargetIds;
+  final Set<String> _confirmedTargetIds;
+  Set<String> get confirmedTargetIds => Set.unmodifiable(_confirmedTargetIds);
   final int retryCount;
   final bool busy;
   final MicrophonePermissionStatus? microphonePermission;
@@ -187,17 +188,19 @@ class SpeakingTaskState {
 /// while callers retain playback and hand it audio focus before capture.
 class SpeakingTaskController extends ChangeNotifier {
   SpeakingTaskController({
+    this.repository = const UnavailableSpeakingTaskRepository(),
     ShadowingRecorder? recorder,
     Future<void> Function(Duration)? delay,
   }) : _recorder = recorder ?? MacosShadowingRecorder(),
        _delay = delay ?? Future<void>.delayed,
-       _store = Store(const SpeakingTaskState()) {
+       _store = Store(SpeakingTaskState()) {
     _store.addListener(notifyListeners);
   }
 
   static const retellingKind = 'l2_retelling';
   static const patternProductionKind = 'pattern_production';
 
+  final SpeakingTaskRepository repository;
   final ShadowingRecorder _recorder;
   final Future<void> Function(Duration) _delay;
   final Store<SpeakingTaskState> _store;
@@ -208,8 +211,7 @@ class SpeakingTaskController extends ChangeNotifier {
   Store<SpeakingTaskState> get store => _store;
   SpeakingTaskState get state => _store.state;
 
-  Future<void> openTask(
-    LocalApi api, {
+  Future<void> openTask({
     required SpeakingTaskSource source,
     required List<RubricPointView> fixedRubricPoints,
     String kind = retellingKind,
@@ -242,7 +244,7 @@ class SpeakingTaskController extends ChangeNotifier {
       ),
     );
     try {
-      var rubric = await api.lookupSemanticRubric(
+      var rubric = await repository.lookupRubric(
         mediaId: source.mediaId,
         startMs: source.startMs,
         endMs: source.endMs,
@@ -250,7 +252,7 @@ class SpeakingTaskController extends ChangeNotifier {
         responseLanguage: source.language,
         transcriptSnapshot: source.transcriptSnapshot,
       );
-      rubric ??= await api.createSemanticRubric(
+      rubric ??= await repository.createRubric(
         purpose: kind,
         source: RubricSourceView(
           mediaId: source.mediaId,
@@ -267,7 +269,7 @@ class SpeakingTaskController extends ChangeNotifier {
           detail: 'Speaking Studio fixed information-point rubric v1',
         ),
       );
-      final models = await api.transcriptionModels();
+      final models = await repository.transcriptionModels();
       final model = _selectModel(models, source.language);
       _attemptStartedAtMs = DateTime.now().millisecondsSinceEpoch;
       _store.update(
@@ -335,14 +337,14 @@ class SpeakingTaskController extends ChangeNotifier {
     }
   }
 
-  Future<void> stopRecording(LocalApi api) async {
+  Future<void> stopRecording() async {
     final source = state.source;
     final modelId = state.asrModelId;
     if (state.phase != 'recording' || source == null || modelId == null) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final captured = await _recorder.stop();
-      final asset = await api.createRecordingAsset(
+      final asset = await repository.createRecording(
         CreateRecordingAsset(
           filePath: captured.path,
           durationMs: captured.durationMs,
@@ -379,7 +381,7 @@ class SpeakingTaskController extends ChangeNotifier {
       );
       RecordingAudioFacts? audioFacts;
       try {
-        audioFacts = await api.recordingAudioFacts(asset.id);
+        audioFacts = await repository.recordingAudioFacts(asset.id);
       } catch (_) {
         // Acoustic facts are a non-scoring enhancement; ASR remains usable.
       }
@@ -391,7 +393,7 @@ class SpeakingTaskController extends ChangeNotifier {
           audioFacts: audioFacts,
         ),
       );
-      final job = await api.createRecordingTranscription(
+      final job = await repository.createTranscription(
         recordingId: asset.id,
         modelId: modelId,
         language: source.language,
@@ -406,7 +408,7 @@ class SpeakingTaskController extends ChangeNotifier {
           busy: false,
         ),
       );
-      await _pollTranscription(api, job.id, generation);
+      await _pollTranscription(job.id, generation);
     } catch (error) {
       _store.update(
         (s) => s.copyWith(
@@ -432,12 +434,12 @@ class SpeakingTaskController extends ChangeNotifier {
     );
   }
 
-  Future<void> cancelTranscription(LocalApi api) async {
+  Future<void> cancelTranscription() async {
     final job = state.transcription;
     if (state.phase != 'transcribing' || job == null) return;
     _pollGeneration++;
     try {
-      final cancelled = await api.cancelRecordingTranscription(job.id);
+      final cancelled = await repository.cancelTranscription(job.id);
       _store.update(
         (s) => s.copyWith(
           phase: 'listening',
@@ -449,7 +451,7 @@ class SpeakingTaskController extends ChangeNotifier {
     } catch (error) {
       final generation = ++_pollGeneration;
       _store.update((s) => s.copyWith(error: 'Could not cancel transcription'));
-      unawaited(_pollTranscription(api, job.id, generation));
+      unawaited(_pollTranscription(job.id, generation));
     }
   }
 
@@ -466,7 +468,7 @@ class SpeakingTaskController extends ChangeNotifier {
     _store.update((s) => s.copyWith(asrReliability: value));
   }
 
-  Future<void> acceptTranscript(LocalApi api) async {
+  Future<void> acceptTranscript() async {
     final source = state.source;
     final rubric = state.rubric;
     final recording = state.recording;
@@ -481,7 +483,7 @@ class SpeakingTaskController extends ChangeNotifier {
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final endedAt = DateTime.now().millisecondsSinceEpoch;
-      final attempt = await api.createSpokenSemanticAttempt(
+      final attempt = await repository.createSpokenAttempt(
         kind: state.kind,
         target: recording.target.toJson(),
         rubricId: rubric.id,
@@ -507,7 +509,7 @@ class SpeakingTaskController extends ChangeNotifier {
       // Resolve the (optional) feedback provider now that the attempt exists —
       // the assist entry only appears once there is something to comment on,
       // and the task flow never depends on any provider.
-      final providerId = await api.preferredLlmProviderId('semantic_judgment');
+      final providerId = await repository.preferredFeedbackProvider();
       if (providerId != null && state.feedbackProviderId != providerId) {
         _store.update((s) => s.copyWith(feedbackProviderId: providerId));
       }
@@ -537,15 +539,15 @@ class SpeakingTaskController extends ChangeNotifier {
   /// the configured provider. The provider sees the source transcript, task
   /// prompt, and learner response; the reply is ephemeral assist — nothing is
   /// stored, and on any provider failure only the error surfaces.
-  Future<void> requestLlmFeedback(LocalApi api) async {
+  Future<void> requestLlmFeedback() async {
     final attempt = state.attempt;
     final providerId = state.feedbackProviderId;
     if (attempt == null || providerId == null) return;
     final response = attempt.responses.single;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final feedback = await api.feedbackViaLlmProvider(
-        providerId,
+      final feedback = await repository.requestFeedback(
+        providerId: providerId,
         attemptId: attempt.id,
         responseRevision: response.revision,
       );
@@ -583,7 +585,7 @@ class SpeakingTaskController extends ChangeNotifier {
     );
   }
 
-  Future<void> scheduleDelayedRetelling(LocalApi api) async {
+  Future<void> scheduleDelayedRetelling() async {
     final source = state.source;
     final attempt = state.attempt;
     if (state.phase != 'done' ||
@@ -594,7 +596,7 @@ class SpeakingTaskController extends ChangeNotifier {
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final item = await api.createReviewItem(
+      final item = await repository.createReview(
         CreateReviewItem(
           source: ReviewSource(
             kind: 'speaking_attempt',
@@ -629,7 +631,7 @@ class SpeakingTaskController extends ChangeNotifier {
     }
   }
 
-  Future<void> completeDelayedReview(LocalApi api, String rating) async {
+  Future<void> completeDelayedReview(String rating) async {
     final reviewItemId = state.source?.reviewItemId;
     if (state.phase != 'done' ||
         state.source?.recall != 'delayed' ||
@@ -640,7 +642,7 @@ class SpeakingTaskController extends ChangeNotifier {
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      await api.submitReviewAttempt(reviewItemId, rating);
+      await repository.submitReview(reviewItemId, rating);
       _store.update(
         (s) =>
             s.copyWith(delayedReviewCompleted: true, busy: false, error: null),
@@ -655,8 +657,7 @@ class SpeakingTaskController extends ChangeNotifier {
     }
   }
 
-  Future<void> confirmSpeakingTarget(
-    LocalApi api, {
+  Future<void> confirmSpeakingTarget({
     required String lexicalEntryId,
     required String surfaceForm,
   }) async {
@@ -671,7 +672,7 @@ class SpeakingTaskController extends ChangeNotifier {
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      await api.confirmSpeakingTarget(
+      await repository.confirmTarget(
         attemptId: attempt.id,
         lexicalEntryId: lexicalEntryId,
         surfaceForm: surfaceForm,
@@ -696,7 +697,7 @@ class SpeakingTaskController extends ChangeNotifier {
 
   Future<void> openMicrophoneSettings() => _recorder.openSettings();
 
-  Future<void> closeTask([LocalApi? api]) async {
+  Future<void> closeTask() async {
     _pollGeneration++;
     var resumable = state;
     if (state.recordingActive) {
@@ -708,9 +709,11 @@ class SpeakingTaskController extends ChangeNotifier {
       );
     }
     final transcription = state.transcription;
-    if (api != null && state.phase == 'transcribing' && transcription != null) {
+    if (repository.isAvailable &&
+        state.phase == 'transcribing' &&
+        transcription != null) {
       try {
-        final cancelled = await api.cancelRecordingTranscription(
+        final cancelled = await repository.cancelTranscription(
           transcription.id,
         );
         resumable = resumable.copyWith(
@@ -735,7 +738,7 @@ class SpeakingTaskController extends ChangeNotifier {
       _drafts[_draftKey(source, resumable.kind, resumable.assistance)] =
           resumable;
     }
-    _store.replace(const SpeakingTaskState());
+    _store.replace(SpeakingTaskState());
   }
 
   void discardDraft({
@@ -746,18 +749,14 @@ class SpeakingTaskController extends ChangeNotifier {
     _drafts.remove(_draftKey(source, kind, assistance));
   }
 
-  Future<void> _pollTranscription(
-    LocalApi api,
-    String jobId,
-    int generation,
-  ) async {
+  Future<void> _pollTranscription(String jobId, int generation) async {
     while (generation == _pollGeneration && state.phase == 'transcribing') {
       await _delay(const Duration(milliseconds: 120));
       if (generation != _pollGeneration || state.phase != 'transcribing') {
         return;
       }
       try {
-        final job = await api.recordingTranscriptionJob(jobId);
+        final job = await repository.readTranscription(jobId);
         if (generation != _pollGeneration) {
           return;
         }

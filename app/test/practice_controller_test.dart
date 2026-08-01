@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/practice_controller.dart';
+import 'package:llplayer_next/data/repositories/practice_repository.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -79,7 +80,9 @@ void main() {
         return (statusCode: 404, body: 'unexpected $method $path');
       },
     );
-    final controller = PracticeController();
+    final controller = PracticeController(
+      repository: LocalPracticeRepository(() => api),
+    );
     const cue = Cue(
       id: 'sentence-1',
       index: 0,
@@ -99,7 +102,6 @@ void main() {
     );
 
     await controller.startCloze(
-      api: api,
       cue: cue,
       mediaId: 'media-1',
       trackId: 'track-1',
@@ -136,12 +138,12 @@ void main() {
     );
 
     controller.setAnswer('hard');
-    await controller.submit(api);
+    await controller.submit();
 
     expect(controller.attempt?.result, 'incorrect');
     expect(controller.attempt?.generatedObservationIds, ['obs-1']);
 
-    await controller.saveCurrentFailureToReview(api);
+    await controller.saveCurrentFailureToReview();
 
     expect(controller.attempt?.generatedReviewItemIds, ['review-1']);
     expect(controller.error, isNull);
@@ -270,7 +272,10 @@ void main() {
         },
       );
       final recorder = _FakeRecorder();
-      final controller = PracticeController(recorder: recorder);
+      final controller = PracticeController(
+        repository: LocalPracticeRepository(() => api),
+        recorder: recorder,
+      );
       const cue = Cue(
         id: 'sentence-shadow',
         index: 0,
@@ -307,7 +312,6 @@ void main() {
       ];
 
       await controller.startShadowing(
-        api: api,
         cue: cue,
         chunk: chunks.first,
         chunks: chunks,
@@ -319,7 +323,6 @@ void main() {
       expect(controller.item?.target.kind, 'chunk');
 
       await controller.selectShadowingStep(
-        api: api,
         index: 1,
         mediaId: 'media-1',
         trackId: 'track-1',
@@ -338,7 +341,6 @@ void main() {
       expect(controller.recordingActive, isTrue);
 
       await controller.stopShadowingRecording(
-        api: api,
         language: 'en',
         mediaId: 'media-1',
         extractReferenceWav: () async => '/tmp/reference.wav',

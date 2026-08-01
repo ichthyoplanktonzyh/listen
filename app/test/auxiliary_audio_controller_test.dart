@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
+import 'package:llplayer_next/data/repositories/speech_synthesis_repository.dart';
+import 'package:llplayer_next/services/auxiliary_audio_player.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 class _FakePlayer implements AuxiliaryAudioPlayer {
@@ -20,6 +22,26 @@ class _FakePlayer implements AuxiliaryAudioPlayer {
 
   @override
   Future<void> dispose() async => events.add('dispose');
+}
+
+class _FakePlaybackService implements AuxiliaryAudioPlaybackService {
+  _FakePlaybackService(this.events);
+
+  final List<String> events;
+  Uri? remoteSource;
+  String? localPath;
+
+  @override
+  AuxiliaryAudioPlayer createLocalFile(String path) {
+    localPath = path;
+    return _FakePlayer(events);
+  }
+
+  @override
+  AuxiliaryAudioPlayer createRemote(Uri source) {
+    remoteSource = source;
+    return _FakePlayer(events);
+  }
 }
 
 void main() {
@@ -51,17 +73,14 @@ void main() {
         );
       },
     );
+    final playback = _FakePlaybackService(events);
     final controller = AuxiliaryAudioController(
-      playerFactory: (source, local) {
-        expect(local, isTrue);
-        expect(source.toFilePath(), '/tmp/voice.aiff');
-        return _FakePlayer(events);
-      },
+      speechRepository: LocalSpeechSynthesisRepository(() => api),
+      playbackService: playback,
     );
 
     final asset = await controller.speak(
-      api,
-      text: 'My own draft.',
+      'My own draft.',
       language: 'en',
       purpose: 'writing_readback',
       acquireAudioFocus: () async => events.add('focus'),
@@ -70,15 +89,15 @@ void main() {
     expect(events, ['focus', 'initialize', 'play']);
     expect(asset?.synthetic, isTrue);
     expect(controller.asset?.providerId, 'local-test');
+    expect(playback.localPath, '/tmp/voice.aiff');
     expect(jsonDecode(requestBody!), containsPair('text', 'My own draft.'));
     controller.dispose();
   });
 
   test('a newer request disposes the previous auxiliary player', () async {
     final events = <String>[];
-    final controller = AuxiliaryAudioController(
-      playerFactory: (source, local) => _FakePlayer(events),
-    );
+    final playback = _FakePlaybackService(events);
+    final controller = AuxiliaryAudioController(playbackService: playback);
 
     await controller.playRemote(
       'https://example.test/one.mp3',
@@ -99,6 +118,7 @@ void main() {
       'initialize',
       'play',
     ]);
+    expect(playback.remoteSource, Uri.parse('https://example.test/two.mp3'));
     await controller.stop();
     expect(events.sublist(events.length - 2), ['pause', 'dispose']);
     controller.dispose();

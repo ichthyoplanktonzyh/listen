@@ -3,15 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/personal_expression.dart';
+import '../data/repositories/speaking_session_repository.dart';
+import '../models/speaking_target_candidate.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
-import '../widgets/panels/speaking_task_studio.dart'
-    show SpeakingTargetCandidate;
 import 'learning_controller.dart';
 import 'player_controller.dart';
 import 'reading_task_controller.dart';
 import 'speaking_actions_coordinator.dart';
 import 'speaking_task_controller.dart';
+
+export '../models/speaking_target_candidate.dart';
 
 /// Owns the speaking channel's page state: which surface sits on top of the
 /// speaking session (studio or L1 comprehension check)
@@ -29,6 +30,7 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
     required this.readingTask,
     required this.learning,
     required this.player,
+    required this.repository,
   });
 
   final SpeakingActionsCoordinator actions;
@@ -36,13 +38,13 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
   final ReadingTaskController readingTask;
   final LearningController learning;
   final PlayerController player;
+  final SpeakingSessionRepository repository;
 
   /// Localization seam; falls back to raw keys when unbound (tests).
   String Function(String key)? text;
 
   String _t(String key) => text?.call(key) ?? key;
 
-  LocalApi? Function()? _getApi;
   bool Function()? _isMounted;
   Future<String?> Function()? _askPersonalExpressionAssessment;
   void Function()? _onReturnToReview;
@@ -52,13 +54,11 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
   /// are dialogs/flows the composition root owns; the coordinator only
   /// decides when they are due.
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required Future<String?> Function() askPersonalExpressionAssessment,
     required void Function() onReturnToReview,
     required void Function() onReturnToPersonalExpression,
   }) {
-    _getApi = getApi;
     _isMounted = isMounted;
     _askPersonalExpressionAssessment = askPersonalExpressionAssessment;
     _onReturnToReview = onReturnToReview;
@@ -83,8 +83,7 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
   /// The speaking rubric's points are the check's template, so both sides
   /// interrogate the same content.
   Future<void> openL1Check() async {
-    final service = _getApi?.call();
-    if (service == null) {
+    if (!repository.isAvailable) {
       // Unavailable State (CONTEXT.md): the L1-check button is a direct
       // click, so a missing core is reported, never swallowed.
       player.setStatus(_t('statusConnectLocalCoreFirst'));
@@ -95,8 +94,7 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
     // The button only renders inside an open speaking task; a missing source
     // or rubric means the task is still loading, so the click stays silent.
     if (speakingSource == null || rubric == null) return;
-    final profile = await service.learnerProfile();
-    final l1 = profile.l1Language;
+    final l1 = await repository.learnerL1Language();
     if (l1 == null || l1.trim().isEmpty) {
       player.setStatus(_t('statusSetL1First'));
       return;
@@ -115,7 +113,6 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
     _l1CheckSource = source;
     notifyListeners();
     await readingTask.openTask(
-      service,
       source: source,
       templatePoints: rubric.points,
       purpose: ReadingTaskController.listeningPurpose,
@@ -152,11 +149,9 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
       final assessment =
           await _askPersonalExpressionAssessment?.call() ?? 'partly_expressed';
       try {
-        await _getApi?.call()?.recordPersonalExpressionAttempt(
+        await repository.recordPersonalExpressionAttempt(
           patternId: personalPattern.id,
           patternVersionId: personalPattern.currentVersion.id,
-          channel: 'speaking',
-          assistance: 'no_text',
           responseText: personalState.correctedTranscript.trim(),
           rawTranscript: personalState.rawTranscript,
           recordingAssetId: personalState.recording!.id,
@@ -167,12 +162,14 @@ class SpeakingChannelCoordinator extends ChangeNotifier {
         player.setStatus(
           _t('statusPersonalExpressionSaveFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: error is SpeakingSessionRepositoryFailure
+              ? error.detail
+              : null,
         );
       }
     }
     activePersonalPattern = null;
-    await actions.close(_getApi?.call());
+    await actions.close();
     if (returnToReview && _mounted) {
       _onReturnToReview?.call();
     } else if (personalPattern != null && _mounted) {

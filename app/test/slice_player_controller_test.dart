@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
-import 'package:video_player/video_player.dart';
 
 class _FakeSlicePlaybackAdapter implements SlicePlaybackAdapter {
   Duration currentPosition = Duration.zero;
@@ -9,7 +8,7 @@ class _FakeSlicePlaybackAdapter implements SlicePlaybackAdapter {
   final seeks = <Duration>[];
 
   @override
-  VideoPlayerController? get videoController => null;
+  SlicePlaybackRenderHandle? get renderHandle => null;
   @override
   bool get isPlaying => playing;
   @override
@@ -30,6 +29,18 @@ class _FakeSlicePlaybackAdapter implements SlicePlaybackAdapter {
   Future<void> setRate(double rate) async {}
 }
 
+class _FakeSlicePlaybackService implements SlicePlaybackService {
+  _FakeSlicePlaybackService(this.session);
+
+  final SlicePlaybackSession session;
+
+  @override
+  String displayName(String path) => 'source.mp4';
+
+  @override
+  Future<SlicePlaybackSession> open(String path) async => session;
+}
+
 Map<String, dynamic> _occurrence() => {
   'original_form': 'approval',
   'media_title_snapshot': 'source.mp4',
@@ -44,7 +55,7 @@ void main() {
     () async {
       final adapter = _FakeSlicePlaybackAdapter();
       final controller = SlicePlayerController(
-        createAdapter: (_) async => adapter,
+        service: _FakeSlicePlaybackService(adapter),
       );
 
       await controller.open(
@@ -70,7 +81,7 @@ void main() {
     () async {
       final adapter = _FakeSlicePlaybackAdapter();
       final controller = SlicePlayerController(
-        createAdapter: (_) async => adapter,
+        service: _FakeSlicePlaybackService(adapter),
       );
       await controller.open(
         path: '/media/source.mp4',

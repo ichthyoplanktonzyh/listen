@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/settings/syntax_capability_settings.dart';
@@ -35,7 +36,11 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: SyntaxCapabilitySettings(api: api)),
+        home: Scaffold(
+          body: SyntaxCapabilitySettings(
+            repository: LocalSyntaxCapabilityRepository(api),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -90,7 +95,10 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: SyntaxCapabilitySettings(api: api, currentTrackId: 'track-1'),
+          body: SyntaxCapabilitySettings(
+            repository: LocalSyntaxCapabilityRepository(api),
+            currentTrackId: 'track-1',
+          ),
         ),
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/settings/llm_provider_settings.dart';
@@ -101,10 +102,12 @@ void main() {
     await pump(
       tester,
       LlmProviderSettings(
-        api: api(
-          fail: (method, path) => path.contains('/v1/llm/providers')
-              ? (statusCode: 500, body: envelope)
-              : null,
+        repository: LocalLlmProviderRepository(
+          api(
+            fail: (method, path) => path.contains('/v1/llm/providers')
+                ? (statusCode: 500, body: envelope)
+                : null,
+          ),
         ),
       ),
     );
@@ -120,10 +123,12 @@ void main() {
     await pump(
       tester,
       RealtimeProviderSettings(
-        api: api(
-          fail: (method, path) => path.contains('/v1/realtime/providers')
-              ? (statusCode: 503, body: envelope)
-              : null,
+        repository: LocalRealtimeProviderRepository(
+          api(
+            fail: (method, path) => path.contains('/v1/realtime/providers')
+                ? (statusCode: 503, body: envelope)
+                : null,
+          ),
         ),
       ),
     );
@@ -139,15 +144,17 @@ void main() {
     await pump(
       tester,
       SyntaxCapabilitySettings(
-        api: api(
-          fail: (method, path) => path.contains('/capability/install')
-              ? (statusCode: 409, body: envelope)
-              : null,
-          ok: {
-            '/v1/syntax/capability':
-                '{"status":"not_installed","enabled":false,'
-                '"runtime_version":"3.7","model_version":"en_core_web_sm"}',
-          },
+        repository: LocalSyntaxCapabilityRepository(
+          api(
+            fail: (method, path) => path.contains('/capability/install')
+                ? (statusCode: 409, body: envelope)
+                : null,
+            ok: {
+              '/v1/syntax/capability':
+                  '{"status":"not_installed","enabled":false,'
+                  '"runtime_version":"3.7","model_version":"en_core_web_sm"}',
+            },
+          ),
         ),
       ),
     );

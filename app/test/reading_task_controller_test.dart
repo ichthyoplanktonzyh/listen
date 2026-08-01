@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/reading_task_controller.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
@@ -144,16 +145,17 @@ class _FakeBackend {
   );
 }
 
+ReadingTaskController _controller(_FakeBackend backend) =>
+    ReadingTaskController(
+      repository: LocalReadingTaskRepository(() => backend.api),
+    );
+
 void main() {
   test('openTask with no existing rubric enters template editing', () async {
     final backend = _FakeBackend()
       ..on('GET', '/v1/semantic/rubrics/lookup', null);
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
+    final controller = _controller(backend);
+    await controller.openTask(source: _source, templatePoints: _template);
     expect(controller.state.phase, 'editing');
     expect(controller.state.draftPoints, hasLength(2));
     // Lookup carried the source identity, not a client-derived id.
@@ -171,12 +173,8 @@ void main() {
       ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', [
         _attemptJson('旧回答'),
       ]);
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
+    final controller = _controller(backend);
+    await controller.openTask(source: _source, templatePoints: _template);
     expect(controller.state.phase, 'answering');
     expect(controller.state.rubric!.id, 'rubric-x');
     expect(controller.state.pastAttemptCount, 1);
@@ -204,23 +202,19 @@ void main() {
         'evidence_class': 'self_assessment',
         'created_at_ms': 20,
       });
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
-    await controller.saveRubric(backend.api);
+    final controller = _controller(backend);
+    await controller.openTask(source: _source, templatePoints: _template);
+    await controller.saveRubric();
     expect(controller.state.phase, 'answering');
 
-    await controller.submitAnswer(backend.api, '地震发生在棉兰老岛。', audioPlayCount: 2);
+    await controller.submitAnswer('地震发生在棉兰老岛。', audioPlayCount: 2);
     expect(controller.state.phase, 'assessing');
 
     controller.setVerdict('main-idea', 'covered');
     expect(controller.state.allPointsJudged, isFalse);
     controller.setVerdict('detail', 'missing');
     expect(controller.state.allPointsJudged, isTrue);
-    await controller.submitSelfAssessment(backend.api);
+    await controller.submitSelfAssessment();
     expect(controller.state.phase, 'done');
     expect(controller.state.judgment!.id, 'judgment-x');
 
@@ -279,22 +273,14 @@ void main() {
         'note': null,
         'occurred_at_ms': 30,
       });
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
-    await controller.submitAnswer(backend.api, '回答');
+    final controller = _controller(backend);
+    await controller.openTask(source: _source, templatePoints: _template);
+    await controller.submitAnswer('回答');
     controller.setVerdict('main-idea', 'partial');
     controller.setVerdict('detail', 'missing');
-    await controller.submitSelfAssessment(backend.api);
+    await controller.submitSelfAssessment();
 
-    await controller.adjudicate(
-      backend.api,
-      pointId: 'main-idea',
-      userVerdict: 'covered',
-    );
+    await controller.adjudicate(pointId: 'main-idea', userVerdict: 'covered');
     expect(controller.state.adjudications, hasLength(1));
     final body = backend.requests
         .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
@@ -304,11 +290,7 @@ void main() {
 
     // Same verdict as current: refused client-side, no request sent.
     final before = backend.requests.length;
-    await controller.adjudicate(
-      backend.api,
-      pointId: 'detail',
-      userVerdict: 'missing',
-    );
+    await controller.adjudicate(pointId: 'detail', userVerdict: 'missing');
     expect(backend.requests.length, before);
   });
 
@@ -317,9 +299,8 @@ void main() {
       ..on('GET', '/v1/semantic/rubrics/lookup', _rubricJson())
       ..on('GET', '/v1/semantic/rubrics/rubric-x/attempts', <dynamic>[])
       ..on('POST', '/v1/semantic/attempts', _attemptJson('复述内容'));
-    final controller = ReadingTaskController();
+    final controller = _controller(backend);
     await controller.openTask(
-      backend.api,
       source: _source,
       templatePoints: _template,
       purpose: ReadingTaskController.listeningPurpose,
@@ -328,7 +309,7 @@ void main() {
     // Lookup went to the listening purpose, not reading.
     expect(backend.requests.first.$2, contains('purpose=l1_retelling'));
 
-    await controller.submitAnswer(backend.api, '复述内容', audioPlayCount: 3);
+    await controller.submitAnswer('复述内容', audioPlayCount: 3);
     final body = backend.requests
         .firstWhere((r) => r.$2 == '/v1/semantic/attempts')
         .$3!;
@@ -356,22 +337,14 @@ void main() {
           'note': null,
           'occurred_at_ms': 40,
         });
-      final controller = ReadingTaskController();
-      await controller.openTask(
-        backend.api,
-        source: _source,
-        templatePoints: _template,
-      );
-      await controller.submitAnswer(
-        backend.api,
-        '地震发生在棉兰老岛。',
-        audioPlayCount: 2,
-      );
+      final controller = _controller(backend);
+      await controller.openTask(source: _source, templatePoints: _template);
+      await controller.submitAnswer('地震发生在棉兰老岛。', audioPlayCount: 2);
       // A judgment-capable provider was discovered, but nothing is judged yet.
       expect(controller.state.judgeProviderId, 'prov-1');
       expect(controller.state.llmJudgment, isNull);
 
-      await controller.requestLlmJudgment(backend.api);
+      await controller.requestLlmJudgment();
       final judgment = controller.state.llmJudgment!;
       expect(judgment.id, 'llm-judgment-1');
       // Never gold: an unqualified provider verdict stays a heuristic proxy.
@@ -387,11 +360,7 @@ void main() {
       expect(judgeBody['response_revision'], 1);
 
       // Correcting the LLM verdict appends an adjudication citing the LLM row.
-      await controller.adjudicateLlm(
-        backend.api,
-        pointId: 'detail',
-        userVerdict: 'covered',
-      );
+      await controller.adjudicateLlm(pointId: 'detail', userVerdict: 'covered');
       expect(controller.state.llmAdjudications, hasLength(1));
       final adjBody = backend.requests
           .firstWhere((r) => r.$2 == '/v1/semantic/adjudications')
@@ -431,16 +400,12 @@ void main() {
           'schema_version': 'semantic/v1',
         })
         ..on('POST', '/v1/semantic/rubrics', _rubricJson());
-      final controller = ReadingTaskController();
-      await controller.openTask(
-        backend.api,
-        source: _source,
-        templatePoints: _template,
-      );
+      final controller = _controller(backend);
+      await controller.openTask(source: _source, templatePoints: _template);
       expect(controller.state.phase, 'editing');
       expect(controller.state.rubricProviderId, 'prov-1');
 
-      await controller.generateRubric(backend.api);
+      await controller.generateRubric();
       // The draft is loaded into the editable template (client-assigned ids),
       // not auto-saved.
       expect(controller.state.phase, 'editing');
@@ -451,7 +416,7 @@ void main() {
       expect(controller.state.draftPoints.first.pointId, 'p1');
 
       // Saving the reviewed draft records honest llm provenance with the model.
-      await controller.saveRubric(backend.api);
+      await controller.saveRubric();
       final body = backend.requests
           .firstWhere((r) => r.$2 == '/v1/semantic/rubrics')
           .$3!;
@@ -471,13 +436,9 @@ void main() {
           'allowed_uses': ['rubric_generation'],
         },
       ]);
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
-    await controller.submitAnswer(backend.api, '回答');
+    final controller = _controller(backend);
+    await controller.openTask(source: _source, templatePoints: _template);
+    await controller.submitAnswer('回答');
     expect(controller.state.judgeProviderId, isNull);
   });
 
@@ -485,15 +446,29 @@ void main() {
     final backend = _FakeBackend()
       ..on('GET', '/v1/semantic/rubrics/lookup', null)
       ..on('POST', '/v1/semantic/rubrics', 500);
-    final controller = ReadingTaskController();
-    await controller.openTask(
-      backend.api,
-      source: _source,
-      templatePoints: _template,
-    );
-    await controller.saveRubric(backend.api);
+    final controller = _controller(backend);
+    await controller.openTask(source: _source, templatePoints: _template);
+    await controller.saveRubric();
     expect(controller.state.phase, 'editing');
     expect(controller.state.error, isNotNull);
     expect(controller.state.judgment, isNull);
+  });
+
+  test('repository converts transport errors into typed failures', () async {
+    final backend = _FakeBackend()
+      ..on('GET', '/v1/semantic/rubrics/lookup', 500);
+    final repository = LocalReadingTaskRepository(() => backend.api);
+
+    await expectLater(
+      repository.lookupRubric(
+        mediaId: _source.mediaId,
+        startMs: _source.startMs,
+        endMs: _source.endMs,
+        purpose: ReadingTaskController.readingPurpose,
+        responseLanguage: _source.responseLanguage,
+        transcriptSnapshot: _source.transcriptSnapshot,
+      ),
+      throwsA(isA<ReadingTaskRepositoryFailure>()),
+    );
   });
 }

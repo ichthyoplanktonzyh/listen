@@ -1,5 +1,4 @@
 import '../models/timeline.dart';
-import '../services/api_service.dart';
 import 'learning_controller.dart';
 import 'learning_workflow_controller.dart';
 import 'player_controller.dart';
@@ -30,18 +29,15 @@ class VocabularyActionsCoordinator {
   final SettingsController settings;
   final PlayerController player;
 
-  late LocalApi? Function() getApi;
   late bool Function() isMounted;
   late String Function(String key) text;
   late Future<void> Function() refreshDiagnosis;
 
   void bind({
-    required LocalApi? Function() getApi,
     required bool Function() isMounted,
     required String Function(String key) text,
     required Future<void> Function() refreshDiagnosis,
   }) {
-    this.getApi = getApi;
     this.isMounted = isMounted;
     this.text = text;
     this.refreshDiagnosis = refreshDiagnosis;
@@ -49,19 +45,18 @@ class VocabularyActionsCoordinator {
 
   /// Unavailable State (CONTEXT.md): user-triggered vocabulary actions report
   /// the missing core instead of silently doing nothing. Background loads
-  /// (word/phrase entries, phrase candidates) keep passing [getApi] straight
-  /// through and stay silent.
-  LocalApi? _requireApi() {
-    final api = getApi();
-    if (api == null && isMounted()) {
+  /// (word/phrase entries, phrase candidates) use the repository availability
+  /// signal and stay silent.
+  bool _requireRepository() {
+    final available = workflow.repositoryAvailable;
+    if (!available && isMounted()) {
       player.setStatus(text('statusConnectLocalCoreFirst'));
     }
-    return api;
+    return available;
   }
 
   Future<void> loadPhraseCandidates(Cue? cue) async {
     await workflow.loadPhraseCandidates(
-      api: getApi(),
       cue: cue,
       learning: learning,
       isMounted: isMounted,
@@ -70,10 +65,8 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> markFirstWord(String? wordStatus) async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     await workflow.markFirstWord(
-      api: api,
       cue: subtitle.currentPrimaryCue,
       wordStatus: wordStatus,
       language: settings.resolveLearningLanguage(
@@ -88,7 +81,6 @@ class VocabularyActionsCoordinator {
 
   Future<void> loadWordEntries() async {
     await workflow.loadWordEntries(
-      api: getApi(),
       track: subtitle.primaryTrack,
       language: settings.resolveLearningLanguage(
         subtitle.primaryTrack?.language,
@@ -100,7 +92,6 @@ class VocabularyActionsCoordinator {
 
   Future<void> loadPhraseEntries() async {
     await workflow.loadPhraseEntries(
-      api: getApi(),
       language: settings.resolveLearningLanguage(
         subtitle.primaryTrack?.language,
       ),
@@ -110,11 +101,9 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> openWord(SubtitleToken token, Cue cue) async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     try {
       await workflow.openWord(
-        api: api,
         token: token,
         cue: cue,
         language: settings.resolveLearningLanguage(
@@ -129,18 +118,16 @@ class VocabularyActionsCoordinator {
         player.setStatus(
           text('statusDictionaryUnavailable'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: workflow.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> setSelectedWordStatus(String? selected) async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     try {
       final update = await workflow.setSelectedWordStatus(
-        api: api,
         selected: selected,
         language: settings.resolveLearningLanguage(
           subtitle.primaryTrack?.language,
@@ -162,7 +149,7 @@ class VocabularyActionsCoordinator {
         player.setStatus(
           text('statusWordUpdateFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: workflow.failureDetail(error),
         );
       }
     }
@@ -172,11 +159,9 @@ class VocabularyActionsCoordinator {
     String capability,
     String? conclusion,
   ) async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     try {
       await workflow.setCapabilityOverride(
-        api: api,
         capability: capability,
         conclusion: conclusion,
         learning: learning,
@@ -188,7 +173,7 @@ class VocabularyActionsCoordinator {
         player.setStatus(
           text('statusCapabilityUpdateFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: workflow.failureDetail(error),
         );
       }
     }
@@ -198,10 +183,8 @@ class VocabularyActionsCoordinator {
     String? definition,
     String? note,
   ) async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     await workflow.saveSelectedLearningContent(
-      api: api,
       definition: definition,
       note: note,
       learning: learning,
@@ -210,11 +193,9 @@ class VocabularyActionsCoordinator {
   }
 
   Future<void> recordCurrentSource() async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     try {
       await workflow.recordCurrentSource(
-        api: api,
         language: settings.resolveLearningLanguage(
           subtitle.primaryTrack?.language,
         ),
@@ -227,17 +208,15 @@ class VocabularyActionsCoordinator {
         player.setStatus(
           text('statusRecordSourceFailed'),
           error: true,
-          failure: describeApiFailure(error),
+          failure: workflow.failureDetail(error),
         );
       }
     }
   }
 
   Future<void> observeSelected(bool heard) async {
-    final api = _requireApi();
-    if (api == null) return;
+    if (!_requireRepository()) return;
     final observed = await workflow.observeSelected(
-      api: api,
       heard: heard,
       learning: learning,
       sourceFor: _sourceFor,

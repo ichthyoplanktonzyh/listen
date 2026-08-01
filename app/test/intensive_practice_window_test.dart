@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/practice_controller.dart';
+import 'package:llplayer_next/data/repositories/practice_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -15,8 +16,10 @@ void main() {
   testWidgets('window can hide its player, navigate, and close', (
     tester,
   ) async {
-    final controller = PracticeController();
     final api = _practiceApi();
+    final controller = PracticeController(
+      repository: LocalPracticeRepository(() => api),
+    );
     const cue = Cue(
       id: 'sentence-1',
       index: 0,
@@ -26,7 +29,6 @@ void main() {
       tokens: [],
     );
     await controller.startSentenceDictation(
-      api: api,
       cue: cue,
       mediaId: 'media-1',
       trackId: 'track-1',
@@ -118,7 +120,10 @@ void main() {
   testWidgets(
     'shadowing panel exposes speed, expansion, and recording controls',
     (tester) async {
-      final controller = PracticeController();
+      final api = _practiceApi();
+      final controller = PracticeController(
+        repository: LocalPracticeRepository(() => api),
+      );
       const cue = Cue(
         id: 'sentence-shadow',
         index: 0,
@@ -154,7 +159,6 @@ void main() {
         ),
       ];
       await controller.startShadowing(
-        api: _practiceApi(),
         cue: cue,
         chunk: chunks.first,
         chunks: chunks,
@@ -217,7 +221,10 @@ void main() {
     tester,
   ) async {
     final gate = Completer<void>();
-    final controller = PracticeController();
+    var api = _practiceApi();
+    final controller = PracticeController(
+      repository: LocalPracticeRepository(() => api),
+    );
     const cueOne = Cue(
       id: 'sentence-1',
       index: 0,
@@ -235,7 +242,6 @@ void main() {
       tokens: [],
     );
     await controller.startSentenceDictation(
-      api: _practiceApi(),
       cue: cueOne,
       mediaId: 'media-1',
       trackId: 'track-1',
@@ -284,8 +290,8 @@ void main() {
     // Navigate to the neighbouring sentence: the draft flips synchronously
     // while the new item is created asynchronously. The prompt must stay on
     // screen the whole time instead of falling back to the placeholder.
+    api = _practiceApi(itemGate: gate.future);
     final pending = controller.startSentenceDictation(
-      api: _practiceApi(itemGate: gate.future),
       cue: cueTwo,
       mediaId: 'media-1',
       trackId: 'track-1',
@@ -311,9 +317,11 @@ void main() {
   testWidgets('cross-media shadowing hides primary sentence navigation', (
     tester,
   ) async {
-    final controller = PracticeController();
+    final api = _practiceApi();
+    final controller = PracticeController(
+      repository: LocalPracticeRepository(() => api),
+    );
     await controller.startExternalShadowing(
-      api: _practiceApi(),
       mediaPath: '/tmp/source.mp4',
       mediaId: 'source-media',
       trackId: 'source-track',

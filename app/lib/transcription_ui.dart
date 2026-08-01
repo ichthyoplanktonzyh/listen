@@ -1,13 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import 'data/repositories/transcription_repository.dart';
 import 'localization.dart';
 import 'models/runtime_resources.dart';
 import 'models/timeline.dart';
-import 'services/api_service.dart';
+import 'models/named_failure.dart';
+import 'services/transcription_file_service.dart';
+import 'widgets/common/api_failure_disclosure.dart';
 import 'widgets/common/listen_empty_state.dart';
 import 'widgets/common/listen_error_state.dart';
 
@@ -16,7 +17,7 @@ typedef LoadGeneratedTrack =
 
 Future<bool> showGenerateSubtitles({
   required BuildContext context,
-  required LocalApi api,
+  required TranscriptionRepository repository,
   required String mediaId,
   required bool secondary,
   String preferredQuality = 'balanced',
@@ -24,7 +25,7 @@ Future<bool> showGenerateSubtitles({
   bool force = false,
 }) async {
   final l = AppLocalizations.of(context);
-  final models = await api.transcriptionModels();
+  final models = await repository.models();
   final installed = models
       .where((model) => model.state == 'installed' || model.state == 'custom')
       .toList(growable: false);
@@ -110,7 +111,7 @@ Future<bool> showGenerateSubtitles({
           ),
           FilledButton(
             onPressed: () async {
-              await api.createTranscriptionJob(
+              await repository.createJob(
                 mediaId: mediaId,
                 modelId: modelId,
                 secondary: secondary,
@@ -136,13 +137,15 @@ extension<T> on Iterable<T> {
 
 class TranscriptionCenter extends StatefulWidget {
   const TranscriptionCenter({
-    required this.api,
+    required this.repository,
     required this.loadTrack,
+    this.fileService = const LocalTranscriptionFileService(),
     super.key,
   });
 
-  final LocalApi api;
+  final TranscriptionRepository repository;
   final LoadGeneratedTrack loadTrack;
+  final TranscriptionFileService fileService;
 
   @override
   State<TranscriptionCenter> createState() => _TranscriptionCenterState();
@@ -153,7 +156,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
   List<TranscriptionJobView> jobs = const [];
   List<TranscriptionProviderView> providers = const [];
   Timer? timer;
-  String? error;
+  NamedFailure? failure;
 
   @override
   void initState() {
@@ -164,18 +167,25 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
 
   Future<void> _refresh() async {
     try {
-      final providerValues = await widget.api.transcriptionProviders();
-      final modelValues = await widget.api.transcriptionModels();
-      final jobValues = await widget.api.transcriptionJobs();
+      final providerValues = await widget.repository.providers();
+      final modelValues = await widget.repository.models();
+      final jobValues = await widget.repository.jobs();
       if (!mounted) return;
       setState(() {
         providers = providerValues;
         models = modelValues;
         jobs = jobValues;
-        error = null;
+        failure = null;
       });
-    } catch (value) {
-      if (mounted) setState(() => error = value.toString());
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => failure = NamedFailure(
+            'transcriptionLoadFailed',
+            detail: widget.repository.failureDetail(error),
+          ),
+        );
+      }
     }
   }
 
@@ -203,12 +213,19 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
             IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
           ],
         ),
-        body: error != null
+        body: failure != null
             ? ListenErrorState(
-                message: error!,
-                action: OutlinedButton(
-                  onPressed: _refresh,
-                  child: Text(l.text('retry')),
+                message: l.text(failure!.messageKey),
+                action: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton(
+                      onPressed: _refresh,
+                      child: Text(l.text('retry')),
+                    ),
+                    if (ApiFailureDisclosure.hasDetail(failure!.detail))
+                      ApiFailureDisclosure(failure: failure!.detail!),
+                  ],
                 ),
               )
             : TabBarView(children: [_models(l), _jobs(l)]),
@@ -224,13 +241,9 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
           alignment: Alignment.centerLeft,
           child: OutlinedButton.icon(
             onPressed: () async {
-              final file = await openFile(
-                acceptedTypeGroups: const [
-                  XTypeGroup(label: 'Whisper model', extensions: ['bin']),
-                ],
-              );
-              if (file != null) {
-                await widget.api.registerCustomTranscriptionModel(file.path);
+              final path = await widget.fileService.pickCustomModel();
+              if (path != null) {
+                await widget.repository.registerCustomModel(path);
                 await _refresh();
               }
             },
@@ -280,7 +293,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                 'downloadable' || 'failed' => IconButton(
                   tooltip: l.text('install'),
                   onPressed: () async {
-                    await widget.api.installTranscriptionModel(model.id);
+                    await widget.repository.installModel(model.id);
                     await _refresh();
                   },
                   icon: const Icon(Icons.download),
@@ -288,7 +301,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                 'installing' => IconButton(
                   tooltip: l.text('cancel'),
                   onPressed: () async {
-                    await widget.api.cancelTranscriptionModelInstall(model.id);
+                    await widget.repository.cancelModelInstall(model.id);
                     await _refresh();
                   },
                   icon: const Icon(Icons.cancel_outlined),
@@ -296,7 +309,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                 _ => IconButton(
                   tooltip: l.text('remove'),
                   onPressed: () async {
-                    await widget.api.deleteTranscriptionModel(model.id);
+                    await widget.repository.deleteModel(model.id);
                     await _refresh();
                   },
                   icon: const Icon(Icons.delete_outline),
@@ -343,15 +356,14 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                   if (active)
                     IconButton(
                       tooltip: l.text('cancel'),
-                      onPressed: () =>
-                          widget.api.cancelTranscriptionJob(job.id),
+                      onPressed: () => widget.repository.cancelJob(job.id),
                       icon: const Icon(Icons.stop_circle_outlined),
                     ),
                   if (status == 'failed' || status == 'cancelled')
                     IconButton(
                       tooltip: l.text('retry'),
                       onPressed: () async {
-                        await widget.api.retryTranscriptionJob(job.id);
+                        await widget.repository.retryJob(job.id);
                         await _refresh();
                       },
                       icon: const Icon(Icons.replay),
@@ -360,7 +372,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                     IconButton(
                       tooltip: l.text('loadGeneratedSubtitle'),
                       onPressed: () async {
-                        final track = await widget.api.readSubtitle(
+                        final track = await widget.repository.readSubtitle(
                           job.generatedTrackId!,
                         );
                         await widget.loadTrack(
@@ -374,14 +386,12 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                     IconButton(
                       tooltip: l.text('exportSrt'),
                       onPressed: () async {
-                        final location = await getSaveLocation(
+                        final content = await widget.repository
+                            .exportSubtitleSrt(job.generatedTrackId!);
+                        await widget.fileService.saveSrt(
                           suggestedName: '${job.mediaTitle}.generated.srt',
+                          content: content,
                         );
-                        if (location == null) return;
-                        final content = await widget.api.exportSubtitleSrt(
-                          job.generatedTrackId!,
-                        );
-                        await File(location.path).writeAsString(content);
                       },
                       icon: const Icon(Icons.file_download_outlined),
                     ),
@@ -391,7 +401,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                       onPressed: () async {
                         final created = await showGenerateSubtitles(
                           context: context,
-                          api: widget.api,
+                          repository: widget.repository,
                           mediaId: job.mediaId,
                           secondary: job.destination == 'secondary',
                           force: true,
@@ -404,7 +414,7 @@ class _TranscriptionCenterState extends State<TranscriptionCenter> {
                     IconButton(
                       tooltip: l.text('archive'),
                       onPressed: () async {
-                        await widget.api.archiveTranscriptionJob(job.id);
+                        await widget.repository.archiveJob(job.id);
                         await _refresh();
                       },
                       icon: const Icon(Icons.archive_outlined),

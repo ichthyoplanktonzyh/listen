@@ -8,31 +8,42 @@ const _unset = Object();
 
 /// Immutable snapshot of learning-related state.
 class LearningState {
-  const LearningState({
-    this.wordEntries = const {},
-    this.phraseEntries = const {},
-    this.capabilityProfiles = const {},
+  LearningState({
+    Map<String, LexicalEntry> wordEntries = const {},
+    Map<String, LexicalEntryDetails> phraseEntries = const {},
+    Map<String, LexicalCapabilityProfile> capabilityProfiles = const {},
     this.selectedLexicalDetails,
     this.selectedDictionary,
     this.selectedPronunciation,
     this.selectedToken,
     this.selectedCue,
-    this.phraseCandidates = const [],
+    List<PhraseCandidate> phraseCandidates = const [],
     this.diagnosis,
     this.sidePanel = 0,
-  });
+  }) : _wordEntries = Map.unmodifiable(wordEntries),
+       _phraseEntries = Map.unmodifiable(phraseEntries),
+       _capabilityProfiles = Map.unmodifiable(capabilityProfiles),
+       _phraseCandidates = List.unmodifiable(phraseCandidates);
 
-  final Map<String, LexicalEntry> wordEntries;
-  final Map<String, LexicalEntryDetails> phraseEntries;
-  final Map<String, LexicalCapabilityProfile> capabilityProfiles;
+  final Map<String, LexicalEntry> _wordEntries;
+  final Map<String, LexicalEntryDetails> _phraseEntries;
+  final Map<String, LexicalCapabilityProfile> _capabilityProfiles;
   final LexicalEntryDetails? selectedLexicalDetails;
   final DictionaryLookupBundle? selectedDictionary;
   final WordPronunciation? selectedPronunciation;
   final SubtitleToken? selectedToken;
   final Cue? selectedCue;
-  final List<PhraseCandidate> phraseCandidates;
+  final List<PhraseCandidate> _phraseCandidates;
   final Diagnosis? diagnosis;
   final int sidePanel;
+
+  Map<String, LexicalEntry> get wordEntries => Map.unmodifiable(_wordEntries);
+  Map<String, LexicalEntryDetails> get phraseEntries =>
+      Map.unmodifiable(_phraseEntries);
+  Map<String, LexicalCapabilityProfile> get capabilityProfiles =>
+      Map.unmodifiable(_capabilityProfiles);
+  List<PhraseCandidate> get phraseCandidates =>
+      List.unmodifiable(_phraseCandidates);
 
   LearningState copyWith({
     Map<String, LexicalEntry>? wordEntries,
@@ -86,7 +97,7 @@ class LearningController extends ChangeNotifier {
   final Map<String, LanguageProfile> _languageProfiles = {};
   LanguageProfile? _currentLanguageProfile;
 
-  LearningController() : _store = Store(const LearningState()) {
+  LearningController() : _store = Store(LearningState()) {
     _store.addListener(notifyListeners);
   }
 
@@ -94,13 +105,13 @@ class LearningController extends ChangeNotifier {
   Store<LearningState> get store => _store;
 
   LearningState get state => _store.state;
-  List<String> get availableLanguages => _availableLanguages;
+  List<String> get availableLanguages => List.unmodifiable(_availableLanguages);
   LanguageProfile? get currentLanguageProfile => _currentLanguageProfile;
   LanguageProfile? languageProfileFor(String languageCode) =>
       _languageProfiles[languageCode];
 
   set availableLanguages(List<String> value) {
-    _availableLanguages = value;
+    _availableLanguages = List.unmodifiable(value);
     notifyListeners();
   }
 

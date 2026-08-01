@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/speaking_task_controller.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
+import '../../models/speaking_target_candidate.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
@@ -13,15 +13,9 @@ import '../common/listen_loading.dart';
 import 'llm_feedback_assist.dart';
 import '../../theme/typography.dart';
 
-class SpeakingTargetCandidate {
-  const SpeakingTargetCandidate({
-    required this.lexicalEntryId,
-    required this.surfaceForm,
-  });
-
-  final String lexicalEntryId;
-  final String surfaceForm;
-}
+// Compatibility export for callers that historically imported the widget to
+// construct candidates. New code should import the presentation model.
+export '../../models/speaking_target_candidate.dart';
 
 /// Whole-scene Speaking host. Each phase gets the space it needs; transcript
 /// and feedback are absent until the state machine makes them available.
@@ -29,7 +23,6 @@ class SpeakingTaskStudio extends StatelessWidget {
   const SpeakingTaskStudio({
     super.key,
     required this.controller,
-    required this.api,
     required this.onPlaySource,
     required this.onPlayRecording,
     required this.onAcquireRecordingFocus,
@@ -39,7 +32,6 @@ class SpeakingTaskStudio extends StatelessWidget {
   });
 
   final SpeakingTaskController controller;
-  final LocalApi api;
   final Future<void> Function() onPlaySource;
   final Future<void> Function() onPlayRecording;
   final Future<void> Function() onAcquireRecordingFocus;
@@ -252,7 +244,7 @@ class SpeakingTaskStudio extends StatelessWidget {
         const SizedBox(height: ListenSpacing.gap24),
         FilledButton.icon(
           key: const ValueKey('speaking-stop-recording'),
-          onPressed: state.busy ? null : () => controller.stopRecording(api),
+          onPressed: state.busy ? null : controller.stopRecording,
           icon: const Icon(Icons.stop),
           label: Text(l.text('speakingStopRecording')),
         ),
@@ -273,7 +265,7 @@ class SpeakingTaskStudio extends StatelessWidget {
         Text(l.text('speakingTranscribing')),
         const SizedBox(height: ListenSpacing.gap8),
         TextButton(
-          onPressed: () => controller.cancelTranscription(api),
+          onPressed: controller.cancelTranscription,
           child: Text(l.text('speakingCancelTranscription')),
         ),
       ],
@@ -338,7 +330,7 @@ class SpeakingTaskStudio extends StatelessWidget {
             FilledButton(
               onPressed: state.correctedTranscript.trim().isEmpty || state.busy
                   ? null
-                  : () => controller.acceptTranscript(api),
+                  : controller.acceptTranscript,
               child: Text(l.text('speakingAcceptTranscript')),
             ),
           ],
@@ -400,7 +392,6 @@ class SpeakingTaskStudio extends StatelessWidget {
                           )
                       ? null
                       : () => controller.confirmSpeakingTarget(
-                          api,
                           lexicalEntryId: target.lexicalEntryId,
                           surfaceForm: target.surfaceForm,
                         ),
@@ -434,7 +425,7 @@ class SpeakingTaskStudio extends StatelessWidget {
     feedback: state.llmFeedback,
     busy: state.busy,
     keyPrefix: 'speaking-task',
-    onRequest: () => unawaited(controller.requestLlmFeedback(api)),
+    onRequest: () => unawaited(controller.requestLlmFeedback()),
   );
 
   Widget _done(BuildContext context, SpeakingTaskState state) {
@@ -462,7 +453,7 @@ class SpeakingTaskStudio extends StatelessWidget {
                 OutlinedButton(
                   onPressed: state.busy
                       ? null
-                      : () => controller.completeDelayedReview(api, rating),
+                      : () => controller.completeDelayedReview(rating),
                   child: Text(l.text('speakingDelayedRate_$rating')),
                 ),
             ],
@@ -491,7 +482,7 @@ class SpeakingTaskStudio extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: state.busy || state.delayedReviewItemId != null
                     ? null
-                    : () => controller.scheduleDelayedRetelling(api),
+                    : controller.scheduleDelayedRetelling,
                 icon: Icon(
                   state.delayedReviewItemId == null
                       ? Icons.event_repeat_outlined

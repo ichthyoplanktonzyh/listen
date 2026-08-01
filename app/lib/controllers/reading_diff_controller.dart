@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/reading_diff.dart';
 import '../models/semantic_task.dart';
-import '../services/api_service.dart';
+import '../data/repositories/reading_task_repository.dart';
 import '../state/store.dart';
 import 'reading_task_controller.dart';
 
@@ -11,26 +11,29 @@ const _unset = Object();
 /// One side of the read-listen pairing: the rubric (if any), the latest
 /// judgment with its corrections applied, and the reduced outcome.
 class DiffSide {
-  const DiffSide({
+  DiffSide({
     this.rubric,
     this.judgment,
-    this.adjudications = const [],
+    List<JudgmentAdjudicationView> adjudications = const [],
     this.outcome = SideOutcome.unassessed,
-  });
+  }) : _adjudications = List.unmodifiable(adjudications);
 
   final SemanticRubricView? rubric;
   final SemanticJudgmentView? judgment;
-  final List<JudgmentAdjudicationView> adjudications;
+  final List<JudgmentAdjudicationView> _adjudications;
+  List<JudgmentAdjudicationView> get adjudications =>
+      List.unmodifiable(_adjudications);
   final SideOutcome outcome;
 }
 
 class ReadingDiffState {
-  const ReadingDiffState({
+  ReadingDiffState({
     this.loading = false,
-    this.read = const DiffSide(),
-    this.listen = const DiffSide(),
+    DiffSide? read,
+    DiffSide? listen,
     this.error,
-  });
+  }) : read = read ?? DiffSide(),
+       listen = listen ?? DiffSide();
 
   final bool loading;
   final DiffSide read;
@@ -55,25 +58,25 @@ class ReadingDiffState {
 /// Read-side aggregation for the read-listen diff card. Pure consumption of
 /// the 3.11 fact family — nothing here writes anything.
 class ReadingDiffController extends ChangeNotifier {
-  ReadingDiffController() : _store = Store(const ReadingDiffState()) {
+  ReadingDiffController({required this.repository})
+    : _store = Store(ReadingDiffState()) {
     _store.addListener(notifyListeners);
   }
 
   final Store<ReadingDiffState> _store;
+  final ReadingTaskRepository repository;
 
   Store<ReadingDiffState> get store => _store;
   ReadingDiffState get state => _store.state;
 
-  Future<void> loadDiff(LocalApi api, ReadingTaskSource source) async {
-    _store.replace(const ReadingDiffState(loading: true));
+  Future<void> loadDiff(ReadingTaskSource source) async {
+    _store.replace(ReadingDiffState(loading: true));
     try {
       final read = await _loadSide(
-        api,
         source,
         ReadingTaskController.readingPurpose,
       );
       final listen = await _loadSide(
-        api,
         source,
         ReadingTaskController.listeningPurpose,
       );
@@ -82,7 +85,7 @@ class ReadingDiffController extends ChangeNotifier {
       );
     } catch (error) {
       _store.replace(
-        const ReadingDiffState(
+        ReadingDiffState(
           loading: false,
           error: 'This comparison could not be built',
         ),
@@ -90,17 +93,13 @@ class ReadingDiffController extends ChangeNotifier {
     }
   }
 
-  void clear() => _store.replace(const ReadingDiffState());
+  void clear() => _store.replace(ReadingDiffState());
 
   /// Latest judgment across the rubric's attempts, with its adjudications.
   /// Judgments citing an older rubric version still count for their own
   /// side's coarse outcome — the reduction never compares across rubrics.
-  Future<DiffSide> _loadSide(
-    LocalApi api,
-    ReadingTaskSource source,
-    String purpose,
-  ) async {
-    final rubric = await api.lookupSemanticRubric(
+  Future<DiffSide> _loadSide(ReadingTaskSource source, String purpose) async {
+    final rubric = await repository.lookupRubric(
       mediaId: source.mediaId,
       startMs: source.startMs,
       endMs: source.endMs,
@@ -108,11 +107,11 @@ class ReadingDiffController extends ChangeNotifier {
       responseLanguage: source.responseLanguage,
       transcriptSnapshot: source.transcriptSnapshot,
     );
-    if (rubric == null) return const DiffSide();
+    if (rubric == null) return DiffSide();
 
     SemanticJudgmentView? latest;
-    for (final attempt in await api.semanticRubricAttempts(rubric.id)) {
-      for (final judgment in await api.semanticAttemptJudgments(attempt.id)) {
+    for (final attempt in await repository.rubricAttempts(rubric.id)) {
+      for (final judgment in await repository.attemptJudgments(attempt.id)) {
         if (latest == null || judgment.createdAtMs >= latest.createdAtMs) {
           latest = judgment;
         }
@@ -120,7 +119,7 @@ class ReadingDiffController extends ChangeNotifier {
     }
     final adjudications = latest == null
         ? const <JudgmentAdjudicationView>[]
-        : await api.judgmentAdjudications(latest.id);
+        : await repository.judgmentAdjudications(latest.id);
     return DiffSide(
       rubric: rubric,
       judgment: latest,

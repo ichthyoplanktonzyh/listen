@@ -10,7 +10,7 @@ const _unset = Object();
 /// Immutable snapshot of playback state.
 /// Used by [PlayerController] to notify listeners.
 class PlayerState {
-  const PlayerState({
+  PlayerState({
     this.mediaId,
     this.mediaPath,
     this.mediaTitle,
@@ -24,14 +24,15 @@ class PlayerState {
     this.muted = false,
     this.rate = 1.0,
     this.volume = 100.0,
-    this.audioTracks = const [],
+    List<PlayerTrack> audioTracks = const [],
     this.selectedAudioId,
-    this.embeddedSubtitleTracks = const [],
+    List<PlayerTrack> embeddedSubtitleTracks = const [],
     this.selectedEmbeddedSubtitleId,
     this.sourceLoopStart,
     this.sourceLoopEnd,
     this.sourceLoopLabel,
-  });
+  }) : _audioTracks = List.unmodifiable(audioTracks),
+       _embeddedSubtitleTracks = List.unmodifiable(embeddedSubtitleTracks);
 
   final String? mediaId;
   final String? mediaPath;
@@ -64,9 +65,12 @@ class PlayerState {
   final bool muted;
   final double rate;
   final double volume;
-  final List<PlayerTrack> audioTracks;
+  final List<PlayerTrack> _audioTracks;
+  List<PlayerTrack> get audioTracks => List.unmodifiable(_audioTracks);
   final String? selectedAudioId;
-  final List<PlayerTrack> embeddedSubtitleTracks;
+  final List<PlayerTrack> _embeddedSubtitleTracks;
+  List<PlayerTrack> get embeddedSubtitleTracks =>
+      List.unmodifiable(_embeddedSubtitleTracks);
   final String? selectedEmbeddedSubtitleId;
   final Duration? sourceLoopStart;
   final Duration? sourceLoopEnd;
@@ -150,7 +154,7 @@ class PlayerController extends ChangeNotifier {
   /// the [position] getter synchronously.
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
 
-  PlayerController() : _store = Store(const PlayerState()) {
+  PlayerController() : _store = Store(PlayerState()) {
     _store.addListener(notifyListeners);
   }
 

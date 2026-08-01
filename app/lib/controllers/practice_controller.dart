@@ -1,65 +1,69 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/practice_repository.dart';
 import '../models/practice.dart';
 import '../models/timeline.dart';
 import '../models/types.dart';
-import '../services/api_service.dart';
+import '../services/practice_file_service.dart';
 import '../services/shadowing_recorder.dart';
 import '../state/store.dart';
 
 const _unset = Object();
 
 class PracticeDraft {
-  const PracticeDraft({
+  PracticeDraft({
     required this.kind,
     required this.targetKind,
     required this.promptText,
     required this.expectedText,
     required this.target,
-    required this.anchors,
+    required List<PracticeAnchor> anchors,
     required this.playbackStartMs,
     required this.playbackEndMs,
     this.focusLabel,
     this.degradedMessage,
-    this.shadowingSteps = const [],
+    List<ShadowingStep> shadowingSteps = const [],
     this.shadowingStepIndex = 0,
     this.referenceMediaPath,
     this.sourceMediaId,
-  });
+  }) : _anchors = List.unmodifiable(anchors),
+       _shadowingSteps = List.unmodifiable(shadowingSteps);
 
   final String kind;
   final String targetKind;
   final String promptText;
   final String expectedText;
   final PracticeTarget target;
-  final List<PracticeAnchor> anchors;
+  final List<PracticeAnchor> _anchors;
+  List<PracticeAnchor> get anchors => List.unmodifiable(_anchors);
   final int playbackStartMs;
   final int playbackEndMs;
   final String? focusLabel;
   final String? degradedMessage;
-  final List<ShadowingStep> shadowingSteps;
+  final List<ShadowingStep> _shadowingSteps;
+  List<ShadowingStep> get shadowingSteps => List.unmodifiable(_shadowingSteps);
   final int shadowingStepIndex;
   final String? referenceMediaPath;
   final String? sourceMediaId;
 }
 
 class ShadowingStep {
-  const ShadowingStep({
+  ShadowingStep({
     required this.label,
     required this.target,
     required this.promptText,
-    required this.anchors,
+    required List<PracticeAnchor> anchors,
     required this.startMs,
     required this.endMs,
-  });
+  }) : _anchors = List.unmodifiable(anchors);
 
   final String label;
   final PracticeTarget target;
   final String promptText;
-  final List<PracticeAnchor> anchors;
+  final List<PracticeAnchor> _anchors;
+  List<PracticeAnchor> get anchors => List.unmodifiable(_anchors);
   final int startMs;
   final int endMs;
 }
@@ -144,14 +148,19 @@ class PracticeState {
 }
 
 class PracticeController extends ChangeNotifier {
-  PracticeController({ShadowingRecorder? recorder})
-    : _recorder = recorder ?? MacosShadowingRecorder(),
-      _store = Store(const PracticeState()) {
+  PracticeController({
+    this.repository = const UnavailablePracticeRepository(),
+    ShadowingRecorder? recorder,
+    this.fileService = const LocalPracticeFileService(),
+  }) : _recorder = recorder ?? MacosShadowingRecorder(),
+       _store = Store(const PracticeState()) {
     _store.addListener(notifyListeners);
   }
 
   final Store<PracticeState> _store;
+  final PracticeRepository repository;
   final ShadowingRecorder _recorder;
+  final PracticeFileService fileService;
   int _generation = 0;
 
   Store<PracticeState> get store => _store;
@@ -192,7 +201,6 @@ class PracticeController extends ChangeNotifier {
       _store.update((s) => s.copyWith(shadowingRate: value));
 
   Future<void> startCloze({
-    required LocalApi? api,
     required Cue? cue,
     required String? mediaId,
     required String? trackId,
@@ -201,7 +209,7 @@ class PracticeController extends ChangeNotifier {
     required int Function(Duration subtitleTime) mediaTimeMs,
   }) async {
     final generation = ++_generation;
-    if (api == null || cue == null) {
+    if (!repository.isAvailable || cue == null) {
       _setError('Open media and subtitles before practice.');
       return;
     }
@@ -262,7 +270,6 @@ class PracticeController extends ChangeNotifier {
           : null,
     );
     await _createItemFromDraft(
-      api: api,
       generation: generation,
       draft: draft,
       mediaId: mediaId,
@@ -271,7 +278,6 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> startSentenceDictation({
-    required LocalApi? api,
     required Cue? cue,
     required String? mediaId,
     required String? trackId,
@@ -279,7 +285,7 @@ class PracticeController extends ChangeNotifier {
     String? degradedMessage,
   }) async {
     final generation = ++_generation;
-    if (api == null || cue == null) {
+    if (!repository.isAvailable || cue == null) {
       _setError('Open media and subtitles before practice.');
       return;
     }
@@ -304,7 +310,6 @@ class PracticeController extends ChangeNotifier {
       degradedMessage: degradedMessage,
     );
     await _createItemFromDraft(
-      api: api,
       generation: generation,
       draft: draft,
       mediaId: mediaId,
@@ -313,7 +318,6 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> startChunkDictation({
-    required LocalApi? api,
     required Cue? cue,
     required DisplayChunk? chunk,
     required String? mediaId,
@@ -322,7 +326,6 @@ class PracticeController extends ChangeNotifier {
   }) async {
     if (chunk == null) {
       await startSentenceDictation(
-        api: api,
         cue: cue,
         mediaId: mediaId,
         trackId: trackId,
@@ -333,7 +336,7 @@ class PracticeController extends ChangeNotifier {
       return;
     }
     final generation = ++_generation;
-    if (api == null || cue == null) {
+    if (!repository.isAvailable || cue == null) {
       _setError('Open media and subtitles before practice.');
       return;
     }
@@ -372,7 +375,6 @@ class PracticeController extends ChangeNotifier {
       focusLabel: 'chunk ${chunk.index + 1}',
     );
     await _createItemFromDraft(
-      api: api,
       generation: generation,
       draft: draft,
       mediaId: mediaId,
@@ -381,7 +383,6 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> startShadowing({
-    required LocalApi? api,
     required Cue? cue,
     required DisplayChunk? chunk,
     required List<DisplayChunk> chunks,
@@ -390,7 +391,7 @@ class PracticeController extends ChangeNotifier {
     required int Function(Duration subtitleTime) mediaTimeMs,
   }) async {
     final generation = ++_generation;
-    if (api == null || cue == null) {
+    if (!repository.isAvailable || cue == null) {
       _setError('Open media and subtitles before shadowing.');
       return;
     }
@@ -403,7 +404,6 @@ class PracticeController extends ChangeNotifier {
           : null,
     );
     await _createItemFromDraft(
-      api: api,
       generation: generation,
       draft: draft,
       mediaId: mediaId,
@@ -412,13 +412,12 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> selectShadowingStep({
-    required LocalApi? api,
     required int index,
     required String? mediaId,
     required String? trackId,
   }) async {
     final current = draft;
-    if (api == null ||
+    if (!repository.isAvailable ||
         current == null ||
         current.kind != 'shadowing' ||
         index < 0 ||
@@ -428,7 +427,6 @@ class PracticeController extends ChangeNotifier {
     }
     final generation = ++_generation;
     await _createItemFromDraft(
-      api: api,
       generation: generation,
       draft: _shadowingDraft(
         current.shadowingSteps,
@@ -441,7 +439,6 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> startExternalShadowing({
-    required LocalApi? api,
     required String mediaPath,
     required String? mediaId,
     required String? trackId,
@@ -451,7 +448,7 @@ class PracticeController extends ChangeNotifier {
     required int endMs,
   }) async {
     final generation = ++_generation;
-    if (api == null ||
+    if (!repository.isAvailable ||
         mediaPath.trim().isEmpty ||
         promptText.trim().isEmpty ||
         endMs <= startMs) {
@@ -502,7 +499,6 @@ class PracticeController extends ChangeNotifier {
       sourceMediaId: mediaId,
     );
     await _createItemFromDraft(
-      api: api,
       generation: generation,
       draft: draft,
       mediaId: mediaId,
@@ -699,21 +695,22 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> stopShadowingRecording({
-    required LocalApi? api,
     required String language,
     required String? mediaId,
     required Future<String> Function() extractReferenceWav,
   }) async {
     final currentItem = item;
     final currentDraft = draft;
-    if (api == null || currentItem == null || currentDraft == null) {
+    if (!repository.isAvailable ||
+        currentItem == null ||
+        currentDraft == null) {
       _setError('Shadowing practice is not ready.');
       return;
     }
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
       final captured = await _recorder.stop();
-      final asset = await api.createRecordingAsset(
+      final asset = await repository.createRecording(
         CreateRecordingAsset(
           filePath: captured.path,
           durationMs: captured.durationMs,
@@ -739,7 +736,7 @@ class PracticeController extends ChangeNotifier {
           recorderVersion: 'macos-avfoundation-pcm16-v1',
         ),
       );
-      final completed = await api.completeShadowingAttempt(
+      final completed = await repository.completeShadowing(
         itemId: currentItem.id,
         recordingId: asset.id,
       );
@@ -754,7 +751,7 @@ class PracticeController extends ChangeNotifier {
       );
       try {
         final referenceWav = await extractReferenceWav();
-        final comparison = await api.compareShadowing(
+        final comparison = await repository.compareShadowing(
           recordingId: asset.id,
           referenceWavPath: referenceWav,
         );
@@ -795,23 +792,19 @@ class PracticeController extends ChangeNotifier {
 
   Future<void> openMicrophoneSettings() => _recorder.openSettings();
 
-  Future<void> deleteCurrentRecording(LocalApi? api) async {
+  Future<void> deleteCurrentRecording() async {
     final asset = recordingAsset;
     // The delete affordance only renders with a recording present, behind the
     // root api gate; a null here is a stale click, so silence is correct.
-    if (api == null || asset == null) return;
+    if (!repository.isAvailable || asset == null) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      await api.deleteRecordingAsset(asset.id);
-      String? cleanupWarning;
-      final file = File(asset.filePath);
-      try {
-        if (await file.exists()) await file.delete();
-      } on FileSystemException {
-        cleanupWarning =
-            'Recording metadata was deleted, but the local file could not be '
-            'removed';
-      }
+      await repository.deleteRecording(asset.id);
+      final deleted = await fileService.deleteIfExists(asset.filePath);
+      final cleanupWarning = deleted
+          ? null
+          : 'Recording metadata was deleted, but the local file could not be '
+                'removed';
       _store.update(
         (s) => s.copyWith(
           recordingAsset: null,
@@ -826,16 +819,16 @@ class PracticeController extends ChangeNotifier {
     }
   }
 
-  Future<void> submit(LocalApi? api) async {
+  Future<void> submit() async {
     final currentItem = item;
-    if (api == null || currentItem == null) {
+    if (!repository.isAvailable || currentItem == null) {
       _setError('Practice item is not ready.');
       return;
     }
     final textAnswer = answer.trim();
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final value = await api.submitPracticeAttempt(
+      final value = await repository.submitAttempt(
         SubmitPracticeAttempt(
           itemId: currentItem.id,
           textAnswer: textAnswer,
@@ -848,10 +841,12 @@ class PracticeController extends ChangeNotifier {
     }
   }
 
-  Future<void> saveCurrentFailureToReview(LocalApi? api) async {
+  Future<void> saveCurrentFailureToReview() async {
     final currentItem = item;
     final currentAttempt = attempt;
-    if (api == null || currentItem == null || currentAttempt == null) {
+    if (!repository.isAvailable ||
+        currentItem == null ||
+        currentAttempt == null) {
       _setError('No practice failure is ready to review.');
       return;
     }
@@ -863,7 +858,7 @@ class PracticeController extends ChangeNotifier {
         .firstWhere((value) => value != null, orElse: () => null);
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final review = await api.createReviewItem(
+      final review = await repository.createReview(
         CreateReviewItem(
           source: ReviewSource(
             kind: 'practice_failure',
@@ -890,7 +885,6 @@ class PracticeController extends ChangeNotifier {
   }
 
   Future<void> _createItemFromDraft({
-    required LocalApi api,
     required int generation,
     required PracticeDraft draft,
     required String? mediaId,
@@ -907,12 +901,8 @@ class PracticeController extends ChangeNotifier {
       ),
     );
     try {
-      final session = await _ensureSession(
-        api,
-        mediaId: mediaId,
-        trackId: trackId,
-      );
-      final item = await api.createPracticeItem(
+      final session = await _ensureSession(mediaId: mediaId, trackId: trackId);
+      final item = await repository.createItem(
         CreatePracticeItem(
           sessionId: session.id,
           kind: draft.kind,
@@ -933,8 +923,7 @@ class PracticeController extends ChangeNotifier {
     }
   }
 
-  Future<PracticeSession> _ensureSession(
-    LocalApi api, {
+  Future<PracticeSession> _ensureSession({
     required String? mediaId,
     required String? trackId,
   }) async {
@@ -945,7 +934,7 @@ class PracticeController extends ChangeNotifier {
         current.mode == 'intensive') {
       return current;
     }
-    return api.createPracticeSession(
+    return repository.createSession(
       CreatePracticeSession(
         mode: 'intensive',
         mediaId: mediaId,

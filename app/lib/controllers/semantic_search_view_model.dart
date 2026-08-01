@@ -5,22 +5,22 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/semantic_search_repository.dart';
 import '../models/named_failure.dart';
 import '../models/semantic_embedding.dart';
-import '../services/api_service.dart' show describeApiFailure;
 
 enum SemanticSearchActivity { installing, indexing }
 
 @immutable
 class SemanticSearchState {
-  const SemanticSearchState({
+  SemanticSearchState({
     this.capability,
-    this.hits = const [],
+    List<SemanticSearchHitView> hits = const [],
     this.busy = true,
     this.activity,
     this.failure,
-  });
+  }) : _hits = List.unmodifiable(hits);
 
   final SemanticEmbeddingCapabilityView? capability;
-  final List<SemanticSearchHitView> hits;
+  final List<SemanticSearchHitView> _hits;
+  List<SemanticSearchHitView> get hits => List.unmodifiable(_hits);
   final bool busy;
   final SemanticSearchActivity? activity;
   final NamedFailure? failure;
@@ -30,7 +30,7 @@ class SemanticSearchViewModel extends ChangeNotifier {
   SemanticSearchViewModel(this._repository);
 
   final SemanticSearchRepository _repository;
-  SemanticSearchState _state = const SemanticSearchState();
+  SemanticSearchState _state = SemanticSearchState();
   int _generation = 0;
   bool _disposed = false;
 
@@ -141,7 +141,12 @@ class SemanticSearchViewModel extends ChangeNotifier {
         capability: _state.capability,
         hits: _state.hits,
         busy: false,
-        failure: NamedFailure(messageKey, detail: describeApiFailure(thrown)),
+        failure: NamedFailure(
+          messageKey,
+          detail: thrown is SemanticSearchRepositoryFailure
+              ? thrown.detail
+              : null,
+        ),
       ),
     );
   }

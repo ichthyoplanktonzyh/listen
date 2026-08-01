@@ -5,8 +5,11 @@ import 'package:llplayer_next/controllers/hunting_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/hunting_session_controller.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
+import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
+import 'package:llplayer_next/data/repositories/listening_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -97,8 +100,8 @@ void main() {
           player: player,
           subtitle: subtitle,
           speechEnhancement: SpeechEnhancementWorkflowController(),
+          repository: LocalResourceRepository(() => service),
         )..bind(
-          getApi: () => service,
           isMounted: () => true,
           text: enText,
           reloadSpeechEnhancements: (_) async {},
@@ -197,25 +200,24 @@ void main() {
   test('a corpus reindex that fails no longer substitutes the exception into '
       'its own {error} placeholder', () async {
     final player = PlayerController();
-    final hunting = HuntingSessionController();
-    final extensive = ExtensiveListeningController();
+    final service = api(
+      fail: (method, path) =>
+          path.contains('reindex') ? (statusCode: 500, body: envelope) : null,
+    );
+    final repository = LocalHuntingRepository(() => service);
+    final hunting = HuntingSessionController(repository: repository);
+    final extensive = ExtensiveListeningController(
+      repository: LocalListeningRepository(() => service),
+    );
     addTearDown(hunting.dispose);
     addTearDown(extensive.dispose);
-    final coordinator =
-        HuntingActionsCoordinator(
-          huntingSession: hunting,
-          player: player,
-          extensiveListening: extensive,
-          subtitle: SubtitleController(),
-        )..bind(
-          getApi: () => api(
-            fail: (method, path) => path.contains('reindex')
-                ? (statusCode: 500, body: envelope)
-                : null,
-          ),
-          isMounted: () => true,
-          text: enText,
-        );
+    final coordinator = HuntingActionsCoordinator(
+      huntingSession: hunting,
+      player: player,
+      extensiveListening: extensive,
+      subtitle: SubtitleController(),
+      repository: repository,
+    )..bind(isMounted: () => true, text: enText);
 
     await coordinator.reindexHuntingCorpus();
 

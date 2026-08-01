@@ -5,17 +5,18 @@ import '../models/types.dart';
 
 @immutable
 class ColdStartMarkingState {
-  const ColdStartMarkingState({
-    this.candidates = const [],
+  ColdStartMarkingState({
+    List<ColdStartWordCandidate> candidates = const [],
     this.currentIndex = 0,
     this.loading = true,
     this.submitting = false,
     this.loadFailed = false,
     this.saveFailed = false,
     this.finished = false,
-  });
+  }) : _candidates = List.unmodifiable(candidates);
 
-  final List<ColdStartWordCandidate> candidates;
+  final List<ColdStartWordCandidate> _candidates;
+  List<ColdStartWordCandidate> get candidates => List.unmodifiable(_candidates);
   final int currentIndex;
   final bool loading;
   final bool submitting;
@@ -37,7 +38,7 @@ class ColdStartMarkingViewModel extends ChangeNotifier {
   final ColdStartMarkingRepository _repository;
   final String trackId;
   final String language;
-  ColdStartMarkingState _state = const ColdStartMarkingState();
+  ColdStartMarkingState _state = ColdStartMarkingState();
   int _generation = 0;
   bool _disposed = false;
 
@@ -45,7 +46,7 @@ class ColdStartMarkingViewModel extends ChangeNotifier {
 
   Future<void> load() async {
     final generation = ++_generation;
-    _publish(const ColdStartMarkingState());
+    _publish(ColdStartMarkingState());
     try {
       final candidates = await _repository.loadCandidates(trackId);
       if (!_isCurrent(generation)) return;
@@ -57,7 +58,7 @@ class ColdStartMarkingViewModel extends ChangeNotifier {
       );
     } catch (_) {
       if (!_isCurrent(generation)) return;
-      _publish(const ColdStartMarkingState(loading: false, loadFailed: true));
+      _publish(ColdStartMarkingState(loading: false, loadFailed: true));
     }
   }
 

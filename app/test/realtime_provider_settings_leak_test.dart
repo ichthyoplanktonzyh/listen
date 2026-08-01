@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/data/repositories/settings_repository.dart';
 import 'package:leak_tracker_flutter_testing/leak_tracker_flutter_testing.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/settings/realtime_provider_settings.dart';
@@ -46,7 +47,7 @@ void main() {
               body: SingleChildScrollView(
                 child: RealtimeProviderSettings(
                   key: ValueKey('round-$round'),
-                  api: api,
+                  repository: LocalRealtimeProviderRepository(api),
                 ),
               ),
             ),

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/semantic_search_view_model.dart';
 import '../../data/repositories/semantic_search_repository.dart';
 import '../../localization.dart';
-import '../../services/api_service.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_empty_state.dart';
@@ -13,15 +12,13 @@ import '../common/listen_empty_state.dart';
 class SemanticSearchDialog extends StatefulWidget {
   const SemanticSearchDialog({
     super.key,
-    required this.api,
+    required this.repository,
     required this.language,
-    this.repository,
     this.viewModel,
   });
 
-  final LocalApi api;
   final String language;
-  final SemanticSearchRepository? repository;
+  final SemanticSearchRepository repository;
   final SemanticSearchViewModel? viewModel;
 
   @override
@@ -37,11 +34,7 @@ class _SemanticSearchDialogState extends State<SemanticSearchDialog> {
   void initState() {
     super.initState();
     _ownsViewModel = widget.viewModel == null;
-    _viewModel =
-        widget.viewModel ??
-        SemanticSearchViewModel(
-          widget.repository ?? LocalSemanticSearchRepository(widget.api),
-        );
+    _viewModel = widget.viewModel ?? SemanticSearchViewModel(widget.repository);
     if (_ownsViewModel) unawaited(_viewModel.loadCapability());
   }
 

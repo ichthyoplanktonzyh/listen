@@ -4,7 +4,6 @@ import '../../controllers/provider_settings_view_models.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../localization.dart';
 import '../../models/realtime_conversation.dart';
-import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -26,10 +25,10 @@ const qwenRealtimeBaselineModel = 'qwen3.5-omni-plus-realtime';
 /// and released in [dispose] (#27) — an inline form has no exit transition to
 /// race, so the lifecycle that fix protected is preserved by construction.
 class RealtimeProviderSettings extends StatefulWidget {
-  const RealtimeProviderSettings({super.key, this.api, this.viewModel})
-    : assert(api != null || viewModel != null);
+  const RealtimeProviderSettings({super.key, this.repository, this.viewModel})
+    : assert(repository != null || viewModel != null);
 
-  final LocalApi? api;
+  final RealtimeProviderRepository? repository;
   final RealtimeProviderSettingsViewModel? viewModel;
 
   @override
@@ -60,9 +59,7 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
     _ownsViewModel = widget.viewModel == null;
     _viewModel =
         widget.viewModel ??
-        RealtimeProviderSettingsViewModel(
-          LocalRealtimeProviderRepository(widget.api!),
-        );
+        RealtimeProviderSettingsViewModel(widget.repository!);
     _viewModel.load();
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/writing_task_controller.dart';
+import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/models/semantic_task.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
@@ -98,10 +99,11 @@ void main() {
   testWidgets('editor is primary and feedback appears only after request', (
     tester,
   ) async {
-    final controller = WritingTaskController();
     final api = _api();
+    final controller = WritingTaskController(
+      repository: LocalWritingTaskRepository(() => api),
+    );
     await controller.openTask(
-      api,
       source: _source,
       kind: WritingTaskController.summaryKind,
       promptSnapshot: 'Summarize.',
@@ -120,7 +122,6 @@ void main() {
           height: 800,
           child: WritingTaskStudio(
             controller: controller,
-            api: api,
             audioPlayCount: () => 0,
             onKindChanged: (_) {},
             onPlaySource: () {},

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/extensive_listening_controller.dart';
+import 'package:llplayer_next/data/repositories/listening_repository.dart';
 import 'package:llplayer_next/models/practice.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -80,7 +81,9 @@ void main() {
         throw StateError('unexpected $method $path');
       },
     );
-    final controller = ExtensiveListeningController();
+    final controller = ExtensiveListeningController(
+      repository: LocalListeningRepository(() => api),
+    );
     final cue = Cue(
       id: 'sentence-1',
       index: 0,
@@ -98,17 +101,12 @@ void main() {
     );
 
     expect(
-      await controller.startSession(
-        api: api,
-        mediaId: 'media-1',
-        trackId: 'track-1',
-      ),
+      await controller.startSession(mediaId: 'media-1', trackId: 'track-1'),
       isTrue,
     );
     expect(controller.active, isTrue);
     expect(
       await controller.captureCurrentCue(
-        api: api,
         cue: cue,
         previousCue: null,
         nextCue: null,
@@ -120,7 +118,6 @@ void main() {
     );
     expect(controller.items.single.subtitleSnapshot, 'would have gone');
     final processed = await controller.processItem(
-      api,
       controller.items.single,
       'review_item',
     );
@@ -128,7 +125,6 @@ void main() {
     expect(controller.items, isEmpty);
     expect(
       await controller.finishSession(
-        api,
         comprehensionReport: 'got_the_gist',
         huntingSummary: const HuntingCompletionSummary(
           promptedCount: 3,
@@ -198,14 +194,13 @@ void main() {
   test('played duration counts only playing time during the session', () async {
     var now = DateTime(2026, 7, 22, 10);
     final fake = sessionOnlyApi();
-    final controller = ExtensiveListeningController(clock: () => now);
+    final controller = ExtensiveListeningController(
+      repository: LocalListeningRepository(() => fake.api),
+      clock: () => now,
+    );
 
     expect(
-      await controller.startSession(
-        api: fake.api,
-        mediaId: 'media-1',
-        trackId: 'track-1',
-      ),
+      await controller.startSession(mediaId: 'media-1', trackId: 'track-1'),
       isTrue,
     );
     controller.notePlaybackState(true);
@@ -219,7 +214,7 @@ void main() {
     expect(controller.playedDuration, const Duration(minutes: 7));
 
     expect(
-      await controller.finishSession(fake.api, comprehensionReport: 'unclear'),
+      await controller.finishSession(comprehensionReport: 'unclear'),
       isTrue,
     );
     // Frozen at completion: post-session playback no longer accumulates.
@@ -233,32 +228,24 @@ void main() {
       'resets per session', () async {
     var now = DateTime(2026, 7, 22, 10);
     final fake = sessionOnlyApi();
-    final controller = ExtensiveListeningController(clock: () => now);
+    final controller = ExtensiveListeningController(
+      repository: LocalListeningRepository(() => fake.api),
+      clock: () => now,
+    );
 
     controller.notePlaybackState(true);
     // Pre-session playback is not this session's listening time.
     now = now.add(const Duration(minutes: 4));
     expect(
-      await controller.startSession(
-        api: fake.api,
-        mediaId: 'media-1',
-        trackId: 'track-1',
-      ),
+      await controller.startSession(mediaId: 'media-1', trackId: 'track-1'),
       isTrue,
     );
     now = now.add(const Duration(minutes: 6));
     expect(controller.playedDuration, const Duration(minutes: 6));
 
+    expect(await controller.finishSession(comprehensionReport: null), isTrue);
     expect(
-      await controller.finishSession(fake.api, comprehensionReport: null),
-      isTrue,
-    );
-    expect(
-      await controller.startSession(
-        api: fake.api,
-        mediaId: 'media-1',
-        trackId: 'track-1',
-      ),
+      await controller.startSession(mediaId: 'media-1', trackId: 'track-1'),
       isTrue,
     );
     now = now.add(const Duration(minutes: 2));

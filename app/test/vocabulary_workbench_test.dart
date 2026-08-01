@@ -5,6 +5,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/auxiliary_audio_controller.dart';
 import 'package:llplayer_next/controllers/hunting_controller.dart';
+import 'package:llplayer_next/data/repositories/lexical_repository.dart';
+import 'package:llplayer_next/data/repositories/semantic_search_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/screens/vocabulary_screen.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -127,7 +129,8 @@ Widget _host({
       GlobalCupertinoLocalizations.delegate,
     ],
     home: VocabularyScreen(
-      api: api,
+      repository: LexicalRepository(api),
+      semanticSearchRepository: LocalSemanticSearchRepository(api),
       language: 'en',
       onExport: () async {},
       onImport: () async {},

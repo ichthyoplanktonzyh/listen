@@ -4,7 +4,6 @@ import '../../controllers/reading_task_controller.dart';
 import '../../controllers/speaking_actions_coordinator.dart';
 import '../../controllers/speaking_channel_coordinator.dart';
 import '../../controllers/speaking_task_controller.dart';
-import '../../services/api_service.dart';
 import '../panels/listening_check_panel.dart';
 import '../panels/speaking_task_studio.dart';
 
@@ -16,14 +15,12 @@ import '../panels/speaking_task_studio.dart';
 class SpeakingChannelHost extends StatelessWidget {
   const SpeakingChannelHost({
     super.key,
-    required this.api,
     required this.speakingChannel,
     required this.speakingActions,
     required this.speakingTaskController,
     required this.readingTaskController,
   });
 
-  final LocalApi api;
   final SpeakingChannelCoordinator speakingChannel;
   final SpeakingActionsCoordinator speakingActions;
   final SpeakingTaskController speakingTaskController;
@@ -39,7 +36,6 @@ class SpeakingChannelHost extends StatelessWidget {
     if (speakingChannel.l1CheckSource != null) {
       return ListeningCheckPanel(
         controller: readingTaskController,
-        api: api,
         audioPlayCount: () => speakingChannel.l1PlayCount,
         onPlaySegment: speakingChannel.playL1Segment,
         onClose: speakingChannel.closeL1Check,
@@ -47,7 +43,6 @@ class SpeakingChannelHost extends StatelessWidget {
     }
     return SpeakingTaskStudio(
       controller: speakingTaskController,
-      api: api,
       onPlaySource: speakingActions.playSource,
       onPlayRecording: speakingActions.playRecording,
       onAcquireRecordingFocus: speakingActions.acquireRecordingFocus,

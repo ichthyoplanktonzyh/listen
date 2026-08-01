@@ -11,12 +11,14 @@ import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/hunting_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/widgets/panels/hunting_prompt_card.dart';
 import 'package:llplayer_next/widgets/layout/player_overlays.dart';
 
 class _Harness {
+  final huntingRepository = const UnavailableHuntingRepository();
   final subtitle = SubtitleController();
   final player = PlayerController();
   final settings = SettingsController();
@@ -50,6 +52,7 @@ class _Harness {
     player: player,
     extensiveListening: extensive,
     subtitle: subtitle,
+    repository: huntingRepository,
   );
 
   Widget get widget => MaterialApp(
@@ -61,7 +64,6 @@ class _Harness {
         children: [
           const SizedBox.expand(child: ColoredBox(color: Colors.black)),
           PlayerOverlays(
-            api: null,
             practiceController: practice,
             slicePlayerController: slicePlayer,
             huntingSessionController: huntingSession,

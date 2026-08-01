@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../../controllers/reading_task_controller.dart';
 import '../../localization.dart';
 import '../../models/semantic_task.dart';
-import '../../services/api_service.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
@@ -25,7 +24,6 @@ class ReadingTaskSheet extends StatefulWidget {
   const ReadingTaskSheet({
     super.key,
     required this.controller,
-    required this.api,
     required this.audioPlayCount,
     this.onPlaySegment,
     this.onClose,
@@ -33,7 +31,6 @@ class ReadingTaskSheet extends StatefulWidget {
   });
 
   final ReadingTaskController controller;
-  final LocalApi api;
 
   /// Honest replay count for the paragraph (feeds the attempt's
   /// `audio_play_count` condition). For the listening retell this counts
@@ -154,7 +151,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
             key: const ValueKey('reading-task-generate-rubric'),
             onPressed: _state.busy
                 ? null
-                : () => unawaited(widget.controller.generateRubric(widget.api)),
+                : () => unawaited(widget.controller.generateRubric()),
             icon: const Icon(
               Icons.auto_awesome_outlined,
               size: ListenIconSize.control,
@@ -169,7 +166,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
       FilledButton.icon(
         onPressed: _state.busy
             ? null
-            : () => unawaited(widget.controller.saveRubric(widget.api)),
+            : () => unawaited(widget.controller.saveRubric()),
         icon: const Icon(Icons.save_outlined),
         label: Text(l.text('readingTaskSavePoints')),
       ),
@@ -333,7 +330,6 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
               ? null
               : () => unawaited(
                   widget.controller.submitAnswer(
-                    widget.api,
                     _answer.text,
                     audioPlayCount: widget.audioPlayCount(),
                   ),
@@ -373,9 +369,7 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
         FilledButton.icon(
           onPressed: _state.busy || !_state.allPointsJudged
               ? null
-              : () => unawaited(
-                  widget.controller.submitSelfAssessment(widget.api),
-                ),
+              : () => unawaited(widget.controller.submitSelfAssessment()),
           icon: const Icon(Icons.fact_check_outlined),
           label: Text(l.text('readingTaskSubmitAssessment')),
         ),
@@ -462,7 +456,6 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
                   ),
                   onSelected: (verdict) => unawaited(
                     widget.controller.adjudicate(
-                      widget.api,
                       pointId: point.pointId,
                       userVerdict: verdict,
                     ),
@@ -501,11 +494,9 @@ class _ReadingTaskSheetState extends State<ReadingTaskSheet> {
     adjudications: _state.llmAdjudications,
     busy: _state.busy,
     keyPrefix: 'reading-task',
-    onRequest: () =>
-        unawaited(widget.controller.requestLlmJudgment(widget.api)),
+    onRequest: () => unawaited(widget.controller.requestLlmJudgment()),
     onCorrect: (pointId, userVerdict) => unawaited(
       widget.controller.adjudicateLlm(
-        widget.api,
         pointId: pointId,
         userVerdict: userVerdict,
       ),

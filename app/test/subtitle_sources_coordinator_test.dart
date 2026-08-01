@@ -5,6 +5,7 @@ import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_sources_coordinator.dart';
+import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/models/task_status.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -52,8 +53,8 @@ _wire(LocalApi? Function() getApi) {
         player: player,
         subtitle: subtitle,
         settings: settings,
+        repository: LocalSubtitleAnalysisRepository(getApi),
       )..bind(
-        getApi: getApi,
         isMounted: () => true,
         showSnackBar: snackBars.add,
         setTaskStatus: taskStatuses.add,

@@ -6,6 +6,8 @@ import 'package:llplayer_next/controllers/listening_inbox_coordinator.dart';
 import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/listening_repository.dart';
+import 'package:llplayer_next/data/repositories/playback_repository.dart';
 import 'package:llplayer_next/models/listening.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -40,24 +42,22 @@ LocalApi _fakeApi(
 _wire(LocalApi? Function() getApi) {
   final player = PlayerController();
   final subtitle = SubtitleController();
-  final extensive = ExtensiveListeningController();
+  final extensive = ExtensiveListeningController(
+    repository: LocalListeningRepository(getApi),
+  );
   final adapter = DesktopPlayerAdapter();
-  final playback =
-      PlaybackActionsCoordinator(
-        adapter: adapter,
-        player: player,
-        subtitle: subtitle,
-      )..bind(
-        getApi: getApi,
-        isMounted: () => true,
-        reloadLearningEntries: () async {},
-      );
+  final playback = PlaybackActionsCoordinator(
+    adapter: adapter,
+    player: player,
+    subtitle: subtitle,
+    repository: LocalPlaybackRepository(getApi),
+  )..bind(isMounted: () => true, reloadLearningEntries: () async {});
   final coordinator = ListeningInboxCoordinator(
     extensiveListening: extensive,
     player: player,
     subtitle: subtitle,
     playbackActions: playback,
-  )..bind(getApi: getApi, isMounted: () => true);
+  )..bind(isMounted: () => true);
   addTearDown(adapter.dispose);
   addTearDown(extensive.dispose);
   return (coordinator: coordinator, player: player, extensive: extensive);

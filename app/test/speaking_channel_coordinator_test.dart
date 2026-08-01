@@ -8,6 +8,8 @@ import 'package:llplayer_next/controllers/speaking_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/speaking_channel_coordinator.dart';
 import 'package:llplayer_next/controllers/speaking_task_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
+import 'package:llplayer_next/data/repositories/reading_task_repository.dart';
+import 'package:llplayer_next/data/repositories/speaking_session_repository.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -30,8 +32,12 @@ LexicalEntry _entry(String id, String displayForm) => LexicalEntry(
 
 class _Harness {
   _Harness({LocalApi? Function()? getApi}) {
+    final apiSupplier = getApi ?? () => null;
+    readingTask = ReadingTaskController(
+      repository: LocalReadingTaskRepository(apiSupplier),
+    );
+    sessionRepository = LocalSpeakingSessionRepository(apiSupplier);
     coordinator.bind(
-      getApi: getApi ?? () => null,
       isMounted: () => true,
       askPersonalExpressionAssessment: () async {
         assessmentsAsked++;
@@ -50,7 +56,8 @@ class _Harness {
   final settings = SettingsController();
   final slicePlayer = SlicePlayerController();
   final task = SpeakingTaskController();
-  final readingTask = ReadingTaskController();
+  late final ReadingTaskController readingTask;
+  late final SpeakingSessionRepository sessionRepository;
   final learning = LearningController();
 
   late final actions = SpeakingActionsCoordinator(
@@ -69,6 +76,7 @@ class _Harness {
     readingTask: readingTask,
     learning: learning,
     player: player,
+    repository: sessionRepository,
   );
 
   void dispose() {
@@ -94,7 +102,7 @@ void main() {
         'c': _entry('c', 'dog'),
       });
       harness.task.store.replace(
-        const SpeakingTaskState(
+        SpeakingTaskState(
           correctedTranscript: 'The cat sat down.',
           asrReliability: 'reliable',
         ),
@@ -112,7 +120,7 @@ void main() {
       final harness = _Harness();
       harness.learning.setWordEntries({'a': _entry('a', '天気')});
       harness.task.store.replace(
-        const SpeakingTaskState(
+        SpeakingTaskState(
           correctedTranscript: '今日は天気がいい',
           asrReliability: 'reliable',
         ),
@@ -125,7 +133,7 @@ void main() {
       final harness = _Harness();
       harness.learning.setWordEntries({'a': _entry('a', 'cat')});
       harness.task.store.replace(
-        const SpeakingTaskState(
+        SpeakingTaskState(
           correctedTranscript: 'The cat sat down.',
           asrReliability: 'unreliable',
         ),
@@ -138,9 +146,7 @@ void main() {
   group('surfaces', () {
     test('closing the L1 check without one open leaves the task alone', () {
       final harness = _Harness();
-      harness.readingTask.store.replace(
-        const ReadingTaskState(phase: 'answering'),
-      );
+      harness.readingTask.store.replace(ReadingTaskState(phase: 'answering'));
       harness.coordinator.closeL1Check();
       // closeTask would have reset the phase; the guard kept it untouched.
       expect(harness.readingTask.state.phase, 'answering');
@@ -178,7 +184,7 @@ void main() {
     test('an unfinished personal-expression session is not filed', () async {
       final harness = _Harness();
       harness.coordinator.activePersonalPattern = null;
-      harness.task.store.replace(const SpeakingTaskState(phase: 'recording'));
+      harness.task.store.replace(SpeakingTaskState(phase: 'recording'));
       await harness.coordinator.closeSurface();
       expect(harness.assessmentsAsked, 0);
       harness.dispose();

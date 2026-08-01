@@ -5,6 +5,7 @@ import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/vocabulary_actions_coordinator.dart';
+import 'package:llplayer_next/data/repositories/learning_repository.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
 /// A core that answers nothing: guards that fire before any request keep it
@@ -25,13 +26,14 @@ _wire({LocalApi? Function()? getApi}) {
   var diagnosis = 0;
   final coordinator =
       VocabularyActionsCoordinator(
-        workflow: LearningWorkflowController(),
+        workflow: LearningWorkflowController(
+          repository: LocalLearningRepository(getApi ?? () => null),
+        ),
         learning: LearningController(),
         subtitle: SubtitleController(),
         settings: SettingsController(),
         player: player,
       )..bind(
-        getApi: getApi ?? () => null,
         isMounted: () => true,
         text: (key) => key,
         refreshDiagnosis: () async => diagnosis++,

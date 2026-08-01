@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/reading_task_repository.dart';
 import '../models/semantic_task.dart';
-import '../services/api_service.dart';
 import '../state/store.dart';
 
 const _unset = Object();
@@ -32,25 +32,28 @@ class ReadingTaskSource {
 }
 
 class ReadingTaskState {
-  const ReadingTaskState({
+  ReadingTaskState({
     this.phase = 'idle',
     this.purpose = ReadingTaskController.readingPurpose,
     this.source,
     this.rubric,
-    this.draftPoints = const [],
+    List<RubricPointView> draftPoints = const [],
     this.draftAnswer = '',
     this.attempt,
     this.judgment,
-    this.draftVerdicts = const {},
-    this.adjudications = const [],
+    Map<String, String> draftVerdicts = const {},
+    List<JudgmentAdjudicationView> adjudications = const [],
     this.judgeProviderId,
     this.rubricProviderId,
     this.llmJudgment,
-    this.llmAdjudications = const [],
+    List<JudgmentAdjudicationView> llmAdjudications = const [],
     this.pastAttemptCount = 0,
     this.busy = false,
     this.error,
-  });
+  }) : _draftPoints = List.unmodifiable(draftPoints),
+       _draftVerdicts = Map.unmodifiable(draftVerdicts),
+       _adjudications = List.unmodifiable(adjudications),
+       _llmAdjudications = List.unmodifiable(llmAdjudications);
 
   /// idle | editing | answering | assessing | done
   final String phase;
@@ -63,14 +66,18 @@ class ReadingTaskState {
   final SemanticRubricView? rubric;
 
   /// Editable template points before the rubric exists (editing phase).
-  final List<RubricPointView> draftPoints;
+  final List<RubricPointView> _draftPoints;
+  List<RubricPointView> get draftPoints => List.unmodifiable(_draftPoints);
   final String draftAnswer;
   final SemanticAttemptView? attempt;
   final SemanticJudgmentView? judgment;
 
   /// point_id → verdict picked so far during self-assessment.
-  final Map<String, String> draftVerdicts;
-  final List<JudgmentAdjudicationView> adjudications;
+  final Map<String, String> _draftVerdicts;
+  Map<String, String> get draftVerdicts => Map.unmodifiable(_draftVerdicts);
+  final List<JudgmentAdjudicationView> _adjudications;
+  List<JudgmentAdjudicationView> get adjudications =>
+      List.unmodifiable(_adjudications);
 
   /// Phase 3.12.2: an optional LLM judgment shown as correctable assist. It
   /// never replaces the manual self-assessment; both are stored, honest
@@ -80,7 +87,9 @@ class ReadingTaskState {
   /// Provider allowed for rubric generation (`rubric_generation`), if any.
   final String? rubricProviderId;
   final SemanticJudgmentView? llmJudgment;
-  final List<JudgmentAdjudicationView> llmAdjudications;
+  final List<JudgmentAdjudicationView> _llmAdjudications;
+  List<JudgmentAdjudicationView> get llmAdjudications =>
+      List.unmodifiable(_llmAdjudications);
   final int pastAttemptCount;
   final bool busy;
   final String? error;
@@ -147,7 +156,12 @@ class ReadingTaskState {
 /// fact family. No path here writes observations or projections — the
 /// attempt/judgment/adjudication rows are the only durable output.
 class ReadingTaskController extends ChangeNotifier {
-  ReadingTaskController() : _store = Store(const ReadingTaskState()) {
+  ReadingTaskController({required ReadingTaskRepository repository})
+    // Public parameter name is intentionally stable while the dependency is
+    // kept behind the ViewModel boundary.
+    // ignore: prefer_initializing_formals
+    : _repository = repository,
+      _store = Store(ReadingTaskState()) {
     _store.addListener(notifyListeners);
   }
 
@@ -155,6 +169,7 @@ class ReadingTaskController extends ChangeNotifier {
   static const listeningPurpose = 'l1_retelling';
   static const evidenceClass = 'self_assessment';
 
+  final ReadingTaskRepository _repository;
   final Store<ReadingTaskState> _store;
   int _answerStartedAtMs = 0;
 
@@ -166,13 +181,13 @@ class ReadingTaskController extends ChangeNotifier {
 
   Store<ReadingTaskState> get store => _store;
   ReadingTaskState get state => _store.state;
+  bool get repositoryAvailable => _repository.isAvailable;
 
   /// Opens the task flow for one paragraph: reuses the existing rubric when
   /// the segment already has one, otherwise enters template editing.
   /// [templatePoints] is the localized preset the user can edit. [purpose]
   /// picks the channel: reading (text visible) or listening retell.
-  Future<void> openTask(
-    LocalApi api, {
+  Future<void> openTask({
     required ReadingTaskSource source,
     required List<RubricPointView> templatePoints,
     String purpose = readingPurpose,
@@ -189,7 +204,7 @@ class ReadingTaskController extends ChangeNotifier {
       ),
     );
     try {
-      final rubric = await api.lookupSemanticRubric(
+      final rubric = await _repository.lookupRubric(
         mediaId: source.mediaId,
         startMs: source.startMs,
         endMs: source.endMs,
@@ -203,10 +218,10 @@ class ReadingTaskController extends ChangeNotifier {
           (s) => s.copyWith(phase: 'editing', draftPoints: points, busy: false),
         );
       } else {
-        final attempts = await api.semanticRubricAttempts(rubric.id);
+        final attempts = await _repository.rubricAttempts(rubric.id);
         _enterAnswering(rubric, attempts.length);
       }
-      await _resolveProviders(api);
+      await _resolveProviders();
     } catch (error) {
       _store.update(
         (s) => s.copyWith(
@@ -223,13 +238,13 @@ class ReadingTaskController extends ChangeNotifier {
   /// provider-listing failure is swallowed: the manual template + self-
   /// assessment path never depends on any provider, and the AI entries simply
   /// stay hidden when nothing is configured.
-  Future<void> _resolveProviders(LocalApi api) async {
+  Future<void> _resolveProviders() async {
     try {
-      final providers = await api.llmProviders();
+      final providers = await _repository.providers();
       _store.update(
         (s) => s.copyWith(
-          judgeProviderId: pickLlmProviderId(providers, 'semantic_judgment'),
-          rubricProviderId: pickLlmProviderId(providers, 'rubric_generation'),
+          judgeProviderId: providers.judgment,
+          rubricProviderId: providers.rubric,
         ),
       );
     } catch (_) {
@@ -241,14 +256,14 @@ class ReadingTaskController extends ChangeNotifier {
   /// current source and loads them into the editable template. The suggestion
   /// is never auto-applied — it becomes a rubric only when the user saves it,
   /// and the save then records honest `llm` provenance.
-  Future<void> generateRubric(LocalApi api) async {
+  Future<void> generateRubric() async {
     final source = state.source;
     final providerId = state.rubricProviderId;
     if (source == null || providerId == null) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final draft = await api.generateRubricViaLlmProvider(
-        providerId,
+      final draft = await _repository.generateRubric(
+        providerId: providerId,
         purpose: state.purpose,
         sourceLanguage: source.sourceLanguage,
         responseLanguage: source.responseLanguage,
@@ -309,12 +324,12 @@ class ReadingTaskController extends ChangeNotifier {
   /// Saves the edited template as rubric version 1. On a concurrent 409 the
   /// existing rubric is fetched instead — never two identities for one
   /// segment.
-  Future<void> saveRubric(LocalApi api) async {
+  Future<void> saveRubric() async {
     final source = state.source;
     if (source == null || state.draftPoints.isEmpty) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final rubric = await api.createSemanticRubric(
+      final rubric = await _repository.saveRubric(
         purpose: state.purpose,
         source: RubricSourceView(
           mediaId: source.mediaId,
@@ -332,30 +347,22 @@ class ReadingTaskController extends ChangeNotifier {
               kind: 'manual',
               detail: 'reading studio paragraph task (user-edited template)',
             ),
+        startMs: source.startMs,
+        endMs: source.endMs,
+        transcriptSnapshot: source.transcriptSnapshot,
       );
       _enterAnswering(rubric, 0);
     } catch (_) {
-      // Most likely a version conflict from a concurrent save; the lookup
-      // either recovers the existing rubric or surfaces the original error.
-      final recovered = await _tryLookup(api, source);
-      if (recovered != null) {
-        _enterAnswering(recovered, 0);
-      } else {
-        _store.update(
-          (s) => s.copyWith(busy: false, error: 'rubric save failed'),
-        );
-      }
+      _store.update(
+        (s) => s.copyWith(busy: false, error: 'rubric save failed'),
+      );
     }
   }
 
   /// Records the typed answer as a completed attempt. Conditions are honest
   /// per channel: reading has the text visible, the listening retell has it
   /// hidden; [audioPlayCount] is the actual replay count either way.
-  Future<void> submitAnswer(
-    LocalApi api,
-    String answer, {
-    int audioPlayCount = 0,
-  }) async {
+  Future<void> submitAnswer(String answer, {int audioPlayCount = 0}) async {
     final source = state.source;
     final rubric = state.rubric;
     final purpose = state.purpose;
@@ -363,7 +370,7 @@ class ReadingTaskController extends ChangeNotifier {
     if (source == null || rubric == null || trimmed.isEmpty) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final attempt = await api.createSemanticAttempt(
+      final attempt = await _repository.createAttempt(
         kind: purpose,
         target: {
           'kind': 'segment',
@@ -413,7 +420,7 @@ class ReadingTaskController extends ChangeNotifier {
   /// Saves the per-point self-assessment as a manual judgment. Covered and
   /// partial verdicts cite the whole response as their span — this is a
   /// self-report, not citation evidence, and the provenance says so.
-  Future<void> submitSelfAssessment(LocalApi api) async {
+  Future<void> submitSelfAssessment() async {
     final rubric = state.rubric;
     final attempt = state.attempt;
     if (rubric == null || attempt == null || !state.allPointsJudged) return;
@@ -435,7 +442,7 @@ class ReadingTaskController extends ChangeNotifier {
     ];
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final judgment = await api.createSemanticJudgment(
+      final judgment = await _repository.createJudgment(
         attemptId: attempt.id,
         responseRevision: response.revision,
         rubricId: rubric.id,
@@ -464,8 +471,7 @@ class ReadingTaskController extends ChangeNotifier {
 
   /// Appends a correction for one point of the saved judgment. The original
   /// judgment is never rewritten (3.11 adjudication semantics).
-  Future<void> adjudicate(
-    LocalApi api, {
+  Future<void> adjudicate({
     required String pointId,
     required String userVerdict,
     String? note,
@@ -475,7 +481,7 @@ class ReadingTaskController extends ChangeNotifier {
     if (judgment == null || prior == null || prior == userVerdict) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final adjudication = await api.createJudgmentAdjudication(
+      final adjudication = await _repository.createAdjudication(
         judgmentId: judgment.id,
         pointId: pointId,
         priorVerdict: prior,
@@ -503,15 +509,15 @@ class ReadingTaskController extends ChangeNotifier {
   /// server-side as a `heuristic_proxy` (no observation/projection). On any
   /// provider failure nothing is stored and the error surfaces — the manual
   /// path is unaffected.
-  Future<void> requestLlmJudgment(LocalApi api) async {
+  Future<void> requestLlmJudgment() async {
     final attempt = state.attempt;
     final providerId = state.judgeProviderId;
     if (attempt == null || providerId == null) return;
     final response = attempt.responses.single;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final judgment = await api.judgeViaLlmProvider(
-        providerId,
+      final judgment = await _repository.judgeWithProvider(
+        providerId: providerId,
         attemptId: attempt.id,
         responseRevision: response.revision,
       );
@@ -535,8 +541,7 @@ class ReadingTaskController extends ChangeNotifier {
   /// Corrects one point of the LLM judgment. Mirrors [adjudicate]: the stored
   /// judgment row is never rewritten; the correction is an append-only
   /// adjudication citing the LLM judgment id.
-  Future<void> adjudicateLlm(
-    LocalApi api, {
+  Future<void> adjudicateLlm({
     required String pointId,
     required String userVerdict,
     String? note,
@@ -546,7 +551,7 @@ class ReadingTaskController extends ChangeNotifier {
     if (judgment == null || prior == null || prior == userVerdict) return;
     _store.update((s) => s.copyWith(busy: true, error: null));
     try {
-      final adjudication = await api.createJudgmentAdjudication(
+      final adjudication = await _repository.createAdjudication(
         judgmentId: judgment.id,
         pointId: pointId,
         priorVerdict: prior,
@@ -570,7 +575,7 @@ class ReadingTaskController extends ChangeNotifier {
   }
 
   void closeTask() {
-    _store.replace(const ReadingTaskState());
+    _store.replace(ReadingTaskState());
   }
 
   void _cachePointDraft(List<RubricPointView> points) {
@@ -593,23 +598,5 @@ class ReadingTaskController extends ChangeNotifier {
         error: null,
       ),
     );
-  }
-
-  Future<SemanticRubricView?> _tryLookup(
-    LocalApi api,
-    ReadingTaskSource source,
-  ) async {
-    try {
-      return await api.lookupSemanticRubric(
-        mediaId: source.mediaId,
-        startMs: source.startMs,
-        endMs: source.endMs,
-        purpose: state.purpose,
-        responseLanguage: source.responseLanguage,
-        transcriptSnapshot: source.transcriptSnapshot,
-      );
-    } catch (_) {
-      return null;
-    }
   }
 }

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
-import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
 import 'package:llplayer_next/services/shadowing_recorder.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
@@ -113,7 +112,6 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: RealtimeConversationPanel(
           controller: controller,
-          api: _api(),
           launch: RealtimeConversationLaunch.free(
             language: 'en',
             modelId: 'asr-model',
@@ -167,7 +165,7 @@ void main() {
   testWidgets('entering a live conversation lands on the stage, not on the '
       'lobby form', (tester) async {
     final controller = RealtimeConversationController(audio: _FakeAudio());
-    controller.state = const RealtimeConversationState(
+    controller.state = RealtimeConversationState(
       phase: RealtimeConversationPhase.live,
       activity: RealtimeConversationActivity.listening,
       selectedProfileId: 'profile-1',
@@ -176,7 +174,6 @@ void main() {
       MaterialApp(
         home: RealtimeConversationPanel(
           controller: controller,
-          api: _api(),
           launch: RealtimeConversationLaunch.free(
             language: 'en',
             modelId: 'asr-model',
@@ -257,7 +254,7 @@ void main() {
 
 RealtimeConversationController _liveController() {
   final controller = RealtimeConversationController(audio: _FakeAudio());
-  controller.state = const RealtimeConversationState(
+  controller.state = RealtimeConversationState(
     phase: RealtimeConversationPhase.live,
     activity: RealtimeConversationActivity.listening,
     selectedProfileId: 'profile-1',
@@ -276,7 +273,6 @@ Future<void> _pumpStage(
     MaterialApp(
       home: RealtimeConversationPanel(
         controller: controller,
-        api: _api(),
         launch: RealtimeConversationLaunch.free(
           language: 'en',
           modelId: 'asr-model',
@@ -290,20 +286,6 @@ Future<void> _pumpStage(
   await tester.pump();
   await tester.pump(const Duration(seconds: 1));
 }
-
-LocalApi _api() => LocalApi.withTransport(
-  baseUrl: 'http://test',
-  token: 'token',
-  transport: (method, path, body) async {
-    if (method == 'GET' && path == '/v1/realtime/providers') {
-      return (statusCode: 200, body: '[]');
-    }
-    if (method == 'GET' && path == '/v1/realtime/sessions') {
-      return (statusCode: 200, body: '[]');
-    }
-    throw StateError('Unexpected request: $method $path ${body ?? ''}');
-  },
-);
 
 class _FakeAudio implements RealtimeAudioSession {
   @override
