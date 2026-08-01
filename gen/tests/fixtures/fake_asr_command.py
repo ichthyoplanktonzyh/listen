@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -17,6 +18,19 @@ def main() -> int:
         print('{"raw_response":"must-not-leak"}')
         return 23
     if mode == "sleep":
+        time.sleep(2)
+        return 0
+    if mode == "flood":
+        sys.stdout.buffer.write(b"x" * (17 * 1024 * 1024))
+        return 0
+    if mode == "spawn-child":
+        child_marker = observation_path.with_suffix(".child")
+        subprocess.Popen([
+            sys.executable,
+            "-c",
+            "import pathlib,sys,time; time.sleep(0.4); pathlib.Path(sys.argv[1]).write_text('leaked')",
+            str(child_marker),
+        ])
         time.sleep(2)
         return 0
     value = json.loads(fixture_path.read_text(encoding="utf-8"))

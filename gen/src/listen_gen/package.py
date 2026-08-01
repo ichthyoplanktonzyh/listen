@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -544,11 +546,37 @@ def write_package(
     """Write a v1 package using the contract's deterministic ZIP profile."""
     manifest_bytes = _canonical_json(manifest)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
-        archive.writestr(_zip_info("manifest.json"), manifest_bytes)
-        for resource in sorted(resources, key=lambda item: item.path.encode("utf-8")):
-            archive.writestr(_zip_info(resource.path), resource.body)
-    return _sha256(output_path.read_bytes())
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=output_path.parent,
+        prefix=f".{output_path.name}.",
+        suffix=".tmp",
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        with zipfile.ZipFile(
+            temporary_path,
+            "w",
+            compression=zipfile.ZIP_STORED,
+            allowZip64=True,
+        ) as archive:
+            archive.writestr(_zip_info("manifest.json"), manifest_bytes)
+            for resource in sorted(resources, key=lambda item: item.path.encode("utf-8")):
+                archive.writestr(_zip_info(resource.path), resource.body)
+        digest = hashlib.sha256()
+        with temporary_path.open("rb") as package:
+            for chunk in iter(lambda: package.read(1024 * 1024), b""):
+                digest.update(chunk)
+            os.fsync(package.fileno())
+        os.replace(temporary_path, output_path)
+        directory_descriptor = os.open(output_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_descriptor)
+        finally:
+            os.close(directory_descriptor)
+        return digest.hexdigest()
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def package_from_lltimeline(input_path: Path, output_path: Path) -> dict[str, Any]:

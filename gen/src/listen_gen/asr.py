@@ -3,11 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import subprocess
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Protocol
+
+from .media import AudioPreprocessor
+from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
 
 from .package import (
     PACKAGE_SCHEMA,
@@ -28,6 +30,7 @@ TIMING_SOURCES = {
     "estimated",
     "user_adjusted",
 }
+ASR_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -106,16 +109,15 @@ class CommandAsrAdapter:
             *(str(media_path) if argument == "{media}" else argument for argument in self.arguments),
         ]
         try:
-            completed = subprocess.run(
+            completed = run_argv(
                 argv,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                check=False,
-                timeout=self.timeout_seconds,
+                timeout_seconds=self.timeout_seconds,
+                stdout_limit_bytes=ASR_STDOUT_LIMIT_BYTES,
             )
-        except subprocess.TimeoutExpired as error:
+        except ProcessTimedOut as error:
             raise ConversionError("ASR command timed out without producing a usable result") from error
+        except ProcessOutputTooLarge as error:
+            raise ConversionError("ASR command output exceeded the safety limit") from error
         except OSError as error:
             raise ConversionError("ASR command could not be started") from error
         if completed.returncode != 0:
@@ -125,6 +127,46 @@ class CommandAsrAdapter:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ConversionError("ASR command returned invalid normalized JSON") from error
         return _parse_transcript(raw)
+
+
+class PreprocessingAsrAdapter:
+    """Supply normalized temporary audio to an underlying ASR adapter."""
+
+    def __init__(
+        self,
+        adapter: AsrAdapter,
+        preprocessor: AudioPreprocessor,
+        *,
+        audio_stream_index: int | None,
+    ):
+        self.adapter = adapter
+        self.preprocessor = preprocessor
+        self.audio_stream_index = audio_stream_index
+
+    def transcribe(self, media_path: Path) -> AsrTranscript:
+        with self.preprocessor.prepare(
+            media_path, audio_stream_index=self.audio_stream_index
+        ) as prepared:
+            transcript = self.adapter.transcribe(prepared.path)
+        pipeline_config = {
+            "adapter_protocol": "listen_gen.asr-result.v1",
+            "audio_preprocessing": {
+                "audio_stream_index": prepared.stream_index,
+                "channels": 1,
+                "container": "wav",
+                "sample_format": "pcm_s16le",
+                "sample_rate_hz": 16000,
+            },
+            "provider_config_sha256": transcript.config_sha256,
+            "schema": "listen_gen.asr-pipeline-config.v1",
+        }
+        config_bytes = json.dumps(
+            pipeline_config, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+        return replace(
+            transcript,
+            config_sha256=f"sha256:{hashlib.sha256(config_bytes).hexdigest()}",
+        )
 
 
 def _object(value: Any, location: str) -> dict[str, Any]:
@@ -288,6 +330,8 @@ def package_media(
     _integer(created_at_ms, "created_at_ms")
     media_fingerprint = _fingerprint(media_path)
     transcript = adapter.transcribe(media_path)
+    if _fingerprint(media_path) != media_fingerprint:
+        raise ConversionError("media input changed during processing")
     sentences = []
     timings = []
     for index, segment in enumerate(transcript.segments):

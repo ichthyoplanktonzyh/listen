@@ -22,20 +22,32 @@ Production provider adapters can be added behind the same interface without
 changing the resource package contract. Explicit creation time and media
 metadata make fixture and replay builds deterministic.
 
-For actual media, `command` runs any local provider wrapper as a direct argv
-subprocess (never through a shell). Put the exact `{media}` placeholder in one
-argument; the wrapper must write a normalized `listen_gen.asr-result.v1`
-document to stdout:
+For actual media, `command` first uses `ffprobe` to identify audio streams and
+`ffmpeg` to create a temporary 16 kHz mono signed-16-bit PCM WAV. It then runs
+the local provider wrapper as a direct argv subprocess (never through a shell).
+Put the exact `{media}` placeholder in one argument; that placeholder receives
+the normalized temporary WAV, not the original container. The wrapper must
+write a normalized `listen_gen.asr-result.v1` document to stdout:
 
 ```bash
 python -m listen_gen package from-media input.mp4 \
   --provider command --command /opt/listen/bin/whisper-wrapper \
   --command-arg transcribe --command-arg '{media}' \
   --command-arg=--model --command-arg large-v3 \
+  --audio-stream-index 1 \
   --command-timeout-seconds 3600 \
   --title "Lesson" --media-kind video --duration-ms 125000 \
   --created-at-ms 1785542400000 --output lesson.listenpkg
 ```
+
+A media file with exactly one audio stream is selected automatically. If it
+has multiple audio streams, `--audio-stream-index` is mandatory and refers to
+the container stream index reported by `ffprobe`. `--ffprobe-command`,
+`--ffmpeg-command`, and `--media-command-timeout-seconds` can select managed
+tool installations and set the preprocessing deadline. Temporary audio is
+removed after success, provider failure, or timeout. Timeouts terminate the
+subprocess group; probe output is capped at 1 MiB and normalized ASR JSON at
+16 MiB.
 
 Whisper, hosted ASR, and other provider-specific decoding belongs inside that
 wrapper. Non-zero exit, timeout, startup failure, and invalid JSON errors do
@@ -54,9 +66,15 @@ Local paths, Core lifecycle state, and unknown artifact payloads are excluded.
 Warnings are printed in the JSON command result.
 
 The v1 package carries generated resources, not media bytes. Its content
-document retains the media SHA-256 so Core can attach the package to matching
-local media. Entries use ZIP `STORE`; each resource identity is the SHA-256 of
-its exact raw JSON bytes.
+document retains the SHA-256 of the original media bytes (not the temporary
+normalized audio), so Core can attach the package to matching local media.
+Local paths and subprocess output are never included. Entries use ZIP `STORE`;
+each resource identity is the SHA-256 of its exact raw JSON bytes.
+Resource provenance configuration combines the provider wrapper's declared
+configuration identity with a stable description of the selected audio stream,
+adapter protocol, and normalization format; executable and temporary paths are
+excluded. Package files are completed and synced beside the destination before
+an atomic replacement, so a failed build does not truncate an existing package.
 
 ## Contract authority
 

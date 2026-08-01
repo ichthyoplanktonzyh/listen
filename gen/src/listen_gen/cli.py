@@ -5,7 +5,13 @@ import json
 import sys
 from pathlib import Path
 
-from .asr import CommandAsrAdapter, FixtureAsrAdapter, package_media
+from .asr import (
+    CommandAsrAdapter,
+    FixtureAsrAdapter,
+    PreprocessingAsrAdapter,
+    package_media,
+)
+from .media import FfmpegAudioPreprocessor
 from .package import ConversionError, package_from_lltimeline
 
 
@@ -29,6 +35,14 @@ def parser() -> argparse.ArgumentParser:
         help="one argv item for the command provider; include {media} exactly once",
     )
     native.add_argument("--command-timeout-seconds", type=float, default=3600.0)
+    native.add_argument(
+        "--audio-stream-index",
+        type=int,
+        help="container stream index; required when the media has multiple audio streams",
+    )
+    native.add_argument("--ffprobe-command", default="ffprobe")
+    native.add_argument("--ffmpeg-command", default="ffmpeg")
+    native.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
     native.add_argument("--title", required=True)
     native.add_argument("--media-kind", required=True, choices=["audio", "video"])
     native.add_argument("--duration-ms", required=True, type=int)
@@ -52,8 +66,17 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 if args.command is None:
                     raise ConversionError("--command is required for the command provider")
-                adapter = CommandAsrAdapter(
+                command_adapter = CommandAsrAdapter(
                     args.command, args.command_arg, args.command_timeout_seconds
+                )
+                adapter = PreprocessingAsrAdapter(
+                    command_adapter,
+                    FfmpegAudioPreprocessor(
+                        ffprobe_executable=args.ffprobe_command,
+                        ffmpeg_executable=args.ffmpeg_command,
+                        timeout_seconds=args.media_command_timeout_seconds,
+                    ),
+                    audio_stream_index=args.audio_stream_index,
                 )
             result = package_media(
                 args.input,

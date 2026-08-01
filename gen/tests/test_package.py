@@ -7,6 +7,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -100,6 +101,20 @@ class PackageFromLLTimelineTests(unittest.TestCase):
                 self.assertEqual(len(manifest["resources"]), 1)
                 self.assertEqual(manifest["resources"][0]["kind"], "subtitle_text_track")
                 self.assertTrue(manifest["resources"][0]["required"])
+
+    def test_packaging_failure_preserves_existing_output_and_removes_temporary_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            original = b"existing-package-must-survive"
+            output.write_bytes(original)
+            with mock.patch(
+                "listen_gen.package.zipfile.ZipFile",
+                side_effect=RuntimeError("simulated packaging failure"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "simulated packaging failure"):
+                    package_from_lltimeline(self.fixture, output)
+            self.assertEqual(output.read_bytes(), original)
+            self.assertEqual(list(Path(directory).iterdir()), [output])
 
 
 if __name__ == "__main__":
