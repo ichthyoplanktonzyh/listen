@@ -15,10 +15,11 @@
 
 ## Current Work
 
-The current documentation slice aligns App agents with the owner-approved open
-package ecosystem, shared vocabulary, repository boundaries, and migration
-order. It does not implement or claim the package discovery, generator, or
-Registry journeys.
+Phase 001 implements the additive local content-package journey against typed
+App fixtures: existing package selection, strict external `listen-gen`
+orchestration, Core import receipt, honest provenance, cancellation/retry, and
+explicit subtitle/word-timeline selection. The pinned Core artifact is still
+unchanged, so immutable-release and packaged end-to-end validation remain open.
 
 ## Established Boundaries
 
@@ -42,8 +43,8 @@ that constraint.
 
 ## Next
 
-1. Define the package discovery, lawful acquisition, match/generate/import,
-   cancellation/retry, and explicit selection journey as an App phase.
-2. Use `CROSS_REPO.md` for Core, Gen, and future Catalog/Registry requests.
+1. Receive immutable Core and versioned Gen handoffs for the Phase 001 requests.
+2. Sync the final fixtures, update `backend.lock.json` only for the immutable
+   Core release, and run the three-repository fixture E2E plus packaged smoke.
 3. Keep the existing whole-media flow until the additive package path has been
-   integrated and validated end to end.
+   integrated and observed end to end.

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../controllers/learning_controller.dart';
+import '../../controllers/content_package_journey_view_model.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/cold_start_marking_view_model.dart';
 import '../../controllers/phonetic_analysis_view_model.dart';
@@ -14,6 +17,7 @@ import '../../models/timeline.dart';
 import '../../models/runtime_resources.dart';
 import '../../phonetic_analysis_ui.dart';
 import '../../screens/subtitle_resources_screen.dart';
+import '../../screens/content_package_journey_screen.dart';
 import '../../transcription_ui.dart';
 import '../panels/cold_start_marking_sheet.dart';
 
@@ -29,6 +33,8 @@ typedef ColdStartMarkingViewModelFactory =
     });
 typedef RegenerateSubtitlesViewModelFactory =
     GenerateSubtitlesViewModel Function(TranscriptionJobView job);
+typedef ContentPackageJourneyViewModelFactory =
+    ContentPackageJourneyViewModel Function();
 
 class _OwnedNotifierRoute extends StatefulWidget {
   const _OwnedNotifierRoute({required this.notifier, required this.child});
@@ -272,6 +278,7 @@ Future<void> openSubtitleResourcesFlow({
   required ResourceActionsCoordinator resourceActions,
   required MediaSessionCoordinator mediaSession,
   required Future<void> Function() onManualReviewTimeline,
+  ContentPackageJourneyViewModelFactory? createContentPackageViewModel,
 }) async {
   if (!backendAvailable) {
     // Unavailable State (CONTEXT.md): the resources screen is a user
@@ -324,6 +331,33 @@ Future<void> openSubtitleResourcesFlow({
           subtitleController: subtitleController,
           resourceActions: resourceActions,
         ),
+        onOpenContentPackages: createContentPackageViewModel == null
+            ? null
+            : () => unawaited(
+                openContentPackageJourneyFlow(
+                  context: context,
+                  createViewModel: createContentPackageViewModel,
+                ).whenComplete(
+                  () => resourceActions.loadSubtitleResources(
+                    updateStatus: false,
+                  ),
+                ),
+              ),
+      ),
+    ),
+  );
+}
+
+Future<void> openContentPackageJourneyFlow({
+  required BuildContext context,
+  required ContentPackageJourneyViewModelFactory createViewModel,
+}) async {
+  final viewModel = createViewModel();
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute(
+      builder: (_) => _OwnedNotifierRoute(
+        notifier: viewModel,
+        child: ContentPackageJourneyScreen(viewModel: viewModel),
       ),
     ),
   );

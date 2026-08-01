@@ -2,6 +2,7 @@ import '../../services/core_transport_service.dart';
 import '../../services/api_service.dart' show LocalApi;
 import 'coach_dashboard_repository.dart';
 import 'cold_start_marking_repository.dart';
+import 'content_package_repository.dart';
 import 'external_vocabulary_repository.dart';
 import 'hunting_repository.dart';
 import 'learning_assets_repository.dart';
@@ -29,6 +30,8 @@ import 'speech_synthesis_repository.dart';
 import 'subtitle_analysis_repository.dart';
 import 'transcription_repository.dart';
 import 'writing_task_repository.dart';
+import '../../services/listen_gen_process_service.dart';
+import '../../services/media_import_file_service.dart';
 
 /// Composition provider that keeps the raw LocalApi handle out of the UI.
 /// Long-lived repositories receive a deferred API lookup; route-scoped ones
@@ -45,6 +48,11 @@ final class LocalCoreRepositories {
       mediaSession = LocalMediaSessionRepository(() => _transport.currentApi),
       playback = LocalPlaybackRepository(() => _transport.currentApi),
       resource = LocalResourceRepository(() => _transport.currentApi),
+      contentPackage = LocalContentPackageRepository(
+        () => _transport.currentApi,
+        const LocalMediaImportFileService(),
+        LocalListenGenProcessService(),
+      ),
       readingTask = LocalReadingTaskRepository(() => _transport.currentApi),
       readingSession = LocalReadingSessionRepository(
         () => _transport.currentApi,
@@ -72,6 +80,7 @@ final class LocalCoreRepositories {
   final MediaSessionRepository mediaSession;
   final PlaybackRepository playback;
   final ResourceRepository resource;
+  final ContentPackageRepository contentPackage;
   final ReadingTaskRepository readingTask;
   final ReadingSessionRepository readingSession;
   final SpeakingSessionRepository speakingSession;

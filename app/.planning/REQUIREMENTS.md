@@ -23,6 +23,15 @@
 - APP-CORE-003: startup handshake 在正常请求前验证 API/contract/runtime compatibility。
 - APP-CORE-004: contract-facing change 必须包含 pinned fixtures 和 focused contract tests。
 - APP-CORE-005: `.backend/`、下载包、build/dist 和 secrets 不得提交。
+- APP-CORE-006: `.listenpkg` 导入必须显示结构化 receipt，并保持 candidate 与 active 分离。
+- APP-CORE-007: Core fingerprint mismatch 必须是独立、可恢复且不泄漏原始 transport 的状态。
+
+## Local Generation
+
+- APP-GEN-001: App 只通过 versioned machine-event protocol 编排外部 `listen-gen`。
+- APP-GEN-002: generator process、子进程取消和临时 package 生命周期由 service/controller seam 管理。
+- APP-GEN-003: executable/provider 配置只来自显式本地 platform seam；secrets 不写入普通 settings、日志或 UI。
+- APP-GEN-004: 旧 whole-media transcription、recording 与 realtime 路径在切流前保持可用。
 
 ## Quality
 

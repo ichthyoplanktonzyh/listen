@@ -4,7 +4,7 @@
 
 - Flutter package version `0.7.0+8`;
 - macOS-first desktop app with embedded `fvp`;
-- 130 committed Dart test files;
+- 181 committed Dart test files;
 - core contract `1.0.0` and runtime `0.7.0` pinned to
   `listen-core` commit `4f4bad8b97a651e1cb731bfccb8fd7e1c4645e0a`;
 - standalone artifact install, Release build, and packaged smoke path.
@@ -19,5 +19,6 @@
 
 ## Product Work
 
-具体 UI/UX phase 由 owner 选择。需要 backend change 时，先在本仓形成 frontend
-phase/contract request，再交给 core；纯 backend phase 不进入本 roadmap。
+当前 active product phase 是本地精确媒体 `.listenpkg` 往返：App-owned journey、
+typed fixtures、Core import request 与 Gen process protocol 已落库。与 immutable Core
+release 同步前，不更新 `backend.lock.json`，也不宣称 packaged end-to-end 已完成。

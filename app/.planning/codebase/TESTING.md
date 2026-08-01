@@ -16,7 +16,7 @@ diagnostic rather than a silent `dynamic`.
 
 ## Test Shape
 
-The split baseline contains 130 Dart test files covering:
+The current baseline contains 181 Dart test files covering:
 
 - models and compatibility parsing;
 - controllers/coordinators and async lifecycle;
@@ -26,6 +26,9 @@ The split baseline contains 130 Dart test files covering:
 - theme/spacing/radius/motion discipline;
 - golden visual regression baselines under `test/goldens`;
 - regression behavior for learning journeys.
+- the local `.listenpkg` Core contract, strict `listen-gen` machine protocol,
+  process completion/cancellation/cleanup, package state machine, and explicit
+  candidate selection/activation journey.
 
 ## Source-Level Discipline Gates
 

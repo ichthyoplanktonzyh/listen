@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import '../models/api_failure.dart';
+import '../models/content_package.dart';
 import '../models/coach_dashboard.dart';
 import '../models/listening.dart';
 import '../models/llm_provider.dart';
@@ -25,6 +26,7 @@ import '../models/types.dart';
 import '../models/vocabulary_transfer.dart';
 
 part 'api/media.dart';
+part 'api/content_packages.dart';
 part 'api/subtitles.dart';
 part 'api/timelines.dart';
 part 'api/speech.dart';

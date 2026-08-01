@@ -1,0 +1,93 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/content_package_journey_view_model.dart';
+import 'package:llplayer_next/data/repositories/content_package_repository.dart';
+import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/content_package.dart';
+import 'package:llplayer_next/models/timeline.dart';
+import 'package:llplayer_next/screens/content_package_journey_screen.dart';
+import 'package:llplayer_next/services/listen_gen_process_service.dart';
+
+void main() {
+  testWidgets(
+    'receipt requires separate subtitle and word activation actions',
+    (tester) async {
+      var subtitleSelections = 0;
+      final activated = <String>[];
+      final viewModel = ContentPackageJourneyViewModel(
+        _WidgetRepository(),
+        (_) async => subtitleSelections++,
+        (id) async => activated.add(id),
+        mediaId: 'media-1',
+        mediaPath: '/tmp/media.wav',
+        mediaTitle: 'Lesson',
+        mediaKind: 'audio',
+        durationMs: 2200,
+      );
+      addTearDown(viewModel.dispose);
+      await viewModel.chooseAndImportPackage();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: const [AppLocalizations.delegate],
+          home: ContentPackageJourneyScreen(viewModel: viewModel),
+        ),
+      );
+
+      expect(find.text('Unsigned local'), findsOneWidget);
+      expect(find.text('Publisher unknown'), findsOneWidget);
+      expect(find.text('machine_checked · listen-gen/0.1.0'), findsNothing);
+      await tester.tap(find.byKey(const Key('select-imported-subtitle')));
+      await tester.pump();
+      await tester.drag(find.byType(ListView), const Offset(0, -192));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('activate-word-timeline-word-1')));
+      await tester.pump();
+
+      expect(subtitleSelections, 1);
+      expect(activated, ['word-1']);
+      expect(find.text('Subtitle selected'), findsOneWidget);
+      expect(find.text('Activated'), findsOneWidget);
+    },
+  );
+}
+
+class _WidgetRepository implements ContentPackageRepository {
+  @override
+  bool get coreAvailable => true;
+  @override
+  bool get generatorConfigured => false;
+  @override
+  ApiFailure failureDetail(Object error) => const ApiFailure(raw: '');
+  @override
+  Future<String?> pickPackage() async => '/tmp/lesson.listenpkg';
+  @override
+  Future<ContentPackageImportReceipt> importPackage({
+    required String mediaId,
+    required String packagePath,
+  }) async => ContentPackageImportReceipt(
+    manifestSha256:
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    track: const SubtitleTrack(id: 'track-1', cues: []),
+    resources: [
+      ContentPackageResourceDisposition(
+        resourceId: 'sha256:subtitle',
+        kind: 'subtitle_text_track',
+        outcome: 'consumed',
+        localIds: const ['track-1'],
+      ),
+      ContentPackageResourceDisposition(
+        resourceId: 'sha256:word',
+        kind: 'word_timeline',
+        outcome: 'consumed',
+        localIds: const ['word-1'],
+      ),
+    ],
+  );
+  @override
+  Future<ListenGenProcessRun> startGeneration(
+    ContentPackageGenerationRequest request,
+  ) => throw UnimplementedError();
+}

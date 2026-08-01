@@ -110,6 +110,23 @@ The app still validates the startup versions. If local core introduces an
 incompatible contract major, the existing app must reject it; coordinate the
 contract and app migration instead of bypassing that check.
 
+### Test an unreleased local generator
+
+The package journey has an explicit process-local development seam. Point the
+App at an executable and pass the non-secret provider argv as a JSON string:
+
+```sh
+LISTEN_GEN_EXECUTABLE=/path/to/listen-gen \
+LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/asr.json"]' \
+  flutter run -d macos
+```
+
+Do not place API keys or other credentials in `LISTEN_GEN_PROVIDER_ARGUMENTS`;
+the configured provider wrapper owns secret retrieval. These variables are not
+written to settings or `backend.lock.json`. Without both a provider argument
+set and a local media path/duration, the UI keeps local generation unavailable
+while existing `.listenpkg` import remains usable.
+
 ## Manual smoke checklist
 
 After the main window opens:

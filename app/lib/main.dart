@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/content_channel_coordinator.dart';
+import 'controllers/content_package_journey_view_model.dart';
 import 'controllers/core_session_controller.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/extensive_listening_controller.dart';
@@ -1709,7 +1710,44 @@ class _PlayerScreenState extends State<PlayerScreen>
     resourceActions: resourceActions,
     mediaSession: mediaSession,
     onManualReviewTimeline: _openManualReviewTimeline,
+    createContentPackageViewModel: () => ContentPackageJourneyViewModel(
+      coreRepositories.contentPackage,
+      (track) async {
+        await mediaSession.usePrimarySubtitleTrack(
+          track,
+          nextStatus: l.text('contentPackageSelected'),
+        );
+        await resourceActions.loadSubtitleResources(updateStatus: false);
+      },
+      (timelineId) async {
+        await coreRepositories.resource.activateWordTimeline(timelineId);
+        final trackId = subtitleController.primaryTrack?.id;
+        if (trackId != null) {
+          await resourceActions.loadTimelineResource(trackId);
+        }
+      },
+      mediaId: playerController.mediaId!,
+      mediaPath: playerController.mediaPath ?? '',
+      mediaTitle: playerController.mediaPath == null
+          ? 'Local media'
+          : widget.pathHelper.basename(playerController.mediaPath!),
+      mediaKind: _contentPackageMediaKind(playerController.mediaPath),
+      durationMs: playerController.duration.inMilliseconds,
+    ),
   );
+
+  String _contentPackageMediaKind(String? path) {
+    final normalized = path?.toLowerCase() ?? '';
+    return normalized.endsWith('.mp3') ||
+            normalized.endsWith('.wav') ||
+            normalized.endsWith('.m4a') ||
+            normalized.endsWith('.flac') ||
+            normalized.endsWith('.aac') ||
+            normalized.endsWith('.ogg') ||
+            normalized.endsWith('.opus')
+        ? 'audio'
+        : 'video';
+  }
 
   void _openColdStartMarking() => openColdStartMarkingFlow(
     context: context,

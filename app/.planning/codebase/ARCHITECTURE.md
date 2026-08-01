@@ -31,6 +31,15 @@ objects receive repository interfaces. Repositories map transport failures to
 typed failures and return typed client/domain views. UI sequencing remains in
 its ViewModel/Controller.
 
+The local content-package journey follows the same direction across two I/O
+boundaries. `ContentPackageRepository` wraps both the typed Core import adapter
+and the external generator service. `ContentPackageJourneyViewModel` owns the
+machine-event lifecycle, stale-run guard, cancellation, retry, receipt, and
+explicit selection state. `ContentPackageJourneyScreen` only renders immutable
+snapshots and emits intent. The process service launches argv directly, treats
+Gen protocol/version/sequence/terminal semantics as a strict contract, and
+owns generated temporary output until Core import settles.
+
 A screen that grew its own state and I/O is split into view / view model /
 repository. `VocabularyViewModel` is the worked example: it owns an immutable
 `VocabularyState` in a `Store`, re-broadcasts as a `ChangeNotifier`, holds no
