@@ -328,6 +328,33 @@ pub trait LLTimelineImportRepository: Send + Sync {
     fn import_lltimeline(&self, import: &LLTimelineImport) -> Result<(), ApplicationError>;
 }
 
+/// A validated Resource Package projected into Core-owned records.
+///
+/// This input is deliberately distinct from [`LLTimelineImport`]: package
+/// resources are immutable candidates and cannot carry Core active-selection
+/// policy across the exchange boundary.
+#[derive(Debug, Clone)]
+pub struct ContentPackageCandidateImport {
+    pub track: SubtitleTrack,
+    pub metadata: LLTimelineMetadata,
+    pub artifacts: Vec<LLTimelineArtifact>,
+    pub word_timelines: Vec<WordTimeline>,
+    pub phone_timelines: Vec<PhoneTimeline>,
+    pub chunk_timelines: Vec<ChunkTimeline>,
+    pub sense_group_analyses: Vec<SenseGroupAnalysis>,
+    pub corpus_occurrences: Vec<CorpusOccurrence>,
+}
+
+/// Atomic, candidate-only persistence boundary for a Resource Package.
+pub trait ContentPackageImportRepository: Send + Sync {
+    /// Adds resources idempotently without changing any existing active
+    /// selection. Returning `Err` guarantees that no package write committed.
+    fn import_content_package_candidates(
+        &self,
+        import: &ContentPackageCandidateImport,
+    ) -> Result<(), ApplicationError>;
+}
+
 /// Capability projections and their audit history change under one invariant.
 pub trait LexicalCapabilityRepository: Send + Sync {
     fn lexical_capability_profile(

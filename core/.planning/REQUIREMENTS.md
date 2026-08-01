@@ -7,6 +7,8 @@
 - CORE-CONTRACT-003: path parameters、schemas 和 examples 必须通过结构校验。
 - CORE-CONTRACT-004: API/contract/runtime version 必须出现在启动握手与 health。
 - CORE-CONTRACT-005: breaking contract change 必须显式升级 major 并提供迁移决策。
+- CORE-CONTRACT-006: content package 导入必须在持久化前完成验包，并以独立事务
+  幂等附加候选；包不得创建、替换或降级 active 选择。
 
 ## Runtime and Releases
 
@@ -25,6 +27,11 @@
 - CORE-ARCH-005: durable learning history 不因可替换 media/resource 被级联删除。
 - CORE-ARCH-006: credential-free local realtime provider 必须限制为 loopback，
   并由 runtime seam 负责 sidecar readiness、终止与回收。
+- CORE-ARCH-007: 可复用 whole-media 离线模型、provider、音频预处理和批生成
+  位于 content-package producer 边界之外；Core 保留媒体身份、验包、候选、active
+  选择、学习记录和消费体验。
+- CORE-ARCH-008: learner recording、realtime conversation 和 learner-dependent
+  LLM 能力保留在 Core，不得随离线生成管线迁出。
 
 ## Quality
 

@@ -1,13 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ApplicationError, ChunkTimeline, CreateWordTimeline, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact,
-    LLTimelineDocument, LLTimelineGenerator, LLTimelineImport, LLTimelineMedia, LLTimelineMetadata,
-    LLTimelineRhythmFrame, MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind,
-    PhoneTimeline, RhythmFrameId, SenseGroupAnalysis, SentenceWordTimingDiagnostics,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
-    TimelineCreator, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
-    WordTimelineSummary, WordTimingBoundaryDiagnostic, build_word_timeline, detached_media_path,
+    ApplicationError, ChunkTimeline, ContentPackageCandidateImport, CreateWordTimeline,
+    LLTIMELINE_SCHEMA_V1, LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator,
+    LLTimelineImport, LLTimelineMedia, LLTimelineMetadata, LLTimelineRhythmFrame,
+    MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind, PhoneTimeline,
+    RhythmFrameId, SenseGroupAnalysis, SentenceWordTimingDiagnostics, SubtitleSentenceId,
+    SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics,
+    TimelineStatus, WordTimeline, WordTimelineId, WordTimelineSummary,
+    WordTimingBoundaryDiagnostic, build_word_timeline, detached_media_path,
     lltimeline_segments_from_track, lltimeline_segments_to_sentences, lltimeline_track_extra,
     lltimeline_track_fingerprint, lltimeline_track_id, mark_word_timeline_published,
     merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity, require_text,
@@ -918,6 +919,80 @@ impl MediaAnalysisUseCases {
         };
         self.lltimeline_imports.import_lltimeline(&import)?;
 
+        Ok(track)
+    }
+
+    pub(crate) fn import_content_package_document_with_media(
+        &self,
+        mut document: LLTimelineDocument,
+        media: MediaItem,
+    ) -> Result<SubtitleTrack, ApplicationError> {
+        if document.schema != LLTIMELINE_SCHEMA_V1 {
+            return Err(ApplicationError::Validation("lltimeline schema"));
+        }
+        require_text(&document.metadata.media.fingerprint, "media fingerprint")?;
+        require_text(&document.metadata.media.title, "media title")?;
+        if document.metadata.media.id != media.id
+            || document.metadata.media.fingerprint != media.fingerprint
+        {
+            return Err(ApplicationError::Validation(
+                "content package media identity",
+            ));
+        }
+        let track = SubtitleTrack {
+            id: lltimeline_track_id(&document)?,
+            media_id: media.id,
+            fingerprint: lltimeline_track_fingerprint(&document),
+            language: document.metadata.language.clone(),
+            source: document
+                .metadata
+                .extra
+                .get("track_source")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("listen-resource-package-v1")
+                .to_owned(),
+            status: SubtitleTrackStatus::Available,
+            sentences: lltimeline_segments_to_sentences(&document.segments)?,
+        };
+        validate_and_prepare_lltimeline_resources(&mut document, &track)?;
+        if document.active_word_timeline_id.is_some()
+            || document.active_phone_timeline_id.is_some()
+            || document.active_chunk_timeline_id.is_some()
+            || document.active_sense_group_analysis_id.is_some()
+            || document
+                .word_timelines
+                .iter()
+                .any(|v| v.status != TimelineStatus::Candidate)
+            || document
+                .phone_timelines
+                .iter()
+                .any(|v| v.status != TimelineStatus::Candidate)
+            || document
+                .chunk_timelines
+                .iter()
+                .any(|v| v.status != TimelineStatus::Candidate)
+            || document
+                .sense_group_analyses
+                .iter()
+                .any(|v| v.status != TimelineStatus::Candidate)
+        {
+            return Err(ApplicationError::Invalid(
+                "content package import must be candidate-only".into(),
+            ));
+        }
+        let corpus_occurrences =
+            self.build_subtitle_corpus_occurrences_from_resources(&track, None, &[])?;
+        self.content_package_imports
+            .import_content_package_candidates(&ContentPackageCandidateImport {
+                track: track.clone(),
+                metadata: document.metadata,
+                artifacts: document.artifacts,
+                word_timelines: document.word_timelines,
+                phone_timelines: document.phone_timelines,
+                chunk_timelines: document.chunk_timelines,
+                sense_group_analyses: document.sense_group_analyses,
+                corpus_occurrences,
+            })?;
         Ok(track)
     }
 

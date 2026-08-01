@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
-    CorpusIndexRepository, DifficultyRepository, LLTimelineImportRepository,
-    LLTimelineResourceRepository, LearnerProfileUseCases, LearningEventKind,
-    LearningEventRepository, LearningEventSubjectKind, LexicalEntryRepository,
+    ContentPackageImportRepository, CorpusIndexRepository, DifficultyRepository,
+    LLTimelineImportRepository, LLTimelineResourceRepository, LearnerProfileUseCases,
+    LearningEventKind, LearningEventRepository, LearningEventSubjectKind, LexicalEntryRepository,
     LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem, MediaLibraryEntry,
     MediaRepository, MediaTriageIntent, PhoneTimelineRepository, PlaybackProgressRepository,
     PronunciationProvider, PronunciationRepository, PronunciationUseCases, RegisterMedia,
@@ -28,6 +28,7 @@ pub struct MediaAnalysisUseCases {
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
+    pub(crate) content_package_imports: Arc<dyn ContentPackageImportRepository>,
     pub(crate) corpus: Arc<dyn CorpusIndexRepository>,
     pub(crate) difficulty: Arc<dyn DifficultyRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -51,6 +52,7 @@ impl MediaAnalysisUseCases {
             phone_timelines: services.phone_timelines.clone(),
             lltimeline_resources: services.lltimeline_resources.clone(),
             lltimeline_imports: services.lltimeline_imports.clone(),
+            content_package_imports: services.content_package_imports.clone(),
             corpus: services.corpus.clone(),
             difficulty: services.difficulty.clone(),
             lexical_entries: services.lexical_entries.clone(),

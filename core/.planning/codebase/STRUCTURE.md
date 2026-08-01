@@ -60,8 +60,10 @@ Notable runtime seams:
   validated LLTimeline snapshot; resource families keep their independent
   lifecycle repositories after import.
 - `application::prepare_content_package_document` converts a verified package
-  into candidate-only LLTimeline projections and an explicit per-resource
-  receipt. It performs no persistence and never selects an active analysis.
+  into candidate-only Core projections and an explicit per-resource receipt.
+- `ContentPackageImportRepository` is the dedicated atomic persistence seam for
+  those projections. It is idempotent, never selects an active analysis, and
+  does not call the legacy LLTimeline import operation.
 
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.

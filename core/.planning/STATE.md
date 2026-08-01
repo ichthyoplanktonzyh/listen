@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-07-31 CST
+> Updated: 2026-08-01 CST
 
 ## Position
 
@@ -14,15 +14,12 @@
 
 ## Current Work
 
-The internal recommended-foundation preparation module now owns exact source
-selection, fixed typed preparation slots, durable single-flight, revision CAS,
-cancellation/retry/recovery, and local-runtime execution through the three fast
-required analyses: WordTimeline, ChunkTimeline, and SenseGroup. Citation and
-predicted audible structures (views A/B) are derived from WordTimeline rather
-than persisted as preparation jobs. SoundLine is independent best-effort
-enrichment; observed phone evidence (view C) remains a separately confirmed
-Phoneme Analysis. The module remains internal until the media-level one-click
-journey in issue #103 supplies or creates the exact Subtitle Text Track.
+The content-package v1 boundary now has bounded inspection, typed projection,
+and a dedicated candidate-only atomic import seam. An external-producer
+prototype has passed local fixture and Core-inspector validation but has no
+published repository handoff yet; LLTimeline conversion remains migration
+compatibility. Existing Core whole-media generation stays temporarily available
+until the new path is published, cut over, and observed.
 
 ## Established Boundaries
 
@@ -40,14 +37,18 @@ not code evidence.
 
 ## Next
 
-1. Implement issue #103 as the media-level one-click entry: reuse an exact
-   Subtitle Text Track or run ASR, then enter foundation preparation.
-2. Split core issue #80 into a production-model slice followed by an
+1. Connect the media-level one-click journey to external package generation and
+   candidate import, then verify cutover before removing legacy whole-media
+   generation responsibility.
+2. Split Core whole-media and learner-recording transcription responsibilities
+   before deleting any legacy coordinator code; realtime and learner-dependent
+   capabilities remain in Core.
+3. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
-3. Publish immutable `1.1.0` contract/runtime artifacts only after owner
+4. Publish immutable `1.1.0` contract/runtime artifacts only after owner
    approval, then complete the `listen-app` lock and DTO handoff.
-4. Run the Apple Silicon short-audio cascade smoke only with explicit model
+5. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-5. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+6. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.
