@@ -1,0 +1,24 @@
+{
+  "schema": "listen.resource.word-timeline.v1",
+  "kind": "word_timeline",
+  "subject": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependencies": [
+    { "resource_id": "sha256:ae4a8de0ef71495050e33cf928c6012c0e52a3c9f2688829bb99ba4d4a6d6fca", "kind": "subtitle_text_track" }
+  ],
+  "provenance": {
+    "created_at_ms": 1785542401000,
+    "tool": { "id": "listen-gen", "version": "0.1.0" },
+    "provider": { "id": "example-aligner", "version": "1" },
+    "model": { "id": "example-word-aligner", "version": "2026-08" },
+    "config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "quality": { "review_status": "machine_checked", "confidence": 0.95, "warnings": [] },
+  "payload": {
+    "words": [
+      { "sentence_id": "sentence-000000", "token_index": 0, "start_ms": 1040, "end_ms": 1300, "confidence": 0.97, "timing_source": "forced_aligned" },
+      { "sentence_id": "sentence-000000", "token_index": 2, "start_ms": 1320, "end_ms": 1680, "confidence": 0.96, "timing_source": "forced_aligned" }
+    ]
+  }
+}

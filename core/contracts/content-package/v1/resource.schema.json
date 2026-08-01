@@ -1,0 +1,508 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v1/resource.schema.json",
+  "title": "Listen Content Resource v1",
+  "oneOf": [
+    { "$ref": "#/$defs/subtitleTextTrackResource" },
+    { "$ref": "#/$defs/wordTimelineResource" },
+    { "$ref": "#/$defs/phoneTimelineResource" },
+    { "$ref": "#/$defs/senseGroupAnalysisResource" },
+    { "$ref": "#/$defs/wordAcousticsResource" },
+    { "$ref": "#/$defs/prosodyAnalysisResource" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "timeRange": {
+      "type": "object",
+      "required": ["start_ms", "end_ms"],
+      "properties": {
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["media_fingerprint"],
+      "properties": {
+        "media_fingerprint": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "kind"],
+      "properties": {
+        "resource_id": { "$ref": "#/$defs/sha256" },
+        "kind": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created_at_ms", "tool"],
+      "properties": {
+        "created_at_ms": { "type": "integer", "minimum": 0 },
+        "tool": { "$ref": "#/$defs/versionedProducer" },
+        "provider": { "$ref": "#/$defs/versionedProducer" },
+        "model": { "$ref": "#/$defs/versionedProducer" },
+        "config_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "versionedProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review_status"],
+      "properties": {
+        "review_status": {
+          "enum": ["unreviewed", "machine_checked", "human_reviewed"]
+        },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "tokenRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sentence_id", "token_index"],
+      "properties": {
+        "sentence_id": { "type": "string", "minLength": 1 },
+        "token_index": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "subtitleToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "kind", "text", "normalized", "start_char", "end_char"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "kind": { "enum": ["word", "whitespace", "punctuation", "other"] },
+        "text": { "type": "string" },
+        "normalized": { "type": ["string", "null"] },
+        "start_char": { "type": "integer", "minimum": 0 },
+        "end_char": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "subtitleSentence": {
+      "allOf": [
+        { "$ref": "#/$defs/timeRange" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id", "index", "start_ms", "end_ms", "original_text",
+            "display_text", "tokens"
+          ],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "index": { "type": "integer", "minimum": 0 },
+            "start_ms": { "type": "integer", "minimum": 0 },
+            "end_ms": { "type": "integer", "minimum": 1 },
+            "original_text": { "type": "string" },
+            "display_text": { "type": "string" },
+            "tokens": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/subtitleToken" }
+            }
+          }
+        }
+      ]
+    },
+    "subtitleTextTrackPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "source_kind", "sentences"],
+      "properties": {
+        "language": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+        },
+        "source_kind": {
+          "enum": ["asr", "embedded_subtitle", "sidecar_subtitle", "manual", "unknown"]
+        },
+        "sentences": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/subtitleSentence" }
+        }
+      }
+    },
+    "wordTiming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sentence_id", "token_index", "start_ms", "end_ms", "timing_source"],
+      "properties": {
+        "sentence_id": { "type": "string", "minLength": 1 },
+        "token_index": { "type": "integer", "minimum": 0 },
+        "start_ms": { "type": "integer", "minimum": 0 },
+        "end_ms": { "type": "integer", "minimum": 1 },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "timing_source": {
+          "enum": ["asr_reported", "asr_aligned", "forced_aligned", "estimated", "user_adjusted"]
+        }
+      }
+    },
+    "wordTimelinePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["words"],
+      "properties": {
+        "words": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/wordTiming" }
+        }
+      }
+    },
+    "phone": {
+      "allOf": [
+        { "$ref": "#/$defs/timeRange" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["symbol", "start_ms", "end_ms", "word_ref"],
+          "properties": {
+            "symbol": { "type": "string", "minLength": 1 },
+            "display_ipa": { "type": "string", "minLength": 1 },
+            "start_ms": { "type": "integer", "minimum": 0 },
+            "end_ms": { "type": "integer", "minimum": 1 },
+            "confidence": { "$ref": "#/$defs/confidence" },
+            "word_ref": {
+              "oneOf": [
+                { "$ref": "#/$defs/tokenRef" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "phoneTimelinePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phone_set", "precision", "phones"],
+      "properties": {
+        "phone_set": { "type": "string", "minLength": 1 },
+        "precision": { "enum": ["detected", "aligned", "approximate"] },
+        "phones": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/phone" }
+        }
+      }
+    },
+    "senseGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sentence_id", "group_index", "start_token_index",
+        "end_token_index_exclusive", "confidence", "sources"
+      ],
+      "properties": {
+        "sentence_id": { "type": "string", "minLength": 1 },
+        "group_index": { "type": "integer", "minimum": 0 },
+        "start_token_index": { "type": "integer", "minimum": 0 },
+        "end_token_index_exclusive": { "type": "integer", "minimum": 1 },
+        "label": { "type": ["string", "null"] },
+        "head_token_index": { "type": ["integer", "null"], "minimum": 0 },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "dependency_parse", "phrase_structure", "language_model",
+              "punctuation", "length_limit", "rule", "user"
+            ]
+          }
+        }
+      }
+    },
+    "senseGroupAnalysisPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["groups"],
+      "properties": {
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/senseGroup" }
+        }
+      }
+    },
+    "wordAcousticMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["word_ref", "energy", "pitch", "duration", "voiced_frame_ratio"],
+      "properties": {
+        "word_ref": { "$ref": "#/$defs/tokenRef" },
+        "energy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rms_dbfs", "local_baseline_dbfs", "delta_db", "prominence"],
+          "properties": {
+            "rms_dbfs": { "type": ["number", "null"] },
+            "local_baseline_dbfs": { "type": ["number", "null"] },
+            "delta_db": { "type": ["number", "null"] },
+            "prominence": {
+              "oneOf": [{ "$ref": "#/$defs/confidence" }, { "type": "null" }]
+            }
+          }
+        },
+        "pitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "median_f0_hz", "local_baseline_f0_hz", "delta_semitones",
+            "range_semitones", "prominence", "reset_after"
+          ],
+          "properties": {
+            "median_f0_hz": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+            "local_baseline_f0_hz": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+            "delta_semitones": { "type": ["number", "null"] },
+            "range_semitones": { "type": ["number", "null"], "minimum": 0 },
+            "prominence": {
+              "oneOf": [{ "$ref": "#/$defs/confidence" }, { "type": "null" }]
+            },
+            "reset_after": {
+              "oneOf": [{ "$ref": "#/$defs/confidence" }, { "type": "null" }]
+            }
+          }
+        },
+        "duration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["duration_ms", "local_ratio"],
+          "properties": {
+            "duration_ms": { "type": "integer", "minimum": 1 },
+            "local_ratio": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+          }
+        },
+        "voiced_frame_ratio": {
+          "oneOf": [
+            { "$ref": "#/$defs/confidence" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "wordAcousticsPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_rate_hz", "energy_baseline", "pitch_baseline", "measurements"],
+      "properties": {
+        "sample_rate_hz": { "type": "integer", "minimum": 1 },
+        "energy_baseline": { "const": "sentence_median_dbfs" },
+        "pitch_baseline": { "const": "sentence_median_f0_hz" },
+        "measurements": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/wordAcousticMeasurement" }
+        }
+      }
+    },
+    "prosodyAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "word_ref", "lexical_stress", "realized_prominence",
+        "utterance_role", "evidence", "confidence"
+      ],
+      "properties": {
+        "word_ref": { "$ref": "#/$defs/tokenRef" },
+        "syllable_index": { "type": ["integer", "null"], "minimum": 0 },
+        "lexical_stress": { "enum": ["primary", "secondary", "unstressed", "unknown"] },
+        "realized_prominence": { "$ref": "#/$defs/confidence" },
+        "utterance_role": { "enum": ["nucleus", "prenuclear", "postnuclear", "unmarked", "unknown"] },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["energy", "pitch", "duration", "lexical_stress", "context"] }
+        },
+        "confidence": { "$ref": "#/$defs/confidence" }
+      }
+    },
+    "prosodyAnalysisPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["anchors"],
+      "properties": {
+        "anchors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/prosodyAnchor" }
+        }
+      }
+    },
+    "subtitleTextTrackResource": {
+      "$ref": "#/$defs/resourceEnvelope",
+      "unevaluatedProperties": false,
+      "properties": {
+        "schema": { "const": "listen.resource.subtitle-text-track.v1" },
+        "kind": { "const": "subtitle_text_track" },
+        "dependencies": { "type": "array", "maxItems": 0 },
+        "payload": { "$ref": "#/$defs/subtitleTextTrackPayload" }
+      }
+    },
+    "wordTimelineResource": {
+      "$ref": "#/$defs/resourceEnvelope",
+      "unevaluatedProperties": false,
+      "properties": {
+        "schema": { "const": "listen.resource.word-timeline.v1" },
+        "kind": { "const": "word_timeline" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/dependency" },
+              { "properties": { "kind": { "const": "subtitle_text_track" } } }
+            ]
+          }
+        },
+        "payload": { "$ref": "#/$defs/wordTimelinePayload" }
+      }
+    },
+    "phoneTimelineResource": {
+      "$ref": "#/$defs/resourceEnvelope",
+      "unevaluatedProperties": false,
+      "properties": {
+        "schema": { "const": "listen.resource.phone-timeline.v1" },
+        "kind": { "const": "phone_timeline" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/dependency" },
+              { "properties": { "kind": { "const": "word_timeline" } } }
+            ]
+          }
+        },
+        "payload": { "$ref": "#/$defs/phoneTimelinePayload" }
+      }
+    },
+    "senseGroupAnalysisResource": {
+      "$ref": "#/$defs/resourceEnvelope",
+      "unevaluatedProperties": false,
+      "properties": {
+        "schema": { "const": "listen.resource.sense-group-analysis.v1" },
+        "kind": { "const": "sense_group_analysis" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/dependency" },
+              { "properties": { "kind": { "const": "subtitle_text_track" } } }
+            ]
+          }
+        },
+        "payload": { "$ref": "#/$defs/senseGroupAnalysisPayload" }
+      }
+    },
+    "wordAcousticsResource": {
+      "$ref": "#/$defs/resourceEnvelope",
+      "unevaluatedProperties": false,
+      "properties": {
+        "schema": { "const": "listen.resource.word-acoustics.v1" },
+        "kind": { "const": "word_acoustics" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/dependency" },
+              { "properties": { "kind": { "const": "word_timeline" } } }
+            ]
+          }
+        },
+        "payload": { "$ref": "#/$defs/wordAcousticsPayload" }
+      }
+    },
+    "prosodyAnalysisResource": {
+      "$ref": "#/$defs/resourceEnvelope",
+      "unevaluatedProperties": false,
+      "properties": {
+        "schema": { "const": "listen.resource.prosody-analysis.v1" },
+        "kind": { "const": "prosody_analysis" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/dependency" },
+              {
+                "properties": {
+                  "kind": {
+                    "enum": ["word_timeline", "word_acoustics", "sense_group_analysis"]
+                  }
+                }
+              }
+            ]
+          },
+          "allOf": [
+            {
+              "contains": { "properties": { "kind": { "const": "word_timeline" } } },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": { "properties": { "kind": { "const": "word_acoustics" } } },
+              "minContains": 1,
+              "maxContains": 1
+            },
+            {
+              "contains": { "properties": { "kind": { "const": "sense_group_analysis" } } },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ]
+        },
+        "payload": { "$ref": "#/$defs/prosodyAnalysisPayload" }
+      }
+    },
+    "resourceEnvelope": {
+      "type": "object",
+      "required": ["schema", "kind", "subject", "dependencies", "provenance", "quality", "payload"],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "subject": { "$ref": "#/$defs/subject" },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/dependency" }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "quality": { "$ref": "#/$defs/quality" },
+        "payload": { "type": "object" }
+      }
+    }
+  }
+}

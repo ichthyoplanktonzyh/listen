@@ -1,0 +1,32 @@
+{
+  "schema": "listen.resource.word-acoustics.v1",
+  "kind": "word_acoustics",
+  "subject": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependencies": [
+    { "resource_id": "sha256:b9223d3d5859d178ada70644363aa6f48b1330e3d21b02b8119721f385bed432", "kind": "word_timeline" }
+  ],
+  "provenance": {
+    "created_at_ms": 1785542404000,
+    "tool": { "id": "listen-gen", "version": "0.1.0" },
+    "provider": { "id": "example-acoustics", "version": "1" },
+    "model": { "id": "example-prosody-features", "version": "2026-08" },
+    "config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "quality": { "review_status": "machine_checked", "confidence": 0.88, "warnings": [] },
+  "payload": {
+    "sample_rate_hz": 16000,
+    "energy_baseline": "sentence_median_dbfs",
+    "pitch_baseline": "sentence_median_f0_hz",
+    "measurements": [
+      {
+        "word_ref": { "sentence_id": "sentence-000000", "token_index": 0 },
+        "energy": { "rms_dbfs": -18.4, "local_baseline_dbfs": -23.7, "delta_db": 5.3, "prominence": 0.88 },
+        "pitch": { "median_f0_hz": 186.2, "local_baseline_f0_hz": 151.4, "delta_semitones": 3.58, "range_semitones": 4.2, "prominence": 0.6, "reset_after": 0.72 },
+        "duration": { "duration_ms": 260, "local_ratio": 1.31 },
+        "voiced_frame_ratio": null
+      }
+    ]
+  }
+}

@@ -3,6 +3,7 @@
 | Path | Current responsibility |
 |---|---|
 | `crates/domain` | stable domain records and invariants |
+| `crates/content-package` | bounded inspection and typed decoding for `.listenpkg` exchange packages |
 | `crates/application` | use cases, repositories, provider-neutral ports |
 | `crates/api-http` | loopback composition, routes, handshake, health |
 | `crates/api-events` | event envelopes |
@@ -15,6 +16,7 @@
 | `crates/local-runtime` | local capability/runtime lifecycle |
 | `crates/writing-feedback` | writing feedback behavior |
 | `contracts` | canonical HTTP/event/player/resource schemas |
+| `contracts/content-package/v1` | canonical `.listenpkg` v1 manifest, typed content-resource schemas, and complete example package tree |
 | `scripts/timeline-production` | production pipeline |
 | `scripts/forced-align` | alignment research tooling |
 | `scripts/syntactic-analysis` | syntax capability tooling |
@@ -57,6 +59,9 @@ Notable runtime seams:
 - `LLTimelineImportRepository` is the import-only atomic boundary for a
   validated LLTimeline snapshot; resource families keep their independent
   lifecycle repositories after import.
+- `application::prepare_content_package_document` converts a verified package
+  into candidate-only LLTimeline projections and an explicit per-resource
+  receipt. It performs no persistence and never selects an active analysis.
 
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.

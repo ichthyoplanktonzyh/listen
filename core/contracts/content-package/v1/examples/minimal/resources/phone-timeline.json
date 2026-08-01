@@ -1,0 +1,32 @@
+{
+  "schema": "listen.resource.phone-timeline.v1",
+  "kind": "phone_timeline",
+  "subject": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependencies": [
+    { "resource_id": "sha256:b9223d3d5859d178ada70644363aa6f48b1330e3d21b02b8119721f385bed432", "kind": "word_timeline" }
+  ],
+  "provenance": {
+    "created_at_ms": 1785542402000,
+    "tool": { "id": "listen-gen", "version": "0.1.0" },
+    "provider": { "id": "example-phone-aligner", "version": "1" },
+    "model": { "id": "example-phone-model", "version": "2026-08" },
+    "config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "quality": { "review_status": "unreviewed", "confidence": 0.89, "warnings": [] },
+  "payload": {
+    "phone_set": "ipa",
+    "precision": "aligned",
+    "phones": [
+      {
+        "symbol": "h",
+        "display_ipa": "h",
+        "start_ms": 1040,
+        "end_ms": 1110,
+        "confidence": 0.92,
+        "word_ref": { "sentence_id": "sentence-000000", "token_index": 0 }
+      }
+    ]
+  }
+}

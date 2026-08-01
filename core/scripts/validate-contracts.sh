@@ -6,6 +6,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 python3 -m unittest "$root/scripts/test_release_artifacts.py"
+cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked
 python3 "$root/scripts/openapi_contract.py" check
 if command -v openapi-generator >/dev/null 2>&1; then
   openapi-generator validate -i "$root/contracts/openapi/v1.yaml"

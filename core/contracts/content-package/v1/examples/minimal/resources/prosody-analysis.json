@@ -1,0 +1,33 @@
+{
+  "schema": "listen.resource.prosody-analysis.v1",
+  "kind": "prosody_analysis",
+  "subject": {
+    "media_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "dependencies": [
+    { "resource_id": "sha256:b9223d3d5859d178ada70644363aa6f48b1330e3d21b02b8119721f385bed432", "kind": "word_timeline" },
+    { "resource_id": "sha256:37e9c54224215990d57177605310e44c3a74fa88153e2bf255347622f43fec04", "kind": "word_acoustics" },
+    { "resource_id": "sha256:5825748c776a8179d57c1989b4984fe3fc6c2161cbb0312c9819e449c5623790", "kind": "sense_group_analysis" }
+  ],
+  "provenance": {
+    "created_at_ms": 1785542405000,
+    "tool": { "id": "listen-gen", "version": "0.1.0" },
+    "provider": { "id": "example-prosody-analysis", "version": "1" },
+    "model": { "id": "example-prosody-model", "version": "2026-08" },
+    "config_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "quality": { "review_status": "unreviewed", "confidence": 0.89, "warnings": [] },
+  "payload": {
+    "anchors": [
+      {
+        "word_ref": { "sentence_id": "sentence-000000", "token_index": 0 },
+        "syllable_index": 0,
+        "lexical_stress": "primary",
+        "realized_prominence": 0.86,
+        "utterance_role": "nucleus",
+        "evidence": ["energy", "pitch", "duration", "lexical_stress"],
+        "confidence": 0.89
+      }
+    ]
+  }
+}
