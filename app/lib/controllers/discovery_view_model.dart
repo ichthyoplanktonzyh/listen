@@ -5,16 +5,16 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/discovery_repository.dart';
 import '../data/repositories/media_import_repository.dart';
 import '../data/repositories/media_library_repository.dart';
-import '../data/repositories/transcription_repository.dart';
+import '../data/repositories/content_package_repository.dart';
+import '../models/content_package.dart';
+import '../services/listen_gen_process_service.dart';
 import '../models/discovery.dart';
 import '../models/media_download.dart';
 import '../models/media_resolution.dart';
 import '../models/types.dart';
 import '../models/api_failure.dart';
 import '../models/embedded_subtitle.dart';
-import '../models/runtime_resources.dart';
 import '../models/saved_vocabulary_count.dart';
-import '../models/timeline.dart';
 
 /// Immutable snapshot of the discovery home.
 @immutable
@@ -29,14 +29,14 @@ class DiscoveryState {
     this.selectedEntryId,
     Map<String, double> downloads = const {},
     Map<String, PackageStatus> packageStatuses = const {},
-    Map<String, TranscriptionStatus> transcriptionStatuses = const {},
-    Map<String, double> transcriptionProgress = const {},
+    Map<String, ContentGenerationStatus> generationStatuses = const {},
+    Map<String, String?> generatorPhases = const {},
   }) : sources = List.unmodifiable(sources),
        entries = List.unmodifiable(entries),
        downloads = Map.unmodifiable(downloads),
        packageStatuses = Map.unmodifiable(packageStatuses),
-       transcriptionStatuses = Map.unmodifiable(transcriptionStatuses),
-       transcriptionProgress = Map.unmodifiable(transcriptionProgress);
+       generationStatuses = Map.unmodifiable(generationStatuses),
+       generatorPhases = Map.unmodifiable(generatorPhases);
 
   final bool loading;
   final bool resolvingUrl;
@@ -47,8 +47,8 @@ class DiscoveryState {
   final String? selectedEntryId;
   final Map<String, double> downloads;
   final Map<String, PackageStatus> packageStatuses;
-  final Map<String, TranscriptionStatus> transcriptionStatuses;
-  final Map<String, double> transcriptionProgress;
+  final Map<String, ContentGenerationStatus> generationStatuses;
+  final Map<String, String?> generatorPhases;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -83,11 +83,10 @@ class DiscoveryState {
   PackageStatus packageStatusOf(String entryId) =>
       packageStatuses[entryId] ?? PackageStatus.unknown;
 
-  TranscriptionStatus transcriptionStatusOf(String entryId) =>
-      transcriptionStatuses[entryId] ?? TranscriptionStatus.idle;
+  ContentGenerationStatus generationStatusOf(String entryId) =>
+      generationStatuses[entryId] ?? ContentGenerationStatus.idle;
 
-  double transcriptionProgressOf(String entryId) =>
-      transcriptionProgress[entryId] ?? 0;
+  String? generatorPhaseOf(String entryId) => generatorPhases[entryId];
 
   DiscoveryState copyWith({
     bool? loading,
@@ -99,8 +98,8 @@ class DiscoveryState {
     String? selectedEntryId,
     Map<String, double>? downloads,
     Map<String, PackageStatus>? packageStatuses,
-    Map<String, TranscriptionStatus>? transcriptionStatuses,
-    Map<String, double>? transcriptionProgress,
+    Map<String, ContentGenerationStatus>? generationStatuses,
+    Map<String, String?>? generatorPhases,
   }) => DiscoveryState(
     loading: loading ?? this.loading,
     resolvingUrl: resolvingUrl ?? this.resolvingUrl,
@@ -111,8 +110,8 @@ class DiscoveryState {
     selectedEntryId: selectedEntryId ?? this.selectedEntryId,
     downloads: downloads ?? this.downloads,
     packageStatuses: packageStatuses ?? this.packageStatuses,
-    transcriptionStatuses: transcriptionStatuses ?? this.transcriptionStatuses,
-    transcriptionProgress: transcriptionProgress ?? this.transcriptionProgress,
+    generationStatuses: generationStatuses ?? this.generationStatuses,
+    generatorPhases: generatorPhases ?? this.generatorPhases,
   );
 }
 
@@ -121,18 +120,18 @@ final class DiscoveryViewModel extends ChangeNotifier {
   DiscoveryViewModel(
     this._repository, [
     MediaImportRepository? importRepository,
-    TranscriptionRepository? transcriptionRepository,
+    ContentPackageRepository? contentPackageRepository,
     MediaLibraryRepository? mediaLibraryRepository,
   ]) : _importRepository =
            importRepository ?? const _FakeMediaImportRepository(),
-       _transcriptionRepository =
-           transcriptionRepository ?? const _FakeTranscriptionRepository(),
+       _contentPackageRepository =
+           contentPackageRepository ?? const _FakeContentPackageRepository(),
        _mediaLibraryRepository =
            mediaLibraryRepository ?? const _FakeMediaLibraryRepository();
 
   final DiscoveryRepository _repository;
   final MediaImportRepository _importRepository;
-  final TranscriptionRepository _transcriptionRepository;
+  final ContentPackageRepository _contentPackageRepository;
   final MediaLibraryRepository _mediaLibraryRepository;
 
   static const customSource = MediaSource(
@@ -150,16 +149,13 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
   final Map<String, String> _localPaths = {};
   final Map<String, String> _mediaIds = {};
+  final Map<String, int?> _mediaDurations = {};
   final Map<String, StreamSubscription<double>> _downloadSubscriptions = {};
   final Map<String, MediaDownloadHandle> _activeDownloads = {};
   final List<MediaEntry> _customEntries = [];
-
-  /// Transcription entry ids we started and are still waiting on. Polling
-  /// keeps running while this set is non-empty, so a job that the core has
-  /// not listed yet cannot be dropped by an idle poll.
-  final Set<String> _pendingTranscriptions = {};
-
-  Timer? _transcriptionPollTimer;
+  final Map<String, ListenGenProcessRun> _generationRuns = {};
+  final Map<String, StreamSubscription<ListenGenMachineEvent>>
+  _generationSubscriptions = {};
   String? _downloadDirectory;
   bool _disposed = false;
 
@@ -329,6 +325,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
             final media = await _mediaLibraryRepository.registerMedia(path);
             _localPaths[entryId] = path;
             _mediaIds[entryId] = media.id;
+            _mediaDurations[entryId] = media.durationMs;
 
             final finished = Map<String, double>.of(_state.downloads)
               ..[entryId] = 1.0;
@@ -362,150 +359,125 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
   String? localPathFor(String entryId) => _localPaths[entryId];
 
-  Future<void> startTranscription(String entryId) async {
+  /// Generates a local learning package with listen-gen for a downloaded
+  /// entry and imports the result into Core. Replaces the Core-side
+  /// transcription job path.
+  Future<void> startGeneration(String entryId) async {
     final mediaId = _mediaIds[entryId];
-    if (mediaId == null) return;
+    final mediaPath = _localPaths[entryId];
+    final entry = _state.entryById(entryId);
+    if (mediaId == null || mediaPath == null || entry == null) return;
 
-    final currentStatus = _state.transcriptionStatusOf(entryId);
-    if (currentStatus == TranscriptionStatus.transcribing ||
-        currentStatus == TranscriptionStatus.completed) {
+    final current = _state.generationStatusOf(entryId);
+    if (current == ContentGenerationStatus.preparing ||
+        current == ContentGenerationStatus.generating ||
+        current == ContentGenerationStatus.importing ||
+        current == ContentGenerationStatus.completed) {
       return;
     }
 
-    try {
-      final models = await _transcriptionRepository.models();
-      final installed = models.where((m) => m.state == 'installed').toList();
-      final modelId = installed.isNotEmpty
-          ? installed.first.id
-          : 'whisper-base';
-
-      _pendingTranscriptions.add(entryId);
-
-      final statuses = Map<String, TranscriptionStatus>.of(
-        _state.transcriptionStatuses,
-      )..[entryId] = TranscriptionStatus.preparing;
-      _state = _state.copyWith(transcriptionStatuses: statuses);
-      notifyListeners();
-
-      await _transcriptionRepository.createJob(
-        mediaId: mediaId,
-        modelId: modelId,
-        secondary: false,
-        translate: false,
-        force: true,
-      );
-
-      final runningStatuses = Map<String, TranscriptionStatus>.of(
-        _state.transcriptionStatuses,
-      )..[entryId] = TranscriptionStatus.transcribing;
-      _state = _state.copyWith(transcriptionStatuses: runningStatuses);
-      notifyListeners();
-
-      _startTranscriptionPolling();
-    } catch (e) {
-      debugPrint('Error starting transcription: $e');
-      _pendingTranscriptions.remove(entryId);
-      final failedStatuses = Map<String, TranscriptionStatus>.of(
-        _state.transcriptionStatuses,
-      )..[entryId] = TranscriptionStatus.failed;
-      _state = _state.copyWith(transcriptionStatuses: failedStatuses);
-      notifyListeners();
-    }
-  }
-
-  void cancelTranscription(String entryId) {
-    final mediaId = _mediaIds[entryId];
-    if (mediaId == null) return;
-    _pendingTranscriptions.remove(entryId);
-
-    unawaited(() async {
-      try {
-        final jobs = await _transcriptionRepository.jobs();
-        final job = jobs.firstWhere((j) => j.mediaId == mediaId);
-        await _transcriptionRepository.cancelJob(job.id);
-      } catch (e) {
-        debugPrint('Error cancelling transcription job: $e');
-      }
-      final statuses = Map<String, TranscriptionStatus>.of(
-        _state.transcriptionStatuses,
-      )..[entryId] = TranscriptionStatus.idle;
-      _state = _state.copyWith(transcriptionStatuses: statuses);
-      notifyListeners();
-    }());
-  }
-
-  void _startTranscriptionPolling() {
-    if (_transcriptionPollTimer != null) return;
-    _transcriptionPollTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => unawaited(_pollJobs()),
+    final request = ContentPackageGenerationRequest(
+      mediaPath: mediaPath,
+      title: entry.title,
+      mediaKind: 'video',
+      durationMs: _mediaDurations[entryId] ?? entry.durationMs,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
     );
+
+    ListenGenProcessRun? run;
+    StreamSubscription<ListenGenMachineEvent>? events;
+    ApiFailure? eventFailure;
+    try {
+      run = await _contentPackageRepository.startGeneration(request);
+      _generationRuns[entryId] = run;
+      _setGenerationStatus(entryId, ContentGenerationStatus.preparing);
+
+      events = run.events.listen(
+        (event) {
+          switch (event.kind) {
+            case ListenGenEventKind.protocol:
+            case ListenGenEventKind.started:
+              _setGenerationStatus(entryId, ContentGenerationStatus.generating);
+            case ListenGenEventKind.phase:
+              _setGenerationPhase(entryId, event.phase);
+              _setGenerationStatus(entryId, ContentGenerationStatus.generating);
+            case ListenGenEventKind.completed:
+              // Package path resolution gates the import below.
+              break;
+            case ListenGenEventKind.failed:
+              eventFailure = ApiFailure(
+                raw: '',
+                code: event.code ?? 'generator_failed',
+                message: event.message,
+                retryable: true,
+              );
+            case ListenGenEventKind.cancelled:
+              _setGenerationStatus(entryId, ContentGenerationStatus.cancelled);
+          }
+        },
+        onError: (Object error) {
+          eventFailure = _contentPackageRepository.failureDetail(error);
+        },
+      );
+      _generationSubscriptions[entryId] = events;
+
+      final packagePath = await run.packagePath;
+      if (eventFailure != null) {
+        _setGenerationStatus(entryId, ContentGenerationStatus.failed);
+        return;
+      }
+
+      _setGenerationStatus(entryId, ContentGenerationStatus.importing);
+      await _contentPackageRepository.importPackage(
+        mediaId: mediaId,
+        packagePath: packagePath,
+      );
+      if (_disposed) return;
+
+      _setGenerationStatus(entryId, ContentGenerationStatus.completed);
+      final packages = Map<String, PackageStatus>.of(_state.packageStatuses)
+        ..[entryId] = PackageStatus.available;
+      _state = _state.copyWith(packageStatuses: packages);
+      notifyListeners();
+    } catch (error) {
+      debugPrint('Error generating learning package: $error');
+      if (!_disposed) {
+        _setGenerationStatus(
+          entryId,
+          error is ListenGenProcessFailure && error.code == 'cancelled'
+              ? ContentGenerationStatus.cancelled
+              : ContentGenerationStatus.failed,
+        );
+      }
+    } finally {
+      await events?.cancel();
+      _generationSubscriptions.remove(entryId);
+      if (identical(_generationRuns[entryId], run)) {
+        _generationRuns.remove(entryId);
+      }
+      await run?.cleanUp();
+    }
   }
 
-  Future<void> _pollJobs() async {
+  void cancelGeneration(String entryId) {
+    _generationRuns[entryId]?.cancel();
+  }
+
+  void _setGenerationStatus(String entryId, ContentGenerationStatus status) {
     if (_disposed) return;
-    try {
-      final jobs = await _transcriptionRepository.jobs();
-      var hasPending = false;
+    final statuses = Map<String, ContentGenerationStatus>.of(
+      _state.generationStatuses,
+    )..[entryId] = status;
+    _state = _state.copyWith(generationStatuses: statuses);
+    notifyListeners();
+  }
 
-      final updatedStatuses = Map<String, TranscriptionStatus>.of(
-        _state.transcriptionStatuses,
-      );
-      final updatedProgress = Map<String, double>.of(
-        _state.transcriptionProgress,
-      );
-      final updatedPackages = Map<String, PackageStatus>.of(
-        _state.packageStatuses,
-      );
-
-      for (final entryId in _pendingTranscriptions.toList()) {
-        final mediaId = _mediaIds[entryId];
-        if (mediaId == null) {
-          _pendingTranscriptions.remove(entryId);
-          continue;
-        }
-
-        final jobList = jobs.where((j) => j.mediaId == mediaId).toList();
-        if (jobList.isEmpty) {
-          // The core has not listed the job yet; keep polling instead of
-          // dropping the transcription silently.
-          hasPending = true;
-          continue;
-        }
-
-        // Find the latest job by ID/creation time
-        jobList.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
-        final job = jobList.first;
-
-        if (job.status == 'completed') {
-          updatedStatuses[entryId] = TranscriptionStatus.completed;
-          updatedProgress[entryId] = 1.0;
-          updatedPackages[entryId] = PackageStatus.available;
-          _pendingTranscriptions.remove(entryId);
-        } else if (job.status == 'failed' || job.status == 'cancelled') {
-          updatedStatuses[entryId] = TranscriptionStatus.failed;
-          _pendingTranscriptions.remove(entryId);
-        } else {
-          updatedStatuses[entryId] = TranscriptionStatus.transcribing;
-          updatedProgress[entryId] = job.phaseProgress / 100.0;
-          hasPending = true;
-        }
-      }
-
-      _state = _state.copyWith(
-        transcriptionStatuses: updatedStatuses,
-        transcriptionProgress: updatedProgress,
-        packageStatuses: updatedPackages,
-      );
-      notifyListeners();
-
-      if (!hasPending) {
-        _transcriptionPollTimer?.cancel();
-        _transcriptionPollTimer = null;
-      }
-    } catch (e) {
-      debugPrint('Error polling transcription jobs: $e');
-    }
+  void _setGenerationPhase(String entryId, String? phase) {
+    if (_disposed) return;
+    final phases = Map<String, String?>.of(_state.generatorPhases)
+      ..[entryId] = phase;
+    _state = _state.copyWith(generatorPhases: phases);
+    notifyListeners();
   }
 
   Future<void> importCustomUrl(String url) async {
@@ -573,8 +545,14 @@ final class DiscoveryViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _transcriptionPollTimer?.cancel();
-    _pendingTranscriptions.clear();
+    for (final sub in _generationSubscriptions.values) {
+      sub.cancel();
+    }
+    _generationSubscriptions.clear();
+    for (final run in _generationRuns.values) {
+      run.cancel();
+    }
+    _generationRuns.clear();
     for (final sub in _downloadSubscriptions.values) {
       sub.cancel();
     }
@@ -638,45 +616,26 @@ class _FakeMediaDownloadHandle implements MediaDownloadHandle {
   void cancel() {}
 }
 
-class _FakeTranscriptionRepository implements TranscriptionRepository {
-  const _FakeTranscriptionRepository();
+class _FakeContentPackageRepository implements ContentPackageRepository {
+  const _FakeContentPackageRepository();
   @override
   ApiFailure failureDetail(Object error) =>
       ApiFailure(raw: error.toString(), message: error.toString());
   @override
-  Future<List<TranscriptionProviderView>> providers() async => [];
+  bool get coreAvailable => false;
   @override
-  Future<List<TranscriptionModelView>> models() async => [];
+  bool get generatorConfigured => false;
   @override
-  Future<List<TranscriptionJobView>> jobs() async => [];
+  Future<String?> pickPackage() async => null;
   @override
-  Future<void> createJob({
+  Future<ContentPackageImportReceipt> importPackage({
     required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    required bool force,
-  }) async {}
+    required String packagePath,
+  }) async => throw StateError('No fake import configured');
   @override
-  Future<void> registerCustomModel(String path) async {}
-  @override
-  Future<void> installModel(String id) async {}
-  @override
-  Future<void> cancelModelInstall(String id) async {}
-  @override
-  Future<void> deleteModel(String id) async {}
-  @override
-  Future<void> cancelJob(String id) async {}
-  @override
-  Future<void> retryJob(String id) async {}
-  @override
-  Future<SubtitleTrack> readSubtitle(String id) async =>
-      throw UnimplementedError();
-  @override
-  Future<String> exportSubtitleSrt(String id) async => '';
-  @override
-  Future<void> archiveJob(String id) async {}
+  Future<ListenGenProcessRun> startGeneration(
+    ContentPackageGenerationRequest request,
+  ) async => throw StateError('No fake generator configured');
 }
 
 class _FakeMediaLibraryRepository implements MediaLibraryRepository {

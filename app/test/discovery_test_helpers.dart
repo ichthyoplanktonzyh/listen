@@ -2,14 +2,15 @@ import 'dart:async';
 import 'package:llplayer_next/models/media_download.dart';
 import 'package:llplayer_next/models/media_resolution.dart';
 import 'package:llplayer_next/models/types.dart';
-import 'package:llplayer_next/models/runtime_resources.dart';
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
-import 'package:llplayer_next/data/repositories/transcription_repository.dart';
+import 'package:llplayer_next/data/repositories/content_package_repository.dart';
 import 'package:llplayer_next/data/repositories/media_library_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/content_package.dart';
 import 'package:llplayer_next/models/saved_vocabulary_count.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/embedded_subtitle.dart';
+import 'package:llplayer_next/services/listen_gen_process_service.dart';
 
 class TestMediaDownloadHandle implements MediaDownloadHandle {
   TestMediaDownloadHandle(String entryId, Completer<String?> completedCompleter)
@@ -96,113 +97,118 @@ class TestMediaImportRepository implements MediaImportRepository {
   ) async => '';
 }
 
-class TestTranscriptionRepository implements TranscriptionRepository {
-  final Map<String, TranscriptionJobView> _jobs = {};
+class TestContentPackageRun implements ListenGenProcessRun {
+  TestContentPackageRun();
+
+  final StreamController<ListenGenMachineEvent> _controller =
+      StreamController<ListenGenMachineEvent>.broadcast();
+  final Completer<String> _packagePath = Completer<String>();
+
+  bool get isComplete => _packagePath.isCompleted;
 
   @override
-  ApiFailure failureDetail(Object error) =>
-      ApiFailure(raw: error.toString(), message: error.toString());
+  Stream<ListenGenMachineEvent> get events => _controller.stream;
 
   @override
-  Future<List<TranscriptionProviderView>> providers() async => [];
+  Future<String> get packagePath => _packagePath.future;
 
-  @override
-  Future<List<TranscriptionModelView>> models() async {
-    return const [
-      TranscriptionModelView(
-        id: 'whisper-base',
-        displayName: 'Whisper Base',
-        revision: '1',
-        sizeBytes: 1000,
-        quality: 'medium',
-        englishOnly: false,
-        state: 'installed',
-        installedBytes: 1000,
-        license: 'MIT',
+  /// Emits the machine protocol lifecycle up to the first progress phase.
+  void emitRunning() {
+    _controller.add(
+      ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
+    );
+    _controller.add(
+      ListenGenMachineEvent(sequence: 1, kind: ListenGenEventKind.started),
+    );
+    _controller.add(
+      ListenGenMachineEvent(
+        sequence: 2,
+        kind: ListenGenEventKind.phase,
+        phase: 'transcribing',
       ),
-    ];
-  }
-
-  @override
-  Future<List<TranscriptionJobView>> jobs() async {
-    final updated = <String, TranscriptionJobView>{};
-    _jobs.forEach((key, job) {
-      if (job.status == 'completed') {
-        updated[key] = job;
-      } else {
-        final nextProgress = job.phaseProgress + 40;
-        if (nextProgress >= 100) {
-          updated[key] = TranscriptionJobView(
-            id: job.id,
-            mediaId: job.mediaId,
-            mediaTitle: job.mediaTitle,
-            modelId: job.modelId,
-            destination: job.destination,
-            status: 'completed',
-            phaseProgress: 100,
-            createdAtMs: job.createdAtMs,
-          );
-        } else {
-          updated[key] = TranscriptionJobView(
-            id: job.id,
-            mediaId: job.mediaId,
-            mediaTitle: job.mediaTitle,
-            modelId: job.modelId,
-            destination: job.destination,
-            status: 'transcribing',
-            phaseProgress: nextProgress,
-            createdAtMs: job.createdAtMs,
-          );
-        }
-      }
-    });
-    _jobs.addAll(updated);
-    return _jobs.values.toList();
-  }
-
-  @override
-  Future<void> createJob({
-    required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    required bool force,
-  }) async {
-    _jobs[mediaId] = TranscriptionJobView(
-      id: 'job-$mediaId',
-      mediaId: mediaId,
-      mediaTitle: 'Title',
-      modelId: modelId,
-      destination: 'dest',
-      status: 'transcribing',
-      phaseProgress: 25,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    _controller.add(
+      ListenGenMachineEvent(
+        sequence: 3,
+        kind: ListenGenEventKind.completed,
+        packageSha256: 'sha256:${'a' * 64}',
+        mediaFingerprint: 'sha256:${'b' * 64}',
+        resources: const [],
+        warnings: const [],
+      ),
     );
   }
 
-  @override
-  Future<void> registerCustomModel(String path) async {}
-  @override
-  Future<void> installModel(String id) async {}
-  @override
-  Future<void> cancelModelInstall(String id) async {}
-  @override
-  Future<void> deleteModel(String id) async {}
-  @override
-  Future<void> cancelJob(String id) async {
-    _jobs.removeWhere((_, job) => job.id == id);
+  /// Resolves the package path, the way a successful listen-gen run does.
+  void completeSuccessfully() {
+    _packagePath.complete('/tmp/generated.listenpkg');
+  }
+
+  /// Emits a failed terminal event and fails the package path.
+  void failWith(String code) {
+    _controller.add(
+      ListenGenMachineEvent(
+        sequence: 1,
+        kind: ListenGenEventKind.failed,
+        code: code,
+        message: 'generator failed',
+      ),
+    );
+    if (!_packagePath.isCompleted) {
+      _packagePath.completeError(ListenGenProcessFailure(code));
+    }
   }
 
   @override
-  Future<void> retryJob(String id) async {}
+  void cancel() {
+    _controller.add(
+      ListenGenMachineEvent(sequence: 4, kind: ListenGenEventKind.cancelled),
+    );
+    if (!_packagePath.isCompleted) {
+      _packagePath.completeError(const ListenGenProcessFailure('cancelled'));
+    }
+  }
+
   @override
-  Future<SubtitleTrack> readSubtitle(String id) async =>
-      throw UnimplementedError();
+  Future<void> cleanUp() async {}
+}
+
+class TestContentPackageRepository implements ContentPackageRepository {
+  final List<TestContentPackageRun> runs = [];
+  final List<ContentPackageGenerationRequest> requests = [];
+
   @override
-  Future<String> exportSubtitleSrt(String id) async => '';
+  bool get coreAvailable => true;
+
   @override
-  Future<void> archiveJob(String id) async {}
+  bool get generatorConfigured => true;
+
+  @override
+  ApiFailure failureDetail(Object error) => error is ListenGenProcessFailure
+      ? ApiFailure(raw: '', code: error.code, retryable: true)
+      : ApiFailure(raw: error.toString(), message: error.toString());
+
+  @override
+  Future<String?> pickPackage() async => null;
+
+  @override
+  Future<ContentPackageImportReceipt> importPackage({
+    required String mediaId,
+    required String packagePath,
+  }) async => ContentPackageImportReceipt(
+    manifestSha256: 'sha256:${'c' * 64}',
+    track: SubtitleTrack(id: 'track-$mediaId', cues: const []),
+  );
+
+  @override
+  Future<ListenGenProcessRun> startGeneration(
+    ContentPackageGenerationRequest request,
+  ) async {
+    requests.add(request);
+    final run = TestContentPackageRun();
+    runs.add(run);
+    return run;
+  }
 }
 
 class TestMediaLibraryRepository implements MediaLibraryRepository {

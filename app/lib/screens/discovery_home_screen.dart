@@ -84,10 +84,10 @@ class DiscoveryHome extends StatelessWidget {
                     packageStatus: state.packageStatusOf(
                       state.selectedEntry!.id,
                     ),
-                    transcriptionStatus: state.transcriptionStatusOf(
+                    generationStatus: state.generationStatusOf(
                       state.selectedEntry!.id,
                     ),
-                    transcriptionProgress: state.transcriptionProgressOf(
+                    generatorPhase: state.generatorPhaseOf(
                       state.selectedEntry!.id,
                     ),
                     onDownload: () =>
@@ -105,10 +105,10 @@ class DiscoveryHome extends StatelessWidget {
                       }
                     },
                     onViewPackage: () => _showPackageDialog(context),
-                    onTranscribe: () =>
-                        viewModel.startTranscription(state.selectedEntry!.id),
-                    onCancelTranscribe: () =>
-                        viewModel.cancelTranscription(state.selectedEntry!.id),
+                    onGenerate: () =>
+                        viewModel.startGeneration(state.selectedEntry!.id),
+                    onCancelGenerate: () =>
+                        viewModel.cancelGeneration(state.selectedEntry!.id),
                   ),
                 ),
             ];
@@ -192,10 +192,10 @@ class DiscoveryHome extends StatelessWidget {
                             currentEntry.id,
                           ),
                           packageStatus: state.packageStatusOf(currentEntry.id),
-                          transcriptionStatus: state.transcriptionStatusOf(
+                          generationStatus: state.generationStatusOf(
                             currentEntry.id,
                           ),
-                          transcriptionProgress: state.transcriptionProgressOf(
+                          generatorPhase: state.generatorPhaseOf(
                             currentEntry.id,
                           ),
                           onDownload: () =>
@@ -214,10 +214,10 @@ class DiscoveryHome extends StatelessWidget {
                             }
                           },
                           onViewPackage: () => _showPackageDialog(context),
-                          onTranscribe: () =>
-                              viewModel.startTranscription(currentEntry.id),
-                          onCancelTranscribe: () =>
-                              viewModel.cancelTranscription(currentEntry.id),
+                          onGenerate: () =>
+                              viewModel.startGeneration(currentEntry.id),
+                          onCancelGenerate: () =>
+                              viewModel.cancelGeneration(currentEntry.id),
                         ),
                       ),
                       Positioned(

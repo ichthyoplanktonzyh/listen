@@ -11,12 +11,15 @@ enum PackageStatus {
   notAvailable,
 }
 
-enum TranscriptionStatus {
+/// Lifecycle of local learning-package generation driven by listen-gen.
+enum ContentGenerationStatus {
   idle,
   preparing,
-  transcribing,
+  generating,
+  importing,
   completed,
   failed,
+  cancelled,
 }
 
 /// Cover artwork is a tone from the active color scheme.

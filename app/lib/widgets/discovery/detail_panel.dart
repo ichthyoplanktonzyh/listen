@@ -21,14 +21,14 @@ class DiscoveryDetailPanel extends StatelessWidget {
     required this.downloadState,
     required this.downloadProgress,
     required this.packageStatus,
-    required this.transcriptionStatus,
-    required this.transcriptionProgress,
+    required this.generationStatus,
+    required this.generatorPhase,
     required this.onDownload,
     required this.onCancelDownload,
     required this.onOpenPlayer,
     required this.onViewPackage,
-    required this.onTranscribe,
-    required this.onCancelTranscribe,
+    required this.onGenerate,
+    required this.onCancelGenerate,
   });
 
   final MediaEntry entry;
@@ -36,14 +36,14 @@ class DiscoveryDetailPanel extends StatelessWidget {
   final DownloadState downloadState;
   final double downloadProgress;
   final PackageStatus packageStatus;
-  final TranscriptionStatus transcriptionStatus;
-  final double transcriptionProgress;
+  final ContentGenerationStatus generationStatus;
+  final String? generatorPhase;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
   final VoidCallback onOpenPlayer;
   final VoidCallback onViewPackage;
-  final VoidCallback onTranscribe;
-  final VoidCallback onCancelTranscribe;
+  final VoidCallback onGenerate;
+  final VoidCallback onCancelGenerate;
 
   @override
   Widget build(BuildContext context) {
@@ -97,12 +97,12 @@ class DiscoveryDetailPanel extends StatelessWidget {
             downloadState: downloadState,
             downloadProgress: downloadProgress,
             packageStatus: packageStatus,
-            transcriptionStatus: transcriptionStatus,
-            transcriptionProgress: transcriptionProgress,
+            generationStatus: generationStatus,
+            generatorPhase: generatorPhase,
             onDownload: onDownload,
             onCancelDownload: onCancelDownload,
-            onTranscribe: onTranscribe,
-            onCancelTranscribe: onCancelTranscribe,
+            onGenerate: onGenerate,
+            onCancelGenerate: onCancelGenerate,
             onOpenPlayer: onOpenPlayer,
           ),
           const SizedBox(height: ListenSpacing.gap16),
@@ -260,24 +260,24 @@ class _UserJourneyActionsCard extends StatelessWidget {
     required this.downloadState,
     required this.downloadProgress,
     required this.packageStatus,
-    required this.transcriptionStatus,
-    required this.transcriptionProgress,
+    required this.generationStatus,
+    required this.generatorPhase,
     required this.onDownload,
     required this.onCancelDownload,
-    required this.onTranscribe,
-    required this.onCancelTranscribe,
+    required this.onGenerate,
+    required this.onCancelGenerate,
     required this.onOpenPlayer,
   });
 
   final DownloadState downloadState;
   final double downloadProgress;
   final PackageStatus packageStatus;
-  final TranscriptionStatus transcriptionStatus;
-  final double transcriptionProgress;
+  final ContentGenerationStatus generationStatus;
+  final String? generatorPhase;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
-  final VoidCallback onTranscribe;
-  final VoidCallback onCancelTranscribe;
+  final VoidCallback onGenerate;
+  final VoidCallback onCancelGenerate;
   final VoidCallback onOpenPlayer;
 
   @override
@@ -290,8 +290,10 @@ class _UserJourneyActionsCard extends StatelessWidget {
 
     final isPackageAvailable = packageStatus == PackageStatus.available;
     final isCheckingPackage = packageStatus == PackageStatus.checking;
-    final isTranscribing =
-        transcriptionStatus == TranscriptionStatus.transcribing;
+    final isGenerating =
+        generationStatus == ContentGenerationStatus.preparing ||
+        generationStatus == ContentGenerationStatus.generating ||
+        generationStatus == ContentGenerationStatus.importing;
 
     // Both downloaded AND package available means ready to study!
     final isReadyToLearn = isDownloaded && isPackageAvailable;
@@ -378,7 +380,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
           const Divider(height: ListenSpacing.gap24),
 
           // ── STEP 2: Content Package ──
-          if (isTranscribing) ...[
+          if (isGenerating) ...[
             Row(
               children: [
                 const ListenLoading.inline(size: 16),
@@ -386,10 +388,10 @@ class _UserJourneyActionsCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     l
-                        .text('discoveryTranscribing')
+                        .text('discoveryGenerating')
                         .replaceFirst(
-                          '{percent}',
-                          '${(transcriptionProgress * 100).round()}%',
+                          '{phase}',
+                          _generatorPhaseLabel(l, generatorPhase),
                         ),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -399,10 +401,8 @@ class _UserJourneyActionsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: ListenSpacing.gap6),
-            LinearProgressIndicator(value: transcriptionProgress),
-            const SizedBox(height: ListenSpacing.gap8),
             OutlinedButton.icon(
-              onPressed: onCancelTranscribe,
+              onPressed: onCancelGenerate,
               icon: const Icon(Icons.close, size: ListenIconSize.inline),
               label: Text(l.text('discoveryCancel')),
               style: OutlinedButton.styleFrom(
@@ -466,9 +466,9 @@ class _UserJourneyActionsCard extends StatelessWidget {
 
             // Transcription button - disabled unless media is downloaded!
             FilledButton.icon(
-              onPressed: isDownloaded ? onTranscribe : null,
-              icon: const Icon(Icons.psychology, size: ListenIconSize.control),
-              label: Text(l.text('discoveryTranscribe')),
+              onPressed: isDownloaded ? onGenerate : null,
+              icon: const Icon(Icons.auto_awesome, size: ListenIconSize.control),
+              label: Text(l.text('discoveryGenerate')),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, 36),
                 backgroundColor: scheme.secondary,
@@ -478,7 +478,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
             if (!isDownloaded) ...[
               const SizedBox(height: ListenSpacing.gap4),
               Text(
-                'Please download media first to unlock transcription.',
+                'Please download media first to generate a learning package.',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
                   fontStyle: FontStyle.italic,
@@ -539,17 +539,27 @@ Widget discoveryDetailPanelPreview() => discoveryPreviewShell(
     downloadState: DownloadState.downloading,
     downloadProgress: 0.4,
     packageStatus: PackageStatus.notAvailable,
-    transcriptionStatus: TranscriptionStatus.idle,
-    transcriptionProgress: 0.0,
+    generationStatus: ContentGenerationStatus.idle,
+    generatorPhase: null,
     onDownload: _noop,
     onCancelDownload: _noop,
     onOpenPlayer: _noop,
     onViewPackage: _noop,
-    onTranscribe: _noop,
-    onCancelTranscribe: _noop,
+    onGenerate: _noop,
+    onCancelGenerate: _noop,
   ),
   width: 380,
   height: 720,
 );
 
 void _noop() {}
+
+String _generatorPhaseLabel(AppLocalizations l, String? phase) =>
+    switch (phase) {
+      'validating' => l.text('contentPackagePhaseValidating'),
+      'probing_media' => l.text('contentPackagePhaseProbing'),
+      'normalizing_audio' => l.text('contentPackagePhaseNormalizing'),
+      'transcribing' => l.text('contentPackagePhaseTranscribing'),
+      'building_package' => l.text('contentPackagePhaseBuilding'),
+      _ => l.text('contentPackagePhaseWorking'),
+    };

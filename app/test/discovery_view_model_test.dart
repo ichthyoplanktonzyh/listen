@@ -7,19 +7,20 @@ import 'discovery_test_helpers.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  DiscoveryViewModel viewModel() {
+  (DiscoveryViewModel, TestContentPackageRepository) viewModel() {
+    final repo = TestContentPackageRepository();
     final vm = DiscoveryViewModel(
       FixtureDiscoveryRepository(),
       TestMediaImportRepository(),
-      TestTranscriptionRepository(),
+      repo,
       TestMediaLibraryRepository(),
     );
     addTearDown(vm.dispose);
-    return vm;
+    return (vm, repo);
   }
 
   test('load selects the first source and its first entry', () async {
-    final vm = viewModel();
+    final (vm, _) = viewModel();
     await vm.load();
 
     final state = vm.state;
@@ -32,7 +33,7 @@ void main() {
   });
 
   test('selectChannel swaps entries and clears the detail selection', () async {
-    final vm = viewModel();
+    final (vm, _) = viewModel();
     await vm.load();
 
     await vm.selectChannel('c-ted-ed');
@@ -45,7 +46,7 @@ void main() {
   });
 
   test('selectItem updates the highlighted entry', () async {
-    final vm = viewModel();
+    final (vm, _) = viewModel();
     await vm.load();
 
     vm.selectItem('i-bbc-3');
@@ -54,10 +55,11 @@ void main() {
   });
 
   test('an in-flight load completing after dispose stays silent', () async {
+    final repo = TestContentPackageRepository();
     final vm = DiscoveryViewModel(
       FixtureDiscoveryRepository(),
       TestMediaImportRepository(),
-      TestTranscriptionRepository(),
+      repo,
       TestMediaLibraryRepository(),
     );
     final load = vm.load();
@@ -66,7 +68,7 @@ void main() {
   });
 
   test('state snapshots never expose mutable collections', () async {
-    final vm = viewModel();
+    final (vm, _) = viewModel();
     await vm.load();
 
     expect(vm.state.sources.clear, throwsUnsupportedError);
@@ -75,7 +77,7 @@ void main() {
   });
 
   testWidgets('startDownload simulates progress until done', (tester) async {
-    final vm = viewModel();
+    final (vm, _) = viewModel();
     await tester.runAsync(() => vm.load());
 
     vm.startDownload('i-bbc-1');
@@ -95,7 +97,7 @@ void main() {
   testWidgets('cancelDownload stops the timer and clears progress', (
     tester,
   ) async {
-    final vm = viewModel();
+    final (vm, _) = viewModel();
     await tester.runAsync(() => vm.load());
 
     vm.startDownload('i-bbc-1');
@@ -110,9 +112,9 @@ void main() {
   });
 
   testWidgets(
-    'startTranscription simulates progress until completed and makes package available',
+    'startGeneration surfaces machine phases, imports, and marks the package available',
     (tester) async {
-      final vm = viewModel();
+      final (vm, repo) = viewModel();
       await tester.runAsync(() => vm.load());
 
       // Initially checks package
@@ -132,58 +134,93 @@ void main() {
       await tester.pumpAndSettle();
       expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
 
-      vm.startTranscription('i-bbc-2');
+      vm.startGeneration('i-bbc-2');
       await tester.pump();
       expect(
-        vm.state.transcriptionStatusOf('i-bbc-2'),
-        TranscriptionStatus.transcribing,
+        vm.state.generationStatusOf('i-bbc-2'),
+        ContentGenerationStatus.preparing,
       );
 
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pump();
-      expect(vm.state.transcriptionProgressOf('i-bbc-2'), greaterThan(0));
-      expect(vm.state.transcriptionProgressOf('i-bbc-2'), lessThan(1));
+      final run = repo.runs.single;
+      expect(repo.requests.single.mediaPath, contains('[i-bbc-2]'));
+      expect(repo.requests.single.mediaKind, 'video');
 
-      await tester.pump(const Duration(seconds: 2));
+      run.emitRunning();
       await tester.pump();
       expect(
-        vm.state.transcriptionStatusOf('i-bbc-2'),
-        TranscriptionStatus.completed,
+        vm.state.generationStatusOf('i-bbc-2'),
+        ContentGenerationStatus.generating,
+      );
+      expect(vm.state.generatorPhaseOf('i-bbc-2'), 'transcribing');
+
+      run.completeSuccessfully();
+      await tester.pump();
+      await tester.pump();
+      expect(
+        vm.state.generationStatusOf('i-bbc-2'),
+        ContentGenerationStatus.completed,
       );
       expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.available);
     },
   );
 
+  testWidgets('cancelGeneration cancels the generator run', (tester) async {
+    final (vm, repo) = viewModel();
+    await tester.runAsync(() => vm.load());
+
+    // Download first to register mediaId
+    await tester.runAsync(() async {
+      vm.selectItem('i-bbc-2');
+      await vm.startDownload('i-bbc-2');
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    });
+
+    await tester.pump();
+    vm.startGeneration('i-bbc-2');
+    await tester.pump();
+    expect(
+      vm.state.generationStatusOf('i-bbc-2'),
+      ContentGenerationStatus.preparing,
+    );
+
+    vm.cancelGeneration('i-bbc-2');
+    await tester.pump();
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    expect(
+      vm.state.generationStatusOf('i-bbc-2'),
+      ContentGenerationStatus.cancelled,
+    );
+    expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
+  });
+
   testWidgets(
-    'cancelTranscription stops the timer and resets transcription status',
+    'startGeneration marks failed when the generator fails',
     (tester) async {
-      final vm = viewModel();
+      final (vm, repo) = viewModel();
       await tester.runAsync(() => vm.load());
 
-      // Download first to register mediaId
       await tester.runAsync(() async {
         vm.selectItem('i-bbc-2');
         await vm.startDownload('i-bbc-2');
         await Future<void>.delayed(const Duration(milliseconds: 600));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
       });
 
+      vm.startGeneration('i-bbc-2');
       await tester.pump();
-      vm.startTranscription('i-bbc-2');
-      await tester.pump();
-
-      vm.cancelTranscription('i-bbc-2');
+      repo.runs.single.failWith('provider_failed');
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
       await tester.pump();
       expect(
-        vm.state.transcriptionStatusOf('i-bbc-2'),
-        TranscriptionStatus.idle,
+        vm.state.generationStatusOf('i-bbc-2'),
+        ContentGenerationStatus.failed,
       );
-      expect(vm.state.transcriptionProgressOf('i-bbc-2'), 0.0);
-
-      await tester.pump(const Duration(seconds: 2));
-      expect(
-        vm.state.transcriptionStatusOf('i-bbc-2'),
-        TranscriptionStatus.idle,
-      );
+      expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
     },
   );
 }

@@ -228,7 +228,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final DiscoveryViewModel discoveryViewModel = DiscoveryViewModel(
     LiveDiscoveryRepository(),
     mediaImportRepository,
-    coreRepositories.transcription,
+    coreRepositories.contentPackage,
     coreRepositories.mediaLibrary,
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);

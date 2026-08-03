@@ -21,7 +21,7 @@ void main() {
     final viewModel = DiscoveryViewModel(
       FixtureDiscoveryRepository(),
       TestMediaImportRepository(),
-      TestTranscriptionRepository(),
+      TestContentPackageRepository(),
       TestMediaLibraryRepository(),
     );
     addTearDown(viewModel.dispose);
