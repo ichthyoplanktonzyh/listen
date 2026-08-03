@@ -115,6 +115,15 @@ class MediaLibraryCoordinator {
     }
   }
 
+  /// Subset of [mediaLibrary] whose local media file still exists on disk.
+  List<MediaLibraryEntry>? get offlineLibrary {
+    final library = mediaLibrary;
+    if (library == null) return null;
+    return library
+        .where((entry) => fileService.exists(entry.media.path))
+        .toList(growable: false);
+  }
+
   /// Opens a library row like any other media — triage never changes what
   /// opening a file does.
   Future<void> openLibraryEntry(MediaLibraryEntry entry) async {

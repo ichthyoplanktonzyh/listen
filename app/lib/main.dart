@@ -59,7 +59,8 @@ import 'controllers/writing_task_controller.dart';
 import 'data/repositories/core_repositories.dart';
 import 'data/repositories/discovery_repository.dart';
 import 'screens/discovery_home_screen.dart';
-import 'theme/icon_size.dart';
+import 'widgets/navigation/app_sidebar.dart';
+import 'widgets/navigation/library_quick_panes.dart';
 import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
 import 'localization.dart';
@@ -224,7 +225,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? syntaxCapabilityTimer;
   final coreTransport = LocalCoreTransportService();
-  final discoveryMode = ValueNotifier<bool>(true);
+  final currentRoute = ValueNotifier<AppRoute>(AppRoute.discovery);
   late final DiscoveryViewModel discoveryViewModel = DiscoveryViewModel(
     LiveDiscoveryRepository(),
     mediaImportRepository,
@@ -753,6 +754,41 @@ class _PlayerScreenState extends State<PlayerScreen>
     _workbenchAnimController.reverse().then((_) {
       if (mounted) setState(() => _workbenchExpanded = false);
     });
+  }
+
+  /// Sidebar navigation: shell routes swap the main pane; learning feature
+  /// routes push their existing full-page flows on top of the shell.
+  Future<void> _handleSidebarRoute(AppRoute route) async {
+    switch (route) {
+      case AppRoute.discovery:
+      case AppRoute.resources:
+      case AppRoute.offline:
+      case AppRoute.history:
+        currentRoute.value = route;
+        return;
+      case AppRoute.vocabulary:
+        await _openVocabulary();
+        return;
+      case AppRoute.expression:
+        await _openPersonalExpression();
+        return;
+      case AppRoute.review:
+        await _openReviewQueue();
+        return;
+      case AppRoute.coach:
+        await _openCoachDashboard();
+        return;
+      case AppRoute.conversation:
+        await _openFreeConversation();
+        return;
+    }
+  }
+
+  /// Starts learning from a discovery entry: opens the media in the session
+  /// and expands the workbench (a global layer above the route shell).
+  Future<void> _startLearningFromDiscovery(String path) async {
+    await mediaSession.openMediaPath(path);
+    _expandWorkbench();
   }
 
   Future<void> _runSmokeIfConfigured() async {
@@ -1907,7 +1943,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     huntingSessionController.dispose();
     settingsController.dispose();
     immersiveMode.dispose();
-    discoveryMode.dispose();
+    currentRoute.dispose();
     discoveryViewModel.dispose();
     coreSessionController.dispose();
     super.dispose();
@@ -1926,24 +1962,35 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget build(BuildContext context) {
     final coreState = coreSessionController.state;
     if (!coreState.isConnected) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (coreState.isConnecting) const ListenLoading(),
-              const SizedBox(height: ListenSpacing.gap16),
-              Text(status, textAlign: TextAlign.center),
-              if (!coreState.isConnecting) ...[
-                const SizedBox(height: ListenSpacing.gap12),
-                FilledButton(
-                  onPressed: () => unawaited(coreSessionController.connect()),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ],
-          ),
-        ),
+      // The boot splash must keep rebuilding while the core session and the
+      // status text change; otherwise a slow connect leaves the old frame
+      // ("Starting local core...") on screen after the core is already up.
+      return ListenableBuilder(
+        listenable: Listenable.merge([coreSessionController, playerController]),
+        builder: (context, _) {
+          final state = coreSessionController.state;
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (state.isConnecting) const ListenLoading(),
+                  const SizedBox(height: ListenSpacing.gap16),
+                  Text(status, textAlign: TextAlign.center),
+                  if (!state.isConnecting) ...[
+                    const SizedBox(height: ListenSpacing.gap12),
+                    FilledButton(
+                      onPressed: () => unawaited(
+                        coreSessionController.connect(),
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
       );
     }
     return ListenableBuilder(
@@ -2103,25 +2150,31 @@ class _PlayerScreenState extends State<PlayerScreen>
                                 Expanded(
                                   child: Stack(
                                     children: [
-                                      ValueListenableBuilder<bool>(
-                                        valueListenable: discoveryMode,
-                                        builder: (context, showDiscovery, _) {
-                                          if (showDiscovery) {
-                                            return DiscoveryHome(
-                                              viewModel: discoveryViewModel,
-                                              onOpenMedia:
-                                                  mediaSession.openMedia,
-                                              onOpenSettings: () =>
-                                                  unawaited(_openSettings()),
-                                              onOpenClassicHome: () =>
-                                                  discoveryMode.value = false,
-                                              onPlayMedia:
-                                                  mediaSession.openMediaPath,
-                                            );
-                                          }
+                                      ValueListenableBuilder<AppRoute>(
+                                        valueListenable: currentRoute,
+                                        builder: (context, route, _) {
                                           return Stack(
                                             children: [
-                                              ListeningHome(
+                                              Row(
+                                                children: [
+                                                  AppSidebar(
+                                                    currentRoute: route,
+                                                    onRouteSelected: (route) => unawaited(_handleSidebarRoute(route)),
+                                                    onOpenSettings: () => unawaited(_openSettings()),
+                                                  ),
+                                                  Expanded(
+                                                    child: switch (route) {
+                                                      AppRoute.discovery => DiscoveryHome(
+                                                        viewModel: discoveryViewModel,
+                                                        onOpenMedia: mediaSession.openMedia,
+                                                        onOpenSettings: () => unawaited(_openSettings()),
+                                                        onOpenClassicHome: () =>
+                                                            currentRoute.value =
+                                                                AppRoute.resources,
+                                                        onPlayMedia:
+                                                            _startLearningFromDiscovery,
+                                                      ),
+                                                      AppRoute.resources => ListeningHome(
                                                 onOpenMedia:
                                                     mediaSession.openMedia,
                                                 onOpenOnline: _openOnline,
@@ -2255,7 +2308,52 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     ? ''
                                                     : playerController.status,
                                               ),
-                                              if (playerController.mediaPath !=
+                                                      AppRoute.offline =>
+                                                        OfflineDownloadsPane(
+                                                          entries:
+                                                              mediaLibraryActions
+                                                                  .offlineLibrary,
+                                                          onOpen: (MediaLibraryEntry entry) =>
+                                                              unawaited(
+                                                                mediaLibraryActions
+                                                                    .openLibraryEntry(
+                                                                      entry,
+                                                                    ),
+                                                              ),
+                                                          onReload: () =>
+                                                              unawaited(
+                                                                mediaLibraryActions
+                                                                    .loadMediaLibrary(),
+                                                              ),
+                                                        ),
+                                                      AppRoute.history =>
+                                                        HistoryPane(
+                                                          entries:
+                                                              mediaLibraryActions
+                                                                  .mediaLibrary,
+                                                          onOpen: (MediaLibraryEntry entry) =>
+                                                              unawaited(
+                                                                mediaLibraryActions
+                                                                    .openLibraryEntry(
+                                                                      entry,
+                                                                    ),
+                                                              ),
+                                                          onReload: () =>
+                                                              unawaited(
+                                                                mediaLibraryActions
+                                                                    .loadMediaLibrary(),
+                                                              ),
+                                                        ),
+                                                      // Learning feature
+                                                      // routes open full-page
+                                                      // flows, never reach
+                                                      // this switch.
+                                                      _ => SizedBox.shrink(),
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      if (playerController.mediaPath !=
                                                   null)
                                                 SlideTransition(
                                                   position:
@@ -2390,25 +2488,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         _collapseWorkbench,
                                                   ),
                                                 ),
-                                              Positioned(
-                                                right: 16,
-                                                bottom: 16,
-                                                child: ActionChip(
-                                                  avatar: const Icon(
-                                                    Icons.arrow_back,
-                                                    size:
-                                                        ListenIconSize.control,
-                                                  ),
-                                                  label: Text(
-                                                    l.text(
-                                                      'discoveryBackToResources',
-                                                    ),
-                                                  ),
-                                                  onPressed: () =>
-                                                      discoveryMode.value =
-                                                          true,
-                                                ),
-                                              ),
+                                                // Back button removed
                                             ],
                                           );
                                         },
