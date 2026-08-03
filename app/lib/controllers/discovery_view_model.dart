@@ -31,12 +31,14 @@ class DiscoveryState {
     Map<String, PackageStatus> packageStatuses = const {},
     Map<String, ContentGenerationStatus> generationStatuses = const {},
     Map<String, String?> generatorPhases = const {},
+    Map<String, ApiFailure?> generationFailures = const {},
   }) : sources = List.unmodifiable(sources),
        entries = List.unmodifiable(entries),
        downloads = Map.unmodifiable(downloads),
        packageStatuses = Map.unmodifiable(packageStatuses),
        generationStatuses = Map.unmodifiable(generationStatuses),
-       generatorPhases = Map.unmodifiable(generatorPhases);
+       generatorPhases = Map.unmodifiable(generatorPhases),
+       generationFailures = Map.unmodifiable(generationFailures);
 
   final bool loading;
   final bool resolvingUrl;
@@ -49,6 +51,7 @@ class DiscoveryState {
   final Map<String, PackageStatus> packageStatuses;
   final Map<String, ContentGenerationStatus> generationStatuses;
   final Map<String, String?> generatorPhases;
+  final Map<String, ApiFailure?> generationFailures;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -88,6 +91,9 @@ class DiscoveryState {
 
   String? generatorPhaseOf(String entryId) => generatorPhases[entryId];
 
+  ApiFailure? generationFailureOf(String entryId) =>
+      generationFailures[entryId];
+
   DiscoveryState copyWith({
     bool? loading,
     bool? resolvingUrl,
@@ -100,6 +106,7 @@ class DiscoveryState {
     Map<String, PackageStatus>? packageStatuses,
     Map<String, ContentGenerationStatus>? generationStatuses,
     Map<String, String?>? generatorPhases,
+    Map<String, ApiFailure?>? generationFailures,
   }) => DiscoveryState(
     loading: loading ?? this.loading,
     resolvingUrl: resolvingUrl ?? this.resolvingUrl,
@@ -112,6 +119,7 @@ class DiscoveryState {
     packageStatuses: packageStatuses ?? this.packageStatuses,
     generationStatuses: generationStatuses ?? this.generationStatuses,
     generatorPhases: generatorPhases ?? this.generatorPhases,
+    generationFailures: generationFailures ?? this.generationFailures,
   );
 }
 
@@ -323,10 +331,15 @@ final class DiscoveryViewModel extends ChangeNotifier {
           }
 
           try {
-            final media = await _mediaLibraryRepository.registerMedia(path);
+            final probedDurationMs = await _importRepository
+                .probeMediaDurationMs(path);
+            final media = await _mediaLibraryRepository.registerMedia(
+              path,
+              durationMs: probedDurationMs,
+            );
             _localPaths[entryId] = path;
             _mediaIds[entryId] = media.id;
-            _mediaDurations[entryId] = media.durationMs;
+            _mediaDurations[entryId] = media.durationMs ?? probedDurationMs;
 
             final finished = Map<String, double>.of(_state.downloads)
               ..[entryId] = 1.0;
@@ -431,6 +444,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
       final packagePath = await run.packagePath;
       if (eventFailure != null) {
+        _setGenerationFailure(entryId, eventFailure);
         _setGenerationStatus(entryId, ContentGenerationStatus.failed);
         return;
       }
@@ -443,6 +457,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
       if (_disposed) return;
 
       _setGenerationStatus(entryId, ContentGenerationStatus.completed);
+      _setGenerationFailure(entryId, null);
       final packages = Map<String, PackageStatus>.of(_state.packageStatuses)
         ..[entryId] = PackageStatus.available;
       _state = _state.copyWith(packageStatuses: packages);
@@ -450,11 +465,15 @@ final class DiscoveryViewModel extends ChangeNotifier {
     } catch (error) {
       debugPrint('Error generating learning package: $error');
       if (!_disposed) {
+        final cancelled =
+            error is ListenGenProcessFailure && error.code == 'cancelled';
+        _setGenerationFailure(
+          entryId,
+          cancelled ? null : _contentPackageRepository.failureDetail(error),
+        );
         _setGenerationStatus(
           entryId,
-          error is ListenGenProcessFailure && error.code == 'cancelled'
-              ? ContentGenerationStatus.cancelled
-              : ContentGenerationStatus.failed,
+          cancelled ? ContentGenerationStatus.cancelled : ContentGenerationStatus.failed,
         );
       }
     } finally {
@@ -485,6 +504,14 @@ final class DiscoveryViewModel extends ChangeNotifier {
     final phases = Map<String, String?>.of(_state.generatorPhases)
       ..[entryId] = phase;
     _state = _state.copyWith(generatorPhases: phases);
+    notifyListeners();
+  }
+
+  void _setGenerationFailure(String entryId, ApiFailure? failure) {
+    if (_disposed) return;
+    final failures = Map<String, ApiFailure?>.of(_state.generationFailures)
+      ..[entryId] = failure;
+    _state = _state.copyWith(generationFailures: failures);
     notifyListeners();
   }
 
@@ -667,6 +694,6 @@ class _FakeMediaLibraryRepository implements MediaLibraryRepository {
     String? intent,
   ) async => throw UnimplementedError();
   @override
-  Future<MediaItem> registerMedia(String path) async =>
+  Future<MediaItem> registerMedia(String path, {int? durationMs}) async =>
       throw UnimplementedError();
 }

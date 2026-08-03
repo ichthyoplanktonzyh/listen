@@ -245,7 +245,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   ) async => throw UnimplementedError();
 
   @override
-  Future<MediaItem> registerMedia(String path) async {
+  Future<MediaItem> registerMedia(String path, {int? durationMs}) async {
     final regExp = RegExp(r'\[([^\]]+)\]');
     final match = regExp.firstMatch(path);
     final entryId = match?.group(1) ?? 'i-bbc-1';
@@ -256,7 +256,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
       fingerprint: 'fp-$entryId',
       title: 'Downloaded Media $entryId',
       kind: 'video',
-      durationMs: mediaDurationMs,
+      durationMs: durationMs ?? mediaDurationMs,
       availability: 'local',
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,

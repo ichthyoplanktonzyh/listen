@@ -90,6 +90,9 @@ class DiscoveryHome extends StatelessWidget {
                     generatorPhase: state.generatorPhaseOf(
                       state.selectedEntry!.id,
                     ),
+                    generationFailure: state.generationFailureOf(
+                      state.selectedEntry!.id,
+                    ),
                     onDownload: () =>
                         viewModel.startDownload(state.selectedEntry!.id),
                     onCancelDownload: () =>
@@ -196,6 +199,9 @@ class DiscoveryHome extends StatelessWidget {
                             currentEntry.id,
                           ),
                           generatorPhase: state.generatorPhaseOf(
+                            currentEntry.id,
+                          ),
+                          generationFailure: state.generationFailureOf(
                             currentEntry.id,
                           ),
                           onDownload: () =>

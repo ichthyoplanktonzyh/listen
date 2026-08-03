@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
 import '../../localization.dart';
+import '../../models/api_failure.dart';
 import '../../models/discovery.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
@@ -23,6 +24,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
     required this.packageStatus,
     required this.generationStatus,
     required this.generatorPhase,
+    required this.generationFailure,
     required this.onDownload,
     required this.onCancelDownload,
     required this.onOpenPlayer,
@@ -38,6 +40,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
   final PackageStatus packageStatus;
   final ContentGenerationStatus generationStatus;
   final String? generatorPhase;
+  final ApiFailure? generationFailure;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
   final VoidCallback onOpenPlayer;
@@ -99,6 +102,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
             packageStatus: packageStatus,
             generationStatus: generationStatus,
             generatorPhase: generatorPhase,
+            generationFailure: generationFailure,
             onDownload: onDownload,
             onCancelDownload: onCancelDownload,
             onGenerate: onGenerate,
@@ -262,6 +266,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
     required this.packageStatus,
     required this.generationStatus,
     required this.generatorPhase,
+    required this.generationFailure,
     required this.onDownload,
     required this.onCancelDownload,
     required this.onGenerate,
@@ -274,6 +279,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
   final PackageStatus packageStatus;
   final ContentGenerationStatus generationStatus;
   final String? generatorPhase;
+  final ApiFailure? generationFailure;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
   final VoidCallback onGenerate;
@@ -471,6 +477,15 @@ class _UserJourneyActionsCard extends StatelessWidget {
                   color: scheme.error,
                 ),
               ),
+              if (generationFailure case final failure?) ...[
+                const SizedBox(height: ListenSpacing.gap4),
+                Text(
+                  _failureDetail(failure),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: scheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: ListenSpacing.gap8),
             ] else if (generationStatus ==
                 ContentGenerationStatus.cancelled) ...[
@@ -560,6 +575,7 @@ Widget discoveryDetailPanelPreview() => discoveryPreviewShell(
     packageStatus: PackageStatus.notAvailable,
     generationStatus: ContentGenerationStatus.idle,
     generatorPhase: null,
+    generationFailure: null,
     onDownload: _noop,
     onCancelDownload: _noop,
     onOpenPlayer: _noop,
@@ -582,3 +598,12 @@ String _generatorPhaseLabel(AppLocalizations l, String? phase) =>
       'building_package' => l.text('contentPackagePhaseBuilding'),
       _ => l.text('contentPackagePhaseWorking'),
     };
+
+String _failureDetail(ApiFailure failure) {
+  final code = failure.code == null || failure.code!.isEmpty
+      ? 'generator_failed'
+      : failure.code!;
+  final message = failure.message;
+  if (message == null || message.isEmpty) return code;
+  return '$code: ${message.length > 220 ? '${message.substring(0, 220)}…' : message}';
+}

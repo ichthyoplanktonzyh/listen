@@ -75,8 +75,9 @@ String _validatedSha256(Object? value) {
 }
 
 class ListenGenProcessFailure implements Exception {
-  const ListenGenProcessFailure(this.code);
+  const ListenGenProcessFailure(this.code, [this.message]);
   final String code;
+  final String? message;
 }
 
 abstract interface class ListenGenProcessRun {
@@ -298,7 +299,7 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
       return;
     }
     if (terminal.kind == ListenGenEventKind.failed) {
-      _completeFailure(terminal.code ?? 'generator_failed');
+      _completeFailure(terminal.code ?? 'generator_failed', terminal.message);
       return;
     }
     if (terminal.kind != ListenGenEventKind.completed || exitCode != 0) {
@@ -320,9 +321,11 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
     _packagePathCompleter.complete(_outputPath);
   }
 
-  void _completeFailure(String code) {
+  void _completeFailure(String code, [String? message]) {
     if (!_packagePathCompleter.isCompleted) {
-      _packagePathCompleter.completeError(ListenGenProcessFailure(code));
+      _packagePathCompleter.completeError(
+        ListenGenProcessFailure(code, message),
+      );
     }
   }
 

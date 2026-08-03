@@ -4,7 +4,7 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension MediaApi on LocalApi {
-  Future<MediaItem> registerMedia(String path) async {
+  Future<MediaItem> registerMedia(String path, {int? durationMs}) async {
     final fingerprint = await fingerprintFile(path);
     return MediaItem.fromJson(
       (await _request('POST', '/v1/media', {
@@ -12,6 +12,7 @@ extension MediaApi on LocalApi {
             'fingerprint': fingerprint.toString(),
             'title': path.split(Platform.pathSeparator).last,
             'kind': LocalApi._isAudio(path) ? 'audio' : 'video',
+            'duration_ms': ?durationMs,
           }))
           as Map<String, dynamic>,
     );

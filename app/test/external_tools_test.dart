@@ -109,4 +109,43 @@ void main() {
       throwsA(isA<ExternalToolError>()),
     );
   });
+
+  test('media duration probe accepts ffprobe string durations', () async {
+    final directory = await Directory.systemTemp.createTemp('llplayer-tools');
+    addTearDown(() => directory.delete(recursive: true));
+    final ffprobe = File('${directory.path}/ffprobe')
+      ..writeAsStringSync(
+        '#!/bin/sh\n'
+        'cat <<\'JSON\'\n'
+        '{"format": {"duration": "400.660317"}}\n'
+        'JSON\n',
+      );
+    await Process.run('/bin/chmod', ['+x', ffprobe.path]);
+
+    final result = await ExternalTools(
+      ffprobePath: ffprobe.path,
+    ).probeMediaDurationMs('/tmp/media.mp4');
+
+    expect(result, 400660);
+  });
+
+  test('media duration probe tolerates numeric durations', () async {
+    final directory = await Directory.systemTemp.createTemp('llplayer-tools');
+    addTearDown(() => directory.delete(recursive: true));
+    final ffprobe = File('${directory.path}/ffprobe')
+      ..writeAsStringSync(
+        '#!/bin/sh\n'
+        'cat <<\'JSON\'\n'
+        '{"format": {"duration": 123.5}}\n'
+        'JSON\n',
+      );
+    await Process.run('/bin/chmod', ['+x', ffprobe.path]);
+
+    final result = await ExternalTools(
+      ffprobePath: ffprobe.path,
+    ).probeMediaDurationMs('/tmp/media.mp4');
+
+    expect(result, 123500);
+  });
 }
+

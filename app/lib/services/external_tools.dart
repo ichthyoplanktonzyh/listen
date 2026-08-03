@@ -67,7 +67,14 @@ class ExternalTools {
       final format =
           (jsonDecode(result) as Map<String, dynamic>)['format']
               as Map<String, dynamic>?;
-      final duration = (format?['duration'] as num?)?.toDouble();
+      // ffprobe emits the duration as a string ("400.660317") in its JSON
+      // output; tolerate numeric values from test fixtures as well.
+      final raw = format?['duration'];
+      final duration = switch (raw) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      };
       return duration == null ? null : (duration * 1000).round();
     } catch (_) {
       return null;
