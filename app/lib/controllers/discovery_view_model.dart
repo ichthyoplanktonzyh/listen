@@ -212,6 +212,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
     if (entries.isNotEmpty) {
       unawaited(checkPackage(entries.first.id));
     }
+    unawaited(_hydrateLocalDurations(entries));
+    unawaited(_resolveRemoteDurations(entries));
   }
 
   void selectItem(String entryId) {
@@ -372,6 +374,72 @@ final class DiscoveryViewModel extends ChangeNotifier {
   }
 
   String? localPathFor(String entryId) => _localPaths[entryId];
+
+  /// Real duration for an entry when known (probed locally or resolved from
+  /// the remote video); null falls back to the feed placeholder.
+  int? durationMsFor(String entryId) => _mediaDurations[entryId];
+
+  /// Fills known durations from the media library for already-downloaded
+  /// entries using one batched query instead of per-entry lookups.
+  Future<void> _hydrateLocalDurations(List<MediaEntry> entries) async {
+    if (entries.isEmpty || !_mediaLibraryRepository.isAvailable) return;
+    try {
+      final library = await _mediaLibraryRepository.listMediaLibrary();
+      if (_disposed) return;
+      var changed = false;
+      for (final entry in entries) {
+        if (_mediaDurations[entry.id] != null) continue;
+        final local = library.where(
+          (item) => item.media.path.contains('[${entry.id}]'),
+        );
+        final duration = local.isEmpty ? null : local.first.media.durationMs;
+        if (duration == null) continue;
+        _mediaDurations[entry.id] = duration;
+        changed = true;
+      }
+      if (changed) notifyListeners();
+    } catch (e) {
+      debugPrint('Error hydrating discovery durations: $e');
+    }
+  }
+
+  /// Resolves real durations for feed entries in the background (yt-dlp) with
+  /// a small concurrency cap. Zero/unknown results keep the placeholder until
+  /// a real value lands.
+  Future<void> _resolveRemoteDurations(List<MediaEntry> entries) async {
+    final pending = entries
+        .where(
+          (entry) =>
+              _mediaDurations[entry.id] == null &&
+              entry.videoUrl != null &&
+              entry.sourceId != customSource.id,
+        )
+        .toList(growable: false);
+    if (pending.isEmpty) return;
+
+    var index = 0;
+    final workers = List.generate(3, (_) async {
+      while (!_disposed) {
+        final next = index++;
+        if (next >= pending.length) return;
+        final entry = pending[next];
+        try {
+          final details = await _importRepository.resolveVideoDetails(
+            entry.videoUrl!,
+          );
+          if (_disposed) return;
+          if (details.durationMs <= 0) continue;
+          if (_mediaDurations[entry.id] == null) {
+            _mediaDurations[entry.id] = details.durationMs;
+            notifyListeners();
+          }
+        } catch (_) {
+          // Best-effort: keep the feed placeholder on resolution failure.
+        }
+      }
+    });
+    await Future.wait(workers);
+  }
 
   /// Generates a local learning package with listen-gen for a downloaded
   /// entry and imports the result into Core. Replaces the Core-side

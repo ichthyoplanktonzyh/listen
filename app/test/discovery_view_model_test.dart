@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/discovery_view_model.dart';
 import 'package:llplayer_next/data/repositories/discovery_repository.dart';
+import 'package:llplayer_next/data/repositories/media_import_repository.dart';
 import 'package:llplayer_next/models/discovery.dart';
 import 'discovery_test_helpers.dart';
 
@@ -262,4 +263,99 @@ void main() {
       );
     },
   );
+
+  testWidgets('downloaded media exposes its probed duration via durationMsFor', (
+    tester,
+  ) async {
+    final vm = DiscoveryViewModel(
+      FixtureDiscoveryRepository(),
+      TestMediaImportRepository(probedDurationMs: 400660),
+      TestContentPackageRepository(),
+      TestMediaLibraryRepository(mediaDurationMs: null),
+    );
+    addTearDown(vm.dispose);
+    await tester.runAsync(() => vm.load());
+
+    await tester.runAsync(() async {
+      vm.selectItem('i-bbc-2');
+      await vm.startDownload('i-bbc-2');
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+    });
+
+    expect(vm.durationMsFor('i-bbc-2'), 400660);
+  });
+
+  testWidgets('feed entry durations resolve in the background from the remote video',
+    (tester) async {
+      final vm = DiscoveryViewModel(
+        _FeedRepositoryWithDurations(),
+        TestMediaImportRepository(resolvedDurationMs: 247000),
+        TestContentPackageRepository(),
+        TestMediaLibraryRepository(),
+      );
+      addTearDown(vm.dispose);
+      await tester.runAsync(() async {
+        await vm.load();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+
+      expect(vm.durationMsFor('feed-1'), 247000);
+      expect(vm.durationMsFor('feed-2'), 247000);
+    },
+  );
+}
+
+/// Feed whose entries carry real YouTube page URLs so the background duration
+/// resolution path can fetch metadata for them.
+class _FeedRepositoryWithDurations implements DiscoveryRepository {
+  static final _source = MediaSource(
+    id: 'c-feed',
+    name: 'Feed',
+    language: 'en',
+    description: '',
+    cover: ChannelCoverTone.slate,
+    type: MediaSourceType.youtube,
+    avatarUrl: null,
+  );
+
+  static List<MediaEntry> _entry(String id) => [
+    MediaEntry(
+      id: id,
+      sourceId: _source.id,
+      title: 'Feed entry $id',
+      description: '',
+      durationMs: 300000,
+      language: 'en',
+      publishedOn: '2026-08-01',
+      thumbnailUrl: null,
+      viewCount: 0,
+      hasPackage: false,
+      videoUrl: 'https://www.youtube.com/watch?v=$id',
+    ),
+  ];
+
+  @override
+  Future<List<MediaSource>> sources() async => [_source];
+
+  @override
+  Future<List<MediaEntry>> entriesFor(String sourceId) async => [
+    ..._entry('feed-1'),
+    ..._entry('feed-2'),
+  ];
+
+  @override
+  Future<PackageStatus> checkPackage(String entryId) async =>
+      PackageStatus.notAvailable;
+
+  @override
+  Future<MediaEntry> resolveCustomVideo(
+    String url,
+    MediaImportRepository importRepo,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MediaSource> resolveCustomChannel(
+    String url,
+    MediaImportRepository importRepo,
+  ) => throw UnimplementedError();
 }

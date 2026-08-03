@@ -19,6 +19,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
     super.key,
     required this.entry,
     required this.source,
+    this.durationMs,
     required this.downloadState,
     required this.downloadProgress,
     required this.packageStatus,
@@ -35,6 +36,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
 
   final MediaEntry entry;
   final MediaSource source;
+  final int? durationMs;
   final DownloadState downloadState;
   final double downloadProgress;
   final PackageStatus packageStatus;
@@ -82,7 +84,9 @@ class DiscoveryDetailPanel extends StatelessWidget {
           const SizedBox(height: ListenSpacing.gap16),
           _MetaRow(
             label: l.text('discoveryDuration'),
-            value: formatDuration(Duration(milliseconds: entry.durationMs)),
+            value: formatDuration(
+              Duration(milliseconds: durationMs ?? entry.durationMs),
+            ),
           ),
           _MetaRow(
             label: l.text('discoveryLevel'), // Re-mapped to views

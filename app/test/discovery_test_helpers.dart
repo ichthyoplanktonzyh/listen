@@ -43,9 +43,13 @@ class TestMediaDownloadHandle implements MediaDownloadHandle {
 }
 
 class TestMediaImportRepository implements MediaImportRepository {
-  TestMediaImportRepository({this.probedDurationMs});
+  TestMediaImportRepository({
+    this.probedDurationMs,
+    this.resolvedDurationMs = 0,
+  });
 
   final int? probedDurationMs;
+  final int resolvedDurationMs;
 
   final completers = <String, Completer<String?>>{};
 
@@ -76,11 +80,11 @@ class TestMediaImportRepository implements MediaImportRepository {
 
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async =>
-      const ResolvedVideoDetails(
+      ResolvedVideoDetails(
         id: '',
         title: 'YouTube Video',
         description: '',
-        durationMs: 0,
+        durationMs: resolvedDurationMs,
         viewCount: 0,
         thumbnail: null,
         channelId: '',

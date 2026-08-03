@@ -18,6 +18,7 @@ class DiscoveryContentCard extends StatelessWidget {
     super.key,
     required this.entry,
     required this.source,
+    this.durationMs,
     required this.downloadState,
     required this.downloadProgress,
     required this.packageStatus,
@@ -29,6 +30,7 @@ class DiscoveryContentCard extends StatelessWidget {
 
   final MediaEntry entry;
   final MediaSource source;
+  final int? durationMs;
   final DownloadState downloadState;
   final double downloadProgress;
   final PackageStatus packageStatus;
@@ -52,7 +54,12 @@ class DiscoveryContentCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _CardCover(entry: entry, source: source, selected: selected),
+              _CardCover(
+                entry: entry,
+                source: source,
+                selected: selected,
+                durationMs: durationMs,
+              ),
               const SizedBox(width: ListenSpacing.gap12),
               Expanded(
                 child: Column(
@@ -134,11 +141,13 @@ class _CardCover extends StatelessWidget {
     required this.entry,
     required this.source,
     required this.selected,
+    this.durationMs,
   });
 
   final MediaEntry entry;
   final MediaSource source;
   final bool selected;
+  final int? durationMs;
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +194,9 @@ class _CardCover extends StatelessWidget {
                 borderRadius: ListenRadii.controlBorder,
               ),
               child: Text(
-                formatDuration(Duration(milliseconds: entry.durationMs)),
+                formatDuration(
+                  Duration(milliseconds: durationMs ?? entry.durationMs),
+                ),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: scheme.onInverseSurface,
                   fontSize: 10,

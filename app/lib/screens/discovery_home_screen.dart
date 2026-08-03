@@ -55,6 +55,7 @@ class DiscoveryHome extends StatelessWidget {
               Expanded(
                 child: _DiscoveryShelf(
                   state: state,
+                  durationMsFor: viewModel.durationMsFor,
                   onSelectItem: (id) {
                     viewModel.selectItem(id);
                     if (!showDetail) {
@@ -75,6 +76,9 @@ class DiscoveryHome extends StatelessWidget {
                   child: DiscoveryDetailPanel(
                     entry: state.selectedEntry!,
                     source: state.selectedSource!,
+                    durationMs: viewModel.durationMsFor(
+                      state.selectedEntry!.id,
+                    ),
                     downloadState: state.downloadStateOf(
                       state.selectedEntry!.id,
                     ),
@@ -133,6 +137,7 @@ class DiscoveryHome extends StatelessWidget {
                   Expanded(
                     child: _DiscoveryShelf(
                       state: state,
+                      durationMsFor: viewModel.durationMsFor,
                       onSelectItem: (id) {
                         viewModel.selectItem(id);
                         final entry = state.entryById(id);
@@ -190,6 +195,7 @@ class DiscoveryHome extends StatelessWidget {
                         child: DiscoveryDetailPanel(
                           entry: currentEntry,
                           source: currentSource,
+                          durationMs: viewModel.durationMsFor(currentEntry.id),
                           downloadState: state.downloadStateOf(currentEntry.id),
                           downloadProgress: state.downloadProgressOf(
                             currentEntry.id,
@@ -439,6 +445,7 @@ class _DiscoveryChannelChips extends StatelessWidget {
 class _DiscoveryShelf extends StatelessWidget {
   const _DiscoveryShelf({
     required this.state,
+    required this.durationMsFor,
     required this.onSelectItem,
     required this.onDownload,
     required this.onCancelDownload,
@@ -446,6 +453,7 @@ class _DiscoveryShelf extends StatelessWidget {
   });
 
   final DiscoveryState state;
+  final int? Function(String entryId) durationMsFor;
   final void Function(String) onSelectItem;
   final void Function(String) onDownload;
   final void Function(String) onCancelDownload;
@@ -537,6 +545,7 @@ class _DiscoveryShelf extends StatelessWidget {
                       child: DiscoveryContentCard(
                         entry: entry,
                         source: state.sourceById(entry.sourceId) ?? source!,
+                        durationMs: durationMsFor(entry.id),
                         downloadState: state.downloadStateOf(entry.id),
                         downloadProgress: state.downloadProgressOf(entry.id),
                         packageStatus: state.packageStatusOf(entry.id),
