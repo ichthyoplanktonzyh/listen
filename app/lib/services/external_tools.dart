@@ -52,6 +52,28 @@ class ExternalTools {
         .toList(growable: false);
   }
 
+  Future<int?> probeMediaDurationMs(String mediaPath) async {
+    try {
+      final executable = await _resolve(ffprobePath, 'ffprobe');
+      final result = await _run(executable, [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'json',
+        mediaPath,
+      ]);
+      final format =
+          (jsonDecode(result) as Map<String, dynamic>)['format']
+              as Map<String, dynamic>?;
+      final duration = (format?['duration'] as num?)?.toDouble();
+      return duration == null ? null : (duration * 1000).round();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String> extractTextSubtitle(
     String mediaPath,
     EmbeddedSubtitle subtitle,

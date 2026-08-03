@@ -144,6 +144,7 @@ void main() {
       final run = repo.runs.single;
       expect(repo.requests.single.mediaPath, contains('[i-bbc-2]'));
       expect(repo.requests.single.mediaKind, 'video');
+      expect(repo.requests.single.durationMs, 300000);
 
       run.emitRunning();
       await tester.pump();
@@ -221,6 +222,44 @@ void main() {
         ContentGenerationStatus.failed,
       );
       expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
+    },
+  );
+
+  testWidgets(
+    'startGeneration probes real media duration when the library has none',
+    (tester) async {
+      final repo = TestContentPackageRepository();
+      final vm = DiscoveryViewModel(
+        FixtureDiscoveryRepository(),
+        TestMediaImportRepository(probedDurationMs: 400660),
+        repo,
+        TestMediaLibraryRepository(mediaDurationMs: null),
+      );
+      addTearDown(vm.dispose);
+      await tester.runAsync(() => vm.load());
+
+      // Register the download with a media library entry that has no
+      // duration, so the generation path must fall back to probing.
+      await tester.runAsync(() async {
+        vm.selectItem('i-bbc-2');
+        await vm.startDownload('i-bbc-2');
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      });
+
+      vm.startGeneration('i-bbc-2');
+      await tester.pump();
+      expect(repo.requests, hasLength(1));
+      expect(repo.requests.single.durationMs, 400660);
+      repo.runs.single.emitRunning();
+      await tester.pump();
+      repo.runs.single.completeSuccessfully();
+      await tester.pump();
+      await tester.pump();
+      expect(
+        vm.state.generationStatusOf('i-bbc-2'),
+        ContentGenerationStatus.completed,
+      );
     },
   );
 }

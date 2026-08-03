@@ -90,6 +90,7 @@ class AppLocalizations {
       'discoveryGenerating': 'Generating learning package: {phase}',
       'discoveryGenerateComplete': 'Learning package ready',
       'discoveryGenerateFailed': 'Package generation failed',
+      'discoveryGenerateCancelled': 'Generation cancelled',
       'discoveryOpenLearning': 'Open for Learning',
       'discoveryCheckingPackage': 'Checking package...',
       'discoveryPackageNotAvailable': 'No package yet',

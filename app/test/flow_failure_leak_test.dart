@@ -422,6 +422,9 @@ final class _DelayedMediaImportRepository implements MediaImportRepository {
   }
 
   @override
+  Future<int?> probeMediaDurationMs(String mediaPath) async => null;
+
+  @override
   Future<String> resolveOnlineMedia(String pageUrl) =>
       throw UnimplementedError();
 

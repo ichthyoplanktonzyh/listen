@@ -121,6 +121,22 @@ LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/asr
   flutter run -d macos
 ```
 
+Real ASR uses the whisper.cpp command provider. The wrapper lives at a stable
+path outside any repository (`~/Library/Application Support/listen/tools/`),
+so generation keeps working regardless of which `listen-gen` branch is
+checked out:
+
+```sh
+LISTEN_GEN_EXECUTABLE=/Users/shadow/listen-gen/.venv/bin/listen-gen \
+LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","command","--command","python3","--command-arg=/Users/shadow/Library/Application Support/listen/tools/whisper_cpp_wrapper.py","--command-arg={media}","--command-arg=--model","--command-arg=/Users/shadow/Library/Application Support/listen/models/whisper/ggml-base.bin"]' \
+  flutter run -d macos
+```
+
+The wrapper source is maintained in the `listen-gen` `pre-experiment` branch
+under `tools/whisper_cpp_wrapper.py`; refresh the stable copy from there when
+the wrapper changes. The model file is a whisper.cpp GGML download
+(e.g. `ggml-base.bin` from https://huggingface.co/ggerganov/whisper.cpp).
+
 Do not place API keys or other credentials in `LISTEN_GEN_PROVIDER_ARGUMENTS`;
 the configured provider wrapper owns secret retrieval. These variables are not
 written to settings or `backend.lock.json`. Without a connected Core, provider

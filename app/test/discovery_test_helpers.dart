@@ -43,7 +43,9 @@ class TestMediaDownloadHandle implements MediaDownloadHandle {
 }
 
 class TestMediaImportRepository implements MediaImportRepository {
-  TestMediaImportRepository();
+  TestMediaImportRepository({this.probedDurationMs});
+
+  final int? probedDurationMs;
 
   final completers = <String, Completer<String?>>{};
 
@@ -90,6 +92,9 @@ class TestMediaImportRepository implements MediaImportRepository {
   ) async => const ResolvedChannelDetails(id: '', name: '');
   @override
   Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath) async => [];
+  @override
+  Future<int?> probeMediaDurationMs(String mediaPath) async =>
+      probedDurationMs;
   @override
   Future<String> extractTextSubtitle(
     String mediaPath,
@@ -212,6 +217,10 @@ class TestContentPackageRepository implements ContentPackageRepository {
 }
 
 class TestMediaLibraryRepository implements MediaLibraryRepository {
+  TestMediaLibraryRepository({this.mediaDurationMs = 300000});
+
+  final int? mediaDurationMs;
+
   final List<MediaLibraryEntry> _entries = [];
 
   @override
@@ -247,7 +256,7 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
       fingerprint: 'fp-$entryId',
       title: 'Downloaded Media $entryId',
       kind: 'video',
-      durationMs: 300000,
+      durationMs: mediaDurationMs,
       availability: 'local',
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,

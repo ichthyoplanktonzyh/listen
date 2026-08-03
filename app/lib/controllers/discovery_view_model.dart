@@ -238,6 +238,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
       _localPaths[entryId] = localEntry.media.path;
       _mediaIds[entryId] = localEntry.media.id;
+      _mediaDurations[entryId] = localEntry.media.durationMs;
 
       _state = _state.copyWith(
         downloads: finished,
@@ -376,11 +377,18 @@ final class DiscoveryViewModel extends ChangeNotifier {
       return;
     }
 
+    final cachedDurationMs = _mediaDurations[entryId];
+    final durationMs =
+        cachedDurationMs ??
+        await _importRepository.probeMediaDurationMs(mediaPath) ??
+        entry.durationMs;
+    _mediaDurations[entryId] = durationMs;
+
     final request = ContentPackageGenerationRequest(
       mediaPath: mediaPath,
       title: entry.title,
       mediaKind: 'video',
-      durationMs: _mediaDurations[entryId] ?? entry.durationMs,
+      durationMs: durationMs,
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
     );
 
@@ -599,6 +607,8 @@ class _FakeMediaImportRepository implements MediaImportRepository {
   ) async => const ResolvedChannelDetails(id: '', name: '');
   @override
   Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath) async => [];
+  @override
+  Future<int?> probeMediaDurationMs(String mediaPath) async => null;
   @override
   Future<String> extractTextSubtitle(
     String mediaPath,

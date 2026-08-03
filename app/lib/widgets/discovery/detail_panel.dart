@@ -464,7 +464,26 @@ class _UserJourneyActionsCard extends StatelessWidget {
             ),
             const SizedBox(height: ListenSpacing.gap8),
 
-            // Transcription button - disabled unless media is downloaded!
+            if (generationStatus == ContentGenerationStatus.failed) ...[
+              Text(
+                l.text('discoveryGenerateFailed'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.error,
+                ),
+              ),
+              const SizedBox(height: ListenSpacing.gap8),
+            ] else if (generationStatus ==
+                ContentGenerationStatus.cancelled) ...[
+              Text(
+                l.text('discoveryGenerateCancelled'),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: ListenSpacing.gap8),
+            ],
+
+            // Generate button - disabled unless media is downloaded!
             FilledButton.icon(
               onPressed: isDownloaded ? onGenerate : null,
               icon: const Icon(Icons.auto_awesome, size: ListenIconSize.control),
