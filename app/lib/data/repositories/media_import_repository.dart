@@ -11,6 +11,8 @@ abstract interface class MediaImportRepository {
     String pageUrl,
     String directory,
   );
+  Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl);
+  Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl);
   Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath);
   Future<String> extractTextSubtitle(
     String mediaPath,
@@ -47,6 +49,14 @@ final class LocalMediaImportRepository implements MediaImportRepository {
     String pageUrl,
     String directory,
   ) => _tools.downloadOnlineMedia(pageUrl, directory);
+
+  @override
+  Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
+      _tools.resolveVideoDetails(pageUrl);
+
+  @override
+  Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl) =>
+      _tools.resolveChannelDetails(channelUrl);
 
   @override
   Future<List<EmbeddedSubtitle>> probeSubtitles(String mediaPath) =>

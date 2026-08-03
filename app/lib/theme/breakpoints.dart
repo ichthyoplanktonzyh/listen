@@ -32,6 +32,10 @@ abstract final class ListenBreakpoints {
   static const minWindowWidth = 640.0;
   static const minWindowHeight = 560.0;
 
+  /// The discovery home shows the lesson detail pane beside the channel rail
+  /// and lesson shelf; below it the detail hides so the shelf stays readable.
+  static const discoveryDetail = 1120.0;
+
   /// [ListeningHome] keeps the navigation sidebar next to the content; below
   /// it, the content pane takes the full width.
   static const homeSidebar = 760.0;

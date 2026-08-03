@@ -424,6 +424,14 @@ final class _DelayedMediaImportRepository implements MediaImportRepository {
   @override
   Future<String> resolveOnlineMedia(String pageUrl) =>
       throw UnimplementedError();
+
+  @override
+  Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl) =>
+      throw UnimplementedError();
 }
 
 ({
