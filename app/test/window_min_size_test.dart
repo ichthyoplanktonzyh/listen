@@ -87,13 +87,6 @@ void main() {
         onOpenMedia: () {},
         onOpenOnline: () {},
         onContinue: () {},
-        onOpenSubtitleResources: () {},
-        onOpenVocabulary: () {},
-        onOpenPersonalExpressions: () {},
-        onOpenConversation: () {},
-        onOpenReview: () {},
-        onOpenCoach: () {},
-        onOpenSettings: () {},
       ),
     ),
   );

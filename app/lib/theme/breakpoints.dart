@@ -36,6 +36,10 @@ abstract final class ListenBreakpoints {
   /// and lesson shelf; below it the detail hides so the shelf stays readable.
   static const discoveryDetail = 1120.0;
 
+  /// The discovery shelf lays media out as a card grid at or above this width;
+  /// below it the single-column list keeps card text readable.
+  static const discoveryGrid = 600.0;
+
   /// [ListeningHome] keeps the navigation sidebar next to the content; below
   /// it, the content pane takes the full width.
   static const homeSidebar = 760.0;

@@ -145,7 +145,9 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
             onShadowing: () async {
               await _slicePlayer.close();
               if (!context.mounted) return;
-              Navigator.of(context).pop();
+              // As a shell route there is nothing to pop; only pushed
+              // contexts (deep links, tests) dismiss themselves.
+              if (Navigator.of(context).canPop()) Navigator.of(context).pop();
               if (entry.card.kind == 'delayed_retelling') {
                 await widget.onStartDelayedRetelling(entry);
               } else {

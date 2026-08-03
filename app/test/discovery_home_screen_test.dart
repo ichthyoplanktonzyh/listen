@@ -13,8 +13,6 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(1440, 900),
     VoidCallback? onOpenMedia,
-    VoidCallback? onOpenSettings,
-    VoidCallback? onOpenClassicHome,
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -41,32 +39,32 @@ void main() {
           body: DiscoveryHome(
             viewModel: viewModel,
             onOpenMedia: onOpenMedia ?? () {},
-            onOpenSettings: onOpenSettings ?? () {},
-            onOpenClassicHome: onOpenClassicHome ?? () {},
           ),
         ),
       ),
     );
     // wait for mock package checking delayed calls
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 400)),
+    );
     await tester.pumpAndSettle();
     return viewModel;
   }
 
-  testWidgets('renders rail, first channel lessons, and lesson detail', (
+  testWidgets('renders sources, first channel lessons, and lesson detail', (
     tester,
   ) async {
     await pumpDiscovery(tester);
 
+    expect(find.text('媒体源'), findsOneWidget);
     expect(find.text('BBC Learning English'), findsWidgets);
     expect(find.text('TED-Ed'), findsOneWidget);
     expect(find.text('英语兔'), findsOneWidget);
     expect(find.text('SciShow'), findsOneWidget);
-    expect(find.text('我的学习'), findsOneWidget);
 
     expect(find.text('6 Minute English: Why do we forget?'), findsNWidgets(2));
     expect(find.text('The English We Speak: on the same page'), findsOneWidget);
-    expect(find.text('3 videos'), findsOneWidget);
+    expect(find.text('3 个视频'), findsOneWidget);
 
     expect(find.text('暂无配套学习包'), findsWidgets);
     expect(find.widgetWithText(FilledButton, '下载媒体'), findsOneWidget);
@@ -78,7 +76,9 @@ void main() {
 
     await tester.tap(find.text('TED-Ed'));
     // wait for package checking delay
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 400)),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('How does your brain learn languages?'), findsNWidgets(2));
@@ -93,7 +93,9 @@ void main() {
 
     await tester.tap(find.text('The English We Speak: on the same page'));
     // wait for package checking delay
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 400)),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('暂无配套学习包'), findsWidgets);
@@ -152,25 +154,9 @@ void main() {
   ) async {
     await pumpDiscovery(tester, size: const Size(600, 800));
 
-    expect(find.text('我的学习'), findsNothing);
-    expect(find.text('媒体源'), findsNothing);
+    expect(find.text('媒体源'), findsOneWidget);
     expect(find.byType(ChoiceChip), findsWidgets);
     expect(find.text('6 Minute English: Why do we forget?'), findsOneWidget);
     expect(find.text('时长'), findsNothing);
-  });
-
-  testWidgets('rail actions reach their callbacks', (tester) async {
-    var settings = 0;
-    var classicHome = 0;
-    await pumpDiscovery(
-      tester,
-      onOpenSettings: () => settings++,
-      onOpenClassicHome: () => classicHome++,
-    );
-
-    await tester.tap(find.text('设置'));
-    expect(settings, 1);
-    await tester.tap(find.text('我的学习'));
-    expect(classicHome, 1);
   });
 }

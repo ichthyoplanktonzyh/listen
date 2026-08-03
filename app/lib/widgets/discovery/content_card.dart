@@ -10,6 +10,7 @@ import '../../utils/format_duration.dart';
 import '../common/listen_loading.dart';
 import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
+import 'source_display_name.dart';
 
 /// A YouTube-style video card representing a MediaEntry: thumbnail, title,
 /// views count, published time, and local package/download controls.
@@ -26,6 +27,7 @@ class DiscoveryContentCard extends StatelessWidget {
     required this.onTap,
     required this.onDownload,
     required this.onCancel,
+    this.axis = Axis.horizontal,
   });
 
   final MediaEntry entry;
@@ -38,6 +40,7 @@ class DiscoveryContentCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDownload;
   final VoidCallback onCancel;
+  final Axis axis;
 
   @override
   Widget build(BuildContext context) {
@@ -51,63 +54,91 @@ class DiscoveryContentCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _CardCover(
-                entry: entry,
-                source: source,
-                selected: selected,
-                durationMs: durationMs,
-              ),
-              const SizedBox(width: ListenSpacing.gap12),
-              Expanded(
-                child: Column(
+          child: axis == Axis.horizontal
+              ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      entry.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: selected ? scheme.primary : scheme.onSurface,
-                        fontWeight: FontWeight.w600,
+                    _CardCover(
+                      entry: entry,
+                      source: source,
+                      selected: selected,
+                      durationMs: durationMs,
+                      axis: axis,
+                    ),
+                    const SizedBox(width: ListenSpacing.gap12),
+                    Expanded(child: _buildMetadata(context, l, scheme)),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: _CardCover(
+                          entry: entry,
+                          source: source,
+                          selected: selected,
+                          durationMs: durationMs,
+                          axis: axis,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: ListenSpacing.gap4),
-                    Text(
-                      '${source.name} · ${_formatViews(l, entry.viewCount)} · ${entry.publishedOn}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: ListenSpacing.gap8),
-                    Wrap(
-                      spacing: ListenSpacing.gap8,
-                      runSpacing: ListenSpacing.gap4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _PackageChip(
-                          status: packageStatus,
-                          labelText: _packageLabel(l, packageStatus),
-                        ),
-                        _DownloadControl(
-                          state: downloadState,
-                          progress: downloadProgress,
-                          onDownload: onDownload,
-                          onCancel: onCancel,
-                        ),
-                      ],
-                    ),
+                    const SizedBox(height: ListenSpacing.gap12),
+                    _buildMetadata(context, l, scheme),
                   ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildMetadata(
+    BuildContext context,
+    AppLocalizations l,
+    ColorScheme scheme,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          entry.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: selected ? scheme.primary : scheme.onSurface,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: ListenSpacing.gap4),
+        Text(
+          '${sourceDisplayName(l, source)} · ${_formatViews(l, entry.viewCount)} · ${entry.publishedOn}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: ListenSpacing.gap8),
+        Wrap(
+          spacing: ListenSpacing.gap8,
+          runSpacing: ListenSpacing.gap4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _PackageChip(
+              status: packageStatus,
+              labelText: _packageLabel(l, packageStatus),
+            ),
+            _DownloadControl(
+              state: downloadState,
+              progress: downloadProgress,
+              onDownload: onDownload,
+              onCancel: onCancel,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -142,12 +173,14 @@ class _CardCover extends StatelessWidget {
     required this.source,
     required this.selected,
     this.durationMs,
+    this.axis = Axis.horizontal,
   });
 
   final MediaEntry entry;
   final MediaSource source;
   final bool selected;
   final int? durationMs;
+  final Axis axis;
 
   @override
   Widget build(BuildContext context) {
@@ -156,8 +189,8 @@ class _CardCover extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final thumbnail = entry.thumbnailUrl;
     return Container(
-      width: 168,
-      height: 94,
+      width: axis == Axis.horizontal ? 168 : null,
+      height: axis == Axis.horizontal ? 94 : null,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: background,

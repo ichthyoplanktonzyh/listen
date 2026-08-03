@@ -8,13 +8,15 @@ import '../listen_wordmark.dart';
 
 /// Top-level application routes shown in the navigation sidebar.
 ///
-/// [AppRoute.offline] and [AppRoute.history] render lightweight panes inside
-/// the shell; the learning feature routes (vocabulary, expression, review,
-/// coach, conversation) open their existing full-page flows on selection.
+/// Routes split by what they are, not by feature age: destinations
+/// (discovery, resources, history, vocabulary, expression, review, coach)
+/// swap the shell pane in place and carry the sidebar's selection state;
+/// [AppRoute.conversation] is the one launched experience — an immersive
+/// stage pushed over the shell, like the player workbench — so it reads as
+/// an activity door rather than a place.
 enum AppRoute {
   discovery,
   resources,
-  offline,
   history,
   vocabulary,
   expression,
@@ -23,7 +25,10 @@ enum AppRoute {
   conversation,
 }
 
-/// Persistent application navigation: recommend → listening → mine.
+/// Persistent application navigation, grouped by user intent: content (what
+/// to listen to), learning (what to practise), insight (what the profile
+/// says). One rail owns every standing destination — page-level rails and
+/// their duplicates are gone.
 class AppSidebar extends StatelessWidget {
   const AppSidebar({
     super.key,
@@ -60,26 +65,18 @@ class AppSidebar extends StatelessWidget {
                 horizontal: ListenSpacing.gap8,
               ),
               children: [
-                _SidebarSectionTitle(title: l.text('sidebarSectionRecommend')),
+                _SidebarSectionTitle(title: l.text('sidebarSectionContent')),
                 _SidebarItem(
                   icon: Icons.explore_outlined,
                   label: l.text('sidebarToday'),
                   isSelected: currentRoute == AppRoute.discovery,
                   onTap: () => onRouteSelected(AppRoute.discovery),
                 ),
-                const SizedBox(height: ListenSpacing.gap16),
-                _SidebarSectionTitle(title: l.text('sidebarSectionListening')),
                 _SidebarItem(
                   icon: Icons.folder_outlined,
                   label: l.text('sidebarMyResources'),
                   isSelected: currentRoute == AppRoute.resources,
                   onTap: () => onRouteSelected(AppRoute.resources),
-                ),
-                _SidebarItem(
-                  icon: Icons.download_outlined,
-                  label: l.text('sidebarOfflineDownloads'),
-                  isSelected: currentRoute == AppRoute.offline,
-                  onTap: () => onRouteSelected(AppRoute.offline),
                 ),
                 _SidebarItem(
                   icon: Icons.history,
@@ -88,36 +85,38 @@ class AppSidebar extends StatelessWidget {
                   onTap: () => onRouteSelected(AppRoute.history),
                 ),
                 const SizedBox(height: ListenSpacing.gap16),
-                _SidebarSectionTitle(title: l.text('sidebarSectionMine')),
+                _SidebarSectionTitle(title: l.text('sidebarSectionLearning')),
                 _SidebarItem(
-                  icon: Icons.book_outlined,
+                  icon: Icons.menu_book_outlined,
                   label: l.text('sidebarVocabulary'),
                   isSelected: currentRoute == AppRoute.vocabulary,
                   onTap: () => onRouteSelected(AppRoute.vocabulary),
                 ),
                 _SidebarItem(
-                  icon: Icons.record_voice_over_outlined,
+                  icon: Icons.format_quote_outlined,
                   label: l.text('sidebarExpression'),
                   isSelected: currentRoute == AppRoute.expression,
                   onTap: () => onRouteSelected(AppRoute.expression),
                 ),
                 _SidebarItem(
-                  icon: Icons.rate_review_outlined,
+                  icon: Icons.headphones_outlined,
                   label: l.text('review'),
                   isSelected: currentRoute == AppRoute.review,
                   onTap: () => onRouteSelected(AppRoute.review),
-                ),
-                _SidebarItem(
-                  icon: Icons.school_outlined,
-                  label: l.text('coachDashboard'),
-                  isSelected: currentRoute == AppRoute.coach,
-                  onTap: () => onRouteSelected(AppRoute.coach),
                 ),
                 _SidebarItem(
                   icon: Icons.forum_outlined,
                   label: l.text('conversation'),
                   isSelected: currentRoute == AppRoute.conversation,
                   onTap: () => onRouteSelected(AppRoute.conversation),
+                ),
+                const SizedBox(height: ListenSpacing.gap16),
+                _SidebarSectionTitle(title: l.text('sidebarSectionInsight')),
+                _SidebarItem(
+                  icon: Icons.insights_outlined,
+                  label: l.text('coachDashboard'),
+                  isSelected: currentRoute == AppRoute.coach,
+                  onTap: () => onRouteSelected(AppRoute.coach),
                 ),
               ],
             ),

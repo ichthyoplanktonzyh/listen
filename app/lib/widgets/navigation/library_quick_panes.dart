@@ -6,8 +6,8 @@ import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 
-/// Shared shell for the lightweight offline/history panes: a titled list fed
-/// by the media library, with an explicit empty state and refresh affordance.
+/// Shared shell for the lightweight library panes: a titled list fed by the
+/// media library, with an explicit empty state and refresh affordance.
 class _LibraryPaneShell extends StatelessWidget {
   const _LibraryPaneShell({
     required this.title,
@@ -62,7 +62,9 @@ class _LibraryPaneShell extends StatelessWidget {
             child: loaded == null || loaded.isEmpty
                 ? _EmptyState(label: emptyLabel, onReload: onReload)
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap8),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: ListenSpacing.gap8,
+                    ),
                     itemCount: loaded.length,
                     itemBuilder: (context, index) =>
                         itemBuilder(context, loaded[index]),
@@ -96,9 +98,9 @@ class _EmptyState extends StatelessWidget {
           const SizedBox(height: ListenSpacing.gap8),
           Text(
             label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: ListenSpacing.gap12),
           OutlinedButton.icon(
@@ -173,38 +175,9 @@ class _LibraryRow extends StatelessWidget {
   }
 }
 
-/// Lightweight offline list: media library rows whose local file still exists.
-class OfflineDownloadsPane extends StatelessWidget {
-  const OfflineDownloadsPane({
-    super.key,
-    required this.entries,
-    required this.onOpen,
-    required this.onReload,
-  });
-
-  final List<MediaLibraryEntry>? entries;
-  final ValueChanged<MediaLibraryEntry> onOpen;
-  final VoidCallback onReload;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-
-    return _LibraryPaneShell(
-      title: l.text('sidebarOfflineDownloads'),
-      entries: entries,
-      emptyLabel: l.text('offlineEmpty'),
-      onReload: onReload,
-      itemBuilder: (context, entry) => _LibraryRow(
-        title: entry.media.title,
-        subtitle: entry.media.path,
-        onTap: () => onOpen(entry),
-      ),
-    );
-  }
-}
-
 /// Lightweight history list: media library rows sorted by most recent update.
+/// (Offline used to be a sibling pane here; it is a filter on the content
+/// home's library section now, since both read the same media library.)
 class HistoryPane extends StatelessWidget {
   const HistoryPane({
     super.key,
@@ -220,9 +193,8 @@ class HistoryPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final history = [...?entries]..sort(
-      (a, b) => b.media.updatedAtMs.compareTo(a.media.updatedAtMs),
-    );
+    final history = [...?entries]
+      ..sort((a, b) => b.media.updatedAtMs.compareTo(a.media.updatedAtMs));
 
     return _LibraryPaneShell(
       title: l.text('sidebarHistory'),

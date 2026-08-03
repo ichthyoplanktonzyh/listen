@@ -13,12 +13,7 @@ import 'widgets/discovery/discovery_preview_shell.dart';
 Widget discoveryHomePreview() {
   final viewModel = DiscoveryViewModel(FixtureDiscoveryRepository())..load();
   return discoveryPreviewShell(
-    DiscoveryHome(
-      viewModel: viewModel,
-      onOpenMedia: _noop,
-      onOpenSettings: _noop,
-      onOpenClassicHome: _noop,
-    ),
+    DiscoveryHome(viewModel: viewModel, onOpenMedia: _noop),
     width: 1280,
     height: 800,
   );

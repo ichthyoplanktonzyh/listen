@@ -2,20 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/theme/typography.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
 
+MediaItem _media(String id, String title) => MediaItem(
+  id: id,
+  path: '/media/$id.mp4',
+  fingerprint: 'fp-$id',
+  title: title,
+  kind: 'video',
+  durationMs: 60000,
+  availability: 'local',
+  createdAtMs: 1,
+  updatedAtMs: 1,
+);
+
+MediaLibraryEntry _entry(String id, String title) => MediaLibraryEntry(
+  media: _media(id, title),
+  primaryTrackId: null,
+  fit: null,
+  triageIntent: null,
+  familiarMaterial: false,
+);
+
 void main() {
   Widget app({
     required VoidCallback onOpenMedia,
     VoidCallback? onOpenOnline,
     VoidCallback? onContinue,
-    VoidCallback? onOpenVocabulary,
-    VoidCallback? onOpenPersonalExpressions,
-    VoidCallback? onOpenConversation,
+    List<MediaLibraryEntry>? mediaLibrary,
+    List<MediaLibraryEntry>? offlineEntries,
     String? recentMediaTitle,
     Duration recentPosition = Duration.zero,
     Duration recentDuration = Duration.zero,
@@ -35,13 +55,14 @@ void main() {
         onOpenMedia: onOpenMedia,
         onOpenOnline: onOpenOnline ?? () {},
         onContinue: onContinue ?? () {},
-        onOpenSubtitleResources: () {},
-        onOpenVocabulary: onOpenVocabulary ?? () {},
-        onOpenPersonalExpressions: onOpenPersonalExpressions ?? () {},
-        onOpenConversation: onOpenConversation ?? () {},
-        onOpenReview: () {},
-        onOpenCoach: () {},
-        onOpenSettings: () {},
+        mediaLibrary: mediaLibrary,
+        offlineEntries: offlineEntries,
+        familiarSupplyEnabled: true,
+        onOpenLibraryEntry: (_) {},
+        onStartExtensiveEntry: (_) {},
+        onStartIntensiveEntry: (_) {},
+        onSetLibraryIntent: (entry, intent) {},
+        onToggleFamiliarSupply: (_) {},
         recentMediaTitle: recentMediaTitle,
         recentPosition: recentPosition,
         recentDuration: recentDuration,
@@ -50,7 +71,7 @@ void main() {
     ),
   );
 
-  testWidgets('wide home shows navigation and opens local media', (
+  testWidgets('home shows the content sections and opens local media', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
@@ -60,13 +81,9 @@ void main() {
     await tester.pumpWidget(app(onOpenMedia: () => openMediaCalls += 1));
     await tester.pumpAndSettle();
 
-    expect(find.text('首页'), findsOneWidget);
     expect(find.text('学习首页'), findsOneWidget);
     expect(find.text('继续当前内容会话'), findsOneWidget);
     expect(find.text('添加内容来源'), findsOneWidget);
-    // The rail owns the learning destinations at this width, so the content
-    // pane no longer repeats them as cards (#17).
-    expect(find.text('到期任务与学习资产'), findsNothing);
 
     await tester.tap(find.text('打开视频或音频'));
     expect(openMediaCalls, 1);
@@ -129,31 +146,14 @@ void main() {
     );
   });
 
-  testWidgets('wide short home keeps every sidebar destination visible', (
-    tester,
-  ) async {
+  testWidgets('home renders clean at a short height', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 384));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(app(onOpenMedia: () {}));
     await tester.pumpAndSettle();
 
-    for (final destination in const [
-      '字幕资源',
-      '词汇本',
-      '我的表达',
-      '对话',
-      '复习',
-      '学习教练',
-    ]) {
-      expect(find.text(destination), findsOneWidget, reason: destination);
-    }
-    await tester.drag(
-      find.byKey(const ValueKey('home-sidebar-scroll')),
-      const Offset(0, -240),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('设置'), findsOneWidget);
+    expect(find.text('学习首页'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -169,135 +169,47 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('首页'), findsNothing);
     await tester.tap(find.text('打开网址'));
     expect(openOnlineCalls, 1);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'wide home routes every learning destination through the rail alone',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 900));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      var openCalls = 0;
-
-      await tester.pumpWidget(
-        app(
-          onOpenMedia: () {},
-          onOpenPersonalExpressions: () => openCalls += 1,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Exactly one entry per destination — the duplicate asset card is gone
-      // (#17).
-      for (final destination in const [
-        '字幕资源',
-        '词汇本',
-        '我的表达',
-        '对话',
-        '复习',
-        '学习教练',
-      ]) {
-        expect(find.text(destination), findsOneWidget, reason: destination);
-      }
-      // Mirror case: opening media is a content action, so the rail dropped
-      // it. The one left is the continue card's call to action, which stands
-      // in for playback while there is no recent media.
-      expect(find.text('打开媒体'), findsOneWidget);
-
-      await tester.tap(find.text('我的表达'));
-      expect(openCalls, 1);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('narrow home keeps every learning destination reachable', (
+  testWidgets('offline filter narrows the library to the offline subset', (
     tester,
   ) async {
-    // The rail is gone below the sidebar breakpoint, so the asset cards are
-    // the only path left. If they were dropped outright rather than made
-    // width-conditional, these destinations would be unreachable from home
-    // (#17) — that regression is what this case exists to catch.
-    await tester.binding.setSurfaceSize(const Size(640, 900));
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(app(onOpenMedia: () {}));
-    await tester.pumpAndSettle();
-
-    expect(find.text('首页'), findsNothing, reason: 'rail is hidden here');
-    expect(find.text('到期任务与学习资产'), findsOneWidget);
-    for (final destination in const [
-      '字幕资源',
-      '词汇本',
-      '我的表达',
-      '对话',
-      '复习',
-      '学习教练',
-    ]) {
-      expect(find.text(destination), findsOneWidget, reason: destination);
-    }
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('compact home stacks my-expressions card without overflow', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(640, 700));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    var openCalls = 0;
-
+    final online = _entry('online-1', 'Online Media One');
+    final offline = _entry('offline-1', 'Offline Media One');
     await tester.pumpWidget(
-      app(onOpenMedia: () {}, onOpenPersonalExpressions: () => openCalls += 1),
+      app(
+        onOpenMedia: () {},
+        mediaLibrary: [online, offline],
+        offlineEntries: [offline],
+      ),
     );
     await tester.pumpAndSettle();
 
-    final entry = find.text('我的表达');
-    expect(entry, findsOneWidget);
-    await tester.ensureVisible(entry);
-    await tester.tap(entry, warnIfMissed: false);
-    expect(openCalls, 1);
-    expect(tester.takeException(), isNull);
-  });
+    // The library section and its filter live on the home only when a library
+    // is present; both entries are listed before the filter is applied.
+    expect(find.text('离线下载'), findsOneWidget);
+    expect(find.text('Online Media One'), findsOneWidget);
+    expect(find.text('Offline Media One'), findsOneWidget);
 
-  testWidgets('wide home vocabulary rail item fires its callback', (
-    tester,
-  ) async {
-    // The "vocabulary button does nothing" report: this pins the wide-layout
-    // half of the path — the sidebar item must actually reach the callback
-    // (the flow-level half lives in learning_flows_test.dart).
-    await tester.binding.setSurfaceSize(const Size(1200, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    var openVocabularyCalls = 0;
-
-    await tester.pumpWidget(
-      app(onOpenMedia: () {}, onOpenVocabulary: () => openVocabularyCalls += 1),
-    );
+    await tester.tap(find.text('离线下载'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('词汇本'));
-    expect(openVocabularyCalls, 1);
-    expect(tester.takeException(), isNull);
-  });
+    expect(find.text('Online Media One'), findsNothing);
+    expect(find.text('Offline Media One'), findsOneWidget);
 
-  testWidgets('narrow home vocabulary asset card fires its callback', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(640, 900));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    var openVocabularyCalls = 0;
-
-    await tester.pumpWidget(
-      app(onOpenMedia: () {}, onOpenVocabulary: () => openVocabularyCalls += 1),
-    );
+    // The filter is a view, not a destination: clearing it restores the full
+    // library.
+    await tester.tap(find.text('离线下载'));
     await tester.pumpAndSettle();
 
-    final entry = find.text('词汇本');
-    expect(entry, findsOneWidget);
-    await tester.ensureVisible(entry);
-    await tester.tap(entry, warnIfMissed: false);
-    expect(openVocabularyCalls, 1);
+    expect(find.text('Online Media One'), findsOneWidget);
+    expect(find.text('Offline Media One'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

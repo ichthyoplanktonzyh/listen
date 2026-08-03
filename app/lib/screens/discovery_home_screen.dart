@@ -8,27 +8,22 @@ import '../theme/icon_size.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_loading.dart';
-import '../widgets/discovery/source_tile.dart';
 import '../widgets/discovery/content_card.dart';
 import '../widgets/discovery/detail_panel.dart';
-import '../widgets/listen_wordmark.dart';
+import '../widgets/discovery/source_display_name.dart';
 
-/// The media-aggregation landing page: YouTube channels on the left, media cards
-/// in the middle, and the action details panel on the right.
+/// The media-aggregation landing page: a sticky channel switcher on top, media
+/// cards below, and the action details panel on the right.
 class DiscoveryHome extends StatelessWidget {
   const DiscoveryHome({
     super.key,
     required this.viewModel,
     required this.onOpenMedia,
-    required this.onOpenSettings,
-    required this.onOpenClassicHome,
     this.onPlayMedia,
   });
 
   final DiscoveryViewModel viewModel;
   final VoidCallback onOpenMedia;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onOpenClassicHome;
   final ValueChanged<String>? onPlayMedia;
 
   @override
@@ -41,35 +36,27 @@ class DiscoveryHome extends StatelessWidget {
           builder: (context, constraints) {
             final showDetail =
                 constraints.maxWidth >= ListenBreakpoints.discoveryDetail;
-            final showRail =
-                constraints.maxWidth >= ListenBreakpoints.homeSidebar;
-            final children = <Widget>[
-              if (showRail)
-                _DiscoveryRail(
-                  sources: state.sources,
-                  selectedSourceId: state.selectedSourceId,
-                  onSelectSource: viewModel.selectChannel,
-                  onOpenMyLearning: onOpenClassicHome,
-                  onOpenSettings: onOpenSettings,
-                ),
-              Expanded(
-                child: _DiscoveryShelf(
-                  state: state,
-                  durationMsFor: viewModel.durationMsFor,
-                  onSelectItem: (id) {
-                    viewModel.selectItem(id);
-                    if (!showDetail) {
-                      final entry = state.entryById(id);
-                      if (entry != null) {
-                        _showDetailBottomSheet(context, entry);
-                      }
-                    }
-                  },
-                  onDownload: viewModel.startDownload,
-                  onCancelDownload: viewModel.cancelDownload,
-                  onImport: viewModel.importCustomUrl,
-                ),
-              ),
+            final shelf = _DiscoveryShelf(
+              state: state,
+              durationMsFor: viewModel.durationMsFor,
+              onSelectItem: (id) {
+                viewModel.selectItem(id);
+                if (!showDetail) {
+                  final entry = state.entryById(id);
+                  if (entry != null) {
+                    _showDetailBottomSheet(context, entry);
+                  }
+                }
+              },
+              onDownload: viewModel.startDownload,
+              onCancelDownload: viewModel.cancelDownload,
+              onImport: viewModel.importCustomUrl,
+              onSelectSource: viewModel.selectChannel,
+              isGrid: constraints.maxWidth >= ListenBreakpoints.discoveryGrid,
+            );
+
+            final content = <Widget>[
+              Expanded(child: shelf),
               if (showDetail && state.selectedEntry != null)
                 SizedBox(
                   width: 372,
@@ -119,39 +106,10 @@ class DiscoveryHome extends StatelessWidget {
                   ),
                 ),
             ];
-            if (showRail) {
-              return ColoredBox(
-                color: Theme.of(context).colorScheme.surface,
-                child: Row(children: children),
-              );
-            }
+
             return ColoredBox(
               color: Theme.of(context).colorScheme.surface,
-              child: Column(
-                children: [
-                  _DiscoveryChannelChips(
-                    sources: state.sources,
-                    selectedSourceId: state.selectedSourceId,
-                    onSelectSource: viewModel.selectChannel,
-                  ),
-                  Expanded(
-                    child: _DiscoveryShelf(
-                      state: state,
-                      durationMsFor: viewModel.durationMsFor,
-                      onSelectItem: (id) {
-                        viewModel.selectItem(id);
-                        final entry = state.entryById(id);
-                        if (entry != null) {
-                          _showDetailBottomSheet(context, entry);
-                        }
-                      },
-                      onDownload: viewModel.startDownload,
-                      onCancelDownload: viewModel.cancelDownload,
-                      onImport: viewModel.importCustomUrl,
-                    ),
-                  ),
-                ],
-              ),
+              child: Row(children: content),
             );
           },
         );
@@ -312,99 +270,6 @@ class DiscoveryHome extends StatelessWidget {
   }
 }
 
-class _DiscoveryRail extends StatelessWidget {
-  const _DiscoveryRail({
-    required this.sources,
-    required this.selectedSourceId,
-    required this.onSelectSource,
-    required this.onOpenMyLearning,
-    required this.onOpenSettings,
-  });
-
-  final List<MediaSource> sources;
-  final String? selectedSourceId;
-  final void Function(String) onSelectSource;
-  final VoidCallback onOpenMyLearning;
-  final VoidCallback onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 232,
-      child: ColoredBox(
-        color: scheme.surfaceContainerHigh,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const ListenWordmark(size: 22),
-                  const SizedBox(width: ListenSpacing.gap8),
-                  Expanded(
-                    child: Text(
-                      l.text('discoveryPrototypeBadge'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: ListenSpacing.gap16),
-              Text(
-                l.text('discoverySources'),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: ListenSpacing.gap6),
-              Expanded(
-                child: ListView(
-                  children: [
-                    for (final source in sources)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: DiscoverySourceTile(
-                          source: source,
-                          selected: source.id == selectedSourceId,
-                          onTap: () => onSelectSource(source.id),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const Divider(height: ListenSpacing.gap16),
-              TextButton.icon(
-                onPressed: onOpenMyLearning,
-                icon: const Icon(
-                  Icons.school_outlined,
-                  size: ListenIconSize.control,
-                ),
-                label: Text(l.text('discoveryMyLearning')),
-              ),
-              TextButton.icon(
-                onPressed: onOpenSettings,
-                icon: const Icon(
-                  Icons.settings_outlined,
-                  size: ListenIconSize.control,
-                ),
-                label: Text(l.text('discoverySettings')),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _DiscoveryChannelChips extends StatelessWidget {
   const _DiscoveryChannelChips({
     required this.sources,
@@ -418,28 +283,90 @@ class _DiscoveryChannelChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: 52,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        children: [
-          for (final source in sources)
+    return ColoredBox(
+      color: scheme.surfaceContainerLow,
+      child: SizedBox(
+        height: 52,
+        child: Row(
+          children: [
             Padding(
-              padding: const EdgeInsets.only(right: ListenSpacing.gap6),
-              child: ChoiceChip(
-                label: Text(source.name),
-                selected: source.id == selectedSourceId,
-                onSelected: (_) => onSelectSource(source.id),
-                selectedColor: scheme.primaryContainer,
-                labelStyle: Theme.of(context).textTheme.bodySmall,
+              padding: const EdgeInsets.only(
+                left: 24,
+                right: ListenSpacing.gap12,
+              ),
+              child: Text(
+                l.text('discoverySources'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
-        ],
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final source in sources)
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          right: ListenSpacing.gap6,
+                        ),
+                        child: ChoiceChip(
+                          label: Text(sourceDisplayName(l, source)),
+                          selected: source.id == selectedSourceId,
+                          onSelected: (_) => onSelectSource(source.id),
+                          selectedColor: scheme.primaryContainer,
+                          labelStyle: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Pins the source switcher to the top of the shelf so switching channels
+/// stays available while the media grid scrolls.
+class _SourceSwitcherHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _SourceSwitcherHeaderDelegate({
+    required this.sources,
+    required this.selectedSourceId,
+    required this.onSelectSource,
+  });
+
+  final List<MediaSource> sources;
+  final String? selectedSourceId;
+  final void Function(String) onSelectSource;
+
+  @override
+  double get minExtent => 52;
+
+  @override
+  double get maxExtent => 52;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => _DiscoveryChannelChips(
+    sources: sources,
+    selectedSourceId: selectedSourceId,
+    onSelectSource: onSelectSource,
+  );
+
+  @override
+  bool shouldRebuild(_SourceSwitcherHeaderDelegate oldDelegate) =>
+      oldDelegate.sources != sources ||
+      oldDelegate.selectedSourceId != selectedSourceId ||
+      oldDelegate.onSelectSource != onSelectSource;
 }
 
 class _DiscoveryShelf extends StatelessWidget {
@@ -450,6 +377,8 @@ class _DiscoveryShelf extends StatelessWidget {
     required this.onDownload,
     required this.onCancelDownload,
     required this.onImport,
+    required this.onSelectSource,
+    required this.isGrid,
   });
 
   final DiscoveryState state;
@@ -458,106 +387,162 @@ class _DiscoveryShelf extends StatelessWidget {
   final void Function(String) onDownload;
   final void Function(String) onCancelDownload;
   final ValueChanged<String> onImport;
+  final void Function(String) onSelectSource;
+  final bool isGrid;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final source = state.selectedSource;
+
     return ColoredBox(
       color: scheme.surfaceContainerLow,
-      child: ListView(
-        padding: ListenPadding.pageCompact,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: ListenBreakpoints.wideColumnMax,
+      child: CustomScrollView(
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _SourceSwitcherHeaderDelegate(
+              sources: state.sources,
+              selectedSourceId: state.selectedSourceId,
+              onSelectSource: onSelectSource,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (source != null) ...[
-                  Text(
-                    source.name,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
+          ),
+          if (source != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  24,
+                  ListenSpacing.gap16,
+                  24,
+                  ListenSpacing.gap12,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      sourceDisplayName(l, source),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: ListenSpacing.gap4),
-                  Text(
-                    source.description,
+                    const SizedBox(height: ListenSpacing.gap4),
+                    Text(
+                      source.description,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    Text(
+                      l
+                          .text('discoveryVideoCount')
+                          .replaceFirst('{count}', '${state.entries.length}'),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (source.id == DiscoveryViewModel.customSource.id) ...[
+                      const SizedBox(height: ListenSpacing.gap12),
+                      _LinkImportBar(
+                        resolvingUrl: state.resolvingUrl,
+                        onImport: onImport,
+                      ),
+                      if (state.resolveFailed) ...[
+                        const SizedBox(height: ListenSpacing.gap6),
+                        Text(
+                          l.text('discoveryResolveFailed'),
+                          style: TextStyle(
+                            color: scheme.error,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          if (state.loading)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: ListenSpacing.gap32),
+                child: Center(child: ListenLoading()),
+              ),
+            )
+          else if (state.entries.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: ListenSpacing.gap32,
+                ),
+                child: Center(
+                  child: Text(
+                    source != null &&
+                            source.id == DiscoveryViewModel.customSource.id
+                        ? l.text('discoveryEmptyImports')
+                        : l.text('discoveryEmptyChannel'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: ListenSpacing.gap8),
-                  Text(
-                    '${state.entries.length} videos',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              sliver: isGrid
+                  ? SliverGrid(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 360,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: 0.85,
+                          ),
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final entry = state.entries[index];
+                        return DiscoveryContentCard(
+                          entry: entry,
+                          source: state.sourceById(entry.sourceId) ?? source!,
+                          durationMs: durationMsFor(entry.id),
+                          downloadState: state.downloadStateOf(entry.id),
+                          downloadProgress: state.downloadProgressOf(entry.id),
+                          packageStatus: state.packageStatusOf(entry.id),
+                          selected: entry.id == state.selectedEntryId,
+                          onTap: () => onSelectItem(entry.id),
+                          onDownload: () => onDownload(entry.id),
+                          onCancel: () => onCancelDownload(entry.id),
+                          axis: Axis.vertical,
+                        );
+                      }, childCount: state.entries.length),
+                    )
+                  : SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final entry = state.entries[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: DiscoveryContentCard(
+                            entry: entry,
+                            source: state.sourceById(entry.sourceId) ?? source!,
+                            durationMs: durationMsFor(entry.id),
+                            downloadState: state.downloadStateOf(entry.id),
+                            downloadProgress: state.downloadProgressOf(
+                              entry.id,
+                            ),
+                            packageStatus: state.packageStatusOf(entry.id),
+                            selected: entry.id == state.selectedEntryId,
+                            onTap: () => onSelectItem(entry.id),
+                            onDownload: () => onDownload(entry.id),
+                            onCancel: () => onCancelDownload(entry.id),
+                            axis: Axis.horizontal,
+                          ),
+                        );
+                      }, childCount: state.entries.length),
                     ),
-                  ),
-                  const SizedBox(height: ListenSpacing.gap12),
-                  _LinkImportBar(
-                    resolvingUrl: state.resolvingUrl,
-                    onImport: onImport,
-                  ),
-                  if (state.resolveFailed) ...[
-                    const SizedBox(height: ListenSpacing.gap6),
-                    Text(
-                      l.text('discoveryResolveFailed'),
-                      style: TextStyle(
-                        color: scheme.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: ListenSpacing.gap16),
-                ],
-                if (state.loading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(
-                      vertical: ListenSpacing.gap32,
-                    ),
-                    child: Center(child: ListenLoading()),
-                  )
-                else if (state.entries.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: ListenSpacing.gap32,
-                    ),
-                    child: Center(
-                      child: Text(
-                        l.text('discoveryEmptyChannel'),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  for (final entry in state.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        bottom: ListenSpacing.gap8,
-                      ),
-                      child: DiscoveryContentCard(
-                        entry: entry,
-                        source: state.sourceById(entry.sourceId) ?? source!,
-                        durationMs: durationMsFor(entry.id),
-                        downloadState: state.downloadStateOf(entry.id),
-                        downloadProgress: state.downloadProgressOf(entry.id),
-                        packageStatus: state.packageStatusOf(entry.id),
-                        selected: entry.id == state.selectedEntryId,
-                        onTap: () => onSelectItem(entry.id),
-                        onDownload: () => onDownload(entry.id),
-                        onCancel: () => onCancelDownload(entry.id),
-                      ),
-                    ),
-              ],
             ),
-          ),
         ],
       ),
     );

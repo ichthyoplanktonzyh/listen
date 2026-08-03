@@ -5,30 +5,27 @@ import '../../controllers/hunting_controller.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/learning_assets_view_models.dart';
 import '../../controllers/learning_flow_view_models.dart';
-import '../../controllers/occurrence_media_resolver.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/practice_actions_coordinator.dart';
-import '../../controllers/coach_dashboard_controller.dart';
 import '../../controllers/personal_expression_view_model.dart';
-import '../../controllers/review_controller.dart';
 import '../../controllers/semantic_search_view_model.dart';
 import '../../controllers/slice_player_controller.dart';
 import '../../controllers/vocabulary_view_model.dart';
 import '../../learning_assets_ui.dart';
 import '../../localization.dart';
 import '../../models/personal_expression.dart';
-import '../../models/practice.dart';
 import '../../models/types.dart';
 import '../../screens/personal_expression_screen.dart';
-import '../../screens/review_queue_screen.dart';
 import '../../screens/vocabulary_screen.dart';
-import '../coach/coach_dashboard_screen.dart';
 
 /// Dialog- and navigation-driven vocabulary/learning flows extracted from the
 /// composition root: learning assets/resources, phrase candidates, lemma
-/// correction, the vocabulary/review/coach screens, and external word-list
-/// import. Parameter names mirror the host's controller fields.
+/// correction, the vocabulary screen and external word-list import. Parameter
+/// names mirror the host's controller fields. Review, coach and expression
+/// are shell routes now (see `widgets/flows/shell_learning_routes.dart`),
+/// so the flows kept here are the ones that genuinely launch a task on top of
+/// the shell rather than navigate to a destination.
 
 /// Gives route-scoped notifiers an explicit owner without pushing disposal
 /// into the reusable screen widgets themselves.
@@ -55,7 +52,7 @@ class _OwnedNotifiersRouteState extends State<_OwnedNotifiersRoute> {
   Widget build(BuildContext context) => widget.child;
 }
 
-Future<PersonalExpressionDetailOutcome> _openPersonalExpressionDetail({
+Future<PersonalExpressionDetailOutcome> openPersonalExpressionDetailFlow({
   required BuildContext context,
   required SentencePatternAssetView pattern,
   required PersonalExpressionDetailViewModelFactory createViewModel,
@@ -123,7 +120,7 @@ Future<void> openLearningAssetsFlow({
               child: PersonalExpressionScreen(
                 viewModel: personalExpressionViewModel,
                 onOpenPattern: (context, pattern) =>
-                    _openPersonalExpressionDetail(
+                    openPersonalExpressionDetailFlow(
                       context: context,
                       pattern: pattern,
                       createViewModel: createPersonalExpressionDetailViewModel,
@@ -166,7 +163,7 @@ Future<void> openPersonalExpressionFlow({
         notifiers: [viewModel],
         child: PersonalExpressionScreen(
           viewModel: viewModel,
-          onOpenPattern: (context, pattern) => _openPersonalExpressionDetail(
+          onOpenPattern: (context, pattern) => openPersonalExpressionDetailFlow(
             context: context,
             pattern: pattern,
             createViewModel: createDetailViewModel,
@@ -354,81 +351,6 @@ Future<void> showVocabularyFlow({
           openCrossModalReviewOnStart: openCrossModalReview,
           onPauseBackgroundPlayback: pauseBackgroundPlayback,
           onStartShadowing: practiceActions.startExternalShadowing,
-        ),
-      ),
-    ),
-  );
-}
-
-Future<void> openReviewQueueFlow({
-  required BuildContext context,
-  required ReviewController? controller,
-  required OccurrenceMediaResolver? resolver,
-  required PlayerController playerController,
-  required Future<void> Function() pauseBackgroundPlayback,
-  required Future<void> Function(ReviewQueueEntry entry) startReviewShadowing,
-  required Future<void> Function(ReviewQueueEntry entry) startDelayedRetelling,
-}) async {
-  if (controller == null || resolver == null) {
-    controller?.dispose();
-    // Unavailable State (CONTEXT.md): the review queue is a user destination;
-    // report the missing core instead of swallowing the click.
-    final l = AppLocalizations.of(context);
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  final slicePlayer = SlicePlayerController();
-  await Navigator.push<void>(
-    context,
-    MaterialPageRoute(
-      // The card plays its source clip on its own decoder (S5 · R1); it only
-      // needs a way to silence the primary player so the clip owns audio.
-      builder: (_) => _OwnedNotifiersRoute(
-        notifiers: [controller, slicePlayer],
-        child: ReviewQueueScreen(
-          controller: controller,
-          resolver: resolver,
-          slicePlayer: slicePlayer,
-          onPauseBackgroundPlayback: pauseBackgroundPlayback,
-          onStartShadowing: startReviewShadowing,
-          onStartDelayedRetelling: startDelayedRetelling,
-        ),
-      ),
-    ),
-  );
-}
-
-Future<void> openCoachDashboardFlow({
-  required BuildContext context,
-  required CoachDashboardController? controller,
-  required PlayerController playerController,
-  required String language,
-  required Future<void> Function() openReviewQueue,
-  required Future<void> Function({bool openCrossModalReview}) openVocabulary,
-  required Future<void> Function() openPersonalExpression,
-}) async {
-  if (controller == null) {
-    // Unavailable State (CONTEXT.md): the coach dashboard is a user
-    // destination; report the missing core instead of swallowing the click.
-    final l = AppLocalizations.of(context);
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  await Navigator.push<void>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => _OwnedNotifiersRoute(
-        notifiers: [controller],
-        child: CoachDashboardScreen(
-          controller: controller,
-          language: language,
-          onNavigate: (destination, _) => switch (destination.kind) {
-            'review_queue' => openReviewQueue(),
-            'hunting_list' => openVocabulary(),
-            'cross_modal_review' => openVocabulary(openCrossModalReview: true),
-            'personal_expression' => openPersonalExpression(),
-            _ => Future<void>.value(),
-          },
         ),
       ),
     ),

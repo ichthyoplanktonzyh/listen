@@ -39,6 +39,7 @@ import 'controllers/reading_task_controller.dart';
 import 'controllers/realtime_conversation_controller.dart';
 import 'controllers/realtime_transcription_model_controller.dart';
 import 'controllers/review_controller.dart';
+import 'controllers/coach_dashboard_controller.dart';
 import 'controllers/semantic_search_view_model.dart';
 import 'controllers/resource_actions_coordinator.dart';
 import 'controllers/settings_controller.dart';
@@ -52,7 +53,6 @@ import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/transcription_view_models.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/vocabulary_view_model.dart';
-import 'controllers/coach_dashboard_controller.dart';
 import 'controllers/cold_start_marking_view_model.dart';
 import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
@@ -61,6 +61,7 @@ import 'data/repositories/discovery_repository.dart';
 import 'screens/discovery_home_screen.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/library_quick_panes.dart';
+import 'widgets/flows/shell_learning_routes.dart';
 import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
 import 'localization.dart';
@@ -593,7 +594,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     speakingChannel.bind(
       isMounted: () => mounted,
       askPersonalExpressionAssessment: _askPersonalExpressionAssessment,
-      onReturnToReview: () => unawaited(_openReviewQueue()),
+      onReturnToReview: () => _openReviewQueue(),
       onReturnToPersonalExpression: () => unawaited(_openPersonalExpression()),
     );
     writingChannel.bind(
@@ -756,27 +757,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
-  /// Sidebar navigation: shell routes swap the main pane; learning feature
-  /// routes push their existing full-page flows on top of the shell.
+  /// Sidebar navigation: every destination swaps the main pane inside the
+  /// shell so its sidebar entry can carry a selection state. Conversation
+  /// alone stays a launched experience (it pushes the immersive stage), so it
+  /// never enters the route state.
   Future<void> _handleSidebarRoute(AppRoute route) async {
     switch (route) {
       case AppRoute.discovery:
       case AppRoute.resources:
-      case AppRoute.offline:
       case AppRoute.history:
-        currentRoute.value = route;
-        return;
       case AppRoute.vocabulary:
-        await _openVocabulary();
-        return;
       case AppRoute.expression:
-        await _openPersonalExpression();
-        return;
       case AppRoute.review:
-        await _openReviewQueue();
-        return;
       case AppRoute.coach:
-        await _openCoachDashboard();
+        currentRoute.value = route;
         return;
       case AppRoute.conversation:
         await _openFreeConversation();
@@ -1095,8 +1089,15 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _openRealtimeConversation([
     ContentSegmentSelection? selection,
   ]) async {
-    if (!coreSessionController.state.isConnected ||
-        !widget.platformCapabilities.isMacOS) {
+    // Unavailable State (CONTEXT.md): the sidebar conversation entry is a
+    // user click — a silent return left it as a dead button, so name the
+    // reason instead.
+    if (!widget.platformCapabilities.isMacOS) {
+      playerController.setStatus(l.text('conversationMacOsOnly'));
+      return;
+    }
+    if (!coreSessionController.state.isConnected) {
+      playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
       return;
     }
     final language =
@@ -1174,7 +1175,9 @@ class _PlayerScreenState extends State<PlayerScreen>
           // The debrief's 回流 is a door, not a claim (#86 · S9): the words
           // this conversation handed to the speaking channel are in the
           // vocabulary book, and an amber target goes straight into 我的表达.
-          onOpenVocabulary: _openVocabulary,
+          // The stage still covers the shell, so this door keeps the pushed
+          // dictionary on top instead of swapping the route underneath.
+          onOpenVocabulary: () => _showVocabulary(),
           // `manual`, not a conversation source kind: the turn never became
           // learner output, so what the learner keeps here is something they
           // are writing down — the backend's production evidence is not
@@ -1267,6 +1270,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Future<void> _openPersonalExpression({PersonalExpressionSourceView? source}) {
+    if (source == null) {
+      // The standing destination with no writing task attached: the route
+      // shell hosts it. Only a deep link carrying a source (the debrief's
+      // save-expression door) still pushes on top as a task.
+      currentRoute.value = AppRoute.expression;
+      return Future<void>.value();
+    }
     final available = coreSessionController.state.isConnected;
     final language = settingsController.resolveLearningLanguage(
       subtitleController.primaryTrack?.language,
@@ -1581,7 +1591,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Future<void> _openVocabulary() => _showVocabulary();
+  /// The vocabulary book as a standing destination; `_showVocabulary` stays
+  /// for parameterised deep links (initial entry, cross-modal review) that
+  /// launch a task on top of whatever is on screen.
+  void _openVocabulary() => currentRoute.value = AppRoute.vocabulary;
 
   Future<void> _openListeningDictionaryEntry(String entryId) =>
       _showVocabulary(initialEntryId: entryId);
@@ -1625,37 +1638,54 @@ class _PlayerScreenState extends State<PlayerScreen>
     openCrossModalReview: openCrossModalReview,
   );
 
-  Future<void> _openReviewQueue() {
-    final repository = coreSessionController.state.isConnected
-        ? coreRepositories.review
-        : null;
-    return openReviewQueueFlow(
-      context: context,
-      controller: repository == null ? null : ReviewController(repository),
-      resolver: repository == null
-          ? null
-          : OccurrenceMediaResolver(repository: repository),
-      playerController: playerController,
-      pauseBackgroundPlayback: _acquireAuxiliaryAudioFocus,
-      startReviewShadowing: _startReviewShadowing,
-      startDelayedRetelling: _startDelayedRetelling,
+  void _openReviewQueue() => currentRoute.value = AppRoute.review;
+
+  /// Route-scoped controller bundles for the learning shell routes. The
+  /// hosts own the lifecycle; these factories are the composition root, so
+  /// repository access stays here and out of presentation.
+  VocabularyRouteControllers? _createVocabularyRouteControllers() {
+    if (!coreSessionController.state.isConnected) return null;
+    return VocabularyRouteControllers(
+      viewModel: VocabularyViewModel(
+        repository: coreRepositories.lexical,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
+      ),
+      semanticSearchViewModel: SemanticSearchViewModel(
+        coreRepositories.semanticSearch,
+      ),
+      slicePlayer: SlicePlayerController(),
     );
   }
 
-  Future<void> _openCoachDashboard() => openCoachDashboardFlow(
-    context: context,
-    controller: !coreSessionController.state.isConnected
-        ? null
-        : CoachDashboardController(coreRepositories.coachDashboard),
-    playerController: playerController,
-    language: settingsController.resolveLearningLanguage(
-      subtitleController.primaryTrack?.language,
-    ),
-    openReviewQueue: _openReviewQueue,
-    openVocabulary: ({bool openCrossModalReview = false}) =>
-        _showVocabulary(openCrossModalReview: openCrossModalReview),
-    openPersonalExpression: () => _openPersonalExpression(),
-  );
+  ExpressionRouteControllers? _createExpressionRouteControllers() {
+    if (!coreSessionController.state.isConnected) return null;
+    return ExpressionRouteControllers(
+      viewModel: PersonalExpressionViewModel(
+        coreRepositories.personalExpression,
+        language: settingsController.resolveLearningLanguage(
+          subtitleController.primaryTrack?.language,
+        ),
+      ),
+    );
+  }
+
+  ReviewRouteControllers? _createReviewRouteControllers() {
+    if (!coreSessionController.state.isConnected) return null;
+    return ReviewRouteControllers(
+      controller: ReviewController(coreRepositories.review),
+      resolver: OccurrenceMediaResolver(repository: coreRepositories.review),
+      slicePlayer: SlicePlayerController(),
+    );
+  }
+
+  CoachRouteControllers? _createCoachRouteControllers() {
+    if (!coreSessionController.state.isConnected) return null;
+    return CoachRouteControllers(
+      controller: CoachDashboardController(coreRepositories.coachDashboard),
+    );
+  }
 
   Future<void> _startReviewShadowing(ReviewQueueEntry entry) async {
     final mediaId = entry.item.source.mediaId;
@@ -1980,9 +2010,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                   if (!state.isConnecting) ...[
                     const SizedBox(height: ListenSpacing.gap12),
                     FilledButton(
-                      onPressed: () => unawaited(
-                        coreSessionController.connect(),
-                      ),
+                      onPressed: () =>
+                          unawaited(coreSessionController.connect()),
                       child: const Text('Retry'),
                     ),
                   ],
@@ -2097,7 +2126,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                               onOpenSubtitleResources: () =>
                                   unawaited(_openSubtitleResources()),
                               onOpenVocabulary: _openVocabulary,
-                              onOpenReview: () => unawaited(_openReviewQueue()),
+                              onOpenReview: () => _openReviewQueue(),
                               onOpenMedia: mediaSession.openMedia,
                               onOpenOnline: _openOnline,
                               onImportPrimarySubtitle: () => unawaited(
@@ -2159,201 +2188,316 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                 children: [
                                                   AppSidebar(
                                                     currentRoute: route,
-                                                    onRouteSelected: (route) => unawaited(_handleSidebarRoute(route)),
-                                                    onOpenSettings: () => unawaited(_openSettings()),
+                                                    onRouteSelected: (route) =>
+                                                        unawaited(
+                                                          _handleSidebarRoute(
+                                                            route,
+                                                          ),
+                                                        ),
+                                                    onOpenSettings: () =>
+                                                        unawaited(
+                                                          _openSettings(),
+                                                        ),
                                                   ),
                                                   Expanded(
                                                     child: switch (route) {
-                                                      AppRoute.discovery => DiscoveryHome(
-                                                        viewModel: discoveryViewModel,
-                                                        onOpenMedia: mediaSession.openMedia,
-                                                        onOpenSettings: () => unawaited(_openSettings()),
-                                                        onOpenClassicHome: () =>
-                                                            currentRoute.value =
-                                                                AppRoute.resources,
-                                                        onPlayMedia:
-                                                            _startLearningFromDiscovery,
-                                                      ),
+                                                      AppRoute.discovery =>
+                                                        DiscoveryHome(
+                                                          viewModel:
+                                                              discoveryViewModel,
+                                                          onOpenMedia:
+                                                              mediaSession
+                                                                  .openMedia,
+                                                          onPlayMedia:
+                                                              _startLearningFromDiscovery,
+                                                        ),
                                                       AppRoute.resources => ListeningHome(
-                                                onOpenMedia:
-                                                    mediaSession.openMedia,
-                                                onOpenOnline: _openOnline,
-                                                onContinue: () {
-                                                  if (_workbenchExpanded ||
-                                                      playerController
-                                                              .mediaPath !=
-                                                          null) {
-                                                    _expandWorkbench();
-                                                  } else {
-                                                    unawaited(
-                                                      mediaLibraryActions
-                                                          .continueRecentMedia(),
-                                                    );
-                                                  }
-                                                },
-                                                onOpenSubtitleResources: () =>
-                                                    unawaited(
-                                                      _openSubtitleResources(),
-                                                    ),
-                                                onOpenVocabulary:
-                                                    _openVocabulary,
-                                                onOpenPersonalExpressions: () =>
-                                                    unawaited(
-                                                      _openPersonalExpression(),
-                                                    ),
-                                                onOpenConversation: () =>
-                                                    unawaited(
-                                                      _openFreeConversation(),
-                                                    ),
-                                                onOpenReview: () => unawaited(
-                                                  _openReviewQueue(),
-                                                ),
-                                                onOpenCoach: () => unawaited(
-                                                  _openCoachDashboard(),
-                                                ),
-                                                onOpenSettings: () =>
-                                                    unawaited(_openSettings()),
-                                                mediaLibrary:
-                                                    mediaLibraryActions
-                                                        .mediaLibrary,
-                                                familiarSupplyEnabled:
-                                                    settingsController
-                                                        .familiarMaterialSuggestions,
-                                                onOpenLibraryEntry: (entry) =>
-                                                    unawaited(
-                                                      mediaLibraryActions
-                                                          .openLibraryEntry(
-                                                            entry,
-                                                          ),
-                                                    ),
-                                                onStartExtensiveEntry:
-                                                    (entry) => unawaited(
-                                                      mediaLibraryActions
-                                                          .startExtensiveFromLibrary(
-                                                            entry,
-                                                          ),
-                                                    ),
-                                                onStartIntensiveEntry:
-                                                    (entry) => unawaited(
-                                                      mediaLibraryActions
-                                                          .startIntensiveFromLibrary(
-                                                            entry,
-                                                          ),
-                                                    ),
-                                                onSetLibraryIntent:
-                                                    (
-                                                      entry,
-                                                      intent,
-                                                    ) => unawaited(
-                                                      mediaLibraryActions
-                                                          .setLibraryTriageIntent(
-                                                            entry,
-                                                            intent,
-                                                          ),
-                                                    ),
-                                                onToggleFamiliarSupply:
-                                                    (enabled) => unawaited(
-                                                      mediaLibraryActions
-                                                          .toggleFamiliarSupply(
-                                                            enabled,
-                                                          ),
-                                                    ),
-                                                recentMediaTitle:
-                                                    settingsController
-                                                        .lastMediaTitle
-                                                        .isEmpty
-                                                    ? null
-                                                    : settingsController
-                                                          .lastMediaTitle,
-                                                recentMediaPath:
-                                                    settingsController
-                                                        .lastMediaPath
-                                                        .isEmpty
-                                                    ? null
-                                                    : settingsController
-                                                          .lastMediaPath,
-                                                recentPosition: Duration(
-                                                  milliseconds:
-                                                      settingsController
-                                                          .lastMediaPositionMs,
-                                                ),
-                                                recentDuration: Duration(
-                                                  milliseconds:
-                                                      settingsController
-                                                          .lastMediaDurationMs,
-                                                ),
-                                                recentSubtitleCount:
-                                                    settingsController
-                                                        .lastMediaSubtitleCount,
-                                                vocabularyCount:
-                                                    mediaLibraryActions
-                                                        .savedVocabulary
-                                                        ?.total ??
-                                                    0,
-                                                vocabularyCapped:
-                                                    mediaLibraryActions
-                                                        .savedVocabulary
-                                                        ?.capped ??
-                                                    false,
-                                                vocabularyKnown:
-                                                    mediaLibraryActions
-                                                        .savedVocabulary !=
-                                                    null,
-                                                listeningInboxCount:
-                                                    extensiveListeningController
-                                                        .activeItemCount,
-                                                coreStatusText:
-                                                    playerController
-                                                        .statusIsPlayback
-                                                    ? ''
-                                                    : playerController.status,
-                                              ),
-                                                      AppRoute.offline =>
-                                                        OfflineDownloadsPane(
-                                                          entries:
+                                                        onOpenMedia:
+                                                            mediaSession
+                                                                .openMedia,
+                                                        onOpenOnline:
+                                                            _openOnline,
+                                                        onContinue: () {
+                                                          if (_workbenchExpanded ||
+                                                              playerController
+                                                                      .mediaPath !=
+                                                                  null) {
+                                                            _expandWorkbench();
+                                                          } else {
+                                                            unawaited(
                                                               mediaLibraryActions
-                                                                  .offlineLibrary,
-                                                          onOpen: (MediaLibraryEntry entry) =>
-                                                              unawaited(
-                                                                mediaLibraryActions
-                                                                    .openLibraryEntry(
-                                                                      entry,
-                                                                    ),
-                                                              ),
-                                                          onReload: () =>
-                                                              unawaited(
-                                                                mediaLibraryActions
-                                                                    .loadMediaLibrary(),
-                                                              ),
-                                                        ),
-                                                      AppRoute.history =>
-                                                        HistoryPane(
-                                                          entries:
+                                                                  .continueRecentMedia(),
+                                                            );
+                                                          }
+                                                        },
+                                                        mediaLibrary:
+                                                            mediaLibraryActions
+                                                                .mediaLibrary,
+                                                        offlineEntries:
+                                                            mediaLibraryActions
+                                                                .offlineLibrary,
+                                                        familiarSupplyEnabled:
+                                                            settingsController
+                                                                .familiarMaterialSuggestions,
+                                                        onOpenLibraryEntry:
+                                                            (
+                                                              entry,
+                                                            ) => unawaited(
                                                               mediaLibraryActions
-                                                                  .mediaLibrary,
-                                                          onOpen: (MediaLibraryEntry entry) =>
-                                                              unawaited(
-                                                                mediaLibraryActions
-                                                                    .openLibraryEntry(
-                                                                      entry,
-                                                                    ),
-                                                              ),
-                                                          onReload: () =>
-                                                              unawaited(
-                                                                mediaLibraryActions
-                                                                    .loadMediaLibrary(),
-                                                              ),
+                                                                  .openLibraryEntry(
+                                                                    entry,
+                                                                  ),
+                                                            ),
+                                                        onStartExtensiveEntry:
+                                                            (
+                                                              entry,
+                                                            ) => unawaited(
+                                                              mediaLibraryActions
+                                                                  .startExtensiveFromLibrary(
+                                                                    entry,
+                                                                  ),
+                                                            ),
+                                                        onStartIntensiveEntry:
+                                                            (
+                                                              entry,
+                                                            ) => unawaited(
+                                                              mediaLibraryActions
+                                                                  .startIntensiveFromLibrary(
+                                                                    entry,
+                                                                  ),
+                                                            ),
+                                                        onSetLibraryIntent:
+                                                            (
+                                                              entry,
+                                                              intent,
+                                                            ) => unawaited(
+                                                              mediaLibraryActions
+                                                                  .setLibraryTriageIntent(
+                                                                    entry,
+                                                                    intent,
+                                                                  ),
+                                                            ),
+                                                        onToggleFamiliarSupply:
+                                                            (
+                                                              enabled,
+                                                            ) => unawaited(
+                                                              mediaLibraryActions
+                                                                  .toggleFamiliarSupply(
+                                                                    enabled,
+                                                                  ),
+                                                            ),
+                                                        recentMediaTitle:
+                                                            settingsController
+                                                                .lastMediaTitle
+                                                                .isEmpty
+                                                            ? null
+                                                            : settingsController
+                                                                  .lastMediaTitle,
+                                                        recentMediaPath:
+                                                            settingsController
+                                                                .lastMediaPath
+                                                                .isEmpty
+                                                            ? null
+                                                            : settingsController
+                                                                  .lastMediaPath,
+                                                        recentPosition: Duration(
+                                                          milliseconds:
+                                                              settingsController
+                                                                  .lastMediaPositionMs,
                                                         ),
-                                                      // Learning feature
-                                                      // routes open full-page
-                                                      // flows, never reach
-                                                      // this switch.
+                                                        recentDuration: Duration(
+                                                          milliseconds:
+                                                              settingsController
+                                                                  .lastMediaDurationMs,
+                                                        ),
+                                                        recentSubtitleCount:
+                                                            settingsController
+                                                                .lastMediaSubtitleCount,
+                                                        vocabularyCount:
+                                                            mediaLibraryActions
+                                                                .savedVocabulary
+                                                                ?.total ??
+                                                            0,
+                                                        vocabularyCapped:
+                                                            mediaLibraryActions
+                                                                .savedVocabulary
+                                                                ?.capped ??
+                                                            false,
+                                                        vocabularyKnown:
+                                                            mediaLibraryActions
+                                                                .savedVocabulary !=
+                                                            null,
+                                                        listeningInboxCount:
+                                                            extensiveListeningController
+                                                                .activeItemCount,
+                                                        coreStatusText:
+                                                            playerController
+                                                                .statusIsPlayback
+                                                            ? ''
+                                                            : playerController
+                                                                  .status,
+                                                      ),
+                                                      AppRoute.vocabulary => VocabularyRouteHost(
+                                                        create:
+                                                            coreSessionController
+                                                                .state
+                                                                .isConnected
+                                                            ? _createVocabularyRouteControllers
+                                                            : null,
+                                                        language: settingsController
+                                                            .resolveLearningLanguage(
+                                                              subtitleController
+                                                                  .primaryTrack
+                                                                  ?.language,
+                                                            ),
+                                                        onExport: playbackActions
+                                                            .exportVocabulary,
+                                                        onImport: playbackActions
+                                                            .importVocabulary,
+                                                        huntingController:
+                                                            huntingController,
+                                                        auxiliaryAudio:
+                                                            auxiliaryAudioController,
+                                                        pauseBackgroundPlayback:
+                                                            _acquireAuxiliaryAudioFocus,
+                                                        onStartShadowing:
+                                                            practiceActions
+                                                                .startExternalShadowing,
+                                                      ),
+                                                      AppRoute.expression => ExpressionRouteHost(
+                                                        create:
+                                                            coreSessionController
+                                                                .state
+                                                                .isConnected
+                                                            ? _createExpressionRouteControllers
+                                                            : null,
+                                                        language: settingsController
+                                                            .resolveLearningLanguage(
+                                                              subtitleController
+                                                                  .primaryTrack
+                                                                  ?.language,
+                                                            ),
+                                                        createDetailViewModel:
+                                                            coreSessionController
+                                                                .state
+                                                                .isConnected
+                                                            ? (
+                                                                pattern,
+                                                              ) => PersonalExpressionDetailViewModel(
+                                                                coreRepositories
+                                                                    .personalExpression,
+                                                                pattern:
+                                                                    pattern,
+                                                              )
+                                                            : null,
+                                                        onPlaySource:
+                                                            _playPersonalExpressionSource,
+                                                        onStartSpeaking:
+                                                            _startPersonalExpressionSpeaking,
+                                                      ),
+                                                      AppRoute.review => ReviewRouteHost(
+                                                        create:
+                                                            coreSessionController
+                                                                .state
+                                                                .isConnected
+                                                            ? _createReviewRouteControllers
+                                                            : null,
+                                                        language: settingsController
+                                                            .resolveLearningLanguage(
+                                                              subtitleController
+                                                                  .primaryTrack
+                                                                  ?.language,
+                                                            ),
+                                                        pauseBackgroundPlayback:
+                                                            _acquireAuxiliaryAudioFocus,
+                                                        onStartShadowing:
+                                                            _startReviewShadowing,
+                                                        onStartDelayedRetelling:
+                                                            _startDelayedRetelling,
+                                                      ),
+                                                      AppRoute.coach => CoachRouteHost(
+                                                        create:
+                                                            coreSessionController
+                                                                .state
+                                                                .isConnected
+                                                            ? _createCoachRouteControllers
+                                                            : null,
+                                                        language: settingsController
+                                                            .resolveLearningLanguage(
+                                                              subtitleController
+                                                                  .primaryTrack
+                                                                  ?.language,
+                                                            ),
+                                                        // The coach's doors
+                                                        // point at sibling
+                                                        // destinations now:
+                                                        // swap the route
+                                                        // instead of pushing
+                                                        // a copy of it.
+                                                        onNavigate: (destination, _) {
+                                                          switch (destination
+                                                              .kind) {
+                                                            case 'review_queue':
+                                                              currentRoute
+                                                                      .value =
+                                                                  AppRoute
+                                                                      .review;
+                                                            case 'hunting_list':
+                                                              currentRoute
+                                                                      .value =
+                                                                  AppRoute
+                                                                      .vocabulary;
+                                                            case 'cross_modal_review':
+                                                              unawaited(
+                                                                _showVocabulary(
+                                                                  openCrossModalReview:
+                                                                      true,
+                                                                ),
+                                                              );
+                                                            case 'personal_expression':
+                                                              currentRoute
+                                                                      .value =
+                                                                  AppRoute
+                                                                      .expression;
+                                                            case 'content_home':
+                                                              currentRoute
+                                                                      .value =
+                                                                  AppRoute
+                                                                      .resources;
+                                                          }
+                                                          return Future<
+                                                            void
+                                                          >.value();
+                                                        },
+                                                      ),
+                                                      AppRoute.history => HistoryPane(
+                                                        entries:
+                                                            mediaLibraryActions
+                                                                .mediaLibrary,
+                                                        onOpen:
+                                                            (
+                                                              MediaLibraryEntry
+                                                              entry,
+                                                            ) => unawaited(
+                                                              mediaLibraryActions
+                                                                  .openLibraryEntry(
+                                                                    entry,
+                                                                  ),
+                                                            ),
+                                                        onReload: () => unawaited(
+                                                          mediaLibraryActions
+                                                              .loadMediaLibrary(),
+                                                        ),
+                                                      ),
+                                                      // Conversation is a
+                                                      // launched experience,
+                                                      // never a route value.
                                                       _ => SizedBox.shrink(),
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                      if (playerController.mediaPath !=
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                              if (playerController.mediaPath !=
                                                   null)
                                                 SlideTransition(
                                                   position:
@@ -2488,7 +2632,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         _collapseWorkbench,
                                                   ),
                                                 ),
-                                                // Back button removed
+                                              // Back button removed
                                             ],
                                           );
                                         },
@@ -2553,8 +2697,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
       onOpenSubtitleResources: () => unawaited(_openSubtitleResources()),
       onOpenVocabulary: _openVocabulary,
-      onOpenReview: () => unawaited(_openReviewQueue()),
-      onOpenCoach: () => unawaited(_openCoachDashboard()),
+      onOpenReview: () => _openReviewQueue(),
+      onOpenCoach: () => currentRoute.value = AppRoute.coach,
       onOpenTranscriptionCenter: () => unawaited(_openTranscriptionCenter()),
       onOpenPhoneticAnalysisCenter: () =>
           unawaited(_openPhoneticAnalysisCenter()),

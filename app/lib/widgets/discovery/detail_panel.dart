@@ -11,6 +11,7 @@ import '../../utils/format_duration.dart';
 import '../common/listen_loading.dart';
 import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
+import 'source_display_name.dart';
 
 /// The right-hand lesson detail: shows full details of a YouTube video, its
 /// metadata, and orchestrates the core user journey (Download -> Package -> Study).
@@ -67,36 +68,14 @@ class DiscoveryDetailPanel extends StatelessWidget {
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: ListenSpacing.gap4),
-          Text(
-            '${source.name} · ${entry.publishedOn}',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
           const SizedBox(height: ListenSpacing.gap12),
-          Text(
-            entry.description,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: ListenSpacing.gap16),
           _MetaRow(
             label: l.text('discoveryDuration'),
             value: formatDuration(
               Duration(milliseconds: durationMs ?? entry.durationMs),
             ),
           ),
-          _MetaRow(
-            label: l.text('discoveryLevel'), // Re-mapped to views
-            value: _formatViews(l, entry.viewCount),
-          ),
           _MetaRow(label: l.text('discoveryLanguage'), value: entry.language),
-          _MetaRow(
-            label: l.text('discoveryPublished'),
-            value: entry.publishedOn,
-          ),
           const SizedBox(height: ListenSpacing.gap24),
 
           // Action flow dashboard card
@@ -127,16 +106,6 @@ class DiscoveryDetailPanel extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatViews(AppLocalizations l, int count) {
-    final viewsText = l.text('discoveryViews');
-    if (count >= 1000000) {
-      return '${(count / 1000000).toStringAsFixed(1)}M $viewsText';
-    } else if (count >= 1000) {
-      return '${(count / 1000).toStringAsFixed(0)}K $viewsText';
-    }
-    return '$count $viewsText';
   }
 }
 
@@ -180,7 +149,10 @@ class _HeroCover extends StatelessWidget {
             else
               _HeroCaption(
                 ink: ink,
-                sourceName: source.name,
+                sourceName: sourceDisplayName(
+                  AppLocalizations.of(context),
+                  source,
+                ),
                 title: entry.title,
               ),
           ],
@@ -477,17 +449,17 @@ class _UserJourneyActionsCard extends StatelessWidget {
             if (generationStatus == ContentGenerationStatus.failed) ...[
               Text(
                 l.text('discoveryGenerateFailed'),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.error,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.error),
               ),
               if (generationFailure case final failure?) ...[
                 const SizedBox(height: ListenSpacing.gap4),
                 Text(
                   _failureDetail(failure),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: scheme.error,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(color: scheme.error),
                 ),
               ],
               const SizedBox(height: ListenSpacing.gap8),
@@ -495,9 +467,9 @@ class _UserJourneyActionsCard extends StatelessWidget {
                 ContentGenerationStatus.cancelled) ...[
               Text(
                 l.text('discoveryGenerateCancelled'),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
               const SizedBox(height: ListenSpacing.gap8),
             ],
@@ -505,7 +477,10 @@ class _UserJourneyActionsCard extends StatelessWidget {
             // Generate button - disabled unless media is downloaded!
             FilledButton.icon(
               onPressed: isDownloaded ? onGenerate : null,
-              icon: const Icon(Icons.auto_awesome, size: ListenIconSize.control),
+              icon: const Icon(
+                Icons.auto_awesome,
+                size: ListenIconSize.control,
+              ),
               label: Text(l.text('discoveryGenerate')),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, 36),

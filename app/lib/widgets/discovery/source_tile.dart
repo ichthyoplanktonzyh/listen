@@ -7,7 +7,7 @@ import '../../theme/spacing.dart';
 import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
 
-/// One selectable media source in the discovery rail.
+/// One selectable media source.
 class DiscoverySourceTile extends StatelessWidget {
   const DiscoverySourceTile({
     super.key,
