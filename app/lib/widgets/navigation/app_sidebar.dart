@@ -6,14 +6,16 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../listen_wordmark.dart';
 
-/// Top-level application routes shown in the navigation sidebar.
+/// The shell's renderable destinations — every value here swaps the main pane
+/// in place and carries the sidebar's selection state.
 ///
-/// Routes split by what they are, not by feature age: destinations
-/// (discovery, resources, history, vocabulary, expression, review, coach)
-/// swap the shell pane in place and carry the sidebar's selection state;
-/// [AppRoute.conversation] is the one launched experience — an immersive
-/// stage pushed over the shell, like the player workbench — so it reads as
-/// an activity door rather than a place.
+/// The enum is deliberately closed to destinations only. Conversation is the
+/// one launched experience — an immersive stage pushed over the shell, like
+/// the player workbench — so it is not a route value at all: it reaches the
+/// shell as [AppSidebar.onOpenConversation]. Keeping it out of the type is
+/// what lets the shell's route `switch` stay exhaustive without an
+/// unreachable arm, and stops the rail from offering a selection state that
+/// could never be true.
 enum AppRoute {
   discovery,
   resources,
@@ -22,23 +24,32 @@ enum AppRoute {
   expression,
   review,
   coach,
-  conversation,
 }
 
 /// Persistent application navigation, grouped by user intent: content (what
 /// to listen to), learning (what to practise), insight (what the profile
 /// says). One rail owns every standing destination — page-level rails and
 /// their duplicates are gone.
+///
+/// The rail carries two kinds of entry, and draws them differently on
+/// purpose: destinations (the grouped list, one of them always selected) and
+/// the single launch action at the foot, which opens the conversation stage
+/// over the shell and therefore never shows a selection state.
 class AppSidebar extends StatelessWidget {
   const AppSidebar({
     super.key,
     required this.currentRoute,
     required this.onRouteSelected,
+    required this.onOpenConversation,
     this.onOpenSettings,
   });
 
   final AppRoute currentRoute;
   final ValueChanged<AppRoute> onRouteSelected;
+
+  /// Launches the immersive conversation stage. Separate from
+  /// [onRouteSelected] because the shell never renders conversation as a pane.
+  final VoidCallback onOpenConversation;
   final VoidCallback? onOpenSettings;
 
   @override
@@ -104,12 +115,6 @@ class AppSidebar extends StatelessWidget {
                   isSelected: currentRoute == AppRoute.review,
                   onTap: () => onRouteSelected(AppRoute.review),
                 ),
-                _SidebarItem(
-                  icon: Icons.forum_outlined,
-                  label: l.text('conversation'),
-                  isSelected: currentRoute == AppRoute.conversation,
-                  onTap: () => onRouteSelected(AppRoute.conversation),
-                ),
                 const SizedBox(height: ListenSpacing.gap16),
                 _SidebarSectionTitle(title: l.text('sidebarSectionInsight')),
                 _SidebarItem(
@@ -121,9 +126,28 @@ class AppSidebar extends StatelessWidget {
               ],
             ),
           ),
+          // Below the destination list the rail changes grammar: the divider
+          // marks where "places you can be" ends and "things you can start"
+          // begins.
+          Divider(height: 1, thickness: 1, color: colors.outlineVariant),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: ListenSpacing.gap8,
+              vertical: ListenSpacing.gap8,
+            ),
+            child: _SidebarLaunchAction(
+              icon: Icons.forum_outlined,
+              label: l.text('sidebarStartConversation'),
+              onTap: onOpenConversation,
+            ),
+          ),
           if (onOpenSettings != null)
             Padding(
-              padding: const EdgeInsets.all(ListenSpacing.gap8),
+              padding: const EdgeInsets.only(
+                left: ListenSpacing.gap8,
+                right: ListenSpacing.gap8,
+                bottom: ListenSpacing.gap8,
+              ),
               child: _SidebarItem(
                 icon: Icons.settings_outlined,
                 label: l.text('settings'),
@@ -153,6 +177,65 @@ class _SidebarSectionTitle extends StatelessWidget {
         title,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// The rail's one launch affordance: it opens an experience over the shell
+/// rather than swapping the pane, so it is drawn as a door — outlined instead
+/// of fillable, tinted with the primary role, and tipped with a leaving arrow.
+/// It takes no `isSelected`, because nothing it opens can ever be "where you
+/// are" in the rail.
+class _SidebarLaunchAction extends StatelessWidget {
+  const _SidebarLaunchAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: ListenRadii.controlBorder,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: ListenRadii.controlBorder,
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        padding: const EdgeInsets.symmetric(
+          horizontal: ListenSpacing.gap12,
+          vertical: ListenSpacing.gap8,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: ListenIconSize.control, color: colors.primary),
+            const SizedBox(width: ListenSpacing.gap12),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // The arrow says the shell is left behind, not re-rendered.
+            Icon(
+              Icons.arrow_outward,
+              size: ListenIconSize.inline,
+              color: colors.primary,
+            ),
+          ],
         ),
       ),
     );

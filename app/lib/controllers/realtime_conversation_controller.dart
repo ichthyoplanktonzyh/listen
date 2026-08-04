@@ -116,6 +116,7 @@ class RealtimeConversationState {
     this.mode = RealtimeConversationMode.topicAnchored,
     List<RealtimeConversationItem> items = const [],
     this.postProcessingCount = 0,
+    this.sessionDuration,
     List<RealtimeConversationSessionView> historySessions = const [],
     List<RealtimeConversationItem> historyItems = const [],
     this.selectedHistorySessionId,
@@ -137,6 +138,15 @@ class RealtimeConversationState {
   final List<RealtimeConversationItem> _items;
   List<RealtimeConversationItem> get items => List.unmodifiable(_items);
   final int postProcessingCount;
+
+  /// How long the conversation ran, captured at the terminal transition.
+  ///
+  /// Null while the session is still running or was never started. The debrief
+  /// (design note `listen-live-conversation-lifecycle.html`: 「3m 42s · 12轮」)
+  /// only states a duration the session actually recorded — never a guess
+  /// from a clock that kept running after the voice went away.
+  final Duration? sessionDuration;
+
   final List<RealtimeConversationSessionView> _historySessions;
   List<RealtimeConversationSessionView> get historySessions =>
       List.unmodifiable(_historySessions);
@@ -193,6 +203,7 @@ class RealtimeConversationState {
     RealtimeConversationMode? mode,
     List<RealtimeConversationItem>? items,
     int? postProcessingCount,
+    Object? sessionDuration = _unset,
     List<RealtimeConversationSessionView>? historySessions,
     List<RealtimeConversationItem>? historyItems,
     Object? selectedHistorySessionId = _unset,
@@ -209,6 +220,9 @@ class RealtimeConversationState {
     mode: mode ?? this.mode,
     items: items ?? this.items,
     postProcessingCount: postProcessingCount ?? this.postProcessingCount,
+    sessionDuration: identical(sessionDuration, _unset)
+        ? this.sessionDuration
+        : sessionDuration as Duration?,
     historySessions: historySessions ?? this.historySessions,
     historyItems: historyItems ?? this.historyItems,
     selectedHistorySessionId: identical(selectedHistorySessionId, _unset)
@@ -419,6 +433,7 @@ class RealtimeConversationController extends ChangeNotifier {
       mode: launch.mode,
       items: const [],
       postProcessingCount: 0,
+      sessionDuration: null,
       error: null,
     );
     notifyListeners();
@@ -1077,22 +1092,33 @@ class RealtimeConversationController extends ChangeNotifier {
         await Future.wait(List<Future<void>>.from(_postProcessing));
       }
       final endedAt = _nowMs();
+      final duration = _sessionStartedAtMs == null
+          ? null
+          : Duration(milliseconds: endedAt - _sessionStartedAtMs!);
       await _persistTerminalSession(
         status: 'completed',
         failureKind: null,
         endedAtMs: endedAt,
       );
-      state = state.copyWith(phase: RealtimeConversationPhase.done);
+      state = state.copyWith(
+        phase: RealtimeConversationPhase.done,
+        sessionDuration: duration,
+      );
       await loadHistory();
     } catch (error) {
+      final endedAt = _nowMs();
+      final duration = _sessionStartedAtMs == null
+          ? null
+          : Duration(milliseconds: endedAt - _sessionStartedAtMs!);
       await _persistTerminalSession(
         status: 'failed',
         failureKind: 'finalization_failed',
-        endedAtMs: _nowMs(),
+        endedAtMs: endedAt,
       );
       state = state.copyWith(
         phase: RealtimeConversationPhase.failed,
         activity: RealtimeConversationActivity.inactive,
+        sessionDuration: duration,
         error: RealtimeConversationNotice(
           kind: 'finish_failed',
           detail: _transport.describeFailure(error),
@@ -1150,6 +1176,7 @@ class RealtimeConversationController extends ChangeNotifier {
       phase: RealtimeConversationPhase.idle,
       activity: RealtimeConversationActivity.inactive,
       postProcessingCount: 0,
+      sessionDuration: null,
       error: null,
     );
     notifyListeners();
@@ -1277,14 +1304,19 @@ class RealtimeConversationController extends ChangeNotifier {
 
   Future<void> _failAndCleanup(RealtimeConversationNotice notice) async {
     await _cleanup(discard: true);
+    final endedAtMs = _nowMs();
+    final duration = _sessionStartedAtMs == null
+        ? null
+        : Duration(milliseconds: endedAtMs - _sessionStartedAtMs!);
     await _persistTerminalSession(
       status: 'failed',
       failureKind: 'provider_connection_failed',
-      endedAtMs: _nowMs(),
+      endedAtMs: endedAtMs,
     );
     state = state.copyWith(
       phase: RealtimeConversationPhase.failed,
       activity: RealtimeConversationActivity.inactive,
+      sessionDuration: duration,
       error: notice,
     );
     notifyListeners();

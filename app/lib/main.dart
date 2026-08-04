@@ -757,27 +757,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
-  /// Sidebar navigation: every destination swaps the main pane inside the
-  /// shell so its sidebar entry can carry a selection state. Conversation
-  /// alone stays a launched experience (it pushes the immersive stage), so it
-  /// never enters the route state.
-  Future<void> _handleSidebarRoute(AppRoute route) async {
-    switch (route) {
-      case AppRoute.discovery:
-      case AppRoute.resources:
-      case AppRoute.history:
-      case AppRoute.vocabulary:
-      case AppRoute.expression:
-      case AppRoute.review:
-      case AppRoute.coach:
-        currentRoute.value = route;
-        return;
-      case AppRoute.conversation:
-        await _openFreeConversation();
-        return;
-    }
-  }
-
   /// Starts learning from a discovery entry: opens the media in the session
   /// and expands the workbench (a global layer above the route shell).
   Future<void> _startLearningFromDiscovery(String path) async {
@@ -2187,12 +2166,19 @@ class _PlayerScreenState extends State<PlayerScreen>
                                               Row(
                                                 children: [
                                                   AppSidebar(
+                                                    // Destinations swap the
+                                                    // pane in place; the
+                                                    // conversation stage is
+                                                    // pushed over the shell,
+                                                    // so it arrives on its own
+                                                    // callback.
                                                     currentRoute: route,
                                                     onRouteSelected: (route) =>
-                                                        unawaited(
-                                                          _handleSidebarRoute(
+                                                        currentRoute.value =
                                                             route,
-                                                          ),
+                                                    onOpenConversation: () =>
+                                                        unawaited(
+                                                          _openFreeConversation(),
                                                         ),
                                                     onOpenSettings: () =>
                                                         unawaited(
@@ -2489,10 +2475,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                               .loadMediaLibrary(),
                                                         ),
                                                       ),
-                                                      // Conversation is a
-                                                      // launched experience,
-                                                      // never a route value.
-                                                      _ => SizedBox.shrink(),
                                                     },
                                                   ),
                                                 ],

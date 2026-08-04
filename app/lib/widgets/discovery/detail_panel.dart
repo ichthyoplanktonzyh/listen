@@ -23,6 +23,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
     this.durationMs,
     required this.downloadState,
     required this.downloadProgress,
+    this.downloadFailure,
     required this.packageStatus,
     required this.generationStatus,
     required this.generatorPhase,
@@ -33,6 +34,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
     required this.onViewPackage,
     required this.onGenerate,
     required this.onCancelGenerate,
+    required this.onRecheckPackage,
   });
 
   final MediaEntry entry;
@@ -40,16 +42,27 @@ class DiscoveryDetailPanel extends StatelessWidget {
   final int? durationMs;
   final DownloadState downloadState;
   final double downloadProgress;
+
+  /// Why the last acquisition attempt failed, shown only in the failed state.
+  final ApiFailure? downloadFailure;
+
   final PackageStatus packageStatus;
   final ContentGenerationStatus generationStatus;
   final String? generatorPhase;
   final ApiFailure? generationFailure;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
-  final VoidCallback onOpenPlayer;
+
+  /// Null when no local file backs this entry — the affordance says "open for
+  /// learning", so it may only exist when there is something to open.
+  final VoidCallback? onOpenPlayer;
+
   final VoidCallback onViewPackage;
   final VoidCallback onGenerate;
   final VoidCallback onCancelGenerate;
+
+  /// Re-runs the package lookup after an undetermined answer.
+  final VoidCallback onRecheckPackage;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +95,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
           _UserJourneyActionsCard(
             downloadState: downloadState,
             downloadProgress: downloadProgress,
+            downloadFailure: downloadFailure,
             packageStatus: packageStatus,
             generationStatus: generationStatus,
             generatorPhase: generatorPhase,
@@ -91,6 +105,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
             onGenerate: onGenerate,
             onCancelGenerate: onCancelGenerate,
             onOpenPlayer: onOpenPlayer,
+            onRecheckPackage: onRecheckPackage,
           ),
           const SizedBox(height: ListenSpacing.gap16),
 
@@ -235,10 +250,54 @@ class _MetaRow extends StatelessWidget {
   }
 }
 
+/// The package line for every status that is not "available" or "checking":
+/// checked-and-none, never-asked, and could-not-ask each get their own words.
+class _PackageStatusRow extends StatelessWidget {
+  const _PackageStatusRow({required this.status});
+
+  final PackageStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, label) = switch (status) {
+      PackageStatus.undetermined => (
+        Icons.help_outline,
+        l.text('discoveryPackageUndetermined'),
+      ),
+      PackageStatus.unknown => (
+        Icons.inventory_2_outlined,
+        l.text('discoveryPackageUnknown'),
+      ),
+      _ => (Icons.inventory_2_outlined, l.text('discoveryPackageNone')),
+    };
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: ListenIconSize.control,
+          color: scheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: ListenSpacing.gap8),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _UserJourneyActionsCard extends StatelessWidget {
   const _UserJourneyActionsCard({
     required this.downloadState,
     required this.downloadProgress,
+    this.downloadFailure,
     required this.packageStatus,
     required this.generationStatus,
     required this.generatorPhase,
@@ -248,10 +307,12 @@ class _UserJourneyActionsCard extends StatelessWidget {
     required this.onGenerate,
     required this.onCancelGenerate,
     required this.onOpenPlayer,
+    required this.onRecheckPackage,
   });
 
   final DownloadState downloadState;
   final double downloadProgress;
+  final ApiFailure? downloadFailure;
   final PackageStatus packageStatus;
   final ContentGenerationStatus generationStatus;
   final String? generatorPhase;
@@ -260,7 +321,8 @@ class _UserJourneyActionsCard extends StatelessWidget {
   final VoidCallback onCancelDownload;
   final VoidCallback onGenerate;
   final VoidCallback onCancelGenerate;
-  final VoidCallback onOpenPlayer;
+  final VoidCallback? onOpenPlayer;
+  final VoidCallback onRecheckPackage;
 
   @override
   Widget build(BuildContext context) {
@@ -269,6 +331,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
 
     final isDownloaded = downloadState == DownloadState.done;
     final isDownloading = downloadState == DownloadState.downloading;
+    final downloadFailed = downloadState == DownloadState.failed;
 
     final isPackageAvailable = packageStatus == PackageStatus.available;
     final isCheckingPackage = packageStatus == PackageStatus.checking;
@@ -308,15 +371,25 @@ class _UserJourneyActionsCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                isDownloaded ? Icons.check_circle : Icons.download,
+                isDownloaded
+                    ? Icons.check_circle
+                    : downloadFailed
+                    ? Icons.error_outline
+                    : Icons.download,
                 size: ListenIconSize.inline,
-                color: isDownloaded ? scheme.primary : scheme.onSurfaceVariant,
+                color: isDownloaded
+                    ? scheme.primary
+                    : downloadFailed
+                    ? scheme.error
+                    : scheme.onSurfaceVariant,
               ),
               const SizedBox(width: ListenSpacing.gap8),
               Expanded(
                 child: Text(
                   isDownloaded
                       ? l.text('discoveryDownloaded')
+                      : downloadFailed
+                      ? l.text('discoveryDownloadFailed')
                       : isDownloading
                       ? l
                             .text('discoveryDownloading')
@@ -326,6 +399,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
                             )
                       : l.text('discoveryDownload'),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: downloadFailed ? scheme.error : null,
                     fontWeight: isDownloading || !isDownloaded
                         ? FontWeight.bold
                         : FontWeight.normal,
@@ -334,6 +408,17 @@ class _UserJourneyActionsCard extends StatelessWidget {
               ),
             ],
           ),
+          // The panel is where the reason lives; the card only had room to say
+          // that it failed.
+          if (downloadFailure case final failure? when downloadFailed) ...[
+            const SizedBox(height: ListenSpacing.gap4),
+            Text(
+              _failureDetail(failure),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: scheme.error),
+            ),
+          ],
           if (isDownloading) ...[
             const SizedBox(height: ListenSpacing.gap6),
             LinearProgressIndicator(value: downloadProgress),
@@ -351,8 +436,17 @@ class _UserJourneyActionsCard extends StatelessWidget {
             const SizedBox(height: ListenSpacing.gap8),
             FilledButton.icon(
               onPressed: onDownload,
-              icon: const Icon(Icons.download, size: ListenIconSize.control),
-              label: Text(l.text('discoveryDownload')),
+              icon: Icon(
+                downloadFailed ? Icons.refresh : Icons.download,
+                size: ListenIconSize.control,
+              ),
+              label: Text(
+                l.text(
+                  downloadFailed
+                      ? 'discoveryDownloadFailedRetry'
+                      : 'discoveryDownload',
+                ),
+              ),
               style: FilledButton.styleFrom(
                 minimumSize: const Size(double.infinity, 36),
               ),
@@ -425,80 +519,75 @@ class _UserJourneyActionsCard extends StatelessWidget {
               ],
             ),
           ] else ...[
-            // Package is NOT available (notAvailable or unknown)
-            Row(
-              children: [
-                Icon(
-                  Icons.inventory_2_outlined,
-                  size: ListenIconSize.control,
-                  color: scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: ListenSpacing.gap8),
-                Expanded(
-                  child: Text(
-                    l.text('discoveryPackageNone'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            _PackageStatusRow(status: packageStatus),
             const SizedBox(height: ListenSpacing.gap8),
 
-            if (generationStatus == ContentGenerationStatus.failed) ...[
-              Text(
-                l.text('discoveryGenerateFailed'),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.error),
-              ),
-              if (generationFailure case final failure?) ...[
-                const SizedBox(height: ListenSpacing.gap4),
+            // Only a *checked* "no package" earns the generate flow. Under
+            // unknown or undetermined we have not been told whether one
+            // already exists, so the honest next step is to ask again.
+            if (packageStatus == PackageStatus.notAvailable) ...[
+              if (generationStatus == ContentGenerationStatus.failed) ...[
                 Text(
-                  _failureDetail(failure),
+                  l.text('discoveryGenerateFailed'),
                   style: Theme.of(
                     context,
-                  ).textTheme.labelSmall?.copyWith(color: scheme.error),
+                  ).textTheme.bodySmall?.copyWith(color: scheme.error),
+                ),
+                if (generationFailure case final failure?) ...[
+                  const SizedBox(height: ListenSpacing.gap4),
+                  Text(
+                    _failureDetail(failure),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: scheme.error),
+                  ),
+                ],
+                const SizedBox(height: ListenSpacing.gap8),
+              ] else if (generationStatus ==
+                  ContentGenerationStatus.cancelled) ...[
+                Text(
+                  l.text('discoveryGenerateCancelled'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: ListenSpacing.gap8),
+              ],
+
+              // Generate button - disabled unless media is downloaded!
+              FilledButton.icon(
+                onPressed: isDownloaded ? onGenerate : null,
+                icon: const Icon(
+                  Icons.auto_awesome,
+                  size: ListenIconSize.control,
+                ),
+                label: Text(l.text('discoveryGenerate')),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 36),
+                  backgroundColor: scheme.secondary,
+                  foregroundColor: scheme.onSecondary,
+                ),
+              ),
+              if (!isDownloaded) ...[
+                const SizedBox(height: ListenSpacing.gap4),
+                Text(
+                  l.text('discoveryGenerateNeedsDownload'),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    fontStyle: FontStyle.italic,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ],
-              const SizedBox(height: ListenSpacing.gap8),
-            ] else if (generationStatus ==
-                ContentGenerationStatus.cancelled) ...[
-              Text(
-                l.text('discoveryGenerateCancelled'),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: ListenSpacing.gap8),
-            ],
-
-            // Generate button - disabled unless media is downloaded!
-            FilledButton.icon(
-              onPressed: isDownloaded ? onGenerate : null,
-              icon: const Icon(
-                Icons.auto_awesome,
-                size: ListenIconSize.control,
-              ),
-              label: Text(l.text('discoveryGenerate')),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size(double.infinity, 36),
-                backgroundColor: scheme.secondary,
-                foregroundColor: scheme.onSecondary,
-              ),
-            ),
-            if (!isDownloaded) ...[
-              const SizedBox(height: ListenSpacing.gap4),
-              Text(
-                'Please download media first to generate a learning package.',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                  fontStyle: FontStyle.italic,
+            ] else
+              OutlinedButton.icon(
+                onPressed: onRecheckPackage,
+                icon: const Icon(Icons.refresh, size: ListenIconSize.control),
+                label: Text(l.text('discoveryCheckPackageAgain')),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 36),
                 ),
-                textAlign: TextAlign.center,
               ),
-            ],
           ],
 
           // ── STEP 3: Learning Launch ──
@@ -561,6 +650,7 @@ Widget discoveryDetailPanelPreview() => discoveryPreviewShell(
     onViewPackage: _noop,
     onGenerate: _noop,
     onCancelGenerate: _noop,
+    onRecheckPackage: _noop,
   ),
   width: 380,
   height: 720,

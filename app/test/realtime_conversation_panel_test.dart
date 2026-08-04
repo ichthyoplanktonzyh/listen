@@ -115,7 +115,6 @@ void main() {
   testWidgets('the lobby offers a voice choice, not a configuration form', (
     tester,
   ) async {
-    var manageVoicesTaps = 0;
     final api = LocalApi.withTransport(
       baseUrl: 'http://test',
       token: 'token',
@@ -131,6 +130,16 @@ void main() {
                 'base_url': 'wss://example.com/api-ws/v1/realtime',
                 'model_id': qwenRealtimeBaselineModel,
                 'voice': 'Tina',
+                'has_credential': true,
+                'timeout_ms': 30000,
+              },
+              {
+                'id': 'profile-alt',
+                'display_name': 'Alt provider',
+                'adapter_kind': 'open_ai_realtime',
+                'base_url': 'wss://example.com/api-ws/v1/realtime',
+                'model_id': openAiRealtimeBaselineModel,
+                'voice': 'Aria',
                 'has_credential': true,
                 'timeout_ms': 30000,
               },
@@ -158,49 +167,41 @@ void main() {
           ),
           acquireAudioFocus: () async {},
           onClose: () {},
-          onManageVoices: () async => manageVoicesTaps++,
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // First glance: an invitation and one action. Not a form.
+    // First glance: the design's 门厅 — one heading naming the room, one
+    // line naming the voice, one action. Not a configuration form.
     expect(tester.takeException(), isNull);
-    expect(find.text('Ready when you are'), findsOneWidget);
+    expect(find.text('Listen Live'), findsOneWidget);
+    expect(find.text('Immersive realtime voice conversation'), findsOneWidget);
     final start = find.byKey(const ValueKey('realtime-start'));
     expect(start, findsOneWidget);
-    expect(
-      find.widgetWithText(FilledButton, 'Start conversation'),
-      findsOneWidget,
-    );
     // The one primary action is the biggest control on the screen.
     expect(tester.getSize(start).height, greaterThanOrEqualTo(56));
 
-    // The voice is a line of text you may tap, not a dropdown demanding a
-    // decision before you are allowed to speak.
-    expect(
-      find.text('In the voice of Realtime provider · Tina'),
-      findsOneWidget,
-    );
+    // The voice is a plain dropdown inside the settings card, not a form
+    // field and not a settings page.
     expect(find.byType(DropdownButtonFormField<String>), findsNothing);
-    // The picker (and the way to settings) only exist once asked for.
+    final dropdown = find.byType(DropdownButton<String>);
+    expect(dropdown, findsOneWidget);
+    expect(find.text('Realtime provider · Tina'), findsOneWidget);
     expect(find.byKey(const ValueKey('realtime-manage-voices')), findsNothing);
+
+    // Selecting another voice takes effect immediately.
+    await tester.tap(dropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alt provider · Aria').last);
+    await tester.pumpAndSettle();
+    expect(controller.state.selectedProfileId, 'profile-alt');
+    expect(find.text('Alt provider · Aria'), findsOneWidget);
 
     // The endpoint/workspace/region/API-key form lives in settings (#87).
     expect(find.text('Add provider'), findsNothing);
     expect(find.widgetWithText(TextField, 'WebSocket endpoint'), findsNothing);
     expect(find.widgetWithText(TextField, 'Workspace ID'), findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('realtime-voice-choice')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('realtime-voice-option-profile-long')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('realtime-manage-voices')));
-    await tester.pumpAndSettle();
-    expect(manageVoicesTaps, 1);
 
     controller.dispose();
   });
@@ -260,15 +261,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('准备好了就说话'), findsOneWidget);
-    expect(find.text('用 test · marin 的声音'), findsOneWidget);
+    expect(find.text('对话 · Live 态'), findsOneWidget);
+    expect(find.text('全屏沉浸式实时语音对话'), findsOneWidget);
+    expect(find.text('对话角色音色'), findsOneWidget);
+    expect(find.text('对方说话的声音风格'), findsOneWidget);
+    expect(find.text('余音字幕'), findsOneWidget);
+    expect(find.text('对方说话时显示淡出字幕'), findsOneWidget);
+    expect(find.text('test · marin'), findsOneWidget);
     expect(find.text('开始对话'), findsOneWidget);
-    expect(find.text('最近的对话'), findsOneWidget);
-    expect(find.text('对方说的话 · 不显示'), findsOneWidget);
     // The English that used to sit on the same screen as the Chinese.
     for (final english in const [
       'Free conversation',
-      'Show what the other person says',
+      'Listen Live',
+      'Voice persona',
+      'Afterglow Captions',
       'Start conversation',
       'Conversation history',
     ]) {
@@ -339,6 +345,12 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    // History lives in the drawer (design note · 方案三), opened from the
+    // app bar — the past is not stacked on top of the start action.
+    expect(find.byType(ListTile), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('realtime-history-open')));
     await tester.pumpAndSettle();
 
     expect(find.byType(ListTile), findsNWidgets(5));

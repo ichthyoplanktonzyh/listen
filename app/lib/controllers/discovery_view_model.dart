@@ -6,6 +6,7 @@ import '../data/repositories/discovery_repository.dart';
 import '../data/repositories/media_import_repository.dart';
 import '../data/repositories/media_library_repository.dart';
 import '../data/repositories/content_package_repository.dart';
+import '../controllers/download_controller.dart';
 import '../models/content_package.dart';
 import '../services/listen_gen_process_service.dart';
 import '../models/discovery.dart';
@@ -21,33 +22,54 @@ import '../models/saved_vocabulary_count.dart';
 class DiscoveryState {
   DiscoveryState({
     this.loading = true,
+    this.entriesLoading = false,
     this.resolvingUrl = false,
     this.resolveFailed = false,
     List<MediaSource> sources = const [],
     this.selectedSourceId,
+    this.sourcesFailure,
     List<MediaEntry> entries = const [],
     this.selectedEntryId,
-    Map<String, double> downloads = const {},
+    this.entriesFailure,
+    Map<String, DownloadStatusSnapshot> downloadSnapshots = const {},
     Map<String, PackageStatus> packageStatuses = const {},
     Map<String, ContentGenerationStatus> generationStatuses = const {},
     Map<String, String?> generatorPhases = const {},
     Map<String, ApiFailure?> generationFailures = const {},
   }) : sources = List.unmodifiable(sources),
        entries = List.unmodifiable(entries),
-       downloads = Map.unmodifiable(downloads),
+       downloadSnapshots = Map.unmodifiable(downloadSnapshots),
        packageStatuses = Map.unmodifiable(packageStatuses),
        generationStatuses = Map.unmodifiable(generationStatuses),
        generatorPhases = Map.unmodifiable(generatorPhases),
        generationFailures = Map.unmodifiable(generationFailures);
 
+  /// The first catalog load — the surface has no sources yet.
   final bool loading;
+
+  /// A channel's feed is in flight. Distinct from [loading]: the sources are
+  /// already on screen, only the shelf below them is still unknown.
+  final bool entriesLoading;
+
   final bool resolvingUrl;
   final bool resolveFailed;
   final List<MediaSource> sources;
   final String? selectedSourceId;
+
+  /// Set when the catalog itself failed. An empty [sources] with no failure is
+  /// an empty catalog; with one it is a broken surface.
+  final ApiFailure? sourcesFailure;
+
   final List<MediaEntry> entries;
   final String? selectedEntryId;
-  final Map<String, double> downloads;
+
+  /// Set when the selected channel's feed failed. An empty [entries] with no
+  /// failure means the channel is genuinely empty.
+  final ApiFailure? entriesFailure;
+  /// Typed acquisition state per entry, mirrored from that entry's
+  /// [DownloadController]. Absent means nothing has been acquired or attempted.
+  final Map<String, DownloadStatusSnapshot> downloadSnapshots;
+
   final Map<String, PackageStatus> packageStatuses;
   final Map<String, ContentGenerationStatus> generationStatuses;
   final Map<String, String?> generatorPhases;
@@ -75,13 +97,22 @@ class DiscoveryState {
   MediaEntry? get selectedEntry =>
       selectedEntryId == null ? null : entryById(selectedEntryId!);
 
-  double downloadProgressOf(String entryId) => downloads[entryId] ?? 0;
+  double downloadProgressOf(String entryId) =>
+      downloadSnapshots[entryId]?.progress ?? 0;
 
   DownloadState downloadStateOf(String entryId) {
-    final progress = downloads[entryId];
-    if (progress == null) return DownloadState.none;
-    return progress >= 1 ? DownloadState.done : DownloadState.downloading;
+    final snapshot = downloadSnapshots[entryId];
+    if (snapshot == null) return DownloadState.none;
+    return switch (snapshot.kind) {
+      DownloadStatusKind.downloading => DownloadState.downloading,
+      DownloadStatusKind.completed => DownloadState.done,
+      DownloadStatusKind.failed => DownloadState.failed,
+    };
   }
+
+  /// Why the last acquisition attempt failed, for the row that offers a retry.
+  ApiFailure? downloadFailureOf(String entryId) =>
+      downloadSnapshots[entryId]?.failure;
 
   PackageStatus packageStatusOf(String entryId) =>
       packageStatuses[entryId] ?? PackageStatus.unknown;
@@ -94,28 +125,45 @@ class DiscoveryState {
   ApiFailure? generationFailureOf(String entryId) =>
       generationFailures[entryId];
 
+  /// Nullable fields take an explicit `clear*` flag: `selectedEntryId: null`
+  /// cannot mean "drop the selection" when every field merges with `??`.
   DiscoveryState copyWith({
     bool? loading,
+    bool? entriesLoading,
     bool? resolvingUrl,
     bool? resolveFailed,
     List<MediaSource>? sources,
     String? selectedSourceId,
+    ApiFailure? sourcesFailure,
+    bool clearSourcesFailure = false,
     List<MediaEntry>? entries,
     String? selectedEntryId,
-    Map<String, double>? downloads,
+    bool clearSelectedEntryId = false,
+    ApiFailure? entriesFailure,
+    bool clearEntriesFailure = false,
+    Map<String, DownloadStatusSnapshot>? downloadSnapshots,
     Map<String, PackageStatus>? packageStatuses,
     Map<String, ContentGenerationStatus>? generationStatuses,
     Map<String, String?>? generatorPhases,
     Map<String, ApiFailure?>? generationFailures,
   }) => DiscoveryState(
     loading: loading ?? this.loading,
+    entriesLoading: entriesLoading ?? this.entriesLoading,
     resolvingUrl: resolvingUrl ?? this.resolvingUrl,
     resolveFailed: resolveFailed ?? this.resolveFailed,
     sources: sources ?? this.sources,
     selectedSourceId: selectedSourceId ?? this.selectedSourceId,
+    sourcesFailure: clearSourcesFailure
+        ? null
+        : sourcesFailure ?? this.sourcesFailure,
     entries: entries ?? this.entries,
-    selectedEntryId: selectedEntryId ?? this.selectedEntryId,
-    downloads: downloads ?? this.downloads,
+    selectedEntryId: clearSelectedEntryId
+        ? null
+        : selectedEntryId ?? this.selectedEntryId,
+    entriesFailure: clearEntriesFailure
+        ? null
+        : entriesFailure ?? this.entriesFailure,
+    downloadSnapshots: downloadSnapshots ?? this.downloadSnapshots,
     packageStatuses: packageStatuses ?? this.packageStatuses,
     generationStatuses: generationStatuses ?? this.generationStatuses,
     generatorPhases: generatorPhases ?? this.generatorPhases,
@@ -158,8 +206,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
   final Map<String, String> _localPaths = {};
   final Map<String, String> _mediaIds = {};
   final Map<String, int?> _mediaDurations = {};
-  final Map<String, StreamSubscription<double>> _downloadSubscriptions = {};
-  final Map<String, MediaDownloadHandle> _activeDownloads = {};
+  final Map<String, DownloadController> _downloadControllers = {};
   final List<MediaEntry> _customEntries = [];
   final Map<String, ListenGenProcessRun> _generationRuns = {};
   final Map<String, StreamSubscription<ListenGenMachineEvent>>
@@ -168,7 +215,24 @@ final class DiscoveryViewModel extends ChangeNotifier {
   bool _disposed = false;
 
   Future<void> load() async {
-    final repoSources = await _repository.sources();
+    _state = _state.copyWith(loading: true, clearSourcesFailure: true);
+    notifyListeners();
+
+    final List<MediaSource> repoSources;
+    try {
+      repoSources = await _repository.sources();
+    } catch (error) {
+      // A catalog that failed is not a catalog that is empty, and leaving
+      // `loading` set would spin forever.
+      debugPrint('Error loading discovery sources: $error');
+      if (_disposed) return;
+      _state = _state.copyWith(
+        loading: false,
+        sourcesFailure: ApiFailure(raw: error.toString()),
+      );
+      notifyListeners();
+      return;
+    }
     if (_disposed) return;
 
     final allSources = [...repoSources, customSource];
@@ -190,30 +254,63 @@ final class DiscoveryViewModel extends ChangeNotifier {
   Future<void> selectChannel(String sourceId) async {
     if (sourceId == _state.selectedSourceId) return;
 
-    _state = _state.copyWith(selectedSourceId: sourceId, selectedEntryId: null);
+    _state = _state.copyWith(
+      selectedSourceId: sourceId,
+      clearSelectedEntryId: true,
+    );
     notifyListeners();
     await _loadEntriesFor(sourceId);
   }
 
+  /// Re-runs the selected channel's feed after a failure.
+  Future<void> retryEntries() async {
+    final sourceId = _state.selectedSourceId;
+    if (sourceId == null) return;
+    await _loadEntriesFor(sourceId);
+  }
+
   Future<void> _loadEntriesFor(String sourceId) async {
-    List<MediaEntry> entries;
-    if (sourceId == 'custom_imports') {
-      entries = _customEntries;
-    } else {
-      entries = await _repository.entriesFor(sourceId);
+    // The old channel's cards stop standing in for the new one's while its
+    // header is already on screen.
+    _state = _state.copyWith(
+      entriesLoading: true,
+      entries: const [],
+      clearSelectedEntryId: true,
+      clearEntriesFailure: true,
+    );
+    notifyListeners();
+
+    final List<MediaEntry> entries;
+    try {
+      entries = sourceId == customSource.id
+          ? List<MediaEntry>.of(_customEntries)
+          : await _repository.entriesFor(sourceId);
+    } catch (error) {
+      debugPrint('Error loading entries for channel $sourceId: $error');
+      if (_disposed || sourceId != _state.selectedSourceId) return;
+      _state = _state.copyWith(
+        entriesLoading: false,
+        entriesFailure: ApiFailure(raw: error.toString()),
+      );
+      notifyListeners();
+      return;
     }
     if (_disposed) return;
+    // A slow channel must not land on top of the one the learner switched to.
+    if (sourceId != _state.selectedSourceId) return;
 
     _state = _state.copyWith(
+      entriesLoading: false,
       entries: entries,
       selectedEntryId: entries.isEmpty ? null : entries.first.id,
+      clearSelectedEntryId: entries.isEmpty,
     );
     notifyListeners();
     if (entries.isNotEmpty) {
       unawaited(checkPackage(entries.first.id));
     }
     unawaited(_hydrateLocalDurations(entries));
-    unawaited(_resolveRemoteDurations(entries));
+    unawaited(_resolveRemoteDurations(sourceId, entries));
   }
 
   void selectItem(String entryId) {
@@ -221,7 +318,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
     _state = _state.copyWith(selectedEntryId: entryId);
     notifyListeners();
-    if (state.packageStatusOf(entryId) == PackageStatus.unknown) {
+    final status = state.packageStatusOf(entryId);
+    if (status == PackageStatus.unknown ||
+        status == PackageStatus.undetermined) {
       unawaited(checkPackage(entryId));
     }
   }
@@ -229,62 +328,110 @@ final class DiscoveryViewModel extends ChangeNotifier {
   Future<void> checkPackage(String entryId) async {
     if (_state.packageStatusOf(entryId) == PackageStatus.checking) return;
 
-    final statuses = Map<String, PackageStatus>.of(_state.packageStatuses)
-      ..[entryId] = PackageStatus.checking;
-    _state = _state.copyWith(packageStatuses: statuses);
-    notifyListeners();
+    _setPackageStatus(entryId, PackageStatus.checking);
 
-    final localEntry = await _findLocalEntry(entryId);
+    // Without the core there is nothing to ask, so the answer stays missing —
+    // "no package" would be a guess dressed up as a fact.
+    if (!_mediaLibraryRepository.isAvailable) {
+      _setPackageStatus(entryId, PackageStatus.undetermined);
+      return;
+    }
+
+    final MediaLibraryEntry? localEntry;
+    try {
+      localEntry = await _findLocalEntry(entryId);
+    } catch (error) {
+      debugPrint('Error searching local media entry: $error');
+      _setPackageStatus(entryId, PackageStatus.undetermined);
+      return;
+    }
     if (_disposed) return;
 
-    if (localEntry != null) {
-      final finished = Map<String, double>.of(_state.downloads)
-        ..[entryId] = 1.0;
-      final updatedStatuses =
-          Map<String, PackageStatus>.of(_state.packageStatuses)
-            ..[entryId] = localEntry.primaryTrackId != null
-                ? PackageStatus.available
-                : PackageStatus.notAvailable;
-
-      _localPaths[entryId] = localEntry.media.path;
-      _mediaIds[entryId] = localEntry.media.id;
-      _mediaDurations[entryId] = localEntry.media.durationMs;
-
-      _state = _state.copyWith(
-        downloads: finished,
-        packageStatuses: updatedStatuses,
-      );
-      notifyListeners();
-    } else {
-      final updatedStatuses = Map<String, PackageStatus>.of(
-        _state.packageStatuses,
-      )..[entryId] = PackageStatus.notAvailable;
-      _state = _state.copyWith(packageStatuses: updatedStatuses);
-      notifyListeners();
+    if (localEntry == null) {
+      _setPackageStatus(entryId, PackageStatus.notAvailable);
+      return;
     }
+
+    // Media already on disk reads as an acquisition that is done, whether this
+    // session downloaded it or a previous one did.
+    final finished = Map<String, DownloadStatusSnapshot>.of(
+      _state.downloadSnapshots,
+    )..[entryId] = DownloadStatusSnapshot.completed(localEntry.media.path);
+    final updatedStatuses =
+        Map<String, PackageStatus>.of(_state.packageStatuses)
+          ..[entryId] = localEntry.primaryTrackId != null
+              ? PackageStatus.available
+              : PackageStatus.notAvailable;
+
+    _localPaths[entryId] = localEntry.media.path;
+    _mediaIds[entryId] = localEntry.media.id;
+    _mediaDurations[entryId] = localEntry.media.durationMs;
+
+    _state = _state.copyWith(
+      downloadSnapshots: finished,
+      packageStatuses: updatedStatuses,
+    );
+    notifyListeners();
   }
 
+  void _setPackageStatus(String entryId, PackageStatus status) {
+    if (_disposed) return;
+    final statuses = Map<String, PackageStatus>.of(_state.packageStatuses)
+      ..[entryId] = status;
+    _state = _state.copyWith(packageStatuses: statuses);
+    notifyListeners();
+  }
+
+  /// Throws when the library cannot be listed; the caller turns that into an
+  /// undetermined status rather than an answer.
   Future<MediaLibraryEntry?> _findLocalEntry(String entryId) async {
-    try {
-      if (!_mediaLibraryRepository.isAvailable) return null;
-      final library = await _mediaLibraryRepository.listMediaLibrary();
-      for (final entry in library) {
-        final path = entry.media.path;
-        if (path.contains('[$entryId]')) {
-          return entry;
-        }
-      }
-    } catch (e) {
-      debugPrint('Error searching local media entry: $e');
+    final library = await _mediaLibraryRepository.listMediaLibrary();
+    for (final entry in library) {
+      if (entry.media.path.contains('[$entryId]')) return entry;
     }
     return null;
   }
 
+  /// One [DownloadController] per entry: several rows can be acquiring at once,
+  /// and each needs its own generation guard so a late callback from a
+  /// cancelled or superseded run cannot land on the row that replaced it.
+  DownloadController _downloadControllerFor(String entryId) =>
+      _downloadControllers.putIfAbsent(entryId, () {
+        final controller = DownloadController(
+          failureMapper: _importRepository.failureDetail,
+          // A discovery row stays on screen, so its failure waits for a retry
+          // instead of quietly timing out from under the learner.
+          failedAutoDismiss: null,
+        );
+        controller.addListener(
+          () => _publishDownloadSnapshot(entryId, controller.snapshot),
+        );
+        return controller;
+      });
+
+  void _publishDownloadSnapshot(String entryId, DownloadStatusSnapshot? value) {
+    if (_disposed) return;
+    final snapshots = Map<String, DownloadStatusSnapshot>.of(
+      _state.downloadSnapshots,
+    );
+    if (value == null) {
+      snapshots.remove(entryId);
+    } else {
+      snapshots[entryId] = value;
+    }
+    _state = _state.copyWith(downloadSnapshots: snapshots);
+    notifyListeners();
+  }
+
+  /// Also the retry: a failed row calls straight back into this.
   Future<void> startDownload(String entryId) async {
     if (_state.downloadStateOf(entryId) == DownloadState.done) return;
 
     final entry = _state.entryById(entryId);
     if (entry == null || entry.videoUrl == null) return;
+
+    final controller = _downloadControllerFor(entryId);
+    controller.starting();
 
     try {
       if (_downloadDirectory == null) {
@@ -296,82 +443,61 @@ final class DiscoveryViewModel extends ChangeNotifier {
         _downloadDirectory = directory;
       }
 
-      final downloads = Map<String, double>.of(_state.downloads)
-        ..[entryId] = 0.01;
-      _state = _state.copyWith(downloads: downloads);
-      notifyListeners();
-
-      _activeDownloads[entryId]?.cancel();
-      await _downloadSubscriptions[entryId]?.cancel();
-
       final handle = await _importRepository.downloadOnlineMedia(
         entry.videoUrl!,
         _downloadDirectory!,
       );
-      _activeDownloads[entryId] = handle;
+      if (_disposed) {
+        handle.cancel();
+        return;
+      }
 
-      _downloadSubscriptions[entryId] = handle.progress.listen(
-        (progress) {
-          if (_disposed) return;
-          final updated = Map<String, double>.of(_state.downloads)
-            ..[entryId] = progress;
-          _state = _state.copyWith(downloads: updated);
-          notifyListeners();
-        },
-        onError: (Object error) {
-          debugPrint('Download error: $error');
-          _cleanDownload(entryId);
-        },
+      controller.attach(
+        progress: handle.progress,
+        completed: handle.completed,
+        cancel: handle.cancel,
+        onCompleted: (path) => unawaited(_adoptDownloadedMedia(entryId, path)),
       );
-
-      unawaited(
-        handle.completed.then((path) async {
-          if (_disposed) return;
-          if (path == null) {
-            _cleanDownload(entryId);
-            return;
-          }
-
-          try {
-            final probedDurationMs = await _importRepository
-                .probeMediaDurationMs(path);
-            final media = await _mediaLibraryRepository.registerMedia(
-              path,
-              durationMs: probedDurationMs,
-            );
-            _localPaths[entryId] = path;
-            _mediaIds[entryId] = media.id;
-            _mediaDurations[entryId] = media.durationMs ?? probedDurationMs;
-
-            final finished = Map<String, double>.of(_state.downloads)
-              ..[entryId] = 1.0;
-            _state = _state.copyWith(downloads: finished);
-            notifyListeners();
-
-            await checkPackage(entryId);
-          } catch (e) {
-            debugPrint('Error registering downloaded media: $e');
-            _cleanDownload(entryId);
-          }
-        }),
-      );
-    } catch (e) {
-      debugPrint('Error starting download: $e');
-      _cleanDownload(entryId);
+    } catch (error) {
+      debugPrint('Error starting download: $error');
+      if (_disposed) return;
+      controller.fail(_importRepository.failureDetail(error));
     }
   }
 
-  void _cleanDownload(String entryId) {
-    _activeDownloads.remove(entryId)?.cancel();
-    _downloadSubscriptions.remove(entryId)?.cancel();
-    final downloads = Map<String, double>.of(_state.downloads)..remove(entryId);
-    _state = _state.copyWith(downloads: downloads);
-    notifyListeners();
+  /// Registers a freshly downloaded file with the core so the entry stops being
+  /// a remote listing and becomes local media.
+  ///
+  /// A failure here is reported as an acquisition failure rather than dropped:
+  /// the bytes may be on disk, but an entry the core never registered is not
+  /// something the learner can act on, and silently reverting to "not
+  /// downloaded" would invite an identical second attempt.
+  Future<void> _adoptDownloadedMedia(String entryId, String path) async {
+    try {
+      final probedDurationMs = await _importRepository.probeMediaDurationMs(
+        path,
+      );
+      final media = await _mediaLibraryRepository.registerMedia(
+        path,
+        durationMs: probedDurationMs,
+      );
+      if (_disposed) return;
+      _localPaths[entryId] = path;
+      _mediaIds[entryId] = media.id;
+      _mediaDurations[entryId] = media.durationMs ?? probedDurationMs;
+      notifyListeners();
+      await checkPackage(entryId);
+    } catch (error) {
+      debugPrint('Error registering downloaded media: $error');
+      if (_disposed) return;
+      _downloadControllers[entryId]?.fail(
+        _importRepository.failureDetail(error),
+      );
+    }
   }
 
-  void cancelDownload(String entryId) {
-    _cleanDownload(entryId);
-  }
+  void cancelDownload(String entryId) =>
+      _downloadControllers[entryId]?.cancel();
 
   String? localPathFor(String entryId) => _localPaths[entryId];
 
@@ -406,7 +532,14 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// Resolves real durations for feed entries in the background (yt-dlp) with
   /// a small concurrency cap. Zero/unknown results keep the placeholder until
   /// a real value lands.
-  Future<void> _resolveRemoteDurations(List<MediaEntry> entries) async {
+  ///
+  /// The workers belong to [sourceId]: once the learner has switched channels
+  /// their entries are off screen, so they abort instead of piling subprocesses
+  /// up behind every switch.
+  Future<void> _resolveRemoteDurations(
+    String sourceId,
+    List<MediaEntry> entries,
+  ) async {
     final pending = entries
         .where(
           (entry) =>
@@ -419,7 +552,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
     var index = 0;
     final workers = List.generate(3, (_) async {
-      while (!_disposed) {
+      while (!_disposed && _state.selectedSourceId == sourceId) {
         final next = index++;
         if (next >= pending.length) return;
         final entry = pending[next];
@@ -427,7 +560,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
           final details = await _importRepository.resolveVideoDetails(
             entry.videoUrl!,
           );
-          if (_disposed) return;
+          if (_disposed || _state.selectedSourceId != sourceId) return;
           if (details.durationMs <= 0) continue;
           if (_mediaDurations[entry.id] == null) {
             _mediaDurations[entry.id] = details.durationMs;
@@ -541,7 +674,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
         );
         _setGenerationStatus(
           entryId,
-          cancelled ? ContentGenerationStatus.cancelled : ContentGenerationStatus.failed,
+          cancelled
+              ? ContentGenerationStatus.cancelled
+              : ContentGenerationStatus.failed,
         );
       }
     } finally {
@@ -610,7 +745,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
         // Switch to Custom Imports channel
         _state = _state.copyWith(
-          selectedSourceId: 'custom_imports',
+          selectedSourceId: customSource.id,
+          entriesLoading: false,
+          clearEntriesFailure: true,
           entries: _customEntries,
           selectedEntryId: entry.id,
         );
@@ -656,14 +793,10 @@ final class DiscoveryViewModel extends ChangeNotifier {
       run.cancel();
     }
     _generationRuns.clear();
-    for (final sub in _downloadSubscriptions.values) {
-      sub.cancel();
+    for (final controller in _downloadControllers.values) {
+      controller.dispose();
     }
-    _downloadSubscriptions.clear();
-    for (final handle in _activeDownloads.values) {
-      handle.cancel();
-    }
-    _activeDownloads.clear();
+    _downloadControllers.clear();
     super.dispose();
   }
 }

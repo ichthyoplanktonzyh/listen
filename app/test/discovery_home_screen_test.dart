@@ -13,14 +13,17 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(1440, 900),
     VoidCallback? onOpenMedia,
+    ValueChanged<String>? onPlayMedia,
+    DiscoveryRepository? repository,
+    TestMediaLibraryRepository? libraryRepository,
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final viewModel = DiscoveryViewModel(
-      FixtureDiscoveryRepository(),
+      repository ?? FixtureDiscoveryRepository(),
       TestMediaImportRepository(),
       TestContentPackageRepository(),
-      TestMediaLibraryRepository(),
+      libraryRepository ?? TestMediaLibraryRepository(),
     );
     addTearDown(viewModel.dispose);
     await tester.runAsync(() => viewModel.load());
@@ -39,6 +42,7 @@ void main() {
           body: DiscoveryHome(
             viewModel: viewModel,
             onOpenMedia: onOpenMedia ?? () {},
+            onPlayMedia: onPlayMedia,
           ),
         ),
       ),
@@ -110,7 +114,12 @@ void main() {
     tester,
   ) async {
     var openedMedia = 0;
-    await pumpDiscovery(tester, onOpenMedia: () => openedMedia++);
+    final played = <String>[];
+    await pumpDiscovery(
+      tester,
+      onOpenMedia: () => openedMedia++,
+      onPlayMedia: played.add,
+    );
 
     await tester.tap(find.widgetWithText(FilledButton, '下载媒体'));
     await tester.pump();
@@ -123,7 +132,69 @@ void main() {
     expect(find.text('媒体已下载'), findsWidgets);
 
     await tester.tap(find.widgetWithText(FilledButton, '开始学习'));
-    expect(openedMedia, 1);
+    // The button opens *this* entry's file, never the generic file picker.
+    expect(played, ['/path/to/downloaded/[i-bbc-1].mp4']);
+    expect(openedMedia, 0);
+  });
+
+  testWidgets('the player action stays disabled without a local file', (
+    tester,
+  ) async {
+    var openedMedia = 0;
+    // No `onPlayMedia`: nothing in this app can play the entry, so the
+    // affordance must not pretend otherwise by falling back to a file picker.
+    await pumpDiscovery(tester, onOpenMedia: () => openedMedia++);
+
+    await tester.tap(find.widgetWithText(FilledButton, '下载媒体'));
+    await tester.pump(const Duration(seconds: 2));
+
+    final player = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, '开始学习'),
+    );
+    expect(player.onPressed, isNull);
+    expect(openedMedia, 0);
+  });
+
+  testWidgets('a failed feed reads as failed, not as an empty channel', (
+    tester,
+  ) async {
+    final repository = TestDiscoveryRepository(
+      sources: [testMediaSource('c-one', name: 'One')],
+      entries: {
+        'c-one': [testMediaEntry('e-one', 'c-one')],
+      },
+    )..failingSources.add('c-one');
+
+    await pumpDiscovery(tester, repository: repository);
+
+    expect(find.text('这个媒体源加载失败。'), findsOneWidget);
+    expect(find.text('这个媒体源还没有视频。'), findsNothing);
+    expect(find.text('3 个视频'), findsNothing);
+
+    repository.failingSources.clear();
+    await tester.tap(find.widgetWithText(OutlinedButton, '重试'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 400)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('这个媒体源加载失败。'), findsNothing);
+    expect(find.text('Entry e-one'), findsWidgets);
+  });
+
+  testWidgets('a disconnected core reports an unchecked package, not none', (
+    tester,
+  ) async {
+    await pumpDiscovery(
+      tester,
+      libraryRepository: TestMediaLibraryRepository(available: false),
+    );
+
+    expect(find.text('无法确认学习包状态'), findsWidgets);
+    expect(find.text('暂无配套学习包'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, '重新查询'), findsOneWidget);
+    // Nothing may be generated on an answer nobody has.
+    expect(find.widgetWithText(FilledButton, '生成学习资源包'), findsNothing);
   });
 
   testWidgets('package dialog lists the package contents and closes', (

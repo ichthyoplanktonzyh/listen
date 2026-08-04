@@ -148,4 +148,3 @@ void main() {
     expect(result, 123500);
   });
 }
-

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/discovery_view_model.dart';
 import 'package:llplayer_next/data/repositories/discovery_repository.dart';
@@ -74,7 +76,97 @@ void main() {
 
     expect(vm.state.sources.clear, throwsUnsupportedError);
     expect(vm.state.entries.clear, throwsUnsupportedError);
-    expect(vm.state.downloads.clear, throwsUnsupportedError);
+    expect(vm.state.downloadSnapshots.clear, throwsUnsupportedError);
+  });
+
+  group('a download that does not succeed', () {
+    DiscoveryViewModel failing({bool failRegister = false}) {
+      final vm = DiscoveryViewModel(
+        FixtureDiscoveryRepository(),
+        TestMediaImportRepository(downloadFails: !failRegister),
+        TestContentPackageRepository(),
+        TestMediaLibraryRepository(failRegister: failRegister),
+      );
+      addTearDown(vm.dispose);
+      return vm;
+    }
+
+    testWidgets('keeps the failure on the row instead of reverting to none', (
+      tester,
+    ) async {
+      final vm = failing();
+      await tester.runAsync(() => vm.load());
+
+      vm.startDownload('i-bbc-1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.failed);
+      expect(vm.state.downloadFailureOf('i-bbc-1'), isNotNull);
+
+      // And it stays: a row the learner is still reading must not time out.
+      await tester.pump(const Duration(seconds: 30));
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.failed);
+    });
+
+    testWidgets('a failed row can be retried in place', (tester) async {
+      final vm = failing();
+      await tester.runAsync(() => vm.load());
+
+      vm.startDownload('i-bbc-1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.failed);
+
+      vm.startDownload('i-bbc-1');
+      await tester.pump();
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.downloading);
+
+      // The retry really re-runs, so this attempt fails on its own terms.
+      await tester.pump(const Duration(milliseconds: 120));
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.failed);
+    });
+
+    testWidgets('a rejected registration is reported, not swallowed', (
+      tester,
+    ) async {
+      final vm = failing(failRegister: true);
+      await tester.runAsync(() => vm.load());
+
+      vm.startDownload('i-bbc-1');
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.failed);
+      expect(vm.state.downloadFailureOf('i-bbc-1'), isNotNull);
+    });
+  });
+
+  testWidgets('a download completing after cancel does not revive the row', (
+    tester,
+  ) async {
+    final imports = TestMediaImportRepository(holdDownload: true);
+    final vm = DiscoveryViewModel(
+      FixtureDiscoveryRepository(),
+      imports,
+      TestContentPackageRepository(),
+      TestMediaLibraryRepository(),
+    );
+    addTearDown(vm.dispose);
+    await tester.runAsync(() => vm.load());
+
+    vm.startDownload('i-bbc-1');
+    await tester.pump();
+    expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.downloading);
+
+    vm.cancelDownload('i-bbc-1');
+    expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.none);
+
+    // The subprocess wins the race and reports success anyway.
+    imports.completers['i-bbc-1']!.complete('/path/to/[i-bbc-1].mp4');
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.none);
   });
 
   testWidgets('startDownload simulates progress until done', (tester) async {
@@ -198,33 +290,32 @@ void main() {
     expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
   });
 
-  testWidgets(
-    'startGeneration marks failed when the generator fails',
-    (tester) async {
-      final (vm, repo) = viewModel();
-      await tester.runAsync(() => vm.load());
+  testWidgets('startGeneration marks failed when the generator fails', (
+    tester,
+  ) async {
+    final (vm, repo) = viewModel();
+    await tester.runAsync(() => vm.load());
 
-      await tester.runAsync(() async {
-        vm.selectItem('i-bbc-2');
-        await vm.startDownload('i-bbc-2');
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-        await Future<void>.delayed(const Duration(milliseconds: 400));
-      });
+    await tester.runAsync(() async {
+      vm.selectItem('i-bbc-2');
+      await vm.startDownload('i-bbc-2');
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    });
 
-      vm.startGeneration('i-bbc-2');
-      await tester.pump();
-      repo.runs.single.failWith('provider_failed');
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump();
-      expect(
-        vm.state.generationStatusOf('i-bbc-2'),
-        ContentGenerationStatus.failed,
-      );
-      expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
-    },
-  );
+    vm.startGeneration('i-bbc-2');
+    await tester.pump();
+    repo.runs.single.failWith('provider_failed');
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pump();
+    expect(
+      vm.state.generationStatusOf('i-bbc-2'),
+      ContentGenerationStatus.failed,
+    );
+    expect(vm.state.packageStatusOf('i-bbc-2'), PackageStatus.notAvailable);
+  });
 
   testWidgets(
     'startGeneration probes real media duration when the library has none',
@@ -264,28 +355,209 @@ void main() {
     },
   );
 
-  testWidgets('downloaded media exposes its probed duration via durationMsFor', (
-    tester,
-  ) async {
-    final vm = DiscoveryViewModel(
-      FixtureDiscoveryRepository(),
-      TestMediaImportRepository(probedDurationMs: 400660),
-      TestContentPackageRepository(),
-      TestMediaLibraryRepository(mediaDurationMs: null),
-    );
-    addTearDown(vm.dispose);
-    await tester.runAsync(() => vm.load());
+  testWidgets(
+    'downloaded media exposes its probed duration via durationMsFor',
+    (tester) async {
+      final vm = DiscoveryViewModel(
+        FixtureDiscoveryRepository(),
+        TestMediaImportRepository(probedDurationMs: 400660),
+        TestContentPackageRepository(),
+        TestMediaLibraryRepository(mediaDurationMs: null),
+      );
+      addTearDown(vm.dispose);
+      await tester.runAsync(() => vm.load());
 
-    await tester.runAsync(() async {
-      vm.selectItem('i-bbc-2');
-      await vm.startDownload('i-bbc-2');
-      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await tester.runAsync(() async {
+        vm.selectItem('i-bbc-2');
+        await vm.startDownload('i-bbc-2');
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      });
+
+      expect(vm.durationMsFor('i-bbc-2'), 400660);
+    },
+  );
+
+  group('honest channel states', () {
+    DiscoveryViewModel viewModelFor(
+      TestDiscoveryRepository repository, {
+      TestMediaImportRepository? importRepository,
+      TestMediaLibraryRepository? libraryRepository,
+    }) {
+      final vm = DiscoveryViewModel(
+        repository,
+        importRepository ?? TestMediaImportRepository(),
+        TestContentPackageRepository(),
+        libraryRepository ?? TestMediaLibraryRepository(),
+      );
+      addTearDown(vm.dispose);
+      return vm;
+    }
+
+    TestDiscoveryRepository twoChannels({List<MediaEntry> second = const []}) =>
+        TestDiscoveryRepository(
+          sources: [testMediaSource('c-one'), testMediaSource('c-two')],
+          entries: {
+            'c-one': [testMediaEntry('e-one', 'c-one')],
+            'c-two': second,
+          },
+        );
+
+    test(
+      'switching to an empty channel drops the previous selection',
+      () async {
+        final vm = viewModelFor(twoChannels());
+        await vm.load();
+        expect(vm.state.selectedEntryId, 'e-one');
+
+        await vm.selectChannel('c-two');
+
+        expect(vm.state.entries, isEmpty);
+        expect(vm.state.selectedEntryId, isNull);
+        expect(vm.state.selectedEntry, isNull);
+        expect(vm.state.entriesFailure, isNull);
+      },
+    );
+
+    test('a channel in flight reports loading, not the old shelf', () async {
+      final repository = twoChannels(
+        second: [testMediaEntry('e-two', 'c-two')],
+      );
+      final gate = Completer<void>();
+      repository.gates['c-two'] = gate;
+      final vm = viewModelFor(repository);
+      await vm.load();
+
+      final switching = vm.selectChannel('c-two');
+      await pumpEventQueue();
+
+      expect(vm.state.entriesLoading, isTrue);
+      expect(
+        vm.state.entries,
+        isEmpty,
+        reason: 'no stale cards under the new header',
+      );
+      expect(vm.state.loading, isFalse);
+
+      gate.complete();
+      await switching;
+
+      expect(vm.state.entriesLoading, isFalse);
+      expect(vm.state.entries.single.id, 'e-two');
     });
 
-    expect(vm.durationMsFor('i-bbc-2'), 400660);
+    test('a failed feed is a failure, not an empty channel', () async {
+      final repository = twoChannels(
+        second: [testMediaEntry('e-two', 'c-two')],
+      );
+      repository.failingSources.add('c-two');
+      final vm = viewModelFor(repository);
+      await vm.load();
+
+      await vm.selectChannel('c-two');
+
+      expect(vm.state.entriesFailure, isNotNull);
+      expect(vm.state.entries, isEmpty);
+      expect(vm.state.entriesLoading, isFalse);
+
+      repository.failingSources.clear();
+      await vm.retryEntries();
+
+      expect(vm.state.entriesFailure, isNull);
+      expect(vm.state.entries.single.id, 'e-two');
+    });
+
+    test('a failed source list stops the spinner and says so', () async {
+      final repository = twoChannels()..failSources = true;
+      final vm = viewModelFor(repository);
+
+      await vm.load();
+
+      expect(vm.state.loading, isFalse);
+      expect(vm.state.sourcesFailure, isNotNull);
+      expect(vm.state.sources, isEmpty);
+
+      repository.failSources = false;
+      await vm.load();
+
+      expect(vm.state.sourcesFailure, isNull);
+      expect(vm.state.selectedSourceId, 'c-one');
+    });
+
+    test(
+      'a disconnected core leaves the package status undetermined',
+      () async {
+        final vm = viewModelFor(
+          twoChannels(),
+          libraryRepository: TestMediaLibraryRepository(available: false),
+        );
+
+        await vm.load();
+        await pumpEventQueue();
+
+        expect(vm.state.packageStatusOf('e-one'), PackageStatus.undetermined);
+      },
+    );
+
+    test(
+      'a failing library listing leaves the package status undetermined',
+      () async {
+        final vm = viewModelFor(
+          twoChannels(),
+          libraryRepository: TestMediaLibraryRepository(failListing: true),
+        );
+
+        await vm.load();
+        await pumpEventQueue();
+
+        expect(vm.state.packageStatusOf('e-one'), PackageStatus.undetermined);
+      },
+    );
+
+    testWidgets('switching channels abandons the previous duration workers', (
+      tester,
+    ) async {
+      final repository = TestDiscoveryRepository(
+        sources: [testMediaSource('c-one'), testMediaSource('c-two')],
+        entries: {
+          'c-one': [
+            for (var index = 0; index < 6; index++)
+              testMediaEntry('e-one-$index', 'c-one'),
+          ],
+          'c-two': const [],
+        },
+      );
+      final gate = Completer<void>();
+      final importRepository = TestMediaImportRepository(
+        resolvedDurationMs: 120000,
+        resolveGate: gate,
+      );
+      final vm = viewModelFor(repository, importRepository: importRepository);
+
+      await tester.runAsync(() async {
+        await vm.load();
+        await pumpEventQueue();
+        // Three workers are parked on the gate; the other three entries are
+        // still queued behind them.
+        expect(importRepository.resolvedUrls, hasLength(3));
+
+        await vm.selectChannel('c-two');
+      });
+
+      // Releasing the gate lets the parked workers look at their queue again.
+      gate.complete();
+      await tester.idle();
+      await tester.pump();
+
+      expect(
+        importRepository.resolvedUrls,
+        hasLength(3),
+        reason: 'workers for an off-screen channel must not keep going',
+      );
+    });
   });
 
-  testWidgets('feed entry durations resolve in the background from the remote video',
+  testWidgets(
+    'feed entry durations resolve in the background from the remote video',
     (tester) async {
       final vm = DiscoveryViewModel(
         _FeedRepositoryWithDurations(),

@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../../models/discovery.dart';
@@ -220,82 +219,79 @@ final class LiveDiscoveryRepository implements DiscoveryRepository {
     return List.unmodifiable([..._defaultSources, ..._customSources]);
   }
 
+  /// Throws on transport, status, or parse failure. Swallowing it here would
+  /// hand the surface an empty list, which reads as "this channel has no
+  /// videos" — indistinguishable from offline or rate-limited.
   @override
   Future<List<MediaEntry>> entriesFor(String sourceId) async {
-    try {
-      final url =
-          'https://www.youtube.com/feeds/videos.xml?channel_id=$sourceId';
-      final request = await _client
-          .getUrl(Uri.parse(url))
-          .timeout(const Duration(seconds: 10));
-      final response = await request.close();
-      if (response.statusCode != 200) {
-        throw HttpException(
-          'YouTube RSS server returned status ${response.statusCode}',
-        );
-      }
-      final body = await response.transform(utf8.decoder).join();
-
-      final entryMatches = RegExp(
-        r'<entry>([\s\S]*?)</entry>',
-      ).allMatches(body);
-      final entries = <MediaEntry>[];
-      for (final match in entryMatches) {
-        final segment = match.group(1) ?? '';
-        final videoId = RegExp(
-          r'<yt:videoId>([^<]+)</yt:videoId>',
-        ).firstMatch(segment)?.group(1)?.trim();
-        final titleRaw =
-            RegExp(
-              r'<title>([^<]+)</title>',
-            ).firstMatch(segment)?.group(1)?.trim() ??
-            '';
-        final descRaw =
-            RegExp(
-              r'<media:description>([\s\S]*?)</media:description>',
-            ).firstMatch(segment)?.group(1)?.trim() ??
-            '';
-        final published =
-            RegExp(
-              r'<published>([^<]+)</published>',
-            ).firstMatch(segment)?.group(1)?.trim() ??
-            '';
-        final thumb = RegExp(
-          r'<media:thumbnail\s+url="([^"]+)"',
-        ).firstMatch(segment)?.group(1)?.trim();
-        final viewsRaw = RegExp(
-          r'<media:statistics\s+views="(\d+)"',
-        ).firstMatch(segment)?.group(1);
-        final views = viewsRaw == null ? 0 : int.tryParse(viewsRaw) ?? 0;
-
-        if (videoId == null || videoId.isEmpty) continue;
-
-        entries.add(
-          MediaEntry(
-            id: videoId,
-            sourceId: sourceId,
-            title: _decodeXml(titleRaw),
-            description: _decodeXml(descRaw),
-            durationMs: 300000, // placeholder (5 minutes)
-            language: 'en',
-            publishedOn: published,
-            thumbnailUrl: thumb,
-            viewCount: views,
-            hasPackage: false,
-            videoUrl: 'https://www.youtube.com/watch?v=$videoId',
-          ),
-        );
-      }
-      return entries;
-    } catch (e) {
-      debugPrint('Error loading entries for channel $sourceId: $e');
-      return const [];
+    final url = 'https://www.youtube.com/feeds/videos.xml?channel_id=$sourceId';
+    final request = await _client
+        .getUrl(Uri.parse(url))
+        .timeout(const Duration(seconds: 10));
+    final response = await request.close();
+    if (response.statusCode != 200) {
+      throw HttpException(
+        'YouTube RSS server returned status ${response.statusCode}',
+      );
     }
+    final body = await response.transform(utf8.decoder).join();
+
+    final entryMatches = RegExp(r'<entry>([\s\S]*?)</entry>').allMatches(body);
+    final entries = <MediaEntry>[];
+    for (final match in entryMatches) {
+      final segment = match.group(1) ?? '';
+      final videoId = RegExp(
+        r'<yt:videoId>([^<]+)</yt:videoId>',
+      ).firstMatch(segment)?.group(1)?.trim();
+      final titleRaw =
+          RegExp(
+            r'<title>([^<]+)</title>',
+          ).firstMatch(segment)?.group(1)?.trim() ??
+          '';
+      final descRaw =
+          RegExp(
+            r'<media:description>([\s\S]*?)</media:description>',
+          ).firstMatch(segment)?.group(1)?.trim() ??
+          '';
+      final published =
+          RegExp(
+            r'<published>([^<]+)</published>',
+          ).firstMatch(segment)?.group(1)?.trim() ??
+          '';
+      final thumb = RegExp(
+        r'<media:thumbnail\s+url="([^"]+)"',
+      ).firstMatch(segment)?.group(1)?.trim();
+      final viewsRaw = RegExp(
+        r'<media:statistics\s+views="(\d+)"',
+      ).firstMatch(segment)?.group(1);
+      final views = viewsRaw == null ? 0 : int.tryParse(viewsRaw) ?? 0;
+
+      if (videoId == null || videoId.isEmpty) continue;
+
+      entries.add(
+        MediaEntry(
+          id: videoId,
+          sourceId: sourceId,
+          title: _decodeXml(titleRaw),
+          description: _decodeXml(descRaw),
+          durationMs: 300000, // placeholder (5 minutes)
+          language: 'en',
+          publishedOn: published,
+          thumbnailUrl: thumb,
+          viewCount: views,
+          hasPackage: false,
+          videoUrl: 'https://www.youtube.com/watch?v=$videoId',
+        ),
+      );
+    }
+    return entries;
   }
 
+  /// The feed carries no package information, and this repository has no way
+  /// to ask the core — so the honest answer is that it does not know.
   @override
   Future<PackageStatus> checkPackage(String entryId) async {
-    return PackageStatus.notAvailable;
+    return PackageStatus.undetermined;
   }
 
   @override

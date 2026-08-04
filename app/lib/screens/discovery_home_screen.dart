@@ -7,6 +7,8 @@ import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
+import '../widgets/common/listen_empty_state.dart';
+import '../widgets/common/listen_error_state.dart';
 import '../widgets/common/listen_loading.dart';
 import '../widgets/discovery/content_card.dart';
 import '../widgets/discovery/detail_panel.dart';
@@ -23,8 +25,25 @@ class DiscoveryHome extends StatelessWidget {
   });
 
   final DiscoveryViewModel viewModel;
+
+  /// The app's generic "open a file from disk" action. It cannot open a
+  /// *selected* entry, so it only appears where that is what is being offered.
   final VoidCallback onOpenMedia;
+
   final ValueChanged<String>? onPlayMedia;
+
+  /// The player affordance exists only when a local file backs the entry.
+  /// Falling back to [onOpenMedia] would put a file picker behind a button
+  /// labelled "open for learning".
+  VoidCallback? _openPlayerAction(String entryId, {VoidCallback? before}) {
+    final localPath = viewModel.localPathFor(entryId);
+    final play = onPlayMedia;
+    if (localPath == null || play == null) return null;
+    return () {
+      before?.call();
+      play(localPath);
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +71,9 @@ class DiscoveryHome extends StatelessWidget {
               onCancelDownload: viewModel.cancelDownload,
               onImport: viewModel.importCustomUrl,
               onSelectSource: viewModel.selectChannel,
+              onRetrySources: viewModel.load,
+              onRetryEntries: viewModel.retryEntries,
+              onOpenMedia: onOpenMedia,
               isGrid: constraints.maxWidth >= ListenBreakpoints.discoveryGrid,
             );
 
@@ -72,6 +94,9 @@ class DiscoveryHome extends StatelessWidget {
                     downloadProgress: state.downloadProgressOf(
                       state.selectedEntry!.id,
                     ),
+                    downloadFailure: state.downloadFailureOf(
+                      state.selectedEntry!.id,
+                    ),
                     packageStatus: state.packageStatusOf(
                       state.selectedEntry!.id,
                     ),
@@ -88,21 +113,14 @@ class DiscoveryHome extends StatelessWidget {
                         viewModel.startDownload(state.selectedEntry!.id),
                     onCancelDownload: () =>
                         viewModel.cancelDownload(state.selectedEntry!.id),
-                    onOpenPlayer: () {
-                      final localPath = viewModel.localPathFor(
-                        state.selectedEntry!.id,
-                      );
-                      if (localPath != null && onPlayMedia != null) {
-                        onPlayMedia!(localPath);
-                      } else {
-                        onOpenMedia();
-                      }
-                    },
+                    onOpenPlayer: _openPlayerAction(state.selectedEntry!.id),
                     onViewPackage: () => _showPackageDialog(context),
                     onGenerate: () =>
                         viewModel.startGeneration(state.selectedEntry!.id),
                     onCancelGenerate: () =>
                         viewModel.cancelGeneration(state.selectedEntry!.id),
+                    onRecheckPackage: () =>
+                        viewModel.checkPackage(state.selectedEntry!.id),
                   ),
                 ),
             ];
@@ -172,22 +190,17 @@ class DiscoveryHome extends StatelessWidget {
                               viewModel.startDownload(currentEntry.id),
                           onCancelDownload: () =>
                               viewModel.cancelDownload(currentEntry.id),
-                          onOpenPlayer: () {
-                            Navigator.of(bottomSheetContext).pop();
-                            final localPath = viewModel.localPathFor(
-                              currentEntry.id,
-                            );
-                            if (localPath != null && onPlayMedia != null) {
-                              onPlayMedia!(localPath);
-                            } else {
-                              onOpenMedia();
-                            }
-                          },
+                          onOpenPlayer: _openPlayerAction(
+                            currentEntry.id,
+                            before: Navigator.of(bottomSheetContext).pop,
+                          ),
                           onViewPackage: () => _showPackageDialog(context),
                           onGenerate: () =>
                               viewModel.startGeneration(currentEntry.id),
                           onCancelGenerate: () =>
                               viewModel.cancelGeneration(currentEntry.id),
+                          onRecheckPackage: () =>
+                              viewModel.checkPackage(currentEntry.id),
                         ),
                       ),
                       Positioned(
@@ -378,6 +391,9 @@ class _DiscoveryShelf extends StatelessWidget {
     required this.onCancelDownload,
     required this.onImport,
     required this.onSelectSource,
+    required this.onRetrySources,
+    required this.onRetryEntries,
+    required this.onOpenMedia,
     required this.isGrid,
   });
 
@@ -388,6 +404,9 @@ class _DiscoveryShelf extends StatelessWidget {
   final void Function(String) onCancelDownload;
   final ValueChanged<String> onImport;
   final void Function(String) onSelectSource;
+  final VoidCallback onRetrySources;
+  final VoidCallback onRetryEntries;
+  final VoidCallback onOpenMedia;
   final bool isGrid;
 
   @override
@@ -395,6 +414,7 @@ class _DiscoveryShelf extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     final source = state.selectedSource;
+    final isCustomSource = source?.id == DiscoveryViewModel.customSource.id;
 
     return ColoredBox(
       color: scheme.surfaceContainerLow,
@@ -433,16 +453,21 @@ class _DiscoveryShelf extends StatelessWidget {
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
-                    const SizedBox(height: ListenSpacing.gap8),
-                    Text(
-                      l
-                          .text('discoveryVideoCount')
-                          .replaceFirst('{count}', '${state.entries.length}'),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                    // While the feed is in flight there is no count to state:
+                    // the previous channel's total is not this one's.
+                    if (!state.entriesLoading &&
+                        state.entriesFailure == null) ...[
+                      const SizedBox(height: ListenSpacing.gap8),
+                      Text(
+                        l
+                            .text('discoveryVideoCount')
+                            .replaceFirst('{count}', '${state.entries.length}'),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                    if (source.id == DiscoveryViewModel.customSource.id) ...[
+                    ],
+                    if (isCustomSource) ...[
                       const SizedBox(height: ListenSpacing.gap12),
                       _LinkImportBar(
                         resolvingUrl: state.resolvingUrl,
@@ -464,11 +489,44 @@ class _DiscoveryShelf extends StatelessWidget {
                 ),
               ),
             ),
-          if (state.loading)
+          // The five shelf states, each answering a different question:
+          // the catalog broke, something is in flight, this feed broke, the
+          // channel is genuinely empty, or here are the videos.
+          if (state.sourcesFailure != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: ListenSpacing.gap32,
+                ),
+                child: ListenErrorState(
+                  message: l.text('discoverySourcesFailed'),
+                  action: OutlinedButton(
+                    onPressed: onRetrySources,
+                    child: Text(l.text('retry')),
+                  ),
+                ),
+              ),
+            )
+          else if (state.loading || state.entriesLoading)
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: ListenSpacing.gap32),
                 child: Center(child: ListenLoading()),
+              ),
+            )
+          else if (state.entriesFailure != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: ListenSpacing.gap32,
+                ),
+                child: ListenErrorState(
+                  message: l.text('discoveryChannelFailed'),
+                  action: OutlinedButton(
+                    onPressed: onRetryEntries,
+                    child: Text(l.text('retry')),
+                  ),
+                ),
               ),
             )
           else if (state.entries.isEmpty)
@@ -477,17 +535,21 @@ class _DiscoveryShelf extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                   vertical: ListenSpacing.gap32,
                 ),
-                child: Center(
-                  child: Text(
-                    source != null &&
-                            source.id == DiscoveryViewModel.customSource.id
-                        ? l.text('discoveryEmptyImports')
-                        : l.text('discoveryEmptyChannel'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
+                child: isCustomSource
+                    ? ListenEmptyState(
+                        icon: Icons.link_off,
+                        message: l.text('discoveryEmptyImports'),
+                        // The one place the generic file picker belongs: here
+                        // it is offered as itself, not as a lesson's player.
+                        action: OutlinedButton(
+                          onPressed: onOpenMedia,
+                          child: Text(l.text('openMedia')),
+                        ),
+                      )
+                    : ListenEmptyState(
+                        icon: Icons.video_library_outlined,
+                        message: l.text('discoveryEmptyChannel'),
+                      ),
               ),
             )
           else

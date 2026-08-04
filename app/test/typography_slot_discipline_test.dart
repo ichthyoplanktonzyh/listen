@@ -45,8 +45,7 @@ void main() {
   // added. File-path granularity on purpose — line numbers drift with every
   // unrelated edit, so a line-level list would cost more to maintain than the
   // debt it tracks.
-  const knownOffenders = <String>{
-  };
+  const knownOffenders = <String>{};
 
   test('text styles come from mapped textTheme slots, not display/headline', () {
     final offenders = [

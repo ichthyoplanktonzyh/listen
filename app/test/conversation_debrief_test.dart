@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/realtime_conversation_controller.dart';
+import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/realtime_conversation.dart';
 import 'package:llplayer_next/services/realtime_audio_bridge.dart';
@@ -54,6 +55,59 @@ void main() {
     expect(targets.map((item) => item.status), ['failed', 'interrupted']);
   });
 
+  test('the debrief summary states the session duration and turn count in '
+      'the design units — 「3m 42s · 12轮」', () {
+    const en = AppLocalizations(Locale('en'));
+    const zh = AppLocalizations(Locale('zh'));
+    ConversationDebriefReadout readout({
+      Duration? duration,
+      int assistantTurns = 6,
+      int learnerTurns = 6,
+    }) => ConversationDebriefReadout(
+      assistantTurns: assistantTurns,
+      learnerTurns: learnerTurns,
+      learnerOutputTurns: 4,
+      transcribingTurns: 0,
+      lostTurns: 1,
+      duration: duration,
+    );
+
+    expect(
+      realtimeDebriefSummaryText(
+        readout(duration: const Duration(minutes: 3, seconds: 42)),
+        en,
+      ),
+      '3m 42s · 12 turns',
+    );
+    // Under a minute, seconds only — the design never pads a short session
+    // with a zero minute.
+    expect(
+      realtimeDebriefSummaryText(
+        readout(duration: const Duration(seconds: 42)),
+        en,
+      ),
+      '42s · 12 turns',
+    );
+    // A session that never recorded an end states no duration rather than a
+    // guess, and an empty session says nothing at all.
+    expect(realtimeDebriefSummaryText(readout(), en), '12 turns');
+    expect(
+      realtimeDebriefSummaryText(
+        readout(assistantTurns: 0, learnerTurns: 0),
+        en,
+      ),
+      isNull,
+    );
+    // The same facts in the learner's own language.
+    expect(
+      realtimeDebriefSummaryText(
+        readout(duration: const Duration(minutes: 3, seconds: 42)),
+        zh,
+      ),
+      '3分42秒 · 12 轮',
+    );
+  });
+
   testWidgets('the debrief is three sections, and a turn still being '
       'transcribed says so instead of showing the provider caption as '
       'your words', (tester) async {
@@ -101,6 +155,41 @@ void main() {
     expect(find.byType(ConversationEchoTally), findsOneWidget);
     expect(find.byType(ConversationEchoSurface), findsNothing);
 
+    controller.dispose();
+  });
+
+  testWidgets('the debrief opens with the design summary line: title, '
+      'duration and turn count', (tester) async {
+    final controller = _controller(
+      RealtimeConversationState(
+        phase: RealtimeConversationPhase.done,
+        sessionDuration: const Duration(minutes: 3, seconds: 42),
+        items: const [
+          RealtimeConversationItem(
+            sequence: 1,
+            role: 'assistant',
+            status: 'finalized',
+            startedAtMs: 1,
+            providerText: 'the other voice',
+          ),
+          RealtimeConversationItem(
+            sequence: 2,
+            role: 'learner',
+            status: 'finalized',
+            startedAtMs: 2,
+            localText: 'my own words',
+          ),
+        ],
+      ),
+    );
+    await _pumpDebrief(tester, controller);
+
+    expect(find.text('Conversation summary'), findsOneWidget);
+    expect(find.text('3m 42s · 2 turns'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('conversation-debrief-summary')),
+      findsOneWidget,
+    );
     controller.dispose();
   });
 

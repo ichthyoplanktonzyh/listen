@@ -68,6 +68,19 @@ abstract final class ListenType {
     fontWeight: FontWeight.w600,
   );
 
+  /// The lobby brand tile's letter. The theme's unmapped headline slot used
+  /// to render the mark, but the framework's M3 headline slots carry no size
+  /// in this Flutter (3.44), so the letter resolved to the ambient body
+  /// metrics (13 / 1.5). This rung pins that exact rendering — the mark is a
+  /// decoration, so it reads the constant instead of an unmapped slot; if the
+  /// tile ever gets a true display-size letter, grow this rung (and
+  /// re-record the lobby goldens) rather than reaching for Material's slot.
+  static const mark = TextStyle(
+    fontSize: 13,
+    height: 1.5,
+    fontWeight: FontWeight.w900,
+  );
+
   /// Timecodes / counters: mono so digits keep one width while playing.
   static const timecode = TextStyle(
     fontFamily: ListenFonts.mono,

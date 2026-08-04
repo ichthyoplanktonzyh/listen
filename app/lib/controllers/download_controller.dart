@@ -35,10 +35,16 @@ class DownloadController extends ChangeNotifier {
 
   final DownloadFailureMapper _failureMapper;
 
-  /// How long a `failed` bar stays before it auto-dismisses. A `completed` bar
-  /// intentionally persists so its "Open" action stays available (opening the
-  /// media dismisses it).
-  final Duration failedAutoDismiss;
+  /// How long a `failed` bar stays before it auto-dismisses, or null to keep it
+  /// until the caller retries or dismisses it.
+  ///
+  /// A transient bar over the player wants the timer; a state that lives on a
+  /// list row the learner is still looking at does not — auto-hiding there
+  /// would take the failure away while they are reading it.
+  ///
+  /// A `completed` bar intentionally persists either way so its "Open" action
+  /// stays available (opening the media dismisses it).
+  final Duration? failedAutoDismiss;
 
   void Function()? _cancelActive;
   final _subscriptions = <StreamSubscription<dynamic>>[];
@@ -124,8 +130,13 @@ class DownloadController extends ChangeNotifier {
 
   void _scheduleFailedAutoDismiss() {
     _autoDismissTimer?.cancel();
+    final delay = failedAutoDismiss;
+    if (delay == null) {
+      _autoDismissTimer = null;
+      return;
+    }
     final generation = _generation;
-    _autoDismissTimer = Timer(failedAutoDismiss, () {
+    _autoDismissTimer = Timer(delay, () {
       if (_stale(generation)) return;
       if (_snapshot?.kind == DownloadStatusKind.failed) _setSnapshot(null);
     });

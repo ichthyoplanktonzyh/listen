@@ -1,14 +1,35 @@
 // Models for the media aggregation discovery flow.
 
-enum DownloadState { none, downloading, done }
+/// Acquisition state of an entry's media.
+///
+/// [failed] exists because the alternative was to drop a failed download back
+/// to [none]: the progress bar vanished, the button said "download" again, and
+/// nothing said why. A failure the learner can see and retry is a state, not
+/// the absence of one.
+enum DownloadState { none, downloading, done, failed }
 
 enum MediaSourceType { youtube, podcast }
 
-enum PackageStatus { 
+/// What is known about an entry's learning package.
+///
+/// "We could not find out" is a state of its own: rendering [notAvailable]
+/// when the core never answered claims a fact nobody checked.
+enum PackageStatus {
+  /// Nothing has been asked yet.
   unknown,
+
+  /// A lookup is in flight.
   checking,
+
+  /// Checked: a package exists for this entry.
   available,
+
+  /// Checked: this entry has no package.
   notAvailable,
+
+  /// The lookup could not run or failed — core disconnected, listing error —
+  /// so the answer is still missing.
+  undetermined,
 }
 
 /// Lifecycle of local learning-package generation driven by listen-gen.

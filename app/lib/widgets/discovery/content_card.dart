@@ -152,12 +152,15 @@ class DiscoveryContentCard extends StatelessWidget {
     return '$count $viewsText';
   }
 
+  /// Every status says what it is. "Not checked yet" and "could not check" are
+  /// not the same claim as "there is none".
   String _packageLabel(AppLocalizations l, PackageStatus status) {
     return switch (status) {
-      PackageStatus.unknown => l.text('discoveryPackageNone'),
+      PackageStatus.unknown => l.text('discoveryPackageUnknown'),
       PackageStatus.checking => l.text('discoveryCheckingPackage'),
       PackageStatus.available => l.text('discoveryPackageAvailable'),
       PackageStatus.notAvailable => l.text('discoveryPackageNotAvailable'),
+      PackageStatus.undetermined => l.text('discoveryPackageUndetermined'),
     };
   }
 }
@@ -316,6 +319,16 @@ class _PackageChip extends StatelessWidget {
             const ListenLoading.inline(size: 10),
             const SizedBox(width: ListenSpacing.gap4),
           ],
+          // The one status carrying a glyph of its own: a missing answer must
+          // not read like the quiet "none" chip beside it.
+          if (status == PackageStatus.undetermined) ...[
+            Icon(
+              Icons.help_outline,
+              size: ListenIconSize.inline,
+              color: colorMap.$2,
+            ),
+            const SizedBox(width: ListenSpacing.gap4),
+          ],
           Text(
             labelText,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -349,6 +362,13 @@ class _PackageChip extends StatelessWidget {
         Colors.transparent,
         scheme.onSurfaceVariant.withValues(alpha: 0.5),
         scheme.outlineVariant,
+      ),
+      // Full-strength ink and a solid outline: unlike "none", this one is
+      // asking to be read.
+      PackageStatus.undetermined => (
+        Colors.transparent,
+        scheme.onSurfaceVariant,
+        scheme.outline,
       ),
     };
   }
@@ -437,6 +457,23 @@ class _DownloadControl extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+      // The row keeps the failure and offers the retry in place. The detail
+      // panel carries the reason; a card this dense only has room to say that
+      // it did not work and that trying again is one tap away.
+      DownloadState.failed => TextButton.icon(
+        onPressed: onDownload,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          foregroundColor: scheme.error,
+        ),
+        icon: const Icon(Icons.refresh, size: ListenIconSize.inline),
+        label: Text(
+          l.text('discoveryDownloadFailedRetry'),
+          style: const TextStyle(fontSize: 12),
         ),
       ),
     };
