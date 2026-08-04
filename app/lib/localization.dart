@@ -376,6 +376,22 @@ class AppLocalizations {
       'transcriptWidth': 'Transcript width',
       'primaryColor': 'Primary color',
       'secondaryColor': 'Secondary color',
+      'mediaLibraryTitle': 'Media library folder',
+      'mediaLibraryDescription':
+          'Downloads land in this folder, and everything in it is what "My '
+          'media" shows.',
+      'mediaLibraryNotSet': 'No folder chosen yet',
+      'mediaLibraryChoose': 'Choose folder…',
+      'mediaLibraryChange': 'Change folder…',
+      'mediaLibraryClear': 'Clear',
+      'mediaLibraryPickerConfirm': 'Use this folder',
+      'mediaLibraryMissing':
+          'This folder is not on disk right now — it may have been moved or '
+          'renamed, or its drive is not connected.',
+      'mediaLibraryAccessHint':
+          'If the folder is in Documents, Desktop or Downloads, macOS asks for '
+          'permission once the first time it is read. Allow it, otherwise the '
+          'folder will look empty.',
       'externalTools': 'Optional external tools',
       'close': 'Close',
       'save': 'Save',
@@ -2392,6 +2408,15 @@ class AppLocalizations {
       'transcriptWidth': '文稿宽度',
       'primaryColor': '主字幕颜色',
       'secondaryColor': '副字幕颜色',
+      'mediaLibraryTitle': '媒体库文件夹',
+      'mediaLibraryDescription': '下载会落在这个文件夹里；「我的媒体」显示的就是它里面的内容。',
+      'mediaLibraryNotSet': '尚未选择文件夹',
+      'mediaLibraryChoose': '选择文件夹…',
+      'mediaLibraryChange': '更换文件夹…',
+      'mediaLibraryClear': '清除',
+      'mediaLibraryPickerConfirm': '使用这个文件夹',
+      'mediaLibraryMissing': '这个文件夹当前不在磁盘上——可能已被移动或改名，也可能所在的磁盘没有连接。',
+      'mediaLibraryAccessHint': '文件夹若位于「文稿」「桌面」或「下载」，macOS 会在首次读取时请求一次授权。请允许，否则文件夹会显示为空。',
       'externalTools': '可选外部工具',
       'close': '关闭',
       'save': '保存',

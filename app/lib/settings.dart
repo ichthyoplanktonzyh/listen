@@ -4,6 +4,19 @@ import 'dart:io';
 const _appSupportDirectoryName = 'listen';
 const _legacyAppSupportDirectoryName = 'LLPlayerNext';
 
+/// How the persisted media library folder relates to the disk right now.
+///
+/// `missing` exists because the path outlives the directory: an external disk
+/// gets unmounted, a folder gets renamed. Folding that back into `unset` would
+/// tell the user they never chose a folder, which is a different — and false —
+/// story than "the folder you chose is not there".
+enum MediaLibraryFolderState { unset, ready, missing }
+
+/// The media library folder as the UI needs it: the path and the verdict about
+/// it always travel together, so no surface can pair a fresh path with a stale
+/// verdict.
+typedef MediaLibraryFolder = ({String path, MediaLibraryFolderState state});
+
 class AppSettings {
   const AppSettings({
     this.version = 8,
@@ -33,6 +46,7 @@ class AppSettings {
     this.lastMediaPositionMs = 0,
     this.lastMediaDurationMs = 0,
     this.lastMediaSubtitleCount = 0,
+    this.mediaLibraryPath = '',
     this.ffmpegPath = '',
     this.ffprobePath = '',
     this.ytDlpPath = '',
@@ -139,6 +153,7 @@ class AppSettings {
       lastMediaPositionMs: json['last_media_position_ms'] as int? ?? 0,
       lastMediaDurationMs: json['last_media_duration_ms'] as int? ?? 0,
       lastMediaSubtitleCount: json['last_media_subtitle_count'] as int? ?? 0,
+      mediaLibraryPath: json['media_library_path'] as String? ?? '',
       ffmpegPath: json['ffmpeg_path'] as String? ?? '',
       ffprobePath: json['ffprobe_path'] as String? ?? '',
       ytDlpPath: json['yt_dlp_path'] as String? ?? '',
@@ -229,6 +244,12 @@ class AppSettings {
   final int lastMediaPositionMs;
   final int lastMediaDurationMs;
   final int lastMediaSubtitleCount;
+
+  /// The folder the user picked as their media library: downloads land here and
+  /// "my media" reads from here. Empty means the user has not chosen one yet.
+  /// The app runs unsandboxed, so a plain path survives a restart — no
+  /// security-scoped bookmark is involved.
+  final String mediaLibraryPath;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -320,73 +341,84 @@ class AppSettings {
     return const AppSettings();
   }
 
+  /// What the disk says about [mediaLibraryPath] right now. Lives beside the
+  /// file's other I/O rather than in the controller, which owns no filesystem.
+  Future<MediaLibraryFolderState> resolveMediaLibraryFolderState() async {
+    if (mediaLibraryPath.isEmpty) return MediaLibraryFolderState.unset;
+    return await Directory(mediaLibraryPath).exists()
+        ? MediaLibraryFolderState.ready
+        : MediaLibraryFolderState.missing;
+  }
+
   Future<void> save() async {
     await file.parent.create(recursive: true);
-    await file.writeAsString(
-      jsonEncode({
-        'version': version,
-        'rate': rate,
-        'volume': volume,
-        'primary_subtitle_offset_ms': primarySubtitleOffsetMs,
-        'secondary_subtitle_offset_ms': secondarySubtitleOffsetMs,
-        'subtitles_visible': subtitlesVisible,
-        'secondary_subtitles_visible': secondarySubtitlesVisible,
-        'status_styles_visible': statusStylesVisible,
-        'primary_font_size': primaryFontSize,
-        'secondary_font_size': secondaryFontSize,
-        'primary_font_family': primaryFontFamily,
-        'secondary_font_family': secondaryFontFamily,
-        'subtitle_preset': subtitlePreset,
-        'language': language,
-        'theme_mode': themeMode,
-        'subtitle_position_x': subtitlePositionX,
-        'subtitle_position_y': subtitlePositionY,
-        'subtitle_background_opacity': subtitleBackgroundOpacity,
-        'primary_color': primaryColor,
-        'secondary_color': secondaryColor,
-        'transcript_width': transcriptWidth,
-        'workbench_media_fraction': workbenchMediaFraction,
-        'last_media_path': lastMediaPath,
-        'last_media_title': lastMediaTitle,
-        'last_media_position_ms': lastMediaPositionMs,
-        'last_media_duration_ms': lastMediaDurationMs,
-        'last_media_subtitle_count': lastMediaSubtitleCount,
-        'ffmpeg_path': ffmpegPath,
-        'ffprobe_path': ffprobePath,
-        'yt_dlp_path': ytDlpPath,
-        'transcription_quality': transcriptionQuality,
-        'transcription_language': transcriptionLanguage,
-        'transcription_destination': transcriptionDestination,
-        'opensubtitles_api_key': openSubtitlesApiKey,
-        'pronunciation_visible': pronunciationVisible,
-        'word_sync_visible': wordSyncVisible,
-        'grouping_mode': groupingMode,
-        'chunk_display_style': chunkDisplayStyle,
-        'highlight_current_chunk': highlightCurrentChunk,
-        'chunk_highlight_style': chunkHighlightStyle,
-        'phoneme_display': phonemeDisplay,
-        'word_highlight_style': wordHighlightStyle,
-        'word_animation_intensity': wordAnimationIntensity,
-        'rule_hints_level': ruleHintsLevel,
-        'precompute_pronunciation': precomputePronunciation,
-        'phonetic_provider_id': phoneticProviderId,
-        'phonetic_model_id': phoneticModelId,
-        'phonetic_analysis_preference': phoneticAnalysisPreference,
-        'show_experimental_phonetic_results': showExperimentalPhoneticResults,
-        'phoneme_highlight_visible': phonemeHighlightVisible,
-        'phoneme_ribbon_visible': phonemeRibbonVisible,
-        'sound_pattern_ribbon_visible': soundPatternRibbonVisible,
-        'sound_pattern_display_mode': soundPatternDisplayMode,
-        'phoneme_ribbon_style': phonemeRibbonStyle,
-        'phonetic_cache_policy': phoneticCachePolicy,
-        'learning_language': learningLanguage,
-        'familiar_material_suggestions': familiarMaterialSuggestions,
-        'mark_keys_enabled': markKeysEnabled,
-        'realtime_caption_visible': realtimeCaptionVisible,
-      }),
-      flush: true,
-    );
+    await file.writeAsString(jsonEncode(toJson()), flush: true);
   }
+
+  /// The persisted shape, split out of [save] so a test can round-trip it
+  /// without writing over the user's real settings file.
+  Map<String, Object?> toJson() => {
+    'version': version,
+    'rate': rate,
+    'volume': volume,
+    'primary_subtitle_offset_ms': primarySubtitleOffsetMs,
+    'secondary_subtitle_offset_ms': secondarySubtitleOffsetMs,
+    'subtitles_visible': subtitlesVisible,
+    'secondary_subtitles_visible': secondarySubtitlesVisible,
+    'status_styles_visible': statusStylesVisible,
+    'primary_font_size': primaryFontSize,
+    'secondary_font_size': secondaryFontSize,
+    'primary_font_family': primaryFontFamily,
+    'secondary_font_family': secondaryFontFamily,
+    'subtitle_preset': subtitlePreset,
+    'language': language,
+    'theme_mode': themeMode,
+    'subtitle_position_x': subtitlePositionX,
+    'subtitle_position_y': subtitlePositionY,
+    'subtitle_background_opacity': subtitleBackgroundOpacity,
+    'primary_color': primaryColor,
+    'secondary_color': secondaryColor,
+    'transcript_width': transcriptWidth,
+    'workbench_media_fraction': workbenchMediaFraction,
+    'last_media_path': lastMediaPath,
+    'last_media_title': lastMediaTitle,
+    'last_media_position_ms': lastMediaPositionMs,
+    'last_media_duration_ms': lastMediaDurationMs,
+    'last_media_subtitle_count': lastMediaSubtitleCount,
+    'media_library_path': mediaLibraryPath,
+    'ffmpeg_path': ffmpegPath,
+    'ffprobe_path': ffprobePath,
+    'yt_dlp_path': ytDlpPath,
+    'transcription_quality': transcriptionQuality,
+    'transcription_language': transcriptionLanguage,
+    'transcription_destination': transcriptionDestination,
+    'opensubtitles_api_key': openSubtitlesApiKey,
+    'pronunciation_visible': pronunciationVisible,
+    'word_sync_visible': wordSyncVisible,
+    'grouping_mode': groupingMode,
+    'chunk_display_style': chunkDisplayStyle,
+    'highlight_current_chunk': highlightCurrentChunk,
+    'chunk_highlight_style': chunkHighlightStyle,
+    'phoneme_display': phonemeDisplay,
+    'word_highlight_style': wordHighlightStyle,
+    'word_animation_intensity': wordAnimationIntensity,
+    'rule_hints_level': ruleHintsLevel,
+    'precompute_pronunciation': precomputePronunciation,
+    'phonetic_provider_id': phoneticProviderId,
+    'phonetic_model_id': phoneticModelId,
+    'phonetic_analysis_preference': phoneticAnalysisPreference,
+    'show_experimental_phonetic_results': showExperimentalPhoneticResults,
+    'phoneme_highlight_visible': phonemeHighlightVisible,
+    'phoneme_ribbon_visible': phonemeRibbonVisible,
+    'sound_pattern_ribbon_visible': soundPatternRibbonVisible,
+    'sound_pattern_display_mode': soundPatternDisplayMode,
+    'phoneme_ribbon_style': phonemeRibbonStyle,
+    'phonetic_cache_policy': phoneticCachePolicy,
+    'learning_language': learningLanguage,
+    'familiar_material_suggestions': familiarMaterialSuggestions,
+    'mark_keys_enabled': markKeysEnabled,
+    'realtime_caption_visible': realtimeCaptionVisible,
+  };
 
   AppSettings copyWith({
     double? rate,
@@ -415,6 +447,7 @@ class AppSettings {
     int? lastMediaPositionMs,
     int? lastMediaDurationMs,
     int? lastMediaSubtitleCount,
+    String? mediaLibraryPath,
     String? ffmpegPath,
     String? ffprobePath,
     String? ytDlpPath,
@@ -481,6 +514,7 @@ class AppSettings {
     lastMediaDurationMs: lastMediaDurationMs ?? this.lastMediaDurationMs,
     lastMediaSubtitleCount:
         lastMediaSubtitleCount ?? this.lastMediaSubtitleCount,
+    mediaLibraryPath: mediaLibraryPath ?? this.mediaLibraryPath,
     ffmpegPath: ffmpegPath ?? this.ffmpegPath,
     ffprobePath: ffprobePath ?? this.ffprobePath,
     ytDlpPath: ytDlpPath ?? this.ytDlpPath,

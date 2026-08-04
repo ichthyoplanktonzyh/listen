@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/settings.dart';
 import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/settings/settings_dialog.dart';
@@ -164,6 +165,11 @@ Future<void> _pumpSettingsDialog(
         transcriptionQuality: 'balanced',
         transcriptionLanguage: 'auto',
         transcriptionDestination: 'primary',
+        mediaLibraryFolder: (path: '', state: MediaLibraryFolderState.unset),
+        onChooseMediaLibraryFolder: () async =>
+            (path: '', state: MediaLibraryFolderState.unset),
+        onClearMediaLibraryFolder: () async =>
+            (path: '', state: MediaLibraryFolderState.unset),
         ffmpegPath: '',
         ffprobePath: '',
         ytDlpPath: '',
