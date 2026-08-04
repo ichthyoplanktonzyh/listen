@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -23,6 +24,7 @@ import 'controllers/listening_inbox_coordinator.dart';
 import 'controllers/manual_review_flow_controller.dart';
 import 'controllers/media_import_flow_controller.dart';
 import 'controllers/media_library_coordinator.dart';
+import 'controllers/media_library_scan_controller.dart';
 import 'controllers/media_session_coordinator.dart';
 import 'controllers/occurrence_media_resolver.dart';
 import 'controllers/playback_actions_coordinator.dart';
@@ -83,6 +85,7 @@ import 'services/external_tools.dart';
 import 'services/file_transfer_service.dart';
 import 'services/fullscreen_window.dart';
 import 'services/media_import_file_service.dart';
+import 'services/media_library_scanner.dart';
 import 'services/platform_capabilities.dart';
 import 'services/smoke_launch_configuration_service.dart';
 import 'settings.dart';
@@ -199,6 +202,26 @@ class ListenApp extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// The disk half of the media-library scan's cheap identification layer.
+///
+/// Core stores a media's path and duration but neither its size nor its mtime,
+/// so the stamps that let a scan skip probing an unchanged file can only be
+/// read here. It lives in the composition root because the file system is not a
+/// controller's to touch.
+Future<KnownMediaStamp?> _readMediaStamp(String path) async {
+  try {
+    final stat = await File(path).stat();
+    if (stat.type == FileSystemEntityType.notFound) return null;
+    return KnownMediaStamp(
+      path: path,
+      sizeBytes: stat.size,
+      modifiedAt: stat.modified,
+    );
+  } on FileSystemException {
+    return null;
+  }
 }
 
 class PlayerScreen extends StatefulWidget {
@@ -375,6 +398,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     extensiveListening: extensiveListeningController,
     repository: coreRepositories.mediaLibrary,
   );
+  late final mediaLibraryScan = MediaLibraryScanController(
+    scanner: MediaLibraryScanner(
+      FfprobeMediaProbe(ffprobePath: settingsController.ffprobePath),
+    ),
+    repository: coreRepositories.mediaLibrary,
+    resolveFolder: () async {
+      // A folder can go off disk between visits (unmounted volume, rename), so
+      // the verdict is re-read at the start of every scan.
+      await settingsController.refreshMediaLibraryFolderState();
+      return settingsController.mediaLibraryFolder;
+    },
+    registeredPaths: () => mediaLibraryActions.registeredMediaPaths,
+    refreshLibrary: mediaLibraryActions.loadMediaLibrary,
+    readStamp: _readMediaStamp,
+  );
   late final subtitleSources = SubtitleSourcesCoordinator(
     player: playerController,
     subtitle: subtitleController,
@@ -480,6 +518,32 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
+  /// The folder scan follows the media surface, never the app launch: entering
+  /// the surface brings the library up to date, leaving it stops the walk
+  /// rather than letting it run behind a screen nobody is looking at.
+  void _scanLibraryWhileVisible() {
+    if (currentRoute.value == AppRoute.resources) {
+      unawaited(mediaLibraryScan.enterLibrary());
+    } else {
+      mediaLibraryScan.leaveLibrary();
+    }
+  }
+
+  /// The media surface sends the user to the same picker Settings uses; a
+  /// folder that was actually chosen is scanned right away, because otherwise
+  /// the surface would sit on "no folder" until the next visit.
+  Future<void> _chooseMediaLibraryFolder() async {
+    final folder = await settingsController.chooseMediaLibraryFolder(
+      confirmButtonText: l.text('mediaLibraryPickerConfirm'),
+    );
+    if (!mounted || folder.state == MediaLibraryFolderState.unset) return;
+    await mediaLibraryScan.refresh();
+  }
+
+  void _onMediaLibraryScanChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// Keeps the extensive-listening played clock honest: it ticks only while
   /// the main player is actually playing (issue #3).
   void _trackExtensivePlayback() =>
@@ -490,6 +554,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     super.initState();
     playerController.addListener(_surfaceErrorStatus);
     playerController.addListener(_trackExtensivePlayback);
+    currentRoute.addListener(_scanLibraryWhileVisible);
+    mediaLibraryScan.addListener(_onMediaLibraryScanChanged);
     playerController.addListener(_exitImmersiveWhenMediaCloses);
     coreSessionController.addListener(_onCoreSessionStateChanged);
     speakingActions.text = (key) => l.text(key);
@@ -1920,6 +1986,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     coreSessionController.removeListener(_onCoreSessionStateChanged);
     playerController.removeListener(_surfaceErrorStatus);
     playerController.removeListener(_trackExtensivePlayback);
+    currentRoute.removeListener(_scanLibraryWhileVisible);
+    mediaLibraryScan.removeListener(_onMediaLibraryScanChanged);
+    mediaLibraryScan.dispose();
     _workbenchAnimController.dispose();
     downloadController.dispose();
     mediaImportController.dispose();
@@ -2225,6 +2294,25 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         familiarSupplyEnabled:
                                                             settingsController
                                                                 .familiarMaterialSuggestions,
+                                                        scan: mediaLibraryScan
+                                                            .state,
+                                                        onScanRefresh: () =>
+                                                            unawaited(
+                                                              mediaLibraryScan
+                                                                  .refresh(),
+                                                            ),
+                                                        onScanCancel:
+                                                            mediaLibraryScan
+                                                                .cancel,
+                                                        onRetryScanRegistrations:
+                                                            () => unawaited(
+                                                              mediaLibraryScan
+                                                                  .retryFailedRegistrations(),
+                                                            ),
+                                                        onChooseMediaLibraryFolder:
+                                                            () => unawaited(
+                                                              _chooseMediaLibraryFolder(),
+                                                            ),
                                                         onOpenLibraryEntry:
                                                             (
                                                               entry,

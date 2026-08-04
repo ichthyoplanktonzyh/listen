@@ -1327,6 +1327,26 @@ class AppLocalizations {
       'coldStartSkip': 'Skip',
       'mediaLibrary': 'Media library',
       'mediaLibraryEmpty': 'Media you open will appear here.',
+      'mediaScanIdle': 'The media library folder has not been scanned yet.',
+      'mediaScanFolderUnset':
+          'Choose a media library folder and what you already have will show up '
+          'here.',
+      'mediaScanCoreUnavailable':
+          'The local core is not connected, so the library contents are '
+          'unknown — this does not mean the library is empty.',
+      'mediaScanScanning': 'Scanning the media library folder…',
+      'mediaScanCompleted': 'Folder scan finished.',
+      'mediaScanCancelled':
+          'Folder scan stopped. Everything already added stays.',
+      'mediaScanFailed': 'The folder scan broke down.',
+      'mediaScanCounts':
+          '{new} added · {unchanged} unchanged · {skipped} skipped',
+      'mediaScanCancel': 'Stop',
+      'mediaScanRefresh': 'Rescan folder',
+      'mediaScanRetryFailed': 'Retry those files',
+      'mediaScanRegisterFailed':
+          '{count} file(s) could not be added to the library.',
+      'sidecarSubtitleBadge': 'Subtitle file alongside',
       'queueIntensive': 'Intensive picks',
       'queueExtensive': 'Extensive listening',
       'queueDeferred': 'Set aside for now',
@@ -2416,7 +2436,8 @@ class AppLocalizations {
       'mediaLibraryClear': '清除',
       'mediaLibraryPickerConfirm': '使用这个文件夹',
       'mediaLibraryMissing': '这个文件夹当前不在磁盘上——可能已被移动或改名，也可能所在的磁盘没有连接。',
-      'mediaLibraryAccessHint': '文件夹若位于「文稿」「桌面」或「下载」，macOS 会在首次读取时请求一次授权。请允许，否则文件夹会显示为空。',
+      'mediaLibraryAccessHint':
+          '文件夹若位于「文稿」「桌面」或「下载」，macOS 会在首次读取时请求一次授权。请允许，否则文件夹会显示为空。',
       'externalTools': '可选外部工具',
       'close': '关闭',
       'save': '保存',
@@ -3252,6 +3273,19 @@ class AppLocalizations {
       'coldStartSkip': '跳过',
       'mediaLibrary': '媒体库',
       'mediaLibraryEmpty': '打开过的媒体会出现在这里。',
+      'mediaScanIdle': '媒体库文件夹还没有扫描过。',
+      'mediaScanFolderUnset': '选择媒体库文件夹后，你手上已有的媒体会出现在这里。',
+      'mediaScanCoreUnavailable': '本地内核未连接，媒体库里有什么无法确认——这不等于库是空的。',
+      'mediaScanScanning': '正在扫描媒体库文件夹…',
+      'mediaScanCompleted': '文件夹扫描完成。',
+      'mediaScanCancelled': '扫描已停止，已经加入的条目保留。',
+      'mediaScanFailed': '文件夹扫描中断。',
+      'mediaScanCounts': '新增 {new} · 未变化 {unchanged} · 跳过 {skipped}',
+      'mediaScanCancel': '停止',
+      'mediaScanRefresh': '重新扫描文件夹',
+      'mediaScanRetryFailed': '重试这些文件',
+      'mediaScanRegisterFailed': '有 {count} 个文件没能加入媒体库。',
+      'sidecarSubtitleBadge': '旁边有字幕文件',
       'queueIntensive': '精听靶单',
       'queueExtensive': '泛听队列',
       'queueDeferred': '暂缓区',

@@ -115,6 +115,12 @@ class MediaLibraryCoordinator {
     }
   }
 
+  /// Paths Core already holds, or null while that answer is unknown. Feeds the
+  /// folder scan's cheap identification layer, which must not treat "the
+  /// library has not loaded" as "nothing is registered".
+  List<String>? get registeredMediaPaths =>
+      mediaLibrary?.map((entry) => entry.media.path).toList(growable: false);
+
   /// Subset of [mediaLibrary] whose local media file still exists on disk.
   List<MediaLibraryEntry>? get offlineLibrary {
     final library = mediaLibrary;

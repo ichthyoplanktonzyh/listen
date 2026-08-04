@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
+import '../common/api_failure_disclosure.dart';
+import '../common/listen_loading.dart';
 
 /// Home media library grouped by triage queue (Phase 3.5 Slice 5).
 ///
@@ -20,6 +23,7 @@ class MediaLibrarySection extends StatelessWidget {
     super.key,
     required this.entries,
     required this.familiarSupplyEnabled,
+    this.sidecarSubtitlePaths = const <String>{},
     required this.onOpen,
     required this.onStartExtensive,
     required this.onStartIntensive,
@@ -30,6 +34,11 @@ class MediaLibrarySection extends StatelessWidget {
   /// Null while the first load is in flight; empty when the library is empty.
   final List<MediaLibraryEntry>? entries;
   final bool familiarSupplyEnabled;
+
+  /// Library paths the last folder scan saw next to a subtitle file. Reported
+  /// as a fact about the folder — pairing them into a learnable resource is a
+  /// separate step, so no row promises anything because of it.
+  final Set<String> sidecarSubtitlePaths;
   final void Function(MediaLibraryEntry entry) onOpen;
   final void Function(MediaLibraryEntry entry) onStartExtensive;
   final void Function(MediaLibraryEntry entry) onStartIntensive;
@@ -93,6 +102,9 @@ class MediaLibrarySection extends StatelessWidget {
               _MediaRow(
                 entry: entry,
                 familiarSupplyEnabled: familiarSupplyEnabled,
+                hasSidecarSubtitle: sidecarSubtitlePaths.contains(
+                  entry.media.path,
+                ),
                 onOpen: () => onOpen(entry),
                 onStartExtensive: () => onStartExtensive(entry),
                 onStartIntensive: () => onStartIntensive(entry),
@@ -198,6 +210,7 @@ class _MediaRow extends StatelessWidget {
   const _MediaRow({
     required this.entry,
     required this.familiarSupplyEnabled,
+    required this.hasSidecarSubtitle,
     required this.onOpen,
     required this.onStartExtensive,
     required this.onStartIntensive,
@@ -206,6 +219,7 @@ class _MediaRow extends StatelessWidget {
 
   final MediaLibraryEntry entry;
   final bool familiarSupplyEnabled;
+  final bool hasSidecarSubtitle;
   final VoidCallback onOpen;
   final VoidCallback onStartExtensive;
   final VoidCallback onStartIntensive;
@@ -272,6 +286,15 @@ class _MediaRow extends StatelessWidget {
                             fit: fit.sound.fit,
                           ),
                         ],
+                        if (hasSidecarSubtitle)
+                          // States what the folder holds, nothing more: the
+                          // subtitle file is not imported yet, so this must
+                          // not read as "ready to learn".
+                          _Badge(
+                            icon: Icons.subtitles_outlined,
+                            label: l.text('sidecarSubtitleBadge'),
+                            color: colors.onSurfaceVariant,
+                          ),
                         if (entry.isGoldenTarget)
                           _Badge(
                             icon: Icons.headphones_outlined,
@@ -380,6 +403,191 @@ class _MiniFitChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The media-library folder scan as the "my media" surface shows it.
+///
+/// Every outcome gets its own sentence, because they ask for different things
+/// from the user: no folder chosen sends them to the picker, a folder gone off
+/// disk sends them to the drive, an unreachable core says the contents are
+/// unknown — which is the one this surface must never collapse into "you have
+/// no media".
+class MediaLibraryScanCard extends StatelessWidget {
+  const MediaLibraryScanCard({
+    super.key,
+    required this.state,
+    required this.onRefresh,
+    required this.onCancel,
+    required this.onRetryFailures,
+    required this.onChooseFolder,
+  });
+
+  final MediaLibraryScanState state;
+  final VoidCallback onRefresh;
+  final VoidCallback onCancel;
+  final VoidCallback onRetryFailures;
+  final VoidCallback onChooseFolder;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final alarming =
+        state.status == MediaLibraryScanStatus.folderMissing ||
+        state.status == MediaLibraryScanStatus.failed;
+    final message = switch (state.status) {
+      MediaLibraryScanStatus.idle => l.text('mediaScanIdle'),
+      MediaLibraryScanStatus.folderUnset => l.text('mediaScanFolderUnset'),
+      MediaLibraryScanStatus.folderMissing => l.text('mediaLibraryMissing'),
+      MediaLibraryScanStatus.coreUnavailable => l.text(
+        'mediaScanCoreUnavailable',
+      ),
+      MediaLibraryScanStatus.scanning => l.text('mediaScanScanning'),
+      MediaLibraryScanStatus.completed => l.text('mediaScanCompleted'),
+      MediaLibraryScanStatus.cancelled => l.text('mediaScanCancelled'),
+      MediaLibraryScanStatus.failed => l.text('mediaScanFailed'),
+    };
+    final failures = state.registrationFailures;
+    return Material(
+      color: colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: ListenRadii.controlBorder,
+        side: BorderSide(
+          color: alarming ? colors.error : colors.outlineVariant,
+        ),
+      ),
+      child: Padding(
+        padding: ListenPadding.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (state.isScanning)
+                  const ListenLoading.inline(size: ListenIconSize.control)
+                else
+                  Icon(
+                    switch (state.status) {
+                      MediaLibraryScanStatus.folderUnset =>
+                        Icons.folder_off_outlined,
+                      MediaLibraryScanStatus.folderMissing =>
+                        Icons.warning_amber_outlined,
+                      MediaLibraryScanStatus.coreUnavailable =>
+                        Icons.cloud_off_outlined,
+                      MediaLibraryScanStatus.completed =>
+                        Icons.check_circle_outline,
+                      MediaLibraryScanStatus.cancelled =>
+                        Icons.pause_circle_outline,
+                      MediaLibraryScanStatus.failed => Icons.error_outline,
+                      _ => Icons.folder_outlined,
+                    },
+                    size: ListenIconSize.control,
+                    color: alarming ? colors.error : colors.onSurfaceVariant,
+                  ),
+                const SizedBox(width: ListenSpacing.gap8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message,
+                        style: text.bodyMedium?.copyWith(
+                          color: alarming ? colors.error : colors.onSurface,
+                        ),
+                      ),
+                      if (state.folderPath.isNotEmpty) ...[
+                        const SizedBox(height: ListenSpacing.gap2),
+                        Text(
+                          state.folderPath,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.labelSmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      if (_showsCounts) ...[
+                        const SizedBox(height: ListenSpacing.gap2),
+                        Text(
+                          l
+                              .text('mediaScanCounts')
+                              .replaceAll('{new}', '${state.registered}')
+                              .replaceAll('{unchanged}', '${state.unchanged}')
+                              .replaceAll('{skipped}', '${state.skipped}'),
+                          style: text.labelSmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: ListenSpacing.gap12),
+                _action(l),
+              ],
+            ),
+            if (state.status == MediaLibraryScanStatus.failed &&
+                ApiFailureDisclosure.hasDetail(state.failure))
+              ApiFailureDisclosure(failure: state.failure!),
+            if (failures.isNotEmpty) ...[
+              const SizedBox(height: ListenSpacing.gap8),
+              ApiFailureNotice(
+                message: l
+                    .text('mediaScanRegisterFailed')
+                    .replaceAll('{count}', '${failures.length}'),
+                failure: failures.first.failure,
+              ),
+              const SizedBox(height: ListenSpacing.gap4),
+              for (final failure in failures.take(3))
+                Text(
+                  failure.fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: onRetryFailures,
+                  child: Text(l.text('mediaScanRetryFailed')),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool get _showsCounts => switch (state.status) {
+    MediaLibraryScanStatus.scanning ||
+    MediaLibraryScanStatus.completed ||
+    MediaLibraryScanStatus.cancelled => true,
+    _ => false,
+  };
+
+  Widget _action(AppLocalizations l) => switch (state.status) {
+    MediaLibraryScanStatus.folderUnset => OutlinedButton(
+      onPressed: onChooseFolder,
+      child: Text(l.text('mediaLibraryChoose')),
+    ),
+    MediaLibraryScanStatus.folderMissing => OutlinedButton(
+      onPressed: onChooseFolder,
+      child: Text(l.text('mediaLibraryChange')),
+    ),
+    MediaLibraryScanStatus.scanning => TextButton(
+      onPressed: onCancel,
+      child: Text(l.text('mediaScanCancel')),
+    ),
+    _ => TextButton(
+      onPressed: onRefresh,
+      child: Text(l.text('mediaScanRefresh')),
+    ),
+  };
 }
 
 class _Badge extends StatelessWidget {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
@@ -23,6 +24,11 @@ class ListeningHome extends StatefulWidget {
     this.mediaLibrary,
     this.offlineEntries,
     this.familiarSupplyEnabled = true,
+    this.scan,
+    this.onScanRefresh,
+    this.onScanCancel,
+    this.onRetryScanRegistrations,
+    this.onChooseMediaLibraryFolder,
     this.onOpenLibraryEntry,
     this.onStartExtensiveEntry,
     this.onStartIntensiveEntry,
@@ -50,6 +56,15 @@ class ListeningHome extends StatefulWidget {
   /// on the library now.
   final List<MediaLibraryEntry>? offlineEntries;
   final bool familiarSupplyEnabled;
+
+  /// Folder-scan state, or null on a surface that has no scan wired. The scan
+  /// is the only thing that can tell an empty library apart from a library
+  /// nobody could read, so it renders even when [mediaLibrary] is unknown.
+  final MediaLibraryScanState? scan;
+  final VoidCallback? onScanRefresh;
+  final VoidCallback? onScanCancel;
+  final VoidCallback? onRetryScanRegistrations;
+  final VoidCallback? onChooseMediaLibraryFolder;
   final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
   final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
   final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
@@ -91,6 +106,11 @@ class _ListeningHomeState extends State<ListeningHome> {
               ? widget.offlineEntries
               : widget.mediaLibrary,
           familiarSupplyEnabled: widget.familiarSupplyEnabled,
+          scan: widget.scan,
+          onScanRefresh: widget.onScanRefresh,
+          onScanCancel: widget.onScanCancel,
+          onRetryScanRegistrations: widget.onRetryScanRegistrations,
+          onChooseMediaLibraryFolder: widget.onChooseMediaLibraryFolder,
           onOpenLibraryEntry: widget.onOpenLibraryEntry,
           onStartExtensiveEntry: widget.onStartExtensiveEntry,
           onStartIntensiveEntry: widget.onStartIntensiveEntry,
@@ -122,6 +142,11 @@ class _HomeContent extends StatelessWidget {
     required this.onOfflineOnlyChanged,
     required this.mediaLibrary,
     required this.familiarSupplyEnabled,
+    required this.scan,
+    required this.onScanRefresh,
+    required this.onScanCancel,
+    required this.onRetryScanRegistrations,
+    required this.onChooseMediaLibraryFolder,
     required this.onOpenLibraryEntry,
     required this.onStartExtensiveEntry,
     required this.onStartIntensiveEntry,
@@ -151,6 +176,11 @@ class _HomeContent extends StatelessWidget {
   final ValueChanged<bool> onOfflineOnlyChanged;
   final List<MediaLibraryEntry>? mediaLibrary;
   final bool familiarSupplyEnabled;
+  final MediaLibraryScanState? scan;
+  final VoidCallback? onScanRefresh;
+  final VoidCallback? onScanCancel;
+  final VoidCallback? onRetryScanRegistrations;
+  final VoidCallback? onChooseMediaLibraryFolder;
   final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
   final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
   final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
@@ -249,13 +279,31 @@ class _HomeContent extends StatelessWidget {
                   ),
                 ],
               ),
+              if (scan != null &&
+                  onScanRefresh != null &&
+                  onScanCancel != null &&
+                  onRetryScanRegistrations != null &&
+                  onChooseMediaLibraryFolder != null) ...[
+                const SizedBox(height: ListenSpacing.gap32),
+                MediaLibraryScanCard(
+                  state: scan!,
+                  onRefresh: onScanRefresh!,
+                  onCancel: onScanCancel!,
+                  onRetryFailures: onRetryScanRegistrations!,
+                  onChooseFolder: onChooseMediaLibraryFolder!,
+                ),
+              ],
               if (mediaLibrary != null &&
                   onOpenLibraryEntry != null &&
                   onStartExtensiveEntry != null &&
                   onStartIntensiveEntry != null &&
                   onSetLibraryIntent != null &&
                   onToggleFamiliarSupply != null) ...[
-                const SizedBox(height: ListenSpacing.gap32),
+                SizedBox(
+                  height: scan == null
+                      ? ListenSpacing.gap32
+                      : ListenSpacing.gap12,
+                ),
                 FilterChip(
                   // Offline used to occupy its own sidebar slot with the same
                   // data source; as a filter it stays one view on the library.
@@ -267,6 +315,8 @@ class _HomeContent extends StatelessWidget {
                 MediaLibrarySection(
                   entries: mediaLibrary,
                   familiarSupplyEnabled: familiarSupplyEnabled,
+                  sidecarSubtitlePaths:
+                      scan?.sidecarSubtitlePaths ?? const <String>{},
                   onOpen: onOpenLibraryEntry!,
                   onStartExtensive: onStartExtensiveEntry!,
                   onStartIntensive: onStartIntensiveEntry!,
