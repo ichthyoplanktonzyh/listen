@@ -13,18 +13,19 @@ You implement one scoped fix in the `listen-app` Flutter desktop repository.
 - **Only touch the files listed in your task's "Files you own" section.** Another
   agent is editing the rest of the repo in parallel. If the fix seems to require
   a file you do not own, stop and report that instead of editing it.
-- Read `AGENT.md` before you start. The rules that matter most here:
-  - UI must distinguish loading, empty, unavailable, degraded, failed,
-    cancelled and completed states **honestly**. Never render "not available"
-    for a state that is actually "unknown".
-  - Controllers own state transitions; services own I/O; widgets receive
-    explicit data and callbacks and do not parse raw transport.
-- All user-visible text goes through `AppLocalizations.text('key')` with **both**
-  `en` and `zh` entries in `lib/localization.dart`. Never inline a literal
-  string in a widget.
-- Reuse the design tokens: `ListenSpacing`, `ListenRadii`, `ListenIconSize`,
-  `ListenBreakpoints`, `Theme.of(context).textTheme`. Do not introduce bare
-  numeric padding or `TextStyle(fontSize: ...)`.
+- Read `AGENT.md` before you start. It is the only spec in this repo and it is
+  short. Do not go looking for rules in `.planning/` or `docs/decisions/` —
+  those are history, not authority.
+- **Rules live in tests, not in prose.** Spacing, radii, icon sizes,
+  breakpoints, column widths, palette, loading language, leaked exception text,
+  CJK literals and layer dependencies are all enforced executably by
+  `test/*_discipline_test.dart` and `test/architecture_layering_test.dart`.
+  Each test states its own reason at the top. When you need to know a rule,
+  read that test — do not guess it, and do not trust a copy of it in prose
+  (including this file).
+- The one rule that is never negotiable: UI distinguishes loading, empty,
+  unavailable, degraded, failed, cancelled and completed **honestly**. Never
+  render "not available" for a state that is actually "unknown".
 - Match the surrounding code's comment density and idiom. This repo writes
   short "why" comments, not "what" comments.
 

@@ -1,45 +1,29 @@
 # State
 
-> Updated: 2026-08-01 CST
-
-## Position
-
-- Repository: `ichthyoplanktonzyh/listen-app`
-- Default implementation owner: Claude
-- Backend authority: `ichthyoplanktonzyh/listen-core`
-- Flutter package version: `0.7.0+8`
-- Contract pin: `1.0.0`
-- Runtime pin: `0.7.0`
-- Core commit pin: `4f4bad8b97a651e1cb731bfccb8fd7e1c4645e0a`
-- Split release: `v0.7.0-split.1`
+> 只写「现在在做什么、下一步是什么」。
+>
+> 跨仓 pin、契约/运行时版本、分支与 HEAD **一律不写在这里**——手抄的状态会漂，
+> 而且漂了没有任何机制会发现（2026-08-04 实测：本文件曾声称 contract 1.0.0 /
+> core `4f4bad8b`，而同仓的 `backend.lock.json` 已经是 1.1.0 / `b980a206`）。
+>
+> 要看当前状态，当场读：
+>
+> ```sh
+> python3 tool/repo_status.py
+> ```
 
 ## Current Work
 
 Phase 001 implements the additive local content-package journey against typed
 App fixtures: existing package selection, strict external `listen-gen`
 orchestration, Core import receipt, honest provenance, cancellation/retry, and
-explicit subtitle/word-timeline selection. The pinned Core artifact is still
-unchanged, so immutable-release and packaged end-to-end validation remain open.
+explicit subtitle/word-timeline selection.
 
-## Established Boundaries
+## Open Questions
 
-- App owns user journey, UI/UX, client state, compatibility parsing and assembly.
-- App owns lawful media-acquisition UX, `listen-gen` process lifecycle, and the
-  presentation of package trust, review, license, compatibility, and selection.
-- Core owns canonical contract, backend behavior and release artifacts.
-- Gen owns open offline production and provider adapters; App does not import
-  its implementation.
-- Hosted Catalog/Registry service ownership remains undecided.
-- App consumes only immutable artifacts pinned by `backend.lock.json`.
-- Normal app work does not require the old monorepo or a sibling core checkout.
-- `design-notes/` owns the frontend charter, audits, and approved explorations.
-- Root `CHANGELOG.md` is updated only by a release owner from merged PRs.
-
-## Known Operational Constraint
-
-GitHub-hosted Actions cannot currently start because of account billing/spending
-state. Strict local validation is the merge evidence unless the owner changes
-that constraint.
+- Hosted Catalog/Registry 服务的归属仍未决定。
+- `listen-gen` 的 private remote 已建（2026-08-04），但本地历史尚未 push，
+  所以它的 commit 暂时仍无法被跨机器引用。
 
 ## Next
 
