@@ -45,7 +45,12 @@ void main() {
       AppRoute.values.map((route) => route.name),
       isNot(contains('conversation')),
     );
-    expect(AppRoute.values, hasLength(7));
+    // Four destinations. The rail used to carry seven under three headings;
+    // the headings were the symptom of a list nobody could hold in their
+    // head, and they grouped by the system's object model rather than by what
+    // the learner came to do. Growing this back past four means asking that
+    // question again, not adding a heading.
+    expect(AppRoute.values, hasLength(4));
   });
 
   testWidgets('conversation is a launch action, not a destination', (
@@ -57,7 +62,7 @@ void main() {
     await tester.pumpWidget(
       _harness(
         AppSidebar(
-          currentRoute: AppRoute.discovery,
+          currentRoute: AppRoute.today,
           onRouteSelected: selectedRoutes.add,
           onOpenConversation: () => launches++,
         ),
@@ -103,6 +108,11 @@ void main() {
       final lastDestination = tester.getTopLeft(find.text('Coach'));
       expect(launchLabel.dy, greaterThan(lastDestination.dy));
       expect(find.byIcon(Icons.arrow_outward), findsOneWidget);
+
+      // No group headings: four destinations explain themselves.
+      for (final heading in const ['Content', 'Learning', 'Insight']) {
+        expect(find.text(heading), findsNothing);
+      }
     }
   });
 }

@@ -86,7 +86,6 @@ void main() {
       body: ListeningHome(
         onOpenMedia: () {},
         onOpenOnline: () {},
-        onContinue: () {},
       ),
     ),
   );

@@ -17,19 +17,30 @@ import '../listen_wordmark.dart';
 /// unreachable arm, and stops the rail from offering a selection state that
 /// could never be true.
 enum AppRoute {
-  discovery,
-  resources,
-  history,
-  vocabulary,
-  expression,
-  review,
+  /// The one opening question: what should I do now.
+  today,
+
+  /// Where material comes from and what is already here — discovery and the
+  /// media library are two segments of one page, because they end in the same
+  /// library.
+  listen,
+
+  /// The language the learner has collected, and the practice on it:
+  /// vocabulary, expressions and review as segments of one page.
+  language,
+
+  /// What the evidence says about the four channels.
   coach,
 }
 
-/// Persistent application navigation, grouped by user intent: content (what
-/// to listen to), learning (what to practise), insight (what the profile
-/// says). One rail owns every standing destination — page-level rails and
-/// their duplicates are gone.
+/// Persistent application navigation: four destinations, no group headings.
+///
+/// The rail used to carry seven destinations under three headings (content /
+/// learning / insight). Those headings were the symptom, not the structure —
+/// they existed to explain a list nobody could hold in their head, and they
+/// grouped by the system's object model (media, words, patterns, cards,
+/// profile) rather than by what the learner came to do. Four destinations
+/// need no headings to explain themselves.
 ///
 /// The rail carries two kinds of entry, and draws them differently on
 /// purpose: destinations (the grouped list, one of them always selected) and
@@ -76,47 +87,24 @@ class AppSidebar extends StatelessWidget {
                 horizontal: ListenSpacing.gap8,
               ),
               children: [
-                _SidebarSectionTitle(title: l.text('sidebarSectionContent')),
                 _SidebarItem(
-                  icon: Icons.explore_outlined,
+                  icon: Icons.wb_sunny_outlined,
                   label: l.text('sidebarToday'),
-                  isSelected: currentRoute == AppRoute.discovery,
-                  onTap: () => onRouteSelected(AppRoute.discovery),
-                ),
-                _SidebarItem(
-                  icon: Icons.folder_outlined,
-                  label: l.text('sidebarMyResources'),
-                  isSelected: currentRoute == AppRoute.resources,
-                  onTap: () => onRouteSelected(AppRoute.resources),
-                ),
-                _SidebarItem(
-                  icon: Icons.history,
-                  label: l.text('sidebarHistory'),
-                  isSelected: currentRoute == AppRoute.history,
-                  onTap: () => onRouteSelected(AppRoute.history),
-                ),
-                const SizedBox(height: ListenSpacing.gap16),
-                _SidebarSectionTitle(title: l.text('sidebarSectionLearning')),
-                _SidebarItem(
-                  icon: Icons.menu_book_outlined,
-                  label: l.text('sidebarVocabulary'),
-                  isSelected: currentRoute == AppRoute.vocabulary,
-                  onTap: () => onRouteSelected(AppRoute.vocabulary),
-                ),
-                _SidebarItem(
-                  icon: Icons.format_quote_outlined,
-                  label: l.text('sidebarExpression'),
-                  isSelected: currentRoute == AppRoute.expression,
-                  onTap: () => onRouteSelected(AppRoute.expression),
+                  isSelected: currentRoute == AppRoute.today,
+                  onTap: () => onRouteSelected(AppRoute.today),
                 ),
                 _SidebarItem(
                   icon: Icons.headphones_outlined,
-                  label: l.text('review'),
-                  isSelected: currentRoute == AppRoute.review,
-                  onTap: () => onRouteSelected(AppRoute.review),
+                  label: l.text('sidebarListen'),
+                  isSelected: currentRoute == AppRoute.listen,
+                  onTap: () => onRouteSelected(AppRoute.listen),
                 ),
-                const SizedBox(height: ListenSpacing.gap16),
-                _SidebarSectionTitle(title: l.text('sidebarSectionInsight')),
+                _SidebarItem(
+                  icon: Icons.menu_book_outlined,
+                  label: l.text('sidebarMyLanguage'),
+                  isSelected: currentRoute == AppRoute.language,
+                  onTap: () => onRouteSelected(AppRoute.language),
+                ),
                 _SidebarItem(
                   icon: Icons.insights_outlined,
                   label: l.text('coachDashboard'),
@@ -156,28 +144,6 @@ class AppSidebar extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _SidebarSectionTitle extends StatelessWidget {
-  const _SidebarSectionTitle({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: ListenSpacing.gap12,
-        vertical: ListenSpacing.gap8,
-      ),
-      child: Text(
-        title,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
       ),
     );
   }

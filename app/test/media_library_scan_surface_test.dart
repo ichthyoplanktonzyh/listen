@@ -48,7 +48,6 @@ Widget _home({
   ListeningHome(
     onOpenMedia: () {},
     onOpenOnline: () {},
-    onContinue: () {},
     mediaLibrary: library,
     offlineEntries: library,
     scan: scan,
