@@ -48,6 +48,21 @@ CJK 字面量、分层依赖——这些都由 `test/*_discipline_test.dart` 和
 **那些测试才是权威，不是这份文档。** 要知道规则，读测试；要改规则，改测试并写清理由。
 不要在这里重复它们——第二份副本只会漂移。
 
+### 通用 Flutter 技能：只有 preview 那条有用
+
+`dart-flutter:*` 那组技能带的是外部默认值，不是本仓库的规矩。实测下来只有一条有增量：
+
+- **`flutter-add-widget-preview` 值得跟。** 仓库用 `@Preview` 展示 discovery 各状态，
+  而「新状态有没有 preview」没有测试守着——加了个诚实状态却不给它一张图，
+  是最容易漏的一类。改 discovery UI 时把这条当收尾清单。
+- **`flutter-apply-architecture-best-practices` 不要跟。** 它讲的分层仓库已经有了，
+  且由 `architecture_layering_test.dart` 执行，比技能强；它多出来的部分要么违反闸门
+  （示例 View 直接用 `CircularProgressIndicator`，`loading_discipline_test.dart` 当场红），
+  要么是无谓改造（`freezed`/`built_value`、`get_it`、`lib/ui/features/` 目录）。
+- 其余（静态分析、单测、pattern matching）被 AGENT.md 的验证命令和既有测试约定覆盖。
+
+「通用技能里是这么写的」和「项目里现在是这么写的」一样，都不构成理由。
+
 ### 语言分离
 
 UI 语言和学习语言是两回事。`lib/` 里不写死任何一种界面语言的句子：

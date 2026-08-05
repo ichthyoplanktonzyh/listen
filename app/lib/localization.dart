@@ -70,6 +70,7 @@ class AppLocalizations {
       'discoveryPackageTimeline': 'Word timing',
       'discoveryPackagePhonetics': 'Pronunciation notes',
       'discoveryDuration': 'Duration',
+      'discoveryDurationUnknown': 'Not stated by the source',
       'discoveryLanguage': 'Language',
       'discoveryReadyToLearn': 'Ready to learn — open it in the player.',
       'discoveryClose': 'Close',
@@ -78,6 +79,22 @@ class AppLocalizations {
       'discoveryGenerateComplete': 'Learning package ready',
       'discoveryGenerateFailed': 'Package generation failed',
       'discoveryGenerateCancelled': 'Generation cancelled',
+      'discoveryGeneratorUnavailable': 'No generator on this machine',
+      'discoveryGeneratorUnavailableHint':
+          'Configure listen-gen in settings to build packages here. Packages '
+          'imported from a file still work.',
+      'genFailureNotConfigured': 'The generator is not configured.',
+      'genFailureStartFailed': 'The generator would not start.',
+      'genFailureProtocolInvalid':
+          'The generator spoke an unexpected protocol.',
+      'genFailureOutputInvalid':
+          'The generator produced an unreadable package.',
+      'genFailureTerminalMissing':
+          'The generator stopped without saying how it ended.',
+      'genFailureFailed': 'The generator reported a failure.',
+      'genFailureOutputMissing': 'The generator finished but wrote no package.',
+      'genFailureDigestMismatch':
+          'The package did not match the digest the generator reported.',
       'discoveryOpenLearning': 'Open for Learning',
       'discoveryCheckingPackage': 'Checking package...',
       'discoveryPackageNotAvailable': 'No package yet',
@@ -2138,6 +2155,7 @@ class AppLocalizations {
       'discoveryPackageTimeline': '词时间轴',
       'discoveryPackagePhonetics': '发音标注',
       'discoveryDuration': '时长',
+      'discoveryDurationUnknown': '来源未提供',
       'discoveryLanguage': '语言',
       'discoveryReadyToLearn': '已就绪，可在播放器中打开。',
       'discoveryClose': '关闭',
@@ -2147,6 +2165,18 @@ class AppLocalizations {
       'discoveryGenerateComplete': '学习资源包已就绪',
       'discoveryGenerateFailed': '资源包生成失败',
       'discoveryGenerateCancelled': '已取消生成',
+      'discoveryGeneratorUnavailable': '本机未配置生成器',
+      'discoveryGeneratorUnavailableHint':
+          '在设置里配置 listen-gen 后即可在本机生成资源包。'
+          '从文件导入的资源包不受影响。',
+      'genFailureNotConfigured': '生成器未配置。',
+      'genFailureStartFailed': '生成器无法启动。',
+      'genFailureProtocolInvalid': '生成器输出的协议无法识别。',
+      'genFailureOutputInvalid': '生成器产出的资源包无法读取。',
+      'genFailureTerminalMissing': '生成器退出了，但没说明结果。',
+      'genFailureFailed': '生成器报告了一个失败。',
+      'genFailureOutputMissing': '生成器结束了，但没有写出资源包。',
+      'genFailureDigestMismatch': '资源包与生成器报告的摘要不一致。',
       'discoveryCheckingPackage': '正在查询资源包...',
       'discoveryPackageNotAvailable': '暂无资源包',
       'discoveryPackageUnknown': '尚未查询学习包',

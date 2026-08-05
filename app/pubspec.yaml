@@ -43,6 +43,7 @@ dependencies:
   video_player: ^2.11.1
   fvp:
     path: third_party/fvp
+  xml: ^7.0.1
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +78,7 @@ flutter:
   # place Chinese UI copy may live).
   assets:
     - assets/discovery_fixtures.json
+    - assets/podcast_starter_feeds.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -84,9 +84,12 @@ class DiscoveryDetailPanel extends StatelessWidget {
           const SizedBox(height: ListenSpacing.gap12),
           _MetaRow(
             label: l.text('discoveryDuration'),
-            value: formatDuration(
-              Duration(milliseconds: durationMs ?? entry.durationMs),
-            ),
+            // A duration nobody has stated is said to be unstated. It used to
+            // be a hardcoded five minutes rendered as a fact.
+            value: switch (durationMs ?? entry.durationMs) {
+              final int known => formatDuration(Duration(milliseconds: known)),
+              null => l.text('discoveryDurationUnknown'),
+            },
           ),
           _MetaRow(label: l.text('discoveryLanguage'), value: entry.language),
           const SizedBox(height: ListenSpacing.gap24),
@@ -413,7 +416,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
           if (downloadFailure case final failure? when downloadFailed) ...[
             const SizedBox(height: ListenSpacing.gap4),
             Text(
-              _failureDetail(failure),
+              _failureDetail(l, failure),
               style: Theme.of(
                 context,
               ).textTheme.labelSmall?.copyWith(color: scheme.error),
@@ -526,58 +529,102 @@ class _UserJourneyActionsCard extends StatelessWidget {
             // unknown or undetermined we have not been told whether one
             // already exists, so the honest next step is to ask again.
             if (packageStatus == PackageStatus.notAvailable) ...[
-              if (generationStatus == ContentGenerationStatus.failed) ...[
-                Text(
-                  l.text('discoveryGenerateFailed'),
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: scheme.error),
+              // No generator on this machine is an absent capability, not a
+              // failed run. It gets a plain unavailable row and a disabled
+              // button — disabled rather than hidden, so the feature is still
+              // discoverable — and never a retry, which could only fail again.
+              if (generationStatus == ContentGenerationStatus.unavailable) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.block_outlined,
+                      size: ListenIconSize.inline,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: ListenSpacing.gap6),
+                    Expanded(
+                      child: Text(
+                        l.text('discoveryGeneratorUnavailable'),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (generationFailure case final failure?) ...[
-                  const SizedBox(height: ListenSpacing.gap4),
-                  Text(
-                    _failureDetail(failure),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelSmall?.copyWith(color: scheme.error),
-                  ),
-                ],
-                const SizedBox(height: ListenSpacing.gap8),
-              ] else if (generationStatus ==
-                  ContentGenerationStatus.cancelled) ...[
-                Text(
-                  l.text('discoveryGenerateCancelled'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: ListenSpacing.gap8),
-              ],
-
-              // Generate button - disabled unless media is downloaded!
-              FilledButton.icon(
-                onPressed: isDownloaded ? onGenerate : null,
-                icon: const Icon(
-                  Icons.auto_awesome,
-                  size: ListenIconSize.control,
-                ),
-                label: Text(l.text('discoveryGenerate')),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 36),
-                  backgroundColor: scheme.secondary,
-                  foregroundColor: scheme.onSecondary,
-                ),
-              ),
-              if (!isDownloaded) ...[
                 const SizedBox(height: ListenSpacing.gap4),
                 Text(
-                  l.text('discoveryGenerateNeedsDownload'),
+                  l.text('discoveryGeneratorUnavailableHint'),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                    fontStyle: FontStyle.italic,
                   ),
-                  textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: ListenSpacing.gap8),
+                FilledButton.icon(
+                  onPressed: null,
+                  icon: const Icon(
+                    Icons.auto_awesome,
+                    size: ListenIconSize.control,
+                  ),
+                  label: Text(l.text('discoveryGenerate')),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 36),
+                  ),
+                ),
+              ] else ...[
+                if (generationStatus == ContentGenerationStatus.failed) ...[
+                  Text(
+                    l.text('discoveryGenerateFailed'),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: scheme.error),
+                  ),
+                  if (generationFailure case final failure?) ...[
+                    const SizedBox(height: ListenSpacing.gap4),
+                    Text(
+                      _failureDetail(l, failure),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: scheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: ListenSpacing.gap8),
+                ] else if (generationStatus ==
+                    ContentGenerationStatus.cancelled) ...[
+                  Text(
+                    l.text('discoveryGenerateCancelled'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: ListenSpacing.gap8),
+                ],
+
+                // Generate button - disabled unless media is downloaded!
+                FilledButton.icon(
+                  onPressed: isDownloaded ? onGenerate : null,
+                  icon: const Icon(
+                    Icons.auto_awesome,
+                    size: ListenIconSize.control,
+                  ),
+                  label: Text(l.text('discoveryGenerate')),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 36),
+                    backgroundColor: scheme.secondary,
+                    foregroundColor: scheme.onSecondary,
+                  ),
+                ),
+                if (!isDownloaded) ...[
+                  const SizedBox(height: ListenSpacing.gap4),
+                  Text(
+                    l.text('discoveryGenerateNeedsDownload'),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      fontStyle: FontStyle.italic,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
               ],
             ] else
               OutlinedButton.icon(
@@ -656,6 +703,60 @@ Widget discoveryDetailPanelPreview() => discoveryPreviewShell(
   height: 720,
 );
 
+/// The panel on a machine with no `listen-gen`: media downloaded, package
+/// checked and absent, and generation simply not available here.
+///
+/// It exists because the difference between this and the `failed` state is
+/// the whole point of the fix — a grey unavailable row with a disabled button
+/// and a sentence naming the real next step, versus a red failure with a retry
+/// that can never succeed. Which one is on screen is obvious in a picture and
+/// invisible in a test name.
+@Preview(
+  name: 'Detail panel · no generator',
+  group: 'Discovery',
+  size: Size(380, 720),
+)
+Widget discoveryDetailPanelNoGeneratorPreview() => discoveryPreviewShell(
+  DiscoveryDetailPanel(
+    entry: const MediaEntry(
+      id: 'i-preview-nogen',
+      sourceId: 'c-preview',
+      title: 'The fastest way to board a plane, according to mathematics',
+      description: 'A queueing-theory look at why boarding takes so long.',
+      durationMs: 357000,
+      language: 'English',
+      publishedOn: '2026-07-28',
+      thumbnailUrl: null,
+      viewCount: 142000,
+      hasPackage: false,
+    ),
+    source: const MediaSource(
+      id: 'c-preview',
+      name: 'TED-Ed',
+      language: 'English',
+      description: '',
+      cover: ChannelCoverTone.rose,
+      type: MediaSourceType.youtube,
+      avatarUrl: null,
+    ),
+    downloadState: DownloadState.done,
+    downloadProgress: 1,
+    packageStatus: PackageStatus.notAvailable,
+    generationStatus: ContentGenerationStatus.unavailable,
+    generatorPhase: null,
+    generationFailure: null,
+    onDownload: _noop,
+    onCancelDownload: _noop,
+    onOpenPlayer: _noop,
+    onViewPackage: _noop,
+    onGenerate: _noop,
+    onCancelGenerate: _noop,
+    onRecheckPackage: _noop,
+  ),
+  width: 380,
+  height: 720,
+);
+
 void _noop() {}
 
 String _generatorPhaseLabel(AppLocalizations l, String? phase) =>
@@ -668,10 +769,33 @@ String _generatorPhaseLabel(AppLocalizations l, String? phase) =>
       _ => l.text('contentPackagePhaseWorking'),
     };
 
-String _failureDetail(ApiFailure failure) {
+/// Sentences for the generator codes we know about.
+///
+/// A raw code like `generator_not_configured` is honest but useless: it tells
+/// the user nothing about what happened or what to do. Unknown codes still
+/// fall through to the code itself — losing diagnosability would be the worse
+/// trade — but every code the generator can actually emit is named here, and
+/// `generation_failure_copy_test.dart` fails when one is added without a
+/// sentence.
+const _generatorFailureKeys = <String, String>{
+  'generator_not_configured': 'genFailureNotConfigured',
+  'generator_start_failed': 'genFailureStartFailed',
+  'generator_protocol_invalid': 'genFailureProtocolInvalid',
+  'generator_output_invalid': 'genFailureOutputInvalid',
+  'generator_terminal_missing': 'genFailureTerminalMissing',
+  'generator_failed': 'genFailureFailed',
+  'generator_output_missing': 'genFailureOutputMissing',
+  'generator_package_digest_mismatch': 'genFailureDigestMismatch',
+};
+
+String _failureDetail(AppLocalizations l, ApiFailure failure) {
   final code = failure.code == null || failure.code!.isEmpty
       ? 'generator_failed'
       : failure.code!;
+  final key = _generatorFailureKeys[code];
+  // The generator's own stderr is a diagnostic, not a user sentence, so it is
+  // never concatenated into the localized line.
+  if (key != null) return l.text(key);
   final message = failure.message;
   if (message == null || message.isEmpty) return code;
   return '$code: ${message.length > 220 ? '${message.substring(0, 220)}…' : message}';

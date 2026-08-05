@@ -10,6 +10,30 @@ enum DownloadState { none, downloading, done, failed }
 
 enum MediaSourceType { youtube, podcast }
 
+/// How this entry's bytes may be obtained, if at all.
+///
+/// Discovery, playback and acquisition are separate capabilities: listing an
+/// entry says nothing about whether the app is entitled or able to fetch it.
+/// Keeping the answer on the entry means the surface can say which one it is
+/// instead of showing a download button that turns out to be a dead end.
+enum MediaAcquisition {
+  /// The publisher put a media URL in the feed for clients to fetch. Podcast
+  /// enclosures; plain HTTP, no extractor.
+  enclosure,
+
+  /// Acquisition goes through a user-provided external tool, on the user's own
+  /// responsibility. The YouTube path.
+  externalTool,
+
+  /// Nothing to acquire — a feed item with no enclosure, a listing-only entry.
+  none,
+}
+
+/// Whether an entry's media carries a picture. Podcast enclosures are usually
+/// audio; the generator needs to be told which, rather than assuming video
+/// because the first source the app ever had was YouTube.
+enum MediaKind { audio, video }
+
 /// What is known about an entry's learning package.
 ///
 /// "We could not find out" is a state of its own: rendering [notAvailable]
@@ -40,6 +64,14 @@ enum ContentGenerationStatus {
   importing,
   completed,
   failed,
+
+  /// The generator is not configured on this machine, so generation cannot be
+  /// attempted at all.
+  ///
+  /// Distinct from [failed]: nothing ran and nothing went wrong. Retrying is
+  /// guaranteed to land here again, so the surface owes the user the real next
+  /// step — configure `listen-gen` — rather than a retry button.
+  unavailable,
   cancelled,
 }
 
@@ -78,7 +110,10 @@ class MediaEntry {
     required this.thumbnailUrl,
     required this.viewCount,
     required this.hasPackage,
-    this.videoUrl,
+    this.acquisition = MediaAcquisition.none,
+    this.mediaKind = MediaKind.video,
+    this.mediaUrl,
+    this.mediaByteLength,
     this.localPath,
   });
 
@@ -86,12 +121,32 @@ class MediaEntry {
   final String sourceId;
   final String title;
   final String description;
-  final int durationMs;
+
+  /// Null when the source never said how long this is.
+  ///
+  /// It used to be a non-null field that the YouTube feed path filled with a
+  /// hardcoded five minutes, which rendered as a duration badge on every card
+  /// — a fabricated fact, indistinguishable from a real one. Unknown is a
+  /// state the surface has to show.
+  final int? durationMs;
+
   final String language;
   final String publishedOn;
   final String? thumbnailUrl;
   final int viewCount;
   final bool hasPackage;
-  final String? videoUrl;
+
+  final MediaAcquisition acquisition;
+  final MediaKind mediaKind;
+
+  /// Where the bytes come from, read according to [acquisition]: an enclosure
+  /// URL to fetch directly, or a page URL to hand to an external tool.
+  final String? mediaUrl;
+
+  /// The size the source advertised, when it did. Advisory only — it is used
+  /// to show progress when the response omits `Content-Length`, never as
+  /// evidence about the bytes that actually arrived.
+  final int? mediaByteLength;
+
   final String? localPath;
 }

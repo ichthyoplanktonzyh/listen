@@ -49,9 +49,13 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
       for (final raw in decoded['channels'] as List<dynamic>)
         _sourceFromMap(raw as Map<dynamic, dynamic>),
     ];
+    final typesById = {for (final source in sources) source.id: source.type};
     final entries = <MediaEntry>[
       for (final raw in decoded['items'] as List<dynamic>)
-        _entryFromMap(raw as Map<dynamic, dynamic>),
+        _entryFromMap(
+          raw as Map<dynamic, dynamic>,
+          typesById[raw['channelId']] ?? MediaSourceType.youtube,
+        ),
     ];
     _sources = List.unmodifiable(sources);
     _entries = List.unmodifiable(entries);
@@ -109,19 +113,32 @@ MediaSource _sourceFromMap(Map<dynamic, dynamic> map) => MediaSource(
   avatarUrl: map['avatarUrl'] as String?,
 );
 
-MediaEntry _entryFromMap(Map<dynamic, dynamic> map) => MediaEntry(
-  id: map['id'] as String,
-  sourceId: map['channelId'] as String,
-  title: map['title'] as String,
-  description: map['description'] as String,
-  durationMs: map['durationMs'] as int,
-  language: map['language'] as String,
-  publishedOn: map['publishedOn'] as String,
-  thumbnailUrl: map['thumbnailUrl'] as String?,
-  viewCount: map['viewCount'] as int? ?? 0,
-  hasPackage: map['hasPackage'] as bool? ?? false,
-  videoUrl: 'https://www.youtube.com/watch?v=${map['id']}',
-);
+/// The fixture used to hand every entry a `youtube.com/watch?v=` URL, whatever
+/// its channel said it was — so a podcast channel's episodes claimed to be
+/// YouTube videos. The acquisition path follows the channel's type instead.
+MediaEntry _entryFromMap(Map<dynamic, dynamic> map, MediaSourceType type) {
+  final id = map['id'] as String;
+  final isYoutube = type == MediaSourceType.youtube;
+  return MediaEntry(
+    id: id,
+    sourceId: map['channelId'] as String,
+    title: map['title'] as String,
+    description: map['description'] as String,
+    durationMs: map['durationMs'] as int?,
+    language: map['language'] as String,
+    publishedOn: map['publishedOn'] as String,
+    thumbnailUrl: map['thumbnailUrl'] as String?,
+    viewCount: map['viewCount'] as int? ?? 0,
+    hasPackage: map['hasPackage'] as bool? ?? false,
+    acquisition: isYoutube
+        ? MediaAcquisition.externalTool
+        : MediaAcquisition.enclosure,
+    mediaKind: isYoutube ? MediaKind.video : MediaKind.audio,
+    mediaUrl: isYoutube
+        ? 'https://www.youtube.com/watch?v=$id'
+        : map['enclosureUrl'] as String?,
+  );
+}
 
 MediaSourceType _typeFromName(String name) => switch (name) {
   'youtube' => MediaSourceType.youtube,
@@ -138,8 +155,15 @@ ChannelCoverTone _coverFromName(String name) => switch (name) {
   _ => ChannelCoverTone.slate,
 };
 
-final class LiveDiscoveryRepository implements DiscoveryRepository {
-  LiveDiscoveryRepository();
+/// Discovery over YouTube's per-channel Atom feed.
+///
+/// Discovery only. Listing a video here grants no acquisition right: the
+/// download path below runs a user-provided external tool, on the user's own
+/// responsibility, which is why entries from this source are marked
+/// [MediaAcquisition.externalTool] rather than sharing the podcast enclosure
+/// path.
+final class YoutubeDiscoveryRepository implements DiscoveryRepository {
+  YoutubeDiscoveryRepository();
 
   final HttpClient _client = HttpClient();
 
@@ -274,13 +298,19 @@ final class LiveDiscoveryRepository implements DiscoveryRepository {
           sourceId: sourceId,
           title: _decodeXml(titleRaw),
           description: _decodeXml(descRaw),
-          durationMs: 300000, // placeholder (5 minutes)
+          // The Atom feed carries no duration. It used to be filled with a
+          // hardcoded five minutes, which every card then rendered as a real
+          // badge; unknown stays unknown until `_resolveRemoteDurations`
+          // reports an actual one.
+          durationMs: null,
           language: 'en',
           publishedOn: published,
           thumbnailUrl: thumb,
           viewCount: views,
           hasPackage: false,
-          videoUrl: 'https://www.youtube.com/watch?v=$videoId',
+          acquisition: MediaAcquisition.externalTool,
+          mediaKind: MediaKind.video,
+          mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
         ),
       );
     }
@@ -311,7 +341,9 @@ final class LiveDiscoveryRepository implements DiscoveryRepository {
       thumbnailUrl: details.thumbnail,
       viewCount: details.viewCount,
       hasPackage: false,
-      videoUrl: url,
+      acquisition: MediaAcquisition.externalTool,
+      mediaKind: MediaKind.video,
+      mediaUrl: url,
     );
   }
 

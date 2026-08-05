@@ -596,13 +596,15 @@ class _FeedRepositoryWithDurations implements DiscoveryRepository {
       sourceId: _source.id,
       title: 'Feed entry $id',
       description: '',
-      durationMs: 300000,
+      // The Atom feed states no duration; that is why the workers run.
+      durationMs: null,
       language: 'en',
       publishedOn: '2026-08-01',
       thumbnailUrl: null,
       viewCount: 0,
       hasPackage: false,
-      videoUrl: 'https://www.youtube.com/watch?v=$id',
+      acquisition: MediaAcquisition.externalTool,
+      mediaUrl: 'https://www.youtube.com/watch?v=$id',
     ),
   ];
 

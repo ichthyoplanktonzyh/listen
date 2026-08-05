@@ -36,6 +36,7 @@ class DiscoveryState {
     Map<String, ContentGenerationStatus> generationStatuses = const {},
     Map<String, String?> generatorPhases = const {},
     Map<String, ApiFailure?> generationFailures = const {},
+    this.generatorConfigured = true,
   }) : sources = List.unmodifiable(sources),
        entries = List.unmodifiable(entries),
        downloadSnapshots = Map.unmodifiable(downloadSnapshots),
@@ -66,6 +67,7 @@ class DiscoveryState {
   /// Set when the selected channel's feed failed. An empty [entries] with no
   /// failure means the channel is genuinely empty.
   final ApiFailure? entriesFailure;
+
   /// Typed acquisition state per entry, mirrored from that entry's
   /// [DownloadController]. Absent means nothing has been acquired or attempted.
   final Map<String, DownloadStatusSnapshot> downloadSnapshots;
@@ -74,6 +76,12 @@ class DiscoveryState {
   final Map<String, ContentGenerationStatus> generationStatuses;
   final Map<String, String?> generatorPhases;
   final Map<String, ApiFailure?> generationFailures;
+
+  /// Whether `listen-gen` is configured on this machine. Read from the
+  /// repository when the ViewModel is built, so the surface knows before it
+  /// offers the action — an unavailable capability is never dressed up as a
+  /// button that fails on press.
+  final bool generatorConfigured;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -117,8 +125,15 @@ class DiscoveryState {
   PackageStatus packageStatusOf(String entryId) =>
       packageStatuses[entryId] ?? PackageStatus.unknown;
 
+  /// With no generator on this machine there is no idle state to be in: the
+  /// capability is absent before anything is attempted, so the surface reads
+  /// `unavailable` from the start rather than offering an action that can only
+  /// fail on press.
   ContentGenerationStatus generationStatusOf(String entryId) =>
-      generationStatuses[entryId] ?? ContentGenerationStatus.idle;
+      generationStatuses[entryId] ??
+      (generatorConfigured
+          ? ContentGenerationStatus.idle
+          : ContentGenerationStatus.unavailable);
 
   String? generatorPhaseOf(String entryId) => generatorPhases[entryId];
 
@@ -146,6 +161,7 @@ class DiscoveryState {
     Map<String, ContentGenerationStatus>? generationStatuses,
     Map<String, String?>? generatorPhases,
     Map<String, ApiFailure?>? generationFailures,
+    bool? generatorConfigured,
   }) => DiscoveryState(
     loading: loading ?? this.loading,
     entriesLoading: entriesLoading ?? this.entriesLoading,
@@ -168,6 +184,7 @@ class DiscoveryState {
     generationStatuses: generationStatuses ?? this.generationStatuses,
     generatorPhases: generatorPhases ?? this.generatorPhases,
     generationFailures: generationFailures ?? this.generationFailures,
+    generatorConfigured: generatorConfigured ?? this.generatorConfigured,
   );
 }
 
@@ -183,7 +200,14 @@ final class DiscoveryViewModel extends ChangeNotifier {
        _contentPackageRepository =
            contentPackageRepository ?? const _FakeContentPackageRepository(),
        _mediaLibraryRepository =
-           mediaLibraryRepository ?? const _FakeMediaLibraryRepository();
+           mediaLibraryRepository ?? const _FakeMediaLibraryRepository() {
+    // Read once at construction rather than on press. Whether the generator
+    // exists is a property of this machine, not of any entry, and the surface
+    // needs it before it decides what to offer.
+    _state = _state.copyWith(
+      generatorConfigured: _contentPackageRepository.generatorConfigured,
+    );
+  }
 
   final DiscoveryRepository _repository;
   final MediaImportRepository _importRepository;
@@ -194,7 +218,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
     id: 'custom_imports',
     name: 'Imports',
     language: 'en',
-    description: 'YouTube videos imported by pasting custom links.',
+    description: 'Items imported by pasting a link.',
     cover: ChannelCoverTone.slate,
     type: MediaSourceType.youtube,
     avatarUrl: null,
@@ -382,9 +406,23 @@ final class DiscoveryViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Recognises media this app downloaded for [entryId] in an earlier session.
+  ///
   /// Throws when the library cannot be listed; the caller turns that into an
   /// undetermined status rather than an answer.
+  ///
+  /// The only link available is yt-dlp's `[id]` filename convention, so this
+  /// answers for the external-tool path alone. A filename is a weak stand-in
+  /// for Source Identity and it does not exist at all on the enclosure path,
+  /// where the file is named after the publisher's URL. Until an acquisition
+  /// record is persisted, a podcast episode downloaded in an earlier session
+  /// is not recognised — the row offers the download again rather than
+  /// claiming a match this cannot actually establish.
   Future<MediaLibraryEntry?> _findLocalEntry(String entryId) async {
+    if (_state.entryById(entryId)?.acquisition !=
+        MediaAcquisition.externalTool) {
+      return null;
+    }
     final library = await _mediaLibraryRepository.listMediaLibrary();
     for (final entry in library) {
       if (entry.media.path.contains('[$entryId]')) return entry;
@@ -424,11 +462,21 @@ final class DiscoveryViewModel extends ChangeNotifier {
   }
 
   /// Also the retry: a failed row calls straight back into this.
+  ///
+  /// Which acquisition runs is the entry's own fact, not the app's default. A
+  /// podcast enclosure is fetched directly because the publisher put it in the
+  /// feed for that; a YouTube page goes to the user's external tool. An entry
+  /// with nothing to acquire never starts one.
   Future<void> startDownload(String entryId) async {
     if (_state.downloadStateOf(entryId) == DownloadState.done) return;
 
     final entry = _state.entryById(entryId);
-    if (entry == null || entry.videoUrl == null) return;
+    final mediaUrl = entry?.mediaUrl;
+    if (entry == null ||
+        mediaUrl == null ||
+        entry.acquisition == MediaAcquisition.none) {
+      return;
+    }
 
     final controller = _downloadControllerFor(entryId);
     controller.starting();
@@ -443,10 +491,19 @@ final class DiscoveryViewModel extends ChangeNotifier {
         _downloadDirectory = directory;
       }
 
-      final handle = await _importRepository.downloadOnlineMedia(
-        entry.videoUrl!,
-        _downloadDirectory!,
-      );
+      final handle = switch (entry.acquisition) {
+        MediaAcquisition.enclosure => await _importRepository.downloadEnclosure(
+          mediaUrl,
+          _downloadDirectory!,
+          expectedBytes: entry.mediaByteLength,
+        ),
+        MediaAcquisition.externalTool =>
+          await _importRepository.downloadOnlineMedia(
+            mediaUrl,
+            _downloadDirectory!,
+          ),
+        MediaAcquisition.none => throw StateError('guarded above'),
+      };
       if (_disposed) {
         handle.cancel();
         return;
@@ -515,6 +572,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
       var changed = false;
       for (final entry in entries) {
         if (_mediaDurations[entry.id] != null) continue;
+        // Same filename-convention limit as [_findLocalEntry].
+        if (entry.acquisition != MediaAcquisition.externalTool) continue;
         final local = library.where(
           (item) => item.media.path.contains('[${entry.id}]'),
         );
@@ -544,7 +603,12 @@ final class DiscoveryViewModel extends ChangeNotifier {
         .where(
           (entry) =>
               _mediaDurations[entry.id] == null &&
-              entry.videoUrl != null &&
+              entry.durationMs == null &&
+              entry.mediaUrl != null &&
+              // Only the external-tool path needs this: a podcast feed states
+              // its own durations, and there is no page for yt-dlp to read at
+              // an enclosure URL anyway.
+              entry.acquisition == MediaAcquisition.externalTool &&
               entry.sourceId != customSource.id,
         )
         .toList(growable: false);
@@ -558,7 +622,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
         final entry = pending[next];
         try {
           final details = await _importRepository.resolveVideoDetails(
-            entry.videoUrl!,
+            entry.mediaUrl!,
           );
           if (_disposed || _state.selectedSourceId != sourceId) return;
           if (details.durationMs <= 0) continue;
@@ -583,6 +647,15 @@ final class DiscoveryViewModel extends ChangeNotifier {
     final entry = _state.entryById(entryId);
     if (mediaId == null || mediaPath == null || entry == null) return;
 
+    // Nothing to attempt without a generator. Land on `unavailable` rather
+    // than running the journey into a `failed` that names an internal code and
+    // offers a retry that cannot ever succeed.
+    if (!_contentPackageRepository.generatorConfigured) {
+      _setGenerationStatus(entryId, ContentGenerationStatus.unavailable);
+      _setGenerationFailure(entryId, null);
+      return;
+    }
+
     final current = _state.generationStatusOf(entryId);
     if (current == ContentGenerationStatus.preparing ||
         current == ContentGenerationStatus.generating ||
@@ -591,17 +664,23 @@ final class DiscoveryViewModel extends ChangeNotifier {
       return;
     }
 
-    final cachedDurationMs = _mediaDurations[entryId];
+    // The local file is the authority here: it is the thing being generated
+    // from. The feed's stated duration is the last resort, and when nothing
+    // knows, the probe result stands as zero rather than a made-up length.
     final durationMs =
-        cachedDurationMs ??
+        _mediaDurations[entryId] ??
         await _importRepository.probeMediaDurationMs(mediaPath) ??
-        entry.durationMs;
+        entry.durationMs ??
+        0;
     _mediaDurations[entryId] = durationMs;
 
     final request = ContentPackageGenerationRequest(
       mediaPath: mediaPath,
       title: entry.title,
-      mediaKind: 'video',
+      mediaKind: switch (entry.mediaKind) {
+        MediaKind.audio => 'audio',
+        MediaKind.video => 'video',
+      },
       durationMs: durationMs,
       createdAtMs: DateTime.now().millisecondsSinceEpoch,
     );
@@ -817,6 +896,12 @@ class _FakeMediaImportRepository implements MediaImportRepository {
     String pageUrl,
     String directory,
   ) async => const _FakeMediaDownloadHandle();
+  @override
+  Future<MediaDownloadHandle> downloadEnclosure(
+    String mediaUrl,
+    String directory, {
+    int? expectedBytes,
+  }) async => const _FakeMediaDownloadHandle();
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async =>
       const ResolvedVideoDetails(

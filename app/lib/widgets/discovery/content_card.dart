@@ -219,28 +219,30 @@ class _CardCover extends StatelessWidget {
               sourceName: source.name,
               title: entry.title,
             ),
-          // YouTube style duration badge in bottom right corner
-          Positioned(
-            right: 6,
-            bottom: 6,
-            child: Container(
-              padding: ListenPadding.tight,
-              decoration: BoxDecoration(
-                color: scheme.inverseSurface.withValues(alpha: 0.75),
-                borderRadius: ListenRadii.controlBorder,
-              ),
-              child: Text(
-                formatDuration(
-                  Duration(milliseconds: durationMs ?? entry.durationMs),
+          // Duration badge in the bottom right corner — only when a duration
+          // is actually known. The badge used to render a hardcoded five
+          // minutes for every entry in a feed that publishes no durations,
+          // which is the most confident-looking way to state a guess.
+          if (durationMs ?? entry.durationMs case final int known)
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: Container(
+                padding: ListenPadding.tight,
+                decoration: BoxDecoration(
+                  color: scheme.inverseSurface.withValues(alpha: 0.75),
+                  borderRadius: ListenRadii.controlBorder,
                 ),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onInverseSurface,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
+                child: Text(
+                  formatDuration(Duration(milliseconds: known)),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: scheme.onInverseSurface,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -509,6 +511,60 @@ Widget discoveryContentCardPreview() => discoveryPreviewShell(
       downloadState: DownloadState.done,
       downloadProgress: 1,
       packageStatus: PackageStatus.available,
+      selected: false,
+      onTap: _noop,
+      onDownload: _noop,
+      onCancel: _noop,
+    ),
+  ),
+  width: 620,
+  height: 120,
+);
+
+/// The same card for a source that publishes no duration — a YouTube Atom feed
+/// before its background worker answers, or a podcast item with no
+/// `itunes:duration`.
+///
+/// It exists so the honest state is something you can look at. The duration
+/// badge is absent rather than showing a placeholder, and "absent" is exactly
+/// the kind of difference that is invisible in a test name and obvious in a
+/// picture.
+@Preview(
+  name: 'Content card · duration unknown',
+  group: 'Discovery',
+  size: Size(620, 120),
+)
+Widget discoveryContentCardUnknownDurationPreview() => discoveryPreviewShell(
+  const Padding(
+    padding: EdgeInsets.all(12),
+    child: DiscoveryContentCard(
+      entry: MediaEntry(
+        id: 'i-preview-unknown',
+        sourceId: 'c-preview',
+        title: 'Up First: the stories behind the morning news',
+        description: '',
+        durationMs: null,
+        language: 'English',
+        publishedOn: '2026-07-28',
+        thumbnailUrl: null,
+        viewCount: 0,
+        hasPackage: false,
+        acquisition: MediaAcquisition.enclosure,
+        mediaKind: MediaKind.audio,
+        mediaUrl: 'https://cdn.example.com/ep001.mp3',
+      ),
+      source: MediaSource(
+        id: 'c-preview',
+        name: 'NPR',
+        language: 'English',
+        description: '',
+        cover: ChannelCoverTone.blue,
+        type: MediaSourceType.podcast,
+        avatarUrl: null,
+      ),
+      downloadState: DownloadState.none,
+      downloadProgress: 0,
+      packageStatus: PackageStatus.undetermined,
       selected: false,
       onTap: _noop,
       onDownload: _noop,

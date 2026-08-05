@@ -402,6 +402,13 @@ final class _DelayedMediaImportRepository implements MediaImportRepository {
   ) => throw UnimplementedError();
 
   @override
+  Future<MediaDownloadHandle> downloadEnclosure(
+    String mediaUrl,
+    String directory, {
+    int? expectedBytes,
+  }) => throw UnimplementedError();
+
+  @override
   Future<String> extractTextSubtitle(
     String mediaPath,
     EmbeddedSubtitle subtitle,

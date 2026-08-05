@@ -115,13 +115,36 @@ class TestMediaImportRepository implements MediaImportRepository {
   @override
   Future<String> resolveOnlineMedia(String pageUrl) async => '';
 
+  /// Every page URL handed to the external-tool path, in call order.
+  final downloadedUrls = <String>[];
+
   @override
   Future<MediaDownloadHandle> downloadOnlineMedia(
     String pageUrl,
     String directory,
   ) async {
+    downloadedUrls.add(pageUrl);
     final entryId = pageUrl.contains('i-bbc-1') ? 'i-bbc-1' : 'i-bbc-2';
     if (downloadFails) return TestFailingDownloadHandle();
+    final completer = Completer<String?>();
+    completers[entryId] = completer;
+    if (holdDownload) return TestHeldDownloadHandle(completer);
+    return TestMediaDownloadHandle(entryId, completer);
+  }
+
+  /// Every enclosure URL handed to the direct-fetch path, with the size the
+  /// feed advertised, so a test can tell which acquisition actually ran.
+  final enclosureRequests = <({String url, int? expectedBytes})>[];
+
+  @override
+  Future<MediaDownloadHandle> downloadEnclosure(
+    String mediaUrl,
+    String directory, {
+    int? expectedBytes,
+  }) async {
+    enclosureRequests.add((url: mediaUrl, expectedBytes: expectedBytes));
+    if (downloadFails) return TestFailingDownloadHandle();
+    final entryId = mediaUrl.contains('i-bbc-1') ? 'i-bbc-1' : 'i-bbc-2';
     final completer = Completer<String?>();
     completers[entryId] = completer;
     if (holdDownload) return TestHeldDownloadHandle(completer);
@@ -384,13 +407,49 @@ MediaEntry testMediaEntry(String id, String sourceId) => MediaEntry(
   sourceId: sourceId,
   title: 'Entry $id',
   description: '',
-  durationMs: 300000,
+  // Null like the real YouTube Atom feed, which publishes no durations: the
+  // background workers exist precisely because this arrives unknown.
+  durationMs: null,
   language: 'en',
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
   hasPackage: false,
-  videoUrl: 'https://www.youtube.com/watch?v=$id',
+  acquisition: MediaAcquisition.externalTool,
+  mediaUrl: 'https://www.youtube.com/watch?v=$id',
+);
+
+/// A podcast episode: a duration the feed stated, an enclosure to fetch
+/// directly, and audio rather than video.
+MediaEntry testPodcastEntry(String id, String sourceId) => MediaEntry(
+  id: id,
+  sourceId: sourceId,
+  title: 'Episode $id',
+  description: '',
+  durationMs: 360000,
+  language: 'en',
+  publishedOn: '2026-08-01',
+  thumbnailUrl: null,
+  viewCount: 0,
+  hasPackage: false,
+  acquisition: MediaAcquisition.enclosure,
+  mediaKind: MediaKind.audio,
+  mediaUrl: 'https://cdn.example.com/$id.mp3',
+  mediaByteLength: 8123456,
+);
+
+/// A feed item with show notes but no enclosure: discoverable, not acquirable.
+MediaEntry testUnacquirableEntry(String id, String sourceId) => MediaEntry(
+  id: id,
+  sourceId: sourceId,
+  title: 'Notes for $id',
+  description: '',
+  durationMs: null,
+  language: 'en',
+  publishedOn: '2026-08-01',
+  thumbnailUrl: null,
+  viewCount: 0,
+  hasPackage: false,
 );
 
 /// A discovery feed the test drives: which sources exist, which entries each

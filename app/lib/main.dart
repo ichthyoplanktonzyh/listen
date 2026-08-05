@@ -59,7 +59,9 @@ import 'controllers/cold_start_marking_view_model.dart';
 import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
 import 'data/repositories/core_repositories.dart';
+import 'data/repositories/composite_discovery_repository.dart';
 import 'data/repositories/discovery_repository.dart';
+import 'data/repositories/podcast_discovery_repository.dart';
 import 'screens/discovery_home_screen.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/library_quick_panes.dart';
@@ -251,7 +253,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   final coreTransport = LocalCoreTransportService();
   final currentRoute = ValueNotifier<AppRoute>(AppRoute.discovery);
   late final DiscoveryViewModel discoveryViewModel = DiscoveryViewModel(
-    LiveDiscoveryRepository(),
+    CompositeDiscoveryRepository(
+      PodcastDiscoveryRepository(),
+      YoutubeDiscoveryRepository(),
+    ),
     mediaImportRepository,
     coreRepositories.contentPackage,
     coreRepositories.mediaLibrary,
