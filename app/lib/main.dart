@@ -66,6 +66,8 @@ import 'data/repositories/podcast_discovery_repository.dart';
 import 'screens/discovery_home_screen.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
+import 'widgets/navigation/shell_tools_menu.dart';
+import 'widgets/layout/session_subtitle_menu.dart';
 import 'widgets/home/today_pane.dart';
 import 'controllers/review_due_controller.dart';
 import 'widgets/flows/shell_learning_routes.dart';
@@ -105,7 +107,6 @@ import 'ui/core/app_controller_scope.dart';
 import 'utils/format_duration.dart';
 import 'widgets/app_bar/app_bar_capabilities.dart';
 import 'widgets/app_bar/macos_menu_bar.dart';
-import 'widgets/app_bar/player_app_bar.dart';
 import 'widgets/channels/reading_channel.dart';
 import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
@@ -2125,6 +2126,41 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  /// The homeless tools, at the foot of the rail. Everything else the shell
+  /// app bar used to carry had another owner already.
+  Widget _toolsMenu() => ShellToolsMenu(
+    onOpenSubtitleResources: () => unawaited(_openSubtitleResources()),
+    onOpenLearningAssets: () => unawaited(_openLearningAssets()),
+    onOpenLearningResources: () => unawaited(_openLearningResources()),
+    onOpenTranscriptionCenter: () => unawaited(_openTranscriptionCenter()),
+    onOpenPhoneticAnalysisCenter: () =>
+        unawaited(_openPhoneticAnalysisCenter()),
+    onExportLogs: () => unawaited(_exportLogs()),
+    onExportVocabulary: () => unawaited(playbackActions.exportVocabulary()),
+    onImportVocabulary: () => unawaited(playbackActions.importVocabulary()),
+    onImportWordList: () => unawaited(_importWordList()),
+  );
+
+  /// Actions on the media currently on the workbench. Rendered inside the
+  /// session header, which only exists while there is media — so nothing here
+  /// needs a `canActOnMedia` gate.
+  Widget _sessionSubtitleMenu() => SessionSubtitleMenu(
+    onImportPrimarySubtitle: () =>
+        unawaited(mediaSession.openSubtitle(secondary: false)),
+    onGeneratePrimarySubtitles: () =>
+        unawaited(_generateSubtitles(secondary: false)),
+    onSearchPrimarySubtitles: () =>
+        unawaited(_searchOpenSubtitles(secondary: false)),
+    onImportSecondarySubtitle: () =>
+        unawaited(mediaSession.openSubtitle(secondary: true)),
+    onGenerateSecondarySubtitles: () =>
+        unawaited(_generateSubtitles(secondary: true)),
+    onSearchSecondarySubtitles: () =>
+        unawaited(_searchOpenSubtitles(secondary: true)),
+    onImportEmbeddedSubtitle: () => unawaited(_importEmbeddedSubtitle()),
+    onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
+  );
+
   // ── Shell panes ──
   //
   // Four destinations, two of which hold several surfaces as segments. The
@@ -2437,63 +2473,13 @@ class _PlayerScreenState extends State<PlayerScreen>
                       (_workbenchExpanded && playerController.playing) ||
                       immersiveMode.immersive,
                   builder: (context, shellVisible) => Scaffold(
-                    // Immersive drops the app bar entirely: the stage owns the
-                    // whole screen, chrome returns only on exit.
-                    appBar: immersiveMode.immersive
-                        ? null
-                        : ShellFadeAppBar(
-                            visible: shellVisible,
-                            child: PlayerAppBar(
-                              // The shared availability object built above (#24);
-                              // the macOS menu bar reads the same instance (#23).
-                              capabilities: capabilities,
-                              onOpenSubtitleResources: () =>
-                                  unawaited(_openSubtitleResources()),
-                              onOpenVocabulary: _openVocabulary,
-                              onOpenReview: () => _openReviewQueue(),
-                              onOpenMedia: mediaSession.openMedia,
-                              onOpenOnline: _openOnline,
-                              onImportPrimarySubtitle: () => unawaited(
-                                mediaSession.openSubtitle(secondary: false),
-                              ),
-                              onGeneratePrimarySubtitles: () => unawaited(
-                                _generateSubtitles(secondary: false),
-                              ),
-                              onSearchPrimarySubtitles: () => unawaited(
-                                _searchOpenSubtitles(secondary: false),
-                              ),
-                              onImportSecondarySubtitle: () => unawaited(
-                                mediaSession.openSubtitle(secondary: true),
-                              ),
-                              onGenerateSecondarySubtitles: () => unawaited(
-                                _generateSubtitles(secondary: true),
-                              ),
-                              onSearchSecondarySubtitles: () => unawaited(
-                                _searchOpenSubtitles(secondary: true),
-                              ),
-                              onImportEmbeddedSubtitle: () =>
-                                  unawaited(_importEmbeddedSubtitle()),
-                              onOpenSettings: () => unawaited(_openSettings()),
-                              onExportLogs: () => unawaited(_exportLogs()),
-                              onExportVocabulary: () =>
-                                  unawaited(playbackActions.exportVocabulary()),
-                              onImportVocabulary: () =>
-                                  unawaited(playbackActions.importVocabulary()),
-                              onImportWordList: () =>
-                                  unawaited(_importWordList()),
-                              onArchiveMedia: () => unawaited(
-                                playbackActions.archiveCurrentMedia(),
-                              ),
-                              onOpenTranscriptionCenter: () =>
-                                  unawaited(_openTranscriptionCenter()),
-                              onOpenPhoneticAnalysisCenter: () =>
-                                  unawaited(_openPhoneticAnalysisCenter()),
-                              onOpenLearningAssets: () =>
-                                  unawaited(_openLearningAssets()),
-                              onOpenLearningResources: () =>
-                                  unawaited(_openLearningResources()),
-                            ),
-                          ),
+                    // No shell app bar. It was a fourth navigation: its
+                    // content and learning menus repeated the native macOS
+                    // menu bar, the rail and the pages themselves; its
+                    // settings button and wordmark repeated the rail's own
+                    // footer and header. What it alone carried moved to where
+                    // it applies — subtitle sourcing to the workbench's
+                    // session header, the tool centres to the rail's foot.
                     body: immersiveMode.immersive
                         ? _immersiveBody(shellVisible)
                         : DesktopDropSurface(
@@ -2529,6 +2515,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         unawaited(
                                                           _openSettings(),
                                                         ),
+                                                    toolsMenu: _toolsMenu(),
                                                   ),
                                                   Expanded(
                                                     child: _routePane(route),
@@ -2541,6 +2528,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   position:
                                                       _workbenchSlideAnimation,
                                                   child: MediaWorkbench(
+                                                    subtitleMenu:
+                                                        _sessionSubtitleMenu(),
                                                     mediaTitle: widget
                                                         .pathHelper
                                                         .basename(

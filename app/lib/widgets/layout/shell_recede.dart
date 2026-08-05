@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import '../../theme/motion.dart';
 
 /// The "shell recedes" signature action (#46, motion spec demo 3): while
-/// media plays and the pointer rests, the chrome (app bar, transport) fades
-/// away so the room goes dark around the content; any pointer activity — or
+/// media plays and the pointer rests, the chrome (the transport, and the
+/// immersive controls) fades away so the room goes dark around the content; any pointer activity — or
 /// keyboard focus landing inside the chrome — brings it back.
 ///
 /// [ShellRecede] is the detector: it wraps the whole shell, watches pointer
@@ -148,25 +148,4 @@ class ShellFade extends StatelessWidget {
       ),
     );
   }
-}
-
-/// [ShellFade] for the [Scaffold.appBar] slot, which insists on a
-/// [PreferredSizeWidget]. Keeps the bar's layout box (the stage must not
-/// jump when the chrome leaves) and only fades the paint.
-class ShellFadeAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const ShellFadeAppBar({
-    super.key,
-    required this.visible,
-    required this.child,
-  });
-
-  final bool visible;
-  final PreferredSizeWidget child;
-
-  @override
-  Size get preferredSize => child.preferredSize;
-
-  @override
-  Widget build(BuildContext context) =>
-      ShellFade(visible: visible, child: child);
 }

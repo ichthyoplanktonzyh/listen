@@ -5,9 +5,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/theme/breakpoints.dart';
-import 'package:llplayer_next/widgets/app_bar/app_bar_capabilities.dart';
-import 'package:llplayer_next/widgets/app_bar/player_app_bar.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
+import 'package:llplayer_next/widgets/navigation/app_sidebar.dart';
+import 'package:llplayer_next/widgets/navigation/shell_tools_menu.dart';
 
 /// The window minimum is declared twice — once in Dart so the layout code can
 /// reason about it, once in Swift where the platform actually enforces it.
@@ -41,11 +41,17 @@ void main() {
     );
   });
 
-  test('the minimum clears the AppBar hard floor', () {
-    // Measured in #19: the icon-only AppBar overflows at 470 and is clean at
-    // 480, in both locales. A minimum at or below that floor would let #18's
-    // overflow back in through the window edge.
+  test('the minimum leaves a usable pane beside the rail', () {
+    // The floor used to be the icon-only AppBar, measured in #19 at 470/480.
+    // That bar is gone; the rail is the shell chrome now, and it is a fixed
+    // 240 wide. The number stays where it was, but what it has to clear is
+    // the rail plus a pane wide enough to be worth rendering.
     expect(ListenBreakpoints.minWindowWidth, greaterThan(480.0));
+    expect(
+      ListenBreakpoints.minWindowWidth - AppSidebar.railWidth,
+      greaterThan(240.0),
+      reason: 'the rail must not eat the window it lives in',
+    );
   });
 
   Widget app(Locale locale) => MaterialApp(
@@ -57,40 +63,38 @@ void main() {
       GlobalWidgetsLocalizations.delegate,
       GlobalCupertinoLocalizations.delegate,
     ],
+    // The shell at its narrowest: the rail (with its full footer) beside a
+    // pane. There is no app bar to overflow any more, so what this has to
+    // prove is that the rail and a real page still fit side by side.
     home: Scaffold(
-      appBar: PlayerAppBar(
-        capabilities: const AppBarCapabilities.available(),
-        onOpenSubtitleResources: () {},
-        onOpenVocabulary: () {},
-        onOpenReview: () {},
-        onOpenMedia: () {},
-        onOpenOnline: () {},
-        onImportPrimarySubtitle: () {},
-        onGeneratePrimarySubtitles: () {},
-        onSearchPrimarySubtitles: () {},
-        onImportSecondarySubtitle: () {},
-        onGenerateSecondarySubtitles: () {},
-        onSearchSecondarySubtitles: () {},
-        onImportEmbeddedSubtitle: () {},
-        onOpenSettings: () {},
-        onExportLogs: () {},
-        onExportVocabulary: () {},
-        onImportVocabulary: () {},
-        onImportWordList: () {},
-        onArchiveMedia: () {},
-        onOpenTranscriptionCenter: () {},
-        onOpenPhoneticAnalysisCenter: () {},
-        onOpenLearningAssets: () {},
-        onOpenLearningResources: () {},
-      ),
-      body: ListeningHome(
-        onOpenMedia: () {},
-        onOpenOnline: () {},
+      body: Row(
+        children: [
+          AppSidebar(
+            currentRoute: AppRoute.listen,
+            onRouteSelected: (_) {},
+            onOpenConversation: () {},
+            onOpenSettings: () {},
+            toolsMenu: ShellToolsMenu(
+              onOpenSubtitleResources: () {},
+              onOpenLearningAssets: () {},
+              onOpenLearningResources: () {},
+              onOpenTranscriptionCenter: () {},
+              onOpenPhoneticAnalysisCenter: () {},
+              onExportLogs: () {},
+              onExportVocabulary: () {},
+              onImportVocabulary: () {},
+              onImportWordList: () {},
+            ),
+          ),
+          const Expanded(
+            child: ListeningHome(onOpenMedia: _noop, onOpenOnline: _noop),
+          ),
+        ],
       ),
     ),
   );
 
-  testWidgets('app bar and home render clean at exactly the minimum', (
+  testWidgets('the rail and a page render clean at exactly the minimum', (
     tester,
   ) async {
     for (final locale in const [Locale('en'), Locale('zh')]) {
@@ -109,3 +113,5 @@ void main() {
     }
   });
 }
+
+void _noop() {}

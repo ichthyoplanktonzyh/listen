@@ -66,14 +66,15 @@ abstract final class ListenBreakpoints {
   /// (roughly 800px) still fits comfortably.
   static const playbackControlsRoomy = 900.0;
 
-  /// [PlayerAppBar]'s four menu buttons keep their text labels; below it only
-  /// the icons remain (the tooltips already carry the same wording, so no
-  /// information is lost).
+  /// A row of icon buttons keeps its text labels; below it only the icons
+  /// remain (the tooltips carry the same wording, so no information is lost).
   ///
-  /// Derived from the widest locale, not the narrowest: English needs 836px
-  /// for `Content / Subtitles / Learning / More actions` plus the settings
-  /// icon, while Chinese fits under 700. Sized at 860 for margin, so a longer
-  /// translation does not immediately reintroduce the overflow this fixed.
+  /// Named for the shell app bar it was measured on. That bar is gone — it
+  /// was a fourth navigation duplicating the native macOS menu bar, the rail
+  /// and the pages themselves — but the threshold outlived it: it was derived
+  /// from the widest locale (English needed 836px for four labelled menus
+  /// plus an icon, Chinese fit under 700, sized at 860 for margin), and the
+  /// personal-expression header now measures its own labels against it.
   static const appBarLabels = 860.0;
 
   /// The coach dashboard's capability portrait keeps the compass ring beside

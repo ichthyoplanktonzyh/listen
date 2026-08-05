@@ -42,10 +42,19 @@ enum AppRoute {
 /// profile) rather than by what the learner came to do. Four destinations
 /// need no headings to explain themselves.
 ///
-/// The rail carries two kinds of entry, and draws them differently on
-/// purpose: destinations (the grouped list, one of them always selected) and
-/// the single launch action at the foot, which opens the conversation stage
-/// over the shell and therefore never shows a selection state.
+/// The rail carries three kinds of entry, and draws them differently on
+/// purpose: destinations (the list, one of them always selected); the single
+/// launch action at the foot, which opens the conversation stage over the
+/// shell and therefore never shows a selection state; and below that the
+/// utilities — tools and settings — which are things you *do*, not places you
+/// can be, and so never draw a selection either.
+///
+/// The utilities landed here when the shell app bar was deleted. That bar was
+/// a fourth navigation: its content and learning menus repeated the native
+/// macOS menu bar, this rail, and the pages themselves, its settings button
+/// repeated this rail's own footer, and its wordmark repeated this rail's
+/// header forty pixels below. What it carried that nothing else did was
+/// tools, and tools belong beside settings.
 class AppSidebar extends StatelessWidget {
   const AppSidebar({
     super.key,
@@ -53,6 +62,7 @@ class AppSidebar extends StatelessWidget {
     required this.onRouteSelected,
     required this.onOpenConversation,
     this.onOpenSettings,
+    this.toolsMenu,
   });
 
   final AppRoute currentRoute;
@@ -63,13 +73,22 @@ class AppSidebar extends StatelessWidget {
   final VoidCallback onOpenConversation;
   final VoidCallback? onOpenSettings;
 
+  /// The homeless tools (asset centres, diagnostics, data import/export), or
+  /// null on a surface with none wired.
+  final Widget? toolsMenu;
+
+  /// Fixed: the rail is chrome, not content, so it does not compete with the
+  /// pane for width. Exposed because the window minimum has to clear it —
+  /// see `window_min_size_test.dart`.
+  static const railWidth = 240.0;
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
 
     return Container(
-      width: 240,
+      width: railWidth,
       color: colors.surfaceContainerHigh,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,6 +148,13 @@ class AppSidebar extends StatelessWidget {
               onTap: onOpenConversation,
             ),
           ),
+          if (toolsMenu != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap8,
+              ),
+              child: toolsMenu!,
+            ),
           if (onOpenSettings != null)
             Padding(
               padding: const EdgeInsets.only(

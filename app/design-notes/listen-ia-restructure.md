@@ -158,6 +158,36 @@ J1 那张图：三个入口，终点统一）。分段状态是页面内部状�
 | `personal_expression` | `AppRoute.expression` | `language` + 表达段 |
 | `content_home` | `AppRoute.resources` | `listen` + 我的媒体段 |
 
+### 3.5 顶栏 · 删除
+
+侧栏压到四个之后，顶栏（`PlayerAppBar`）暴露成**第四套导航**。同一批动作有四份拷贝：
+
+| 动作 | 顶栏 | macOS 原生菜单栏 | 侧栏 | 页面本身 |
+| --- | --- | --- | --- | --- |
+| 打开媒体 / 打开网址 | 「内容」菜单 | File | — | 听页两张主卡 + 播放栏按钮 |
+| 词汇 / 复习 | 「学习」菜单 | Learning | 我的语言 | — |
+| 设置 | 右侧齿轮 | Preferences | 侧栏底部 | — |
+| wordmark | 标题位 | — | 侧栏顶部（下方 40px） | — |
+
+加上一条独立的毛病：「字幕」菜单每一项都是 `mediaGatedItem`，没有媒体时整个菜单是
+一排带理由的禁用项——诚实，但无用。而有媒体时它又和工作台的 `_SessionHeader`
+叠成两层标题栏。
+
+`macos_menu_bar.dart` 已经带了 File / Learning / Playback / Preferences，
+且本仓库只有 macOS 一个发布目标。所以顶栏承担的东西，要么原生菜单栏已经有，
+要么侧栏已经有，要么页面上就摆着。**删掉整条顶栏**，它独有的两件东西各自回家：
+
+- **字幕的导入 / 生成 / 搜索**（生成与搜索确实是顶栏独有）+ 归档 →
+  `SessionSubtitleMenu`，挂进工作台 `_SessionHeader` 的末端。
+  那个 header 只在有媒体时存在，**门禁从条件变成结构**：这里不可能有死项。
+- **工具中心 + 诊断 / 数据**（字幕资源、学习资产、资源、转写中心、音素分析中心、
+  导出日志、词表导入导出）→ `ShellToolsMenu`，收进侧栏底部，挨着设置。
+  它们是「你要做的事」，不是「你能待的地方」，所以不进目的地列表、不占选中态。
+
+`ShellFadeAppBar` 随之删除（`ShellRecede` 仍然用 `ShellFade` 淡出播放栏与沉浸态控件）。
+`ListenBreakpoints.appBarLabels` 保留——它是按最宽语言量出来的阈值，
+现在由个人表达页的头部在用，只是注释要说清它已经不属于顶栏。
+
 ## 四、落地顺序
 
 1. `AppRoute` 收敛到四个值 + 侧栏去分组；
@@ -165,8 +195,9 @@ J1 那张图：三个入口，终点统一）。分段状态是页面内部状�
 3. `LanguagePane`：三个既有 host 三段；
 4. `ReviewDueController` + `TodayPane`，含四种诚实状态；
 5. 教练落点映射；
-6. `en` / `zh` 两侧补齐所有新 key（AGENT.md 语言分离）；
-7. 测试。
+6. 删顶栏，字幕菜单进工作台 header，工具菜单进侧栏底部；
+7. `en` / `zh` 两侧补齐所有新 key（AGENT.md 语言分离）；
+8. 测试。
 
 ## 五、由测试执行的规则
 
@@ -185,6 +216,12 @@ J1 那张图：三个入口，终点统一）。分段状态是页面内部状�
   打开错的段）、只构建选中段、点击只上报不自选。
 - `listening_home_test.dart`：新增「最近学过是排序不是房间」——同样的行、换个顺序、
   一条都没被过滤掉。
+- 新 `shell_chrome_menus_test.dart`（取代 `player_app_bar_test.dart`）：工具菜单
+  **不得再出现任何已有归属的条目**（vocabulary / review / open-media / open-online /
+  settings 一律不许在列表里）；字幕菜单**没有任何一项是禁用的**——门禁已经是结构性的；
+  两个菜单在 zh 下不得漏出硬编码英文。
+- `window_min_size_test.dart`：顶栏没了，最小宽度要守的变成「侧栏 + 一个还值得渲染的
+  内容区」，`AppSidebar.railWidth` 因此从字面量提成常量。
 - 既有 discipline 测试（间距 / 圆角 / 字号 / 等待语言 / CJK 字面量 / 分层依赖）
   全绿，不为这次重构放宽任何一条。
 
