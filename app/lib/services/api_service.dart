@@ -14,6 +14,7 @@ import '../models/practice.dart';
 import '../models/production_corpus.dart';
 import '../models/projection_review.dart';
 import '../models/reading.dart';
+import '../models/review_deck.dart';
 import '../models/realtime_conversation.dart';
 import '../models/saved_vocabulary_count.dart';
 import '../models/runtime_resources.dart';

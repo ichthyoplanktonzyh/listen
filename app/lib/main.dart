@@ -41,6 +41,7 @@ import 'controllers/reading_task_controller.dart';
 import 'controllers/realtime_conversation_controller.dart';
 import 'controllers/realtime_transcription_model_controller.dart';
 import 'controllers/review_controller.dart';
+import 'controllers/review_deck_controller.dart';
 import 'controllers/coach_dashboard_controller.dart';
 import 'controllers/semantic_search_view_model.dart';
 import 'controllers/resource_actions_coordinator.dart';
@@ -80,6 +81,7 @@ import 'models/timeline.dart';
 import 'models/types.dart';
 import 'player_adapter.dart';
 import 'player_shortcuts.dart';
+import 'services/anki_package_file_service.dart';
 import 'services/core_transport_service.dart';
 import 'services/cover_art_cache.dart';
 import 'services/desktop_playback_bootstrap.dart';
@@ -1758,6 +1760,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!coreSessionController.state.isConnected) return null;
     return ReviewRouteControllers(
       controller: ReviewController(coreRepositories.review),
+      deckController: ReviewDeckController(coreRepositories.review),
       resolver: OccurrenceMediaResolver(repository: coreRepositories.review),
       slicePlayer: SlicePlayerController(),
     );
@@ -2520,6 +2523,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                                   .primaryTrack
                                                                   ?.language,
                                                             ),
+                                                        fileService:
+                                                            const LocalAnkiPackageFileService(),
                                                         pauseBackgroundPlayback:
                                                             _acquireAuxiliaryAudioFocus,
                                                         onStartShadowing:

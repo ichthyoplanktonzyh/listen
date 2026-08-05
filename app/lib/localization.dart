@@ -176,7 +176,15 @@ class AppLocalizations {
       'contentPackageTechnicalDetails': 'Technical details',
       'reviewTitle': 'Sound review',
       'reviewNewCard': 'New card',
+      'reviewStateLearning': 'Learning',
+      'reviewStateRelearning': 'Relearning',
+      'reviewStateReview': 'In review',
       'reviewRelearnCount': 'Relearn {count}',
+      'reviewIntervalLabel': 'Interval {interval}',
+      'reviewIntervalMinutes': '{count} min',
+      'reviewIntervalHours': '{count} h',
+      'reviewIntervalDays': '{count} d',
+      'reviewIntervalMonths': '{count} mo',
       'reviewPauseClip': 'Pause sound clip',
       'reviewPlayClip': 'Play sound clip',
       'reviewClipUnavailable': 'Source media unavailable; using text snapshot',
@@ -219,6 +227,63 @@ class AppLocalizations {
       'reviewNoDueCards': 'No sound cards due right now',
       'reviewRoundCompleted': 'Completed {count} this round',
       'reviewDueInfoNote': 'The due count is information, not debt.',
+      'reviewDailyLimitReached': 'That is enough for today',
+      'reviewDailyLimitNote':
+          'Today’s budget: {new}/{newLimit} new, '
+          '{reviews}/{reviewLimit} reviews. More cards are waiting for '
+          'tomorrow; nothing is overdue.',
+      'reviewOriginImportedAnki': 'From Anki · no listening enhancements',
+      'reviewOriginImportedAnkiDeck':
+          'From Anki · {deck} · no listening enhancements',
+      'reviewCustomStudyExtraPractice':
+          'Custom study · extra practice, your schedule is untouched',
+      'reviewCustomStudyAdvancesSchedule':
+          'Custom study · reviewing ahead, this does move your schedule',
+      'reviewCustomStudyCompleted': 'Practised {count} extra',
+      'reviewCustomStudyLeftScheduleAlone':
+          'Your normal schedule is unchanged.',
+      'reviewCustomStudyAdvancedSchedule':
+          'These cards were reviewed ahead, so their next due dates moved.',
+      'reviewDueToday': 'waiting today',
+      'reviewBudgetSpent':
+          'Today so far: {new}/{newLimit} new · {reviews}/{reviewLimit} reviews',
+      'reviewStartSession': 'Start reviewing',
+      'reviewDeckLoadFailed': 'Could not load review decks',
+      'reviewNativeDeck': 'Your cards',
+      'reviewNativeDeckName': 'Cards from your media',
+      'reviewImportedDecks': 'Imported decks',
+      'reviewPractiseOneChannel': 'Or practise one channel:',
+      'reviewCustomStudy': 'Custom study',
+      'reviewCustomStudyMoreNew': 'Ten more new',
+      'reviewCustomStudyReviewAhead': 'Review ahead',
+      'reviewCustomStudyForgotten': 'Redo the forgotten',
+      'reviewDailyLimits': 'Daily limits',
+      'reviewLimitNewCards': 'New cards per day',
+      'reviewLimitReviews': 'Reviews per day',
+      'reviewImportAnkiDeck': 'Import an Anki deck (.apkg)',
+      'reviewExportAnkiDeck': 'Export to Anki (.apkg)',
+      'reviewExportConfirm': 'Export anyway',
+      'reviewExportDisclosureIntro':
+          'An .apkg carries text, audio and scheduling. These listen features '
+          'have no equivalent in Anki and will not survive the trip:',
+      'reviewExportLossVideo': 'Video slices are rendered down to audio.',
+      'reviewExportLossShadowing': 'Shadowing and delayed retelling are lost.',
+      'reviewExportLossSourceJump':
+          'Jumping back to the source media is lost.',
+      'reviewExportLossCapability':
+          'Listening evidence and the capability profile stay here.',
+      'reviewImportReport': 'Import finished',
+      'reviewImportCounts':
+          '{imported} cards imported · {updated} updated · {skipped} skipped',
+      'reviewImportDetails':
+          '{decks} decks · {revlog} review-log entries · {media} media files',
+      'reviewExportReport': 'Export finished',
+      'reviewExportCounts':
+          '{cards} cards · {revlog} review-log entries · {media} media files',
+      'reviewExportVideoRendered':
+          '{count} video slices were rendered as audio.',
+      'reviewExportMediaFailed': '{count} media files could not be rendered.',
+      'reviewExportOmitted': 'Not carried across: {items}',
       'reviewStatusSuggestions': 'Recognition status suggestions',
       // ── Status-line messages (GitHub #12 Slice 3) ──
       'statusStartingCore': 'Starting local core...',
@@ -419,6 +484,7 @@ class AppLocalizations {
       'externalTools': 'Optional external tools',
       'close': 'Close',
       'save': 'Save',
+      'dismiss': 'Dismiss',
       'vocabulary': 'Vocabulary',
       'listeningDictionary': 'Listening Dictionary',
       'openListeningDictionary': 'Listen in dictionary',
@@ -2250,7 +2316,15 @@ class AppLocalizations {
       'contentPackageTechnicalDetails': '技术详情',
       'reviewTitle': '声音复习',
       'reviewNewCard': '新卡',
+      'reviewStateLearning': '学习中',
+      'reviewStateRelearning': '重学中',
+      'reviewStateReview': '复习中',
       'reviewRelearnCount': '重学 {count}',
+      'reviewIntervalLabel': '间隔 {interval}',
+      'reviewIntervalMinutes': '{count} 分钟',
+      'reviewIntervalHours': '{count} 小时',
+      'reviewIntervalDays': '{count} 天',
+      'reviewIntervalMonths': '{count} 个月',
       'reviewPauseClip': '暂停声音片段',
       'reviewPlayClip': '播放声音片段',
       'reviewClipUnavailable': '原媒体不可播放，使用文字快照',
@@ -2288,6 +2362,55 @@ class AppLocalizations {
       'reviewNoDueCards': '现在没有到期声音卡',
       'reviewRoundCompleted': '本轮完成 {count} 张',
       'reviewDueInfoNote': '到期数量只是信息，不是欠账。',
+      'reviewDailyLimitReached': '今天的量够了',
+      'reviewDailyLimitNote':
+          '今日额度：新卡 {new}/{newLimit}，复习 {reviews}/{reviewLimit}。'
+          '剩下的卡在明天等你，没有欠账。',
+      'reviewOriginImportedAnki': '来自 Anki · 无听力增强',
+      'reviewOriginImportedAnkiDeck': '来自 Anki · {deck} · 无听力增强',
+      'reviewCustomStudyExtraPractice': '自定义学习 · 额外练习，不动你的日程',
+      'reviewCustomStudyAdvancesSchedule': '自定义学习 · 提前复习，会改变日程',
+      'reviewCustomStudyCompleted': '额外练了 {count} 张',
+      'reviewCustomStudyLeftScheduleAlone': '正常日程没有变化。',
+      'reviewCustomStudyAdvancedSchedule':
+          '这些卡被提前复习，下次到期时间已经前移。',
+      'reviewDueToday': '今天待复习',
+      'reviewBudgetSpent':
+          '今日已练：新卡 {new}/{newLimit} · 复习 {reviews}/{reviewLimit}',
+      'reviewStartSession': '开始复习',
+      'reviewDeckLoadFailed': '无法加载复习牌组',
+      'reviewNativeDeck': '你的卡片',
+      'reviewNativeDeckName': '来自你的媒体',
+      'reviewImportedDecks': '导入牌组',
+      'reviewPractiseOneChannel': '或者只练一个通道：',
+      'reviewCustomStudy': '自定义学习',
+      'reviewCustomStudyMoreNew': '多学 10 张',
+      'reviewCustomStudyReviewAhead': '提前复习',
+      'reviewCustomStudyForgotten': '重练遗忘',
+      'reviewDailyLimits': '每日上限',
+      'reviewLimitNewCards': '每天新卡',
+      'reviewLimitReviews': '每天复习',
+      'reviewImportAnkiDeck': '导入 Anki 卡包（.apkg）',
+      'reviewExportAnkiDeck': '导出到 Anki（.apkg）',
+      'reviewExportConfirm': '仍然导出',
+      'reviewExportDisclosureIntro':
+          '.apkg 能带走文本、音频和调度状态。下面这些 listen 的能力在 Anki 里'
+          '没有对应物，导出后会丢失：',
+      'reviewExportLossVideo': '视频切片会被压成音频。',
+      'reviewExportLossShadowing': '影子跟读和延迟复述会丢失。',
+      'reviewExportLossSourceJump': '跳回原媒体的能力会丢失。',
+      'reviewExportLossCapability': '听力证据和能力画像留在这里，不会跟着走。',
+      'reviewImportReport': '导入完成',
+      'reviewImportCounts':
+          '导入 {imported} 张 · 更新 {updated} 张 · 跳过 {skipped} 张',
+      'reviewImportDetails':
+          '{decks} 个牌组 · {revlog} 条复习记录 · {media} 个媒体文件',
+      'reviewExportReport': '导出完成',
+      'reviewExportCounts':
+          '{cards} 张卡 · {revlog} 条复习记录 · {media} 个媒体文件',
+      'reviewExportVideoRendered': '{count} 个视频切片被压成了音频。',
+      'reviewExportMediaFailed': '{count} 个媒体文件渲染失败。',
+      'reviewExportOmitted': '未能带走：{items}',
       'reviewStatusSuggestions': '识别状态建议',
       // ── 状态栏消息（GitHub #12 Slice 3）──
       'statusStartingCore': '正在启动本地核心…',
@@ -2478,6 +2601,7 @@ class AppLocalizations {
       'externalTools': '可选外部工具',
       'close': '关闭',
       'save': '保存',
+      'dismiss': '知道了',
       'vocabulary': '词汇本',
       'listeningDictionary': '听力词典',
       'openListeningDictionary': '在词典中听例句',

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../controllers/auxiliary_audio_controller.dart';
@@ -6,6 +8,7 @@ import '../../controllers/hunting_controller.dart';
 import '../../controllers/occurrence_media_resolver.dart';
 import '../../controllers/personal_expression_view_model.dart';
 import '../../controllers/review_controller.dart';
+import '../../controllers/review_deck_controller.dart';
 import '../../controllers/semantic_search_view_model.dart';
 import '../../controllers/slice_player_controller.dart';
 import '../../controllers/vocabulary_view_model.dart';
@@ -14,8 +17,10 @@ import '../../models/coach_dashboard.dart';
 import '../../models/personal_expression.dart';
 import '../../models/practice.dart';
 import '../../screens/personal_expression_screen.dart';
+import '../../screens/review_deck_home_screen.dart';
 import '../../screens/review_queue_screen.dart';
 import '../../screens/vocabulary_screen.dart';
+import '../../services/anki_package_file_service.dart';
 import '../coach/coach_dashboard_screen.dart';
 import '../common/listen_error_state.dart';
 import 'learning_flows.dart';
@@ -174,21 +179,24 @@ class _VocabularyRouteHostState
   }
 }
 
-/// The audio-first review queue as a shell route.
+/// The review home and the audio-first card session as one shell route.
 class ReviewRouteControllers implements RouteScopedControllers {
   const ReviewRouteControllers({
     required this.controller,
+    required this.deckController,
     required this.resolver,
     required this.slicePlayer,
   });
 
   final ReviewController controller;
+  final ReviewDeckController deckController;
   final OccurrenceMediaResolver resolver;
   final SlicePlayerController slicePlayer;
 
   @override
   void dispose() {
     controller.dispose();
+    deckController.dispose();
     slicePlayer.dispose();
   }
 }
@@ -198,11 +206,13 @@ class ReviewRouteHost extends ShellRouteHost<ReviewRouteControllers> {
     super.key,
     required super.create,
     required super.language,
+    required this.fileService,
     required this.pauseBackgroundPlayback,
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
   });
 
+  final AnkiPackageFileService fileService;
   final Future<void> Function() pauseBackgroundPlayback;
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
   final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
@@ -213,17 +223,61 @@ class ReviewRouteHost extends ShellRouteHost<ReviewRouteControllers> {
 
 class _ReviewRouteHostState
     extends ShellRouteHostState<ReviewRouteHost, ReviewRouteControllers> {
+  /// The route shows the deck home; a session is pushed over it so leaving one
+  /// lands back on counts that are then re-read. The session controller is
+  /// shared rather than rebuilt, so an interrupted round survives the pop.
+  bool _inSession = false;
+
+  Future<void> _runSession(
+    ReviewRouteControllers controllers,
+    Future<bool> Function() start,
+  ) async {
+    // The session opens whether or not the load succeeded. A failure lives in
+    // the session's own state and the session screen reports it with a retry;
+    // returning early here would leave a pressed button doing nothing at all,
+    // which is the one outcome that tells the learner nothing.
+    await start();
+    if (!mounted) return;
+    setState(() => _inSession = true);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => ReviewQueueScreen(
+          controller: controllers.controller,
+          resolver: controllers.resolver,
+          slicePlayer: controllers.slicePlayer,
+          autoLoad: false,
+          onPauseBackgroundPlayback: widget.pauseBackgroundPlayback,
+          onStartShadowing: widget.onStartShadowing,
+          onStartDelayedRetelling: widget.onStartDelayedRetelling,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _inSession = false);
+    // Whatever the round did, the counts on the home page moved.
+    unawaited(controllers.deckController.load());
+  }
+
   @override
   Widget build(BuildContext context) {
     final controllers = this.controllers;
     if (controllers == null) return const _CoreUnavailablePane();
-    return ReviewQueueScreen(
-      controller: controllers.controller,
-      resolver: controllers.resolver,
-      slicePlayer: controllers.slicePlayer,
-      onPauseBackgroundPlayback: widget.pauseBackgroundPlayback,
-      onStartShadowing: widget.onStartShadowing,
-      onStartDelayedRetelling: widget.onStartDelayedRetelling,
+    return ReviewDeckHomeScreen(
+      controller: controllers.deckController,
+      fileService: widget.fileService,
+      onStartSession: () {
+        if (_inSession) return;
+        unawaited(_runSession(controllers, controllers.controller.load));
+      },
+      onStartCustomStudy: (request) {
+        if (_inSession) return;
+        unawaited(
+          _runSession(
+            controllers,
+            () => controllers.controller.loadCustomStudy(request),
+          ),
+        );
+      },
     );
   }
 }

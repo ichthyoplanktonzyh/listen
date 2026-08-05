@@ -754,6 +754,26 @@ class ReviewSchedule {
   final int lapseCount;
 }
 
+/// The scheduling state of a review card, as the FSRS-6 scheduler reports it.
+///
+/// This is read off the wire, never inferred. The card head used to say "New
+/// card" for every card with zero lapses — false for any card reviewed and
+/// never forgotten — and inferring the state from `interval_days` instead only
+/// swaps one guess for a better guess. The scheduler is the one that knows.
+enum ReviewCardState {
+  newCard('new'),
+  learning('learning'),
+  relearning('relearning'),
+  review('review');
+
+  const ReviewCardState(this.wire);
+
+  final String wire;
+
+  static ReviewCardState fromJson(String value) =>
+      values.firstWhere((state) => state.wire == value);
+}
+
 class ReviewAttempt {
   const ReviewAttempt({
     required this.id,
@@ -806,7 +826,9 @@ class ReviewQueueEntry {
   const ReviewQueueEntry({
     required this.item,
     required this.schedule,
+    required this.state,
     required this.card,
+    required this.origin,
   });
 
   factory ReviewQueueEntry.fromJson(Map<String, dynamic> json) =>
@@ -815,12 +837,18 @@ class ReviewQueueEntry {
         schedule: ReviewSchedule.fromJson(
           json['schedule'] as Map<String, dynamic>,
         ),
+        state: ReviewCardState.fromJson(json['state'] as String),
         card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
+        origin: ReviewItemOrigin.fromJson(
+          json['origin'] as Map<String, dynamic>,
+        ),
       );
 
   final ReviewItem item;
   final ReviewSchedule schedule;
+  final ReviewCardState state;
   final ReviewCard card;
+  final ReviewItemOrigin origin;
 
   int? get playbackStartMs => item.anchors
       .map((value) => value.startMs)
@@ -837,6 +865,37 @@ class ReviewQueueEntry {
         null,
         (value, next) => value == null || next > value ? next : value,
       );
+}
+
+/// Where a card came from. An `imported_anki` card carries no listening
+/// evidence of its own, so [hasListeningEnhancements] is the backend saying
+/// which of listen's own affordances the card can actually support — the
+/// session reads it instead of assuming every card was born here.
+class ReviewItemOrigin {
+  const ReviewItemOrigin({
+    required this.kind,
+    required this.ankiGuid,
+    required this.deckId,
+    required this.deckName,
+    required this.hasListeningEnhancements,
+  });
+
+  factory ReviewItemOrigin.fromJson(Map<String, dynamic> json) =>
+      ReviewItemOrigin(
+        kind: json['kind'] as String,
+        ankiGuid: json['anki_guid'] as String?,
+        deckId: json['deck_id'] as String?,
+        deckName: json['deck_name'] as String?,
+        hasListeningEnhancements: json['has_listening_enhancements'] as bool,
+      );
+
+  final String kind;
+  final String? ankiGuid;
+  final String? deckId;
+  final String? deckName;
+  final bool hasListeningEnhancements;
+
+  bool get isImportedAnki => kind == 'imported_anki';
 }
 
 class ReviewSubmission {
