@@ -43,7 +43,9 @@ class DiscoveryDetailPanel extends StatelessWidget {
   final MediaSource source;
   final int? durationMs;
   final DownloadState downloadState;
-  final double downloadProgress;
+
+  /// Null while the total is unknown; renders indeterminate.
+  final double? downloadProgress;
 
   /// Why the last acquisition attempt failed, shown only in the failed state.
   final ApiFailure? downloadFailure;
@@ -322,7 +324,9 @@ class _UserJourneyActionsCard extends StatelessWidget {
   });
 
   final DownloadState downloadState;
-  final double downloadProgress;
+
+  /// Null while the total is unknown; renders indeterminate.
+  final double? downloadProgress;
   final ApiFailure? downloadFailure;
   final PackageStatus packageStatus;
   final ContentGenerationStatus generationStatus;
@@ -406,12 +410,16 @@ class _UserJourneyActionsCard extends StatelessWidget {
                       : downloadFailed
                       ? l.text('discoveryDownloadFailed')
                       : isDownloading
-                      ? l
-                            .text('discoveryDownloading')
-                            .replaceFirst(
-                              '{percent}',
-                              '${(downloadProgress * 100).round()}%',
-                            )
+                      // With no length there is no percentage, so the token is
+                      // removed rather than filled with a guess.
+                      ? l.text('discoveryDownloading').replaceFirst(
+                          '{percent}',
+                          switch (downloadProgress) {
+                            final double fraction =>
+                              '${(fraction * 100).round()}%',
+                            null => '',
+                          },
+                        ).trim()
                       : l.text('discoveryDownload'),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: downloadFailed ? scheme.error : null,
@@ -436,6 +444,8 @@ class _UserJourneyActionsCard extends StatelessWidget {
           ],
           if (isDownloading) ...[
             const SizedBox(height: ListenSpacing.gap6),
+            // Null renders the indeterminate animation: running, length
+            // unknown. A bar held at 0% reads as a hang.
             LinearProgressIndicator(value: downloadProgress),
             const SizedBox(height: ListenSpacing.gap6),
             OutlinedButton.icon(

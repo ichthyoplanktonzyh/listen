@@ -80,7 +80,7 @@ class DownloadController extends ChangeNotifier {
   /// to receive `error.toString()`, and every caller pasted that into a
   /// sentence — see [DownloadStatusSnapshot.failed].
   void attach({
-    required Stream<double> progress,
+    required Stream<double?> progress,
     required Future<String?> completed,
     required void Function() cancel,
     void Function(String path)? onCompleted,
@@ -88,7 +88,9 @@ class DownloadController extends ChangeNotifier {
   }) {
     final generation = _generation;
     _cancelActive = cancel;
-    _setSnapshot(const DownloadStatusSnapshot.downloading(progress: 0));
+    // Starts unknown rather than at zero: nothing has been measured yet, and
+    // a 0% bar that never moves is the shape a hang takes.
+    _setSnapshot(const DownloadStatusSnapshot.downloading(progress: null));
     _subscriptions.add(
       progress.listen((value) {
         if (_stale(generation)) return;

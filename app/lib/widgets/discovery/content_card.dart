@@ -34,7 +34,9 @@ class DiscoveryContentCard extends StatelessWidget {
   final MediaSource source;
   final int? durationMs;
   final DownloadState downloadState;
-  final double downloadProgress;
+
+  /// Null while the total is unknown; renders indeterminate.
+  final double? downloadProgress;
   final PackageStatus packageStatus;
   final bool selected;
   final VoidCallback onTap;
@@ -385,7 +387,10 @@ class _DownloadControl extends StatelessWidget {
   });
 
   final DownloadState state;
-  final double progress;
+
+  /// Null when the response carried no length, so the bar animates and the
+  /// percentage is omitted rather than invented.
+  final double? progress;
   final VoidCallback onDownload;
   final VoidCallback onCancel;
 
@@ -419,13 +424,15 @@ class _DownloadControl extends StatelessWidget {
               borderRadius: ListenRadii.controlBorder,
             ),
           ),
-          const SizedBox(width: ListenSpacing.gap6),
-          Text(
-            '${(progress * 100).round()}%',
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(fontSize: 10),
-          ),
+          if (progress case final double fraction) ...[
+            const SizedBox(width: ListenSpacing.gap6),
+            Text(
+              '${(fraction * 100).round()}%',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(fontSize: 10),
+            ),
+          ],
           const SizedBox(width: ListenSpacing.gap2),
           IconButton(
             onPressed: onCancel,
@@ -576,3 +583,54 @@ Widget discoveryContentCardUnknownDurationPreview() => discoveryPreviewShell(
 );
 
 void _noop() {}
+
+/// A download in flight whose total the host never stated.
+///
+/// The bar animates instead of sitting at 0%, and no percentage is shown.
+/// Which of the two is on screen is the whole difference between "working"
+/// and "hung", and it is invisible in a test name.
+@Preview(
+  name: 'Content card · downloading, length unknown',
+  group: 'Discovery',
+  size: Size(620, 120),
+)
+Widget discoveryContentCardIndeterminatePreview() => discoveryPreviewShell(
+  const Padding(
+    padding: EdgeInsets.all(12),
+    child: DiscoveryContentCard(
+      entry: MediaEntry(
+        id: 'i-preview-indeterminate',
+        sourceId: 'c-preview',
+        title: 'Up First: the stories behind the morning news',
+        description: '',
+        durationMs: null,
+        language: 'English',
+        publishedOn: '2026-07-28',
+        thumbnailUrl: null,
+        viewCount: 0,
+        hasPackage: false,
+        acquisition: MediaAcquisition.enclosure,
+        mediaKind: MediaKind.audio,
+        mediaUrl: 'https://cdn.example.com/ep001.mp3',
+      ),
+      source: MediaSource(
+        id: 'c-preview',
+        name: 'NPR',
+        language: 'English',
+        description: '',
+        cover: ChannelCoverTone.blue,
+        type: MediaSourceType.podcast,
+        avatarUrl: null,
+      ),
+      downloadState: DownloadState.downloading,
+      downloadProgress: null,
+      packageStatus: PackageStatus.undetermined,
+      selected: false,
+      onTap: _noop,
+      onDownload: _noop,
+      onCancel: _noop,
+    ),
+  ),
+  width: 620,
+  height: 120,
+);

@@ -70,14 +70,20 @@ void main() {
     expect(entries.last.durationMs, isNull);
   });
 
-  test('a feed host error fails rather than reading as an empty podcast', () async {
-    handler = (request) async {
-      request.response.statusCode = HttpStatus.serviceUnavailable;
-      await request.response.close();
-    };
+  test(
+    'a feed host error fails rather than reading as an empty podcast',
+    () async {
+      handler = (request) async {
+        request.response.statusCode = HttpStatus.serviceUnavailable;
+        await request.response.close();
+      };
 
-    await expectLater(repository.entriesFor(feedUrl()), throwsA(isA<HttpException>()));
-  });
+      await expectLater(
+        repository.entriesFor(feedUrl()),
+        throwsA(isA<HttpException>()),
+      );
+    },
+  );
 
   test('a page that is not a feed fails as a format problem', () async {
     handler = (request) async {
@@ -134,6 +140,58 @@ void main() {
       expect(source.name, isNotEmpty);
       expect(Uri.parse(source.id).isScheme('https'), isTrue, reason: source.id);
     }
+  });
+
+  group('a feed is fetched once per session', () {
+    test('selecting the same channel again does not refetch', () async {
+      // `entriesFor` used to hit the network on every selection, so clicking
+      // away from The Daily and back paid its whole download a second time.
+      var requests = 0;
+      final served = handler;
+      handler = (request) async {
+        requests += 1;
+        await served(request);
+      };
+
+      final first = await repository.entriesFor(feedUrl());
+      final second = await repository.entriesFor(feedUrl());
+
+      expect(requests, 1);
+      expect(second.map((entry) => entry.id), first.map((entry) => entry.id));
+    });
+
+    test('forgetting a feed sends the next read back to the network', () async {
+      // Refreshing has to remain possible; it is a deliberate act rather than
+      // a side effect of navigating.
+      var requests = 0;
+      final served = handler;
+      handler = (request) async {
+        requests += 1;
+        await served(request);
+      };
+
+      await repository.entriesFor(feedUrl());
+      repository.forget(feedUrl());
+      await repository.entriesFor(feedUrl());
+
+      expect(requests, 2);
+    });
+
+    test('a failed fetch is not cached as an answer', () async {
+      // Caching a failure would make one bad moment look like a permanently
+      // broken channel for the rest of the session.
+      handler = (request) async {
+        request.response.statusCode = 503;
+        await request.response.close();
+      };
+      await expectLater(repository.entriesFor(feedUrl()), throwsA(anything));
+
+      handler = (request) async {
+        request.response.write(_feed);
+        await request.response.close();
+      };
+      expect(await repository.entriesFor(feedUrl()), hasLength(2));
+    });
   });
 }
 

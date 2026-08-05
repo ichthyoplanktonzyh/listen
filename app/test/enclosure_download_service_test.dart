@@ -42,16 +42,47 @@ void main() {
     if (directory.existsSync()) await directory.delete(recursive: true);
   });
 
-  test('writes the enclosure to disk and reports progress', () async {
+  test('reports a real fraction when the host states a length', () async {
+    // The default handler sends no Content-Length, so this states one and
+    // splits the body: without both, nothing here would exercise a fraction.
+    handler = (request) async {
+      request.response.headers.contentType = ContentType('audio', 'mpeg');
+      request.response.headers.contentLength = 2048;
+      request.response.add(List<int>.filled(1024, 7));
+      await request.response.flush();
+      request.response.add(List<int>.filled(1024, 7));
+      await request.response.close();
+    };
+
     final download = service.start(urlFor('/media/ep001.mp3'), directory.path);
     final progress = await download.progress.toList();
     final path = await download.completed;
 
     expect(path, '${directory.path}/ep001.mp3');
     expect(File(path!).lengthSync(), 2048);
-    expect(progress, isNotEmpty);
+    expect(progress.whereType<double>(), isNotEmpty);
     expect(progress.last, 1.0);
-    expect(progress, everyElement(inInclusiveRange(0.0, 1.0)));
+    expect(
+      progress.whereType<double>(),
+      everyElement(inInclusiveRange(0.0, 1.0)),
+    );
+    // A stated length means every event is measured; none is a guess.
+    expect(progress, isNot(contains(null)));
+  });
+
+  test('reports an unknown length as null rather than as zero', () async {
+    // A chunked response has no denominator. This is the default handler, and
+    // the previous version of this test passed under it while claiming to
+    // check progress — it only ever saw the final 1.0.
+    final download = service.start(urlFor('/media/ep001.mp3'), directory.path);
+    final progress = await download.progress.toList();
+    final path = await download.completed;
+
+    expect(File(path!).lengthSync(), 2048);
+    expect(progress, contains(null));
+    // Still ends at a definite 1.0: the download did finish, and that much is
+    // known even when the total never was.
+    expect(progress.last, 1.0);
   });
 
   test('drops the query string when naming the file', () async {
@@ -63,16 +94,21 @@ void main() {
     expect(await download.completed, '${directory.path}/ep001.mp3');
   });
 
-  test('appends an extension from the media type when the URL has none',
-      () async {
-    final download = service.start(urlFor('/stream/12345'), directory.path);
+  test(
+    'appends an extension from the media type when the URL has none',
+    () async {
+      final download = service.start(urlFor('/stream/12345'), directory.path);
 
-    expect(await download.completed, '${directory.path}/12345.mp3');
-  });
+      expect(await download.completed, '${directory.path}/12345.mp3');
+    },
+  );
 
   test('leaves the name alone when the media type is unrecognised', () async {
     handler = (request) async {
-      request.response.headers.contentType = ContentType('application', 'x-odd');
+      request.response.headers.contentType = ContentType(
+        'application',
+        'x-odd',
+      );
       request.response.add(List<int>.filled(16, 1));
       await request.response.close();
     };
@@ -113,21 +149,26 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 
-  test('fails on an empty body rather than registering a zero-byte episode',
-      () async {
-    handler = (request) async {
-      request.response.headers.contentType = ContentType('audio', 'mpeg');
-      await request.response.close();
-    };
+  test(
+    'fails on an empty body rather than registering a zero-byte episode',
+    () async {
+      handler = (request) async {
+        request.response.headers.contentType = ContentType('audio', 'mpeg');
+        await request.response.close();
+      };
 
-    final download = service.start(urlFor('/media/ep001.mp3'), directory.path);
+      final download = service.start(
+        urlFor('/media/ep001.mp3'),
+        directory.path,
+      );
 
-    await expectLater(
-      download.completed,
-      throwsA(isA<EnclosureDownloadError>()),
-    );
-    expect(directory.listSync(), isEmpty);
-  });
+      await expectLater(
+        download.completed,
+        throwsA(isA<EnclosureDownloadError>()),
+      );
+      expect(directory.listSync(), isEmpty);
+    },
+  );
 
   test('refuses an enclosure address that is not http', () async {
     final download = service.start('file:///etc/passwd', directory.path);
@@ -139,33 +180,38 @@ void main() {
     expect(directory.listSync(), isEmpty);
   });
 
-  test('cancelling fails the download and leaves nothing partial behind',
-      () async {
-    final started = Completer<void>();
-    handler = (request) async {
-      request.response.headers.contentType = ContentType('audio', 'mpeg');
-      request.response.add(List<int>.filled(1024, 3));
-      await request.response.flush();
-      started.complete();
-      // Hold the response open so the download is genuinely mid-flight.
-      await Future<void>.delayed(const Duration(seconds: 30));
-    };
+  test(
+    'cancelling fails the download and leaves nothing partial behind',
+    () async {
+      final started = Completer<void>();
+      handler = (request) async {
+        request.response.headers.contentType = ContentType('audio', 'mpeg');
+        request.response.add(List<int>.filled(1024, 3));
+        await request.response.flush();
+        started.complete();
+        // Hold the response open so the download is genuinely mid-flight.
+        await Future<void>.delayed(const Duration(seconds: 30));
+      };
 
-    final download = service.start(urlFor('/media/ep001.mp3'), directory.path);
-    await started.future;
-    download.cancel();
+      final download = service.start(
+        urlFor('/media/ep001.mp3'),
+        directory.path,
+      );
+      await started.future;
+      download.cancel();
 
-    await expectLater(
-      download.completed,
-      throwsA(
-        isA<EnclosureDownloadError>().having(
-          (e) => e.message,
-          'message',
-          contains('cancelled'),
+      await expectLater(
+        download.completed,
+        throwsA(
+          isA<EnclosureDownloadError>().having(
+            (e) => e.message,
+            'message',
+            contains('cancelled'),
+          ),
         ),
-      ),
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(directory.listSync(), isEmpty);
-  });
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(directory.listSync(), isEmpty);
+    },
+  );
 }

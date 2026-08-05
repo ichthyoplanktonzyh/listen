@@ -88,7 +88,18 @@ class PodcastFeedFormatException implements Exception {
   String toString() => 'PodcastFeedFormatException: $message';
 }
 
-PodcastFeed parsePodcastFeed(String body) {
+/// How many episodes a shelf can meaningfully offer.
+///
+/// Podcast feeds carry the whole back catalogue by design — The Daily
+/// publishes 2937 items in 18 MB — and the shelf shows the newest handful.
+/// Items are newest-first, so a cap this far past what any surface renders
+/// costs nothing and bounds both the download and the parse.
+const podcastEpisodeLimit = 200;
+
+/// The closing tag [readPodcastFeedBody] counts to know when to stop.
+const podcastItemCloseTag = '</item>';
+
+PodcastFeed parsePodcastFeed(String body, {int maxEpisodes = 0}) {
   final XmlDocument document;
   try {
     document = XmlDocument.parse(body);
@@ -111,9 +122,63 @@ PodcastFeed parsePodcastFeed(String body) {
     language: _text(channel, 'language').toLowerCase(),
     imageUrl: _imageOf(channel),
     episodes: [
-      for (final item in channel.findElements('item')) _episodeFrom(item),
+      for (final item
+          in maxEpisodes > 0
+              ? channel.findElements('item').take(maxEpisodes)
+              : channel.findElements('item'))
+        _episodeFrom(item),
     ],
   );
+}
+
+/// Reads a feed body, stopping once [maxItems] episodes have arrived.
+///
+/// The whole cost of showing a podcast was the download: 18 MB and 25 seconds
+/// for The Daily, of which the shelf used the first few kilobytes. Items are
+/// newest-first, so the rest is history nobody asked for. This consumes the
+/// response until it has counted enough `</item>` closes, cuts the buffer
+/// there, and closes the two enclosing tags by hand so the result is a
+/// well-formed document.
+///
+/// The count would be thrown off by a literal `</item>` inside a CDATA
+/// description. That is why the cap is far above what any surface shows:
+/// miscounting there costs a few extra or missing history entries nobody was
+/// going to scroll to, never a malformed parse — the cut still lands on a real
+/// item boundary either way.
+Future<String> readPodcastFeedBody(
+  Stream<String> chunks, {
+  int maxItems = podcastEpisodeLimit,
+}) async {
+  final buffer = StringBuffer();
+  var body = '';
+  var seen = 0;
+  var searchedTo = 0;
+
+  await for (final chunk in chunks) {
+    buffer.write(chunk);
+    body = buffer.toString();
+    // Rescan only from a little before the previous frontier, so a close tag
+    // split across two chunks is still seen exactly once.
+    var index = body.indexOf(
+      podcastItemCloseTag,
+      searchedTo - podcastItemCloseTag.length < 0
+          ? 0
+          : searchedTo - podcastItemCloseTag.length,
+    );
+    while (index != -1) {
+      final end = index + podcastItemCloseTag.length;
+      if (end > searchedTo) {
+        seen += 1;
+        searchedTo = end;
+        if (seen >= maxItems) {
+          return '${body.substring(0, end)}</channel></rss>';
+        }
+      }
+      index = body.indexOf(podcastItemCloseTag, end);
+    }
+    searchedTo = body.length;
+  }
+  return body;
 }
 
 PodcastEpisode _episodeFrom(XmlElement item) {

@@ -39,9 +39,12 @@ class DownloadStatusBar extends StatelessWidget {
             const Icon(Icons.download, size: ListenIconSize.control),
             const SizedBox(width: ListenSpacing.gap8),
             Expanded(
+              // A null value renders the indeterminate animation, which is
+              // what "running, length unknown" actually looks like. A bar
+              // pinned at 0% reads as a hang.
               child: LinearProgressIndicator(
                 value: downloading
-                    ? status.progress.clamp(0.0, 1.0).toDouble()
+                    ? status.progress?.clamp(0.0, 1.0).toDouble()
                     : 1.0,
               ),
             ),
@@ -50,8 +53,14 @@ class DownloadStatusBar extends StatelessWidget {
               fit: FlexFit.loose,
               child: Text(
                 switch (status.kind) {
-                  DownloadStatusKind.downloading =>
-                    '${l.text('downloadingInBackground')} ${(status.progress * 100).toStringAsFixed(1)}%',
+                  DownloadStatusKind.downloading => switch (status.progress) {
+                    final double fraction =>
+                      '${l.text('downloadingInBackground')} '
+                          '${(fraction * 100).toStringAsFixed(1)}%',
+                    // No denominator, so no number: the label says it is
+                    // running and stops there.
+                    null => l.text('downloadingInBackground'),
+                  },
                   DownloadStatusKind.completed => l.text('downloadComplete'),
                   DownloadStatusKind.failed => l.text('downloadFailed'),
                 },

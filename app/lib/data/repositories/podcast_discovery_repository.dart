@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart' show rootBundle;
 
@@ -27,6 +28,14 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
 
   final HttpClient _client;
   final String _starterAssetPath;
+
+  /// Parsed feeds for this session.
+  ///
+  /// `entriesFor` used to refetch on every selection, so clicking away from a
+  /// channel and back paid the whole download again. A feed's episode list is
+  /// the same for the minutes a person spends browsing it; refreshing it is a
+  /// deliberate act, not a side effect of navigation.
+  final Map<String, PodcastFeed> _feeds = {};
 
   List<MediaSource>? _starters;
   final List<MediaSource> _customSources = [];
@@ -112,7 +121,19 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
     return source;
   }
 
+  /// Drops the cached feed for [sourceId] so the next read goes to the
+  /// network. The refresh affordance is the caller's to offer.
+  void forget(String sourceId) => _feeds.remove(sourceId);
+
   Future<PodcastFeed> _fetchFeed(String feedUrl) async {
+    final cached = _feeds[feedUrl];
+    if (cached != null) return cached;
+    final feed = await _downloadFeed(feedUrl);
+    _feeds[feedUrl] = feed;
+    return feed;
+  }
+
+  Future<PodcastFeed> _downloadFeed(String feedUrl) async {
     final uri = Uri.parse(feedUrl);
     if (!uri.isScheme('http') && !uri.isScheme('https')) {
       throw const PodcastFeedFormatException(
@@ -130,8 +151,12 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
         uri: uri,
       );
     }
-    final body = await response.transform(utf8.decoder).join();
-    return parsePodcastFeed(body);
+    final body = await readPodcastFeedBody(response.transform(utf8.decoder));
+    // Even a capped feed is hundreds of kilobytes of XML, and parsing it on
+    // the UI isolate showed up as a dropped frame rather than as work.
+    return Isolate.run(
+      () => parsePodcastFeed(body, maxEpisodes: podcastEpisodeLimit),
+    );
   }
 
   MediaEntry _entryFrom(

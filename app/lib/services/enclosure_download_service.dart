@@ -46,7 +46,7 @@ class EnclosureDownload implements MediaDownloadHandle {
   final String _directory;
   final int? _expectedBytes;
 
-  final _progress = StreamController<double>.broadcast();
+  final _progress = StreamController<double?>.broadcast();
   final _result = Completer<String?>();
 
   bool _cancelled = false;
@@ -55,7 +55,7 @@ class EnclosureDownload implements MediaDownloadHandle {
   File? _partial;
 
   @override
-  Stream<double> get progress => _progress.stream;
+  Stream<double?> get progress => _progress.stream;
 
   @override
   Future<String?> get completed => _result.future;
@@ -115,9 +115,10 @@ class EnclosureDownload implements MediaDownloadHandle {
         (chunk) {
           sink.add(chunk);
           received += chunk.length;
-          if (total > 0) {
-            _progress.add((received / total).clamp(0.0, 1.0));
-          }
+          // Null keeps the surface honest and moving: without a length there
+          // is no fraction, and emitting nothing at all would leave a bar
+          // frozen at its initial value looking like a stall.
+          _progress.add(total > 0 ? (received / total).clamp(0.0, 1.0) : null);
         },
         onDone: () {
           if (!done.isCompleted) done.complete();

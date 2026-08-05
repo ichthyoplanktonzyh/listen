@@ -48,12 +48,15 @@ void main() {
       expect(episode.guid, 'https://cdn.example.com/ep003.mp3');
     });
 
-    test('keeps an item that carries no enclosure but marks it unacquirable', () {
-      final episode = parsePodcastFeed(_feed).episodes[3];
+    test(
+      'keeps an item that carries no enclosure but marks it unacquirable',
+      () {
+        final episode = parsePodcastFeed(_feed).episodes[3];
 
-      expect(episode.enclosureUrl, isNull);
-      expect(episode.enclosureBytes, isNull);
-    });
+        expect(episode.enclosureUrl, isNull);
+        expect(episode.enclosureBytes, isNull);
+      },
+    );
 
     test('does not read channel elements as item elements', () {
       // The third item omits <title>; a segment-scanning parser would report
@@ -104,6 +107,65 @@ void main() {
       }
     });
   });
+
+  /// Reading only as much of a feed as a shelf can show.
+  ///
+  /// The real incident: The Daily publishes its whole back catalogue — 2937
+  /// episodes, 18.4 MB — and selecting the channel took 25 seconds, of which
+  /// the visible shelf used the first few kilobytes. Items are newest-first,
+  /// so everything past the cap is history nobody asked for.
+  group('reading only what the shelf shows', () {
+    test(
+      'reading stops at the cap and still yields a parseable document',
+      () async {
+        final body = await readPodcastFeedBody(
+          _inChunks(_feedWith(500), 997),
+          maxItems: 20,
+        );
+
+        final feed = parsePodcastFeed(body);
+        expect(feed.episodes, hasLength(20));
+        // The newest are kept, and the channel metadata preceding them survives
+        // the cut.
+        expect(feed.episodes.first.title, 'Episode 0');
+        expect(feed.episodes.last.title, 'Episode 19');
+        expect(feed.title, 'Cap');
+        expect(feed.language, 'en');
+        expect(body.length, lessThan(_feedWith(500).length));
+      },
+    );
+
+    test('a close tag split across chunks is counted exactly once', () async {
+      // 1-byte chunks put a boundary inside every `</item>`; a rescan window
+      // that double-counted would stop early and silently lose episodes.
+      final body = await readPodcastFeedBody(
+        _inChunks(_feedWith(30), 1),
+        maxItems: 12,
+      );
+
+      expect(parsePodcastFeed(body).episodes, hasLength(12));
+    });
+
+    test('a feed shorter than the cap is read whole and left intact', () async {
+      final source = _feedWith(3);
+      final body = await readPodcastFeedBody(
+        _inChunks(source, 64),
+        maxItems: 50,
+      );
+
+      expect(body, source);
+      expect(parsePodcastFeed(body).episodes, hasLength(3));
+    });
+
+    test('the parser caps episodes even when handed a whole feed', () {
+      // Belt and braces: a body that never went through the reader should not
+      // build 2937 episode objects either.
+      expect(
+        parsePodcastFeed(_feedWith(400), maxEpisodes: 25).episodes,
+        hasLength(25),
+      );
+    });
+  });
 }
 
 const _feed = '''
@@ -142,3 +204,20 @@ const _feed = '''
   </channel>
 </rss>
 ''';
+
+String _feedWith(int items) => [
+  '<rss><channel><title>Cap</title><language>en</language>',
+  for (var index = 0; index < items; index++)
+    '<item><title>Episode $index</title><guid>g$index</guid>'
+        '<enclosure url="https://h/$index.mp3" type="audio/mpeg"/></item>',
+  '</channel></rss>',
+].join();
+
+Stream<String> _inChunks(String body, int size) async* {
+  for (var start = 0; start < body.length; start += size) {
+    yield body.substring(
+      start,
+      start + size > body.length ? body.length : start + size,
+    );
+  }
+}

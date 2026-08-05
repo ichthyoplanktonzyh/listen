@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:llplayer_next/services/acquisition_ledger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/discovery_view_model.dart';
 import 'package:llplayer_next/data/repositories/composite_discovery_repository.dart';
@@ -29,7 +32,11 @@ void main() {
   );
 
   (DiscoveryViewModel, TestMediaImportRepository, TestContentPackageRepository)
-  podcastViewModel({List<MediaEntry>? entries}) {
+  podcastViewModel({
+    List<MediaEntry>? entries,
+    TestMediaLibraryRepository? library,
+    AcquisitionLedger? ledger,
+  }) {
     final imports = TestMediaImportRepository();
     final packages = TestContentPackageRepository();
     final vm = DiscoveryViewModel(
@@ -42,7 +49,8 @@ void main() {
       ),
       imports,
       packages,
-      TestMediaLibraryRepository(),
+      library ?? TestMediaLibraryRepository(),
+      ledger,
     );
     addTearDown(vm.dispose);
     return (vm, imports, packages);
@@ -149,27 +157,29 @@ void main() {
       expect(sources.last.id, 'c-yt');
     });
 
-    test('routes a feed URL to the podcast side and a channel id to YouTube',
-        () async {
-      final youtube = TestDiscoveryRepository(
-        sources: [testMediaSource('c-yt')],
-        entries: {
-          'c-yt': [testMediaEntry('v-1', 'c-yt')],
-        },
-      );
-      final composite = CompositeDiscoveryRepository(
-        PodcastDiscoveryRepository(),
-        youtube,
-      );
+    test(
+      'routes a feed URL to the podcast side and a channel id to YouTube',
+      () async {
+        final youtube = TestDiscoveryRepository(
+          sources: [testMediaSource('c-yt')],
+          entries: {
+            'c-yt': [testMediaEntry('v-1', 'c-yt')],
+          },
+        );
+        final composite = CompositeDiscoveryRepository(
+          PodcastDiscoveryRepository(),
+          youtube,
+        );
 
-      expect(await composite.entriesFor('c-yt'), hasLength(1));
-      // The podcast side owns anything URL-shaped, so this reaches its fetch
-      // and fails there rather than being handed to the YouTube feed.
-      await expectLater(
-        composite.entriesFor('https://feeds.example.invalid/show.xml'),
-        throwsA(isNot(isA<TypeError>())),
-      );
-    });
+        expect(await composite.entriesFor('c-yt'), hasLength(1));
+        // The podcast side owns anything URL-shaped, so this reaches its fetch
+        // and fails there rather than being handed to the YouTube feed.
+        await expectLater(
+          composite.entriesFor('https://feeds.example.invalid/show.xml'),
+          throwsA(isNot(isA<TypeError>())),
+        );
+      },
+    );
 
     test('sends a pasted YouTube link to the channel resolver', () async {
       final youtube = _RecordingDiscoveryRepository();
@@ -184,6 +194,68 @@ void main() {
       );
 
       expect(youtube.resolvedChannels, ['https://www.youtube.com/@example']);
+    });
+  });
+
+  group('recognising media a previous session acquired', () {
+    test('a podcast episode downloaded before is not offered again', () async {
+      // The filename convention that answers this on the YouTube path does not
+      // exist for an enclosure: the file is `p0p1qc9j.mp3`, the guid is
+      // `urn:bbc:podcast:p0p1qc9j`. Restarting therefore offered the download
+      // again, and taking it wrote `episode (2).mp3`.
+      final directory = Directory.systemTemp.createTempSync('journey-ledger-');
+      addTearDown(() => directory.deleteSync(recursive: true));
+
+      final first = AcquisitionLedger(directory: directory);
+      await first.load();
+      await first.record(
+        'i-bbc-1',
+        mediaId: 'm-1',
+        path: '/library/p0p1qc9j.mp3',
+      );
+
+      // A fresh instance, as a relaunch would build.
+      final restarted = AcquisitionLedger(directory: directory);
+      final library = TestMediaLibraryRepository(
+        seed: [
+          TestMediaLibraryRepository.entry(
+            id: 'm-1',
+            path: '/library/p0p1qc9j.mp3',
+          ),
+        ],
+      );
+      final (vm, _, _) = podcastViewModel(library: library, ledger: restarted);
+      await vm.load();
+      await vm.selectChannel(podcastSource.id);
+      vm.selectItem('i-bbc-1');
+      await pumpEventQueue();
+
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.done);
+      expect(vm.localPathFor('i-bbc-1'), '/library/p0p1qc9j.mp3');
+    });
+
+    test('a record whose file Core no longer knows is dropped', () async {
+      // The ledger says what was acquired, not what survives. A row that
+      // claimed a file that is gone would be the confident lie it exists to
+      // avoid, and re-checking it forever would be the other failure.
+      final directory = Directory.systemTemp.createTempSync('journey-ledger-');
+      addTearDown(() => directory.deleteSync(recursive: true));
+
+      final ledger = AcquisitionLedger(directory: directory);
+      await ledger.load();
+      await ledger.record('i-bbc-1', mediaId: 'm-gone', path: '/gone.mp3');
+
+      final (vm, _, _) = podcastViewModel(
+        library: TestMediaLibraryRepository(),
+        ledger: ledger,
+      );
+      await vm.load();
+      await vm.selectChannel(podcastSource.id);
+      vm.selectItem('i-bbc-1');
+      await pumpEventQueue();
+
+      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.none);
+      expect(ledger['i-bbc-1'], isNull);
     });
   });
 }

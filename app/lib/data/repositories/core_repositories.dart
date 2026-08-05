@@ -46,34 +46,34 @@ final class LocalCoreRepositories {
     this._transport, {
     ContentGeneratorSetup generatorSetup = unresolvedContentGeneratorSetup,
   }) : realtimeConversation = LocalRealtimeConversationRepository(
-        () => _transport.currentApi!,
-      ),
-      hunting = LocalHuntingRepository(() => _transport.currentApi),
-      learning = LocalLearningRepository(() => _transport.currentApi),
-      listening = LocalListeningRepository(() => _transport.currentApi),
-      mediaLibrary = LocalMediaLibraryRepository(() => _transport.currentApi),
-      mediaSession = LocalMediaSessionRepository(() => _transport.currentApi),
-      playback = LocalPlaybackRepository(() => _transport.currentApi),
-      resource = LocalResourceRepository(() => _transport.currentApi),
-      contentPackage = LocalContentPackageRepository(
-        () => _transport.currentApi,
-        const LocalMediaImportFileService(),
-        LocalListenGenProcessService(setup: generatorSetup),
-      ),
-      readingTask = LocalReadingTaskRepository(() => _transport.currentApi),
-      readingSession = LocalReadingSessionRepository(
-        () => _transport.currentApi,
-      ),
-      speakingSession = LocalSpeakingSessionRepository(
-        () => _transport.currentApi,
-      ),
-      speechEnhancement = LocalSpeechEnhancementRepository(
-        () => _transport.currentApi,
-      ),
-      subtitleAnalysis = LocalSubtitleAnalysisRepository(
-        () => _transport.currentApi,
-      ),
-      writingTask = LocalWritingTaskRepository(() => _transport.currentApi);
+         () => _transport.currentApi!,
+       ),
+       hunting = LocalHuntingRepository(() => _transport.currentApi),
+       learning = LocalLearningRepository(() => _transport.currentApi),
+       listening = LocalListeningRepository(() => _transport.currentApi),
+       mediaLibrary = LocalMediaLibraryRepository(() => _transport.currentApi),
+       mediaSession = LocalMediaSessionRepository(() => _transport.currentApi),
+       playback = LocalPlaybackRepository(() => _transport.currentApi),
+       resource = LocalResourceRepository(() => _transport.currentApi),
+       contentPackage = LocalContentPackageRepository(
+         () => _transport.currentApi,
+         const LocalMediaImportFileService(),
+         LocalListenGenProcessService(setup: generatorSetup),
+       ),
+       readingTask = LocalReadingTaskRepository(() => _transport.currentApi),
+       readingSession = LocalReadingSessionRepository(
+         () => _transport.currentApi,
+       ),
+       speakingSession = LocalSpeakingSessionRepository(
+         () => _transport.currentApi,
+       ),
+       speechEnhancement = LocalSpeechEnhancementRepository(
+         () => _transport.currentApi,
+       ),
+       subtitleAnalysis = LocalSubtitleAnalysisRepository(
+         () => _transport.currentApi,
+       ),
+       writingTask = LocalWritingTaskRepository(() => _transport.currentApi);
 
   final LocalCoreTransportService _transport;
 

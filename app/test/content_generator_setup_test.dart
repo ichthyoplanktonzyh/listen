@@ -41,17 +41,20 @@ void main() {
     environment: {'HOME': root.path},
   );
 
-  test('a checked-out working copy is found without any configuration', () async {
-    // How this is actually developed today: the console script lives in the
-    // repository's virtualenv, which is on no PATH a GUI launch would see.
-    final generator = touch('listen-gen/.venv/bin/listen-gen');
-    touch('$modelDirectory/ggml-base.bin');
+  test(
+    'a checked-out working copy is found without any configuration',
+    () async {
+      // How this is actually developed today: the console script lives in the
+      // repository's virtualenv, which is on no PATH a GUI launch would see.
+      final generator = touch('listen-gen/.venv/bin/listen-gen');
+      touch('$modelDirectory/ggml-base.bin');
 
-    final setup = await locator().resolve();
+      final setup = await locator().resolve();
 
-    expect(setup.state, ContentGeneratorState.ready);
-    expect(setup.generatorPath, generator.path);
-  });
+      expect(setup.state, ContentGeneratorState.ready);
+      expect(setup.generatorPath, generator.path);
+    },
+  );
 
   test('the whisper model is found in the shared models directory', () async {
     touch('listen-gen/.venv/bin/listen-gen');
@@ -87,16 +90,21 @@ void main() {
     expect(setup.modelPath, chosen.path);
   });
 
-  test('a configured path that no longer exists falls back to the lookup', () async {
-    touch('listen-gen/.venv/bin/listen-gen');
-    final present = touch('$modelDirectory/ggml-base.bin');
+  test(
+    'a configured path that no longer exists falls back to the lookup',
+    () async {
+      touch('listen-gen/.venv/bin/listen-gen');
+      final present = touch('$modelDirectory/ggml-base.bin');
 
-    final setup = await locator(modelPath: '${root.path}/deleted.bin').resolve();
+      final setup = await locator(
+        modelPath: '${root.path}/deleted.bin',
+      ).resolve();
 
-    // A stale setting must not strand a machine that has a usable model.
-    expect(setup.modelPath, present.path);
-    expect(setup.state, ContentGeneratorState.ready);
-  });
+      // A stale setting must not strand a machine that has a usable model.
+      expect(setup.modelPath, present.path);
+      expect(setup.state, ContentGeneratorState.ready);
+    },
+  );
 
   test('a missing generator and a missing model are told apart', () async {
     touch('$modelDirectory/ggml-base.bin');
@@ -109,29 +117,35 @@ void main() {
     expect(noModel.state, ContentGeneratorState.modelMissing);
   });
 
-  test('an empty model directory is not mistaken for an installed model', () async {
-    touch('listen-gen/.venv/bin/listen-gen');
-    Directory('${root.path}/$modelDirectory').createSync(recursive: true);
+  test(
+    'an empty model directory is not mistaken for an installed model',
+    () async {
+      touch('listen-gen/.venv/bin/listen-gen');
+      Directory('${root.path}/$modelDirectory').createSync(recursive: true);
 
-    final setup = await locator().resolve();
+      final setup = await locator().resolve();
 
-    expect(setup.state, ContentGeneratorState.modelMissing);
-    expect(setup.modelPath, isEmpty);
-  });
+      expect(setup.state, ContentGeneratorState.modelMissing);
+      expect(setup.modelPath, isEmpty);
+    },
+  );
 
-  test('the provider argv names whisper-cpp and carries no app internals', () async {
-    touch('listen-gen/.venv/bin/listen-gen');
-    touch('$modelDirectory/ggml-base.bin');
+  test(
+    'the provider argv names whisper-cpp and carries no app internals',
+    () async {
+      touch('listen-gen/.venv/bin/listen-gen');
+      touch('$modelDirectory/ggml-base.bin');
 
-    final arguments = contentGeneratorProviderArguments(
-      await locator().resolve(),
-    );
+      final arguments = contentGeneratorProviderArguments(
+        await locator().resolve(),
+      );
 
-    expect(arguments.sublist(0, 2), ['--provider', 'whisper-cpp']);
-    expect(arguments, contains('--model'));
-    // The wrapper protocol this replaced is gone: no placeholder, no script,
-    // no interpreter. If any reappears, it belongs in listen-gen instead.
-    expect(arguments.any((item) => item.contains('{media}')), isFalse);
-    expect(arguments.any((item) => item.endsWith('.py')), isFalse);
-  });
+      expect(arguments.sublist(0, 2), ['--provider', 'whisper-cpp']);
+      expect(arguments, contains('--model'));
+      // The wrapper protocol this replaced is gone: no placeholder, no script,
+      // no interpreter. If any reappears, it belongs in listen-gen instead.
+      expect(arguments.any((item) => item.contains('{media}')), isFalse);
+      expect(arguments.any((item) => item.endsWith('.py')), isFalse);
+    },
+  );
 }

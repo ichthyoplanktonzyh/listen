@@ -48,7 +48,9 @@ class TestMediaDownloadHandle implements MediaDownloadHandle {
 /// A download that fails the way the real one does: `completed` finishes with
 /// an error rather than a null path.
 class TestFailingDownloadHandle implements MediaDownloadHandle {
-  TestFailingDownloadHandle({Duration after = const Duration(milliseconds: 60)}) {
+  TestFailingDownloadHandle({
+    Duration after = const Duration(milliseconds: 60),
+  }) {
     _timer = Timer(after, () {
       if (_cancelled) return;
       _controller.add(0.3);
@@ -270,11 +272,8 @@ class TestContentPackageRepository implements ContentPackageRepository {
   bool get generatorConfigured => true;
 
   @override
-
   ContentGeneratorState get generatorState => generatorConfigured
-
       ? ContentGeneratorState.ready
-
       : ContentGeneratorState.generatorMissing;
 
   @override
@@ -328,7 +327,31 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     this.available = true,
     this.failListing = false,
     this.failRegister = false,
-  });
+    List<MediaLibraryEntry> seed = const [],
+  }) {
+    _entries.addAll(seed);
+  }
+
+  /// Builds the library row a previous session's download would have left, so
+  /// a test can start from "this was already acquired".
+  static MediaLibraryEntry entry({required String id, required String path}) =>
+      MediaLibraryEntry(
+        media: MediaItem(
+          id: id,
+          path: path,
+          fingerprint: 'fp-$id',
+          title: 'Seeded $id',
+          kind: 'audio',
+          durationMs: 300000,
+          availability: 'local',
+          createdAtMs: 0,
+          updatedAtMs: 0,
+        ),
+        primaryTrackId: null,
+        fit: null,
+        triageIntent: null,
+        familiarMaterial: false,
+      );
 
   /// True makes registration throw the way a core rejection does.
   final bool failRegister;

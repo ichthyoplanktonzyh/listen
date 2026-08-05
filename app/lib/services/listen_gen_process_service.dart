@@ -114,7 +114,9 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
   }) : _executable =
            executable ??
            Platform.environment['LISTEN_GEN_EXECUTABLE'] ??
-           (setup.generatorPath.isNotEmpty ? setup.generatorPath : 'listen-gen'),
+           (setup.generatorPath.isNotEmpty
+               ? setup.generatorPath
+               : 'listen-gen'),
        _providerArgs = List.unmodifiable(
          providerArgs ??
              _providerArgsFromEnvironment() ??

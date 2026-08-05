@@ -86,6 +86,7 @@ import 'services/diagnostic_log_export_service.dart';
 import 'services/external_tools.dart';
 import 'services/file_transfer_service.dart';
 import 'services/fullscreen_window.dart';
+import 'services/acquisition_ledger.dart';
 import 'services/content_generator_setup.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
@@ -276,6 +277,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     mediaImportRepository,
     coreRepositories.contentPackage,
     coreRepositories.mediaLibrary,
+    // The composition root is the only place that hands out a ledger backed by
+    // a real directory; everything else defaults to remembering nothing.
+    AcquisitionLedger.forCurrentUser(),
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);
   late final coreRepositories = LocalCoreRepositories(

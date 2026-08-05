@@ -82,7 +82,11 @@ class ContentGeneratorLocator {
       // today, and its console script lives in the virtualenv.
       '$_home/listen-gen/.venv/bin/listen-gen',
     ]);
-    final whisper = await _resolveExecutable(whisperPath, 'whisper-cli', const []);
+    final whisper = await _resolveExecutable(
+      whisperPath,
+      'whisper-cli',
+      const [],
+    );
     final ffprobe = await _resolveExecutable(ffprobePath, 'ffprobe', const []);
     final ffmpeg = await _resolveExecutable(ffmpegPath, 'ffmpeg', const []);
     final model = await _resolveModel();

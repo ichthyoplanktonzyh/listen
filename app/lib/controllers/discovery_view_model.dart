@@ -15,6 +15,7 @@ import '../models/media_download.dart';
 import '../models/media_resolution.dart';
 import '../models/types.dart';
 import '../models/api_failure.dart';
+import '../services/acquisition_ledger.dart';
 import '../models/embedded_subtitle.dart';
 import '../models/saved_vocabulary_count.dart';
 
@@ -112,8 +113,10 @@ class DiscoveryState {
   MediaEntry? get selectedEntry =>
       selectedEntryId == null ? null : entryById(selectedEntryId!);
 
-  double downloadProgressOf(String entryId) =>
-      downloadSnapshots[entryId]?.progress ?? 0;
+  /// Null while a download runs with no known total, so the surface can show
+  /// an indeterminate bar rather than a fraction nobody measured.
+  double? downloadProgressOf(String entryId) =>
+      downloadSnapshots[entryId]?.progress;
 
   DownloadState downloadStateOf(String entryId) {
     final snapshot = downloadSnapshots[entryId];
@@ -204,7 +207,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
     MediaImportRepository? importRepository,
     ContentPackageRepository? contentPackageRepository,
     MediaLibraryRepository? mediaLibraryRepository,
-  ]) : _importRepository =
+    AcquisitionLedger? ledger,
+  ]) : _ledger = ledger ?? AcquisitionLedger.inMemory(),
+       _importRepository =
            importRepository ?? const _FakeMediaImportRepository(),
        _contentPackageRepository =
            contentPackageRepository ?? const _FakeContentPackageRepository(),
@@ -223,6 +228,10 @@ final class DiscoveryViewModel extends ChangeNotifier {
   final MediaImportRepository _importRepository;
   final ContentPackageRepository _contentPackageRepository;
   final MediaLibraryRepository _mediaLibraryRepository;
+
+  /// What earlier sessions acquired, so a restart does not offer a download
+  /// that already happened.
+  final AcquisitionLedger _ledger;
 
   static const customSource = MediaSource(
     id: 'custom_imports',
@@ -249,6 +258,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
   bool _disposed = false;
 
   Future<void> load() async {
+    if (!_ledger.isLoaded) await _ledger.load();
     _state = _state.copyWith(loading: true, clearSourcesFailure: true);
     notifyListeners();
 
@@ -399,6 +409,13 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
     _localPaths[entryId] = localEntry.media.path;
     _mediaIds[entryId] = localEntry.media.id;
+    unawaited(
+      _ledger.record(
+        entryId,
+        mediaId: localEntry.media.id,
+        path: localEntry.media.path,
+      ),
+    );
     _mediaDurations[entryId] = localEntry.media.durationMs;
 
     _state = _state.copyWith(
@@ -421,19 +438,35 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// Throws when the library cannot be listed; the caller turns that into an
   /// undetermined status rather than an answer.
   ///
-  /// The only link available is yt-dlp's `[id]` filename convention, so this
-  /// answers for the external-tool path alone. A filename is a weak stand-in
-  /// for Source Identity and it does not exist at all on the enclosure path,
-  /// where the file is named after the publisher's URL. Until an acquisition
-  /// record is persisted, a podcast episode downloaded in an earlier session
-  /// is not recognised — the row offers the download again rather than
-  /// claiming a match this cannot actually establish.
+  /// The written record answers first: the app knows what it downloaded, so
+  /// it does not have to re-derive it from a filename. yt-dlp's `[id]`
+  /// convention stays as the fallback that recognises media acquired before
+  /// the ledger existed, and it only ever applied to the external-tool path —
+  /// an enclosure is saved under the publisher's filename, which has nothing
+  /// to do with the feed's guid.
+  ///
+  /// A recorded media id still has to be present in Core's library. The record
+  /// says what was acquired, not what survives: a person who emptied a folder
+  /// did not consult this file first, and a row that claimed a file that is
+  /// gone would be exactly the kind of confident lie the ledger exists to
+  /// avoid.
   Future<MediaLibraryEntry?> _findLocalEntry(String entryId) async {
+    final library = await _mediaLibraryRepository.listMediaLibrary();
+
+    final recorded = _ledger[entryId];
+    if (recorded != null) {
+      for (final entry in library) {
+        if (entry.media.id == recorded.mediaId) return entry;
+      }
+      // Recorded but no longer in the library: drop it rather than re-check
+      // this row on every visit for the life of the install.
+      await _ledger.forget(entryId);
+    }
+
     if (_state.entryById(entryId)?.acquisition !=
         MediaAcquisition.externalTool) {
       return null;
     }
-    final library = await _mediaLibraryRepository.listMediaLibrary();
     for (final entry in library) {
       if (entry.media.path.contains('[$entryId]')) return entry;
     }
@@ -551,6 +584,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
       if (_disposed) return;
       _localPaths[entryId] = path;
       _mediaIds[entryId] = media.id;
+      unawaited(_ledger.record(entryId, mediaId: media.id, path: path));
       _mediaDurations[entryId] = media.durationMs ?? probedDurationMs;
       notifyListeners();
       await checkPackage(entryId);
