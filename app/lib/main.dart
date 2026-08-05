@@ -81,6 +81,7 @@ import 'models/types.dart';
 import 'player_adapter.dart';
 import 'player_shortcuts.dart';
 import 'services/core_transport_service.dart';
+import 'services/cover_art_cache.dart';
 import 'services/desktop_playback_bootstrap.dart';
 import 'services/diagnostic_log_export_service.dart';
 import 'services/external_tools.dart';
@@ -133,6 +134,10 @@ import 'widgets/settings/settings_flow.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   const FvpDesktopPlaybackBootstrap().initialize();
+  // Cover art survives the launch it was fetched in only from here: every
+  // other construction site defaults to keeping nothing, so no test writes
+  // images into the developer's own support directory.
+  CoverArtCache.instance = CoverArtCache.forCurrentUser();
   // Resolved before the first frame: the discovery surface decides whether to
   // offer generation from this, and an unavailable capability must never be
   // shown as an available one while a lookup is still in flight.

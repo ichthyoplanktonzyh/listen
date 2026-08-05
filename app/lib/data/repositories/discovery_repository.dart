@@ -164,15 +164,54 @@ ChannelCoverTone _coverFromName(String name) => switch (name) {
 /// [MediaAcquisition.externalTool] rather than sharing the podcast enclosure
 /// path.
 final class YoutubeDiscoveryRepository implements DiscoveryRepository {
-  YoutubeDiscoveryRepository({SubscriptionStore? subscriptions})
-    : _subscriptions = subscriptions ?? SubscriptionStore.inMemory();
+  YoutubeDiscoveryRepository({
+    SubscriptionStore? subscriptions,
+    HttpClient? client,
+    this.feedBaseUrl = 'https://www.youtube.com/feeds/videos.xml',
+    this.retryBackoff = const Duration(milliseconds: 400),
+  }) : _subscriptions = subscriptions ?? SubscriptionStore.inMemory(),
+       _client = client ?? HttpClient();
 
-  final HttpClient _client = HttpClient();
+  final HttpClient _client;
+
+  /// Where the per-channel Atom feed lives. A field so a test can point it at
+  /// a local server and drive the status codes this endpoint really returns.
+  final String feedBaseUrl;
+
+  /// Delay before the first retry; the second waits twice as long.
+  ///
+  /// A field so tests do not spend a real second proving the retry happens.
+  final Duration retryBackoff;
+
+  /// How many times a feed request is attempted before the surface is told the
+  /// source failed.
+  ///
+  /// Measured on 2026-08-05: the same channel feed URL, requested repeatedly
+  /// seconds apart, answered 200, 404 and 500 in no pattern — for channels
+  /// that verifiably exist, and identically under a browser user agent. The
+  /// endpoint throttles by returning "not found". One attempt therefore failed
+  /// roughly half the time, and the surface said "this source could not be
+  /// loaded" about a channel that was fine.
+  ///
+  /// Three attempts, not more: a channel that really is gone answers the same
+  /// way, and making the person wait longer to be told so is its own dishonesty.
+  static const _attempts = 3;
 
   /// Subscribed channels, durable when the composition root supplied a backed
   /// store. They used to live in a plain list and vanish on restart.
   final SubscriptionStore _subscriptions;
 
+  /// The starter channels.
+  ///
+  /// Every id here was resolved from the channel's own page on 2026-08-05 and
+  /// is the one YouTube's Atom feed answers to. Two of them used to be
+  /// invented strings — Wired and SciShow — and those two sources could never
+  /// load at all, which read as the same failure as the throttling above.
+  ///
+  /// `avatarUrl` is null on all of them for the same reason: the six
+  /// `yt3.googleusercontent.com` links that used to be here were fabricated
+  /// too. Nothing renders the avatar today, so a real one would have to be
+  /// fetched when something does.
   static const List<MediaSource> _defaultSources = [
     MediaSource(
       id: 'UCsooa4yRKGN_zEE8iknghZA',
@@ -182,8 +221,7 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
           'Carefully curated educational videos, many of which are collaborations between talented educators and animators.',
       cover: ChannelCoverTone.rose,
       type: MediaSourceType.youtube,
-      avatarUrl:
-          'https://yt3.googleusercontent.com/ytc/AIdrodkkwq6d9uQ6yP5978r81H7X14X5G-0L5a2G9X8=s176-c-k-c0x00ffffff-no-rj',
+      avatarUrl: null,
     ),
     MediaSource(
       id: 'UCsXVk37bltHxD1rDPwtNM8Q',
@@ -193,8 +231,7 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
           'Animation videos explaining science, space, technology, history, and philosophy with beautiful illustration.',
       cover: ChannelCoverTone.blue,
       type: MediaSourceType.youtube,
-      avatarUrl:
-          'https://yt3.googleusercontent.com/ytc/AIdrodfU_mD_31qX1-N-q_G_1_Q_V-0L5_Y_1_Q=s176-c-k-c0x00ffffff-no-rj',
+      avatarUrl: null,
     ),
     MediaSource(
       id: 'UCLXo7UDZvByw2ixzpQCufnA',
@@ -204,19 +241,17 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
           'Vox helps you understand our complex world with news, context, maps, and video essays on society and science.',
       cover: ChannelCoverTone.slate,
       type: MediaSourceType.youtube,
-      avatarUrl:
-          'https://yt3.googleusercontent.com/ytc/AIdrodfV_mD_31qX1-N-q_G_1_Q_V-0L5_Y_1_Q=s176-c-k-c0x00ffffff-no-rj',
+      avatarUrl: null,
     ),
     MediaSource(
-      id: 'UCn8zNIfYAQNdrFRrr8oibKw',
+      id: 'UCftwRNsjfRo08xYE31tkiyw',
       name: 'Wired',
       language: 'en',
       description:
           'Wired is where tomorrow is realized, focusing on technology, science, culture, and business through interviews.',
       cover: ChannelCoverTone.green,
       type: MediaSourceType.youtube,
-      avatarUrl:
-          'https://yt3.googleusercontent.com/ytc/AIdrodfW_mD_31qX1-N-q_G_1_Q_V-0L5_Y_1_Q=s176-c-k-c0x00ffffff-no-rj',
+      avatarUrl: null,
     ),
     MediaSource(
       id: 'UCHaHD477h-FeBbVh9Sh7syA',
@@ -226,19 +261,17 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
           'Learn English from the BBC with new videos, podcasts, and quizzes published every week to improve your skills.',
       cover: ChannelCoverTone.amber,
       type: MediaSourceType.youtube,
-      avatarUrl:
-          'https://yt3.googleusercontent.com/ytc/AIdrodfA_mD_31qX1-N-q_G_1_Q_V-0L5_Y_1_Q=s176-c-k-c0x00ffffff-no-rj',
+      avatarUrl: null,
     ),
     MediaSource(
-      id: 'UC6nSFpj9HTCZ5t-N3Rm3-HA',
+      id: 'UCZYTClx2T1of7BRZ86-8fow',
       name: 'SciShow',
       language: 'en',
       description:
           'SciShow explores the unexpected, explaining the scientific mysteries of the universe and daily life.',
       cover: ChannelCoverTone.blue,
       type: MediaSourceType.youtube,
-      avatarUrl:
-          'https://yt3.googleusercontent.com/ytc/AIdrodfS_mD_31qX1-N-q_G_1_Q_V-0L5_Y_1_Q=s176-c-k-c0x00ffffff-no-rj',
+      avatarUrl: null,
     ),
   ];
 
@@ -256,17 +289,7 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   /// videos" — indistinguishable from offline or rate-limited.
   @override
   Future<List<MediaEntry>> entriesFor(String sourceId) async {
-    final url = 'https://www.youtube.com/feeds/videos.xml?channel_id=$sourceId';
-    final request = await _client
-        .getUrl(Uri.parse(url))
-        .timeout(const Duration(seconds: 10));
-    final response = await request.close();
-    if (response.statusCode != 200) {
-      throw HttpException(
-        'YouTube RSS server returned status ${response.statusCode}',
-      );
-    }
-    final body = await response.transform(utf8.decoder).join();
+    final body = await _fetchFeed(sourceId);
 
     final entryMatches = RegExp(r'<entry>([\s\S]*?)</entry>').allMatches(body);
     final entries = <MediaEntry>[];
@@ -323,6 +346,36 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
       );
     }
     return entries;
+  }
+
+  /// The feed XML for [sourceId], retried through the endpoint's throttling.
+  ///
+  /// Only the status is retried. A transport failure is the machine's own
+  /// network and repeating it just delays the same answer, while a body that
+  /// arrived is a body — retrying because it parsed to nothing would hide a
+  /// channel that genuinely has no videos.
+  Future<String> _fetchFeed(String sourceId) async {
+    final uri = Uri.parse('$feedBaseUrl?channel_id=$sourceId');
+    var delay = retryBackoff;
+    for (var attempt = 1; ; attempt++) {
+      final request = await _client
+          .getUrl(uri)
+          .timeout(const Duration(seconds: 10));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        return response.transform(utf8.decoder).join();
+      }
+      await response.drain<void>();
+      if (attempt >= _attempts) {
+        throw HttpException(
+          'YouTube RSS server returned status ${response.statusCode} '
+          'on $_attempts attempts',
+          uri: uri,
+        );
+      }
+      await Future<void>.delayed(delay);
+      delay *= 2;
+    }
   }
 
   /// The feed carries no package information, and this repository has no way

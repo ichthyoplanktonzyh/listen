@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/services/cover_art_cache.dart';
 import 'package:llplayer_next/widgets/discovery/cover_image.dart';
 
 /// Cover art must be decoded at the size it is drawn.
@@ -53,6 +54,26 @@ void main() {
     await pumpCover(tester, width: 168, devicePixelRatio: 3);
 
     expect(resizeProviderOf(tester).width, 504);
+  });
+
+  testWidgets('the two draw sizes share one fetch', (tester) async {
+    // Bounding the decode fixed the flicker and none of the waiting: the bytes
+    // were still the whole 3000×3000 file. Flutter's image cache is keyed by
+    // decode size, so the detail panel at 380 missed what the card at 168 had
+    // already downloaded and fetched the same half-megabyte again. The sharing
+    // has to happen below the decode.
+    await pumpCover(tester, width: 168);
+    final card = resizeProviderOf(tester).imageProvider;
+
+    await pumpCover(tester, width: 380);
+    final hero = resizeProviderOf(tester).imageProvider;
+
+    expect(card, isA<CoverArtImage>());
+    expect(
+      hero,
+      card,
+      reason: 'one URL is one cache entry regardless of who drew it',
+    );
   });
 
   testWidgets('the loading state is not the unavailable state', (tester) async {

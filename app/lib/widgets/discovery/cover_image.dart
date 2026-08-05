@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Remote cover art, decoded at the size it is actually drawn.
+import '../../services/cover_art_cache.dart';
+
+/// Remote cover art: fetched once, decoded at the size it is actually drawn.
 ///
 /// Podcast artwork is published at 3000×3000 because Apple requires it, and a
 /// shelf renders it into a 168×94 box. `Image.network` with no cache hint
@@ -10,9 +12,15 @@ import 'package:flutter/material.dart';
 /// eviction meant decoding a 9-megapixel JPEG again, and the covers appeared
 /// slowly and then kept disappearing.
 ///
-/// [cacheWidth] is in physical pixels, so the device pixel ratio has to be
-/// part of it: on a 3× display a 168pt box is 504px, and decoding narrower
-/// than that would look soft.
+/// Bounding the decode fixed the flicker and none of the waiting, because the
+/// bytes were still the whole 3000×3000 file — half a megabyte per cover,
+/// re-fetched on every launch and again when the detail panel asked for the
+/// same picture at a different decode size. [CoverArtCache] holds that layer;
+/// this widget is only the two states on top of it.
+///
+/// The decode width is per site and deliberately not shared. It is in physical
+/// pixels, so the device pixel ratio has to be part of it: on a 3× display a
+/// 168pt box is 504px, and decoding narrower than that would look soft.
 class DiscoveryCoverImage extends StatelessWidget {
   const DiscoveryCoverImage({
     super.key,
@@ -42,10 +50,13 @@ class DiscoveryCoverImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ratio = MediaQuery.devicePixelRatioOf(context);
-    return Image.network(
-      url,
+    return Image(
+      image: ResizeImage(
+        CoverArtImage(url),
+        width: (width * ratio).round(),
+        allowUpscaling: false,
+      ),
       fit: BoxFit.cover,
-      cacheWidth: (width * ratio).round(),
       loadingBuilder: (context, child, progress) =>
           progress == null ? child : ColoredBox(color: tone),
       errorBuilder: (context, error, stackTrace) => fallback,
