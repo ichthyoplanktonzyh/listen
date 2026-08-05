@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../../models/discovery.dart';
+import '../../services/subscription_store.dart';
 import 'media_import_repository.dart';
 
 /// Content-resource discovery boundary for the home preflight.
@@ -163,9 +164,14 @@ ChannelCoverTone _coverFromName(String name) => switch (name) {
 /// [MediaAcquisition.externalTool] rather than sharing the podcast enclosure
 /// path.
 final class YoutubeDiscoveryRepository implements DiscoveryRepository {
-  YoutubeDiscoveryRepository();
+  YoutubeDiscoveryRepository({SubscriptionStore? subscriptions})
+    : _subscriptions = subscriptions ?? SubscriptionStore.inMemory();
 
   final HttpClient _client = HttpClient();
+
+  /// Subscribed channels, durable when the composition root supplied a backed
+  /// store. They used to live in a plain list and vanish on restart.
+  final SubscriptionStore _subscriptions;
 
   static const List<MediaSource> _defaultSources = [
     MediaSource(
@@ -236,11 +242,13 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
     ),
   ];
 
-  final List<MediaSource> _customSources = [];
-
   @override
   Future<List<MediaSource>> sources() async {
-    return List.unmodifiable([..._defaultSources, ..._customSources]);
+    if (!_subscriptions.isLoaded) await _subscriptions.load();
+    return List.unmodifiable([
+      ..._defaultSources,
+      ..._subscriptions.of(MediaSourceType.youtube),
+    ]);
   }
 
   /// Throws on transport, status, or parse failure. Swallowing it here would
@@ -364,9 +372,7 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
       avatarUrl: null,
     );
 
-    if (!_customSources.any((s) => s.id == details.id)) {
-      _customSources.add(newSource);
-    }
+    await _subscriptions.add(newSource);
     return newSource;
   }
 

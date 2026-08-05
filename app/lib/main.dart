@@ -88,6 +88,7 @@ import 'services/file_transfer_service.dart';
 import 'services/fullscreen_window.dart';
 import 'services/acquisition_ledger.dart';
 import 'services/content_generator_setup.dart';
+import 'services/subscription_store.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
 import 'services/platform_capabilities.dart';
@@ -269,10 +270,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? syntaxCapabilityTimer;
   final coreTransport = LocalCoreTransportService();
   final currentRoute = ValueNotifier<AppRoute>(AppRoute.discovery);
+  late final SubscriptionStore subscriptionStore =
+      SubscriptionStore.forCurrentUser();
   late final DiscoveryViewModel discoveryViewModel = DiscoveryViewModel(
     CompositeDiscoveryRepository(
-      PodcastDiscoveryRepository(),
-      YoutubeDiscoveryRepository(),
+      // One store across both sides: a subscription is a subscription, and
+      // only the composition root hands out one backed by a real directory.
+      PodcastDiscoveryRepository(subscriptions: subscriptionStore),
+      YoutubeDiscoveryRepository(subscriptions: subscriptionStore),
     ),
     mediaImportRepository,
     coreRepositories.contentPackage,

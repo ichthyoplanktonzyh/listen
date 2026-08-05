@@ -119,7 +119,7 @@ class AppLocalizations {
       'discoveryEmptyImports':
           'No imported media yet. Paste a YouTube link above to start.',
       'discoveryInputPlaceholder':
-          'Paste YouTube video or channel link here...',
+          'Paste a podcast feed address, or a YouTube video or channel link...',
       'discoveryResolving': 'Resolving URL...',
       'discoveryResolveFailed': 'Failed to resolve URL. Please retry.',
       'contentPackageTitle': 'Local learning package',
@@ -2197,7 +2197,7 @@ class AppLocalizations {
       'discoveryImports': '导入',
       'discoveryVideoCount': '{count} 个视频',
       'discoveryEmptyImports': '还没有导入的媒体，在上方粘贴 YouTube 链接开始。',
-      'discoveryInputPlaceholder': '在此粘贴 YouTube 视频或频道链接...',
+      'discoveryInputPlaceholder': '粘贴播客 feed 地址,或 YouTube 视频/频道链接...',
       'discoveryResolving': '正在解析链接...',
       'discoveryResolveFailed': '解析链接失败，请重试',
       'contentPackageTitle': '本地学习资源包',

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import '../../models/discovery.dart';
 import '../../services/podcast_feed_parser.dart';
+import '../../services/subscription_store.dart';
 import 'discovery_repository.dart';
 import 'media_import_repository.dart';
 
@@ -20,9 +21,13 @@ import 'media_import_repository.dart';
 /// A source id is the feed URL. For a podcast the feed address is the stable
 /// thing to point at; there is no separate channel identifier to prefer.
 final class PodcastDiscoveryRepository implements DiscoveryRepository {
-  PodcastDiscoveryRepository({HttpClient? client, String? starterAssetPath})
-    : _client = client ?? HttpClient(),
-      _starterAssetPath = starterAssetPath ?? _defaultStarterAsset;
+  PodcastDiscoveryRepository({
+    HttpClient? client,
+    String? starterAssetPath,
+    SubscriptionStore? subscriptions,
+  }) : _client = client ?? HttpClient(),
+       _starterAssetPath = starterAssetPath ?? _defaultStarterAsset,
+       _subscriptions = subscriptions ?? SubscriptionStore.inMemory();
 
   static const _defaultStarterAsset = 'assets/podcast_starter_feeds.json';
 
@@ -38,7 +43,14 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
   final Map<String, PodcastFeed> _feeds = {};
 
   List<MediaSource>? _starters;
-  final List<MediaSource> _customSources = [];
+
+  /// Subscribed feeds, durable when the composition root supplied a backed
+  /// store. Held here only through the store so a restart cannot disagree with
+  /// what is on screen.
+  final SubscriptionStore _subscriptions;
+
+  List<MediaSource> get _customSources =>
+      _subscriptions.of(MediaSourceType.podcast);
 
   /// A podcast source id is its feed URL, and YouTube channel ids are never
   /// URLs — so the shape answers this even before [sources] has been awaited
@@ -54,6 +66,7 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
 
   @override
   Future<List<MediaSource>> sources() async {
+    if (!_subscriptions.isLoaded) await _subscriptions.load();
     final starters = _starters ??= await _loadStarters();
     return List.unmodifiable([...starters, ..._customSources]);
   }
@@ -116,8 +129,7 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
       avatarUrl: feed.imageUrl,
     );
 
-    _customSources.removeWhere((existing) => existing.id == source.id);
-    _customSources.add(source);
+    await _subscriptions.add(source);
     return source;
   }
 

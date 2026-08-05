@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/data/repositories/podcast_discovery_repository.dart';
+import 'package:llplayer_next/data/repositories/media_import_repository.dart';
 import 'package:llplayer_next/models/discovery.dart';
+import 'package:llplayer_next/services/subscription_store.dart';
 import 'package:llplayer_next/services/podcast_feed_parser.dart';
 
 import 'discovery_test_helpers.dart';
@@ -193,10 +195,53 @@ void main() {
       expect(await repository.entriesFor(feedUrl()), hasLength(2));
     });
   });
+
+  test('a subscribed feed is still there after a restart', () async {
+    // The whole point: a paste used to add a channel that existed until quit.
+    final directory = Directory.systemTemp.createTempSync('subs-repo-');
+    addTearDown(() => directory.deleteSync(recursive: true));
+
+    final store = SubscriptionStore(directory: directory);
+    final subscribing = PodcastDiscoveryRepository(
+      client: HttpOverrides.runWithHttpOverrides(
+        HttpClient.new,
+        _RealHttpOverrides(),
+      ),
+      subscriptions: store,
+    );
+    final added = await subscribing.resolveCustomChannel(
+      feedUrl(),
+      _UnusedImportRepository(),
+    );
+
+    // A fresh store and repository, as a relaunch would build.
+    final relaunched = PodcastDiscoveryRepository(
+      client: HttpOverrides.runWithHttpOverrides(
+        HttpClient.new,
+        _RealHttpOverrides(),
+      ),
+      subscriptions: SubscriptionStore(directory: directory),
+    );
+
+    final sources = await relaunched.sources();
+    expect(sources.map((source) => source.id), contains(added.id));
+    expect(
+      sources.firstWhere((source) => source.id == added.id).name,
+      'Daily Listening',
+    );
+  });
 }
 
 /// The base class's own `createHttpClient` builds a real one.
 class _RealHttpOverrides extends HttpOverrides {}
+
+/// Subscribing to a podcast feed never consults the import repository; a stub
+/// that throws proves the flow does not quietly start depending on one.
+class _UnusedImportRepository implements MediaImportRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('subscribing must not touch imports');
+}
 
 const _feed = '''
 <?xml version="1.0" encoding="UTF-8"?>
