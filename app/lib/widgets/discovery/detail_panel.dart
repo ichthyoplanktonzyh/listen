@@ -4,6 +4,7 @@ import 'package:flutter/widget_previews.dart';
 import '../../localization.dart';
 import '../../models/api_failure.dart';
 import '../../models/discovery.dart';
+import '../../services/content_generator_setup.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -28,6 +29,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
     required this.generationStatus,
     required this.generatorPhase,
     required this.generationFailure,
+    this.generatorState = ContentGeneratorState.ready,
     required this.onDownload,
     required this.onCancelDownload,
     required this.onOpenPlayer,
@@ -50,6 +52,10 @@ class DiscoveryDetailPanel extends StatelessWidget {
   final ContentGenerationStatus generationStatus;
   final String? generatorPhase;
   final ApiFailure? generationFailure;
+
+  /// Which piece of the toolchain is missing, so the unavailable row names
+  /// the one thing to fix rather than saying "not configured".
+  final ContentGeneratorState generatorState;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
 
@@ -103,6 +109,7 @@ class DiscoveryDetailPanel extends StatelessWidget {
             generationStatus: generationStatus,
             generatorPhase: generatorPhase,
             generationFailure: generationFailure,
+            generatorState: generatorState,
             onDownload: onDownload,
             onCancelDownload: onCancelDownload,
             onGenerate: onGenerate,
@@ -305,6 +312,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
     required this.generationStatus,
     required this.generatorPhase,
     required this.generationFailure,
+    this.generatorState = ContentGeneratorState.ready,
     required this.onDownload,
     required this.onCancelDownload,
     required this.onGenerate,
@@ -320,6 +328,10 @@ class _UserJourneyActionsCard extends StatelessWidget {
   final ContentGenerationStatus generationStatus;
   final String? generatorPhase;
   final ApiFailure? generationFailure;
+
+  /// Which piece of the toolchain is missing, so the unavailable row names
+  /// the one thing to fix rather than saying "not configured".
+  final ContentGeneratorState generatorState;
   final VoidCallback onDownload;
   final VoidCallback onCancelDownload;
   final VoidCallback onGenerate;
@@ -544,7 +556,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
                     const SizedBox(width: ListenSpacing.gap6),
                     Expanded(
                       child: Text(
-                        l.text('discoveryGeneratorUnavailable'),
+                        l.text(_generatorUnavailableKey(generatorState)),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -554,7 +566,7 @@ class _UserJourneyActionsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: ListenSpacing.gap4),
                 Text(
-                  l.text('discoveryGeneratorUnavailableHint'),
+                  l.text('${_generatorUnavailableKey(generatorState)}Hint'),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
@@ -800,3 +812,13 @@ String _failureDetail(AppLocalizations l, ApiFailure failure) {
   if (message == null || message.isEmpty) return code;
   return '$code: ${message.length > 220 ? '${message.substring(0, 220)}…' : message}';
 }
+
+/// The copy key for each missing piece. Each names one thing to fix; a single
+/// "not configured" sentence would be honest about the state and useless
+/// about the cause.
+String _generatorUnavailableKey(ContentGeneratorState state) => switch (state) {
+  ContentGeneratorState.modelMissing => 'discoveryGeneratorNoModel',
+  ContentGeneratorState.whisperMissing => 'discoveryGeneratorNoWhisper',
+  ContentGeneratorState.generatorMissing ||
+  ContentGeneratorState.ready => 'discoveryGeneratorUnavailable',
+};

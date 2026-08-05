@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'content_generator_setup.dart';
+
 import 'package:crypto/crypto.dart';
 
 import '../models/content_package.dart';
@@ -89,25 +91,49 @@ abstract interface class ListenGenProcessRun {
 
 abstract interface class ListenGenProcessService {
   bool get isConfigured;
+
+  /// Which piece is missing, when [isConfigured] is false. "Not configured"
+  /// is not an actionable sentence; "no speech model installed" is.
+  ContentGeneratorState get state;
   Future<ListenGenProcessRun> start(ContentPackageGenerationRequest request);
 }
 
 final class LocalListenGenProcessService implements ListenGenProcessService {
-  LocalListenGenProcessService({String? executable, List<String>? providerArgs})
-    : _executable =
-          executable ??
-          Platform.environment['LISTEN_GEN_EXECUTABLE'] ??
-          'listen-gen',
-      _providerArgs = List.unmodifiable(
-        providerArgs ?? _providerArgsFromEnvironment(),
-      );
+  /// Built from a [ContentGeneratorSetup] the app resolved for itself.
+  ///
+  /// The environment variables that used to be the only way in are kept as a
+  /// developer override and nothing more. Requiring them was the bug: one of
+  /// them was a hand-written nested-escaped JSON array carrying a python
+  /// interpreter, a wrapper script path and a provider protocol, none of which
+  /// a person should have to know, and neither of which survives launching the
+  /// app from Finder.
+  LocalListenGenProcessService({
+    ContentGeneratorSetup setup = unresolvedContentGeneratorSetup,
+    String? executable,
+    List<String>? providerArgs,
+  }) : _executable =
+           executable ??
+           Platform.environment['LISTEN_GEN_EXECUTABLE'] ??
+           (setup.generatorPath.isNotEmpty ? setup.generatorPath : 'listen-gen'),
+       _providerArgs = List.unmodifiable(
+         providerArgs ??
+             _providerArgsFromEnvironment() ??
+             (setup.state == ContentGeneratorState.ready
+                 ? contentGeneratorProviderArguments(setup)
+                 : const <String>[]),
+       ),
+       _setup = setup;
 
   final String _executable;
   final List<String> _providerArgs;
+  final ContentGeneratorSetup _setup;
 
-  static List<String> _providerArgsFromEnvironment() {
+  /// Null when unset, so an override can be told from an absent one: an
+  /// invalid override must not silently fall back to the resolved toolchain
+  /// and generate with something other than what the developer asked for.
+  static List<String>? _providerArgsFromEnvironment() {
     final encoded = Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS'];
-    if (encoded == null || encoded.isEmpty) return const [];
+    if (encoded == null || encoded.isEmpty) return null;
     try {
       final value = jsonDecode(encoded);
       if (value is! List<dynamic> || value.any((item) => item is! String)) {
@@ -121,6 +147,10 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
 
   @override
   bool get isConfigured => _providerArgs.isNotEmpty;
+
+  @override
+  ContentGeneratorState get state =>
+      isConfigured ? ContentGeneratorState.ready : _setup.state;
 
   @override
   Future<ListenGenProcessRun> start(

@@ -1,3 +1,4 @@
+import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -219,6 +220,10 @@ class _FakePackageRepository implements ContentPackageRepository {
   bool get coreAvailable => coreIsAvailable;
   @override
   bool get generatorConfigured => true;
+  @override
+  ContentGeneratorState get generatorState => generatorConfigured
+      ? ContentGeneratorState.ready
+      : ContentGeneratorState.generatorMissing;
   @override
   ApiFailure failureDetail(Object error) =>
       error is ApiFailure ? error : ApiFailure(raw: '', code: '$error');

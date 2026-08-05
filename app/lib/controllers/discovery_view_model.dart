@@ -8,6 +8,7 @@ import '../data/repositories/media_library_repository.dart';
 import '../data/repositories/content_package_repository.dart';
 import '../controllers/download_controller.dart';
 import '../models/content_package.dart';
+import '../services/content_generator_setup.dart';
 import '../services/listen_gen_process_service.dart';
 import '../models/discovery.dart';
 import '../models/media_download.dart';
@@ -37,6 +38,7 @@ class DiscoveryState {
     Map<String, String?> generatorPhases = const {},
     Map<String, ApiFailure?> generationFailures = const {},
     this.generatorConfigured = true,
+    this.generatorState = ContentGeneratorState.ready,
   }) : sources = List.unmodifiable(sources),
        entries = List.unmodifiable(entries),
        downloadSnapshots = Map.unmodifiable(downloadSnapshots),
@@ -82,6 +84,11 @@ class DiscoveryState {
   /// offers the action — an unavailable capability is never dressed up as a
   /// button that fails on press.
   final bool generatorConfigured;
+
+  /// Which piece of the toolchain is missing when it is not configured, so
+  /// the surface can name the one thing to fix instead of saying "not
+  /// configured" at someone.
+  final ContentGeneratorState generatorState;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -162,6 +169,7 @@ class DiscoveryState {
     Map<String, String?>? generatorPhases,
     Map<String, ApiFailure?>? generationFailures,
     bool? generatorConfigured,
+    ContentGeneratorState? generatorState,
   }) => DiscoveryState(
     loading: loading ?? this.loading,
     entriesLoading: entriesLoading ?? this.entriesLoading,
@@ -185,6 +193,7 @@ class DiscoveryState {
     generatorPhases: generatorPhases ?? this.generatorPhases,
     generationFailures: generationFailures ?? this.generationFailures,
     generatorConfigured: generatorConfigured ?? this.generatorConfigured,
+    generatorState: generatorState ?? this.generatorState,
   );
 }
 
@@ -206,6 +215,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
     // needs it before it decides what to offer.
     _state = _state.copyWith(
       generatorConfigured: _contentPackageRepository.generatorConfigured,
+      generatorState: _contentPackageRepository.generatorState,
     );
   }
 
@@ -948,6 +958,10 @@ class _FakeContentPackageRepository implements ContentPackageRepository {
   bool get coreAvailable => false;
   @override
   bool get generatorConfigured => false;
+  @override
+  ContentGeneratorState get generatorState => generatorConfigured
+      ? ContentGeneratorState.ready
+      : ContentGeneratorState.generatorMissing;
   @override
   Future<String?> pickPackage() async => null;
   @override

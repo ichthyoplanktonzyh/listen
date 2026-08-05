@@ -86,6 +86,7 @@ import 'services/diagnostic_log_export_service.dart';
 import 'services/external_tools.dart';
 import 'services/file_transfer_service.dart';
 import 'services/fullscreen_window.dart';
+import 'services/content_generator_setup.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
 import 'services/platform_capabilities.dart';
@@ -127,14 +128,20 @@ import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/player/shortcut_cheat_sheet.dart';
 import 'widgets/settings/settings_flow.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   const FvpDesktopPlaybackBootstrap().initialize();
+  // Resolved before the first frame: the discovery surface decides whether to
+  // offer generation from this, and an unavailable capability must never be
+  // shown as an available one while a lookup is still in flight.
+  final generatorSetup = await const ContentGeneratorLocator().resolve();
   runApp(
-    const ListenApp(
-      platformCapabilities: LocalPlatformCapabilities(),
-      pathHelper: PlatformPathHelper(),
-      smokeLaunchConfiguration: EnvironmentSmokeLaunchConfigurationService(),
+    ListenApp(
+      platformCapabilities: const LocalPlatformCapabilities(),
+      pathHelper: const PlatformPathHelper(),
+      smokeLaunchConfiguration:
+          const EnvironmentSmokeLaunchConfigurationService(),
+      generatorSetup: generatorSetup,
     ),
   );
 }
@@ -174,11 +181,15 @@ class ListenApp extends StatelessWidget {
     required this.platformCapabilities,
     required this.pathHelper,
     required this.smokeLaunchConfiguration,
+    this.generatorSetup = unresolvedContentGeneratorSetup,
   });
 
   final PlatformCapabilities platformCapabilities;
   final PlatformPathHelper pathHelper;
   final SmokeLaunchConfigurationService smokeLaunchConfiguration;
+
+  /// The generation toolchain found on this machine, resolved once in `main`.
+  final ContentGeneratorSetup generatorSetup;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -201,6 +212,7 @@ class ListenApp extends StatelessWidget {
         platformCapabilities: platformCapabilities,
         pathHelper: pathHelper,
         smokeLaunchConfiguration: smokeLaunchConfiguration,
+        generatorSetup: generatorSetup,
       ),
     ),
   );
@@ -232,11 +244,15 @@ class PlayerScreen extends StatefulWidget {
     required this.platformCapabilities,
     required this.pathHelper,
     required this.smokeLaunchConfiguration,
+    this.generatorSetup = unresolvedContentGeneratorSetup,
   });
 
   final PlatformCapabilities platformCapabilities;
   final PlatformPathHelper pathHelper;
   final SmokeLaunchConfigurationService smokeLaunchConfiguration;
+
+  /// The generation toolchain found on this machine, resolved once in `main`.
+  final ContentGeneratorSetup generatorSetup;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -262,7 +278,10 @@ class _PlayerScreenState extends State<PlayerScreen>
     coreRepositories.mediaLibrary,
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);
-  late final coreRepositories = LocalCoreRepositories(coreTransport);
+  late final coreRepositories = LocalCoreRepositories(
+    coreTransport,
+    generatorSetup: widget.generatorSetup,
+  );
   late final coreSessionController = CoreSessionController(
     repository: coreSessionRepository,
     currentMediaId: () => playerController.mediaId,

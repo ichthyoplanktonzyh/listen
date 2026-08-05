@@ -1,3 +1,4 @@
+import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'dart:async';
 import 'package:llplayer_next/models/discovery.dart';
 import 'package:llplayer_next/models/media_download.dart';
@@ -267,6 +268,14 @@ class TestContentPackageRepository implements ContentPackageRepository {
 
   @override
   bool get generatorConfigured => true;
+
+  @override
+
+  ContentGeneratorState get generatorState => generatorConfigured
+
+      ? ContentGeneratorState.ready
+
+      : ContentGeneratorState.generatorMissing;
 
   @override
   ApiFailure failureDetail(Object error) => error is ListenGenProcessFailure

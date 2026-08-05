@@ -91,9 +91,16 @@ void main() {
     // "No generator on this machine" is an unavailable capability, not a
     // failed run, so it carries its own sentence plus a hint naming the real
     // next step. Without the hint the row is honest but still a dead end.
+    // Every reason, plus its hint. A missing model told to install listen-gen
+    // is worse than saying nothing: it sends the user to fix the one thing
+    // that is already there.
     for (final key in const [
       'discoveryGeneratorUnavailable',
       'discoveryGeneratorUnavailableHint',
+      'discoveryGeneratorNoModel',
+      'discoveryGeneratorNoModelHint',
+      'discoveryGeneratorNoWhisper',
+      'discoveryGeneratorNoWhisperHint',
     ]) {
       for (final locale in const ['en', 'zh']) {
         final copy = AppLocalizations(Locale(locale)).text(key);

@@ -183,6 +183,7 @@ class DiscoveryHome extends StatelessWidget {
                           generatorPhase: state.generatorPhaseOf(
                             currentEntry.id,
                           ),
+                          generatorState: state.generatorState,
                           generationFailure: state.generationFailureOf(
                             currentEntry.id,
                           ),

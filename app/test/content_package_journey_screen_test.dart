@@ -1,3 +1,4 @@
+import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -110,6 +111,10 @@ class _GeneratingRepository implements ContentPackageRepository {
   @override
   bool get generatorConfigured => true;
   @override
+  ContentGeneratorState get generatorState => generatorConfigured
+      ? ContentGeneratorState.ready
+      : ContentGeneratorState.generatorMissing;
+  @override
   ApiFailure failureDetail(Object error) => error is ListenGenProcessFailure
       ? ApiFailure(raw: '', code: error.code)
       : const ApiFailure(raw: '');
@@ -151,6 +156,10 @@ class _WidgetRepository implements ContentPackageRepository {
   bool get coreAvailable => true;
   @override
   bool get generatorConfigured => false;
+  @override
+  ContentGeneratorState get generatorState => generatorConfigured
+      ? ContentGeneratorState.ready
+      : ContentGeneratorState.generatorMissing;
   @override
   ApiFailure failureDetail(Object error) => const ApiFailure(raw: '');
   @override

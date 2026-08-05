@@ -81,8 +81,15 @@ class AppLocalizations {
       'discoveryGenerateCancelled': 'Generation cancelled',
       'discoveryGeneratorUnavailable': 'No generator on this machine',
       'discoveryGeneratorUnavailableHint':
-          'Configure listen-gen in settings to build packages here. Packages '
-          'imported from a file still work.',
+          'Install listen-gen, or set its path in Settings. Packages imported '
+          'from a file still work.',
+      'discoveryGeneratorNoModel': 'No speech model installed',
+      'discoveryGeneratorNoModelHint':
+          'Put a whisper .bin model in Application Support > listen > models > '
+          'whisper, or set its path in Settings.',
+      'discoveryGeneratorNoWhisper': 'whisper-cli not found',
+      'discoveryGeneratorNoWhisperHint':
+          'Install whisper-cpp, or set its path in Settings.',
       'genFailureNotConfigured': 'The generator is not configured.',
       'genFailureStartFailed': 'The generator would not start.',
       'genFailureProtocolInvalid':

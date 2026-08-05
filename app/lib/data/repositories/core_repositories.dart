@@ -30,6 +30,7 @@ import 'speech_synthesis_repository.dart';
 import 'subtitle_analysis_repository.dart';
 import 'transcription_repository.dart';
 import 'writing_task_repository.dart';
+import '../../services/content_generator_setup.dart';
 import '../../services/listen_gen_process_service.dart';
 import '../../services/media_import_file_service.dart';
 
@@ -37,8 +38,14 @@ import '../../services/media_import_file_service.dart';
 /// Long-lived repositories receive a deferred API lookup; route-scoped ones
 /// are created only while the core is connected.
 final class LocalCoreRepositories {
-  LocalCoreRepositories(this._transport)
-    : realtimeConversation = LocalRealtimeConversationRepository(
+  /// [generatorSetup] is resolved once at startup, because whether the
+  /// generation toolchain exists is a property of the machine rather than of
+  /// any request, and the discovery surface must know before it offers to
+  /// generate anything.
+  LocalCoreRepositories(
+    this._transport, {
+    ContentGeneratorSetup generatorSetup = unresolvedContentGeneratorSetup,
+  }) : realtimeConversation = LocalRealtimeConversationRepository(
         () => _transport.currentApi!,
       ),
       hunting = LocalHuntingRepository(() => _transport.currentApi),
@@ -51,7 +58,7 @@ final class LocalCoreRepositories {
       contentPackage = LocalContentPackageRepository(
         () => _transport.currentApi,
         const LocalMediaImportFileService(),
-        LocalListenGenProcessService(),
+        LocalListenGenProcessService(setup: generatorSetup),
       ),
       readingTask = LocalReadingTaskRepository(() => _transport.currentApi),
       readingSession = LocalReadingSessionRepository(
