@@ -8,6 +8,7 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../common/listen_loading.dart';
+import 'cover_image.dart';
 import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
 import 'source_display_name.dart';
@@ -206,10 +207,14 @@ class _CardCover extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (thumbnail != null && thumbnail.isNotEmpty)
-            Image.network(
-              thumbnail,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => _CoverPlaceholder(
+            DiscoveryCoverImage(
+              url: thumbnail,
+              // The grid cell has no fixed width, so the shelf's column width
+              // stands in; either way the decode is bounded by something the
+              // card is actually drawn at rather than by the source artwork.
+              width: axis == Axis.horizontal ? 168 : 320,
+              tone: background,
+              fallback: _CoverPlaceholder(
                 ink: ink,
                 sourceName: source.name,
                 title: entry.title,

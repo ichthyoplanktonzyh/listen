@@ -10,6 +10,7 @@ import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
 import '../common/listen_loading.dart';
+import 'cover_image.dart';
 import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
 import 'source_display_name.dart';
@@ -164,10 +165,14 @@ class _HeroCover extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (thumbnail != null && thumbnail.isNotEmpty)
-              Image.network(
-                thumbnail,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => _HeroCaption(
+              DiscoveryCoverImage(
+                url: thumbnail,
+                // The hero fills the panel, which is 380 wide in the preview
+                // and narrower on a split layout; decoding to the wider case
+                // keeps it crisp without reaching 3000px.
+                width: 380,
+                tone: background,
+                fallback: _HeroCaption(
                   ink: ink,
                   sourceName: source.name,
                   title: entry.title,
