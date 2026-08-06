@@ -60,6 +60,8 @@ def main() -> int:
         return 0
     if mode == "no-output":
         return 0
+    if mode == "delete-model":
+        Path(model_path).unlink()
     if mode == "sleep":
         time.sleep(30)
         return 0

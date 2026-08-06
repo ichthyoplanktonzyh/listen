@@ -132,8 +132,18 @@ class WhisperCppAsrAdapter:
         if not media_path.is_file():
             raise ConversionError("media input is not a regular file")
         resolved = self._resolve_executable()
-        runtime_sha256 = _sha256_file(Path(resolved))
-        model_sha256 = _sha256_file(self.model_path)
+        try:
+            runtime_sha256 = _sha256_file(Path(resolved))
+        except OSError as error:
+            raise ConversionError(
+                "whisper.cpp provider could not be started"
+            ) from error
+        try:
+            model_sha256 = _sha256_file(self.model_path)
+        except OSError as error:
+            raise ConversionError(
+                "whisper.cpp model must be a regular file"
+            ) from error
         with tempfile.TemporaryDirectory(prefix="listen-gen-whisper-") as directory:
             output_prefix = Path(directory) / "result"
             argv = [
@@ -166,9 +176,16 @@ class WhisperCppAsrAdapter:
                 raise ConversionError(
                     f"whisper.cpp provider failed with exit status {completed.returncode}"
                 )
+            try:
+                runtime_sha256_after = _sha256_file(Path(resolved))
+                model_sha256_after = _sha256_file(self.model_path)
+            except OSError as error:
+                raise ConversionError(
+                    "whisper.cpp provider runtime or model changed during transcription"
+                ) from error
             if (
-                _sha256_file(Path(resolved)) != runtime_sha256
-                or _sha256_file(self.model_path) != model_sha256
+                runtime_sha256_after != runtime_sha256
+                or model_sha256_after != model_sha256
             ):
                 raise ConversionError(
                     "whisper.cpp provider runtime or model changed during transcription"
@@ -179,7 +196,13 @@ class WhisperCppAsrAdapter:
                     "whisper.cpp provider produced no JSON output"
                 )
             try:
-                raw = json.loads(result_path.read_text(encoding="utf-8"))
+                result_bytes = result_path.read_bytes()
+            except OSError as error:
+                raise ConversionError(
+                    "whisper.cpp provider returned an invalid result"
+                ) from error
+            try:
+                raw = json.loads(result_bytes)
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ConversionError(
                     "whisper.cpp provider returned invalid JSON"

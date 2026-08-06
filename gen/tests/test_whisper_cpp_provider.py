@@ -426,6 +426,43 @@ class WhisperCppProviderTests(unittest.TestCase):
             observation = json.loads(observed.read_text(encoding="utf-8"))
             self.assert_pid_dead(int(observation["pid"]))
 
+    def test_model_deleted_during_transcription_maps_to_provider_failed(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model = self.write_model(root)
+            output = root / "lesson.listenpkg"
+            completed = run_cli(
+                self.base_argv(output, model=model, machine=True),
+                env=self.whisper_env(
+                    mode="delete-model",
+                    observed=root / "observed.json",
+                ),
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertFalse(model.exists())
+            events = parse_events(completed.stdout)
+            final = self.assert_terminal(events)
+            self.assertEqual(final["event"], "failed")
+            self.assertEqual(final["code"], "provider_failed")
+            self.assertEqual(
+                final["message"], "The transcription provider failed."
+            )
+            self.assertNotIn("input_not_found", completed.stdout)
+            self.assertNotIn("package_write_failed", completed.stdout)
+            self.assertNotIn("Traceback", completed.stdout)
+            self.assertNotIn(str(model), completed.stdout)
+            self.assertNotIn("listen-gen-whisper-", completed.stdout)
+            self.assertNotIn("listen-gen-audio-", completed.stdout)
+            self.assertFalse(output.exists())
+            leftovers = [
+                path.name
+                for path in root.iterdir()
+                if ".machine.tmp" in path.name
+            ]
+            self.assertEqual(leftovers, [])
+
     def test_invalid_arguments_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
