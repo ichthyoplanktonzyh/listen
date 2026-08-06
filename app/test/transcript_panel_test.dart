@@ -225,10 +225,14 @@ void _analysisGroup() {
     await tester.pumpAndSettle();
 
     // Tap a word in the first sentence. The panel records the press itself,
-    // because `TokenLine` hands word taps over without a position.
-    final target = tester.getCenter(
+    // because `TokenLine` hands word taps over without a position. The
+    // transcript is left-aligned, so aim just inside the row's leading edge —
+    // where the opening word sits — rather than the row's geometric centre,
+    // which now lands in the ragged-right whitespace past the text.
+    final row = tester.getRect(
       find.byKey(const ValueKey('transcript-cue-cue-0')),
     );
+    final target = Offset(row.left + 40, row.top + 22);
     await tester.tapAt(target);
     await tester.pumpAndSettle();
 

@@ -7,7 +7,6 @@ import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
-import '../../utils/format_duration.dart';
 import '../../utils/transcript_translation.dart';
 import '../subtitle/token_line.dart';
 
@@ -182,25 +181,12 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                ListTile(
+                                _TranscriptCueRow(
                                   key: ValueKey('transcript-cue-${cue.id}'),
                                   selected: selected,
-                                  selectedTileColor: colors.primaryContainer
-                                      .withValues(alpha: 0.5),
-                                  contentPadding: ListenPadding.row,
-                                  leading: SizedBox(
-                                    width: 58,
-                                    child: Text(
-                                      formatDuration(cue.start),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelMedium
-                                          ?.copyWith(
-                                            color: colors.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ),
-                                  title: Column(
+                                  accentColor: colors.primary,
+                                  onTap: () => widget.onSeekCue(cue),
+                                  child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     mainAxisSize: MainAxisSize.min,
@@ -212,7 +198,31 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                           capabilityProfiles:
                                               widget.capabilityProfiles,
                                           showStyles: widget.showStyles,
-                                          baseColor: effectiveBaseColor,
+                                          // Read as a paragraph, ragged-right.
+                                          // TokenLine defaults to centre for the
+                                          // on-video subtitle overlay; in the
+                                          // transcript that centres every
+                                          // wrapped line, which reads as a
+                                          // column of poetry rather than prose.
+                                          textAlign: TextAlign.start,
+                                          // Tight prose leading so one wrapped
+                                          // sentence reads as one sentence. The
+                                          // subtitle default (font metrics) was
+                                          // spacing lines far enough apart that a
+                                          // wrapped line looked like the next
+                                          // sentence.
+                                          lineHeight: 1.35,
+                                          // The playing sentence reads in the
+                                          // primary hue rather than under a
+                                          // full-width fill block: the
+                                          // reference marks the current line
+                                          // with blue text, and a fill that
+                                          // wide becomes the brightest thing on
+                                          // the panel — louder than the words it
+                                          // is meant to point at.
+                                          baseColor: selected
+                                              ? colors.primary
+                                              : effectiveBaseColor,
                                           onWord: (token, cue) => widget.onWord(
                                             token,
                                             cue,
@@ -247,7 +257,6 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                         ),
                                     ],
                                   ),
-                                  onTap: () => widget.onSeekCue(cue),
                                 ),
                                 // The analysis belongs to one sentence, so it
                                 // opens inside that sentence. As a panel tab it
@@ -351,6 +360,57 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
     widget.scrollController.jumpTo(target.toDouble());
     return true;
   }
+}
+
+/// One sentence in the transcript: the text (and its translation line), made
+/// tappable to seek, with the playing sentence marked by a left accent rule.
+///
+/// This replaced a `ListTile` that carried a 58px timecode gutter on every row
+/// and a full-width `primaryContainer` fill on the current one. Together those
+/// made the transcript read like a subtitle editor — a column of timecodes with
+/// a lit block sliding down it — rather than a page of text. The timecodes go
+/// (seeking is a click on the sentence, and the reference reader shows none),
+/// and the current line is carried by primary-hue text plus a thin rule instead
+/// of a block that outshouts the words.
+///
+/// The rule keeps its 2.5px width whether or not the row is current — only its
+/// colour changes — so a sentence becoming current never nudges its text
+/// sideways.
+class _TranscriptCueRow extends StatelessWidget {
+  const _TranscriptCueRow({
+    super.key,
+    required this.selected,
+    required this.accentColor,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool selected;
+  final Color accentColor;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(
+            color: selected ? accentColor : Colors.transparent,
+            width: 2.5,
+          ),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: ListenSpacing.gap16,
+          vertical: ListenSpacing.gap12,
+        ),
+        child: child,
+      ),
+    ),
+  );
 }
 
 /// The translation of one sentence, under the original.

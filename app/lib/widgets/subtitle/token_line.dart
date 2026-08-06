@@ -42,6 +42,7 @@ class TokenLine extends StatefulWidget {
     this.mediaPosition,
     this.subtitleOffset = Duration.zero,
     this.textAlign = TextAlign.center,
+    this.lineHeight,
   });
 
   final Cue cue;
@@ -72,6 +73,14 @@ class TokenLine extends StatefulWidget {
   /// Center for subtitle/transcript surfaces; start for the reading view's
   /// flowing paragraphs.
   final TextAlign textAlign;
+
+  /// Line-height multiplier for wrapped lines. Null keeps the font's own
+  /// metrics — right for the one- or two-line subtitle drawn over video, where
+  /// the app font's tall default leading reads as generous rather than broken.
+  /// The transcript, which wraps long sentences into paragraphs, passes a
+  /// tighter value so a single sentence's lines sit together instead of drifting
+  /// apart like separate sentences.
+  final double? lineHeight;
 
   /// Unified grouping presentation: `off`, `prosodic`, `semantic`, `compare`.
   /// The prosodic ([chunkPartition]) and semantic ([senseGroups]) data both
@@ -127,6 +136,7 @@ class _TokenLineState extends State<TokenLine> {
   bool get showStyles => widget.showStyles;
   double get fontSize => widget.fontSize;
   String? get fontFamily => widget.fontFamily;
+  double? get lineHeight => widget.lineHeight;
   Color? get baseColor => widget.baseColor;
   int? get currentTokenIndex => widget.currentTokenIndex;
   SentenceChunkPartition? get chunkPartition => widget.chunkPartition;
@@ -650,6 +660,7 @@ class _TokenLineState extends State<TokenLine> {
     final base = TextStyle(
       fontSize: fontSize,
       fontFamily: fontFamily,
+      height: lineHeight,
       // Glow is the charter's caption treatment (#30): the current word IS
       // the signal teal with a soft halo; the other styles keep the gentler
       // lerp. overlaySignal, not colorScheme.primary — over video the light
