@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../localization.dart';
 import '../../models/content_channel.dart';
 import '../../theme/breakpoints.dart';
-import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/media_title.dart';
 import '../common/content_settle.dart';
@@ -60,7 +59,6 @@ class MediaWorkbench extends StatefulWidget {
 class _MediaWorkbenchState extends State<MediaWorkbench> {
   static const splitterWidth = 9.0;
   static const defaultMediaFraction = 0.42;
-  static const compactMediaFraction = 0.32;
   late double _mediaFraction;
 
   @override
@@ -131,15 +129,13 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
                         SizedBox(
                           height: availableHeight * effectiveFraction,
                           child: _MediaPane(
+                            mediaTitle: widget.mediaTitle,
                             playerStage: widget.playerStage,
-                            onCompactMedia: () =>
-                                _setMediaFraction(compactMediaFraction),
-                            onResetLayout: () =>
-                                _setMediaFraction(defaultMediaFraction),
-                            onCollapse: widget.onCollapse,
                           ),
                         ),
                         _WorkbenchSplitter.horizontal(
+                          onReset: () =>
+                              _setMediaFraction(defaultMediaFraction),
                           onDrag: (delta) {
                             _setMediaFraction(
                               (_mediaFraction + delta / availableHeight).clamp(
@@ -178,15 +174,12 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
                       SizedBox(
                         width: availableWidth * effectiveFraction,
                         child: _MediaPane(
+                          mediaTitle: widget.mediaTitle,
                           playerStage: widget.playerStage,
-                          onCompactMedia: () =>
-                              _setMediaFraction(compactMediaFraction),
-                          onResetLayout: () =>
-                              _setMediaFraction(defaultMediaFraction),
-                          onCollapse: widget.onCollapse,
                         ),
                       ),
                       _WorkbenchSplitter(
+                        onReset: () => _setMediaFraction(defaultMediaFraction),
                         onDrag: (delta) {
                           _setMediaFraction(
                             (_mediaFraction + delta / availableWidth).clamp(
@@ -255,25 +248,7 @@ class _SessionHeader extends StatelessWidget {
                 onPressed: onCollapse,
                 icon: const Icon(Icons.home_outlined),
               ),
-            Flexible(
-              // The header reads the title, not the download artefact (§3.7):
-              // extension, provider id and trailing date are stripped for
-              // display. The raw file name stays one hover away, so nothing is
-              // hidden — a learner who needs the exact file still has it.
-              child: Tooltip(
-                message: mediaTitle,
-                child: Text(
-                  displayMediaTitle(mediaTitle),
-                  key: const Key('workbench-media-title'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-            const SizedBox(width: ListenSpacing.gap16),
+            const Spacer(),
             ContentChannelSwitcher(
               selected: selectedChannel,
               availability: availability,
@@ -298,12 +273,21 @@ class _SessionHeader extends StatelessWidget {
   }
 }
 
+/// The drag handle between the two panes.
+///
+/// Double-clicking it restores the default split. That is where the two
+/// layout buttons went: resetting a split is an action on the splitter, and
+/// putting it on the splitter costs no permanent chrome in the media pane.
 class _WorkbenchSplitter extends StatelessWidget {
-  const _WorkbenchSplitter({required this.onDrag}) : _vertical = false;
-  const _WorkbenchSplitter.horizontal({required this.onDrag})
-    : _vertical = true;
+  const _WorkbenchSplitter({required this.onDrag, required this.onReset})
+    : _vertical = false;
+  const _WorkbenchSplitter.horizontal({
+    required this.onDrag,
+    required this.onReset,
+  }) : _vertical = true;
 
   final ValueChanged<double> onDrag;
+  final VoidCallback onReset;
   final bool _vertical;
 
   @override
@@ -320,6 +304,7 @@ class _WorkbenchSplitter extends StatelessWidget {
         child: GestureDetector(
           key: const Key('media-workbench-splitter'),
           behavior: HitTestBehavior.opaque,
+          onDoubleTap: onReset,
           onHorizontalDragUpdate: _vertical
               ? null
               : (details) => onDrag(details.delta.dx),
@@ -341,63 +326,61 @@ class _WorkbenchSplitter extends StatelessWidget {
   }
 }
 
+/// The media half of the workbench: what this is, and the picture.
+///
+/// It used to open with a 56px toolbar holding a decorative play glyph and two
+/// layout buttons — none of them actions on the media — and then centre the
+/// video inside a padded 16:9 box, which left a band of empty surface above
+/// and below it. The title, meanwhile, was a single ellipsized line squeezed
+/// into the session header between the channel pills and the menus.
+///
+/// So the title comes here, where there is room for it to be the heading of
+/// the thing it names, and the video takes the width it is given. Resetting
+/// the split moved to a double-click on the splitter: that is the thing being
+/// reset, and it costs no permanent chrome.
 class _MediaPane extends StatelessWidget {
-  const _MediaPane({
-    required this.playerStage,
-    required this.onCompactMedia,
-    required this.onResetLayout,
-    this.onCollapse,
-  });
+  const _MediaPane({required this.mediaTitle, required this.playerStage});
 
+  final String mediaTitle;
   final Widget playerStage;
-  final VoidCallback? onCompactMedia;
-  final VoidCallback? onResetLayout;
-  final VoidCallback? onCollapse;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final l = AppLocalizations.of(context);
     return ColoredBox(
       color: colors.surface,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 56,
+          Padding(
+            padding: ListenPadding.card,
+            // The heading reads the title, not the download artefact (§3.7):
+            // extension, provider id and trailing date are stripped for
+            // display. The raw file name stays one hover away, so nothing is
+            // hidden — a learner who needs the exact file still has it.
+            child: Tooltip(
+              message: mediaTitle,
+              child: Text(
+                displayMediaTitle(mediaTitle),
+                key: const Key('workbench-media-title'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: ListenSpacing.gap16,
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.play_circle_outline,
-                    size: ListenIconSize.control,
-                    color: colors.primary,
-                  ),
-                  const Spacer(),
-                  if (onCompactMedia != null)
-                    IconButton(
-                      tooltip: l.text('compactMediaPane'),
-                      onPressed: onCompactMedia,
-                      icon: const Icon(Icons.compress),
-                    ),
-                  if (onResetLayout != null)
-                    IconButton(
-                      tooltip: l.text('resetWorkbenchLayout'),
-                      onPressed: onResetLayout,
-                      icon: const Icon(Icons.restart_alt),
-                    ),
-                ],
-              ),
-            ),
-          ),
-          Divider(height: 1, color: colors.outlineVariant),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Center(
+              // Top-aligned rather than centred: the picture belongs under its
+              // heading, and on an audio file the leftover space collects at
+              // the bottom instead of framing an empty box.
+              child: Align(
+                alignment: Alignment.topCenter,
                 child: AspectRatio(aspectRatio: 16 / 9, child: playerStage),
               ),
             ),

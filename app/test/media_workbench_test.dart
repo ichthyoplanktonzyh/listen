@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -128,6 +129,39 @@ void main() {
         .width;
     expect(widthAfter, greaterThan(widthBefore));
     expect(tester.takeException(), isNull);
+
+    // The splitter also answers a double-click, so a drag leaves that
+    // recognizer's tracking timer behind. Let it expire inside the test.
+    await tester.pump(kDoubleTapTimeout);
+  });
+
+  testWidgets('double-clicking the splitter restores the default split', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    // The two layout buttons this replaces sat in a 56px toolbar above the
+    // video, permanently, for an action taken once in a while.
+    final fractions = <double>[];
+    await tester.pumpWidget(
+      localized(
+        MediaWorkbench(
+          mediaTitle: 'CNN 10.mp4',
+          playerStage: const ColoredBox(color: Colors.black),
+          learningPanel: const ColoredBox(color: Colors.white),
+          mediaFraction: 0.6,
+          onMediaFractionChanged: fractions.add,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('media-workbench-splitter')));
+    await tester.pump(kDoubleTapMinTime);
+    await tester.tap(find.byKey(const Key('media-workbench-splitter')));
+    await tester.pump(kDoubleTapTimeout);
+
+    expect(fractions, [0.42]);
   });
 
   testWidgets('media workbench stacks panes in a narrow window', (
