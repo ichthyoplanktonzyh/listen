@@ -5,7 +5,7 @@ import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ContextManager, Iterator, Protocol
+from typing import Any, Callable, ContextManager, Iterator, Protocol
 
 from .package import ConversionError
 from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
@@ -43,6 +43,7 @@ class FfmpegAudioPreprocessor:
         ffprobe_executable: str = "ffprobe",
         ffmpeg_executable: str = "ffmpeg",
         timeout_seconds: float = 300.0,
+        progress: Callable[[str], None] | None = None,
     ):
         if not ffprobe_executable or not ffmpeg_executable:
             raise ConversionError("media tool executables must be non-empty")
@@ -51,6 +52,7 @@ class FfmpegAudioPreprocessor:
         self.ffprobe_executable = ffprobe_executable
         self.ffmpeg_executable = ffmpeg_executable
         self.timeout_seconds = timeout_seconds
+        self.progress = progress
 
     def _run_probe(self, media_path: Path) -> tuple[AudioStream, ...]:
         try:
@@ -123,9 +125,13 @@ class FfmpegAudioPreprocessor:
     ) -> Iterator[PreparedAudio]:
         if not media_path.is_file():
             raise ConversionError("media input is not a regular file")
+        if self.progress is not None:
+            self.progress("probing_media")
         stream = self._select_stream(self._run_probe(media_path), audio_stream_index)
         with tempfile.TemporaryDirectory(prefix="listen-gen-audio-") as directory:
             output_path = Path(directory) / "normalized.wav"
+            if self.progress is not None:
+                self.progress("normalizing_audio")
             try:
                 completed = run_argv(
                     [

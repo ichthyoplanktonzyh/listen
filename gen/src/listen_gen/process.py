@@ -64,6 +64,9 @@ def run_argv(
         except subprocess.TimeoutExpired as error:
             _terminate_group(process)
             raise ProcessTimedOut from error
+        except BaseException:
+            _terminate_group(process)
+            raise
 
     assert process.stdout is not None
     chunks: queue.Queue[bytes | None] = queue.Queue(maxsize=2)
@@ -99,6 +102,9 @@ def run_argv(
         reader.join()
         return result
     except (ProcessTimedOut, ProcessOutputTooLarge):
+        _terminate_group(process)
+        raise
+    except BaseException:
         _terminate_group(process)
         raise
     finally:

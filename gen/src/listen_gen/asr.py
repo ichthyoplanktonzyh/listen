@@ -6,7 +6,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from .media import AudioPreprocessor
 from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
@@ -72,12 +72,17 @@ class AsrAdapter(Protocol):
 class FixtureAsrAdapter:
     """Offline adapter for contract tests; it never contacts a service."""
 
-    def __init__(self, fixture_path: Path):
+    def __init__(
+        self, fixture_path: Path, *, progress: Callable[[str], None] | None = None
+    ):
         self.fixture_path = fixture_path
+        self.progress = progress
 
     def transcribe(self, media_path: Path) -> AsrTranscript:
         if not media_path.is_file():
             raise ConversionError("media input is not a regular file")
+        if self.progress is not None:
+            self.progress("transcribing")
         raw = json.loads(self.fixture_path.read_text(encoding="utf-8"))
         return _parse_transcript(raw)
 
@@ -90,7 +95,14 @@ class CommandAsrAdapter:
     to stdout. Shell parsing is deliberately never involved.
     """
 
-    def __init__(self, executable: str, arguments: list[str], timeout_seconds: float):
+    def __init__(
+        self,
+        executable: str,
+        arguments: list[str],
+        timeout_seconds: float,
+        *,
+        progress: Callable[[str], None] | None = None,
+    ):
         if not executable:
             raise ConversionError("ASR command executable must be non-empty")
         if arguments.count("{media}") != 1:
@@ -100,6 +112,7 @@ class CommandAsrAdapter:
         self.executable = executable
         self.arguments = tuple(arguments)
         self.timeout_seconds = timeout_seconds
+        self.progress = progress
 
     def transcribe(self, media_path: Path) -> AsrTranscript:
         if not media_path.is_file():
@@ -138,15 +151,19 @@ class PreprocessingAsrAdapter:
         preprocessor: AudioPreprocessor,
         *,
         audio_stream_index: int | None,
+        progress: Callable[[str], None] | None = None,
     ):
         self.adapter = adapter
         self.preprocessor = preprocessor
         self.audio_stream_index = audio_stream_index
+        self.progress = progress
 
     def transcribe(self, media_path: Path) -> AsrTranscript:
         with self.preprocessor.prepare(
             media_path, audio_stream_index=self.audio_stream_index
         ) as prepared:
+            if self.progress is not None:
+                self.progress("transcribing")
             transcript = self.adapter.transcribe(prepared.path)
         pipeline_config = {
             "adapter_protocol": "listen_gen.asr-result.v1",
@@ -319,6 +336,7 @@ def package_media(
     media_kind: str,
     duration_ms: int,
     created_at_ms: int,
+    progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
     if not media_path.is_file():
         raise ConversionError("media input is not a regular file")
@@ -388,6 +406,8 @@ def package_media(
             "required": resource.required, "size_bytes": len(resource.body),
         } for resource in resources],
     }
+    if progress is not None:
+        progress("building_package")
     package_sha256 = write_package(output_path, manifest, resources)
     return {
         "status": "created", "output": str(output_path),
