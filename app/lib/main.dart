@@ -120,7 +120,7 @@ import 'widgets/flows/speaking_flows.dart';
 import 'widgets/flows/subtitle_resource_flows.dart';
 import 'widgets/flows/writing_flows.dart';
 import 'widgets/home/listening_home.dart';
-import 'widgets/layout/content_channel_switcher.dart';
+import 'widgets/layout/content_channel_availability.dart';
 import 'widgets/layout/desktop_drop_surface.dart';
 import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/playback_bar.dart';
@@ -2145,6 +2145,31 @@ class _PlayerScreenState extends State<PlayerScreen>
     onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
   );
 
+  /// What each channel can and cannot do with the material that is loaded.
+  /// A channel that cannot be entered is listed with its reason rather than
+  /// hidden or offered as a clickable promise.
+  Map<ContentChannel, ContentChannelAvailability> _channelAvailability() {
+    final noTranscript = subtitleController.primaryTrack == null
+        ? ContentChannelAvailability.unavailable(
+            l.text('channelNeedsTranscript'),
+          )
+        : null;
+    return {
+      ContentChannel.listening: const ContentChannelAvailability.available(),
+      ContentChannel.reading:
+          noTranscript ?? const ContentChannelAvailability.available(),
+      ContentChannel.speaking:
+          noTranscript ??
+          (widget.platformCapabilities.isMacOS
+              ? const ContentChannelAvailability.available()
+              : ContentChannelAvailability.unavailable(
+                  l.text('channelUnavailable'),
+                )),
+      ContentChannel.writing:
+          noTranscript ?? const ContentChannelAvailability.available(),
+    };
+  }
+
   /// The extensive-listening session. It was on the transport, among controls
   /// that act on the next 200ms; a session that spans a whole sitting belongs
   /// with the other facts about this sitting.
@@ -2172,8 +2197,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _studyMenu() {
     final cue = subtitleController.currentPrimaryCue;
     return StudyMenu(
+      selectedChannel: contentChannels.selected,
+      channelAvailability: _channelAvailability(),
+      onChannelSelected: (channel) =>
+          unawaited(contentChannels.select(channel)),
       hasCue: cue != null,
-      canRead: subtitleController.primaryTrack != null,
       canCloze:
           cue != null &&
           (subtitleController.timingsBySentence[cue.id] ?? const []).isNotEmpty,
@@ -2184,7 +2212,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                   ?.chunks
                   .isNotEmpty ??
               false),
-      onRead: () => unawaited(readingChannel.open()),
       onShadow: () => unawaited(practiceActions.startShadowingPractice()),
       onCloze: () => unawaited(practiceActions.startClozePractice()),
       onChunkDictation: () =>
@@ -2579,53 +2606,6 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     selectedChannel:
                                                         contentChannels
                                                             .selected,
-                                                    channelAvailability: {
-                                                      ContentChannel.listening:
-                                                          const ContentChannelAvailability.available(),
-                                                      ContentChannel.reading:
-                                                          subtitleController
-                                                                  .primaryTrack ==
-                                                              null
-                                                          ? ContentChannelAvailability.unavailable(
-                                                              l.text(
-                                                                'channelNeedsTranscript',
-                                                              ),
-                                                            )
-                                                          : const ContentChannelAvailability.available(),
-                                                      ContentChannel.speaking:
-                                                          subtitleController
-                                                                  .primaryTrack ==
-                                                              null
-                                                          ? ContentChannelAvailability.unavailable(
-                                                              l.text(
-                                                                'channelNeedsTranscript',
-                                                              ),
-                                                            )
-                                                          : !widget
-                                                                .platformCapabilities
-                                                                .isMacOS
-                                                          ? ContentChannelAvailability.unavailable(
-                                                              l.text(
-                                                                'channelUnavailable',
-                                                              ),
-                                                            )
-                                                          : const ContentChannelAvailability.available(),
-                                                      ContentChannel.writing:
-                                                          subtitleController
-                                                                  .primaryTrack ==
-                                                              null
-                                                          ? ContentChannelAvailability.unavailable(
-                                                              l.text(
-                                                                'channelNeedsTranscript',
-                                                              ),
-                                                            )
-                                                          : const ContentChannelAvailability.available(),
-                                                    },
-                                                    onChannelSelected:
-                                                        (channel) => unawaited(
-                                                          contentChannels
-                                                              .select(channel),
-                                                        ),
                                                     immersiveStage: switch (contentChannels
                                                         .selected) {
                                                       ContentChannel.writing =>

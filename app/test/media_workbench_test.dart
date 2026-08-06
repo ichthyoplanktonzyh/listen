@@ -6,8 +6,6 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/layout/media_workbench.dart';
-import 'package:llplayer_next/models/content_channel.dart';
-import 'package:llplayer_next/widgets/layout/content_channel_switcher.dart';
 import 'package:llplayer_next/widgets/player/playback_controls.dart';
 
 void main() {
@@ -183,38 +181,6 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('content channels gate unavailable capabilities honestly', (
-    tester,
-  ) async {
-    ContentChannel? selected;
-    await tester.pumpWidget(
-      localized(
-        MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: const ColoredBox(color: Colors.black),
-          learningPanel: const ColoredBox(color: Colors.white),
-          mediaFraction: 0.42,
-          onMediaFractionChanged: _noopFraction,
-          selectedChannel: ContentChannel.listening,
-          channelAvailability: const {
-            ContentChannel.listening: ContentChannelAvailability.available(),
-            ContentChannel.reading: ContentChannelAvailability.available(),
-            ContentChannel.speaking: ContentChannelAvailability.unavailable(
-              '尚无录音能力',
-            ),
-          },
-          onChannelSelected: (channel) => selected = channel,
-        ),
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey('content-channel-reading')));
-    expect(selected, ContentChannel.reading);
-    selected = null;
-    await tester.tap(find.byKey(const ValueKey('content-channel-speaking')));
-    expect(selected, isNull);
   });
 
   testWidgets('immersive channel owns the workbench body', (tester) async {

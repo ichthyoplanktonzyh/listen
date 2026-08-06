@@ -6,7 +6,6 @@ import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
 import '../../utils/media_title.dart';
 import '../common/content_settle.dart';
-import 'content_channel_switcher.dart';
 
 class MediaWorkbench extends StatefulWidget {
   const MediaWorkbench({
@@ -18,8 +17,6 @@ class MediaWorkbench extends StatefulWidget {
     required this.onMediaFractionChanged,
     this.onCollapse,
     this.selectedChannel = ContentChannel.listening,
-    this.channelAvailability = const {},
-    this.onChannelSelected,
     this.immersiveStage,
     this.subtitleMenu,
     this.studyMenu,
@@ -33,9 +30,10 @@ class MediaWorkbench extends StatefulWidget {
   final double mediaFraction;
   final ValueChanged<double> onMediaFractionChanged;
   final VoidCallback? onCollapse;
+
+  /// Which surface owns the body. Only [ContentSettle] reads it now — the
+  /// switch itself moved onto [studyMenu].
   final ContentChannel selectedChannel;
-  final Map<ContentChannel, ContentChannelAvailability> channelAvailability;
-  final ValueChanged<ContentChannel>? onChannelSelected;
 
   /// A channel-native surface that owns the workbench body. Reading and task
   /// scenes use this instead of pretending to be the media pane of a split.
@@ -92,10 +90,6 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
   Widget build(BuildContext context) => Column(
     children: [
       _SessionHeader(
-        mediaTitle: widget.mediaTitle,
-        selectedChannel: widget.selectedChannel,
-        availability: widget.channelAvailability,
-        onSelected: widget.onChannelSelected,
         onCollapse: widget.onCollapse,
         subtitleMenu: widget.subtitleMenu,
         studyMenu: widget.studyMenu,
@@ -206,10 +200,6 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
 
 class _SessionHeader extends StatelessWidget {
   const _SessionHeader({
-    required this.mediaTitle,
-    required this.selectedChannel,
-    required this.availability,
-    required this.onSelected,
     required this.onCollapse,
     required this.subtitleMenu,
     required this.studyMenu,
@@ -217,10 +207,6 @@ class _SessionHeader extends StatelessWidget {
     required this.listeningMenu,
   });
 
-  final String mediaTitle;
-  final ContentChannel selectedChannel;
-  final Map<ContentChannel, ContentChannelAvailability> availability;
-  final ValueChanged<ContentChannel>? onSelected;
   final VoidCallback? onCollapse;
 
   /// Actions on *this* media (subtitle sourcing, archiving). They used to sit
@@ -258,15 +244,7 @@ class _SessionHeader extends StatelessWidget {
                 icon: const Icon(Icons.home_outlined),
               ),
             const Spacer(),
-            ContentChannelSwitcher(
-              selected: selectedChannel,
-              availability: availability,
-              onSelected: onSelected ?? (_) {},
-            ),
-            if (listeningMenu != null) ...[
-              const SizedBox(width: ListenSpacing.gap8),
-              listeningMenu!,
-            ],
+            if (listeningMenu != null) listeningMenu!,
             if (translationMenu != null) ...[
               const SizedBox(width: ListenSpacing.gap8),
               translationMenu!,

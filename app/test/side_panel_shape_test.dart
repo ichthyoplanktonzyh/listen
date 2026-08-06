@@ -3,6 +3,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/localization.dart';
+import 'package:llplayer_next/models/content_channel.dart';
+import 'package:llplayer_next/widgets/layout/content_channel_availability.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/layout/side_panel_tabs.dart';
 import 'package:llplayer_next/widgets/layout/study_menu.dart';
@@ -85,29 +87,99 @@ void main() {
       await tester.tap(find.byKey(const Key('study-menu')));
       await tester.pumpAndSettle();
 
-      // The four scattered homes — posture grid, its inner popup, and two
-      // transport menus — collapse to this list.
-      for (final label in const ['通读全文', '跟读', '挖空', '语块听写', '整句听写']) {
+      // The five scattered homes — the channel pills, the posture grid, the
+      // popup inside one of its cells, and two transport menus — collapse to
+      // this list.
+      for (final label in const [
+        '听',
+        '读',
+        '说',
+        '写',
+        '跟读',
+        '挖空',
+        '语块听写',
+        '整句听写',
+      ]) {
         expect(find.text(label), findsOneWidget);
       }
-      // Grouped, because reading the whole text and drilling one sentence are
-      // different kinds of work.
+      // Grouped, because working the whole text, drilling one sentence, and
+      // producing something are different kinds of work.
       expect(find.text('整篇'), findsOneWidget);
       expect(find.text('单句'), findsOneWidget);
+      expect(find.text('产出'), findsOneWidget);
     });
 
-    testWidgets('without a sentence the intensive modes rest, reading stays', (
+    testWidgets('the channel you are in carries the selection mark', (
       tester,
     ) async {
-      await tester.binding.setSurfaceSize(const Size(900, 800));
+      await tester.binding.setSurfaceSize(const Size(900, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
-      var read = 0;
       await tester.pumpWidget(
         _harness(
           width: 200,
-          child: _menu(hasCue: false, onRead: () => read += 1),
+          child: _menu(selectedChannel: ContentChannel.reading),
         ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('study-menu')));
+      await tester.pumpAndSettle();
+
+      // The channels are mutually exclusive surfaces, so exactly one is
+      // marked; the intensive modes are things you start and carry no mark.
+      expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+      expect(
+        find.byIcon(Icons.radio_button_unchecked),
+        findsNWidgets(ContentChannel.values.length - 1),
+      );
+    });
+
+    testWidgets('an unenterable channel says why and refuses the tap', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(900, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final chosen = <ContentChannel>[];
+      await tester.pumpWidget(
+        _harness(
+          width: 200,
+          child: _menu(
+            channelAvailability: const {
+              ContentChannel.listening: ContentChannelAvailability.available(),
+              ContentChannel.reading: ContentChannelAvailability.available(),
+              ContentChannel.speaking: ContentChannelAvailability.unavailable(
+                '尚无录音能力',
+              ),
+              ContentChannel.writing: ContentChannelAvailability.available(),
+            },
+            onChannelSelected: chosen.add,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('study-menu')));
+      await tester.pumpAndSettle();
+
+      // Listed with the reason, not hidden and not a clickable promise.
+      expect(find.text('尚无录音能力'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('content-channel-speaking')));
+      await tester.pumpAndSettle();
+      expect(chosen, isEmpty);
+
+      await tester.tap(find.byKey(const ValueKey('content-channel-reading')));
+      await tester.pumpAndSettle();
+      expect(chosen, [ContentChannel.reading]);
+    });
+
+    testWidgets('without a sentence the intensive modes rest, channels stay', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(900, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _harness(width: 200, child: _menu(hasCue: false)),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('study-menu')));
@@ -117,17 +189,14 @@ void main() {
           .widgetList<PopupMenuItem<String>>(find.byType(PopupMenuItem<String>))
           .where((item) => item.value != null);
       for (final item in items) {
-        // Reading needs a transcript, not a current sentence.
+        // The channels answer to the loaded transcript; only the four
+        // intensive modes need the sentence being played.
         expect(
           item.enabled,
-          item.value == 'read',
-          reason: '${item.value} should be ${item.value == "read"}',
+          item.value!.startsWith('channel-'),
+          reason: '${item.value}',
         );
       }
-
-      await tester.tap(find.text('通读全文'));
-      await tester.pumpAndSettle();
-      expect(read, 1);
     });
 
     testWidgets('an unavailable mode says why instead of vanishing', (
@@ -155,16 +224,23 @@ void main() {
 
 Widget _menu({
   bool hasCue = true,
-  bool canRead = true,
   bool canCloze = true,
   bool canChunkDictation = true,
-  VoidCallback? onRead,
+  ContentChannel selectedChannel = ContentChannel.listening,
+  Map<ContentChannel, ContentChannelAvailability>? channelAvailability,
+  ValueChanged<ContentChannel>? onChannelSelected,
 }) => StudyMenu(
+  selectedChannel: selectedChannel,
+  channelAvailability:
+      channelAvailability ??
+      {
+        for (final channel in ContentChannel.values)
+          channel: const ContentChannelAvailability.available(),
+      },
+  onChannelSelected: onChannelSelected ?? (_) {},
   hasCue: hasCue,
-  canRead: canRead,
   canCloze: canCloze,
   canChunkDictation: canChunkDictation,
-  onRead: onRead ?? () {},
   onShadow: () {},
   onCloze: () {},
   onChunkDictation: () {},
