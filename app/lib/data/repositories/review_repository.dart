@@ -48,8 +48,7 @@ class LocalReviewRepository implements ReviewRepository {
   final LocalApi _api;
 
   @override
-  Future<ReviewQueue> queue({int limit = 20}) =>
-      _api.reviewQueue(limit: limit);
+  Future<ReviewQueue> queue({int limit = 20}) => _api.reviewQueue(limit: limit);
 
   @override
   Future<List<ReviewIntervalPreview>> intervalPreview(String itemId) =>

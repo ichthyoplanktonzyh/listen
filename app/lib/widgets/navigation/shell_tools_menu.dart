@@ -162,9 +162,9 @@ class ShellToolsMenu extends StatelessWidget {
             Expanded(
               child: Text(
                 l.text('shellTools'),
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

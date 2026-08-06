@@ -27,18 +27,21 @@ void main() {
 
   setUp(() => fired = []);
 
-  Widget wrap(Widget child, {Locale locale = const Locale('en')}) => MaterialApp(
-    theme: ListenTheme.light(),
-    locale: locale,
-    supportedLocales: AppLocalizations.supportedLocales,
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    home: Scaffold(body: Align(alignment: Alignment.topLeft, child: child)),
-  );
+  Widget wrap(Widget child, {Locale locale = const Locale('en')}) =>
+      MaterialApp(
+        theme: ListenTheme.light(),
+        locale: locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          body: Align(alignment: Alignment.topLeft, child: child),
+        ),
+      );
 
   Widget toolsMenu() => ShellToolsMenu(
     onOpenSubtitleResources: () => fired.add('subtitle-resources'),
@@ -124,7 +127,8 @@ void main() {
         expect(
           values,
           isNot(contains(owned)),
-          reason: '"$owned" already has an owner; a copy here is the bug the '
+          reason:
+              '"$owned" already has an owner; a copy here is the bug the '
               'app bar was deleted for',
         );
       }

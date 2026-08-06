@@ -41,9 +41,8 @@ class LocalAnkiPackageFileService implements AnkiPackageFileService {
   }
 
   @override
-  Future<String?> pickExportDestination() async =>
-      (await getSaveLocation(
-        suggestedName: 'listen-export.apkg',
-        acceptedTypeGroups: const [_group],
-      ))?.path;
+  Future<String?> pickExportDestination() async => (await getSaveLocation(
+    suggestedName: 'listen-export.apkg',
+    acceptedTypeGroups: const [_group],
+  ))?.path;
 }

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/media_import_file_service.dart';
 import '../settings.dart';
+import '../utils/transcript_translation.dart';
 
 /// Wraps [AppSettings] persistence with [ChangeNotifier] for reactive UI.
 class SettingsController extends ChangeNotifier {
@@ -52,6 +53,21 @@ class SettingsController extends ChangeNotifier {
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
   bool get wordSyncVisible => _settings.wordSyncVisible;
   String get groupingMode => _settings.groupingMode;
+
+  /// How the transcript pairs the two subtitle tracks. It is a habit that
+  /// changes several times inside one session — check the translation, hide
+  /// it again, test yourself — so it persists like the other display choices
+  /// rather than resetting per media.
+  TranscriptTranslation get transcriptTranslation =>
+      TranscriptTranslation.fromStorage(_settings.transcriptTranslation);
+
+  Future<void> setTranscriptTranslation(TranscriptTranslation value) {
+    if (transcriptTranslation == value) return Future.value();
+    _settings = _settings.copyWith(transcriptTranslation: value.storageValue);
+    notifyListeners();
+    return save();
+  }
+
   bool get chunkHighlightActive => _settings.chunkHighlightActive;
   String get chunkDisplayStyle => _settings.chunkDisplayStyle;
   bool get highlightCurrentChunk => _settings.highlightCurrentChunk;

@@ -268,8 +268,7 @@ class AppLocalizations {
           'have no equivalent in Anki and will not survive the trip:',
       'reviewExportLossVideo': 'Video slices are rendered down to audio.',
       'reviewExportLossShadowing': 'Shadowing and delayed retelling are lost.',
-      'reviewExportLossSourceJump':
-          'Jumping back to the source media is lost.',
+      'reviewExportLossSourceJump': 'Jumping back to the source media is lost.',
       'reviewExportLossCapability':
           'Listening evidence and the capability profile stay here.',
       'reviewImportReport': 'Import finished',
@@ -933,6 +932,12 @@ class AppLocalizations {
       'wordBubbleDetails': 'Full entry',
       'playPronunciation': 'Play pronunciation',
       'studyMode': 'Ways to work this',
+      'translationDisplay': 'Translation',
+      'translationSourceOnly': 'Original only',
+      'translationBilingual': 'Original and translation',
+      'translationOnly': 'Translation only',
+      'sentenceHasNoTranslation': 'No translation for this sentence',
+      'noTranslationTrack': 'This media has no translation track.',
       'studyModeReadingGroup': 'Whole text',
       'studyModeIntensiveGroup': 'One sentence',
       'wordLearning': 'Word learning',
@@ -2384,8 +2389,7 @@ class AppLocalizations {
       'reviewCustomStudyAdvancesSchedule': '自定义学习 · 提前复习，会改变日程',
       'reviewCustomStudyCompleted': '额外练了 {count} 张',
       'reviewCustomStudyLeftScheduleAlone': '正常日程没有变化。',
-      'reviewCustomStudyAdvancedSchedule':
-          '这些卡被提前复习，下次到期时间已经前移。',
+      'reviewCustomStudyAdvancedSchedule': '这些卡被提前复习，下次到期时间已经前移。',
       'reviewDueToday': '今天待复习',
       'reviewBudgetSpent':
           '今日已练：新卡 {new}/{newLimit} · 复习 {reviews}/{reviewLimit}',
@@ -2413,13 +2417,10 @@ class AppLocalizations {
       'reviewExportLossSourceJump': '跳回原媒体的能力会丢失。',
       'reviewExportLossCapability': '听力证据和能力画像留在这里，不会跟着走。',
       'reviewImportReport': '导入完成',
-      'reviewImportCounts':
-          '导入 {imported} 张 · 更新 {updated} 张 · 跳过 {skipped} 张',
-      'reviewImportDetails':
-          '{decks} 个牌组 · {revlog} 条复习记录 · {media} 个媒体文件',
+      'reviewImportCounts': '导入 {imported} 张 · 更新 {updated} 张 · 跳过 {skipped} 张',
+      'reviewImportDetails': '{decks} 个牌组 · {revlog} 条复习记录 · {media} 个媒体文件',
       'reviewExportReport': '导出完成',
-      'reviewExportCounts':
-          '{cards} 张卡 · {revlog} 条复习记录 · {media} 个媒体文件',
+      'reviewExportCounts': '{cards} 张卡 · {revlog} 条复习记录 · {media} 个媒体文件',
       'reviewExportVideoRendered': '{count} 个视频切片被压成了音频。',
       'reviewExportMediaFailed': '{count} 个媒体文件渲染失败。',
       'reviewExportOmitted': '未能带走：{items}',
@@ -3011,6 +3012,12 @@ class AppLocalizations {
       'wordBubbleDetails': '完整词条',
       'playPronunciation': '播放读音',
       'studyMode': '怎么练这篇',
+      'translationDisplay': '译文显示',
+      'translationSourceOnly': '只看原文',
+      'translationBilingual': '原文加译文',
+      'translationOnly': '只看译文',
+      'sentenceHasNoTranslation': '这句没有对应的译文',
+      'noTranslationTrack': '这个媒体没有译文轨。',
       'studyModeReadingGroup': '整篇',
       'studyModeIntensiveGroup': '单句',
       'wordLearning': '词汇学习',

@@ -49,15 +49,18 @@ void main() {
 
   tearDown(() async => server.close(force: true));
 
-  test('a throttled answer is retried rather than reported as failure', () async {
-    statuses = [HttpStatus.notFound, HttpStatus.internalServerError, 200];
+  test(
+    'a throttled answer is retried rather than reported as failure',
+    () async {
+      statuses = [HttpStatus.notFound, HttpStatus.internalServerError, 200];
 
-    final entries = await repositoryFor(server).entriesFor('UC-channel');
+      final entries = await repositoryFor(server).entriesFor('UC-channel');
 
-    expect(requests, 3);
-    expect(entries.single.id, 'abc123');
-    expect(entries.single.title, 'How memory works');
-  });
+      expect(requests, 3);
+      expect(entries.single.id, 'abc123');
+      expect(entries.single.title, 'How memory works');
+    },
+  );
 
   test('a source that never answers still fails, and says so', () async {
     // Retrying forever would be its own dishonesty: a channel that really is

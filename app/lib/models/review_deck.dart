@@ -23,10 +23,7 @@ class ReviewDailyLimits {
   final int newCards;
   final int reviews;
 
-  Map<String, dynamic> toJson() => {
-    'new_cards': newCards,
-    'reviews': reviews,
-  };
+  Map<String, dynamic> toJson() => {'new_cards': newCards, 'reviews': reviews};
 
   ReviewDailyLimits copyWith({int? newCards, int? reviews}) =>
       ReviewDailyLimits(
@@ -74,7 +71,9 @@ class ReviewQueue {
 
   factory ReviewQueue.fromJson(Map<String, dynamic> json) => ReviewQueue(
     entries: ((json['entries'] as List<dynamic>?) ?? const [])
-        .map((value) => ReviewQueueEntry.fromJson(value as Map<String, dynamic>))
+        .map(
+          (value) => ReviewQueueEntry.fromJson(value as Map<String, dynamic>),
+        )
         .toList(growable: false),
     limitStatus: ReviewLimitStatus.fromJson(
       json['limit_status'] as Map<String, dynamic>,
@@ -273,7 +272,8 @@ class CustomStudyQueue {
       CustomStudyQueue(
         entries: ((json['entries'] as List<dynamic>?) ?? const [])
             .map(
-              (value) => ReviewQueueEntry.fromJson(value as Map<String, dynamic>),
+              (value) =>
+                  ReviewQueueEntry.fromJson(value as Map<String, dynamic>),
             )
             .toList(growable: false),
         advancesNormalSchedule: json['advances_normal_schedule'] as bool,

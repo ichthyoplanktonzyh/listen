@@ -831,18 +831,15 @@ class ReviewQueueEntry {
     required this.origin,
   });
 
-  factory ReviewQueueEntry.fromJson(Map<String, dynamic> json) =>
-      ReviewQueueEntry(
-        item: ReviewItem.fromJson(json['item'] as Map<String, dynamic>),
-        schedule: ReviewSchedule.fromJson(
-          json['schedule'] as Map<String, dynamic>,
-        ),
-        state: ReviewCardState.fromJson(json['state'] as String),
-        card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
-        origin: ReviewItemOrigin.fromJson(
-          json['origin'] as Map<String, dynamic>,
-        ),
-      );
+  factory ReviewQueueEntry.fromJson(
+    Map<String, dynamic> json,
+  ) => ReviewQueueEntry(
+    item: ReviewItem.fromJson(json['item'] as Map<String, dynamic>),
+    schedule: ReviewSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
+    state: ReviewCardState.fromJson(json['state'] as String),
+    card: ReviewCard.fromJson(json['card'] as Map<String, dynamic>),
+    origin: ReviewItemOrigin.fromJson(json['origin'] as Map<String, dynamic>),
+  );
 
   final ReviewItem item;
   final ReviewSchedule schedule;

@@ -22,12 +22,12 @@ MediaItem _media(String id, String title, int updatedAtMs) => MediaItem(
 
 MediaLibraryEntry _entry(String id, String title, {int updatedAtMs = 1}) =>
     MediaLibraryEntry(
-  media: _media(id, title, updatedAtMs),
-  primaryTrackId: null,
-  fit: null,
-  triageIntent: null,
-  familiarMaterial: false,
-);
+      media: _media(id, title, updatedAtMs),
+      primaryTrackId: null,
+      fit: null,
+      triageIntent: null,
+      familiarMaterial: false,
+    );
 
 void main() {
   Widget app({

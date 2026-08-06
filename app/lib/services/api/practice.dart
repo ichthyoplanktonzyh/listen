@@ -92,10 +92,11 @@ extension PracticeReviewApi on LocalApi {
   /// with the budget status that explains a short or empty queue. The raw
   /// `/v1/review/items` list is still there but says nothing about limits, so
   /// a session built on it silently ignores them.
-  Future<ReviewQueue> reviewQueue({int limit = 20}) async => ReviewQueue.fromJson(
-    (await _request('GET', '/v1/review/queue?limit=$limit'))
-        as Map<String, dynamic>,
-  );
+  Future<ReviewQueue> reviewQueue({int limit = 20}) async =>
+      ReviewQueue.fromJson(
+        (await _request('GET', '/v1/review/queue?limit=$limit'))
+            as Map<String, dynamic>,
+      );
 
   Future<List<ReviewIntervalPreview>> reviewIntervalPreview(
     String itemId,

@@ -129,6 +129,7 @@ import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/shell_recede.dart';
 import 'widgets/layout/side_panel.dart';
 import 'widgets/layout/study_menu.dart';
+import 'widgets/layout/translation_mode_button.dart';
 import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
@@ -2143,6 +2144,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
   );
 
+  /// Switches the transcript between original, bilingual and translation.
+  Widget _translationMenu() => TranslationModeButton(
+    mode: settingsController.transcriptTranslation,
+    onChanged: (mode) =>
+        unawaited(settingsController.setTranscriptTranslation(mode)),
+  );
+
   /// Ways of working the material on the workbench. One menu, because these
   /// were spread over a posture grid, a popup inside it, and two transport
   /// menus — four places to look for one decision.
@@ -2541,6 +2549,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     subtitleMenu:
                                                         _sessionSubtitleMenu(),
                                                     studyMenu: _studyMenu(),
+                                                    translationMenu:
+                                                        _translationMenu(),
                                                     mediaTitle: widget
                                                         .pathHelper
                                                         .basename(

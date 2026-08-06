@@ -22,7 +22,9 @@ class ReviewDueState {
   /// including on failure, where a stale number would read as current.
   final int? count;
 
-  const ReviewDueState.unknown() : status = ReviewDueStatus.unknown, count = null;
+  const ReviewDueState.unknown()
+    : status = ReviewDueStatus.unknown,
+      count = null;
 }
 
 /// The shell's read of "how many cards are waiting", and nothing else.

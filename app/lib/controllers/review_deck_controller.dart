@@ -74,9 +74,7 @@ class ReviewDeckController extends ChangeNotifier {
     try {
       final overview = await _repository.deckOverview();
       if (_disposed || generation != _loadGeneration) return false;
-      _set(
-        (state) => state.copyWith(overview: overview, busy: false),
-      );
+      _set((state) => state.copyWith(overview: overview, busy: false));
       return true;
     } catch (error) {
       if (_disposed || generation != _loadGeneration) return false;

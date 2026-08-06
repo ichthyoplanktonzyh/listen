@@ -187,7 +187,10 @@ class WordBubble extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final userDefinition = details?.entry.userDefinition;
     if (userDefinition != null && userDefinition.isNotEmpty) {
-      return Text(userDefinition, style: Theme.of(context).textTheme.bodyMedium);
+      return Text(
+        userDefinition,
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
     }
     if (dictionary == null) {
       return Row(

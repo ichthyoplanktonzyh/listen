@@ -8,6 +8,7 @@ import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
+import '../../utils/transcript_translation.dart';
 import '../subtitle/token_line.dart';
 
 class TranscriptPanel extends StatefulWidget {
@@ -30,6 +31,10 @@ class TranscriptPanel extends StatefulWidget {
     this.onToggleAnalysis,
     this.analysisExpanded = false,
     this.analysis,
+    this.translationMode = TranscriptTranslation.source,
+    this.translationFor,
+    this.hasTranslationTrack = false,
+    this.onImportTranslation,
   });
 
   final SubtitleTrack? track;
@@ -63,6 +68,20 @@ class TranscriptPanel extends StatefulWidget {
   /// [analysisExpanded]. It arrives built so this panel stays free of the
   /// eight controllers a diagnosis card reads from.
   final Widget? analysis;
+
+  /// Which of the two tracks the transcript shows.
+  final TranscriptTranslation translationMode;
+
+  /// The translation of one sentence, or null when that sentence has none.
+  /// Resolving it needs the secondary track and both offsets, which live on
+  /// the subtitle controller, so the host supplies the lookup.
+  final String? Function(Cue cue)? translationFor;
+
+  /// Whether a secondary track is loaded at all. This is what separates
+  /// "there is no translation for this file" — said once, at the top — from
+  /// "this sentence has none", which is said per sentence.
+  final bool hasTranslationTrack;
+  final VoidCallback? onImportTranslation;
 
   @override
   State<TranscriptPanel> createState() => _TranscriptPanelState();
@@ -137,6 +156,17 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                 // row and covers nothing, which is the better trade.
                 child: Column(
                   children: [
+                    // Said once, at the top, because it is a fact about the
+                    // file. Repeating it under all 200 sentences would be the
+                    // same fact 200 times, and would drown the sentences that
+                    // genuinely have no line of their own.
+                    if (widget.translationMode.showsTranslation &&
+                        !widget.hasTranslationTrack)
+                      _NoTranslationTrackNotice(
+                        message: l.text('noTranslationTrack'),
+                        actionLabel: l.text('importSubtitle'),
+                        onImport: widget.onImportTranslation,
+                      ),
                     Expanded(
                       child: ListView.builder(
                         controller: widget.scrollController,
@@ -170,25 +200,52 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                           ),
                                     ),
                                   ),
-                                  title: TokenLine(
-                                    cue: cue,
-                                    profiles: widget.wordEntries,
-                                    capabilityProfiles:
-                                        widget.capabilityProfiles,
-                                    showStyles: widget.showStyles,
-                                    baseColor: effectiveBaseColor,
-                                    onWord: (token, cue) => widget.onWord(
-                                      token,
-                                      cue,
-                                      _lastPressPosition,
-                                    ),
-                                    groupingMode: widget.groupingMode,
-                                    chunkDisplayStyle: widget.chunkDisplayStyle,
-                                    chunkPartition: widget
-                                        .chunkPartitionsBySentence[cue.id],
-                                    senseGroups:
-                                        widget.senseGroupsBySentence[cue.id] ??
-                                        const [],
+                                  title: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (widget.translationMode.showsSource)
+                                        TokenLine(
+                                          cue: cue,
+                                          profiles: widget.wordEntries,
+                                          capabilityProfiles:
+                                              widget.capabilityProfiles,
+                                          showStyles: widget.showStyles,
+                                          baseColor: effectiveBaseColor,
+                                          onWord: (token, cue) => widget.onWord(
+                                            token,
+                                            cue,
+                                            _lastPressPosition,
+                                          ),
+                                          groupingMode: widget.groupingMode,
+                                          chunkDisplayStyle:
+                                              widget.chunkDisplayStyle,
+                                          chunkPartition:
+                                              widget
+                                                  .chunkPartitionsBySentence[cue
+                                                  .id],
+                                          senseGroups:
+                                              widget.senseGroupsBySentence[cue
+                                                  .id] ??
+                                              const [],
+                                        ),
+                                      if (widget
+                                              .translationMode
+                                              .showsTranslation &&
+                                          widget.hasTranslationTrack)
+                                        _TranslationLine(
+                                          text: widget.translationFor?.call(
+                                            cue,
+                                          ),
+                                          missingLabel: l.text(
+                                            'sentenceHasNoTranslation',
+                                          ),
+                                          alone: !widget
+                                              .translationMode
+                                              .showsSource,
+                                        ),
+                                    ],
                                   ),
                                   onTap: () => widget.onSeekCue(cue),
                                 ),
@@ -293,6 +350,102 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
     );
     widget.scrollController.jumpTo(target.toDouble());
     return true;
+  }
+}
+
+/// The translation of one sentence, under the original.
+///
+/// A sentence whose translation track covers nothing here says so rather than
+/// rendering an empty line: with the original above it, a blank row reads as a
+/// translation that exists and is empty, which is a different and false claim.
+/// The reference app puts a permanent "translation is disabled" line in this
+/// slot; the honest version of that is naming which sentence has none.
+class _TranslationLine extends StatelessWidget {
+  const _TranslationLine({
+    required this.text,
+    required this.missingLabel,
+    required this.alone,
+  });
+
+  final String? text;
+  final String missingLabel;
+
+  /// True in translation-only mode, where this line is the sentence rather
+  /// than an annotation on it, and takes the reading size to match.
+  final bool alone;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context).textTheme;
+    if (text == null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: ListenSpacing.gap2),
+        child: Text(
+          missingLabel,
+          key: const Key('transcript-translation-missing'),
+          style: theme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(top: alone ? 0 : ListenSpacing.gap2),
+      child: Text(
+        text!,
+        key: const Key('transcript-translation'),
+        style: alone
+            ? theme.bodyMedium
+            : theme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+/// Said once when the media has no second track at all.
+class _NoTranslationTrackNotice extends StatelessWidget {
+  const _NoTranslationTrackNotice({
+    required this.message,
+    required this.actionLabel,
+    required this.onImport,
+  });
+
+  final String message;
+  final String actionLabel;
+  final VoidCallback? onImport;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      key: const Key('transcript-no-translation-track'),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLowest,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Padding(
+        padding: ListenPadding.row,
+        child: Row(
+          children: [
+            Icon(
+              Icons.translate_outlined,
+              size: ListenIconSize.control,
+              color: colors.onSurfaceVariant,
+            ),
+            const SizedBox(width: ListenSpacing.gap8),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ),
+            if (onImport != null)
+              TextButton(onPressed: onImport, child: Text(actionLabel)),
+          ],
+        ),
+      ),
+    );
   }
 }
 

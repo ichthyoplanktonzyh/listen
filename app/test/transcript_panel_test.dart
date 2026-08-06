@@ -142,7 +142,10 @@ void _analysisGroup() {
     await tester.pumpAndSettle();
 
     // Eight sentences are on screen; exactly one carries the control.
-    expect(find.byKey(const Key('transcript-analyse-sentence')), findsOneWidget);
+    expect(
+      find.byKey(const Key('transcript-analyse-sentence')),
+      findsOneWidget,
+    );
     final control = tester.getRect(
       find.byKey(const Key('transcript-analyse-sentence')),
     );

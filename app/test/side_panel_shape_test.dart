@@ -42,7 +42,10 @@ void main() {
       await tester.pumpWidget(
         _harness(
           width: 280,
-          child: SidePanelTabs(selected: SidePanelTab.notes, onSelected: (_) {}),
+          child: SidePanelTabs(
+            selected: SidePanelTab.notes,
+            onSelected: (_) {},
+          ),
         ),
       );
       await tester.pumpAndSettle();

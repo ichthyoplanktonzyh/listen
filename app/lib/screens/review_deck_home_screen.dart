@@ -218,10 +218,8 @@ class _SectionTitle extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: Theme.of(context).textTheme.titleMedium,
-  );
+  Widget build(BuildContext context) =>
+      Text(text, style: Theme.of(context).textTheme.titleMedium);
 }
 
 /// The one number the page exists to answer, plus the budget that shaped it.
@@ -298,9 +296,7 @@ class _CountsRow extends StatelessWidget {
       message: l.text(tooltipKey),
       child: Text(
         '$value',
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: color),
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
       ),
     );
     return Row(
@@ -314,11 +310,7 @@ class _CountsRow extends StatelessWidget {
           'reviewStateLearning',
         ),
         const SizedBox(width: ListenSpacing.gap8),
-        count(
-          counts.due,
-          ListenColors.learningRecognized,
-          'reviewStateReview',
-        ),
+        count(counts.due, ListenColors.learningRecognized, 'reviewStateReview'),
       ],
     );
   }
@@ -567,9 +559,7 @@ class _DailyLimitsCardState extends State<_DailyLimitsCard> {
     final newCards = int.tryParse(_newCards.text.trim());
     final reviews = int.tryParse(_reviews.text.trim());
     if (newCards == null || reviews == null) return;
-    widget.onSave(
-      ReviewDailyLimits(newCards: newCards, reviews: reviews),
-    );
+    widget.onSave(ReviewDailyLimits(newCards: newCards, reviews: reviews));
   }
 }
 

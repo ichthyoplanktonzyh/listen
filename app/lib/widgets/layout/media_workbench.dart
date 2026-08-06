@@ -24,6 +24,7 @@ class MediaWorkbench extends StatefulWidget {
     this.immersiveStage,
     this.subtitleMenu,
     this.studyMenu,
+    this.translationMenu,
   });
 
   final String mediaTitle;
@@ -48,6 +49,9 @@ class MediaWorkbench extends StatefulWidget {
   /// It sits here rather than above the transcript, where it used to be a 2×2
   /// button wall between the reader and the text.
   final Widget? studyMenu;
+
+  /// Switches the transcript between original, bilingual and translation.
+  final Widget? translationMenu;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -93,6 +97,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
         onCollapse: widget.onCollapse,
         subtitleMenu: widget.subtitleMenu,
         studyMenu: widget.studyMenu,
+        translationMenu: widget.translationMenu,
       ),
       Expanded(
         // Channel surfaces settle in (#46): switching channels fades the new
@@ -210,6 +215,7 @@ class _SessionHeader extends StatelessWidget {
     required this.onCollapse,
     required this.subtitleMenu,
     required this.studyMenu,
+    required this.translationMenu,
   });
 
   final String mediaTitle;
@@ -226,6 +232,9 @@ class _SessionHeader extends StatelessWidget {
   /// Ways of working this material. Like [subtitleMenu] it acts on *this*
   /// media, so it is gated by this header's own existence.
   final Widget? studyMenu;
+
+  /// Which of the two subtitle tracks the transcript shows.
+  final Widget? translationMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +279,10 @@ class _SessionHeader extends StatelessWidget {
               availability: availability,
               onSelected: onSelected ?? (_) {},
             ),
+            if (translationMenu != null) ...[
+              const SizedBox(width: ListenSpacing.gap8),
+              translationMenu!,
+            ],
             if (studyMenu != null) ...[
               const SizedBox(width: ListenSpacing.gap8),
               studyMenu!,

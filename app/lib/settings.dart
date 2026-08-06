@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'utils/transcript_translation.dart';
+
 const _appSupportDirectoryName = 'listen';
 const _legacyAppSupportDirectoryName = 'LLPlayerNext';
 
@@ -57,6 +59,7 @@ class AppSettings {
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
     this.groupingMode = 'off',
+    this.transcriptTranslation = 'bilingual',
     this.chunkDisplayStyle = 'capsule',
     this.highlightCurrentChunk = false,
     this.chunkHighlightStyle = 'background',
@@ -173,6 +176,9 @@ class AppSettings {
         json['show_chunk_grouping'] as bool? ?? true,
         json['show_sense_grouping'] as bool? ?? false,
       ),
+      transcriptTranslation: _transcriptTranslation(
+        json['transcript_translation'],
+      ),
       chunkDisplayStyle: _chunkDisplayStyle(json['chunk_display_style']),
       highlightCurrentChunk: version >= 8
           ? json['highlight_current_chunk'] as bool? ?? false
@@ -266,6 +272,12 @@ class AppSettings {
   /// data layers stay separate per ADR 0016; this only unifies how a single
   /// active grouping is drawn.
   final String groupingMode;
+
+  /// How the transcript shows the primary and secondary tracks against each
+  /// other: `source`, `bilingual` or `translation`. See
+  /// [TranscriptTranslation]; stored as a string so an unknown value degrades
+  /// to the default rather than failing to parse.
+  final String transcriptTranslation;
   final String chunkDisplayStyle;
   final bool highlightCurrentChunk;
   final String chunkHighlightStyle;
@@ -396,6 +408,7 @@ class AppSettings {
     'pronunciation_visible': pronunciationVisible,
     'word_sync_visible': wordSyncVisible,
     'grouping_mode': groupingMode,
+    'transcript_translation': transcriptTranslation,
     'chunk_display_style': chunkDisplayStyle,
     'highlight_current_chunk': highlightCurrentChunk,
     'chunk_highlight_style': chunkHighlightStyle,
@@ -458,6 +471,7 @@ class AppSettings {
     bool? pronunciationVisible,
     bool? wordSyncVisible,
     String? groupingMode,
+    String? transcriptTranslation,
     String? chunkDisplayStyle,
     bool? highlightCurrentChunk,
     String? chunkHighlightStyle,
@@ -526,6 +540,7 @@ class AppSettings {
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,
     groupingMode: groupingMode ?? this.groupingMode,
+    transcriptTranslation: transcriptTranslation ?? this.transcriptTranslation,
     chunkDisplayStyle: chunkDisplayStyle ?? this.chunkDisplayStyle,
     highlightCurrentChunk: highlightCurrentChunk ?? this.highlightCurrentChunk,
     chunkHighlightStyle: chunkHighlightStyle ?? this.chunkHighlightStyle,
@@ -588,6 +603,9 @@ class AppSettings {
     if (showChunk) return 'prosodic';
     return 'off';
   }
+
+  static String _transcriptTranslation(Object? value) =>
+      TranscriptTranslation.fromStorage(value).storageValue;
 
   static String _chunkHighlightStyle(Object? value) =>
       value == 'bounce' || value == 'glow' ? value as String : 'background';

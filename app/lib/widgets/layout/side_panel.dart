@@ -17,6 +17,7 @@ import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../../utils/transcript_translation.dart';
 import '../panels/content_fit_card.dart';
 import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
@@ -174,6 +175,19 @@ class _SidePanelState extends State<SidePanel> {
     );
   }
 
+  /// The secondary-track line for [cue]. The two tracks carry independent
+  /// offsets, so both are applied before the overlap is taken.
+  String? _translationFor(Cue cue) {
+    final secondary = subtitleController.secondaryTrack;
+    if (secondary == null) return null;
+    return translationForCue(
+      cue: cue,
+      secondaryCues: secondary.cues,
+      primaryOffset: subtitleController.primarySubtitleOffset,
+      secondaryOffset: subtitleController.secondarySubtitleOffset,
+    );
+  }
+
   void _toggleAnalysis() {
     final expanded = !learningController.diagnosisExpanded;
     learningController.setDiagnosisExpanded(expanded);
@@ -237,6 +251,12 @@ class _SidePanelState extends State<SidePanel> {
     // TokenLine honors the same mode as the on-video subtitle.
     chunkPartitionsBySentence: subtitleController.chunkPartitionsBySentence,
     senseGroupsBySentence: subtitleController.senseGroupsBySentence,
+    translationMode: settingsController.transcriptTranslation,
+    hasTranslationTrack: subtitleController.secondaryTrack != null,
+    translationFor: _translationFor,
+    onImportTranslation: playerController.mediaId == null
+        ? null
+        : () => unawaited(mediaSession.openSubtitle(secondary: true)),
     onToggleAnalysis: subtitleController.currentPrimaryCue == null
         ? null
         : _toggleAnalysis,
@@ -278,8 +298,7 @@ class _SidePanelState extends State<SidePanel> {
             onRecordSource: widget.onRecordCurrentSource,
             onReadingMark: widget.onReadingMark,
             onCorrectLemma: widget.onCorrectLemma,
-            onOpenListeningDictionary:
-                widget.onOpenListeningDictionary == null
+            onOpenListeningDictionary: widget.onOpenListeningDictionary == null
                 ? null
                 : () => unawaited(
                     widget.onOpenListeningDictionary!(
@@ -297,10 +316,7 @@ class _SidePanelState extends State<SidePanel> {
     return Column(
       children: [
         Expanded(flex: 3, child: word),
-        Divider(
-          height: 1,
-          color: Theme.of(context).colorScheme.outlineVariant,
-        ),
+        Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
         Expanded(
           flex: 2,
           child: ListeningInboxPanel(

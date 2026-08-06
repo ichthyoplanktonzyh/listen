@@ -213,10 +213,7 @@ class _ReviewDoor extends StatelessWidget {
         label: l.text('reviewDueToday'),
         value: null,
         note: l.text('todayReviewDueFailed'),
-        trailing: TextButton(
-          onPressed: onRetry,
-          child: Text(l.text('retry')),
-        ),
+        trailing: TextButton(onPressed: onRetry, child: Text(l.text('retry'))),
         onOpen: null,
       ),
     };
