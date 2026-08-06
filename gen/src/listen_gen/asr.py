@@ -350,35 +350,48 @@ def package_media(
     transcript = adapter.transcribe(media_path)
     if _fingerprint(media_path) != media_fingerprint:
         raise ConversionError("media input changed during processing")
+    segments = transcript.segments
+    if segments and any(bool(segment.words) for segment in segments) and not all(
+        bool(segment.words) for segment in segments
+    ):
+        raise ConversionError(
+            "ASR transcript must provide word timings for every segment or none"
+        )
+    has_word_timeline = bool(segments) and all(
+        bool(segment.words) for segment in segments
+    )
     sentences = []
     timings = []
-    for index, segment in enumerate(transcript.segments):
+    for index, segment in enumerate(segments):
         if segment.end_ms > duration_ms:
             raise ConversionError(f"ASR segment {index} exceeds media duration")
         tokens = _tokens(segment.text)
-        token_by_span = {
-            (token["start_char"], token["end_char"]): token for token in tokens if token["kind"] == "word"
-        }
         sentence_id = _sentence_id(media_fingerprint, index, segment)
         sentences.append({
             "id": sentence_id, "index": index, "start_ms": segment.start_ms,
             "end_ms": segment.end_ms, "original_text": segment.text,
             "display_text": segment.display_text, "tokens": tokens,
         })
-        for word_index, word in enumerate(segment.words):
-            token = token_by_span.get((word.start_char, word.end_char))
-            if token is None:
-                raise ConversionError(
-                    f"ASR segment {index} word {word_index} does not exactly match a word token"
-                )
-            timing = {
-                "sentence_id": sentence_id, "token_index": token["index"],
-                "start_ms": word.start_ms, "end_ms": word.end_ms,
-                "timing_source": word.timing_source,
+        if has_word_timeline:
+            token_by_span = {
+                (token["start_char"], token["end_char"]): token
+                for token in tokens
+                if token["kind"] == "word"
             }
-            if word.confidence is not None:
-                timing["confidence"] = word.confidence
-            timings.append(timing)
+            for word_index, word in enumerate(segment.words):
+                token = token_by_span.get((word.start_char, word.end_char))
+                if token is None:
+                    raise ConversionError(
+                        f"ASR segment {index} word {word_index} does not exactly match a word token"
+                    )
+                timing = {
+                    "sentence_id": sentence_id, "token_index": token["index"],
+                    "start_ms": word.start_ms, "end_ms": word.end_ms,
+                    "timing_source": word.timing_source,
+                }
+                if word.confidence is not None:
+                    timing["confidence"] = word.confidence
+                timings.append(timing)
     provenance = _provenance(transcript, created_at_ms)
     quality = {"review_status": "machine_checked"}
     subtitle = _envelope(
@@ -387,12 +400,14 @@ def package_media(
         payload={"language": transcript.language, "source_kind": "asr", "sentences": sentences},
         required=True,
     )
-    word_timeline = _envelope(
-        kind="word_timeline", media_fingerprint=media_fingerprint,
-        dependencies=[subtitle], provenance=provenance, quality=quality,
-        payload={"words": timings}, required=False,
-    )
-    resources: list[ResourceFile] = [subtitle, word_timeline]
+    resources: list[ResourceFile] = [subtitle]
+    if has_word_timeline:
+        word_timeline = _envelope(
+            kind="word_timeline", media_fingerprint=media_fingerprint,
+            dependencies=[subtitle], provenance=provenance, quality=quality,
+            payload={"words": timings}, required=False,
+        )
+        resources.append(word_timeline)
     manifest = {
         "schema": PACKAGE_SCHEMA,
         "created_at_ms": created_at_ms,
