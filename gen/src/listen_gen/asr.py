@@ -338,8 +338,6 @@ def package_media(
     created_at_ms: int,
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    if progress is not None:
-        progress("validating")
     if not media_path.is_file():
         raise ConversionError("media input is not a regular file")
     if not title.strip():

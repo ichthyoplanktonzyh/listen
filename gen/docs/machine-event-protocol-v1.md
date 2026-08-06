@@ -45,6 +45,26 @@ machine event is produced.
 
 Exit codes in machine mode: success `0`, failure `2`, cancellation `130`.
 
+## Argument failures
+
+When `--machine-events` is present, argument parsing itself is part of the
+protocol. Missing required arguments, invalid `--provider` choices, argument
+type errors, and unknown options are all reported as machine events:
+
+```text
+protocol
+started
+phase(validating)
+failed(code=invalid_arguments)
+```
+
+The `failed` event carries the stable message
+`Generation arguments are invalid.`; the raw argparse message is never written
+to stdout, stderr, or the event. `argparse` usage text does not appear
+anywhere in machine mode. Without `--machine-events`, the CLI keeps standard
+`argparse` behavior: usage and error text on stderr, empty stdout, exit code
+`2`.
+
 ## Common fields
 
 Every event carries these fields:
@@ -224,6 +244,25 @@ With `--machine-events`, SIGINT and SIGTERM:
 
 If the pipeline already emitted `completed` or `failed`, a later signal does
 not emit `cancelled`.
+
+## Output commit semantics
+
+In machine mode the pipeline never writes directly to the caller-specified
+output path. It builds the package at a unique staging path in the same
+directory (`. <output>.<random>.machine.tmp`), reads the package digest and
+resource manifest from that staging package, and only then enters an
+uninterruptible terminal commit:
+
+1. the staging package is atomically moved to the final output with
+   `os.replace()`;
+2. the `completed` event is emitted immediately after.
+
+Until that commit, the caller-specified output is never replaced: validation
+failures, provider failures, SIGINT, and SIGTERM all leave a pre-existing
+output byte-for-byte unchanged. A failed or cancelled run removes its staging
+package. Inside the terminal commit, a late signal is recorded but does not
+interrupt the move or suppress `completed`, so `completed` and `cancelled` can
+never both appear for the same run.
 
 ## Completed example
 

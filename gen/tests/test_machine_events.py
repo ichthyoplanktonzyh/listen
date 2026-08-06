@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import signal
@@ -13,8 +14,11 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 MACHINE_EVENT_SCHEMA = "listen_gen.machine-event.v1"
 TERMINAL_EVENTS = {"completed", "failed", "cancelled"}
+
+from listen_gen.protocol import MachineEventEmitter, protocol_capabilities
 
 
 def _env() -> dict[str, str]:
@@ -91,20 +95,30 @@ class MachineEventCliTests(unittest.TestCase):
         self.assertEqual(len(terminals), 1)
         return terminals[0]
 
+    def assert_no_staging_leftovers(self, directory: Path) -> None:
+        leftovers = [
+            path.name for path in Path(directory).iterdir()
+            if ".machine.tmp" in path.name
+        ]
+        self.assertEqual(leftovers, [])
+
     def test_success_event_order_and_sequence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "lesson.listenpkg"
             completed = run_cli(self.fixture_argv(output))
             self.assertEqual(completed.returncode, 0, completed.stderr)
             events = parse_events(completed.stdout)
+            phases = [
+                event["phase"]
+                for event in events
+                if event["event"] == "phase"
+            ]
             self.assertEqual(
                 [event["event"] for event in events],
                 ["protocol", "started", "phase", "phase", "phase", "completed"],
             )
-            self.assertEqual(
-                [event["phase"] for event in events if event["event"] == "phase"],
-                ["validating", "transcribing", "building_package"],
-            )
+            self.assertEqual(phases, ["validating", "transcribing", "building_package"])
+            self.assertEqual(phases.count("validating"), 1)
             self.assertEqual(
                 [event["sequence"] for event in events],
                 list(range(len(events))),
@@ -327,6 +341,272 @@ class MachineEventCliTests(unittest.TestCase):
             self.assertEqual(result["output"], str(output))
             self.assertNotIn("schema", completed.stdout)
             self.assertTrue(output.is_file())
+
+    def test_missing_required_argument_reports_invalid_arguments(self) -> None:
+        completed = run_cli(
+            [
+                "package", "from-media", "input.mp4",
+                "--provider", "fixture",
+                "--machine-events",
+            ]
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stderr, "")
+        events = parse_events(completed.stdout)
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["protocol", "started", "phase", "failed"],
+        )
+        self.assertEqual(events[2]["phase"], "validating")
+        final = self.assert_terminal_uniqueness(events)
+        self.assertEqual(final["event"], "failed")
+        self.assertEqual(final["code"], "invalid_arguments")
+        self.assertEqual(final["message"], "Generation arguments are invalid.")
+        self.assertNotIn("usage:", completed.stdout)
+        self.assertNotIn("the following arguments are required", completed.stdout)
+        self.assertNotIn("Traceback", completed.stdout)
+
+    def test_invalid_provider_choice_reports_invalid_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            argv = self.fixture_argv(output)
+            argv[argv.index("--provider") + 1] = "unsupported"
+            completed = run_cli(argv)
+        self.assertEqual(completed.returncode, 2)
+        events = parse_events(completed.stdout)
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["protocol", "started", "phase", "failed"],
+        )
+        self.assertEqual(
+            self.assert_terminal_uniqueness(events)["code"],
+            "invalid_arguments",
+        )
+        self.assertNotIn("invalid choice", completed.stdout)
+
+    def test_argument_type_error_reports_invalid_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            argv = self.fixture_argv(output)
+            argv[argv.index("--duration-ms") + 1] = "not-an-integer"
+            completed = run_cli(argv)
+        self.assertEqual(completed.returncode, 2)
+        events = parse_events(completed.stdout)
+        final = self.assert_terminal_uniqueness(events)
+        self.assertEqual(final["event"], "failed")
+        self.assertEqual(final["code"], "invalid_arguments")
+        self.assertNotIn("invalid int value", completed.stdout)
+
+    def test_unknown_option_reports_invalid_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            argv = self.fixture_argv(output)
+            argv.append("--unknown-option")
+            completed = run_cli(argv)
+        self.assertEqual(completed.returncode, 2)
+        events = parse_events(completed.stdout)
+        final = self.assert_terminal_uniqueness(events)
+        self.assertEqual(final["event"], "failed")
+        self.assertEqual(final["code"], "invalid_arguments")
+        self.assertNotIn("unrecognized arguments", completed.stdout)
+
+    def test_ordinary_mode_argument_error_keeps_argparse_behavior(self) -> None:
+        completed = run_cli(
+            ["package", "from-media", "input.mp4", "--provider", "fixture"]
+        )
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("usage:", completed.stderr)
+        self.assertIn("the following arguments are required", completed.stderr)
+        self.assertNotIn(MACHINE_EVENT_SCHEMA, completed.stderr)
+
+    def test_missing_fixture_emits_validating_exactly_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            argv = [
+                "package", "from-media", str(self.media),
+                "--output", str(output),
+                "--provider", "fixture",
+                "--title", "Machine protocol sample", "--media-kind", "audio",
+                "--duration-ms", "2200", "--created-at-ms", "1786000000000",
+                "--machine-events",
+            ]
+            completed = run_cli(argv)
+        self.assertEqual(completed.returncode, 2)
+        events = parse_events(completed.stdout)
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["protocol", "started", "phase", "failed"],
+        )
+        validating = [
+            event for event in events if event.get("phase") == "validating"
+        ]
+        self.assertEqual(len(validating), 1)
+        final = self.assert_terminal_uniqueness(events)
+        self.assertEqual(final["code"], "invalid_arguments")
+
+    def test_missing_media_placeholder_emits_validating_exactly_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            argv = [
+                "package", "from-media", str(self.media),
+                "--output", str(output),
+                "--provider", "command", "--command", sys.executable,
+                "--command-arg", "no-placeholder-here",
+                "--title", "Machine protocol sample", "--media-kind", "audio",
+                "--duration-ms", "2200", "--created-at-ms", "1786000000000",
+                "--machine-events",
+            ]
+            completed = run_cli(argv)
+        self.assertEqual(completed.returncode, 2)
+        events = parse_events(completed.stdout)
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["protocol", "started", "phase", "failed"],
+        )
+        validating = [
+            event for event in events if event.get("phase") == "validating"
+        ]
+        self.assertEqual(len(validating), 1)
+        final = self.assert_terminal_uniqueness(events)
+        self.assertEqual(final["code"], "invalid_arguments")
+
+    def _start_hanging_cli(
+        self, argv: list[str], env: dict[str, str] | None = None
+    ) -> subprocess.Popen[str]:
+        return subprocess.Popen(
+            [sys.executable, "-m", "listen_gen", *argv],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_env() if env is None else env,
+        )
+
+    def _wait_for_observation(
+        self, process: subprocess.Popen[str], observed: Path
+    ) -> None:
+        deadline = time.monotonic() + 30
+        while not observed.is_file() and time.monotonic() < deadline:
+            if process.poll() is not None:
+                break
+            time.sleep(0.05)
+        self.assertTrue(
+            observed.is_file(), "fake provider did not start before the deadline"
+        )
+
+    def _assert_provider_dead(self, observation: Path) -> None:
+        data = json.loads(observation.read_text(encoding="utf-8"))
+        provider_pid = int(data["pid"])
+        deadline = time.monotonic() + 10
+        alive = True
+        while time.monotonic() < deadline:
+            try:
+                os.kill(provider_pid, 0)
+            except ProcessLookupError:
+                alive = False
+                break
+            time.sleep(0.05)
+        self.assertFalse(alive, "provider process is still alive")
+
+    def test_sigint_preserves_preexisting_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            output.write_bytes(b"preexisting-package")
+            observed = Path(directory) / "observed.json"
+            argv = self.command_argv(
+                output, "hang", observed, command_timeout="600"
+            )
+            process = self._start_hanging_cli(argv)
+            self._wait_for_observation(process, observed)
+            process.send_signal(signal.SIGINT)
+            stdout, stderr = process.communicate(timeout=60)
+            self.assertEqual(process.returncode, 130, stderr)
+            events = parse_events(stdout)
+            terminal = self.assert_terminal_uniqueness(events)
+            self.assertEqual(terminal["event"], "cancelled")
+            self.assertEqual(output.read_bytes(), b"preexisting-package")
+            self.assert_no_staging_leftovers(Path(directory))
+            self._assert_provider_dead(observed)
+
+    def test_sigterm_cancels_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            observed = Path(directory) / "observed.json"
+            argv = self.command_argv(
+                output, "hang", observed, command_timeout="600"
+            )
+            process = self._start_hanging_cli(argv)
+            self._wait_for_observation(process, observed)
+            process.send_signal(signal.SIGTERM)
+            stdout, stderr = process.communicate(timeout=60)
+            self.assertEqual(process.returncode, 130, stderr)
+            events = parse_events(stdout)
+            self.assertNotIn("completed", [event["event"] for event in events])
+            self.assertNotIn("failed", [event["event"] for event in events])
+            terminal = self.assert_terminal_uniqueness(events)
+            self.assertEqual(terminal["event"], "cancelled")
+            self.assertFalse(output.exists())
+            self.assert_no_staging_leftovers(Path(directory))
+            self._assert_provider_dead(observed)
+
+    def test_cancel_before_terminal_commit_never_commits_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "lesson.listenpkg"
+            output.write_bytes(b"preexisting-package")
+            marker = Path(directory) / "before-commit.marker"
+            env = _env()
+            env["LISTEN_GEN_TEST_PAUSE_BEFORE_TERMINAL_COMMIT"] = "1"
+            env["LISTEN_GEN_TEST_BEFORE_COMMIT_MARKER"] = str(marker)
+            argv = self.fixture_argv(output)
+            process = self._start_hanging_cli(argv, env=env)
+            deadline = time.monotonic() + 30
+            while not marker.is_file() and time.monotonic() < deadline:
+                if process.poll() is not None:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(
+                marker.is_file(), "pipeline did not reach the commit seam"
+            )
+            self.assertEqual(marker.read_text(encoding="utf-8"), "ready")
+            self.assertEqual(output.read_bytes(), b"preexisting-package")
+            process.send_signal(signal.SIGINT)
+            stdout, stderr = process.communicate(timeout=60)
+            self.assertEqual(process.returncode, 130, stderr)
+            events = parse_events(stdout)
+            terminal = self.assert_terminal_uniqueness(events)
+            self.assertEqual(terminal["event"], "cancelled")
+            self.assertEqual(output.read_bytes(), b"preexisting-package")
+            self.assert_no_staging_leftovers(Path(directory))
+
+    def test_completed_terminal_cannot_be_followed_by_cancelled(self) -> None:
+        stream = io.StringIO()
+        writer = MachineEventEmitter(stream=stream)
+        writer.protocol(protocol_capabilities())
+        writer.started()
+        writer.phase("validating")
+        writer.phase("transcribing")
+        writer.phase("building_package")
+        writer.completed(
+            package_sha256=f"sha256:{'0' * 64}",
+            media_fingerprint=f"sha256:{'1' * 64}",
+            resources=[],
+            warnings=[],
+        )
+        with self.assertRaises(RuntimeError):
+            writer.cancelled()
+        with self.assertRaises(RuntimeError):
+            writer.failed(code="internal_error", message="late failure")
+        events = parse_events(stream.getvalue())
+        self.assertEqual(
+            [event["event"] for event in events],
+            ["protocol", "started", "phase", "phase", "phase", "completed"],
+        )
+        terminals = [
+            event for event in events if event["event"] in TERMINAL_EVENTS
+        ]
+        self.assertEqual(len(terminals), 1)
+        self.assertEqual(terminals[0]["event"], "completed")
+        self.assertTrue(writer.terminal_emitted)
 
 
 if __name__ == "__main__":

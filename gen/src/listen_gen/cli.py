@@ -4,8 +4,11 @@ import argparse
 import contextlib
 import hashlib
 import json
+import os
 import signal
 import sys
+import tempfile
+import time
 import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -34,9 +37,21 @@ class CancellationRequested(BaseException):
         self.signal_number = signal_number
 
 
+class ArgumentParsingFailed(Exception):
+    """Argparse rejected the invocation without printing usage or exiting."""
+
+
+class MachineArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that reports machine-mode failures as exceptions."""
+
+    def error(self, message: str) -> None:
+        raise ArgumentParsingFailed(message)
+
+
 class _CancellationState:
     def __init__(self) -> None:
         self.signal_number: int | None = None
+        self.terminal_commit = False
 
     def requested(self) -> bool:
         return self.signal_number is not None
@@ -50,7 +65,8 @@ def _cancellation_signals(state: _CancellationState) -> Iterator[None]:
 
     def request(signum: int, _frame: Any) -> None:
         state.signal_number = signum
-        raise CancellationRequested(signum)
+        if not state.terminal_commit:
+            raise CancellationRequested(signum)
 
     for signum in (signal.SIGINT, signal.SIGTERM):
         previous[signum] = signal.signal(signum, request)
@@ -61,8 +77,24 @@ def _cancellation_signals(state: _CancellationState) -> Iterator[None]:
             signal.signal(signum, handler)
 
 
-def parser() -> argparse.ArgumentParser:
-    root = argparse.ArgumentParser(prog="listen-gen")
+@contextlib.contextmanager
+def _terminal_commit(state: _CancellationState) -> Iterator[None]:
+    """Make the final replace + completed event uninterruptible as a unit."""
+
+    if state.requested():
+        raise CancellationRequested(state.signal_number or signal.SIGINT)
+    state.terminal_commit = True
+    try:
+        yield
+    finally:
+        state.terminal_commit = False
+
+
+def parser(
+    *,
+    parser_class: type[argparse.ArgumentParser] = argparse.ArgumentParser,
+) -> argparse.ArgumentParser:
+    root = parser_class(prog="listen-gen")
     commands = root.add_subparsers(dest="command", required=True)
     package = commands.add_parser("package", help="build a Listen content package")
     package_commands = package.add_subparsers(dest="package_command", required=True)
@@ -182,28 +214,61 @@ def _completed_details(package_path: Path) -> tuple[str, str, list[dict[str, obj
     )
 
 
-def _emit_success(
-    writer: MachineEventEmitter, output_path: Path, result: dict[str, Any]
-) -> None:
-    package_sha256, media_fingerprint, resources = _completed_details(output_path)
-    writer.completed(
-        package_sha256=package_sha256,
-        media_fingerprint=media_fingerprint,
-        resources=resources,
-        warnings=result["warnings"],
+def _create_machine_staging_path(output_path: Path) -> Path:
+    """Reserve a unique same-directory staging name for the final package."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, name = tempfile.mkstemp(
+        dir=output_path.parent,
+        prefix=f".{output_path.name}.",
+        suffix=".machine.tmp",
     )
+    os.close(descriptor)
+    path = Path(name)
+    path.unlink()
+    return path
 
 
-def _main_machine(args: argparse.Namespace) -> int:
-    writer = MachineEventEmitter()
-    state = _CancellationState()
-    writer.protocol(protocol_capabilities())
-    writer.started()
+def _main_machine(
+    args: argparse.Namespace,
+    *,
+    writer: MachineEventEmitter,
+    state: _CancellationState,
+) -> int:
     with _cancellation_signals(state):
         try:
-            result = _run(args, state, writer)
-            _emit_success(writer, args.output, result)
-            return 0
+            staging_path = _create_machine_staging_path(args.output)
+            try:
+                machine_args = argparse.Namespace(**vars(args))
+                machine_args.output = staging_path
+                result = _run(machine_args, state, writer)
+                package_sha256, media_fingerprint, resources = _completed_details(
+                    staging_path
+                )
+                if (
+                    os.environ.get("LISTEN_GEN_TEST_PAUSE_BEFORE_TERMINAL_COMMIT")
+                    == "1"
+                ):
+                    marker = os.environ.get("LISTEN_GEN_TEST_BEFORE_COMMIT_MARKER")
+                    if marker:
+                        Path(marker).write_text("ready", encoding="utf-8")
+                    while not state.requested():
+                        time.sleep(0.01)
+                if state.requested():
+                    raise CancellationRequested(
+                        state.signal_number or signal.SIGINT
+                    )
+                with _terminal_commit(state):
+                    os.replace(staging_path, args.output)
+                    writer.completed(
+                        package_sha256=package_sha256,
+                        media_fingerprint=media_fingerprint,
+                        resources=resources,
+                        warnings=result["warnings"],
+                    )
+                return 0
+            finally:
+                staging_path.unlink(missing_ok=True)
         except CancellationRequested:
             if writer.terminal_emitted:
                 return 0 if writer.terminal_event == "completed" else 2
@@ -240,7 +305,23 @@ def _main_ordinary(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parser().parse_args(argv)
-    if getattr(args, "machine_events", False):
-        return _main_machine(args)
-    return _main_ordinary(args)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    help_requested = "-h" in raw_argv or "--help" in raw_argv
+    machine_requested = "--machine-events" in raw_argv and not help_requested
+    if not machine_requested:
+        args = parser().parse_args(raw_argv)
+        return _main_ordinary(args)
+    writer = MachineEventEmitter()
+    state = _CancellationState()
+    writer.protocol(protocol_capabilities())
+    writer.started()
+    writer.phase("validating")
+    try:
+        args = parser(parser_class=MachineArgumentParser).parse_args(raw_argv)
+    except ArgumentParsingFailed:
+        writer.failed(
+            code="invalid_arguments",
+            message=MACHINE_ERROR_MESSAGES["invalid_arguments"],
+        )
+        return 2
+    return _main_machine(args, writer=writer, state=state)
