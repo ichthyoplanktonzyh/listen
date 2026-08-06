@@ -92,6 +92,32 @@ void main() {
     expect(tooltip.message, fileName);
   });
 
+  testWidgets('the session header carries settings, since the rail is behind', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    // The workbench is a full-bleed sibling of the navigation rail, so it
+    // covers the rail's settings entry: on Windows that left no way in at all.
+    var opened = 0;
+    await tester.pumpWidget(
+      localized(
+        MediaWorkbench(
+          mediaTitle: 'CNN 10.mp4',
+          playerStage: const ColoredBox(color: Colors.black),
+          learningPanel: const ColoredBox(color: Colors.white),
+          mediaFraction: 0.42,
+          onMediaFractionChanged: _noopFraction,
+          onOpenSettings: () => opened += 1,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('workbench-settings')));
+    expect(opened, 1);
+  });
+
   testWidgets('wide workbench divider resizes media and transcript panes', (
     tester,
   ) async {

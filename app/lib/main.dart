@@ -2593,6 +2593,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     studyMenu: _studyMenu(),
                                                     listeningMenu:
                                                         _listeningMenu(),
+                                                    onOpenSettings: () =>
+                                                        unawaited(
+                                                          _openSettings(),
+                                                        ),
                                                     translationMenu:
                                                         _translationMenu(),
                                                     mediaTitle: widget

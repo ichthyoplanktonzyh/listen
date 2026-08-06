@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/content_channel.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
 import '../../utils/media_title.dart';
@@ -22,6 +23,7 @@ class MediaWorkbench extends StatefulWidget {
     this.studyMenu,
     this.translationMenu,
     this.listeningMenu,
+    this.onOpenSettings,
   });
 
   final String mediaTitle;
@@ -53,6 +55,14 @@ class MediaWorkbench extends StatefulWidget {
 
   /// The extensive-listening session for this sitting.
   final Widget? listeningMenu;
+
+  /// Opens app settings.
+  ///
+  /// The rail's own settings entry is unreachable while this workbench is up —
+  /// the workbench is a full-bleed sibling of the rail, so it covers it — which
+  /// left the native macOS menu as the only way in and nothing at all on
+  /// Windows. It belongs on the surface that is actually on screen.
+  final VoidCallback? onOpenSettings;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -95,6 +105,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
         studyMenu: widget.studyMenu,
         translationMenu: widget.translationMenu,
         listeningMenu: widget.listeningMenu,
+        onOpenSettings: widget.onOpenSettings,
       ),
       Expanded(
         // Channel surfaces settle in (#46): switching channels fades the new
@@ -205,6 +216,7 @@ class _SessionHeader extends StatelessWidget {
     required this.studyMenu,
     required this.translationMenu,
     required this.listeningMenu,
+    required this.onOpenSettings,
   });
 
   final VoidCallback? onCollapse;
@@ -223,6 +235,9 @@ class _SessionHeader extends StatelessWidget {
 
   /// The extensive-listening session for this sitting.
   final Widget? listeningMenu;
+
+  /// App settings. The rail that used to carry this is behind the workbench.
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -257,6 +272,15 @@ class _SessionHeader extends StatelessWidget {
               const SizedBox(width: ListenSpacing.gap8),
               subtitleMenu!,
             ],
+            if (onOpenSettings != null)
+              IconButton(
+                key: const Key('workbench-settings'),
+                tooltip: l.text('settings'),
+                onPressed: onOpenSettings,
+                iconSize: ListenIconSize.chrome,
+                color: colors.onSurfaceVariant,
+                icon: const Icon(Icons.settings_outlined),
+              ),
           ],
         ),
       ),
