@@ -78,6 +78,7 @@ import 'models/capability_readiness.dart';
 import 'models/backend_event.dart';
 import 'models/content_activity.dart';
 import 'models/content_channel.dart';
+import 'models/workbench_study_mode.dart';
 import 'models/personal_expression.dart';
 import 'models/practice.dart';
 import 'models/task_status.dart';
@@ -539,6 +540,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get status => playerController.status;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool _workbenchExpanded = false;
+
+  /// How the listening transcript presents itself. A workbench-level display
+  /// choice, not a channel, so it lives here beside the other local UI state
+  /// rather than in [ContentChannelCoordinator].
+  WorkbenchStudyMode _studyMode = WorkbenchStudyMode.normal;
   late final AnimationController _workbenchAnimController;
   late final Animation<Offset> _workbenchSlideAnimation;
   // ── Convenience ──
@@ -2201,6 +2207,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       channelAvailability: _channelAvailability(),
       onChannelSelected: (channel) =>
           unawaited(contentChannels.select(channel)),
+      selectedMode: _studyMode,
+      onModeSelected: _selectStudyMode,
       hasCue: cue != null,
       canCloze:
           cue != null &&
@@ -2219,6 +2227,16 @@ class _PlayerScreenState extends State<PlayerScreen>
       onSentenceDictation: () =>
           unawaited(practiceActions.startSentenceDictationPractice()),
     );
+  }
+
+  /// Enters the listening channel in [mode]. The three reading displays are the
+  /// listening channel — picking one from the study menu both selects it and
+  /// sets how its transcript reads.
+  void _selectStudyMode(WorkbenchStudyMode mode) {
+    setState(() => _studyMode = mode);
+    if (contentChannels.selected != ContentChannel.listening) {
+      unawaited(contentChannels.select(ContentChannel.listening));
+    }
   }
 
   // ── Shell panes ──
@@ -2593,6 +2611,14 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     studyMenu: _studyMenu(),
                                                     listeningMenu:
                                                         _listeningMenu(),
+                                                    canShadow:
+                                                        subtitleController
+                                                            .currentPrimaryCue !=
+                                                        null,
+                                                    onShadow: () => unawaited(
+                                                      practiceActions
+                                                          .startShadowingPractice(),
+                                                    ),
                                                     onOpenSettings: () =>
                                                         unawaited(
                                                           _openSettings(),
@@ -2848,6 +2874,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onReadingMark: readingController.isOpen
         ? (understood) => unawaited(_recordReadingMark(understood))
         : null,
+    studyMode: _studyMode,
   );
 
   Widget _controls() => PlaybackBar(

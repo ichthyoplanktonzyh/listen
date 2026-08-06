@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/content_channel.dart';
+import '../../models/workbench_study_mode.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/menu_rows.dart';
@@ -24,6 +25,8 @@ class StudyMenu extends StatelessWidget {
     required this.selectedChannel,
     required this.channelAvailability,
     required this.onChannelSelected,
+    required this.selectedMode,
+    required this.onModeSelected,
     required this.hasCue,
     required this.canCloze,
     required this.canChunkDictation,
@@ -36,6 +39,14 @@ class StudyMenu extends StatelessWidget {
   final ContentChannel selectedChannel;
   final Map<ContentChannel, ContentChannelAvailability> channelAvailability;
   final ValueChanged<ContentChannel> onChannelSelected;
+
+  /// The listening channel is expressed *as* its three display modes — read
+  /// through, blind, word select — rather than a single "Listen" item beside a
+  /// separate mode switch. Picking one enters listening in that display, so the
+  /// menu carries one selection ("how am I working this material") across both
+  /// channels and modes.
+  final WorkbenchStudyMode selectedMode;
+  final ValueChanged<WorkbenchStudyMode> onModeSelected;
 
   /// The intensive modes work on the sentence being played. Without one they
   /// are listed and disabled rather than hidden, so the menu never changes
@@ -54,6 +65,7 @@ class StudyMenu extends StatelessWidget {
   final VoidCallback onSentenceDictation;
 
   static const _channelValuePrefix = 'channel-';
+  static const _modeValuePrefix = 'mode-';
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +82,13 @@ class StudyMenu extends StatelessWidget {
           );
           return;
         }
+        if (value.startsWith(_modeValuePrefix)) {
+          final name = value.substring(_modeValuePrefix.length);
+          onModeSelected(
+            WorkbenchStudyMode.values.firstWhere((mode) => mode.name == name),
+          );
+          return;
+        }
         switch (value) {
           case 'shadow':
             onShadow();
@@ -83,7 +102,29 @@ class StudyMenu extends StatelessWidget {
       },
       itemBuilder: (_) => [
         ListenMenuHeader(label: l.text('studyModeReadingGroup')),
-        _channelItem(l, ContentChannel.listening),
+        // The listening channel, as its three displays. Selecting one enters
+        // listening in that mode, so these carry listening's selection mark.
+        _modeItem(
+          l,
+          WorkbenchStudyMode.normal,
+          Icons.article_outlined,
+          'studyModeNormal',
+          'studyModeNormalHint',
+        ),
+        _modeItem(
+          l,
+          WorkbenchStudyMode.blindListening,
+          Icons.hearing_outlined,
+          'studyModeBlind',
+          'studyModeBlindHint',
+        ),
+        _modeItem(
+          l,
+          WorkbenchStudyMode.wordSelection,
+          Icons.quiz_outlined,
+          'studyModeWordSelect',
+          'studyModeWordSelectHint',
+        ),
         _channelItem(l, ContentChannel.reading),
         const PopupMenuDivider(),
         ListenMenuHeader(label: l.text('studyModeIntensiveGroup')),
@@ -141,7 +182,11 @@ class StudyMenu extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              _channelIcon(selectedChannel),
+              // In listening the trigger shows the active display; elsewhere it
+              // shows the channel you are in.
+              selectedChannel == ContentChannel.listening
+                  ? _modeIcon(selectedMode)
+                  : _channelIcon(selectedChannel),
               size: ListenIconSize.chrome,
               color: quiet,
             ),
@@ -187,6 +232,37 @@ class StudyMenu extends StatelessWidget {
       ),
     );
   }
+
+  /// One display of the listening transcript. Mutually exclusive with the
+  /// channels and with each other, so it carries a radio mark — lit only while
+  /// listening is the channel you are in.
+  PopupMenuItem<String> _modeItem(
+    AppLocalizations l,
+    WorkbenchStudyMode mode,
+    IconData icon,
+    String titleKey,
+    String hintKey,
+  ) {
+    final selected =
+        selectedChannel == ContentChannel.listening && selectedMode == mode;
+    return PopupMenuItem(
+      key: ValueKey('study-mode-${mode.name}'),
+      value: '$_modeValuePrefix${mode.name}',
+      child: ListenMenuRow(
+        icon: selected
+            ? Icons.radio_button_checked
+            : Icons.radio_button_unchecked,
+        title: l.text(titleKey),
+        subtitle: l.text(hintKey),
+      ),
+    );
+  }
+
+  static IconData _modeIcon(WorkbenchStudyMode mode) => switch (mode) {
+    WorkbenchStudyMode.normal => Icons.article_outlined,
+    WorkbenchStudyMode.blindListening => Icons.hearing_outlined,
+    WorkbenchStudyMode.wordSelection => Icons.quiz_outlined,
+  };
 
   static IconData _channelIcon(ContentChannel channel) => switch (channel) {
     ContentChannel.listening => Icons.headphones_outlined,

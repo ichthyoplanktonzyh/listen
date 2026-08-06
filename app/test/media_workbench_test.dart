@@ -45,8 +45,9 @@ void main() {
 
     expect(find.byKey(const Key('media-stage')), findsOneWidget);
     expect(find.byKey(const Key('learning-panel')), findsOneWidget);
-    // The header reads the title, not the file name (§3.7).
-    expect(find.text('CNN 10'), findsOneWidget);
+    // The title reads clean — not the file name (§3.7) — and now shows twice:
+    // once as the pane heading, once in the header breadcrumb (P0-b).
+    expect(find.text('CNN 10'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 

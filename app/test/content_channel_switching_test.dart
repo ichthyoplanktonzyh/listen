@@ -27,6 +27,7 @@ import 'package:llplayer_next/data/repositories/speaking_session_repository.dart
 import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/content_channel.dart';
+import 'package:llplayer_next/models/workbench_study_mode.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
@@ -235,6 +236,10 @@ class _Harness {
               ContentChannel.writing: ContentChannelAvailability.available(),
             },
             onChannelSelected: channels.select,
+            selectedMode: WorkbenchStudyMode.normal,
+            // The listening displays enter the listening channel; the test
+            // returns to listening by picking 通读.
+            onModeSelected: (_) => channels.select(ContentChannel.listening),
             hasCue: true,
             canCloze: true,
             canChunkDictation: true,
@@ -298,14 +303,19 @@ class _Harness {
 }
 
 Future<void> _tapChannel(WidgetTester tester, String name) async {
-  // The four channels live on the study menu now, beside the intensive modes
-  // — one control for "how do I want to work this material" instead of four.
+  // The channels live on the study menu now, beside the intensive modes — one
+  // control for "how do I want to work this material" instead of four. Listening
+  // has no item of its own: it is entered through its displays, so 'listening'
+  // maps to picking the read-through display (通读 → mode-normal).
+  final key = name == 'listening'
+      ? const ValueKey('study-mode-normal')
+      : ValueKey('content-channel-$name');
   await tester.tap(find.byKey(const Key('study-menu')));
   // Explicit pumps rather than pumpAndSettle: the channel surfaces animate in
   // (and one of them breathes), so settling never arrives.
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
-  await tester.tap(find.byKey(ValueKey('content-channel-$name')));
+  await tester.tap(find.byKey(key));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
 }

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/content_channel.dart';
+import 'package:llplayer_next/models/workbench_study_mode.dart';
 import 'package:llplayer_next/widgets/layout/content_channel_availability.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/layout/side_panel_tabs.dart';
@@ -89,9 +90,12 @@ void main() {
 
       // The five scattered homes — the channel pills, the posture grid, the
       // popup inside one of its cells, and two transport menus — collapse to
-      // this list.
+      // this list. Listening is expressed as its three displays (通读/盲听/选词)
+      // rather than one "听" item beside a separate mode switch.
       for (final label in const [
-        '听',
+        '通读',
+        '盲听',
+        '选词',
         '读',
         '说',
         '写',
@@ -125,12 +129,15 @@ void main() {
       await tester.tap(find.byKey(const Key('study-menu')));
       await tester.pumpAndSettle();
 
-      // The channels are mutually exclusive surfaces, so exactly one is
-      // marked; the intensive modes are things you start and carry no mark.
+      // Channels and the three listening displays are one mutually exclusive
+      // selection, so exactly one is marked; the intensive modes are things you
+      // start and carry no mark. In the reading channel none of the listening
+      // displays are lit, so the marks are: 读 checked, and 通读/盲听/选词 + 说 + 写
+      // unchecked.
       expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
       expect(
         find.byIcon(Icons.radio_button_unchecked),
-        findsNWidgets(ContentChannel.values.length - 1),
+        findsNWidgets(WorkbenchStudyMode.values.length + 2),
       );
     });
 
@@ -189,11 +196,13 @@ void main() {
           .widgetList<PopupMenuItem<String>>(find.byType(PopupMenuItem<String>))
           .where((item) => item.value != null);
       for (final item in items) {
-        // The channels answer to the loaded transcript; only the four
-        // intensive modes need the sentence being played.
+        // The channels and the listening displays answer to the loaded
+        // transcript, not the sentence being played; only the four intensive
+        // modes need a current sentence.
         expect(
           item.enabled,
-          item.value!.startsWith('channel-'),
+          item.value!.startsWith('channel-') ||
+              item.value!.startsWith('mode-'),
           reason: '${item.value}',
         );
       }
@@ -227,8 +236,10 @@ Widget _menu({
   bool canCloze = true,
   bool canChunkDictation = true,
   ContentChannel selectedChannel = ContentChannel.listening,
+  WorkbenchStudyMode selectedMode = WorkbenchStudyMode.normal,
   Map<ContentChannel, ContentChannelAvailability>? channelAvailability,
   ValueChanged<ContentChannel>? onChannelSelected,
+  ValueChanged<WorkbenchStudyMode>? onModeSelected,
 }) => StudyMenu(
   selectedChannel: selectedChannel,
   channelAvailability:
@@ -238,6 +249,8 @@ Widget _menu({
           channel: const ContentChannelAvailability.available(),
       },
   onChannelSelected: onChannelSelected ?? (_) {},
+  selectedMode: selectedMode,
+  onModeSelected: onModeSelected ?? (_) {},
   hasCue: hasCue,
   canCloze: canCloze,
   canChunkDictation: canChunkDictation,

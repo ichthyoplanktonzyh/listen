@@ -4,11 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/models/workbench_study_mode.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/panels/transcript_panel.dart';
 
 void main() {
   _analysisGroup();
+  _studyModeGroup();
 
   testWidgets('transcript keeps the current cue visible with variable rows', (
     tester,
@@ -241,6 +243,125 @@ void _analysisGroup() {
   });
 }
 
+/// The reading states are displays of this same pane, not separate windows.
+/// Blind and word-select both replace the scrolling transcript with the current
+/// sentence in focus — blanked — matching 每日英语听力's 盲听 / 选词.
+void _studyModeGroup() {
+  String plainOf(WidgetTester tester, Key key) =>
+      tester.widget<Text>(find.byKey(key)).textSpan!.toPlainText();
+
+  testWidgets('blind mode focuses the current sentence, blanked, with a count', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(8, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[2],
+        studyMode: WorkbenchStudyMode.blindListening,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Only the current sentence is on screen — the list is gone — and it is
+    // blanked (underscore runs) with some scaffolding words kept.
+    expect(find.byType(ListView), findsNothing);
+    expect(
+      find.byKey(const Key('transcript-blind-sentence')),
+      findsOneWidget,
+    );
+    final plain = plainOf(tester, const Key('transcript-blind-sentence'));
+    expect(plain, contains('_'));
+    expect(plain.replaceAll('_', '').trim(), isNotEmpty);
+    // The count stands where in the piece the ear is: sentence 3 of 8.
+    expect(find.text('3 / 8'), findsOneWidget);
+    // Blind shows no candidate words — that is word-select's job.
+    expect(find.byType(OutlinedButton), findsNothing);
+  });
+
+  testWidgets('word select offers the removed words as chips and fills a blank', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(700, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(6, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[1],
+        studyMode: WorkbenchStudyMode.wordSelection,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The current sentence, blanked, plus the prompt and a chip per blank.
+    expect(find.byType(ListView), findsNothing);
+    expect(find.text('请选择下列单词进行填空'), findsOneWidget);
+    final before = plainOf(tester, const Key('transcript-word-select-sentence'));
+    final blanks = RegExp(r'_+').allMatches(before).length;
+    final chips = find.byType(OutlinedButton);
+    expect(tester.widgetList(chips), hasLength(blanks));
+    expect(blanks, greaterThan(0));
+
+    // Tapping a chip drops its word into the first empty blank and consumes it.
+    final label = ((tester.widget<OutlinedButton>(chips.first)).child! as Text)
+        .data!;
+    await tester.ensureVisible(chips.first);
+    await tester.tap(chips.first);
+    await tester.pumpAndSettle();
+
+    final after = plainOf(tester, const Key('transcript-word-select-sentence'));
+    expect(after, contains(label));
+    expect(RegExp(r'_+').allMatches(after).length, blanks - 1);
+    // The used chip stays visible but disabled, so the pool keeps its shape.
+    expect(
+      tester.widget<OutlinedButton>(chips.first).onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('focus modes ask for a sentence when none is playing', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(4, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: null,
+        studyMode: WorkbenchStudyMode.wordSelection,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('transcript-focus-awaiting')),
+      findsOneWidget,
+    );
+  });
+}
+
 Cue _cue(int index) {
   final text = index.isEven
       ? 'Target sentence $index with a compact listening line.'
@@ -297,15 +418,17 @@ class _Harness extends StatelessWidget {
     this.analysisExpanded = false,
     this.analysis,
     this.onWord,
+    this.studyMode = WorkbenchStudyMode.normal,
   });
 
   final ScrollController controller;
   final SubtitleTrack track;
-  final Cue currentCue;
+  final Cue? currentCue;
   final VoidCallback? onToggleAnalysis;
   final bool analysisExpanded;
   final Widget? analysis;
   final Future<void> Function(SubtitleToken, Cue, Offset)? onWord;
+  final WorkbenchStudyMode studyMode;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -336,6 +459,7 @@ class _Harness extends StatelessWidget {
             onToggleAnalysis: onToggleAnalysis,
             analysisExpanded: analysisExpanded,
             analysis: analysis,
+            studyMode: studyMode,
           ),
         ),
       ),

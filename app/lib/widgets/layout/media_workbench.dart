@@ -23,6 +23,8 @@ class MediaWorkbench extends StatefulWidget {
     this.studyMenu,
     this.translationMenu,
     this.listeningMenu,
+    this.onShadow,
+    this.canShadow = false,
     this.onOpenSettings,
   });
 
@@ -55,6 +57,16 @@ class MediaWorkbench extends StatefulWidget {
 
   /// The extensive-listening session for this sitting.
   final Widget? listeningMenu;
+
+  /// Shadows the sentence being played — the high-frequency entry the
+  /// reference product keeps in the top bar, distinct from the same mode buried
+  /// in [studyMenu]. Null-safe: when there is no current sentence the header
+  /// still shows the control, disabled with a reason ([canShadow]).
+  final VoidCallback? onShadow;
+
+  /// Whether a sentence is currently playing to shadow. Drives whether the
+  /// header's shadow control is live or shown disabled-with-reason.
+  final bool canShadow;
 
   /// Opens app settings.
   ///
@@ -100,11 +112,14 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
   Widget build(BuildContext context) => Column(
     children: [
       _SessionHeader(
+        mediaTitle: widget.mediaTitle,
         onCollapse: widget.onCollapse,
         subtitleMenu: widget.subtitleMenu,
         studyMenu: widget.studyMenu,
         translationMenu: widget.translationMenu,
         listeningMenu: widget.listeningMenu,
+        onShadow: widget.onShadow,
+        canShadow: widget.canShadow,
         onOpenSettings: widget.onOpenSettings,
       ),
       Expanded(
@@ -211,13 +226,20 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
 
 class _SessionHeader extends StatelessWidget {
   const _SessionHeader({
+    required this.mediaTitle,
     required this.onCollapse,
     required this.subtitleMenu,
     required this.studyMenu,
     required this.translationMenu,
     required this.listeningMenu,
+    required this.onShadow,
+    required this.canShadow,
     required this.onOpenSettings,
   });
+
+  /// The media on the workbench, for the breadcrumb. It reads the title, not
+  /// the download artefact — same rule as the media pane heading.
+  final String mediaTitle;
 
   final VoidCallback? onCollapse;
 
@@ -235,6 +257,10 @@ class _SessionHeader extends StatelessWidget {
 
   /// The extensive-listening session for this sitting.
   final Widget? listeningMenu;
+
+  /// Shadows the sentence being played, [canShadow] gating it.
+  final VoidCallback? onShadow;
+  final bool canShadow;
 
   /// App settings. The rail that used to carry this is behind the workbench.
   final VoidCallback? onOpenSettings;
@@ -258,20 +284,48 @@ class _SessionHeader extends StatelessWidget {
                 onPressed: onCollapse,
                 icon: const Icon(Icons.home_outlined),
               ),
-            const Spacer(),
+            // Where the learner is. The reference top bar leads with a source
+            // breadcrumb; we have no source hierarchy yet (a backend gap — see
+            // workbench-backend-gaps.md), so the honest path is the library and
+            // this media's title, never an invented channel name.
+            Expanded(child: _Breadcrumb(mediaTitle: mediaTitle)),
+            // A labelled, tooltipped tool band — not an anonymous menu cluster.
+            // Order runs low-commitment to high: session, shadow, how the text
+            // reads, how to work it, its subtitles, then take-away and app
+            // chrome. Unwired take-away entries are shown disabled with the
+            // reason, never as a clickable promise.
             ?listeningMenu,
-            if (translationMenu != null) ...[
-              const SizedBox(width: ListenSpacing.gap8),
-              translationMenu!,
-            ],
-            if (studyMenu != null) ...[
-              const SizedBox(width: ListenSpacing.gap8),
-              studyMenu!,
-            ],
-            if (subtitleMenu != null) ...[
-              const SizedBox(width: ListenSpacing.gap8),
-              subtitleMenu!,
-            ],
+            _gap,
+            IconButton(
+              key: const Key('workbench-shadow'),
+              tooltip: canShadow
+                  ? l.text('workbenchShadowTooltip')
+                  : l.text('workbenchShadowNoCue'),
+              onPressed: canShadow ? onShadow : null,
+              iconSize: ListenIconSize.chrome,
+              color: colors.onSurfaceVariant,
+              icon: const Icon(Icons.mic_none_outlined),
+            ),
+            if (translationMenu != null) ...[_gap, translationMenu!],
+            if (studyMenu != null) ...[_gap, studyMenu!],
+            if (subtitleMenu != null) ...[_gap, subtitleMenu!],
+            _gap,
+            IconButton(
+              key: const Key('workbench-export'),
+              tooltip: l.text('workbenchExportUnavailable'),
+              onPressed: null,
+              iconSize: ListenIconSize.chrome,
+              color: colors.onSurfaceVariant,
+              icon: const Icon(Icons.download_outlined),
+            ),
+            IconButton(
+              key: const Key('workbench-share'),
+              tooltip: l.text('workbenchShareUnavailable'),
+              onPressed: null,
+              iconSize: ListenIconSize.chrome,
+              color: colors.onSurfaceVariant,
+              icon: const Icon(Icons.ios_share_outlined),
+            ),
             if (onOpenSettings != null)
               IconButton(
                 key: const Key('workbench-settings'),
@@ -284,6 +338,54 @@ class _SessionHeader extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  static const _gap = SizedBox(width: ListenSpacing.gap8);
+}
+
+/// The media breadcrumb: `Media library / <title>`. It reads the display title
+/// (extension, provider id and trailing date stripped) and keeps the raw file
+/// name a hover away, so nothing is hidden. When space runs out the title
+/// ellipsizes; the library root and separator hold their width so the learner
+/// never loses the sense of place.
+class _Breadcrumb extends StatelessWidget {
+  const _Breadcrumb({required this.mediaTitle});
+
+  final String mediaTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final l = AppLocalizations.of(context);
+    final quiet = Theme.of(
+      context,
+    ).textTheme.labelLarge?.copyWith(color: colors.onSurfaceVariant);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(l.text('mediaLibrary'), style: quiet),
+        Icon(
+          Icons.chevron_right,
+          size: ListenIconSize.control,
+          color: colors.onSurfaceVariant,
+        ),
+        Flexible(
+          child: Tooltip(
+            message: mediaTitle,
+            child: Text(
+              displayMediaTitle(mediaTitle),
+              key: const Key('workbench-breadcrumb-title'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: colors.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

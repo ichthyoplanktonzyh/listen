@@ -1,11 +1,15 @@
+import 'dart:math';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../models/workbench_study_mode.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
+import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/transcript_translation.dart';
 import '../subtitle/token_line.dart';
@@ -34,6 +38,7 @@ class TranscriptPanel extends StatefulWidget {
     this.translationFor,
     this.hasTranslationTrack = false,
     this.onImportTranslation,
+    this.studyMode = WorkbenchStudyMode.normal,
   });
 
   final SubtitleTrack? track;
@@ -82,6 +87,11 @@ class TranscriptPanel extends StatefulWidget {
   final bool hasTranslationTrack;
   final VoidCallback? onImportTranslation;
 
+  /// How the transcript presents itself: read-through, blind, or word-select.
+  /// The reading states are displays of this same panel, so they are branches
+  /// here rather than separate windows.
+  final WorkbenchStudyMode studyMode;
+
   @override
   State<TranscriptPanel> createState() => _TranscriptPanelState();
 }
@@ -123,183 +133,195 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final Widget body;
+    if (widget.track == null) {
+      body = _TranscriptEmptyState(onImportSubtitle: widget.onImportSubtitle);
+    } else {
+      // The reading states are displays of this same pane. Read-through is the
+      // scrolling transcript; blind and word-select replace it with a single
+      // sentence in focus — the reference does not keep the list behind them.
+      body = switch (widget.studyMode) {
+        WorkbenchStudyMode.normal => _readThroughList(context),
+        WorkbenchStudyMode.blindListening => _BlindView(
+          cue: widget.currentCue,
+          index: _currentCueIndex,
+          total: widget.track!.cues.length,
+        ),
+        WorkbenchStudyMode.wordSelection => _WordSelectView(
+          // A different sentence is a different exercise: rebuild from scratch
+          // so filled blanks never bleed across sentences.
+          key: ValueKey(widget.currentCue?.id),
+          cue: widget.currentCue,
+          index: _currentCueIndex,
+          total: widget.track!.cues.length,
+        ),
+      };
+    }
+    return Material(color: colors.surfaceContainerLowest, child: body);
+  }
+
+  Widget _readThroughList(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final effectiveBaseColor = widget.baseColor.computeLuminance() > 0.75
         ? colors.onSurface
         : widget.baseColor;
-    return Material(
-      color: colors.surfaceContainerLowest,
-      child: widget.track == null
-          ? _TranscriptEmptyState(onImportSubtitle: widget.onImportSubtitle)
-          : NotificationListener<ScrollNotification>(
-              // A real user drag carries dragDetails; programmatic scrolls do
-              // not, so this pauses following only on genuine interaction.
-              onNotification: (notification) {
-                if (notification is ScrollStartNotification &&
-                    notification.dragDetails != null) {
-                  _pauseFollowing();
-                }
-                return false;
-              },
-              child: Listener(
-                onPointerDown: (event) => _lastPressPosition = event.position,
-                onPointerSignal: (event) {
-                  if (event is PointerScrollEvent) _pauseFollowing();
-                },
-                // A column, not a stack: the resume-following control is a
-                // strip attached under the list instead of a pill floating on
-                // top of it. The reference app floats it, and floating it
-                // covers whichever sentence happens to be at the bottom-right
-                // — a different one at every window height. A strip costs one
-                // row and covers nothing, which is the better trade.
-                child: Column(
-                  children: [
-                    // Said once, at the top, because it is a fact about the
-                    // file. Repeating it under all 200 sentences would be the
-                    // same fact 200 times, and would drown the sentences that
-                    // genuinely have no line of their own.
-                    if (widget.translationMode.showsTranslation &&
-                        !widget.hasTranslationTrack)
-                      _NoTranslationTrackNotice(
-                        message: l.text('noTranslationTrack'),
-                        actionLabel: l.text('importSubtitle'),
-                        onImport: widget.onImportTranslation,
-                      ),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: widget.scrollController,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: ListenSpacing.gap8,
-                        ),
-                        itemCount: widget.track!.cues.length,
-                        itemBuilder: (context, index) {
-                          final cue = widget.track!.cues[index];
-                          final selected = cue.id == widget.currentCue?.id;
-                          return KeyedSubtree(
-                            key: _keyFor(cue),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _TranscriptCueRow(
-                                  key: ValueKey('transcript-cue-${cue.id}'),
-                                  selected: selected,
-                                  accentColor: colors.primary,
-                                  onTap: () => widget.onSeekCue(cue),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (widget.translationMode.showsSource)
-                                        TokenLine(
-                                          cue: cue,
-                                          profiles: widget.wordEntries,
-                                          capabilityProfiles:
-                                              widget.capabilityProfiles,
-                                          showStyles: widget.showStyles,
-                                          // Read as a paragraph, ragged-right.
-                                          // TokenLine defaults to centre for the
-                                          // on-video subtitle overlay; in the
-                                          // transcript that centres every
-                                          // wrapped line, which reads as a
-                                          // column of poetry rather than prose.
-                                          textAlign: TextAlign.start,
-                                          // Tight prose leading so one wrapped
-                                          // sentence reads as one sentence. The
-                                          // subtitle default (font metrics) was
-                                          // spacing lines far enough apart that a
-                                          // wrapped line looked like the next
-                                          // sentence.
-                                          lineHeight: 1.35,
-                                          // The playing sentence reads in the
-                                          // primary hue rather than under a
-                                          // full-width fill block: the
-                                          // reference marks the current line
-                                          // with blue text, and a fill that
-                                          // wide becomes the brightest thing on
-                                          // the panel — louder than the words it
-                                          // is meant to point at.
-                                          baseColor: selected
-                                              ? colors.primary
-                                              : effectiveBaseColor,
-                                          onWord: (token, cue) => widget.onWord(
-                                            token,
-                                            cue,
-                                            _lastPressPosition,
-                                          ),
-                                          groupingMode: widget.groupingMode,
-                                          chunkDisplayStyle:
-                                              widget.chunkDisplayStyle,
-                                          chunkPartition:
-                                              widget
-                                                  .chunkPartitionsBySentence[cue
-                                                  .id],
-                                          senseGroups:
-                                              widget.senseGroupsBySentence[cue
-                                                  .id] ??
-                                              const [],
-                                        ),
-                                      if (widget
-                                              .translationMode
-                                              .showsTranslation &&
-                                          widget.hasTranslationTrack)
-                                        _TranslationLine(
-                                          text: widget.translationFor?.call(
-                                            cue,
-                                          ),
-                                          missingLabel: l.text(
-                                            'sentenceHasNoTranslation',
-                                          ),
-                                          alone: !widget
-                                              .translationMode
-                                              .showsSource,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                // The analysis belongs to one sentence, so it
-                                // opens inside that sentence. As a panel tab it
-                                // could be "open" while the sentence it
-                                // described was scrolled out of sight, and
-                                // reaching it always cost the transcript.
-                                if (selected && widget.onToggleAnalysis != null)
-                                  _AnalysisControl(
-                                    expanded: widget.analysisExpanded,
-                                    label: l.text('analyseSentence'),
-                                    onPressed: widget.onToggleAnalysis!,
-                                  ),
-                                if (selected &&
-                                    widget.analysisExpanded &&
-                                    widget.analysis != null)
-                                  Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      ListenSpacing.gap12,
-                                      0,
-                                      ListenSpacing.gap12,
-                                      ListenSpacing.gap12,
-                                    ),
-                                    child: widget.analysis,
-                                  ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    if (!_following && widget.currentCue != null)
-                      _BackToCurrentBar(
-                        label: l.text('backToCurrentSentence'),
-                        onPressed: _resumeFollowing,
-                      ),
-                  ],
+    return NotificationListener<ScrollNotification>(
+      // A real user drag carries dragDetails; programmatic scrolls do not, so
+      // this pauses following only on genuine interaction.
+      onNotification: (notification) {
+        if (notification is ScrollStartNotification &&
+            notification.dragDetails != null) {
+          _pauseFollowing();
+        }
+        return false;
+      },
+      child: Listener(
+        onPointerDown: (event) => _lastPressPosition = event.position,
+        onPointerSignal: (event) {
+          if (event is PointerScrollEvent) _pauseFollowing();
+        },
+        // A column, not a stack: the resume-following control is a strip
+        // attached under the list instead of a pill floating on top of it. The
+        // reference app floats it, and floating it covers whichever sentence
+        // happens to be at the bottom-right — a different one at every window
+        // height. A strip costs one row and covers nothing.
+        child: Column(
+          children: [
+            // Said once, at the top, because it is a fact about the file.
+            // Repeating it under all 200 sentences would be the same fact 200
+            // times, and would drown the sentences that genuinely have no line
+            // of their own.
+            if (widget.translationMode.showsTranslation &&
+                !widget.hasTranslationTrack)
+              _NoTranslationTrackNotice(
+                message: l.text('noTranslationTrack'),
+                actionLabel: l.text('importSubtitle'),
+                onImport: widget.onImportTranslation,
+              ),
+            Expanded(
+              child: ListView.builder(
+                controller: widget.scrollController,
+                padding: const EdgeInsets.symmetric(
+                  vertical: ListenSpacing.gap8,
                 ),
+                itemCount: widget.track!.cues.length,
+                itemBuilder: (context, index) {
+                  final cue = widget.track!.cues[index];
+                  final selected = cue.id == widget.currentCue?.id;
+                  return KeyedSubtree(
+                    key: _keyFor(cue),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _TranscriptCueRow(
+                          key: ValueKey('transcript-cue-${cue.id}'),
+                          selected: selected,
+                          accentColor: colors.primary,
+                          onTap: () => widget.onSeekCue(cue),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.translationMode.showsSource)
+                                TokenLine(
+                                  cue: cue,
+                                  profiles: widget.wordEntries,
+                                  capabilityProfiles: widget.capabilityProfiles,
+                                  showStyles: widget.showStyles,
+                                  // Read as a paragraph, ragged-right. TokenLine
+                                  // defaults to centre for the on-video subtitle
+                                  // overlay; in the transcript that centres every
+                                  // wrapped line, which reads as a column of
+                                  // poetry rather than prose.
+                                  textAlign: TextAlign.start,
+                                  // Tight prose leading so one wrapped sentence
+                                  // reads as one sentence.
+                                  lineHeight: 1.35,
+                                  // The playing sentence reads in the primary
+                                  // hue rather than under a full-width fill
+                                  // block: a fill that wide becomes the
+                                  // brightest thing on the panel — louder than
+                                  // the words it is meant to point at.
+                                  baseColor: selected
+                                      ? colors.primary
+                                      : effectiveBaseColor,
+                                  onWord: (token, cue) => widget.onWord(
+                                    token,
+                                    cue,
+                                    _lastPressPosition,
+                                  ),
+                                  groupingMode: widget.groupingMode,
+                                  chunkDisplayStyle: widget.chunkDisplayStyle,
+                                  chunkPartition: widget
+                                      .chunkPartitionsBySentence[cue.id],
+                                  senseGroups:
+                                      widget.senseGroupsBySentence[cue.id] ??
+                                      const [],
+                                ),
+                              if (widget.translationMode.showsTranslation &&
+                                  widget.hasTranslationTrack)
+                                _TranslationLine(
+                                  text: widget.translationFor?.call(cue),
+                                  missingLabel: l.text(
+                                    'sentenceHasNoTranslation',
+                                  ),
+                                  alone: !widget.translationMode.showsSource,
+                                ),
+                            ],
+                          ),
+                        ),
+                        // The analysis belongs to one sentence, so it opens
+                        // inside that sentence. As a panel tab it could be
+                        // "open" while the sentence it described was scrolled
+                        // out of sight, and reaching it always cost the
+                        // transcript.
+                        if (selected && widget.onToggleAnalysis != null)
+                          _AnalysisControl(
+                            expanded: widget.analysisExpanded,
+                            label: l.text('analyseSentence'),
+                            onPressed: widget.onToggleAnalysis!,
+                          ),
+                        if (selected &&
+                            widget.analysisExpanded &&
+                            widget.analysis != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              ListenSpacing.gap12,
+                              0,
+                              ListenSpacing.gap12,
+                              ListenSpacing.gap12,
+                            ),
+                            child: widget.analysis,
+                          ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ),
+            if (!_following && widget.currentCue != null)
+              _BackToCurrentBar(
+                label: l.text('backToCurrentSentence'),
+                onPressed: _resumeFollowing,
+              ),
+          ],
+        ),
+      ),
     );
   }
 
   GlobalKey _keyFor(Cue cue) => _cueKeys.putIfAbsent(cue.id, () => GlobalKey());
+
+  /// 1-based position of the current sentence, or 0 before one is playing.
+  int get _currentCueIndex {
+    final cue = widget.currentCue;
+    final cues = widget.track?.cues;
+    if (cue == null || cues == null) return 0;
+    final index = cues.indexWhere((value) => value.id == cue.id);
+    return index < 0 ? 0 : index + 1;
+  }
 
   void _pauseFollowing() {
     if (_following) setState(() => _following = false);
@@ -412,6 +434,443 @@ class _TranscriptCueRow extends StatelessWidget {
     ),
   );
 }
+
+/// The header row shared by the single-sentence focus modes: an optional label
+/// on the left and the `n / total` count on the right, matching the reference's
+/// progress pill.
+class _FocusHeader extends StatelessWidget {
+  const _FocusHeader({this.label, required this.index, required this.total});
+
+  final String? label;
+  final int index;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        if (label != null) ...[
+          Icon(
+            Icons.hearing_outlined,
+            size: ListenIconSize.control,
+            color: colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: ListenSpacing.gap8),
+          Text(
+            label!,
+            style: theme.labelLarge?.copyWith(color: colors.onSurfaceVariant),
+          ),
+          const Spacer(),
+        ],
+        DecoratedBox(
+          key: const Key('transcript-focus-progress'),
+          decoration: BoxDecoration(
+            color: colors.surfaceContainerHighest,
+            borderRadius: ListenRadii.pillBorder,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: ListenSpacing.gap12,
+              vertical: ListenSpacing.gap4,
+            ),
+            child: Text(
+              '$index / $total',
+              style: theme.labelLarge?.copyWith(color: colors.onSurfaceVariant),
+            ),
+          ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Shown by both focus modes before a sentence is playing — there is no current
+/// sentence to blank, so it asks for one rather than rendering an empty frame.
+class _FocusAwaitingCue extends StatelessWidget {
+  const _FocusAwaitingCue({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: ListenPadding.page,
+        child: Text(
+          message,
+          key: const Key('transcript-focus-awaiting'),
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+}
+
+/// Blind listening: the current sentence only, with most words blanked to a
+/// gap the size of the hidden word. The learner reads what scaffolding is left
+/// and catches the rest by ear. No candidate words — that is word-select.
+class _BlindView extends StatelessWidget {
+  const _BlindView({
+    required this.cue,
+    required this.index,
+    required this.total,
+  });
+
+  final Cue? cue;
+  final int index;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final theme = Theme.of(context).textTheme;
+    if (cue == null) {
+      return Padding(
+        padding: ListenPadding.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _FocusHeader(
+              label: l.text('blindModeLabel'),
+              index: index,
+              total: total,
+            ),
+            const SizedBox(height: ListenSpacing.gap16),
+            Expanded(
+              child: _FocusAwaitingCue(message: l.text('focusAwaitingCue')),
+            ),
+          ],
+        ),
+      );
+    }
+    // Scrollable: one long sentence, blanked and loosely leaded, can outrun a
+    // short pane.
+    return SingleChildScrollView(
+      padding: ListenPadding.card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FocusHeader(
+            label: l.text('blindModeLabel'),
+            index: index,
+            total: total,
+          ),
+          const SizedBox(height: ListenSpacing.gap16),
+          Text.rich(
+            TextSpan(children: _blankSpans(context, _blankSentence(cue!))),
+            key: const Key('transcript-blind-sentence'),
+            style: theme.titleMedium?.copyWith(height: 1.9),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Word select: the current sentence blanked, and below it the removed words as
+/// chips to place back. The chips are exactly the blanked words, shuffled — the
+/// exercise is self-contained in the sentence, no external answer data.
+class _WordSelectView extends StatefulWidget {
+  const _WordSelectView({
+    super.key,
+    required this.cue,
+    required this.index,
+    required this.total,
+  });
+
+  final Cue? cue;
+  final int index;
+  final int total;
+
+  @override
+  State<_WordSelectView> createState() => _WordSelectViewState();
+}
+
+class _WordSelectViewState extends State<_WordSelectView> {
+  late List<_Segment> _segments;
+  late List<_Candidate> _candidates;
+
+  // slot index -> the candidate placed in it, or null while empty.
+  final Map<int, int> _placed = {};
+
+  // Tap recognizers for filled blanks, rebuilt each frame and disposed here so
+  // they never outlive the spans that hold them.
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _build();
+  }
+
+  @override
+  void dispose() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+
+  void _build() {
+    final cue = widget.cue;
+    _segments = cue == null ? const [] : _blankSentence(cue);
+    final blanks = _segments.whereType<_Blank>().toList();
+    // The pool is the removed words themselves, shuffled deterministically per
+    // sentence so it is stable across rebuilds within a sitting.
+    final rng = Random(cue == null ? 0 : cue.id.hashCode ^ 0x5f3759df);
+    final pool = [
+      for (var i = 0; i < blanks.length; i += 1)
+        _Candidate(id: i, word: blanks[i].answer),
+    ]..shuffle(rng);
+    _candidates = pool;
+  }
+
+  int? get _nextEmptySlot {
+    for (final segment in _segments) {
+      if (segment is _Blank && !_placed.containsKey(segment.slot)) {
+        return segment.slot;
+      }
+    }
+    return null;
+  }
+
+  void _place(_Candidate candidate) {
+    final slot = _nextEmptySlot;
+    if (slot == null) return;
+    setState(() => _placed[slot] = candidate.id);
+  }
+
+  void _clear(int slot) => setState(() => _placed.remove(slot));
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context).textTheme;
+    if (widget.cue == null) {
+      return Padding(
+        padding: ListenPadding.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _FocusHeader(index: widget.index, total: widget.total),
+            const SizedBox(height: ListenSpacing.gap16),
+            Expanded(
+              child: _FocusAwaitingCue(message: l.text('focusAwaitingCue')),
+            ),
+          ],
+        ),
+      );
+    }
+    final usedIds = _placed.values.toSet();
+    return SingleChildScrollView(
+      padding: ListenPadding.card,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _FocusHeader(index: widget.index, total: widget.total),
+          const SizedBox(height: ListenSpacing.gap16),
+          Text.rich(
+            TextSpan(
+              children: _filledSpans(context, _segments, _placed, _candidates),
+            ),
+            key: const Key('transcript-word-select-sentence'),
+            style: theme.titleMedium?.copyWith(height: 2.1),
+          ),
+          const SizedBox(height: ListenSpacing.gap16),
+          Divider(color: colors.outlineVariant),
+          const SizedBox(height: ListenSpacing.gap8),
+          Text(
+            l.text('wordSelectPrompt'),
+            style: theme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+          ),
+          const SizedBox(height: ListenSpacing.gap12),
+          Wrap(
+            spacing: ListenSpacing.gap12,
+            runSpacing: ListenSpacing.gap12,
+            children: [
+              for (final candidate in _candidates)
+                _WordChip(
+                  label: candidate.word,
+                  used: usedIds.contains(candidate.id),
+                  onTap: () => _place(candidate),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<InlineSpan> _filledSpans(
+    BuildContext context,
+    List<_Segment> segments,
+    Map<int, int> placed,
+    List<_Candidate> candidates,
+  ) {
+    final colors = Theme.of(context).colorScheme;
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+    final spans = <InlineSpan>[];
+    for (final segment in segments) {
+      if (segment is _Literal) {
+        spans.add(TextSpan(text: segment.text));
+        continue;
+      }
+      final blank = segment as _Blank;
+      final placedId = placed[blank.slot];
+      if (placedId == null) {
+        spans.add(_underscoreSpan(context, blank.answer.length));
+      } else {
+        final word = candidates.firstWhere((c) => c.id == placedId).word;
+        final recognizer = TapGestureRecognizer()
+          ..onTap = () => _clear(blank.slot);
+        _recognizers.add(recognizer);
+        spans.add(
+          TextSpan(
+            text: word,
+            style: TextStyle(
+              color: colors.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: colors.primary,
+            ),
+            recognizer: recognizer,
+          ),
+        );
+      }
+    }
+    return spans;
+  }
+}
+
+/// One candidate word placed in the pool.
+class _Candidate {
+  const _Candidate({required this.id, required this.word});
+  final int id;
+  final String word;
+}
+
+/// A tappable candidate chip. A placed chip stays visible but greys out, so the
+/// pool never changes shape underfoot as words are used.
+class _WordChip extends StatelessWidget {
+  const _WordChip({
+    required this.label,
+    required this.used,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool used;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return OutlinedButton(
+      onPressed: used ? null : onTap,
+      style: OutlinedButton.styleFrom(
+        shape: const StadiumBorder(),
+        side: BorderSide(
+          color: used ? colors.outlineVariant : colors.outline,
+        ),
+        foregroundColor: colors.onSurface,
+        padding: const EdgeInsets.symmetric(
+          horizontal: ListenSpacing.gap16,
+          vertical: ListenSpacing.gap8,
+        ),
+      ),
+      child: Text(label),
+    );
+  }
+}
+
+/// A blank standing in for one hidden word (`_Blank`) or a run of kept text —
+/// words, spaces, punctuation — shown verbatim (`_Literal`).
+sealed class _Segment {
+  const _Segment();
+}
+
+class _Literal extends _Segment {
+  const _Literal(this.text);
+  final String text;
+}
+
+class _Blank extends _Segment {
+  const _Blank({required this.answer, required this.slot});
+  final String answer;
+  final int slot;
+}
+
+/// Blanks a sentence for the focus modes: word tokens are hidden with a
+/// deterministic ~60% probability (seeded by the sentence id so it is stable
+/// within a sitting), everything else — spaces, punctuation, kept words — is
+/// literal. At least one word is always blanked so word-select has an exercise,
+/// and never every word so blind keeps some scaffolding.
+List<_Segment> _blankSentence(Cue cue) {
+  final words = [
+    for (var i = 0; i < cue.tokens.length; i += 1)
+      if (_isBlankable(cue.tokens[i])) i,
+  ];
+  final rng = Random(cue.id.hashCode);
+  final blanked = <int>{};
+  for (final index in words) {
+    if (rng.nextDouble() < 0.6) blanked.add(index);
+  }
+  // Guardrails: at least one blank, and at least one word left visible.
+  if (words.isNotEmpty && blanked.isEmpty) blanked.add(words.first);
+  if (words.length > 1 && blanked.length == words.length) {
+    blanked.remove(words.first);
+  }
+
+  final segments = <_Segment>[];
+  var slot = 0;
+  for (var i = 0; i < cue.tokens.length; i += 1) {
+    final token = cue.tokens[i];
+    if (blanked.contains(i)) {
+      segments.add(_Blank(answer: token.text, slot: slot++));
+    } else {
+      segments.add(_Literal(token.text));
+    }
+  }
+  return segments;
+}
+
+bool _isBlankable(SubtitleToken token) =>
+    token.kind == 'word' && (token.normalized?.isNotEmpty ?? false);
+
+/// The blind view's non-interactive spans: literals verbatim, blanks as an
+/// underscore run the width of the hidden word.
+List<InlineSpan> _blankSpans(BuildContext context, List<_Segment> segments) {
+  final spans = <InlineSpan>[];
+  for (final segment in segments) {
+    if (segment is _Literal) {
+      spans.add(TextSpan(text: segment.text));
+    } else {
+      spans.add(_underscoreSpan(context, (segment as _Blank).answer.length));
+    }
+  }
+  return spans;
+}
+
+/// A blank: an underscore run sized to the hidden word, clamped so a very short
+/// or very long word still reads as a gap.
+InlineSpan _underscoreSpan(BuildContext context, int wordLength) {
+  final colors = Theme.of(context).colorScheme;
+  final count = wordLength.clamp(2, 12);
+  return TextSpan(
+    text: ' ${'_' * count} ',
+    style: TextStyle(color: colors.onSurfaceVariant),
+  );
+}
+
 
 /// The translation of one sentence, under the original.
 ///

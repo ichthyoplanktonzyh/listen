@@ -13,6 +13,7 @@ import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
+import '../../models/workbench_study_mode.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
@@ -68,6 +69,7 @@ class SidePanel extends StatefulWidget {
     this.onStartColdStart,
     this.onRecordCurrentSource,
     this.onReadingMark,
+    this.studyMode = WorkbenchStudyMode.normal,
   });
 
   final PlayerController playerController;
@@ -111,6 +113,9 @@ class SidePanel extends StatefulWidget {
   /// Explicit reading mark for the selected word; non-null only while the
   /// reading posture is open (Phase 3.13 Slice 5).
   final void Function(bool understood)? onReadingMark;
+
+  /// How the transcript presents itself — read-through, blind, or word-select.
+  final WorkbenchStudyMode studyMode;
 
   @override
   State<SidePanel> createState() => _SidePanelState();
@@ -234,6 +239,7 @@ class _SidePanelState extends State<SidePanel> {
 
   Widget _transcript() => TranscriptPanel(
     track: subtitleController.primaryTrack,
+    studyMode: widget.studyMode,
     scrollController: transcriptController,
     currentCue: subtitleController.currentPrimaryCue,
     wordEntries: learningController.wordEntries,
