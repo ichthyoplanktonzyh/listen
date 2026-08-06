@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -19,6 +20,16 @@ def main() -> int:
         return 23
     if mode == "sleep":
         time.sleep(2)
+        return 0
+    if mode == "hang":
+        observation_path.write_text(
+            json.dumps({"media_path": str(media_path), "pid": os.getpid()}),
+            encoding="utf-8",
+        )
+        while True:
+            time.sleep(3600)
+    if mode == "invalid-json":
+        print('{"provider_raw":"must-not-leak-invalid-json"')
         return 0
     if mode == "flood":
         sys.stdout.buffer.write(b"x" * (17 * 1024 * 1024))

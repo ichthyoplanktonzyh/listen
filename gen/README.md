@@ -76,6 +76,34 @@ adapter protocol, and normalization format; executable and temporary paths are
 excluded. Package files are completed and synced beside the destination before
 an atomic replacement, so a failed build does not truncate an existing package.
 
+## Machine-readable generation
+
+Add `--machine-events` to `package from-media` to switch stdout to strict
+NDJSON machine events that a supervisor can start, parse, cancel, and verify
+without scraping logs:
+
+```bash
+listen-gen package from-media input.mp4 \
+  --provider fixture \
+  --fixture tests/fixtures/asr-result.json \
+  --title "Test media" \
+  --media-kind video \
+  --duration-ms 10000 \
+  --created-at-ms 1786000000000 \
+  --output /tmp/generated.listenpkg \
+  --machine-events
+```
+
+Every line is one JSON object of the `listen_gen.machine-event.v1` schema with
+a continuous `sequence` starting at 0. The first event is `protocol`, followed
+by `started`, fixed pipeline `phase` events, and exactly one terminal event
+(`completed`, `failed`, or `cancelled`). SIGINT/SIGTERM terminate the provider
+process group, clean up temporary audio, and emit `cancelled` with exit code
+`130`. Ordinary mode output is unchanged when the flag is absent.
+
+See [docs/machine-event-protocol-v1.md](docs/machine-event-protocol-v1.md) for
+the full event, phase, and error-code contract.
+
 ## Contract authority
 
 The canonical schema is owned by `listen-core` at
