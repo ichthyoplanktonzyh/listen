@@ -27,6 +27,7 @@ from .protocol import (
     machine_error,
     protocol_capabilities,
 )
+from .whisper_cpp import WhisperCppAsrAdapter
 
 
 class CancellationRequested(BaseException):
@@ -103,7 +104,11 @@ def parser(
     )
     native.add_argument("input", type=Path)
     native.add_argument("--output", required=True, type=Path)
-    native.add_argument("--provider", required=True, choices=["fixture", "command"])
+    native.add_argument(
+        "--provider",
+        required=True,
+        choices=["fixture", "command", "whisper-cpp"],
+    )
     native.add_argument("--fixture", type=Path, help="normalized JSON for the fixture provider")
     native.add_argument("--command", help="external ASR wrapper executable; no shell is used")
     native.add_argument(
@@ -113,6 +118,12 @@ def parser(
         help="one argv item for the command provider; include {media} exactly once",
     )
     native.add_argument("--command-timeout-seconds", type=float, default=3600.0)
+    native.add_argument("--whisper-cli", default="whisper-cli")
+    native.add_argument("--whisper-model", type=Path)
+    native.add_argument("--whisper-model-id")
+    native.add_argument("--whisper-language", default="auto")
+    native.add_argument("--whisper-translate-to-english", action="store_true")
+    native.add_argument("--whisper-timeout-seconds", type=float, default=3600.0)
     native.add_argument(
         "--audio-stream-index",
         type=int,
@@ -156,7 +167,7 @@ def _run(
             if args.fixture is None:
                 raise ConversionError("--fixture is required for the fixture provider")
             adapter = FixtureAsrAdapter(args.fixture, progress=progress)
-        else:
+        elif args.provider == "command":
             if args.command is None:
                 raise ConversionError("--command is required for the command provider")
             command_adapter = CommandAsrAdapter(
@@ -167,6 +178,26 @@ def _run(
             )
             adapter = PreprocessingAsrAdapter(
                 command_adapter,
+                FfmpegAudioPreprocessor(
+                    ffprobe_executable=args.ffprobe_command,
+                    ffmpeg_executable=args.ffmpeg_command,
+                    timeout_seconds=args.media_command_timeout_seconds,
+                    progress=progress,
+                ),
+                audio_stream_index=args.audio_stream_index,
+                progress=progress,
+            )
+        else:
+            whisper_adapter = WhisperCppAsrAdapter(
+                args.whisper_cli,
+                args.whisper_model,
+                args.whisper_model_id,
+                args.whisper_language,
+                args.whisper_translate_to_english,
+                args.whisper_timeout_seconds,
+            )
+            adapter = PreprocessingAsrAdapter(
+                whisper_adapter,
                 FfmpegAudioPreprocessor(
                     ffprobe_executable=args.ffprobe_command,
                     ffmpeg_executable=args.ffmpeg_command,

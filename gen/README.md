@@ -5,9 +5,10 @@ output is a content package consumed by `listen-core`; model runtimes and raw
 provider payloads are not part of that interface.
 
 The production entry point transcribes media behind a provider-neutral ASR
-adapter and writes native v1 `subtitle_text_track` and `word_timeline`
-resources. The offline fixture provider exercises the full CLI without model
-credentials or network access:
+adapter. It always writes a native v1 `subtitle_text_track` resource; a
+`word_timeline` resource is generated only when the provider supplies
+complete word-level timing. The offline fixture provider exercises the full
+CLI without model credentials or network access:
 
 ```bash
 python -m listen_gen package from-media input.wav \
@@ -52,6 +53,44 @@ subprocess group; probe output is capped at 1 MiB and normalized ASR JSON at
 Whisper, hosted ASR, and other provider-specific decoding belongs inside that
 wrapper. Non-zero exit, timeout, startup failure, and invalid JSON errors do
 not echo provider stdout/stderr, raw responses, or command arguments.
+The `command` provider's normalized contract is unchanged: the wrapper must
+still emit one `listen_gen.asr-result.v1` document on stdout with word timing
+for every segment.
+
+## First-class whisper.cpp provider
+
+`whisper-cpp` is a first-class provider: `listen-gen` runs a local
+`whisper-cli` directly (never through a shell) against the same temporary
+16 kHz mono PCM WAV used by the `command` provider, parses whisper.cpp
+standard JSON (`-oj`), and emits a subtitle-only package because that format
+does not provide word-level timing:
+
+```bash
+listen-gen package from-media input.mp4 \
+  --provider whisper-cpp \
+  --whisper-cli /path/to/whisper-cli \
+  --whisper-model /path/to/ggml-base.bin \
+  --whisper-model-id whisper.cpp:base@main \
+  --whisper-language auto \
+  --title "Lesson" \
+  --media-kind video \
+  --duration-ms 125000 \
+  --created-at-ms 1786000000000 \
+  --output lesson.listenpkg \
+  --machine-events
+```
+
+The provider runs with the exact argv
+`<whisper-cli> -m <model> -f <normalized-wav> -oj -of <temporary-prefix>
+-l <language>` (plus `-tr` for `--whisper-translate-to-english`). Provenance
+binds the provider version to the whisper-cli file bytes, the model version
+to the model file bytes, and the config identity to a canonical provider
+configuration; no local paths are recorded, so identical bytes and
+configuration produce identical packages across different installation paths.
+
+See [docs/whisper-cpp-provider-v1.md](docs/whisper-cpp-provider-v1.md) for
+the full provider contract, machine phases, error mapping, and cancellation
+semantics.
 
 The LLTimeline command is migration compatibility only:
 

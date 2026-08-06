@@ -147,6 +147,30 @@ def _classify_error(error: BaseException) -> str:
     if isinstance(error, FileNotFoundError):
         return "input_not_found"
     message = str(error).lower()
+    whisper_invalid_arguments = (
+        "whisper.cpp model must be a regular file",
+        "whisper.cpp model id must be non-empty",
+        "whisper.cpp language must be a valid language tag",
+        "whisper.cpp timeout must be positive",
+        "whisper.cpp executable must be non-empty",
+    )
+    if message in whisper_invalid_arguments:
+        return "invalid_arguments"
+    if message == "whisper.cpp provider could not be started":
+        return "provider_start_failed"
+    if message == "whisper.cpp provider timed out":
+        return "provider_timeout"
+    if message.startswith("whisper.cpp provider failed with exit status"):
+        return "provider_failed"
+    if message == "whisper.cpp provider runtime or model changed during transcription":
+        return "provider_failed"
+    if message in {
+        "whisper.cpp provider produced no json output",
+        "whisper.cpp provider returned invalid json",
+        "whisper.cpp provider returned an invalid result",
+        "asr transcript must provide word timings for every segment or none",
+    }:
+        return "provider_output_invalid"
     if "media input is not a regular file" in message:
         return "input_not_found"
     if "changed during" in message:
