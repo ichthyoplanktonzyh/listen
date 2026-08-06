@@ -16,6 +16,7 @@ import '../../theme/typography.dart';
 import '../../utils/format_duration.dart';
 import '../../utils/media_title.dart';
 import '../common/api_failure_disclosure.dart';
+import '../common/menu_rows.dart';
 
 /// One receded look for both transport progress bars (#30): a thin track that
 /// nearly sinks into the bar, where only the played portion and the handle
@@ -112,10 +113,6 @@ class PlaybackControls extends StatelessWidget {
     this.statusIsError = false,
     this.statusFailure,
     required this.taskStatuses,
-    required this.extensiveListeningActive,
-    this.huntingActive = false,
-    required this.listeningMarkEnabled,
-    required this.listeningInboxCount,
     this.spaceTargetsPractice = false,
     required this.onSeek,
     required this.onSeekToPreviousCue,
@@ -141,10 +138,8 @@ class PlaybackControls extends StatelessWidget {
     required this.onEmbeddedSubtitleTrackChanged,
     required this.onPrimaryOffsetChanged,
     required this.onSecondaryOffsetChanged,
-    required this.onToggleExtensiveListening,
-    this.onToggleHunting,
-    required this.onCaptureListeningInbox,
-    required this.onHardInterruptListening,
+    this.abAnchor,
+    required this.onMarkAbPoint,
     this.isCompact = false,
     this.mediaTitle,
     this.onExpand,
@@ -189,10 +184,6 @@ class PlaybackControls extends StatelessWidget {
   /// among the fields shown even then.
   final ApiFailure? statusFailure;
   final List<UserTaskStatus> taskStatuses;
-  final bool extensiveListeningActive;
-  final bool huntingActive;
-  final bool listeningMarkEnabled;
-  final int listeningInboxCount;
 
   /// Space drives the practice clip right now, not the main player (#25).
   final bool spaceTargetsPractice;
@@ -221,10 +212,14 @@ class PlaybackControls extends StatelessWidget {
   final ValueChanged<PlayerTrack> onEmbeddedSubtitleTrackChanged;
   final ValueChanged<Duration> onPrimaryOffsetChanged;
   final ValueChanged<Duration> onSecondaryOffsetChanged;
-  final VoidCallback onToggleExtensiveListening;
-  final VoidCallback? onToggleHunting;
-  final VoidCallback onCaptureListeningInbox;
-  final VoidCallback onHardInterruptListening;
+
+  /// The A point of an A/B repeat that has been started but not closed. Null
+  /// both before A is set and once the loop is running — [sourceLoopStart] is
+  /// what says the loop exists.
+  final Duration? abAnchor;
+
+  /// Advances the A/B repeat: set A, then close it at B, then clear.
+  final VoidCallback onMarkAbPoint;
   final bool isCompact;
   final String? mediaTitle;
   final VoidCallback? onExpand;
@@ -705,67 +700,20 @@ class PlaybackControls extends StatelessWidget {
           onPressed: () => onLoopCueChanged(!loopCue),
           icon: Icons.repeat_one,
         ),
-        if (roomy) ...[
-          const SizedBox(width: ListenSpacing.gap8),
-          _PlaybackMenuButton(
-            tooltip: l.text('listeningMode'),
-            label: l.text('listeningMode'),
-            icon: extensiveListeningActive
-                ? Icons.hearing
-                : Icons.hearing_outlined,
-            selected: extensiveListeningActive,
-            badgeCount: listeningInboxCount,
-            onSelected: (value) {
-              if (value == 'toggle-listening') {
-                onToggleExtensiveListening();
-              }
-              if (value == 'toggle-hunting') onToggleHunting?.call();
-              if (value == 'mark-inbox') onCaptureListeningInbox();
-              if (value == 'hard-interrupt') onHardInterruptListening();
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'toggle-listening',
-                child: _PlaybackMenuRow(
-                  icon: extensiveListeningActive
-                      ? Icons.hearing
-                      : Icons.hearing_outlined,
-                  title: extensiveListeningActive
-                      ? l.text('finishExtensiveListening')
-                      : l.text('startExtensiveListening'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-hunting',
-                enabled: listeningMarkEnabled && onToggleHunting != null,
-                child: _PlaybackMenuRow(
-                  icon: huntingActive ? Icons.gps_fixed : Icons.gps_not_fixed,
-                  title: huntingActive
-                      ? l.text('huntingStopMode')
-                      : l.text('huntingStartMode'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'mark-inbox',
-                enabled: listeningMarkEnabled && onToggleHunting != null,
-                child: _PlaybackMenuRow(
-                  icon: Icons.bookmark_add_outlined,
-                  title: l.text('markListeningInbox'),
-                  trailing: listeningInboxCount > 0
-                      ? '$listeningInboxCount'
-                      : null,
-                ),
-              ),
-              PopupMenuItem(
-                value: 'hard-interrupt',
-                enabled: listeningMarkEnabled,
-                child: _PlaybackMenuRow(
-                  icon: Icons.pause_circle_outline,
-                  title: l.text('hardInterruptListening'),
-                ),
-              ),
-            ],
-          ),
+        const SizedBox(width: ListenSpacing.gap8),
+        // A/B repeat, the one control this transport was missing and the one
+        // every intensive-listening player has. It is a three-step button, so
+        // it says which step it is on instead of relying on the user to
+        // remember: set A, close at B, clear.
+        _AbLoopButton(
+          anchor: abAnchor,
+          looping: sourceLoopStart != null,
+          onPressed: onMarkAbPoint,
+        ),
+        // Chunk navigation stays a menu: it is four related playback actions
+        // with no room for four more buttons, and unlike the listening session
+        // it does belong to the transport.
+        if (roomy)
           _PlaybackMenuButton(
             tooltip: l.text('chunkMode'),
             label: l.text('chunkMode'),
@@ -782,28 +730,28 @@ class PlaybackControls extends StatelessWidget {
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: 'previous-chunk',
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.keyboard_double_arrow_left,
                   title: l.text('previousChunk'),
                 ),
               ),
               PopupMenuItem(
                 value: 'loop-chunk',
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.segment,
                   title: l.text('loopChunk'),
                 ),
               ),
               PopupMenuItem(
                 value: 'next-chunk',
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.keyboard_double_arrow_right,
                   title: l.text('nextChunk'),
                 ),
               ),
               PopupMenuItem(
                 value: 'expand-chunk',
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.unfold_more,
                   title: l.text('expandChunk'),
                 ),
@@ -812,78 +760,21 @@ class PlaybackControls extends StatelessWidget {
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'stop-source-loop',
-                  child: _PlaybackMenuRow(
+                  child: ListenMenuRow(
                     icon: Icons.stop_circle_outlined,
                     title: l.text('stopSourceLoop'),
                   ),
                 ),
               ],
             ],
-          ),
-          _PlaybackMenuButton(
-            tooltip: l.text('subtitleMode'),
-            label: l.text('subtitleMode'),
-            icon: Icons.subtitles_outlined,
-            selected: subtitlesVisible || statusStylesVisible,
-            onSelected: (value) {
-              if (value == 'toggle-primary') {
-                onSubtitlesVisibleChanged(!subtitlesVisible);
-              }
-              if (value == 'toggle-secondary') {
-                onSecondaryVisibleChanged(!secondarySubtitlesVisible);
-              }
-              if (value == 'toggle-status-styles') {
-                onStatusStylesChanged(!statusStylesVisible);
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'toggle-primary',
-                child: _PlaybackMenuRow(
-                  icon: subtitlesVisible
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  title: l.text('subtitles'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-secondary',
-                enabled: secondarySubtitlesAvailable,
-                child: _PlaybackMenuRow(
-                  icon: secondarySubtitlesVisible
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  title: l.text('secondary'),
-                  subtitle: secondarySubtitlesAvailable
-                      ? null
-                      : l.text('secondarySubtitleUnavailable'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-status-styles',
-                child: _PlaybackMenuRow(
-                  icon: statusStylesVisible
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  title: l.text('wordStyles'),
-                ),
-              ),
-            ],
-          ),
-        ] else
+          )
+        else
           PopupMenuButton<String>(
-            tooltip: l.text('moreActions'),
-            icon: const Icon(Icons.more_horiz),
+            tooltip: l.text('chunkMode'),
+            icon: const Icon(Icons.segment),
+            enabled: chunkControlsEnabled,
             onSelected: (value) {
               switch (value) {
-                case 'toggle-listening':
-                  onToggleExtensiveListening();
-                case 'toggle-hunting':
-                  onToggleHunting?.call();
-                case 'mark-inbox':
-                  onCaptureListeningInbox();
-                case 'hard-interrupt':
-                  onHardInterruptListening();
                 case 'previous-chunk':
                   onSeekToPreviousChunk();
                 case 'loop-chunk':
@@ -894,104 +785,33 @@ class PlaybackControls extends StatelessWidget {
                   onLoopExpandedChunk();
                 case 'stop-source-loop':
                   onStopSourceLoop();
-                case 'toggle-primary':
-                  onSubtitlesVisibleChanged(!subtitlesVisible);
-                case 'toggle-secondary':
-                  onSecondaryVisibleChanged(!secondarySubtitlesVisible);
-                case 'toggle-status-styles':
-                  onStatusStylesChanged(!statusStylesVisible);
               }
             },
             itemBuilder: (_) => [
               PopupMenuItem(
-                enabled: false,
-                child: Text(
-                  l.text('listeningMode'),
-                  style: ListenType.body.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-listening',
-                child: _PlaybackMenuRow(
-                  icon: extensiveListeningActive
-                      ? Icons.hearing
-                      : Icons.hearing_outlined,
-                  title: extensiveListeningActive
-                      ? l.text('finishExtensiveListening')
-                      : l.text('startExtensiveListening'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-hunting',
-                enabled: listeningMarkEnabled,
-                child: _PlaybackMenuRow(
-                  icon: huntingActive ? Icons.gps_fixed : Icons.gps_not_fixed,
-                  title: huntingActive
-                      ? l.text('huntingStopMode')
-                      : l.text('huntingStartMode'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'mark-inbox',
-                enabled: listeningMarkEnabled,
-                child: _PlaybackMenuRow(
-                  icon: Icons.bookmark_add_outlined,
-                  title: l.text('markListeningInbox'),
-                  trailing: listeningInboxCount > 0
-                      ? '$listeningInboxCount'
-                      : null,
-                ),
-              ),
-              PopupMenuItem(
-                value: 'hard-interrupt',
-                enabled: listeningMarkEnabled,
-                child: _PlaybackMenuRow(
-                  icon: Icons.pause_circle_outline,
-                  title: l.text('hardInterruptListening'),
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                enabled: false,
-                child: Text(
-                  l.text('chunkMode'),
-                  style: ListenType.body.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              PopupMenuItem(
                 value: 'previous-chunk',
-                enabled: chunkControlsEnabled,
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.keyboard_double_arrow_left,
                   title: l.text('previousChunk'),
                 ),
               ),
               PopupMenuItem(
                 value: 'loop-chunk',
-                enabled: chunkControlsEnabled,
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.segment,
                   title: l.text('loopChunk'),
                 ),
               ),
               PopupMenuItem(
                 value: 'next-chunk',
-                enabled: chunkControlsEnabled,
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.keyboard_double_arrow_right,
                   title: l.text('nextChunk'),
                 ),
               ),
               PopupMenuItem(
                 value: 'expand-chunk',
-                enabled: chunkControlsEnabled,
-                child: _PlaybackMenuRow(
+                child: ListenMenuRow(
                   icon: Icons.unfold_more,
                   title: l.text('expandChunk'),
                 ),
@@ -1000,53 +820,25 @@ class PlaybackControls extends StatelessWidget {
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'stop-source-loop',
-                  child: _PlaybackMenuRow(
+                  child: ListenMenuRow(
                     icon: Icons.stop_circle_outlined,
                     title: l.text('stopSourceLoop'),
                   ),
                 ),
               ],
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                enabled: false,
-                child: Text(
-                  l.text('subtitleMode'),
-                  style: ListenType.body.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-primary',
-                child: _PlaybackMenuRow(
-                  icon: subtitlesVisible
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  title: l.text('subtitles'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-secondary',
-                enabled: secondarySubtitlesAvailable,
-                child: _PlaybackMenuRow(
-                  icon: secondarySubtitlesVisible
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  title: l.text('secondary'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'toggle-status-styles',
-                child: _PlaybackMenuRow(
-                  icon: statusStylesVisible
-                      ? Icons.check_box_outlined
-                      : Icons.check_box_outline_blank,
-                  title: l.text('wordStyles'),
-                ),
-              ),
             ],
           ),
+        // One toggle for the subtitles drawn over the video. It was a menu of
+        // three checkboxes; the other two — the second track and the word
+        // status styling — are display preferences that live in playback
+        // settings, and the transcript's own two-track pairing moved to the
+        // session header where the transcript is.
+        _ToggleIcon(
+          tooltip: l.text('subtitles'),
+          selected: subtitlesVisible,
+          onPressed: () => onSubtitlesVisibleChanged(!subtitlesVisible),
+          icon: Icons.subtitles_outlined,
+        ),
         const Spacer(),
         DropdownButtonHideUnderline(
           child: DropdownButton<double>(
@@ -1230,6 +1022,60 @@ class PlaybackControls extends StatelessWidget {
   }
 }
 
+/// A/B repeat as a three-step button.
+///
+/// Every intensive-listening player has one and this transport did not: the
+/// only range loops available were the chunk ones, which loop what the timeline
+/// says rather than what the ear picked out. The three steps are labelled
+/// rather than implied — "A" while waiting for the start, "B" while waiting for
+/// the end, "AB" lit while the loop runs — because a two-tap control whose
+/// state is invisible is a control nobody trusts.
+class _AbLoopButton extends StatelessWidget {
+  const _AbLoopButton({
+    required this.anchor,
+    required this.looping,
+    required this.onPressed,
+  });
+
+  /// Set once A is marked and the button is waiting for B.
+  final Duration? anchor;
+  final bool looping;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final pending = anchor != null && !looping;
+    final active = looping || pending;
+    return Tooltip(
+      message: l.text(
+        looping
+            ? 'abLoopClear'
+            : pending
+            ? 'abLoopSetEnd'
+            : 'abLoopSetStart',
+      ),
+      child: TextButton(
+        key: const Key('playback-ab-loop'),
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: active ? colors.primary : colors.onSurfaceVariant,
+          padding: ListenPadding.tight,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: Text(
+          pending ? 'A•' : 'AB',
+          style: ListenType.emphasis.copyWith(
+            fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PlaybackMenuButton extends StatelessWidget {
   const _PlaybackMenuButton({
     required this.tooltip,
@@ -1239,7 +1085,6 @@ class _PlaybackMenuButton extends StatelessWidget {
     required this.onSelected,
     required this.itemBuilder,
     this.enabled = true,
-    this.badgeCount = 0,
   });
 
   final String tooltip;
@@ -1247,7 +1092,6 @@ class _PlaybackMenuButton extends StatelessWidget {
   final IconData icon;
   final bool selected;
   final bool enabled;
-  final int badgeCount;
   final PopupMenuItemSelected<String> onSelected;
   final PopupMenuItemBuilder<String> itemBuilder;
 
@@ -1286,11 +1130,7 @@ class _PlaybackMenuButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Badge.count(
-                  count: badgeCount,
-                  isLabelVisible: badgeCount > 0,
-                  child: iconWidget,
-                ),
+                iconWidget,
                 const SizedBox(width: ListenSpacing.gap6),
                 Text(
                   label,
@@ -1309,66 +1149,6 @@ class _PlaybackMenuButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _PlaybackMenuRow extends StatelessWidget {
-  const _PlaybackMenuRow({
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final String? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 250),
-      child: Row(
-        children: [
-          Icon(
-            icon,
-            size: ListenIconSize.control,
-            color: colors.onSurfaceVariant,
-          ),
-          const SizedBox(width: ListenSpacing.gap12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (subtitle != null)
-                  Text(
-                    subtitle!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (trailing != null) ...[
-            const SizedBox(width: ListenSpacing.gap12),
-            Text(
-              trailing!,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: colors.primary,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ],
       ),
     );
   }

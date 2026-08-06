@@ -128,6 +128,7 @@ import 'widgets/layout/player_overlays.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/shell_recede.dart';
 import 'widgets/layout/side_panel.dart';
+import 'widgets/layout/listening_session_menu.dart';
 import 'widgets/layout/study_menu.dart';
 import 'widgets/layout/translation_mode_button.dart';
 import 'widgets/panels/conversation_stage_shell.dart';
@@ -2144,6 +2145,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
   );
 
+  /// The extensive-listening session. It was on the transport, among controls
+  /// that act on the next 200ms; a session that spans a whole sitting belongs
+  /// with the other facts about this sitting.
+  Widget _listeningMenu() => ListeningSessionMenu(
+    active: extensiveListeningController.active,
+    huntingActive: huntingSessionController.state.enabled,
+    markEnabled: subtitleController.currentPrimaryCue != null,
+    inboxCount: extensiveListeningController.activeItemCount,
+    onToggleListening: () => unawaited(_toggleExtensiveListening()),
+    onToggleHunting: () => unawaited(huntingActions.toggleHuntingMode()),
+    onCaptureInbox: () => unawaited(inboxActions.captureListeningInbox()),
+    onHardInterrupt: () => unawaited(_hardInterruptListening()),
+  );
+
   /// Switches the transcript between original, bilingual and translation.
   Widget _translationMenu() => TranslationModeButton(
     mode: settingsController.transcriptTranslation,
@@ -2549,6 +2564,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                     subtitleMenu:
                                                         _sessionSubtitleMenu(),
                                                     studyMenu: _studyMenu(),
+                                                    listeningMenu:
+                                                        _listeningMenu(),
                                                     translationMenu:
                                                         _translationMenu(),
                                                     mediaTitle: widget
@@ -2853,16 +2870,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     adapter: adapter,
     playerController: playerController,
     extensiveListeningController: extensiveListeningController,
-    huntingSessionController: huntingSessionController,
     subtitleController: subtitleController,
     mediaSession: mediaSession,
     playbackActions: playbackActions,
     taskStatuses: taskStatuses.values.toList(growable: false),
     onSeekCue: _seekCue,
-    onToggleExtensiveListening: _toggleExtensiveListening,
-    onToggleHunting: huntingActions.toggleHuntingMode,
-    onCaptureListeningInbox: inboxActions.captureListeningInbox,
-    onHardInterruptListening: _hardInterruptListening,
     onSaveSettings: _saveSettings,
     spaceTargetsPractice: practiceController.draft?.referenceMediaPath != null,
     isCompact:

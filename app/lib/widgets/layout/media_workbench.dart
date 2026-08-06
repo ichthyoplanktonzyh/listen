@@ -24,6 +24,7 @@ class MediaWorkbench extends StatefulWidget {
     this.subtitleMenu,
     this.studyMenu,
     this.translationMenu,
+    this.listeningMenu,
   });
 
   final String mediaTitle;
@@ -51,6 +52,9 @@ class MediaWorkbench extends StatefulWidget {
 
   /// Switches the transcript between original, bilingual and translation.
   final Widget? translationMenu;
+
+  /// The extensive-listening session for this sitting.
+  final Widget? listeningMenu;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -96,6 +100,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
         subtitleMenu: widget.subtitleMenu,
         studyMenu: widget.studyMenu,
         translationMenu: widget.translationMenu,
+        listeningMenu: widget.listeningMenu,
       ),
       Expanded(
         // Channel surfaces settle in (#46): switching channels fades the new
@@ -209,6 +214,7 @@ class _SessionHeader extends StatelessWidget {
     required this.subtitleMenu,
     required this.studyMenu,
     required this.translationMenu,
+    required this.listeningMenu,
   });
 
   final String mediaTitle;
@@ -228,6 +234,9 @@ class _SessionHeader extends StatelessWidget {
 
   /// Which of the two subtitle tracks the transcript shows.
   final Widget? translationMenu;
+
+  /// The extensive-listening session for this sitting.
+  final Widget? listeningMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -254,6 +263,10 @@ class _SessionHeader extends StatelessWidget {
               availability: availability,
               onSelected: onSelected ?? (_) {},
             ),
+            if (listeningMenu != null) ...[
+              const SizedBox(width: ListenSpacing.gap8),
+              listeningMenu!,
+            ],
             if (translationMenu != null) ...[
               const SizedBox(width: ListenSpacing.gap8),
               translationMenu!,
