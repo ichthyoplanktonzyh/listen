@@ -27,6 +27,9 @@ class TranscriptPanel extends StatefulWidget {
     this.chunkPartitionsBySentence = const {},
     this.senseGroupsBySentence = const {},
     this.chunkDisplayStyle = 'capsule',
+    this.onToggleAnalysis,
+    this.analysisExpanded = false,
+    this.analysis,
   });
 
   final SubtitleTrack? track;
@@ -40,9 +43,26 @@ class TranscriptPanel extends StatefulWidget {
   final Map<String, SentenceChunkPartition> chunkPartitionsBySentence;
   final Map<String, List<SenseGroup>> senseGroupsBySentence;
   final String chunkDisplayStyle;
-  final Future<void> Function(SubtitleToken token, Cue cue) onWord;
+
+  /// Opens a word. [anchor] is where the reader clicked, in global
+  /// coordinates, so the lookup can surface as a bubble over that word instead
+  /// of replacing this panel — which is what used to happen, and what cost the
+  /// reader their place in the text every single time.
+  final Future<void> Function(SubtitleToken token, Cue cue, Offset anchor)
+  onWord;
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function()? onImportSubtitle;
+
+  /// Opens or closes the analysis of the current sentence. Null on hosts with
+  /// no analysis wired, which hides the control rather than offering a dead
+  /// one.
+  final VoidCallback? onToggleAnalysis;
+  final bool analysisExpanded;
+
+  /// The analysis body, rendered inside the current sentence while
+  /// [analysisExpanded]. It arrives built so this panel stays free of the
+  /// eight controllers a diagnosis card reads from.
+  final Widget? analysis;
 
   @override
   State<TranscriptPanel> createState() => _TranscriptPanelState();
@@ -55,6 +75,13 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
   // (drag or wheel) pauses following so the user can read elsewhere without
   // being yanked back; programmatic scrolls never trip this.
   bool _following = true;
+
+  // Where the last press landed, in global coordinates. Word taps arrive from
+  // `TokenLine` without a position — it is one `InkWell` per token inside a
+  // `RichText` — so the panel records the press itself and hands the point on
+  // as the bubble's anchor. Reading it here also means the anchor is the pixel
+  // the user actually aimed at, not the centre of a word box.
+  Offset _lastPressPosition = Offset.zero;
 
   @override
   void initState() {
@@ -98,15 +125,16 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                 return false;
               },
               child: Listener(
+                onPointerDown: (event) => _lastPressPosition = event.position,
                 onPointerSignal: (event) {
                   if (event is PointerScrollEvent) _pauseFollowing();
                 },
                 // A column, not a stack: the resume-following control is a
                 // strip attached under the list instead of a pill floating on
-                // top of it. The floating form covered the very sentence the
-                // reader had scrolled to (§3.7 / charter P2 — chrome does not
-                // sit on content), and it covered a different sentence at
-                // every window height.
+                // top of it. The reference app floats it, and floating it
+                // covers whichever sentence happens to be at the bottom-right
+                // — a different one at every window height. A strip costs one
+                // row and covers nothing, which is the better trade.
                 child: Column(
                   children: [
                     Expanded(
@@ -121,38 +149,73 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                           final selected = cue.id == widget.currentCue?.id;
                           return KeyedSubtree(
                             key: _keyFor(cue),
-                            child: ListTile(
-                              key: ValueKey('transcript-cue-${cue.id}'),
-                              selected: selected,
-                              selectedTileColor: colors.primaryContainer
-                                  .withValues(alpha: 0.5),
-                              contentPadding: ListenPadding.row,
-                              leading: SizedBox(
-                                width: 58,
-                                child: Text(
-                                  formatDuration(cue.start),
-                                  style: Theme.of(context).textTheme.labelMedium
-                                      ?.copyWith(
-                                        color: colors.onSurfaceVariant,
-                                      ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                ListTile(
+                                  key: ValueKey('transcript-cue-${cue.id}'),
+                                  selected: selected,
+                                  selectedTileColor: colors.primaryContainer
+                                      .withValues(alpha: 0.5),
+                                  contentPadding: ListenPadding.row,
+                                  leading: SizedBox(
+                                    width: 58,
+                                    child: Text(
+                                      formatDuration(cue.start),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            color: colors.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                  title: TokenLine(
+                                    cue: cue,
+                                    profiles: widget.wordEntries,
+                                    capabilityProfiles:
+                                        widget.capabilityProfiles,
+                                    showStyles: widget.showStyles,
+                                    baseColor: effectiveBaseColor,
+                                    onWord: (token, cue) => widget.onWord(
+                                      token,
+                                      cue,
+                                      _lastPressPosition,
+                                    ),
+                                    groupingMode: widget.groupingMode,
+                                    chunkDisplayStyle: widget.chunkDisplayStyle,
+                                    chunkPartition: widget
+                                        .chunkPartitionsBySentence[cue.id],
+                                    senseGroups:
+                                        widget.senseGroupsBySentence[cue.id] ??
+                                        const [],
+                                  ),
+                                  onTap: () => widget.onSeekCue(cue),
                                 ),
-                              ),
-                              title: TokenLine(
-                                cue: cue,
-                                profiles: widget.wordEntries,
-                                capabilityProfiles: widget.capabilityProfiles,
-                                showStyles: widget.showStyles,
-                                baseColor: effectiveBaseColor,
-                                onWord: widget.onWord,
-                                groupingMode: widget.groupingMode,
-                                chunkDisplayStyle: widget.chunkDisplayStyle,
-                                chunkPartition:
-                                    widget.chunkPartitionsBySentence[cue.id],
-                                senseGroups:
-                                    widget.senseGroupsBySentence[cue.id] ??
-                                    const [],
-                              ),
-                              onTap: () => widget.onSeekCue(cue),
+                                // The analysis belongs to one sentence, so it
+                                // opens inside that sentence. As a panel tab it
+                                // could be "open" while the sentence it
+                                // described was scrolled out of sight, and
+                                // reaching it always cost the transcript.
+                                if (selected && widget.onToggleAnalysis != null)
+                                  _AnalysisControl(
+                                    expanded: widget.analysisExpanded,
+                                    label: l.text('analyseSentence'),
+                                    onPressed: widget.onToggleAnalysis!,
+                                  ),
+                                if (selected &&
+                                    widget.analysisExpanded &&
+                                    widget.analysis != null)
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      ListenSpacing.gap12,
+                                      0,
+                                      ListenSpacing.gap12,
+                                      ListenSpacing.gap12,
+                                    ),
+                                    child: widget.analysis,
+                                  ),
+                              ],
                             ),
                           );
                         },
@@ -233,13 +296,56 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
   }
 }
 
+/// The per-sentence analysis toggle, drawn quietly under the current sentence.
+///
+/// It only exists on the sentence being played, which is the only one the
+/// analysis can describe — an always-present control on every row would be a
+/// button wall down the length of the transcript.
+class _AnalysisControl extends StatelessWidget {
+  const _AnalysisControl({
+    required this.expanded,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final bool expanded;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: ListenSpacing.gap16),
+        child: TextButton.icon(
+          key: const Key('transcript-analyse-sentence'),
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: colors.primary,
+            padding: ListenPadding.tight,
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          icon: Icon(
+            expanded ? Icons.expand_less : Icons.expand_more,
+            size: ListenIconSize.inline,
+          ),
+          label: Text(label, style: Theme.of(context).textTheme.labelMedium),
+        ),
+      ),
+    );
+  }
+}
+
 /// The strip that offers to resume following the current sentence.
 ///
 /// It takes its own row at the bottom edge of the list rather than floating
 /// over it: the transcript is content, and a control that hides a line of it
-/// is exactly the "chrome glows over content" the charter's P2 forbids. Being
-/// laid out also makes it honest about its cost — the list gets shorter while
-/// the offer stands, and gets its height back the moment following resumes.
+/// covers a different line at every window height. Being laid out also makes
+/// it honest about its cost — the list gets shorter while the offer stands,
+/// and gets its height back the moment following resumes.
 class _BackToCurrentBar extends StatelessWidget {
   const _BackToCurrentBar({required this.label, required this.onPressed});
 

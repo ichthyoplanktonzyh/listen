@@ -23,6 +23,7 @@ class MediaWorkbench extends StatefulWidget {
     this.onChannelSelected,
     this.immersiveStage,
     this.subtitleMenu,
+    this.studyMenu,
   });
 
   final String mediaTitle;
@@ -42,6 +43,11 @@ class MediaWorkbench extends StatefulWidget {
   /// Actions on this media, shown at the end of the session header. Null on
   /// surfaces that have none wired.
   final Widget? subtitleMenu;
+
+  /// Ways of working this material — reading, shadowing, the dictation modes.
+  /// It sits here rather than above the transcript, where it used to be a 2×2
+  /// button wall between the reader and the text.
+  final Widget? studyMenu;
 
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
@@ -86,6 +92,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
         onSelected: widget.onChannelSelected,
         onCollapse: widget.onCollapse,
         subtitleMenu: widget.subtitleMenu,
+        studyMenu: widget.studyMenu,
       ),
       Expanded(
         // Channel surfaces settle in (#46): switching channels fades the new
@@ -202,6 +209,7 @@ class _SessionHeader extends StatelessWidget {
     required this.onSelected,
     required this.onCollapse,
     required this.subtitleMenu,
+    required this.studyMenu,
   });
 
   final String mediaTitle;
@@ -214,6 +222,10 @@ class _SessionHeader extends StatelessWidget {
   /// on a shell app bar, gated by `canActOnMedia` and therefore dead on every
   /// screen that had no media; here the gate is this header's own existence.
   final Widget? subtitleMenu;
+
+  /// Ways of working this material. Like [subtitleMenu] it acts on *this*
+  /// media, so it is gated by this header's own existence.
+  final Widget? studyMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -258,6 +270,10 @@ class _SessionHeader extends StatelessWidget {
               availability: availability,
               onSelected: onSelected ?? (_) {},
             ),
+            if (studyMenu != null) ...[
+              const SizedBox(width: ListenSpacing.gap8),
+              studyMenu!,
+            ],
             if (subtitleMenu != null) ...[
               const SizedBox(width: ListenSpacing.gap8),
               subtitleMenu!,

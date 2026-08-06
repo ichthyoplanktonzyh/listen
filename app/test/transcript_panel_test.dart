@@ -8,6 +8,8 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/panels/transcript_panel.dart';
 
 void main() {
+  _analysisGroup();
+
   testWidgets('transcript keeps the current cue visible with variable rows', (
     tester,
   ) async {
@@ -113,6 +115,125 @@ void main() {
   });
 }
 
+/// The analysis used to be one of five side-panel tabs, so reaching it meant
+/// the transcript — including the sentence being analysed — left the screen.
+/// These pin the replacement: it is an expansion of one sentence, offered on
+/// that sentence only, and it never displaces the text.
+void _analysisGroup() {
+  testWidgets('analysis is offered on the current sentence only', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(8, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[2],
+        onToggleAnalysis: () {},
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Eight sentences are on screen; exactly one carries the control.
+    expect(find.byKey(const Key('transcript-analyse-sentence')), findsOneWidget);
+    final control = tester.getRect(
+      find.byKey(const Key('transcript-analyse-sentence')),
+    );
+    final currentCue = tester.getRect(
+      find.byKey(const ValueKey('transcript-cue-cue-2')),
+    );
+    expect(control.top, greaterThanOrEqualTo(currentCue.bottom - 0.5));
+  });
+
+  testWidgets('expanding the analysis keeps every sentence on screen', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(8, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    var toggles = 0;
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[2],
+        onToggleAnalysis: () => toggles += 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('transcript-analyse-sentence')));
+    expect(toggles, 1);
+
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[2],
+        onToggleAnalysis: () {},
+        analysisExpanded: true,
+        analysis: const Text('analysis body', key: Key('analysis-body')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The analysis renders inside the sentence it describes, and the transcript
+    // is still a transcript — the list did not get replaced by it.
+    expect(find.byKey(const Key('analysis-body')), findsOneWidget);
+    expect(find.byType(ListView), findsOneWidget);
+    final body = tester.getRect(find.byKey(const Key('analysis-body')));
+    final currentCue = tester.getRect(
+      find.byKey(const ValueKey('transcript-cue-cue-2')),
+    );
+    expect(body.top, greaterThanOrEqualTo(currentCue.bottom - 0.5));
+  });
+
+  testWidgets('a word tap reports where it landed, for the bubble anchor', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(4, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    Offset? anchor;
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[0],
+        onWord: (_, _, position) async => anchor = position,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Tap a word in the first sentence. The panel records the press itself,
+    // because `TokenLine` hands word taps over without a position.
+    final target = tester.getCenter(
+      find.byKey(const ValueKey('transcript-cue-cue-0')),
+    );
+    await tester.tapAt(target);
+    await tester.pumpAndSettle();
+
+    expect(anchor, isNotNull);
+    expect(anchor, target);
+  });
+}
+
 Cue _cue(int index) {
   final text = index.isEven
       ? 'Target sentence $index with a compact listening line.'
@@ -165,11 +286,19 @@ class _Harness extends StatelessWidget {
     required this.controller,
     required this.track,
     required this.currentCue,
+    this.onToggleAnalysis,
+    this.analysisExpanded = false,
+    this.analysis,
+    this.onWord,
   });
 
   final ScrollController controller;
   final SubtitleTrack track;
   final Cue currentCue;
+  final VoidCallback? onToggleAnalysis;
+  final bool analysisExpanded;
+  final Widget? analysis;
+  final Future<void> Function(SubtitleToken, Cue, Offset)? onWord;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -195,8 +324,11 @@ class _Harness extends StatelessWidget {
             wordEntries: const <String, LexicalEntry>{},
             showStyles: true,
             baseColor: Colors.black,
-            onWord: (_, _) async {},
+            onWord: onWord ?? (_, _, _) async {},
             onSeekCue: (_) async {},
+            onToggleAnalysis: onToggleAnalysis,
+            analysisExpanded: analysisExpanded,
+            analysis: analysis,
           ),
         ),
       ),

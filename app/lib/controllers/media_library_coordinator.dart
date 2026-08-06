@@ -166,7 +166,7 @@ class MediaLibraryCoordinator {
       return;
     }
     await openMediaPath(entry.media.path);
-    if (isMounted()) learning.selectSidePanel(0);
+    if (isMounted()) learning.selectTab(SidePanelTab.transcript);
   }
 
   Future<void> setLibraryTriageIntent(

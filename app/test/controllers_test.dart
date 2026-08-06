@@ -90,8 +90,8 @@ void main() {
     final learning = LearningController();
     var learningNotifications = 0;
     learning.addListener(() => learningNotifications++);
-    learning.selectSidePanel(1);
-    expect(learning.sidePanel, 1);
+    learning.selectTab(SidePanelTab.notes);
+    expect(learning.tab, SidePanelTab.notes);
     expect(learningNotifications, 1);
     learning.dispose();
   });
@@ -335,12 +335,17 @@ void main() {
     );
   });
 
-  test('selecting a word opens the word learning side panel', () {
+  // Selecting a word used to force the panel to the word tab, which took the
+  // transcript off screen on every single lookup. The lookup now surfaces as a
+  // bubble over the word, so selection must leave the panel exactly where the
+  // reader put it.
+  test('selecting a word leaves the panel where it is', () {
     final controller = LearningController()
-      ..selectSidePanel(1)
+      ..selectTab(SidePanelTab.transcript)
       ..selectWord(_lexicalDetails);
 
-    expect(controller.sidePanel, 2);
+    expect(controller.tab, SidePanelTab.transcript);
+    expect(controller.selectedLexicalDetails, _lexicalDetails);
   });
 
   test(

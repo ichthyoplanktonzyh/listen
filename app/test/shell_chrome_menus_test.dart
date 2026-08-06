@@ -60,6 +60,7 @@ void main() {
     onGenerateSecondarySubtitles: () => fired.add('generate-secondary'),
     onSearchSecondarySubtitles: () => fired.add('search-secondary'),
     onImportEmbeddedSubtitle: () => fired.add('import-embedded'),
+    onOpenResources: () => fired.add('open-resources'),
     onArchiveMedia: () => fired.add('archive-media'),
   );
 
@@ -169,6 +170,7 @@ void main() {
         'generate-secondary',
         'search-secondary',
         'import-embedded',
+        'open-resources',
         'archive-media',
       ]);
     });
@@ -205,6 +207,7 @@ void main() {
         'generate-secondary',
         'search-secondary',
         'import-embedded',
+        'open-resources',
         'archive-media',
       ]) {
         fired = [];

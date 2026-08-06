@@ -128,6 +128,7 @@ import 'widgets/layout/player_overlays.dart';
 import 'widgets/layout/player_stage.dart';
 import 'widgets/layout/shell_recede.dart';
 import 'widgets/layout/side_panel.dart';
+import 'widgets/layout/study_menu.dart';
 import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
@@ -1038,21 +1039,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   String _capabilityStatusSegment(CapabilityReadiness readiness) =>
       '${l.text(readiness.titleKey)}: ${l.text(readiness.stateKey)}';
 
-  Future<void> _deleteSubtitleResource(SubtitleTrack track) =>
-      deleteSubtitleResourceFlow(
-        context: context,
-        resourceActions: resourceActions,
-        track: track,
-      );
-
-  Future<void> _exportSubtitleResource(SubtitleTrack track) =>
-      exportSubtitleResourceFlow(
-        context: context,
-        playerController: playerController,
-        resourceActions: resourceActions,
-        track: track,
-      );
-
   Future<void> _openManualReviewTimeline() async {
     final controller = ManualReviewFlowController(
       coreSessionController.state.isConnected
@@ -1610,11 +1596,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     await practiceActions.startSentenceDictationPractice();
   }
 
-  Future<void> _openDiagnosisView() async {
-    learningController.selectSidePanel(3);
-    await _refreshDiagnosis();
-  }
-
   Future<void> _toggleExtensiveListening() async {
     if (!extensiveListeningController.active) {
       final started = await extensiveListeningController.startSession(
@@ -1701,7 +1682,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _hardInterruptListening() async {
     if (playerController.playing) await adapter.playOrPause();
     await inboxActions.captureListeningInbox();
-    learningController.selectSidePanel(3);
+    learningController.setDiagnosisExpanded(true);
     await _refreshDiagnosis();
     if (mounted) {
       playerController.setStatus(l.text('statusPausedForListeningCheck'));
@@ -2158,8 +2139,37 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSearchSecondarySubtitles: () =>
         unawaited(_searchOpenSubtitles(secondary: true)),
     onImportEmbeddedSubtitle: () => unawaited(_importEmbeddedSubtitle()),
+    onOpenResources: () => unawaited(_openSubtitleResources()),
     onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
   );
+
+  /// Ways of working the material on the workbench. One menu, because these
+  /// were spread over a posture grid, a popup inside it, and two transport
+  /// menus — four places to look for one decision.
+  Widget _studyMenu() {
+    final cue = subtitleController.currentPrimaryCue;
+    return StudyMenu(
+      hasCue: cue != null,
+      canRead: subtitleController.primaryTrack != null,
+      canCloze:
+          cue != null &&
+          (subtitleController.timingsBySentence[cue.id] ?? const []).isNotEmpty,
+      canChunkDictation:
+          cue != null &&
+          (subtitleController
+                  .chunkPartitionsBySentence[cue.id]
+                  ?.chunks
+                  .isNotEmpty ??
+              false),
+      onRead: () => unawaited(readingChannel.open()),
+      onShadow: () => unawaited(practiceActions.startShadowingPractice()),
+      onCloze: () => unawaited(practiceActions.startClozePractice()),
+      onChunkDictation: () =>
+          unawaited(practiceActions.startChunkDictationPractice()),
+      onSentenceDictation: () =>
+          unawaited(practiceActions.startSentenceDictationPractice()),
+    );
+  }
 
   // ── Shell panes ──
   //
@@ -2530,6 +2540,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   child: MediaWorkbench(
                                                     subtitleMenu:
                                                         _sessionSubtitleMenu(),
+                                                    studyMenu: _studyMenu(),
                                                     mediaTitle: widget
                                                         .pathHelper
                                                         .basename(
@@ -2801,7 +2812,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     learningController: learningController,
     extensiveListeningController: extensiveListeningController,
     settingsController: settingsController,
-    resourceActions: resourceActions,
     mediaSession: mediaSession,
     playbackActions: playbackActions,
     transcriptController: transcriptController,
@@ -2812,16 +2822,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSaveSelectedLearningContent:
         vocabularyActions.saveSelectedLearningContent,
     onObserveSelected: vocabularyActions.observeSelected,
-    onManualReviewTimeline: _openManualReviewTimeline,
-    onDeleteSubtitle: _deleteSubtitleResource,
-    onExportSubtitle: _exportSubtitleResource,
-    onStartClozePractice: practiceActions.startClozePractice,
-    onStartChunkDictationPractice: practiceActions.startChunkDictationPractice,
-    onStartSentenceDictationPractice:
-        practiceActions.startSentenceDictationPractice,
-    onStartShadowingPractice: practiceActions.startShadowingPractice,
-    onOpenReading: () => unawaited(readingChannel.open()),
-    onOpenDiagnosisView: _openDiagnosisView,
+    onRequestDiagnosis: _refreshDiagnosis,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
     onPlayPronunciationAudio: _playPronunciationAudio,

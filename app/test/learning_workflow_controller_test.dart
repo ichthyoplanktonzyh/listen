@@ -19,8 +19,8 @@ Cue _cue(String id) => Cue(
 
 void main() {
   group('LearningWorkflowController.openWord', () {
-    test('switches to the word learning panel before lookups finish', () async {
-      final learning = LearningController()..selectSidePanel(0);
+    test('leaves the transcript in place while the lookup runs', () async {
+      final learning = LearningController();
       final firstResponse = Completer<ApiResponse>();
       final api = LocalApi.withTransport(
         baseUrl: 'http://test',
@@ -72,7 +72,7 @@ void main() {
         isMounted: () => true,
       );
 
-      expect(learning.sidePanel, 2);
+      expect(learning.tab, SidePanelTab.transcript);
       expect(learning.selectedToken, token);
       expect(learning.selectedCue, cue);
       expect(learning.selectedLexicalDetails, isNull);
@@ -84,12 +84,12 @@ void main() {
       ));
       await future;
 
-      expect(learning.sidePanel, 2);
+      expect(learning.tab, SidePanelTab.transcript);
       expect(learning.selectedLexicalDetails?.entry.normalizedForm, 'hello');
     });
 
     test('keeps word details visible when optional lookups fail', () async {
-      final learning = LearningController()..selectSidePanel(0);
+      final learning = LearningController();
       final api = LocalApi.withTransport(
         baseUrl: 'http://test',
         token: 'tok',
@@ -122,7 +122,7 @@ void main() {
         isMounted: () => true,
       );
 
-      expect(learning.sidePanel, 2);
+      expect(learning.tab, SidePanelTab.transcript);
       expect(learning.selectedLexicalDetails?.entry.normalizedForm, 'hello');
       expect(learning.selectedDictionary, isNull);
       expect(learning.selectedPronunciation, isNull);
@@ -164,7 +164,7 @@ void main() {
         isMounted: () => true,
       );
 
-      expect(learning.sidePanel, 2);
+      expect(learning.tab, SidePanelTab.transcript);
       expect(learning.selectedLexicalDetails?.entry.id, 'lexical-1');
       expect(
         learning.selectedLexicalDetails?.entry.status,
@@ -217,7 +217,7 @@ void main() {
           isMounted: () => true,
         );
 
-        expect(learning.sidePanel, 2);
+        expect(learning.tab, SidePanelTab.transcript);
         expect(learning.selectedLexicalDetails?.entry.id, 'lexical-1');
 
         detailsResponse.complete((

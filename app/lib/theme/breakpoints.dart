@@ -48,10 +48,6 @@ abstract final class ListenBreakpoints {
   /// stack vertically so each label still fits on one line.
   static const homeStatusStrip = 720.0;
 
-  /// Side-panel tabs show text labels beside their icons; below it only the
-  /// icons remain.
-  static const sidePanelTabLabels = 520.0;
-
   /// The media workbench splits media and panel side by side; below it the
   /// split turns vertical.
   static const workbenchStacked = 820.0;
