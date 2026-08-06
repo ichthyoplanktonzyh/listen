@@ -244,7 +244,7 @@ class _SessionHeader extends StatelessWidget {
                 icon: const Icon(Icons.home_outlined),
               ),
             const Spacer(),
-            if (listeningMenu != null) listeningMenu!,
+            ?listeningMenu,
             if (translationMenu != null) ...[
               const SizedBox(width: ListenSpacing.gap8),
               translationMenu!,
