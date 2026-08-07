@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import io
 import json
 import os
@@ -45,7 +46,8 @@ EXPECTED_LOCK = {
     "schema_version": 1,
 }
 
-SOURCE_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+SOURCE_COMMIT_RE = re.compile(r"[0-9a-f]{40}")
+SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
 SHEBANG = b"#!/usr/bin/env python3\n"
 FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 ENTRY_MODE = 0o100644
@@ -99,46 +101,61 @@ class ReleaseBundleError(Exception):
     pass
 
 
-def _canonical_json(document: object) -> bytes:
-    return (
-        json.dumps(
-            document,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-        + b"\n"
-    )
+def _canonical_json_bytes(document: object) -> bytes:
+    return json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _canonical_json_file_bytes(document: object) -> bytes:
+    return _canonical_json_bytes(document) + b"\n"
 
 
 def _sha256_hex(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
-def _normalize_source_bytes(data: bytes) -> bytes:
-    return data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
-
-
 def _load_protocol_constants(repo_root: Path) -> dict[str, object]:
-    """Import protocol constants from the checkout source, never an install."""
+    """Import protocol constants from the checkout source, never an install.
+
+    All cached ``listen_gen`` modules are removed for the duration of the
+    import so a different checkout is never shadowed by the caller's state,
+    and the caller's module state is fully restored afterwards.
+    """
     src = str(repo_root / "src")
+    saved_modules = {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "listen_gen" or name.startswith("listen_gen.")
+    }
+    for name in saved_modules:
+        del sys.modules[name]
     sys.path.insert(0, src)
-    saved = sys.modules.pop("listen_gen", None)
     try:
-        from listen_gen import protocol
-    except ImportError:
-        raise ReleaseBundleError("release source package is missing")
-    else:
-        return {
-            "tool_id": protocol.TOOL_ID,
-            "tool_version": protocol.TOOL_VERSION,
-            "machine_event_schema": protocol.MACHINE_EVENT_SCHEMA,
-            "machine_protocol_version": protocol.MACHINE_PROTOCOL_VERSION,
-        }
+        try:
+            protocol = importlib.import_module("listen_gen.protocol")
+            constants = {
+                "tool_id": protocol.TOOL_ID,
+                "tool_version": protocol.TOOL_VERSION,
+                "machine_event_schema": protocol.MACHINE_EVENT_SCHEMA,
+                "machine_protocol_version": protocol.MACHINE_PROTOCOL_VERSION,
+            }
+        except Exception:
+            raise ReleaseBundleError("release source package is missing")
+        finally:
+            for name in [
+                name
+                for name in sys.modules
+                if name == "listen_gen" or name.startswith("listen_gen.")
+            ]:
+                del sys.modules[name]
+        return constants
     finally:
-        if saved is not None:
-            sys.modules["listen_gen"] = saved
+        sys.modules.update(saved_modules)
         try:
             sys.path.remove(src)
         except ValueError:
@@ -187,7 +204,13 @@ def _collect_source_entries(repo_root: Path) -> list[tuple[str, bytes]]:
         if path.is_symlink() or not path.is_file():
             continue
         archive_path = "listen_gen/" + path.relative_to(package_root).as_posix()
-        entries.append((archive_path, _normalize_source_bytes(path.read_bytes())))
+        try:
+            raw = path.read_bytes()
+            text = raw.decode("utf-8")
+        except (OSError, UnicodeDecodeError):
+            raise ReleaseBundleError("release archive content does not match source")
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+        entries.append((archive_path, normalized))
     entries.append(("__main__.py", ROOT_MAIN_SOURCE.encode("utf-8")))
     entries.sort(key=lambda item: item[0])
     return entries
@@ -254,7 +277,7 @@ def _build_manifest(
             "resource_schema_id": lock["resource_schema_id"],
             "package_schema": lock["package_schema"],
             "schema_version": lock["schema_version"],
-            "canonical_sha256": _sha256_hex(_canonical_json(lock)),
+            "canonical_sha256": _sha256_hex(_canonical_json_bytes(lock)),
         },
         "runtime": {
             "python_requires": REQUIRED_PYTHON,
@@ -277,7 +300,9 @@ def build_release_bundle(
 ) -> tuple[Path, Path]:
     repo_root = Path(repo_root)
     output_parent = Path(output_parent)
-    if not SOURCE_COMMIT_RE.match(source_commit):
+    if not isinstance(source_commit, str) or not SOURCE_COMMIT_RE.fullmatch(
+        source_commit
+    ):
         raise ReleaseBundleError("source commit must be a lowercase 40-character SHA")
     version, _ = _read_project_metadata(repo_root)
     constants = _load_protocol_constants(repo_root)
@@ -309,7 +334,7 @@ def build_release_bundle(
         pyz_name = f"listen-gen-{version}.pyz"
         manifest_name = f"listen-gen-{version}.release.json"
         _write_pyz(staging / pyz_name, pyz_bytes)
-        (staging / manifest_name).write_bytes(_canonical_json(manifest))
+        (staging / manifest_name).write_bytes(_canonical_json_file_bytes(manifest))
         verify_release_bundle(repo_root, staging / manifest_name)
         os.replace(str(staging), str(bundle_dir))
         staging = None
@@ -335,6 +360,8 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
         raise ReleaseBundleError("release manifest is invalid")
     if not isinstance(parsed, dict):
         raise ReleaseBundleError("release manifest is invalid")
+    if raw != _canonical_json_file_bytes(parsed):
+        raise ReleaseBundleError("release manifest is invalid")
     _check_keys(parsed, MANIFEST_ROOT_FIELDS)
     if parsed["schema"] != RELEASE_BUNDLE_SCHEMA:
         raise ReleaseBundleError("release manifest is invalid")
@@ -350,13 +377,16 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
     if source["repository"] != SOURCE_REPOSITORY:
         raise ReleaseBundleError("release manifest is invalid")
     commit = source["commit"]
-    if not isinstance(commit, str) or not SOURCE_COMMIT_RE.match(commit):
+    if not isinstance(commit, str) or not SOURCE_COMMIT_RE.fullmatch(commit):
         raise ReleaseBundleError("release manifest is invalid")
     machine_protocol = parsed["machine_protocol"]
     _check_keys(machine_protocol, MANIFEST_PROTOCOL_FIELDS)
     if machine_protocol["schema"] != MACHINE_EVENT_SCHEMA:
         raise ReleaseBundleError("release manifest is invalid")
-    if machine_protocol["version"] != MACHINE_PROTOCOL_VERSION:
+    protocol_version = machine_protocol["version"]
+    if type(protocol_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if protocol_version != MACHINE_PROTOCOL_VERSION:
         raise ReleaseBundleError("release manifest is invalid")
     contract = parsed["content_package_contract"]
     _check_keys(contract, MANIFEST_CONTRACT_FIELDS)
@@ -370,12 +400,17 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
         raise ReleaseBundleError("release manifest is invalid")
     if contract["package_schema"] != EXPECTED_LOCK["package_schema"]:
         raise ReleaseBundleError("release manifest is invalid")
-    if contract["schema_version"] != EXPECTED_LOCK["schema_version"]:
+    schema_version = contract["schema_version"]
+    if type(schema_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if schema_version != EXPECTED_LOCK["schema_version"]:
         raise ReleaseBundleError("release manifest is invalid")
     canonical_sha256 = contract["canonical_sha256"]
-    if not isinstance(canonical_sha256, str):
+    if not isinstance(canonical_sha256, str) or not SHA256_RE.fullmatch(
+        canonical_sha256
+    ):
         raise ReleaseBundleError("release manifest is invalid")
-    if canonical_sha256 != _sha256_hex(_canonical_json(EXPECTED_LOCK)):
+    if canonical_sha256 != _sha256_hex(_canonical_json_bytes(EXPECTED_LOCK)):
         raise ReleaseBundleError("release manifest is invalid")
     runtime = parsed["runtime"]
     _check_keys(runtime, MANIFEST_RUNTIME_FIELDS)
@@ -400,10 +435,10 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
     if artifact["entrypoint"] != "__main__.py":
         raise ReleaseBundleError("release manifest is invalid")
     size_bytes = artifact["size_bytes"]
-    if not isinstance(size_bytes, int) or isinstance(size_bytes, bool) or size_bytes < 0:
+    if type(size_bytes) is not int or size_bytes < 0:
         raise ReleaseBundleError("release manifest is invalid")
     sha256 = artifact["sha256"]
-    if not isinstance(sha256, str) or not sha256.startswith("sha256:"):
+    if not isinstance(sha256, str) or not SHA256_RE.fullmatch(sha256):
         raise ReleaseBundleError("release manifest is invalid")
     return parsed
 
@@ -483,7 +518,7 @@ def verify_release_bundle(
         raise ReleaseBundleError("content package contract lock is invalid")
     if contract["schema_version"] != lock["schema_version"]:
         raise ReleaseBundleError("content package contract lock is invalid")
-    if contract["canonical_sha256"] != _sha256_hex(_canonical_json(lock)):
+    if contract["canonical_sha256"] != _sha256_hex(_canonical_json_bytes(lock)):
         raise ReleaseBundleError("content package contract lock is invalid")
     return {
         "status": "verified",

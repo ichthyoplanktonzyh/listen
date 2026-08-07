@@ -27,17 +27,18 @@ SHEBANG = b"#!/usr/bin/env python3\n"
 FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 
 
-def canonical_json(document: object) -> bytes:
-    return (
-        json.dumps(
-            document,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        ).encode("utf-8")
-        + b"\n"
-    )
+def canonical_json_bytes(document: object) -> bytes:
+    return json.dumps(
+        document,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def canonical_json_file_bytes(document: object) -> bytes:
+    return canonical_json_bytes(document) + b"\n"
 
 
 def env_with_src() -> dict[str, str]:
@@ -82,6 +83,14 @@ def make_malicious_pyz(bad_name: str) -> bytes:
             info.external_attr = 0o100644 << 16
             archive.writestr(info, b"payload\n")
     return SHEBANG + buffer.getvalue()
+
+
+def copy_repo_root(prefix: str) -> Path:
+    root = Path(tempfile.mkdtemp(prefix=prefix))
+    shutil.copytree(ROOT / "src" / "listen_gen", root / "src" / "listen_gen")
+    shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
+    shutil.copyfile(ROOT / "contracts.lock.json", root / "contracts.lock.json")
+    return root
 
 
 class ReleaseBundleTestBase(unittest.TestCase):
@@ -208,8 +217,12 @@ class ManifestContentTests(ReleaseBundleTestBase):
         self.assertEqual(contract["package_schema"], lock["package_schema"])
         self.assertEqual(contract["schema_version"], lock["schema_version"])
         self.assertEqual(contract["canonical_sha256"], "sha256:" + hashlib.sha256(
-            canonical_json(lock)
+            canonical_json_bytes(lock)
         ).hexdigest())
+        self.assertNotEqual(
+            contract["canonical_sha256"],
+            "sha256:" + hashlib.sha256(canonical_json_file_bytes(lock)).hexdigest(),
+        )
         artifact_bytes = self.artifact.read_bytes()
         self.assertEqual(manifest["artifact"], {
             "filename": PYZ_NAME,
@@ -218,7 +231,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
             "size_bytes": len(artifact_bytes),
             "sha256": "sha256:" + hashlib.sha256(artifact_bytes).hexdigest(),
         })
-        self.assertEqual(raw, canonical_json(manifest))
+        self.assertEqual(raw, canonical_json_file_bytes(manifest))
         self.assertTrue(raw.endswith(b"\n"))
         self.assertFalse(raw.endswith(b"\n\n"))
         text = raw.decode("utf-8")
@@ -386,7 +399,7 @@ class VerifierFailureTests(ReleaseBundleTestBase):
             _, manifest = self.copy_bundle(Path(tmp))
             parsed = json.loads(manifest.read_bytes())
             parsed["artifact"]["filename"] = f"../{PYZ_NAME}"
-            manifest.write_bytes(canonical_json(parsed))
+            manifest.write_bytes(canonical_json_file_bytes(parsed))
             completed = run_tool(["verify", str(manifest)])
             self.assertEqual(completed.returncode, 2)
             self.assertEqual(
@@ -405,7 +418,7 @@ class VerifierFailureTests(ReleaseBundleTestBase):
                 parsed["artifact"]["sha256"] = (
                     "sha256:" + hashlib.sha256(malicious).hexdigest()
                 )
-                manifest.write_bytes(canonical_json(parsed))
+                manifest.write_bytes(canonical_json_file_bytes(parsed))
                 completed = run_tool(["verify", str(manifest)])
                 self.assertEqual(completed.returncode, 2, bad_name)
                 self.assertEqual(
@@ -426,7 +439,7 @@ class VerifierFailureTests(ReleaseBundleTestBase):
         )
         self.assertEqual(
             completed.stdout,
-            canonical_json(document).decode("utf-8"),
+            canonical_json_file_bytes(document).decode("utf-8"),
         )
 
 
@@ -438,6 +451,8 @@ class BuildErrorTests(unittest.TestCase):
             FAKE_COMMIT[:39],
             FAKE_COMMIT + "a",
             "z" + FAKE_COMMIT[1:],
+            FAKE_COMMIT + "\n",
+            FAKE_COMMIT + " ",
         ]
         with tempfile.TemporaryDirectory() as tmp:
             for commit in invalid:
@@ -532,7 +547,8 @@ class CliBuildOutputTests(unittest.TestCase):
                 "manifest": f"listen-gen-{VERSION}/{MANIFEST_NAME}",
             })
             self.assertEqual(
-                completed.stdout, canonical_json(document).decode("utf-8")
+                completed.stdout,
+                canonical_json_file_bytes(document).decode("utf-8"),
             )
             bundle = Path(tmp) / f"listen-gen-{VERSION}"
             self.assertEqual(
@@ -543,6 +559,133 @@ class CliBuildOutputTests(unittest.TestCase):
             self.assertEqual(mode, 0o755)
             verify = run_tool(["verify", str(bundle / MANIFEST_NAME)])
             self.assertEqual(verify.returncode, 0, verify.stderr)
+
+
+class StrictVerifierTests(ReleaseBundleTestBase):
+    def assert_manifest_rejected(self, raw: bytes) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest = self.copy_bundle(Path(tmp))
+            manifest.write_bytes(raw)
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(ROOT, manifest)
+            self.assertEqual(str(caught.exception), "release manifest is invalid")
+
+    def test_non_canonical_manifest_variants_rejected(self) -> None:
+        parsed = json.loads(self.manifest.read_bytes())
+        pretty = (
+            json.dumps(parsed, ensure_ascii=False, sort_keys=True, indent=2)
+            + "\n"
+        ).encode("utf-8")
+        self.assert_manifest_rejected(pretty)
+        self.assert_manifest_rejected(canonical_json_bytes(parsed))
+        self.assert_manifest_rejected(canonical_json_file_bytes(parsed) + b"\n")
+        self.assert_manifest_rejected(b" " + canonical_json_file_bytes(parsed))
+        ordered = {}
+        for key in reversed(sorted(parsed)):
+            ordered[key] = parsed[key]
+        reordered = (
+            json.dumps(
+                ordered,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        self.assertEqual(json.loads(reordered), parsed)
+        self.assert_manifest_rejected(reordered)
+
+    def test_duplicate_json_keys_rejected(self) -> None:
+        text = self.manifest.read_bytes().decode("utf-8")
+        duplicated_root = (
+            '{"schema":"listen_gen.release-bundle.v1",' + text[1:]
+        ).encode("utf-8")
+        self.assertEqual(json.loads(duplicated_root), json.loads(text))
+        self.assert_manifest_rejected(duplicated_root)
+        parsed = json.loads(text)
+        sha = parsed["artifact"]["sha256"]
+        needle = f'"sha256":"{sha}"'
+        self.assertIn(needle, text)
+        duplicated_sha = text.replace(
+            needle, f'{needle},"sha256":"{sha}"', 1
+        ).encode("utf-8")
+        self.assertEqual(json.loads(duplicated_sha), parsed)
+        self.assert_manifest_rejected(duplicated_sha)
+
+    def test_invalid_artifact_sha_formats(self) -> None:
+        hex64 = hashlib.sha256(b"artifact").hexdigest()
+        invalid_values = [
+            "sha256:",
+            "sha256:abc",
+            "sha256:" + hex64[:63],
+            "sha256:" + hex64 + "a",
+            "sha256:" + hex64.upper(),
+            "sha256:" + hex64 + "extra",
+        ]
+        parsed = json.loads(self.manifest.read_bytes())
+        for value in invalid_values:
+            with tempfile.TemporaryDirectory() as tmp:
+                artifact, manifest = self.copy_bundle(Path(tmp))
+                # Removing the artifact proves the format error precedes the
+                # checksum stage: it must not report a missing artifact.
+                artifact.unlink()
+                parsed["artifact"]["sha256"] = value
+                manifest.write_bytes(canonical_json_file_bytes(parsed))
+                with self.assertRaises(rb.ReleaseBundleError) as caught:
+                    rb.verify_release_bundle(ROOT, manifest)
+                self.assertEqual(
+                    str(caught.exception), "release manifest is invalid", value
+                )
+
+    def test_bool_cannot_impersonate_integers(self) -> None:
+        mutations = [
+            lambda document: document["machine_protocol"].__setitem__("version", True),
+            lambda document: document["content_package_contract"].__setitem__(
+                "schema_version", True
+            ),
+            lambda document: document["artifact"].__setitem__("size_bytes", True),
+        ]
+        for mutate in mutations:
+            variant = json.loads(self.manifest.read_bytes())
+            mutate(variant)
+            self.assert_manifest_rejected(canonical_json_file_bytes(variant))
+
+
+class ModuleIsolationAndSourceTests(unittest.TestCase):
+    def test_repo_root_module_isolation(self) -> None:
+        root = copy_repo_root("isolated-repo-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        protocol_file = root / "src" / "listen_gen" / "protocol.py"
+        with protocol_file.open("a", encoding="utf-8") as handle:
+            handle.write('\nTOOL_VERSION = "9.9.9"\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.build_release_bundle(root, Path(tmp), FAKE_COMMIT)
+            self.assertEqual(str(caught.exception), "release manifest is invalid")
+        # The test process's cached real modules must be fully restored.
+        self.assertEqual(protocol.TOOL_VERSION, VERSION)
+
+    def test_non_utf8_python_source_rejected(self) -> None:
+        root = copy_repo_root("bad-utf8-repo-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        (root / "src" / "listen_gen" / "invalid_source.py").write_bytes(b"\xff\xfe")
+        with tempfile.TemporaryDirectory() as tmp:
+            output_parent = Path(tmp)
+            unrelated = output_parent / "keep.txt"
+            unrelated.write_text("keep me\n")
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.build_release_bundle(root, output_parent, FAKE_COMMIT)
+            self.assertEqual(
+                str(caught.exception),
+                "release archive content does not match source",
+            )
+            self.assertFalse((output_parent / f"listen-gen-{VERSION}").exists())
+            leftovers = [
+                path.name for path in output_parent.iterdir()
+                if ".staging." in path.name
+            ]
+            self.assertEqual(leftovers, [])
+            self.assertEqual(unrelated.read_text(), "keep me\n")
 
 
 if __name__ == "__main__":
