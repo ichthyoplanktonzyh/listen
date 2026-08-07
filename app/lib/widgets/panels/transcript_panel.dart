@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../controllers/transcript_readiness_view_model.dart';
 import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../models/types.dart';
@@ -12,6 +13,7 @@ import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/transcript_translation.dart';
+import '../common/listen_loading.dart';
 import '../subtitle/token_line.dart';
 
 class TranscriptPanel extends StatefulWidget {
@@ -27,7 +29,7 @@ class TranscriptPanel extends StatefulWidget {
     required this.onWord,
     required this.onSeekCue,
     this.onSeekWord,
-    this.onImportSubtitle,
+    required this.readiness,
     this.groupingMode = 'off',
     this.chunkPartitionsBySentence = const {},
     this.senseGroupsBySentence = const {},
@@ -66,7 +68,12 @@ class TranscriptPanel extends StatefulWidget {
   /// a double tap opens the dictionary ([onWord]). Null keeps single-tap
   /// dictionary lookup.
   final Future<void> Function(SubtitleToken token, Cue cue)? onSeekWord;
-  final Future<void> Function()? onImportSubtitle;
+
+  /// The workbench's answer to "does this media have a learning transcript".
+  /// Rendered in place of the transcript when no track is selected: the
+  /// missing/choosing/preparing/failed states are the product journey, not an
+  /// engineering "import subtitle" panel.
+  final TranscriptReadinessView readiness;
 
   /// Opens or closes the floating analysis window for the current sentence.
   /// Null on hosts with no analysis wired, which hides the control rather than
@@ -138,7 +145,7 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
     final colors = Theme.of(context).colorScheme;
     final Widget body;
     if (widget.track == null) {
-      body = _TranscriptEmptyState(onImportSubtitle: widget.onImportSubtitle);
+      body = _TranscriptReadinessSurface(view: widget.readiness);
     } else {
       // The reading states are displays of this same pane. Read-through is the
       // scrolling transcript; blind and word-select replace it with a single
@@ -1100,55 +1107,274 @@ class _BackToCurrentFab extends StatelessWidget {
   }
 }
 
-class _TranscriptEmptyState extends StatelessWidget {
-  const _TranscriptEmptyState({required this.onImportSubtitle});
+/// What the transcript pane shows when no track is selected: the workbench's
+/// readiness journey, rendered from state and callbacks so the panel stays a
+/// pure view (the owning SidePanel builds this from the readiness ViewModel).
+class TranscriptReadinessView {
+  TranscriptReadinessView({
+    required this.phase,
+    required this.onPrepare,
+    required this.onSelectTrack,
+    required this.onImportSubtitle,
+    required this.onCancel,
+    required this.onRetry,
+    List<SubtitleTrack> usableTracks = const [],
+    this.preparationStage,
+    this.canCancel = false,
+    this.canRetry = false,
+    this.fingerprintMismatch = false,
+  }) : _usableTracks = List.unmodifiable(usableTracks);
 
-  final Future<void> Function()? onImportSubtitle;
+  final TranscriptReadinessPhase phase;
+  final TranscriptPreparationStage? preparationStage;
+  final List<SubtitleTrack> _usableTracks;
+  List<SubtitleTrack> get usableTracks => List.unmodifiable(_usableTracks);
+  final bool canCancel;
+  final bool canRetry;
+  final bool fingerprintMismatch;
+  final Future<void> Function() onPrepare;
+  final Future<void> Function(SubtitleTrack track) onSelectTrack;
+  final Future<void> Function() onImportSubtitle;
+  final void Function() onCancel;
+  final Future<void> Function() onRetry;
+}
+
+class _TranscriptReadinessSurface extends StatelessWidget {
+  const _TranscriptReadinessSurface({required this.view});
+
+  final TranscriptReadinessView view;
+
+  @override
+  Widget build(BuildContext context) => switch (view.phase) {
+    TranscriptReadinessPhase.ready => const SizedBox.shrink(),
+    TranscriptReadinessPhase.choosing => _ChooseTranscriptState(view: view),
+    TranscriptReadinessPhase.missing => _MissingTranscriptState(view: view),
+    TranscriptReadinessPhase.preparing => _PreparingTranscriptState(view: view),
+    TranscriptReadinessPhase.failed => _FailedTranscriptState(view: view),
+    TranscriptReadinessPhase.unavailable => _UnavailableTranscriptState(
+      view: view,
+    ),
+  };
+}
+
+class _MissingTranscriptState extends StatelessWidget {
+  const _MissingTranscriptState({required this.view});
+
+  final TranscriptReadinessView view;
+
+  @override
+  Widget build(BuildContext context) => _ReadinessNotice(
+    icon: Icons.auto_stories_outlined,
+    title: AppLocalizations.of(context).text('missingLearningTranscriptTitle'),
+    body: AppLocalizations.of(context).text('missingLearningTranscriptBody'),
+    actions: [
+      FilledButton.icon(
+        key: const Key('prepare-learning-transcript'),
+        onPressed: () => view.onPrepare(),
+        icon: const Icon(Icons.auto_awesome_outlined),
+        label: Text(
+          AppLocalizations.of(context).text('prepareLearningTranscript'),
+        ),
+      ),
+      OutlinedButton(
+        key: const Key('import-subtitle-file'),
+        onPressed: () => view.onImportSubtitle(),
+        child: Text(
+          AppLocalizations.of(context).text('importSubtitleFile'),
+        ),
+      ),
+    ],
+  );
+}
+
+class _UnavailableTranscriptState extends StatelessWidget {
+  const _UnavailableTranscriptState({required this.view});
+
+  final TranscriptReadinessView view;
+
+  @override
+  Widget build(BuildContext context) => _ReadinessNotice(
+    icon: Icons.cloud_off_outlined,
+    title: AppLocalizations.of(
+      context,
+    ).text('transcriptPreparationUnavailableTitle'),
+    body: AppLocalizations.of(
+      context,
+    ).text('transcriptPreparationUnavailableBody'),
+    actions: [
+      OutlinedButton(
+        key: const Key('import-subtitle-file'),
+        onPressed: () => view.onImportSubtitle(),
+        child: Text(
+          AppLocalizations.of(context).text('importSubtitleFile'),
+        ),
+      ),
+    ],
+  );
+}
+
+class _ChooseTranscriptState extends StatelessWidget {
+  const _ChooseTranscriptState({required this.view});
+
+  final TranscriptReadinessView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final tracks = view.usableTracks;
+    final showSnippets = _hasAmbiguousLabels(tracks);
+    return ListView(
+      padding: ListenPadding.pageCompact,
+      children: [
+        Icon(
+          Icons.menu_book_outlined,
+          size: ListenIconSize.illustration,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(height: ListenSpacing.gap12),
+        Text(
+          l.text('chooseLearningTranscriptTitle'),
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: ListenSpacing.gap8),
+        Text(
+          l.text('chooseLearningTranscriptBody'),
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: ListenSpacing.gap16),
+        for (final track in tracks)
+          _TranscriptChoiceTile(
+            track: track,
+            showSnippet: showSnippets,
+            onSelect: () => view.onSelectTrack(track),
+          ),
+      ],
+    );
+  }
+
+  /// Whether any two tracks would read identically (same language, same
+  /// source label). Only then is a first-sentence snippet added, so the list
+  /// stays quiet when the labels already distinguish the options.
+  bool _hasAmbiguousLabels(List<SubtitleTrack> tracks) {
+    final seen = <String, bool>{};
+    for (final track in tracks) {
+      final key = '${track.language}|${track.source}';
+      if (seen.containsKey(key)) return true;
+      seen[key] = true;
+    }
+    return false;
+  }
+}
+
+class _TranscriptChoiceTile extends StatelessWidget {
+  const _TranscriptChoiceTile({
+    required this.track,
+    required this.showSnippet,
+    required this.onSelect,
+  });
+
+  final SubtitleTrack track;
+  final bool showSnippet;
+  final VoidCallback onSelect;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
+    final firstCue = track.cues.firstOrNull;
+    final snippet = showSnippet && firstCue != null
+        ? firstCue.text.trim()
+        : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: ListenSpacing.gap8),
+      child: Material(
+        key: Key('transcript-choice-${track.id}'),
+        color: colors.surfaceContainer,
+        shape: RoundedRectangleBorder(
+          borderRadius: ListenRadii.controlBorder,
+          side: BorderSide(color: colors.outlineVariant),
+        ),
+        child: InkWell(
+          onTap: onSelect,
+          borderRadius: ListenRadii.controlBorder,
+          child: Padding(
+            padding: ListenPadding.row,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.subtitles_outlined,
+                  size: ListenIconSize.control,
+                  color: colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: ListenSpacing.gap8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _languageLabel(l, track.language),
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: ListenSpacing.gap2),
+                      Text(
+                        [
+                          _sourceLabel(l, track.source),
+                          if (snippet != null && snippet.isNotEmpty) snippet,
+                        ].join(' · '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: ListenIconSize.control,
+                  color: colors.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreparingTranscriptState extends StatelessWidget {
+  const _PreparingTranscriptState({required this.view});
+
+  final TranscriptReadinessView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: ListenPadding.pageCompact,
         child: ConstrainedBox(
-          // A centred notice, not a column: glyph, one heading, one sentence,
-          // one action. See `noticeColumnMax` for why this rung exists rather
-          // than reusing `formColumnMax`.
           constraints: const BoxConstraints(
             maxWidth: ListenBreakpoints.noticeColumnMax,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.subtitles_outlined,
-                size: ListenIconSize.illustration,
-                color: colors.primary,
-              ),
-              const SizedBox(height: ListenSpacing.gap12),
-              Text(
-                l.text('noTranscriptTitle'),
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: ListenSpacing.gap8),
-              Text(
-                l.text('importSubtitleHint'),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-              if (onImportSubtitle != null) ...[
+              ListenLoading(label: _preparationLabel(l, view.preparationStage)),
+              if (view.canCancel) ...[
                 const SizedBox(height: ListenSpacing.gap16),
-                FilledButton.icon(
-                  onPressed: () => onImportSubtitle!(),
-                  icon: const Icon(Icons.add),
-                  label: Text(l.text('importSubtitle')),
+                TextButton(
+                  key: const Key('cancel-transcript-preparation'),
+                  onPressed: view.onCancel,
+                  child: Text(l.text('cancel')),
                 ),
               ],
             ],
@@ -1158,3 +1384,156 @@ class _TranscriptEmptyState extends StatelessWidget {
     );
   }
 }
+
+class _FailedTranscriptState extends StatelessWidget {
+  const _FailedTranscriptState({required this.view});
+
+  final TranscriptReadinessView view;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final mismatch = view.fingerprintMismatch;
+    return _ReadinessNotice(
+      icon: Icons.error_outline,
+      iconColor: Theme.of(context).colorScheme.error,
+      title: l.text(
+        mismatch
+            ? 'transcriptPreparationFingerprintMismatchTitle'
+            : 'transcriptPreparationFailedTitle',
+      ),
+      body: l.text(
+        mismatch
+            ? 'transcriptPreparationFingerprintMismatchBody'
+            : 'transcriptPreparationFailedBody',
+      ),
+      actions: [
+        if (!mismatch && view.canRetry)
+          FilledButton(
+            key: const Key('retry-transcript-preparation'),
+            onPressed: () => view.onRetry(),
+            child: Text(l.text('retry')),
+          ),
+        OutlinedButton(
+          key: const Key('import-subtitle-file'),
+          onPressed: () => view.onImportSubtitle(),
+          child: Text(l.text('importSubtitleFile')),
+        ),
+      ],
+    );
+  }
+}
+
+/// The shared centered notice used by the readiness states: glyph, heading,
+/// optional explanation, then the actions. Same measure as the old empty
+/// state (`noticeColumnMax`); the chooser and preparing surfaces have their
+/// own layouts because they carry more than a notice.
+class _ReadinessNotice extends StatelessWidget {
+  const _ReadinessNotice({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.actions,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final Color? iconColor;
+  final String title;
+  final String body;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: ListenPadding.pageCompact,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: ListenBreakpoints.noticeColumnMax,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: ListenIconSize.illustration,
+                color: iconColor ?? colors.primary,
+              ),
+              const SizedBox(height: ListenSpacing.gap12),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              if (body.isNotEmpty) ...[
+                const SizedBox(height: ListenSpacing.gap8),
+                Text(
+                  body,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: ListenSpacing.gap16),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: ListenSpacing.gap8,
+                  runSpacing: ListenSpacing.gap8,
+                  children: actions,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _preparationLabel(
+  AppLocalizations l,
+  TranscriptPreparationStage? stage,
+) => switch (stage) {
+  TranscriptPreparationStage.checkingMedia => l.text(
+    'transcriptPreparationCheckingMedia',
+  ),
+  TranscriptPreparationStage.readingMedia => l.text(
+    'transcriptPreparationReadingMedia',
+  ),
+  TranscriptPreparationStage.preparingAudio => l.text(
+    'transcriptPreparationPreparingAudio',
+  ),
+  TranscriptPreparationStage.transcribing => l.text(
+    'transcriptPreparationTranscribing',
+  ),
+  TranscriptPreparationStage.organizing => l.text(
+    'transcriptPreparationOrganizing',
+  ),
+  TranscriptPreparationStage.importing => l.text(
+    'transcriptPreparationImporting',
+  ),
+  TranscriptPreparationStage.starting || null => l.text(
+    'transcriptPreparationStarting',
+  ),
+};
+
+String _languageLabel(AppLocalizations l, String? language) =>
+    switch (language) {
+      'en' => l.text('english'),
+      'zh' => l.text('chinese'),
+      'ja' => l.text('japanese'),
+      _ => language ?? l.text('transcriptLanguageUnknown'),
+    };
+
+String _sourceLabel(AppLocalizations l, String source) =>
+    switch (source) {
+      'subtitle' || 'imported' => l.text('transcriptSourceImported'),
+      'generated' => l.text('transcriptSourceGenerated'),
+      _ => l.text('transcriptSourceOther'),
+    };

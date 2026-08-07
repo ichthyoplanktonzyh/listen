@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/transcript_readiness_view_model.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
@@ -540,9 +541,21 @@ class _Harness extends StatelessWidget {
             onToggleAnalysis: onToggleAnalysis,
             analysisExpanded: analysisExpanded,
             studyMode: studyMode,
+            readiness: _noReadinessNeeded(),
           ),
         ),
       ),
     ),
   );
 }
+
+/// The list harness always has a track, so the readiness surface never
+/// renders; a no-op view keeps the panel's required input honest.
+TranscriptReadinessView _noReadinessNeeded() => TranscriptReadinessView(
+  phase: TranscriptReadinessPhase.ready,
+  onPrepare: () async {},
+  onSelectTrack: (_) async {},
+  onImportSubtitle: () async {},
+  onCancel: () {},
+  onRetry: () async {},
+);

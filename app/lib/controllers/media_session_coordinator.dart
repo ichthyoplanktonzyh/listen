@@ -141,6 +141,17 @@ class MediaSessionCoordinator {
           player.setPosition(saved);
         }
         await resourceActions.loadSubtitleResources(updateStatus: false);
+        try {
+          // The workbench owns "does this media have a learning transcript".
+          // After the resource list lands, pick the single obvious candidate —
+          // never guess when there are several, and never leave the user
+          // staring at an empty panel when the core already holds the answer.
+          await reconcileLearningTranscript();
+        } catch (_) {
+          // Convenience, not a gate: a failed auto-select must not turn the
+          // media-open status into a core failure. The readiness surface
+          // still shows the chooser/prepare path from the loaded resources.
+        }
       }
     } catch (error) {
       coreError = error;
@@ -175,6 +186,34 @@ class MediaSessionCoordinator {
         );
       }
     }
+  }
+
+  /// Selects the one unambiguous learning transcript for the current media,
+  /// or leaves the choice to the workbench.
+  ///
+  /// Cases, in order:
+  ///
+  /// * a track is already selected — keep it, never replace;
+  /// * exactly one usable track exists — select it automatically, because
+  ///   asking the user to pick from one option is a dead tap;
+  /// * several usable tracks exist — select nothing; the workbench shows a
+  ///   chooser instead of guessing (no quality ordering exists yet);
+  /// * no usable track exists — select nothing; the workbench shows the
+  ///   prepare surface.
+  ///
+  /// Usability is the domain model's own rule ([SubtitleTrack.usableForLearning]):
+  /// archived/withheld tracks are never candidates, whatever their content.
+  Future<void> reconcileLearningTranscript() async {
+    if (!isMounted() || subtitle.primaryTrack != null) return;
+    final usable = subtitle.subtitleResources
+        .where((track) => track.usableForLearning)
+        .toList(growable: false);
+    if (usable.length != 1) return;
+    await usePrimarySubtitleTrack(
+      usable.single,
+      nextStatus: text('statusLearningTranscriptSelected'),
+    );
+    await resourceActions.loadSubtitleResources(updateStatus: false);
   }
 
   // ── Subtitle import ──

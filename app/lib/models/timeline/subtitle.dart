@@ -89,6 +89,12 @@ class SubtitleTrack {
   final List<Cue> cues;
 
   bool get archived => status == 'archived';
+
+  /// Whether this track can serve as the learning transcript: the core holds
+  /// it available (not archived or otherwise withheld) and it actually carries
+  /// sentences. Tracks that fail this are never auto-selection or chooser
+  /// candidates in the workbench.
+  bool get usableForLearning => status == 'available' && cues.isNotEmpty;
 }
 
 class SubtitleResourceCapabilities {

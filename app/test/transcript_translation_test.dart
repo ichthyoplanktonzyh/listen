@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:llplayer_next/controllers/transcript_readiness_view_model.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
@@ -249,6 +250,14 @@ Widget _harness({
           translationMode: mode,
           translationFor: translationFor,
           hasTranslationTrack: hasTranslationTrack,
+          readiness: TranscriptReadinessView(
+            phase: TranscriptReadinessPhase.ready,
+            onPrepare: () async {},
+            onSelectTrack: (_) async {},
+            onImportSubtitle: () async {},
+            onCancel: () {},
+            onRetry: () async {},
+          ),
         ),
       ),
     ),

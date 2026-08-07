@@ -1441,7 +1441,45 @@ class AppLocalizations {
       'openVideoAudio': 'Open video or audio',
       'importSubtitle': 'Import subtitle',
       'importSubtitleHint': 'Import SRT or WebVTT subtitles',
-      'noTranscriptTitle': 'No transcript yet',
+      'importSubtitleFile': 'Import subtitle file',
+      'missingLearningTranscriptTitle': 'No learning transcript yet',
+      'missingLearningTranscriptBody':
+          'Prepare a transcript synced to this media, and you can shadow, '
+          'look up words and follow along word by word.',
+      'prepareLearningTranscript': 'Prepare learning transcript',
+      'chooseLearningTranscriptTitle': 'Choose a learning transcript',
+      'chooseLearningTranscriptBody':
+          'This media has several usable transcripts — pick the one you want '
+          'to learn from.',
+      'transcriptPreparationStarting': 'Preparing learning transcript…',
+      'transcriptPreparationCheckingMedia': 'Checking media…',
+      'transcriptPreparationReadingMedia': 'Reading media info…',
+      'transcriptPreparationPreparingAudio': 'Preparing audio…',
+      'transcriptPreparationTranscribing': 'Generating learning transcript…',
+      'transcriptPreparationOrganizing': 'Organizing learning resources…',
+      'transcriptPreparationImporting': 'Importing learning transcript…',
+      'transcriptPreparationFailedTitle':
+          'Could not prepare the learning transcript',
+      'transcriptPreparationFailedBody':
+          'Try again, or import a subtitle file instead.',
+      'transcriptPreparationFingerprintMismatchTitle':
+          'This transcript belongs to a different media file',
+      'transcriptPreparationFingerprintMismatchBody':
+          'The prepared transcript does not match the media you are listening '
+          'to, so it was not selected.',
+      'transcriptPreparationUnavailableTitle':
+          'Automatic transcript preparation is unavailable right now',
+      'transcriptPreparationUnavailableBody':
+          'Connect the local core and configure the generator to prepare a '
+          'transcript automatically — or import a subtitle file.',
+      'transcriptLanguageUnknown': 'Unknown language',
+      'transcriptSourceImported': 'Imported',
+      'transcriptSourceGenerated': 'Generated',
+      'transcriptSourceOther': 'Transcript',
+      'statusLearningTranscriptSelected':
+          'Selected as learning transcript',
+      'statusLearningTranscriptSelectionFailed':
+          'Could not select learning transcript',
       'backToCurrentSentence': 'Back to current',
       'subtitleResources': 'Subtitle resources',
       'contentFit': 'Difficulty',
@@ -3503,7 +3541,36 @@ class AppLocalizations {
       'openVideoAudio': '打开视频或音频',
       'importSubtitle': '导入字幕',
       'importSubtitleHint': '导入 SRT 或 WebVTT 字幕',
-      'noTranscriptTitle': '还没有文稿',
+      'importSubtitleFile': '导入字幕文件',
+      'missingLearningTranscriptTitle': '还没有学习文稿',
+      'missingLearningTranscriptBody':
+          '准备一份与当前音视频同步的文稿，就可以开始跟读、查词和词级跟随。',
+      'prepareLearningTranscript': '准备学习文稿',
+      'chooseLearningTranscriptTitle': '选择学习文稿',
+      'chooseLearningTranscriptBody':
+          '这段媒体有多份可用的文稿，选一份开始学习。',
+      'transcriptPreparationStarting': '正在准备学习文稿…',
+      'transcriptPreparationCheckingMedia': '正在检查媒体…',
+      'transcriptPreparationReadingMedia': '正在读取媒体信息…',
+      'transcriptPreparationPreparingAudio': '正在准备音频…',
+      'transcriptPreparationTranscribing': '正在生成学习文稿…',
+      'transcriptPreparationOrganizing': '正在整理学习资源…',
+      'transcriptPreparationImporting': '正在导入学习文稿…',
+      'transcriptPreparationFailedTitle': '学习文稿准备失败',
+      'transcriptPreparationFailedBody': '请重试，或改用手动导入字幕文件。',
+      'transcriptPreparationFingerprintMismatchTitle':
+          '这份文稿对应的是不同的媒体文件',
+      'transcriptPreparationFingerprintMismatchBody':
+          '准备出的文稿与当前媒体不匹配，因此没有选中。',
+      'transcriptPreparationUnavailableTitle': '当前无法自动准备学习文稿',
+      'transcriptPreparationUnavailableBody':
+          '连接本地 Core 并配置生成器后即可自动准备文稿；也可以导入字幕文件。',
+      'transcriptLanguageUnknown': '语言未知',
+      'transcriptSourceImported': '导入',
+      'transcriptSourceGenerated': '自动生成',
+      'transcriptSourceOther': '文稿',
+      'statusLearningTranscriptSelected': '已选为学习文稿',
+      'statusLearningTranscriptSelectionFailed': '无法选择学习文稿',
       'backToCurrentSentence': '回到当前句',
       'subtitleResources': '字幕资源',
       'contentFit': '难度适配',

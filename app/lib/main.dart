@@ -54,6 +54,7 @@ import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/subtitle_sources_coordinator.dart';
 import 'controllers/transcription_view_models.dart';
+import 'controllers/transcript_readiness_view_model.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/vocabulary_view_model.dart';
 import 'controllers/cold_start_marking_view_model.dart';
@@ -524,6 +525,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get status => playerController.status;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool _workbenchExpanded = false;
+  TranscriptReadinessViewModel? _transcriptReadiness;
 
   /// How the listening transcript presents itself. A workbench-level display
   /// choice, not a channel, so it lives here beside the other local UI state
@@ -656,6 +658,11 @@ class _PlayerScreenState extends State<PlayerScreen>
       text: (key) => l.text(key),
       confirmLLTimelineMismatch: _confirmLLTimelineMismatch,
       onMediaSwitched: () {
+        // A different media has a different transcript story; drop the
+        // previous media's readiness state (and cancel any in-flight
+        // preparation) rather than letting it bleed into the next session.
+        _transcriptReadiness?.dispose();
+        _transcriptReadiness = null;
         unawaited(slicePlayerController.close());
         if (speakingActions.isOpen) {
           speakingChannel.closeL1Check();
@@ -1887,33 +1894,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         durationMs > 0;
     final ContentPackageJourneyViewModelFactory? packageFactory =
         canUseContentPackages
-        ? () => ContentPackageJourneyViewModel(
-            coreRepositories.contentPackage,
-            (track) async {
-              await mediaSession.usePrimarySubtitleTrack(
-                track,
-                nextStatus: l.text('contentPackageSelected'),
-              );
-              await resourceActions.loadSubtitleResources(updateStatus: false);
-            },
-            (timelineId) async {
-              await coreRepositories.resource.activateWordTimeline(timelineId);
-              final trackId = subtitleController.primaryTrack?.id;
-              if (trackId != null) {
-                try {
-                  await resourceActions.loadTimelineResource(trackId);
-                } catch (_) {
-                  // Activation is durable Core state. A follow-up refresh is
-                  // best-effort and must not report that activation failed.
-                }
-              }
-            },
-            mediaId: mediaId,
-            mediaPath: mediaPath,
-            mediaTitle: widget.pathHelper.basename(mediaPath),
-            mediaKind: _contentPackageMediaKind(mediaPath),
-            durationMs: durationMs,
-          )
+        ? () => _createContentPackageJourney()!
         : null;
     return openSubtitleResourcesFlow(
       context: context,
@@ -1935,6 +1916,69 @@ class _PlayerScreenState extends State<PlayerScreen>
       createContentPackageViewModel: packageFactory,
     );
   }
+
+  /// Builds the package journey for the *current* media. Shared by the legacy
+  /// package screen and the workbench's transcript-preparation flow, so both
+  /// run the exact same generation/import/cancel/retry orchestration.
+  ContentPackageJourneyViewModel? _createContentPackageJourney() {
+    final mediaId = playerController.mediaId;
+    final mediaPath = playerController.mediaPath;
+    final durationMs = playerController.duration.inMilliseconds;
+    if (mediaId == null ||
+        mediaPath == null ||
+        mediaPath.isEmpty ||
+        durationMs <= 0) {
+      return null;
+    }
+    return ContentPackageJourneyViewModel(
+      coreRepositories.contentPackage,
+      (track) async {
+        await mediaSession.usePrimarySubtitleTrack(
+          track,
+          nextStatus: l.text('contentPackageSelected'),
+        );
+        await resourceActions.loadSubtitleResources(updateStatus: false);
+      },
+      (timelineId) async {
+        await coreRepositories.resource.activateWordTimeline(timelineId);
+        final trackId = subtitleController.primaryTrack?.id;
+        if (trackId != null) {
+          try {
+            await resourceActions.loadTimelineResource(trackId);
+          } catch (_) {
+            // Activation is durable Core state. A follow-up refresh is
+            // best-effort and must not report that activation failed.
+          }
+        }
+      },
+      mediaId: mediaId,
+      mediaPath: mediaPath,
+      mediaTitle: widget.pathHelper.basename(mediaPath),
+      mediaKind: _contentPackageMediaKind(mediaPath),
+      durationMs: durationMs,
+    );
+  }
+
+  TranscriptReadinessViewModel get _readinessViewModel =>
+      _transcriptReadiness ??= TranscriptReadinessViewModel(
+        subtitle: subtitleController,
+        mediaSession: mediaSession,
+        canAutoPrepare: () =>
+            coreSessionController.state.isConnected &&
+            coreRepositories.contentPackage.generatorConfigured &&
+            playerController.mediaId != null &&
+            (playerController.mediaPath?.isNotEmpty ?? false) &&
+            playerController.duration.inMilliseconds > 0,
+        createJourney: _createContentPackageJourney,
+        // The predicate reads core connectivity *and* live player readiness
+        // (media id/path/duration). Both can arrive after the workbench first
+        // builds — a core reconnect, or duration landing after open — so the
+        // projection must be invalidated by either source.
+        refreshTrigger: Listenable.merge([
+          coreSessionController,
+          playerController,
+        ]),
+      )..bind(text: (key) => l.text(key));
 
   String _contentPackageMediaKind(String? path) {
     final normalized = path?.toLowerCase() ?? '';
@@ -2063,6 +2107,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     unawaited(coreSessionController.shutdown());
+    _transcriptReadiness?.dispose();
     coreSessionController.removeListener(_onCoreSessionStateChanged);
     playerController.removeListener(_surfaceErrorStatus);
     playerController.removeListener(_trackExtensivePlayback);
@@ -2872,6 +2917,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     extensiveListeningController: extensiveListeningController,
     settingsController: settingsController,
     mediaSession: mediaSession,
+    transcriptReadiness: _readinessViewModel,
     transcriptController: transcriptController,
     onOpenWord: vocabularyActions.openWord,
     onSeekCue: _seekCue,

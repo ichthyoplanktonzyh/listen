@@ -8,6 +8,7 @@ import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
+import '../../controllers/transcript_readiness_view_model.dart';
 import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
@@ -44,6 +45,7 @@ class SidePanel extends StatefulWidget {
     required this.extensiveListeningController,
     required this.settingsController,
     required this.mediaSession,
+    required this.transcriptReadiness,
     required this.transcriptController,
     required this.onOpenWord,
     required this.onSeekCue,
@@ -71,6 +73,7 @@ class SidePanel extends StatefulWidget {
   final ExtensiveListeningController extensiveListeningController;
   final SettingsController settingsController;
   final MediaSessionCoordinator mediaSession;
+  final TranscriptReadinessViewModel transcriptReadiness;
   final ScrollController transcriptController;
   final Future<void> Function(SubtitleToken token, Cue cue) onOpenWord;
   final Future<void> Function(Cue? cue) onSeekCue;
@@ -212,37 +215,56 @@ class _SidePanelState extends State<SidePanel> {
     ),
   );
 
-  Widget _transcript() => TranscriptPanel(
-    track: subtitleController.primaryTrack,
-    studyMode: widget.studyMode,
-    scrollController: transcriptController,
-    currentCue: subtitleController.currentPrimaryCue,
-    wordEntries: learningController.wordEntries,
-    capabilityProfiles: learningController.capabilityProfiles,
-    showStyles: subtitleController.statusStylesVisible,
-    baseColor: settingsController.primaryColor,
-    onWord: _openWord,
-    onSeekCue: _seekCue,
-    onSeekWord: widget.onSeekWord,
-    onImportSubtitle: playerController.mediaId == null
-        ? null
-        : () async => mediaSession.openSubtitle(secondary: false),
-    groupingMode: settingsController.groupingMode,
-    chunkDisplayStyle: settingsController.chunkDisplayStyle,
-    // Both grouping layers flow in independently (ADR 0016); the transcript's
-    // TokenLine honors the same mode as the on-video subtitle.
-    chunkPartitionsBySentence: subtitleController.chunkPartitionsBySentence,
-    senseGroupsBySentence: subtitleController.senseGroupsBySentence,
-    translationMode: settingsController.transcriptTranslation,
-    hasTranslationTrack: subtitleController.secondaryTrack != null,
-    translationFor: _translationFor,
-    onImportTranslation: playerController.mediaId == null
-        ? null
-        : () => unawaited(mediaSession.openSubtitle(secondary: true)),
-    onToggleAnalysis: subtitleController.currentPrimaryCue == null
-        ? null
-        : _toggleAnalysis,
-    analysisExpanded: learningController.diagnosisExpanded,
+  Widget _transcript() => ListenableBuilder(
+    listenable: widget.transcriptReadiness,
+    builder: (context, _) {
+      final readiness = widget.transcriptReadiness.state;
+      return TranscriptPanel(
+        track: subtitleController.primaryTrack,
+        studyMode: widget.studyMode,
+        scrollController: transcriptController,
+        currentCue: subtitleController.currentPrimaryCue,
+        wordEntries: learningController.wordEntries,
+        capabilityProfiles: learningController.capabilityProfiles,
+        showStyles: subtitleController.statusStylesVisible,
+        baseColor: settingsController.primaryColor,
+        onWord: _openWord,
+        onSeekCue: _seekCue,
+        onSeekWord: widget.onSeekWord,
+        // The readiness journey owns the "no transcript" surface: what the
+        // workbench offers depends on what exists and what this machine can
+        // do, not on an engineering import affordance.
+        readiness: TranscriptReadinessView(
+          phase: readiness.phase,
+          preparationStage: readiness.preparationStage,
+          usableTracks: readiness.usableTracks,
+          canCancel: readiness.canCancel,
+          canRetry: readiness.canRetry,
+          fingerprintMismatch: readiness.fingerprintMismatch,
+          onPrepare: widget.transcriptReadiness.prepareLearningTranscript,
+          onSelectTrack: widget.transcriptReadiness.selectTrack,
+          onImportSubtitle: () => mediaSession.openSubtitle(secondary: false),
+          onCancel: widget.transcriptReadiness.cancel,
+          onRetry: widget.transcriptReadiness.retry,
+        ),
+        groupingMode: settingsController.groupingMode,
+        chunkDisplayStyle: settingsController.chunkDisplayStyle,
+        // Both grouping layers flow in independently (ADR 0016); the
+        // transcript's TokenLine honors the same mode as the on-video subtitle.
+        chunkPartitionsBySentence: subtitleController.chunkPartitionsBySentence,
+        senseGroupsBySentence: subtitleController.senseGroupsBySentence,
+        translationMode: settingsController.transcriptTranslation,
+        hasTranslationTrack: subtitleController.secondaryTrack != null,
+        translationFor: _translationFor,
+        onImportTranslation: playerController.mediaId == null
+            ? null
+            : () => unawaited(mediaSession.openSubtitle(secondary: true)),
+        onToggleAnalysis: subtitleController.currentPrimaryCue == null
+            ? null
+            : _toggleAnalysis,
+        analysisExpanded: learningController.diagnosisExpanded,
+      );
+    },
   );
 
   /// The session's own notes: the word being studied in full, and — while an
