@@ -35,7 +35,7 @@ final class LocalContentPackageRepository implements ContentPackageRepository {
   bool get generatorConfigured => _generator.isConfigured;
   @override
   ApiFailure failureDetail(Object error) => error is ListenGenProcessFailure
-      ? ApiFailure(raw: '', code: error.code, retryable: true)
+      ? ApiFailure(raw: '', code: error.code, retryable: error.retryable)
       : describeApiFailure(error);
   @override
   Future<String?> pickPackage() => _files.pickContentPackage();

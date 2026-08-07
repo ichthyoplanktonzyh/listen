@@ -60,6 +60,7 @@ void main() {
         .map(
           (line) => parseListenGenMachineEvent(
             jsonDecode(line) as Map<String, dynamic>,
+            expectedToolVersion: '0.1.0',
           ),
         )
         .toList(growable: false);
@@ -84,11 +85,17 @@ void main() {
         };
 
     expect(
-      () => parseListenGenMachineEvent(event(version: 2, tool: 'listen-gen')),
+      () => parseListenGenMachineEvent(
+        event(version: 2, tool: 'listen-gen'),
+        expectedToolVersion: '0.1.0',
+      ),
       throwsFormatException,
     );
     expect(
-      () => parseListenGenMachineEvent(event(version: 1, tool: 'other')),
+      () => parseListenGenMachineEvent(
+        event(version: 1, tool: 'other'),
+        expectedToolVersion: '0.1.0',
+      ),
       throwsFormatException,
     );
   });
@@ -112,6 +119,9 @@ void main() {
             )
             as Map<String, dynamic>;
     completed['package_sha256'] = 'sha256:no';
-    expect(() => parseListenGenMachineEvent(completed), throwsFormatException);
+    expect(
+      () => parseListenGenMachineEvent(completed, expectedToolVersion: '0.1.0'),
+      throwsFormatException,
+    );
   });
 }

@@ -1,0 +1,28 @@
+{
+  "schema": "listen_gen.asr-result.v1",
+  "language": "en-US",
+  "provider": {"id": "fixture-asr", "version": "1"},
+  "model": {"id": "fixture-words", "version": "2026-08"},
+  "config_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "segments": [
+    {
+      "start_ms": 100,
+      "end_ms": 1200,
+      "text": "Listen, carefully!",
+      "display_text": "Listen, carefully!",
+      "words": [
+        {"start_char": 0, "end_char": 6, "start_ms": 100, "end_ms": 480, "confidence": 0.98, "timing_source": "asr_reported"},
+        {"start_char": 8, "end_char": 17, "start_ms": 560, "end_ms": 1100, "confidence": 0.96, "timing_source": "asr_reported"}
+      ]
+    },
+    {
+      "start_ms": 1300,
+      "end_ms": 2100,
+      "text": "Words matter.",
+      "words": [
+        {"start_char": 0, "end_char": 5, "start_ms": 1300, "end_ms": 1600, "confidence": 0.97, "timing_source": "asr_reported"},
+        {"start_char": 6, "end_char": 12, "start_ms": 1650, "end_ms": 2020, "confidence": 0.95, "timing_source": "asr_reported"}
+      ]
+    }
+  ]
+}

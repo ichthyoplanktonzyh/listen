@@ -110,24 +110,58 @@ The app still validates the startup versions. If local core introduces an
 incompatible contract major, the existing app must reject it; coordinate the
 contract and app migration instead of bypassing that check.
 
-### Test an unreleased local generator
+### Test the pinned local generator bundle
 
-The package journey has an explicit process-local development seam. Point the
-App at an executable and pass the non-secret provider argv as a JSON string:
+The package journey runs exactly one generator: the `listen-gen` release
+bundle pinned by the committed `listen_gen.lock.json`. The App does **not**
+accept a source checkout, a `PYTHONPATH`, or an arbitrary `listen-gen`
+executable. Point it at the release manifest and pass the non-secret provider
+argv as a JSON string:
 
 ```sh
-LISTEN_GEN_EXECUTABLE=/path/to/listen-gen \
-LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/asr.json"]' \
+LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.1.0.release.json \
+LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/sample.asr.json"]' \
   flutter run -d macos
 ```
 
-Do not place API keys or other credentials in `LISTEN_GEN_PROVIDER_ARGUMENTS`;
-the configured provider wrapper owns secret retrieval. These variables are not
-written to settings or `backend.lock.json`. Without a connected Core, provider
-argument set, and a local media path with positive duration, the UI keeps local
-generation unavailable. Process fallback signals reclaim the direct
-`listen-gen` PID; cleanup of descendants during a valid cancellation remains
-part of the generator contract.
+Requirements and behavior:
+
+- the `.release.json` manifest and its `.pyz` artifact must live in the **same
+  directory**; the App resolves the artifact beside the manifest;
+- before every run the App verifies the committed lock, the manifest's file
+  hash, and the artifact's size and hash against the lock — any mismatch fails
+  the run with a stable, non-retryable code and never launches anything;
+- the `.pyz` still requires Python 3.11+ on the machine;
+- do not place API keys or other credentials in
+  `LISTEN_GEN_PROVIDER_ARGUMENTS`; the configured provider wrapper owns secret
+  retrieval. These variables are not written to settings or
+  `backend.lock.json`;
+- without a connected Core, a provider argument set, and a local media path
+  with positive duration, the UI keeps local generation unavailable;
+- cleanup of descendants during a valid cancellation remains part of the
+  generator contract.
+
+To produce the bundle locally, build it from the pinned `listen-gen` source:
+
+```sh
+cd /path/to/listen-gen
+python3 tools/release_bundle.py build \
+  --source-commit 41a53336fd893522abf7ef168fd2ace9fa6ac678 \
+  --output-parent /path/to/.listen-gen
+```
+
+### Local three-repository round trip
+
+To exercise the full `pinned .pyz -> .listenpkg -> Core import` path against a
+real Core, use the dedicated script. It builds both external repositories at
+their pinned commits in a throwaway directory, runs the focused integration
+test, and cleans up after itself:
+
+```sh
+LISTEN_CORE_REPO=/absolute/path/to/listen-core \
+LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
+  ./tool/verify_local_content_package_roundtrip.sh
+```
 
 ## Manual smoke checklist
 

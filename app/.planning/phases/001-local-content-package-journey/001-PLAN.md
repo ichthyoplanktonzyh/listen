@@ -1,5 +1,13 @@
 # Plan
 
+> **Update (2026-08-07):** Slice 2's `listen-gen` launch is now gated on a
+> pinned release bundle. The App verifies `listen_gen.lock.json` (manifest
+> hash + artifact size/hash) and launches only the fixed-checksum `.pyz`; it no
+> longer trusts an arbitrary executable. The real fixture-provider →
+> `.listenpkg` → Core import round trip is covered by
+> `test/integration/listen_gen_core_roundtrip_test.dart` and
+> `tool/verify_local_content_package_roundtrip.sh`.
+
 ## Slice 1 — App-owned boundary
 
 - Pin representative Core import and Gen machine-event fixtures.

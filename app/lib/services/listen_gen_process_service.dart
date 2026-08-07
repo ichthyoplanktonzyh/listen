@@ -5,10 +5,17 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import '../models/content_package.dart';
+import 'listen_gen_release_service.dart';
 
 final RegExp _sha256Reference = RegExp(r'^sha256:[0-9a-f]{64}$');
 
-ListenGenMachineEvent parseListenGenMachineEvent(Map<String, dynamic> json) {
+/// [expectedToolVersion] is the version the verified release bundle declares.
+/// Binding it here means a machine event stamped by any other build of the
+/// tool is a protocol violation, not something to trust and continue on.
+ListenGenMachineEvent parseListenGenMachineEvent(
+  Map<String, dynamic> json, {
+  required String expectedToolVersion,
+}) {
   if (json['schema'] != 'listen_gen.machine-event.v1') {
     throw const FormatException('Unsupported listen-gen event schema');
   }
@@ -18,8 +25,7 @@ ListenGenMachineEvent parseListenGenMachineEvent(Map<String, dynamic> json) {
   final tool = json['tool'];
   if (tool is! Map<String, dynamic> ||
       tool['id'] != 'listen-gen' ||
-      tool['version'] is! String ||
-      (tool['version'] as String).isEmpty) {
+      tool['version'] != expectedToolVersion) {
     throw const FormatException('Invalid listen-gen tool identity');
   }
   final eventName = json['event'] as String;
@@ -75,8 +81,14 @@ String _validatedSha256(Object? value) {
 }
 
 class ListenGenProcessFailure implements Exception {
-  const ListenGenProcessFailure(this.code);
+  const ListenGenProcessFailure(this.code, {this.retryable = true});
   final String code;
+
+  /// Whether retrying the same request could plausibly succeed. Release
+  /// verification failures are integrity/configuration problems — the same
+  /// pinned bundle fails identically — so they are not retryable; provider and
+  /// process runtime failures keep the default retryable semantics.
+  final bool retryable;
 }
 
 abstract interface class ListenGenProcessRun {
@@ -92,16 +104,19 @@ abstract interface class ListenGenProcessService {
 }
 
 final class LocalListenGenProcessService implements ListenGenProcessService {
-  LocalListenGenProcessService({String? executable, List<String>? providerArgs})
-    : _executable =
-          executable ??
-          Platform.environment['LISTEN_GEN_EXECUTABLE'] ??
-          'listen-gen',
-      _providerArgs = List.unmodifiable(
-        providerArgs ?? _providerArgsFromEnvironment(),
-      );
+  /// The app runs exactly one generator: the pinned release bundle the
+  /// [ListenGenReleaseService] verifies byte-for-byte before each run. There is
+  /// no executable override — an arbitrary `listen-gen` on the machine is not
+  /// something this app is willing to launch.
+  LocalListenGenProcessService({
+    ListenGenReleaseService? releaseService,
+    List<String>? providerArgs,
+  }) : _releaseService = releaseService ?? LocalListenGenReleaseService(),
+       _providerArgs = List.unmodifiable(
+         providerArgs ?? _providerArgsFromEnvironment(),
+       );
 
-  final String _executable;
+  final ListenGenReleaseService _releaseService;
   final List<String> _providerArgs;
 
   static List<String> _providerArgsFromEnvironment() {
@@ -119,21 +134,28 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
   }
 
   @override
-  bool get isConfigured => _providerArgs.isNotEmpty;
+  bool get isConfigured =>
+      _releaseService.isConfigured && _providerArgs.isNotEmpty;
 
   @override
   Future<ListenGenProcessRun> start(
     ContentPackageGenerationRequest request,
   ) async {
     if (!isConfigured) {
-      throw const ListenGenProcessFailure('generator_not_configured');
+      throw const ListenGenProcessFailure(
+        'generator_not_configured',
+        retryable: false,
+      );
     }
+    // Re-verify the pinned bundle on every run. A release failure must abort
+    // before any temporary output directory exists or any process is started.
+    final verified = await _releaseService.verify();
     final directory = await Directory.systemTemp.createTemp(
       'listen-package-generation-',
     );
     final outputPath = '${directory.path}/generated.listenpkg';
     try {
-      final process = await Process.start(_executable, [
+      final process = await Process.start(verified.artifactPath, [
         'package',
         'from-media',
         request.mediaPath,
@@ -154,6 +176,7 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
         process: process,
         directory: directory,
         outputPath: outputPath,
+        expectedToolVersion: verified.toolVersion,
       );
     } catch (_) {
       await directory.delete(recursive: true);
@@ -167,6 +190,7 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
     required this._process,
     required this._directory,
     required this._outputPath,
+    required this._expectedToolVersion,
   }) {
     _stdoutDone = _consumeStdout();
     _processDone = _settleProcessSafely();
@@ -177,6 +201,7 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
   final Process _process;
   final Directory _directory;
   final String _outputPath;
+  final String _expectedToolVersion;
   final StreamController<ListenGenMachineEvent> _eventController =
       StreamController<ListenGenMachineEvent>();
   final Completer<String> _packagePathCompleter = Completer<String>();
@@ -200,6 +225,7 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
         if (line.trim().isEmpty) continue;
         final event = parseListenGenMachineEvent(
           jsonDecode(line) as Map<String, dynamic>,
+          expectedToolVersion: _expectedToolVersion,
         );
         _validateSequence(event);
         _validateLifecycle(event);
