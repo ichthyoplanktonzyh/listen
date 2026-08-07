@@ -60,6 +60,22 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
   static const _generatorRepository =
       'https://github.com/ichthyoplanktonzyh/listen-gen';
 
+  /// Compatibility identity the committed lock must declare. These are what the
+  /// app is built to talk to; a lock that names a different repository, schema,
+  /// protocol, or contract authority is not a newer pin but an incompatible
+  /// one. Version pins (tool.version, source_git_sha, artifact hash/size) stay
+  /// owned by the committed lock and are deliberately not hardcoded here.
+  static const _lockRepository = 'ichthyoplanktonzyh/listen-gen';
+  static const _releaseBundleSchema = 'listen_gen.release-bundle.v1';
+  static const _toolId = 'listen-gen';
+  static const _machineSchema = 'listen_gen.machine-event.v1';
+  static const _machineVersion = 1;
+  static const _authorityRepository = 'ichthyoplanktonzyh/listen-core';
+  static const _authorityPath = 'contracts/content-package/v1';
+  static const _packageSchema = 'listen.resource-package.v1';
+  static const _contractSchemaVersion = 1;
+  static const _pythonRequires = '>=3.11';
+
   /// The shebang the zipapp must begin with. Binding it means a swapped file
   /// that is not a python zipapp fails before it is ever launched.
   static const _artifactShebang = '#!/usr/bin/env python3\n';
@@ -118,24 +134,28 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'artifact',
     });
     read.expect(read.integer(root, 'manifest_version') == 1);
-    read.string(root, 'repository');
+    read.expect(read.string(root, 'repository') == _lockRepository);
     final sourceGitSha = read.commit(root, 'source_git_sha');
 
     final releaseManifest = read.object(root['release_manifest']);
     read.exactKeys(releaseManifest, const {'schema', 'filename', 'sha256'});
     final manifestSchema = read.string(releaseManifest, 'schema');
+    read.expect(manifestSchema == _releaseBundleSchema);
     final manifestFilename = read.basename(releaseManifest, 'filename');
     final manifestSha256 = read.sha256(releaseManifest, 'sha256');
 
     final tool = read.object(root['tool']);
     read.exactKeys(tool, const {'id', 'version'});
     final toolId = read.string(tool, 'id');
+    read.expect(toolId == _toolId);
     final toolVersion = read.string(tool, 'version');
 
     final machineProtocol = read.object(root['machine_protocol']);
     read.exactKeys(machineProtocol, const {'schema', 'version'});
     final machineSchema = read.string(machineProtocol, 'schema');
+    read.expect(machineSchema == _machineSchema);
     final machineVersion = read.integer(machineProtocol, 'version');
+    read.expect(machineVersion == _machineVersion);
 
     final contract = read.object(root['content_package_contract']);
     read.exactKeys(contract, const {
@@ -148,19 +168,28 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     });
     final authority = read.object(contract['authority']);
     read.exactKeys(authority, const {'repository', 'path'});
+    final authorityRepository = read.string(authority, 'repository');
+    read.expect(authorityRepository == _authorityRepository);
+    final authorityPath = read.string(authority, 'path');
+    read.expect(authorityPath == _authorityPath);
+    final packageSchema = read.string(contract, 'package_schema');
+    read.expect(packageSchema == _packageSchema);
+    final contractSchemaVersion = read.integer(contract, 'schema_version');
+    read.expect(contractSchemaVersion == _contractSchemaVersion);
     final contractLock = _ContractIdentity(
-      authorityRepository: read.string(authority, 'repository'),
-      authorityPath: read.string(authority, 'path'),
+      authorityRepository: authorityRepository,
+      authorityPath: authorityPath,
       manifestSchemaId: read.string(contract, 'manifest_schema_id'),
       resourceSchemaId: read.string(contract, 'resource_schema_id'),
-      packageSchema: read.string(contract, 'package_schema'),
-      schemaVersion: read.integer(contract, 'schema_version'),
+      packageSchema: packageSchema,
+      schemaVersion: contractSchemaVersion,
       canonicalSha256: read.sha256(contract, 'canonical_sha256'),
     );
 
     final runtime = read.object(root['runtime']);
     read.exactKeys(runtime, const {'python_requires'});
     final pythonRequires = read.string(runtime, 'python_requires');
+    read.expect(pythonRequires == _pythonRequires);
 
     final artifact = read.object(root['artifact']);
     read.exactKeys(artifact, const {
@@ -268,25 +297,47 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     }
     final read = _StrictReader(() => throw _manifestInvalid);
     final root = read.object(decoded);
+    // Strict shape: an unknown or missing field anywhere fails the manifest.
+    read.exactKeys(root, const {
+      'schema',
+      'source',
+      'tool',
+      'machine_protocol',
+      'content_package_contract',
+      'runtime',
+      'artifact',
+    });
 
     read.expect(read.string(root, 'schema') == lock.manifestSchema);
 
     final source = read.object(root['source']);
+    read.exactKeys(source, const {'repository', 'commit'});
     read.expect(read.string(source, 'repository') == _generatorRepository);
     read.expect(read.string(source, 'commit') == lock.sourceGitSha);
 
     final tool = read.object(root['tool']);
+    read.exactKeys(tool, const {'id', 'version'});
     read.expect(read.string(tool, 'id') == lock.toolId);
     read.expect(read.string(tool, 'version') == lock.toolVersion);
 
     final machineProtocol = read.object(root['machine_protocol']);
+    read.exactKeys(machineProtocol, const {'schema', 'version'});
     read.expect(read.string(machineProtocol, 'schema') == lock.machineSchema);
     read.expect(
       read.integer(machineProtocol, 'version') == lock.machineVersion,
     );
 
     final contract = read.object(root['content_package_contract']);
+    read.exactKeys(contract, const {
+      'authority',
+      'manifest_schema_id',
+      'resource_schema_id',
+      'package_schema',
+      'schema_version',
+      'canonical_sha256',
+    });
     final authority = read.object(contract['authority']);
+    read.exactKeys(authority, const {'repository', 'path'});
     read.expect(
       read.string(authority, 'repository') == lock.contract.authorityRepository,
     );
@@ -311,10 +362,18 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     );
 
     final runtime = read.object(root['runtime']);
+    read.exactKeys(runtime, const {'python_requires', 'provider_requirements'});
     read.expect(read.string(runtime, 'python_requires') == lock.pythonRequires);
     _validateProviderRequirements(read, runtime['provider_requirements']);
 
     final artifact = read.object(root['artifact']);
+    read.exactKeys(artifact, const {
+      'filename',
+      'format',
+      'entrypoint',
+      'size_bytes',
+      'sha256',
+    });
     read.expect(read.string(artifact, 'filename') == lock.artifactFilename);
     read.expect(read.string(artifact, 'format') == lock.artifactFormat);
     read.expect(read.string(artifact, 'entrypoint') == lock.artifactEntrypoint);

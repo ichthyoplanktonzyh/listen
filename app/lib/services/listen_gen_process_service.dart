@@ -154,8 +154,35 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
       'listen-package-generation-',
     );
     final outputPath = '${directory.path}/generated.listenpkg';
+
+    // Freeze the verified bytes into a private copy this run owns, and launch
+    // that copy. Between verify() and launch the original file could still be
+    // swapped on disk; binding execution to a re-hashed private copy closes
+    // that window — we run exactly the bytes we verified, nothing else.
+    final String verifiedCopyPath;
     try {
-      final process = await Process.start(verified.artifactPath, [
+      verifiedCopyPath = await _materializeVerifiedArtifact(
+        verified,
+        directory,
+      );
+    } catch (error) {
+      await directory.delete(recursive: true);
+      // A swapped original, a failed copy, or a copy whose hash no longer
+      // matches is an integrity failure, never a transient start failure.
+      if (error is ListenGenProcessFailure) rethrow;
+      throw const ListenGenProcessFailure(
+        'generator_release_artifact_invalid',
+        retryable: false,
+      );
+    }
+
+    try {
+      // `/usr/bin/env python3 <copy>` matches the zipapp's own
+      // `#!/usr/bin/env python3` shebang without depending on an executable
+      // bit the copy does not carry. No shell is involved.
+      final process = await Process.start('/usr/bin/env', [
+        'python3',
+        verifiedCopyPath,
         'package',
         'from-media',
         request.mediaPath,
@@ -182,6 +209,36 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
       await directory.delete(recursive: true);
       throw const ListenGenProcessFailure('generator_start_failed');
     }
+  }
+
+  /// Copies the verified artifact into [directory] and re-hashes the copy
+  /// against the verified digest. The launched bytes are therefore the exact
+  /// bytes that passed verification, even if the original is swapped in the
+  /// meantime. Throws [ListenGenProcessFailure] `generator_release_artifact_invalid`
+  /// (non-retryable) when the original cannot be read or the copy's hash does
+  /// not match; the caller removes [directory].
+  static Future<String> _materializeVerifiedArtifact(
+    VerifiedListenGenRelease verified,
+    Directory directory,
+  ) async {
+    const invalid = ListenGenProcessFailure(
+      'generator_release_artifact_invalid',
+      retryable: false,
+    );
+    final copyPath = '${directory.path}/verified-listen-gen-0.1.0.pyz';
+    List<int> bytes;
+    try {
+      bytes = await File(verified.artifactPath).readAsBytes();
+      await File(copyPath).writeAsBytes(bytes, flush: true);
+      // Hash the copy we are about to run, not the source we just left behind.
+      bytes = await File(copyPath).readAsBytes();
+    } catch (_) {
+      throw invalid;
+    }
+    if ('sha256:${sha256.convert(bytes)}' != verified.artifactSha256) {
+      throw invalid;
+    }
+    return copyPath;
   }
 }
 

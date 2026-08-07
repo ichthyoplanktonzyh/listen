@@ -48,29 +48,42 @@ tmp="$(mktemp -d)"
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
 
+# PYTHONDONTWRITEBYTECODE keeps the Gen build/verify from leaving __pycache__
+# behind inside the Gen checkout.
 echo "verify-roundtrip: building pinned Gen bundle"
 ( cd "$LISTEN_GEN_REPO" &&
-  python3 tools/release_bundle.py build \
+  PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py build \
     --source-commit "$GEN_PIN" \
     --output-parent "$tmp/gen" )
 
 echo "verify-roundtrip: verifying Gen bundle"
 ( cd "$LISTEN_GEN_REPO" &&
-  python3 tools/release_bundle.py verify \
+  PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
     "$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" )
 
+# Build Core into a temporary target so nothing is written into the checkout.
 echo "verify-roundtrip: building pinned Core api-http"
-( cd "$LISTEN_CORE_REPO" && cargo build -p api-http )
+CARGO_TARGET_DIR="$tmp/core-target" \
+  cargo build \
+  --locked \
+  --manifest-path "$LISTEN_CORE_REPO/Cargo.toml" \
+  -p api-http
 
 mkdir -p "$tmp/home"
 
 echo "verify-roundtrip: running focused integration test"
 ( cd "$app_root" &&
   HOME="$tmp/home" \
-  LLPLAYERNEXT_API_BINARY="$LISTEN_CORE_REPO/target/debug/api-http" \
+  LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
   LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" \
   LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\"]" \
   LISTEN_PACKAGE_E2E=1 \
   flutter test test/integration/listen_gen_core_roundtrip_test.dart )
+
+# The run must leave both external checkouts untouched.
+[ -z "$(git -C "$LISTEN_CORE_REPO" status --porcelain)" ] ||
+  fail "listen-core working tree changed during the round trip"
+[ -z "$(git -C "$LISTEN_GEN_REPO" status --porcelain)" ] ||
+  fail "listen-gen working tree changed during the round trip"
 
 echo "verify-roundtrip: OK"

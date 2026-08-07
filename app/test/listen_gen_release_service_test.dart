@@ -407,4 +407,64 @@ void main() {
       _failsWith('generator_release_manifest_missing'),
     );
   });
+
+  test('rejects an incompatible committed lock identity', () async {
+    final mutations = <String, void Function(Map<String, dynamic>)>{
+      'repository': (lock) => lock['repository'] = 'someone/else',
+      'release schema': (lock) =>
+          (lock['release_manifest'] as Map)['schema'] = 'other.schema.v1',
+      'tool id': (lock) => (lock['tool'] as Map)['id'] = 'not-listen-gen',
+      'machine schema': (lock) =>
+          (lock['machine_protocol'] as Map)['schema'] = 'other.event.v1',
+      'machine version': (lock) =>
+          (lock['machine_protocol'] as Map)['version'] = 2,
+      'authority repository': (lock) =>
+          ((lock['content_package_contract'] as Map)['authority']
+                  as Map)['repository'] =
+              'someone/core',
+      'authority path': (lock) =>
+          ((lock['content_package_contract'] as Map)['authority']
+                  as Map)['path'] =
+              'contracts/other/v1',
+      'package schema': (lock) =>
+          (lock['content_package_contract'] as Map)['package_schema'] =
+              'other.package.v1',
+      'contract schema version': (lock) =>
+          (lock['content_package_contract'] as Map)['schema_version'] = 2,
+      'python requires': (lock) =>
+          (lock['runtime'] as Map)['python_requires'] = '>=3.10',
+    };
+    for (final entry in mutations.entries) {
+      final built = await _build(await _tempDir(), mutateLock: entry.value);
+      await expectLater(
+        built.service.verify(),
+        _failsWith('generator_release_lock_invalid'),
+        reason: 'lock identity: ${entry.key}',
+      );
+    }
+  });
+
+  test(
+    'rejects manifest unknown fields at root, artifact, and runtime',
+    () async {
+      final mutations = <String, void Function(Map<String, dynamic>)>{
+        'root': (manifest) => manifest['surprise'] = true,
+        'artifact': (manifest) =>
+            (manifest['artifact'] as Map)['surprise'] = true,
+        'runtime': (manifest) =>
+            (manifest['runtime'] as Map)['surprise'] = true,
+      };
+      for (final entry in mutations.entries) {
+        final built = await _build(
+          await _tempDir(),
+          mutateManifest: entry.value,
+        );
+        await expectLater(
+          built.service.verify(),
+          _failsWith('generator_release_manifest_invalid'),
+          reason: 'manifest unknown field: ${entry.key}',
+        );
+      }
+    },
+  );
 }
