@@ -650,6 +650,23 @@ class StrictVerifierTests(ReleaseBundleTestBase):
             mutate(variant)
             self.assert_manifest_rejected(canonical_json_file_bytes(variant))
 
+    def test_manifest_tool_version_must_match_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact, manifest = self.copy_bundle(Path(tmp))
+            # Forge a 9.9.9 bundle: names stay internally consistent and the
+            # artifact bytes, size, and SHA are untouched.
+            forged_artifact = artifact.parent / "listen-gen-9.9.9.pyz"
+            artifact.rename(forged_artifact)
+            parsed = json.loads(manifest.read_bytes())
+            parsed["tool"]["version"] = "9.9.9"
+            parsed["artifact"]["filename"] = "listen-gen-9.9.9.pyz"
+            forged_manifest = artifact.parent / "listen-gen-9.9.9.release.json"
+            manifest.rename(forged_manifest)
+            forged_manifest.write_bytes(canonical_json_file_bytes(parsed))
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(ROOT, forged_manifest)
+            self.assertEqual(str(caught.exception), "release manifest is invalid")
+
 
 class ModuleIsolationAndSourceTests(unittest.TestCase):
     def test_repo_root_module_isolation(self) -> None:
@@ -664,6 +681,23 @@ class ModuleIsolationAndSourceTests(unittest.TestCase):
             self.assertEqual(str(caught.exception), "release manifest is invalid")
         # The test process's cached real modules must be fully restored.
         self.assertEqual(protocol.TOOL_VERSION, VERSION)
+
+    def test_verifier_rejects_project_protocol_version_drift(self) -> None:
+        root = copy_repo_root("drift-repo-")
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        pyproject = root / "pyproject.toml"
+        pyproject.write_text(
+            pyproject.read_text("utf-8").replace(
+                'version = "0.1.0"', 'version = "9.9.9"', 1
+            )
+        )
+        # The checkout protocol identity stays at 0.1.0.
+        self.assertEqual(protocol.TOOL_VERSION, VERSION)
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest = rb.build_release_bundle(ROOT, Path(tmp), FAKE_COMMIT)
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(root, manifest)
+            self.assertEqual(str(caught.exception), "release manifest is invalid")
 
     def test_non_utf8_python_source_rejected(self) -> None:
         root = copy_repo_root("bad-utf8-repo-")

@@ -476,6 +476,28 @@ def verify_release_bundle(
     repo_root = Path(repo_root)
     manifest_path = Path(manifest_path)
     manifest = _parse_manifest(manifest_path)
+    project_version, requires_python = _read_project_metadata(repo_root)
+    constants = _load_protocol_constants(repo_root)
+    if constants["tool_id"] != TOOL_ID:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["tool_version"] != project_version:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["machine_event_schema"] != MACHINE_EVENT_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    if constants["machine_protocol_version"] != MACHINE_PROTOCOL_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest["tool"] != {
+        "id": constants["tool_id"],
+        "version": constants["tool_version"],
+    }:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest["machine_protocol"] != {
+        "schema": constants["machine_event_schema"],
+        "version": constants["machine_protocol_version"],
+    }:
+        raise ReleaseBundleError("release manifest is invalid")
+    if manifest["runtime"]["python_requires"] != requires_python:
+        raise ReleaseBundleError("release manifest is invalid")
     version = manifest["tool"]["version"]
     artifact = manifest["artifact"]
     artifact_path = manifest_path.parent / artifact["filename"]
