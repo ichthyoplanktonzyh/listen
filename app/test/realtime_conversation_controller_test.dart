@@ -485,6 +485,51 @@ void main() {
         await harness.controller.cancel();
       },
     );
+
+    test(
+      'a finished conversation records how long it ran for the debrief',
+      () async {
+        final harness = _Harness(transcripts: const ['learner']);
+        await harness.start();
+        expect(harness.controller.state.sessionDuration, isNull);
+
+        await harness.learnerTurn('user-1', 'provider learner');
+        await harness.assistantTurn('assistant-1', 'A reply');
+        // Still running: no duration is claimed until the end is recorded.
+        expect(harness.controller.state.sessionDuration, isNull);
+
+        await harness.controller.finish();
+
+        expect(harness.controller.state.phase, RealtimeConversationPhase.done);
+        final duration = harness.controller.state.sessionDuration;
+        expect(duration, isNotNull);
+        expect(duration, greaterThan(Duration.zero));
+      },
+    );
+
+    test(
+      'a provider failure mid-conversation still records the elapsed time',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
+
+        harness.connection.emit(
+          jsonEncode({'type': 'provider_error', 'error': 'fixture error'}),
+        );
+        await _settle();
+
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.failed,
+        );
+        expect(harness.controller.state.sessionDuration, isNotNull);
+        expect(
+          harness.controller.state.sessionDuration,
+          greaterThan(Duration.zero),
+        );
+        expect(harness.controller.state.error?.kind, 'provider_error');
+      },
+    );
   });
 }
 

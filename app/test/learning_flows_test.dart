@@ -217,30 +217,4 @@ void main() {
     expect(find.text('go'), findsOneWidget);
     expect(player.status, 'Connect the local core first');
   });
-
-  testWidgets('review-queue flow with a null api reports the missing core', (
-    tester,
-  ) async {
-    final player = PlayerController();
-
-    await tester.pumpWidget(
-      _Harness(
-        onPressed: (context) => openReviewQueueFlow(
-          context: context,
-          controller: null,
-          resolver: null,
-          playerController: player,
-          pauseBackgroundPlayback: () async {},
-          startReviewShadowing: (_) async {},
-          startDelayedRetelling: (_) async {},
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('go'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('go'), findsOneWidget);
-    expect(player.status, 'Connect the local core first');
-  });
 }

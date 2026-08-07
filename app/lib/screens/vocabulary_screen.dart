@@ -26,6 +26,11 @@ import '../widgets/common/capability_viz.dart';
 import '../widgets/vocabulary/vocabulary_book_view.dart';
 import '../widgets/vocabulary/vocabulary_gap_panel.dart';
 
+/// The dictionary hands slice audio to the practice window through this
+/// callback; the occurrence arrives as the raw occurrence JSON.
+typedef VocabularyShadowingCallback =
+    Future<void> Function(String path, Map<String, dynamic> occurrence);
+
 /// The listening dictionary workbench.
 ///
 /// This is the View half of the screen: it renders [VocabularyState], turns
@@ -66,8 +71,10 @@ class VocabularyScreen extends StatefulWidget {
   /// Pauses whatever is playing behind this route (the primary player) so a
   /// slice owns audio focus alone, matching the workbench behaviour.
   final Future<void> Function()? onPauseBackgroundPlayback;
-  final Future<void> Function(String path, Map<String, dynamic> occurrence)?
-  onStartShadowing;
+
+  /// Hands a slice's audio to the practice window. The occurrence is the raw
+  /// occurrence JSON the practice surface already speaks.
+  final VocabularyShadowingCallback? onStartShadowing;
 
   @override
   State<VocabularyScreen> createState() => _VocabularyScreenState();
@@ -393,7 +400,9 @@ class _VocabularyScreenState extends State<VocabularyScreen> {
     final callback = widget.onStartShadowing;
     if (path == null || callback == null) return;
     await slicePlayer.pause();
-    if (mounted) Navigator.of(context).pop();
+    // Pushed contexts (deep links, tests) dismiss themselves; as a shell
+    // route the dictionary stays and hands audio to the practice window.
+    if (mounted && Navigator.of(context).canPop()) Navigator.of(context).pop();
     await callback(path, occurrence.toJson());
   }
 

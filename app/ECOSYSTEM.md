@@ -118,9 +118,21 @@ phase and contract request.
 
 The current checked-in baseline is a local-media-first Flutter app pinned to the
 immutable Core release in `backend.lock.json`. Whole-media transcription still
-uses Core's `/v1/transcription/*` model and job APIs. Online URL playback and
-download currently use app-managed external-tool flows. These are current code
+uses Core's `/v1/transcription/*` model and job APIs. These are current code
 facts, not the target package-production boundary.
+
+Discovery covers two source families behind one catalog. Podcast RSS is read
+and parsed in the app, and its acquisition is a direct fetch of the
+publisher-provided enclosure — no external tool is involved, and the feed's own
+durations and media types drive the journey. YouTube discovery reads the
+per-channel Atom feed, and its acquisition still goes through an app-managed
+external-tool flow on the user's own responsibility. An entry carries which
+acquisition applies to it, including that none does.
+
+Recognising media acquired in an earlier session relies on the external tool's
+`[id]` filename convention, so it works only on the YouTube path. A podcast
+episode downloaded in a previous session is not matched back to its feed entry;
+there is no persisted acquisition record yet.
 
 The app does not yet implement `.listenpkg` discovery or import, a Catalog or
 Registry UI, `listen-gen` process orchestration, package trust presentation, or

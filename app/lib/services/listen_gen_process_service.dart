@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'content_generator_setup.dart';
+
 import 'package:crypto/crypto.dart';
 
 import '../models/content_package.dart';
@@ -81,8 +83,14 @@ String _validatedSha256(Object? value) {
 }
 
 class ListenGenProcessFailure implements Exception {
-  const ListenGenProcessFailure(this.code, {this.retryable = true});
+  const ListenGenProcessFailure(this.code, {
+    this.message,
+    this.retryable = true,
+  });
   final String code;
+
+  /// Human-readable, path-free detail for surfaces that can show it.
+  final String? message;
 
   /// Whether retrying the same request could plausibly succeed. Release
   /// verification failures are integrity/configuration problems — the same
@@ -100,6 +108,10 @@ abstract interface class ListenGenProcessRun {
 
 abstract interface class ListenGenProcessService {
   bool get isConfigured;
+
+  /// Which piece is missing, when [isConfigured] is false. "Not configured"
+  /// is not an actionable sentence; "no speech model installed" is.
+  ContentGeneratorState get state;
   Future<ListenGenProcessRun> start(ContentPackageGenerationRequest request);
 }
 
@@ -136,6 +148,12 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
   @override
   bool get isConfigured =>
       _releaseService.isConfigured && _providerArgs.isNotEmpty;
+
+  @override
+  ContentGeneratorState get state =>
+      isConfigured
+          ? ContentGeneratorState.ready
+          : ContentGeneratorState.generatorMissing;
 
   @override
   Future<ListenGenProcessRun> start(
@@ -381,7 +399,7 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
       return;
     }
     if (terminal.kind == ListenGenEventKind.failed) {
-      _completeFailure(terminal.code ?? 'generator_failed');
+      _completeFailure(terminal.code ?? 'generator_failed', terminal.message);
       return;
     }
     if (terminal.kind != ListenGenEventKind.completed || exitCode != 0) {
@@ -403,9 +421,11 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
     _packagePathCompleter.complete(_outputPath);
   }
 
-  void _completeFailure(String code) {
+  void _completeFailure(String code, [String? message]) {
     if (!_packagePathCompleter.isCompleted) {
-      _packagePathCompleter.completeError(ListenGenProcessFailure(code));
+      _packagePathCompleter.completeError(
+        ListenGenProcessFailure(code, message: message),
+      );
     }
   }
 

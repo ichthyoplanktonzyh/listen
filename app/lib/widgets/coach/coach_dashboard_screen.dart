@@ -415,7 +415,10 @@ class _CoachDashboardScreenState extends State<CoachDashboardScreen> {
     CoachSuggestionDestination destination, {
     String? suggestionId,
   }) async {
-    if (destination.kind == 'content_home') {
+    if (destination.kind == 'content_home' && Navigator.of(context).canPop()) {
+      // Pushed contexts (deep links, tests) dismiss themselves; as a shell
+      // route there is nothing to pop, so the door falls through to the
+      // host's navigation and lands on the content home route instead.
       Navigator.pop(context);
       return;
     }

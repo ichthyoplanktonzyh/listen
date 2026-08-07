@@ -6,6 +6,24 @@ import '../state/store.dart';
 
 const _unset = Object();
 
+/// The two things the right-hand panel can be.
+///
+/// It used to be five: transcript, subtitle resources, word, diagnosis and
+/// inbox, each replacing the others. That made the transcript one drawer among
+/// five, so looking up a word or asking for an analysis took the text off
+/// screen — the reader came back and had to find their place again. The
+/// transcript is the floor of this workbench, not a drawer: word lookups now
+/// open as a bubble over it and analysis expands inside the sentence, which
+/// leaves exactly two panes worth switching between.
+enum SidePanelTab {
+  /// The interactive transcript. Resident: nothing replaces it.
+  transcript,
+
+  /// What this session has produced — the selected word in full, and the
+  /// listening inbox.
+  notes,
+}
+
 /// Immutable snapshot of learning-related state.
 class LearningState {
   LearningState({
@@ -19,7 +37,8 @@ class LearningState {
     this.selectedCue,
     List<PhraseCandidate> phraseCandidates = const [],
     this.diagnosis,
-    this.sidePanel = 0,
+    this.tab = SidePanelTab.transcript,
+    this.diagnosisExpanded = false,
   }) : _wordEntries = Map.unmodifiable(wordEntries),
        _phraseEntries = Map.unmodifiable(phraseEntries),
        _capabilityProfiles = Map.unmodifiable(capabilityProfiles),
@@ -35,7 +54,14 @@ class LearningState {
   final Cue? selectedCue;
   final List<PhraseCandidate> _phraseCandidates;
   final Diagnosis? diagnosis;
-  final int sidePanel;
+  final SidePanelTab tab;
+
+  /// Whether the current sentence's analysis is open inside the transcript.
+  ///
+  /// The analysis used to be a tab, which is why it could be "open" while the
+  /// sentence it described was not on screen. Being an expansion of one
+  /// sentence, it is a boolean about that sentence and nothing else.
+  final bool diagnosisExpanded;
 
   Map<String, LexicalEntry> get wordEntries => Map.unmodifiable(_wordEntries);
   Map<String, LexicalEntryDetails> get phraseEntries =>
@@ -56,7 +82,8 @@ class LearningState {
     Object? selectedCue = _unset,
     List<PhraseCandidate>? phraseCandidates,
     Object? diagnosis = _unset,
-    int? sidePanel,
+    SidePanelTab? tab,
+    bool? diagnosisExpanded,
   }) => LearningState(
     wordEntries: wordEntries ?? this.wordEntries,
     phraseEntries: phraseEntries ?? this.phraseEntries,
@@ -80,7 +107,8 @@ class LearningState {
     diagnosis: identical(diagnosis, _unset)
         ? this.diagnosis
         : diagnosis as Diagnosis?,
-    sidePanel: sidePanel ?? this.sidePanel,
+    tab: tab ?? this.tab,
+    diagnosisExpanded: diagnosisExpanded ?? this.diagnosisExpanded,
   );
 
   bool get hasDiagnosis => diagnosis != null;
@@ -133,7 +161,8 @@ class LearningController extends ChangeNotifier {
       _store.state.selectedPronunciation;
   List<PhraseCandidate> get phraseCandidates => _store.state.phraseCandidates;
   Diagnosis? get diagnosis => _store.state.diagnosis;
-  int get sidePanel => _store.state.sidePanel;
+  SidePanelTab get tab => _store.state.tab;
+  bool get diagnosisExpanded => _store.state.diagnosisExpanded;
   SubtitleToken? get selectedToken => _store.state.selectedToken;
   Cue? get selectedCue => _store.state.selectedCue;
 
@@ -143,12 +172,14 @@ class LearningController extends ChangeNotifier {
   void setPhraseEntries(Map<String, LexicalEntryDetails> entries) =>
       _store.update((s) => s.copyWith(phraseEntries: entries));
 
+  /// Selecting a word no longer moves the panel. The lookup surfaces as a
+  /// bubble anchored to the word in the transcript; the panel only follows
+  /// when the reader explicitly asks for the full entry.
   void selectWord(LexicalEntryDetails? details) => _store.update(
     (s) => s.copyWith(
       selectedLexicalDetails: details,
       selectedDictionary: null,
       selectedPronunciation: null,
-      sidePanel: details != null ? 2 : s.sidePanel,
     ),
   );
 
@@ -185,8 +216,14 @@ class LearningController extends ChangeNotifier {
   void setDiagnosis(Diagnosis? diagnosis) =>
       _store.update((s) => s.copyWith(diagnosis: diagnosis));
 
-  void selectSidePanel(int index) =>
-      _store.update((s) => s.copyWith(sidePanel: index));
+  void selectTab(SidePanelTab tab) =>
+      _store.update((s) => s.copyWith(tab: tab));
+
+  /// Opens or closes the analysis inside the current sentence. Collapsing does
+  /// not discard [diagnosis]: re-opening the same sentence shows what was
+  /// already loaded instead of asking for it again.
+  void setDiagnosisExpanded(bool expanded) =>
+      _store.update((s) => s.copyWith(diagnosisExpanded: expanded));
 
   void setSelectedToken(SubtitleToken? token) =>
       _store.update((s) => s.copyWith(selectedToken: token));

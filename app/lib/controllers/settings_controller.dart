@@ -3,10 +3,18 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 
+import '../services/media_import_file_service.dart';
 import '../settings.dart';
+import '../utils/transcript_translation.dart';
 
 /// Wraps [AppSettings] persistence with [ChangeNotifier] for reactive UI.
 class SettingsController extends ChangeNotifier {
+  /// The media library folder is picked with the same directory chooser the
+  /// import path already uses, so there is one platform channel, not two.
+  SettingsController({this.files = const LocalMediaImportFileService()});
+
+  final MediaImportFileService files;
+
   AppSettings _settings = const AppSettings();
 
   AppSettings get settings => _settings;
@@ -30,6 +38,7 @@ class SettingsController extends ChangeNotifier {
   int get lastMediaPositionMs => _settings.lastMediaPositionMs;
   int get lastMediaDurationMs => _settings.lastMediaDurationMs;
   int get lastMediaSubtitleCount => _settings.lastMediaSubtitleCount;
+  String get mediaLibraryPath => _settings.mediaLibraryPath;
   double get volume => _settings.volume;
   double get rate => _settings.rate;
   bool get subtitlesVisible => _settings.subtitlesVisible;
@@ -44,6 +53,21 @@ class SettingsController extends ChangeNotifier {
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
   bool get wordSyncVisible => _settings.wordSyncVisible;
   String get groupingMode => _settings.groupingMode;
+
+  /// How the transcript pairs the two subtitle tracks. It is a habit that
+  /// changes several times inside one session — check the translation, hide
+  /// it again, test yourself — so it persists like the other display choices
+  /// rather than resetting per media.
+  TranscriptTranslation get transcriptTranslation =>
+      TranscriptTranslation.fromStorage(_settings.transcriptTranslation);
+
+  Future<void> setTranscriptTranslation(TranscriptTranslation value) {
+    if (transcriptTranslation == value) return Future.value();
+    _settings = _settings.copyWith(transcriptTranslation: value.storageValue);
+    notifyListeners();
+    return save();
+  }
+
   bool get chunkHighlightActive => _settings.chunkHighlightActive;
   String get chunkDisplayStyle => _settings.chunkDisplayStyle;
   bool get highlightCurrentChunk => _settings.highlightCurrentChunk;
@@ -83,9 +107,56 @@ class SettingsController extends ChangeNotifier {
 
   Color get secondaryColor => Color(_settings.secondaryColor);
 
+  // ── Media library folder ──
+
+  MediaLibraryFolderState _mediaLibraryFolderState =
+      MediaLibraryFolderState.unset;
+
+  /// The persisted path together with what the disk says about it. Resolved
+  /// when the path changes and on demand, never on every read: this is disk
+  /// I/O, and a getter that touched the filesystem would run inside `build`.
+  MediaLibraryFolder get mediaLibraryFolder =>
+      (path: _settings.mediaLibraryPath, state: _mediaLibraryFolderState);
+
+  /// Opens the folder chooser and adopts the result. A cancelled picker returns
+  /// the folder unchanged — cancelling must never clear what the user had.
+  Future<MediaLibraryFolder> chooseMediaLibraryFolder({
+    required String confirmButtonText,
+  }) async {
+    final picked = await files.pickDownloadDirectory(
+      confirmButtonText: confirmButtonText,
+    );
+    if (picked == null || picked.isEmpty) return mediaLibraryFolder;
+    return setMediaLibraryPath(picked);
+  }
+
+  /// Records the folder the user picked. Its state is resolved before the
+  /// notification so listeners never see a new path next to the old verdict.
+  Future<MediaLibraryFolder> setMediaLibraryPath(String path) async {
+    _settings = _settings.copyWith(mediaLibraryPath: path);
+    _mediaLibraryFolderState = await _settings.resolveMediaLibraryFolderState();
+    notifyListeners();
+    await save();
+    return mediaLibraryFolder;
+  }
+
+  /// Forgets the folder. Distinct from a folder that went missing — this is the
+  /// user saying they no longer have one.
+  Future<MediaLibraryFolder> clearMediaLibraryFolder() =>
+      setMediaLibraryPath('');
+
+  /// Re-checks the disk, e.g. after an unmounted volume came back.
+  Future<void> refreshMediaLibraryFolderState() async {
+    final next = await _settings.resolveMediaLibraryFolderState();
+    if (next == _mediaLibraryFolderState) return;
+    _mediaLibraryFolderState = next;
+    notifyListeners();
+  }
+
   /// Load settings from disk and notify listeners.
   Future<void> load() async {
     _settings = await AppSettings.load();
+    _mediaLibraryFolderState = await _settings.resolveMediaLibraryFolderState();
     notifyListeners();
   }
 

@@ -6,9 +6,10 @@ import '../../controllers/realtime_conversation_controller.dart';
 import '../../localization.dart';
 import '../../models/realtime_conversation.dart';
 import '../../theme/breakpoints.dart';
-import '../../theme/icon_size.dart';
+import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 import '../common/capability_viz.dart';
 import '../common/listen_loading.dart';
 import 'conversation_afterglow_caption.dart';
@@ -225,108 +226,224 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
   /// transcript becomes learner output) both still exist, and both still say
   /// the same thing — they just no longer have to be read before every single
   /// conversation.
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   Widget _lobby(BuildContext context, RealtimeConversationState state) {
     final theme = Theme.of(context);
     final l = AppLocalizations.of(context);
     final anchor = widget.launch.anchor?.text.trim();
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(ListenSpacing.gap12),
-            child: IconButton(
-              key: const ValueKey('realtime-close'),
-              tooltip: l.text('realtimeLeaveConversation'),
-              onPressed: _requestClose,
-              icon: const Icon(Icons.arrow_back),
+
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          key: const ValueKey('realtime-close'),
+          tooltip: l.text('realtimeLeaveConversation'),
+          onPressed: _requestClose,
+          icon: const Icon(Icons.arrow_back),
+        ),
+        actions: [
+          IconButton(
+            key: const ValueKey('realtime-history-open'),
+            tooltip: l.text('realtimeRecentConversations'),
+            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+            icon: const Icon(Icons.history),
+          ),
+          const SizedBox(width: ListenSpacing.gap8),
+        ],
+      ),
+      endDrawer: Drawer(
+        backgroundColor: theme.colorScheme.surface,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(ListenSpacing.gap16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l.text('realtimeRecentConversations'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: ListenSpacing.gap16),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: _lobbyHistory(context, state, l),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(
-                ListenSpacing.gap24,
-                0,
-                ListenSpacing.gap24,
-                ListenSpacing.gap32,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: ListenBreakpoints.formColumnMax,
+        ),
+      ),
+      body: SingleChildScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(
+          ListenSpacing.gap24,
+          ListenSpacing.gap8,
+          ListenSpacing.gap24,
+          ListenSpacing.gap32,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.formColumnMax,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Logo
+                Center(
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.rectangle,
+                      borderRadius: ListenRadii.panelBorder,
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
+                      gradient: RadialGradient(
+                        colors: [
+                          ListenColors.brandTeal.withValues(alpha: 0.15),
+                          theme.colorScheme.surface,
+                        ],
+                        radius: 0.8,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: ListenColors.brandTeal.withValues(alpha: 0.15),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'L',
+                      style: ListenType.mark.copyWith(
+                        color: ListenColors.brandTeal,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: ListenSpacing.gap16),
+                Text(
+                  l.text('realtimeLobbyLiveTitle'),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: ListenSpacing.gap8),
+                Text(
+                  l.text('realtimeLobbyLiveSubtitle'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: ListenSpacing.gap32),
+
+                // Settings Form
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
+                    borderRadius: ListenRadii.panelBorder,
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: ListenSpacing.gap32),
-                      Text(
-                        l.text('realtimeLobbyReady'),
-                        style: theme.textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: ListenSpacing.gap8),
-                      _LobbyVoiceChoice(
-                        profiles: state.profiles,
-                        selectedProfileId: state.selectedProfileId,
-                        enabled: state.canConfigure,
-                        onSelected: widget.controller.selectProfile,
-                        onManageVoices: widget.onManageVoices == null
-                            ? null
-                            : _manageVoices,
-                      ),
-                      if (anchor != null && anchor.isNotEmpty) ...[
-                        const SizedBox(height: ListenSpacing.gap6),
-                        Text(
-                          l
-                              .text('realtimeLobbyTopic')
-                              .replaceAll('{topic}', anchor),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
                         ),
-                      ],
-                      const SizedBox(height: ListenSpacing.gap24),
-                      if (state.error != null) ...[
-                        ConversationNoticeBar(notice: state.error!),
-                        const SizedBox(height: ListenSpacing.gap12),
-                      ],
-                      // The one action. Everything else on this screen is
-                      // either a fold-away setting or the past.
-                      FilledButton.icon(
-                        key: const ValueKey('realtime-start'),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(56),
+                        child: _LobbyVoiceChoice(
+                          profiles: state.profiles,
+                          selectedProfileId: state.selectedProfileId,
+                          enabled: state.canConfigure,
+                          onSelected: widget.controller.selectProfile,
+                          onManageVoices: widget.onManageVoices == null
+                              ? null
+                              : _manageVoices,
                         ),
-                        onPressed: state.selectedProfileId == null
-                            ? null
-                            : _startConversation,
-                        icon: const Icon(Icons.mic),
-                        label: Text(l.text('realtimeStartConversation')),
                       ),
-                      const SizedBox(height: ListenSpacing.gap12),
-                      _LobbyCaptionChoice(
-                        enabled: _captionEnabled,
-                        onChanged: _setCaptionEnabled,
+                      Divider(
+                        height: 1,
+                        color: theme.colorScheme.outlineVariant,
                       ),
-                      const SizedBox(height: ListenSpacing.gap32),
-                      const Divider(),
-                      const SizedBox(height: ListenSpacing.gap16),
-                      ..._lobbyHistory(context, state, l),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        child: _LobbyCaptionChoice(
+                          enabled: _captionEnabled,
+                          onChanged: _setCaptionEnabled,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
+                if (anchor != null && anchor.isNotEmpty) ...[
+                  const SizedBox(height: ListenSpacing.gap16),
+                  Text(
+                    l.text('realtimeLobbyTopic').replaceAll('{topic}', anchor),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: ListenSpacing.gap32),
+                if (state.error != null) ...[
+                  ConversationNoticeBar(notice: state.error!),
+                  const SizedBox(height: ListenSpacing.gap16),
+                ],
+                FilledButton.icon(
+                  key: const ValueKey('realtime-start'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                  ),
+                  onPressed: state.selectedProfileId == null
+                      ? null
+                      : _startConversation,
+                  icon: const Icon(Icons.mic),
+                  label: Text(l.text('realtimeStartConversation')),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  /// 最近的对话 — the past, kept where the past belongs: under the action,
-  /// short, and readable at a glance.
   List<Widget> _lobbyHistory(
     BuildContext context,
     RealtimeConversationState state,
@@ -362,11 +479,6 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
         ? sessions
         : sessions.take(_lobbyHistoryPreviewCount).toList(growable: false);
     return [
-      Text(
-        l.text('realtimeRecentConversations'),
-        style: theme.textTheme.titleMedium,
-      ),
-      const SizedBox(height: ListenSpacing.gap8),
       if (state.historyError != null)
         ConversationNoticeBar(notice: state.historyError!),
       if (state.historyLoading)
@@ -538,6 +650,8 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      ConversationDebriefSummary(readout: readout),
+                      const SizedBox(height: ListenSpacing.gap16),
                       if (state.error != null)
                         ConversationNoticeBar(notice: state.error!),
                       // P4, first thing on the page: while local Whisper is
@@ -680,7 +794,7 @@ class _RealtimeConversationPanelState extends State<RealtimeConversationPanel> {
 /// voice the last one used. So the current voice is stated, and the picker
 /// only exists once the learner asks for it by tapping. The dead-end case
 /// (no voice configured at all) keeps its explicit way out to settings.
-class _LobbyVoiceChoice extends StatefulWidget {
+class _LobbyVoiceChoice extends StatelessWidget {
   const _LobbyVoiceChoice({
     required this.profiles,
     required this.selectedProfileId,
@@ -696,27 +810,19 @@ class _LobbyVoiceChoice extends StatefulWidget {
   final Future<void> Function()? onManageVoices;
 
   @override
-  State<_LobbyVoiceChoice> createState() => _LobbyVoiceChoiceState();
-}
-
-class _LobbyVoiceChoiceState extends State<_LobbyVoiceChoice> {
-  bool _open = false;
-
-  @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final profiles = widget.profiles;
     if (profiles.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l.text('realtimeNoVoiceInLobby')),
-          if (widget.onManageVoices != null) ...[
+          if (onManageVoices != null) ...[
             const SizedBox(height: ListenSpacing.gap8),
             OutlinedButton.icon(
               key: const ValueKey('realtime-manage-voices'),
-              onPressed: () => unawaited(widget.onManageVoices!()),
+              onPressed: () => onManageVoices!(),
               icon: const Icon(Icons.settings_outlined),
               label: Text(l.text('realtimeManageVoices')),
             ),
@@ -724,85 +830,52 @@ class _LobbyVoiceChoiceState extends State<_LobbyVoiceChoice> {
         ],
       );
     }
-    final selected = profiles
-        .where((profile) => profile.id == widget.selectedProfileId)
-        .firstOrNull;
-    final line = selected == null
-        ? l.text('realtimeLobbyNoVoiceLine')
-        : l
-              .text('realtimeLobbyVoiceLine')
-              .replaceAll('{voice}', _describe(selected));
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Semantics(
-          button: true,
-          label: '${l.text('realtimeChooseVoice')} · $line',
-          child: InkWell(
-            key: const ValueKey('realtime-voice-choice'),
-            borderRadius: ListenRadii.controlBorder,
-            onTap: widget.enabled ? () => setState(() => _open = !_open) : null,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      line,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _open ? Icons.expand_less : Icons.expand_more,
-                    size: ListenIconSize.control,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.text('realtimeVoiceLabel'),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
+              const SizedBox(height: ListenSpacing.gap2),
+              Text(
+                l.text('realtimeVoiceDesc'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 11,
+                ),
+              ),
+            ],
           ),
         ),
-        if (_open) ...[
-          const SizedBox(height: ListenSpacing.gap4),
-          for (final profile in profiles)
-            ListTile(
-              key: ValueKey('realtime-voice-option-${profile.id}'),
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              selected: profile.id == widget.selectedProfileId,
-              leading: Icon(
-                profile.id == widget.selectedProfileId
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-              ),
-              onTap: widget.enabled
-                  ? () {
-                      widget.onSelected(profile.id);
-                      setState(() => _open = false);
-                    }
-                  : null,
-              title: Text(
-                _describe(profile),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          if (widget.onManageVoices != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                key: const ValueKey('realtime-manage-voices'),
-                onPressed: () => unawaited(widget.onManageVoices!()),
-                icon: const Icon(Icons.settings_outlined),
-                label: Text(l.text('realtimeManageVoices')),
-              ),
-            ),
-        ],
+        DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: selectedProfileId,
+            onChanged: enabled
+                ? (v) {
+                    if (v != null) onSelected(v);
+                  }
+                : null,
+            items: profiles
+                .map(
+                  (profile) => DropdownMenuItem<String>(
+                    value: profile.id,
+                    child: Text(
+                      _describe(profile),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
       ],
     );
   }
@@ -826,74 +899,41 @@ String _emptyBodyKey(bool learner, bool failed) => switch ((learner, failed)) {
 /// that matters most — provider captions are guidance, only the local Whisper
 /// transcript becomes learner output — is spelled out in full. They are simply
 /// no longer mandatory reading before every conversation.
-class _LobbyCaptionChoice extends StatefulWidget {
+class _LobbyCaptionChoice extends StatelessWidget {
   const _LobbyCaptionChoice({required this.enabled, required this.onChanged});
 
   final bool enabled;
   final ValueChanged<bool> onChanged;
 
   @override
-  State<_LobbyCaptionChoice> createState() => _LobbyCaptionChoiceState();
-}
-
-class _LobbyCaptionChoiceState extends State<_LobbyCaptionChoice> {
-  bool _open = false;
-
-  @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final value = l.text(
-      widget.enabled ? 'realtimeCaptionShown' : 'realtimeCaptionHidden',
-    );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        InkWell(
-          key: const ValueKey('realtime-caption-disclosure'),
-          borderRadius: ListenRadii.controlBorder,
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: ListenSpacing.gap6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${l.text('realtimeCaptionRow')} · $value',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.text('realtimeCaptionLabel'),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
                 ),
-                Icon(
-                  _open ? Icons.expand_less : Icons.expand_more,
-                  size: ListenIconSize.control,
+              ),
+              const SizedBox(height: ListenSpacing.gap2),
+              Text(
+                l.text('realtimeCaptionDesc'),
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
+                  fontSize: 11,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-        if (_open) ...[
-          // 字幕默认关 (#85 · S8): the choice is remembered, and it only ever
-          // governs the other person's line — the learner's own words are not
-          // on the stage to switch on.
-          SwitchListTile.adaptive(
-            key: const ValueKey('realtime-caption-toggle'),
-            contentPadding: EdgeInsets.zero,
-            value: widget.enabled,
-            onChanged: widget.onChanged,
-            title: Text(l.text('realtimeCaptionSwitch')),
-            subtitle: Text(l.text('realtimeCaptionSwitchHint')),
-          ),
-          const SizedBox(height: ListenSpacing.gap4),
-          Text(
-            l.text('realtimeHonestLayering'),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
+        Switch.adaptive(value: enabled, onChanged: onChanged),
       ],
     );
   }

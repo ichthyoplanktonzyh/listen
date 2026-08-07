@@ -88,6 +88,11 @@ void main() {
     final controller = _controller(api);
     await _pump(tester, controller, api);
 
+    // History lives in the endDrawer (design note · 方案三), so the notice is
+    // only in the tree once the drawer is open.
+    await tester.tap(find.byKey(const ValueKey('realtime-history-open')));
+    await tester.pumpAndSettle();
+
     expect(
       find.text('Your past conversations could not be loaded.'),
       findsOneWidget,
@@ -101,6 +106,10 @@ void main() {
     final api = _api(onTurns: () => (statusCode: 500, body: envelope));
     final controller = _controller(api);
     await _pump(tester, controller, api);
+
+    // The failure notice renders inside the history drawer, not on the lobby.
+    await tester.tap(find.byKey(const ValueKey('realtime-history-open')));
+    await tester.pumpAndSettle();
 
     await controller.openHistorySession('session-1');
     await tester.pump();

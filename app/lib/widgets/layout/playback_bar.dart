@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/extensive_listening_controller.dart';
-import '../../controllers/hunting_session_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
@@ -25,16 +24,11 @@ class PlaybackBar extends StatefulWidget {
     required this.adapter,
     required this.playerController,
     required this.extensiveListeningController,
-    required this.huntingSessionController,
     required this.subtitleController,
     required this.mediaSession,
     required this.playbackActions,
     required this.taskStatuses,
     required this.onSeekCue,
-    required this.onToggleExtensiveListening,
-    required this.onToggleHunting,
-    required this.onCaptureListeningInbox,
-    required this.onHardInterruptListening,
     required this.onSaveSettings,
     this.spaceTargetsPractice = false,
     this.isCompact = false,
@@ -47,7 +41,6 @@ class PlaybackBar extends StatefulWidget {
   final DesktopPlayerAdapter adapter;
   final PlayerController playerController;
   final ExtensiveListeningController extensiveListeningController;
-  final HuntingSessionController huntingSessionController;
   final SubtitleController subtitleController;
   final MediaSessionCoordinator mediaSession;
   final PlaybackActionsCoordinator playbackActions;
@@ -57,10 +50,6 @@ class PlaybackBar extends StatefulWidget {
   /// player (#25: the transport shows a quiet hint so the drift is visible).
   final bool spaceTargetsPractice;
   final Future<void> Function(Cue? cue) onSeekCue;
-  final Future<void> Function() onToggleExtensiveListening;
-  final Future<void> Function() onToggleHunting;
-  final Future<void> Function() onCaptureListeningInbox;
-  final Future<void> Function() onHardInterruptListening;
   final Future<void> Function() onSaveSettings;
   final bool isCompact;
   final String? mediaTitle;
@@ -87,11 +76,43 @@ class _PlaybackBarState extends State<PlaybackBar> {
   List<UserTaskStatus> get taskStatuses => widget.taskStatuses;
 
   Future<void> _seekCue(Cue? cue) => widget.onSeekCue(cue);
-  Future<void> _toggleExtensiveListening() =>
-      widget.onToggleExtensiveListening();
-  Future<void> _captureListeningInbox() => widget.onCaptureListeningInbox();
-  Future<void> _hardInterruptListening() => widget.onHardInterruptListening();
   Future<void> _saveSettings() => widget.onSaveSettings();
+
+  /// The A point of an A/B repeat waiting for its B.
+  ///
+  /// It lives here rather than on the player controller because it is not
+  /// playback state: it is a half-finished gesture that exists only between
+  /// two clicks, and it is discarded whenever the loop it was heading for is
+  /// replaced by any other range loop.
+  Duration? _abAnchor;
+
+  /// Set A → close at B → clear. Marking B behind A still gives a valid range;
+  /// the two points are sorted rather than rejected, because a learner who
+  /// realises the phrase started earlier should be able to say so by clicking
+  /// there.
+  void _markAbPoint() {
+    if (playerController.sourceLoopStart != null) {
+      playerController.setSourceLoop(null, null);
+      setState(() => _abAnchor = null);
+      return;
+    }
+    final now = playerController.positionListenable.value;
+    final anchor = _abAnchor;
+    if (anchor == null) {
+      setState(() => _abAnchor = now);
+      return;
+    }
+    final start = anchor <= now ? anchor : now;
+    final end = anchor <= now ? now : anchor;
+    // A zero-length range would loop a single frame forever. Below that the
+    // second click reads as "I meant here after all", so A simply moves.
+    if (end - start < const Duration(milliseconds: 200)) {
+      setState(() => _abAnchor = now);
+      return;
+    }
+    playerController.setSourceLoop(start, end, label: 'abLoop');
+    setState(() => _abAnchor = null);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -122,11 +143,9 @@ class _PlaybackBarState extends State<PlaybackBar> {
       statusIsError: playerController.statusIsError,
       statusFailure: playerController.statusFailure,
       taskStatuses: taskStatuses,
-      extensiveListeningActive: extensiveListeningController.active,
-      huntingActive: widget.huntingSessionController.state.enabled,
-      listeningMarkEnabled: subtitleController.currentPrimaryCue != null,
-      listeningInboxCount: extensiveListeningController.activeItemCount,
       spaceTargetsPractice: widget.spaceTargetsPractice,
+      abAnchor: _abAnchor,
+      onMarkAbPoint: _markAbPoint,
       onSeek: (value) => adapter.seek(value),
       onSeekToPreviousCue: () => _seekCue(
         subtitleController.primaryCursor.previous(
@@ -197,10 +216,6 @@ class _PlaybackBarState extends State<PlaybackBar> {
         subtitleController.setSecondarySubtitleOffset(offset);
         unawaited(_saveSettings());
       },
-      onToggleExtensiveListening: () => unawaited(_toggleExtensiveListening()),
-      onToggleHunting: () => unawaited(widget.onToggleHunting()),
-      onCaptureListeningInbox: () => unawaited(_captureListeningInbox()),
-      onHardInterruptListening: () => unawaited(_hardInterruptListening()),
       isCompact: widget.isCompact,
       mediaTitle: widget.mediaTitle,
       onExpand: widget.onExpand,

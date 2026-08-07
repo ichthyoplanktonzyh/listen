@@ -6,6 +6,7 @@ import '../../models/realtime_conversation.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
+import '../../theme/typography.dart';
 import '../common/capability_viz.dart';
 import 'conversation_turn_failure.dart';
 
@@ -37,6 +38,7 @@ class ConversationDebriefReadout {
     required this.learnerOutputTurns,
     required this.transcribingTurns,
     required this.lostTurns,
+    this.duration,
   });
 
   /// Turns the other voice took.
@@ -58,6 +60,10 @@ class ConversationDebriefReadout {
   /// or the turn was cut short. These are the amber targets.
   final int lostTurns;
 
+  /// How long the session ran, when the controller recorded an end. Null
+  /// while the conversation is still going or when the end was never seen.
+  final Duration? duration;
+
   /// False while local Whisper is still working. The readout stays provisional
   /// until this is true; it never announces a final tally early.
   bool get settled => transcribingTurns == 0;
@@ -69,7 +75,8 @@ class ConversationDebriefReadout {
       other.learnerTurns == learnerTurns &&
       other.learnerOutputTurns == learnerOutputTurns &&
       other.transcribingTurns == transcribingTurns &&
-      other.lostTurns == lostTurns;
+      other.lostTurns == lostTurns &&
+      other.duration == duration;
 
   @override
   int get hashCode => Object.hash(
@@ -78,13 +85,14 @@ class ConversationDebriefReadout {
     learnerOutputTurns,
     transcribingTurns,
     lostTurns,
+    duration,
   );
 
   @override
   String toString() =>
       'ConversationDebriefReadout(assistant: $assistantTurns, learner: '
       '$learnerTurns, output: $learnerOutputTurns, transcribing: '
-      '$transcribingTurns, lost: $lostTurns)';
+      '$transcribingTurns, lost: $lostTurns, duration: $duration)';
 }
 
 /// Learner turn statuses that mean "local Whisper has not answered yet".
@@ -141,12 +149,89 @@ ConversationDebriefReadout conversationDebriefReadoutOf(
     learnerOutputTurns: output,
     transcribingTurns: transcribing,
     lostTurns: lost,
+    duration: state.sessionDuration,
   );
 }
 
 List<RealtimeConversationItem> conversationDebriefTargetsOf(
   RealtimeConversationState state,
 ) => state.items.where(conversationTurnIsTarget).toList();
+
+/// The design note's debrief header line — 「3m 42s · 12轮」 — as a single
+/// string, or null when the session offers neither a duration nor a turn.
+///
+/// Duration is stated in the design's own units (minutes and seconds, not a
+/// rounded minute) and only when the session actually recorded an end.
+/// Turns are counted the way the history counts them: every turn that
+/// happened, whoever took it. Nothing here is estimated; a conversation that
+/// recorded no end contributes no duration, and an empty one says nothing
+/// rather than printing a zero.
+String? realtimeDebriefSummaryText(
+  ConversationDebriefReadout readout,
+  AppLocalizations l,
+) {
+  final parts = <String>[];
+  final duration = readout.duration;
+  if (duration != null) {
+    final minutes = duration.inMinutes;
+    final seconds = duration.inSeconds.remainder(60);
+    parts.add(
+      minutes == 0
+          ? l
+                .text('realtimeDebriefDurationSeconds')
+                .replaceAll('{seconds}', '$seconds')
+          : l
+                .text('realtimeDebriefDurationMinutesSeconds')
+                .replaceAll('{minutes}', '$minutes')
+                .replaceAll('{seconds}', '$seconds'),
+    );
+  }
+  final turns = readout.assistantTurns + readout.learnerTurns;
+  if (turns > 0) {
+    parts.add(l.text('realtimeDebriefTurns').replaceAll('{turns}', '$turns'));
+  }
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// 对话总结 — the debrief's heading, with the session's own facts beside it.
+///
+/// The design note pins the meta to the header (`3m 42s · 12轮`): the room
+/// opens by saying how long the conversation ran and how many turns it took.
+/// Both numbers are the session's record, never a live estimate — a session
+/// that never recorded an end states no duration, and the turns line stays
+/// silent until there is a turn to count.
+class ConversationDebriefSummary extends StatelessWidget {
+  const ConversationDebriefSummary({super.key, required this.readout});
+
+  final ConversationDebriefReadout readout;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = AppLocalizations.of(context);
+    final summary = realtimeDebriefSummaryText(readout, l);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Expanded(
+          child: Text(
+            l.text('realtimeDebriefTitle'),
+            style: theme.textTheme.titleLarge,
+          ),
+        ),
+        if (summary != null)
+          Text(
+            key: const ValueKey('conversation-debrief-summary'),
+            summary,
+            style: ListenType.timecode.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 /// Section 3 · 回流 — the read-out, and the water frozen into a bar.
 ///

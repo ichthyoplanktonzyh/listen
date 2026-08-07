@@ -167,8 +167,15 @@ class TimelineCursor {
     return index >= 0 && index + 1 < cues.length ? cues[index + 1] : null;
   }
 
-  Duration mediaStart(Cue cue) => _nonNegative(cue.start + offset);
+  Duration mediaStart(Cue cue) => mediaAt(cue.start);
   Duration mediaEnd(Cue cue) => _nonNegative(cue.end + offset);
+
+  /// Maps an in-sentence timestamp — a tapped word's or chunk's start — into
+  /// media time, applying the same subtitle offset as [mediaStart]. This is
+  /// what lets the transcript seek to the word the reader clicked rather than
+  /// to the whole sentence.
+  Duration mediaAt(Duration timelinePosition) =>
+      _nonNegative(timelinePosition + offset);
 
   Duration _nonNegative(Duration value) =>
       value.isNegative ? Duration.zero : value;

@@ -225,24 +225,24 @@ void main() {
     );
     await tester.pump();
 
-    // The switch is a setting, so it lives behind the lobby's disclosure row
-    // rather than in front of the start button. The row states the current
-    // value without being opened.
-    expect(find.text('What the other person says · not shown'), findsOneWidget);
-    expect(find.byKey(const ValueKey('realtime-caption-toggle')), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('realtime-caption-disclosure')));
-    await tester.pump();
-
-    final toggle = find.byKey(const ValueKey('realtime-caption-toggle'));
+    // The caption choice sits in the lobby's settings card as one labelled
+    // switch: a line naming the setting and a line saying what it governs,
+    // defaulting to off (#85 · S8).
+    expect(find.text('Afterglow Captions'), findsOneWidget);
+    expect(
+      find.text('Show fading captions when the other person speaks'),
+      findsOneWidget,
+    );
+    final toggle = find.byType(Switch);
     expect(toggle, findsOneWidget);
-    expect(tester.widget<SwitchListTile>(toggle).value, isFalse);
+    expect(tester.widget<Switch>(toggle).value, isFalse);
 
     await tester.tap(toggle);
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
     expect(persisted, isTrue);
-    expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).value, isTrue);
 
     controller.dispose();
   });

@@ -150,6 +150,25 @@ python3 tools/release_bundle.py build \
   --output-parent /path/to/.listen-gen
 ```
 
+### Real ASR with the whisper.cpp command provider
+
+Real ASR uses the whisper.cpp command provider through the same pinned
+bundle — only the provider argv changes; there is no executable override.
+The wrapper lives at a stable path outside any repository
+(`~/Library/Application Support/listen/tools/`), so generation keeps working
+regardless of which `listen-gen` branch is checked out:
+
+```sh
+LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.1.0.release.json \
+LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","command","--command","python3","--command-arg=/Users/shadow/Library/Application Support/listen/tools/whisper_cpp_wrapper.py","--command-arg={media}","--command-arg=--model","--command-arg=/Users/shadow/Library/Application Support/listen/models/whisper/ggml-base.bin"]' \
+  flutter run -d macos
+```
+
+The wrapper source is maintained in the `listen-gen` `pre-experiment` branch
+under `tools/whisper_cpp_wrapper.py`; refresh the stable copy from there when
+the wrapper changes. The model file is a whisper.cpp GGML download
+(e.g. `ggml-base.bin` from https://huggingface.co/ggerganov/whisper.cpp).
+
 ### Local three-repository round trip
 
 To exercise the full `pinned .pyz -> .listenpkg -> Core import` path against a

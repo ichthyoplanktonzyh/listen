@@ -125,7 +125,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     final heading = find.text(
-      const AppLocalizations(Locale('en')).text('realtimeLobbyReady'),
+      const AppLocalizations(Locale('en')).text('realtimeLobbyLiveTitle'),
     );
     expect(heading, findsOneWidget);
     final scheme = Theme.of(tester.element(heading)).colorScheme;

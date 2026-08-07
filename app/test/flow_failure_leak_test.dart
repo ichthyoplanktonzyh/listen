@@ -402,6 +402,13 @@ final class _DelayedMediaImportRepository implements MediaImportRepository {
   ) => throw UnimplementedError();
 
   @override
+  Future<MediaDownloadHandle> downloadEnclosure(
+    String mediaUrl,
+    String directory, {
+    int? expectedBytes,
+  }) => throw UnimplementedError();
+
+  @override
   Future<String> extractTextSubtitle(
     String mediaPath,
     EmbeddedSubtitle subtitle,
@@ -422,7 +429,18 @@ final class _DelayedMediaImportRepository implements MediaImportRepository {
   }
 
   @override
+  Future<int?> probeMediaDurationMs(String mediaPath) async => null;
+
+  @override
   Future<String> resolveOnlineMedia(String pageUrl) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ResolvedChannelDetails> resolveChannelDetails(String channelUrl) =>
       throw UnimplementedError();
 }
 

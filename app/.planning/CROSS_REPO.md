@@ -1,92 +1,77 @@
-# Cross-Repository Protocol
+# 跨仓请求模板
 
-## Request Authority
+真正的工作项是**目标仓库的 GitHub issue**。这份文件不是需要遵守的流程，
+是写那个 issue 时的检查清单——照着填，填完贴过去，本仓只留一个链接和本地集成状态。
 
-Cross-repository work starts from an app-owned user journey. A request written
-before a separate App implementation validates that journey must be labeled
-**owner-approved synthetic request** when the product owner has authorized the
-simulation. The label grants planning authority; it is not evidence that the
-App or an end-to-end flow already works.
+当前谁钉了谁的哪个 commit，跑脚本当场看，不要手抄到任何文档里：
 
-## Common Request Content
+```sh
+python3 tool/repo_status.py
+```
 
-Before asking another component for data or operations, record:
+## 硬规则
 
-- user journey and user-visible outcome;
-- screen/component and all UI states;
-- required fields, operations, filters and ordering;
-- loading, empty, error, cancellation, retry and partial-result semantics;
-- expected frequency, volume and latency;
-- privacy, user authority and provenance requirements;
-- ownership and cleanup of media, package, credentials, processes, and
-  temporary files;
-- compatibility, versioning, idempotency, and migration expectations;
-- representative mock request/response examples.
+这几条不是清单，是约束：
 
-App planning records only the stable request link and local integration state,
-not another repository's implementation plan.
+- 不共享分支，不依赖同级 checkout，不 fetch 移动的 core `main`。
+- 未发布的契约一律不当作稳定。
+- app 不 import gen 的 Python 内部实现，只通过版本化的 CLI/协议调用它。
+- 范围、兼容性、发布时机的冲突由 owner 裁决。
 
-## Core Contract Request
+## 给 listen-core 的契约请求
 
-Submit canonical local API, validation, persistence, package-import,
-active-selection, and learning-record requests to `listen-core`. Do not edit a
-local or sibling copy of `contracts/openapi/v1.yaml`.
+规范 API、校验、持久化、包导入、激活选择、学习记录相关的请求提给 core。
+不要改本地或同级的 `contracts/openapi/v1.yaml`。
 
-## Core Handoff Expected
+```markdown
+### 用户旅程与可见结果
+### 涉及的界面/组件，以及全部 UI 状态
+### 需要的字段、操作、过滤与排序
+### loading / empty / error / cancel / retry / 部分结果 的语义
+### 预期频率、数据量、延迟
+### 隐私、用户权限、provenance 要求
+### 媒体/包/凭据/进程/临时文件的归属与清理
+### 兼容性、版本、幂等、迁移预期
+### 代表性的 mock 请求与响应
+```
 
-Core returns:
+包导入类请求还要写清：fingerprint 与 Timeline 兼容规则、原子性与幂等、
+candidate 与 active 的行为差异、大小与路径权限上限、以及脱敏后的稳定失败形态。
 
-- canonical method/path and schemas;
-- compatibility classification and contract version;
-- failure/lifecycle semantics;
-- release tag and exact core commit;
-- contract/runtime artifact URLs and SHA-256;
-- migration/deprecation notes.
+## 给 listen-gen 的生成请求
 
-Core package import must state fingerprint and Timeline Compatibility rules,
-atomicity and idempotency, candidate-versus-active behavior, size and path
-authority limits, and stable redacted failures.
+> ⚠ gen 的 private remote 已建（`ichthyoplanktonzyh/listen-gen`，2026-08-04），
+> 但本地历史尚未 push，所以 issue 流暂时还没真正可用。
 
-## Generator Request
+媒体预处理、provider、离线生成、确定性包输出、进度、取消、CLI/协议相关的请求提给 gen。
 
-Submit media preprocessing, provider, offline-generation, deterministic package
-output, progress, cancellation, and CLI/protocol requests to `listen-gen`.
-Record:
+```markdown
+### 可执行文件与协议的兼容性
+### provider 配置与凭据权限
+### 进度与取消语义，含子进程清理
+### 输入媒体与输出包的归属
+### 确定性、脱敏、依赖闭合的输出要求
+### 不花费付费额度的 fake/fixture 验证方式
+```
 
-- executable and protocol compatibility;
-- provider configuration and credential authority;
-- progress and cancellation semantics, including child-process cleanup;
-- input-media and output-package ownership;
-- deterministic, redacted, dependency-closed output requirements;
-- fake or fixture validation that does not spend paid model credit.
+gen 返回：版本化的 CLI 或协议、支持的包契约版本、失败与退出语义、
+确定性 fixture、发布/安装说明。
 
-Gen returns a versioned CLI or protocol, supported package contract version,
-failure and exit semantics, deterministic fixtures, and release/install
-instructions. App code must not depend on Gen internals or import its Python
-modules directly.
+## 给 Catalog / Registry 的请求
 
-## Catalog or Registry Request
+> ⚠ **该服务及其仓库归属尚未决定。** 不要默认指派给 App、Core 或 Gen。
 
-Submit discovery, Catalog Channel and Entry, Media Offer, Package Listing and
-Release, publisher, signature, rating, report, and update requests to the future
-Hosted Catalog/Registry owner. That service and its repository ownership are
-not yet decided; do not assign them implicitly to App, Core, or Gen.
+请求必须保持发现、播放、合法媒体获取三者分离（尤其是 YouTube），并定义分页、
+缓存、离线与不可用状态、可变元数据与不可变摘要的区别、信任与许可 provenance、
+以及该服务缺席时的本地直接导入行为。
 
-The request must keep discovery, playback, and lawful media acquisition
-separate, especially for YouTube. It must define pagination, caching, offline
-and unavailable states, mutable metadata versus immutable digests, trust and
-license provenance, and direct local-import behavior when the service is absent.
+## core 回什么
 
-## App Integration
+- 规范 method/path 与 schema；
+- 兼容性分类与契约版本；
+- 实现与失败/生命周期语义；
+- release tag、确切 core commit、产物 URL 与 SHA-256；
+- 迁移或废弃说明。
 
-1. Implement against typed app-owned fixtures or a mock.
-2. Receive immutable releases or versioned protocols from the owning component.
-3. For Core changes, update `backend.lock.json` and verify the artifact.
-4. Sync fixture manifests and compatibility expectations.
-5. Implement typed parsing, process/service boundaries, controllers, and honest
-   UI behavior.
-6. Run focused contract tests, full app tests, Release build, and packaged smoke
-   as needed.
-
-No shared branch, source directory, sibling checkout, moving-main dependency,
-or direct import of Gen internals is an accepted synchronization mechanism.
+app 侧完成握手 = 提交更新后的 `backend.lock.json`、同步的 fixture manifest、
+客户端/契约测试，以及集成与打包冒烟证据。

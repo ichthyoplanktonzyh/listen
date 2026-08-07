@@ -53,6 +53,10 @@ abstract final class ListenColors {
   /// overlay ink (#30).
   static const overlaySignal = Color(0xff4db8a8);
 
+  /// The lobby brand mark's teal (the tile letter and its glow). A fixed
+  /// brand mark, like the wordmark's — never theme-flipped (#32).
+  static const brandTeal = Color(0xff009688);
+
   static const soundCitation = Color(0xff8fd3ff);
   static const soundConnected = Color(0xff6dd6c3);
   static const soundConnectedStrong = Color(0xffa7f3e8);

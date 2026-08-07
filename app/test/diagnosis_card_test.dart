@@ -111,42 +111,48 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         home: Scaffold(
-          body: DiagnosisCard(
-            diagnosis: const Diagnosis(),
-            pronunciation: const PronunciationAnalysis(
-              sentenceId: 'sentence-1',
-              displayIpa: 'AH',
-              rules: [
-                PronunciationRule(
-                  ruleFamily: 'weak_form',
-                  reason: 'context',
-                  status: 'likely_by_context',
-                  confidence: 0.7,
-                ),
-              ],
-            ),
-            phoneticAnalysis: const PhoneticAnalysis(
-              providerId: 'fixture',
-              modelRevision: 'v1',
-              phoneSet: 'test',
-              detectedPhones: [
-                DetectedPhone(
-                  symbol: 'AH',
+          // The card is content inside a list — the transcript's, in
+          // production — so the list is what scrolls it.
+          body: ListView(
+            children: [
+              DiagnosisCard(
+                diagnosis: const Diagnosis(),
+                pronunciation: const PronunciationAnalysis(
+                  sentenceId: 'sentence-1',
                   displayIpa: 'AH',
-                  phoneSet: 'test',
-                  start: Duration(milliseconds: 100),
-                  end: Duration(milliseconds: 150),
-                  confidence: 0.5,
-                  tokenIndex: 0,
-                  provider: 'fixture',
-                  modelRevision: 'v1',
+                  rules: [
+                    PronunciationRule(
+                      ruleFamily: 'weak_form',
+                      reason: 'context',
+                      status: 'likely_by_context',
+                      confidence: 0.7,
+                    ),
+                  ],
                 ),
-              ],
-              findings: [finding],
-            ),
-            onLoopDetectedPhone: (value) => loopedPhone = value,
-            onLoopFinding: (value) => loopedFinding = value,
-            onFindingFeedback: (_, value) => feedback = value,
+                phoneticAnalysis: const PhoneticAnalysis(
+                  providerId: 'fixture',
+                  modelRevision: 'v1',
+                  phoneSet: 'test',
+                  detectedPhones: [
+                    DetectedPhone(
+                      symbol: 'AH',
+                      displayIpa: 'AH',
+                      phoneSet: 'test',
+                      start: Duration(milliseconds: 100),
+                      end: Duration(milliseconds: 150),
+                      confidence: 0.5,
+                      tokenIndex: 0,
+                      provider: 'fixture',
+                      modelRevision: 'v1',
+                    ),
+                  ],
+                  findings: [finding],
+                ),
+                onLoopDetectedPhone: (value) => loopedPhone = value,
+                onLoopFinding: (value) => loopedFinding = value,
+                onFindingFeedback: (_, value) => feedback = value,
+              ),
+            ],
           ),
         ),
       ),
@@ -325,6 +331,58 @@ void main() {
     expect(find.text('could have been 74% audible'), findsOneWidget);
     expect(find.text('weak group 70% audible'), findsOneWidget);
     expect(find.textContaining('Rhythm confidence: 77%'), findsOneWidget);
+  });
+
+  // The analysis opens inside the sentence it describes, which means it is
+  // built as one item of the transcript's own `ListView` — an unbounded
+  // height. A card that was a scroll view itself threw
+  // "Vertical viewport was given unbounded height" from `performLayout`, and a
+  // render box whose layout threw never gets a size: every pointer that
+  // afterwards crossed the card produced "Cannot hit test a render box with no
+  // size", until a hover landed mid-update and tripped the mouse tracker's
+  // `!_debugDuringDeviceUpdate` assertion. The analysis was unusable.
+  testWidgets('analysis lays out inline, where height is unbounded', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        home: Scaffold(
+          // The transcript, in miniature: a vertical list whose items get no
+          // height from above.
+          body: ListView(
+            children: const [
+              Text('a sentence'),
+              DiagnosisCard(
+                diagnosis: Diagnosis(
+                  hints: [
+                    DiagnosisHint(
+                      kind: 'recognition_barrier',
+                      reasons: ['tone_confusion'],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Evidence and analysis'), findsOneWidget);
+
+    // And it still opens: the evidence section is reachable, which is what the
+    // sizeless render box took away.
+    await tester.tap(find.text('Evidence and analysis'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('document rhythm hotspot can trigger evidence loop', (

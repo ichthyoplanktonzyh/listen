@@ -21,6 +21,7 @@ class TokenLine extends StatefulWidget {
     this.capabilityDisplayChannel,
     required this.showStyles,
     required this.onWord,
+    this.onWordTap,
     this.onChunk,
     this.phraseCandidates = const [],
     this.phraseEntries = const {},
@@ -42,6 +43,8 @@ class TokenLine extends StatefulWidget {
     this.mediaPosition,
     this.subtitleOffset = Duration.zero,
     this.textAlign = TextAlign.center,
+    this.lineHeight,
+    this.trailing,
   });
 
   final Cue cue;
@@ -73,11 +76,31 @@ class TokenLine extends StatefulWidget {
   /// flowing paragraphs.
   final TextAlign textAlign;
 
+  /// Line-height multiplier for wrapped lines. Null keeps the font's own
+  /// metrics — right for the one- or two-line subtitle drawn over video, where
+  /// the app font's tall default leading reads as generous rather than broken.
+  /// The transcript, which wraps long sentences into paragraphs, passes a
+  /// tighter value so a single sentence's lines sit together instead of drifting
+  /// apart like separate sentences.
+  final double? lineHeight;
+
+  /// An inline widget flowed after the sentence's last word, wrapping with the
+  /// text rather than taking a row of its own. The transcript hangs its `解析`
+  /// entry here so it sits at the sentence end, matching the reference.
+  final Widget? trailing;
+
   /// Unified grouping presentation: `off`, `prosodic`, `semantic`, `compare`.
   /// The prosodic ([chunkPartition]) and semantic ([senseGroups]) data both
   /// flow in independently (ADR 0016); this only picks how one is drawn.
   final String groupingMode;
   final Future<void> Function(SubtitleToken token, Cue cue) onWord;
+
+  /// A single tap on a word, when the host wants clicks to play from that word.
+  /// The dictionary ([onWord]) always opens on a double tap; this is only the
+  /// single-tap action. Non-null (the transcript) makes one tap seek to the
+  /// word; null (the on-video overlay, the reading view) leaves a single tap to
+  /// fall through to whatever sits behind the word.
+  final Future<void> Function(SubtitleToken token, Cue cue)? onWordTap;
   final Future<void> Function(DisplayChunk chunk)? onChunk;
   final List<PhraseCandidate> phraseCandidates;
   final Map<String, LexicalEntryDetails> phraseEntries;
@@ -127,6 +150,7 @@ class _TokenLineState extends State<TokenLine> {
   bool get showStyles => widget.showStyles;
   double get fontSize => widget.fontSize;
   String? get fontFamily => widget.fontFamily;
+  double? get lineHeight => widget.lineHeight;
   Color? get baseColor => widget.baseColor;
   int? get currentTokenIndex => widget.currentTokenIndex;
   SentenceChunkPartition? get chunkPartition => widget.chunkPartition;
@@ -139,6 +163,8 @@ class _TokenLineState extends State<TokenLine> {
   String get groupingMode => widget.groupingMode;
   Future<void> Function(SubtitleToken token, Cue cue) get onWord =>
       widget.onWord;
+  Future<void> Function(SubtitleToken token, Cue cue)? get onWordTap =>
+      widget.onWordTap;
   Future<void> Function(DisplayChunk chunk)? get onChunk => widget.onChunk;
   List<PhraseCandidate> get phraseCandidates => widget.phraseCandidates;
   Map<String, LexicalEntryDetails> get phraseEntries => widget.phraseEntries;
@@ -216,7 +242,16 @@ class _TokenLineState extends State<TokenLine> {
 
   @override
   Widget build(BuildContext context) => Text.rich(
-    TextSpan(children: _spans(context)),
+    TextSpan(
+      children: [
+        ..._spans(context),
+        if (widget.trailing != null)
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: widget.trailing!,
+          ),
+      ],
+    ),
     textAlign: widget.textAlign,
   );
 
@@ -583,7 +618,12 @@ class _TokenLineState extends State<TokenLine> {
       alignment: PlaceholderAlignment.baseline,
       baseline: TextBaseline.alphabetic,
       child: InkWell(
-        onTap: () => onWord(token, cue),
+        // The dictionary always opens on a double tap, everywhere a word is
+        // shown, so the gesture is one thing to learn. A single tap seeks to
+        // this word only where the host wired click-to-play ([onWordTap] — the
+        // transcript); elsewhere it does nothing and falls through.
+        onTap: onWordTap == null ? null : () => onWordTap!(token, cue),
+        onDoubleTap: () => onWord(token, cue),
         child: AnimatedScale(
           scale: !reduceMotion && current && currentWordStyle == 'bounce'
               ? 1 + currentWordIntensity * 0.22
@@ -650,6 +690,7 @@ class _TokenLineState extends State<TokenLine> {
     final base = TextStyle(
       fontSize: fontSize,
       fontFamily: fontFamily,
+      height: lineHeight,
       // Glow is the charter's caption treatment (#30): the current word IS
       // the signal teal with a soft halo; the other styles keep the gentler
       // lerp. overlaySignal, not colorScheme.primary — over video the light

@@ -295,7 +295,19 @@ const _modelWireCouplingBaseline = <String, int>{
   'lib/models/listening.dart': 12,
   'lib/models/llm_provider.dart': 14,
   'lib/models/personal_expression.dart': 33,
-  'lib/models/practice.dart': 132,
+  // 138, up from 132: contract 1.1.0 makes `state` and `origin` required
+  // fields of ReviewQueueEntry. The card head has to read the scheduler's own
+  // state rather than infer one from `interval_days`/`lapse_count`, and the
+  // session has to read `origin.has_listening_enhancements` rather than assume
+  // every card was born here. That is two parsed types, each costing a
+  // `fromJson` declaration plus its call site. Deliberate: the alternative was
+  // less wire coupling and two wrong claims on screen.
+  'lib/models/practice.dart': 138,
+  // The review surfaces contract 1.1.0 added — deck counts, daily budget,
+  // interval prediction, custom study and Anki interop. Eleven wire types in
+  // their own file rather than piled onto practice.dart, which is why this is
+  // a new entry and not another jump in the number above.
+  'lib/models/review_deck.dart': 51,
   'lib/models/production_corpus.dart': 26,
   'lib/models/projection_review.dart': 10,
   'lib/models/reading.dart': 2,

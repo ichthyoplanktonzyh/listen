@@ -1,0 +1,228 @@
+{
+  "channels": [
+    {
+      "id": "c-bbc-learning",
+      "name": "BBC Learning English",
+      "language": "English",
+      "description": "Short everyday English lessons and news vocabulary.",
+      "cover": "blue",
+      "type": "youtube",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-ted-ed",
+      "name": "TED-Ed",
+      "language": "English",
+      "description": "Animated lessons on ideas worth spreading.",
+      "cover": "amber",
+      "type": "youtube",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-vox",
+      "name": "Vox",
+      "language": "English (US)",
+      "description": "Clear explanations of the news and internet culture.",
+      "cover": "slate",
+      "type": "youtube",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-kurzgesagt",
+      "name": "Kurzgesagt – In a Nutshell",
+      "language": "English",
+      "description": "Science and big questions, beautifully animated.",
+      "cover": "green",
+      "type": "youtube",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-yingyu-eng",
+      "name": "英语兔",
+      "language": "中文 · English",
+      "description": "中英对照的发音、连读与听力讲解。",
+      "cover": "rose",
+      "type": "youtube",
+      "avatarUrl": null
+    },
+    {
+      "id": "c-scishow",
+      "name": "SciShow",
+      "language": "English (US)",
+      "description": "Fast answers to curious science questions.",
+      "cover": "green",
+      "type": "youtube",
+      "avatarUrl": null
+    }
+  ],
+  "items": [
+    {
+      "id": "i-bbc-1",
+      "channelId": "c-bbc-learning",
+      "title": "6 Minute English: Why do we forget?",
+      "description": "Memory researchers explain why names and facts slip away.",
+      "durationMs": 360000,
+      "language": "English",
+      "publishedOn": "2026-07-28",
+      "thumbnailUrl": null,
+      "viewCount": 142000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-bbc-2",
+      "channelId": "c-bbc-learning",
+      "title": "The English We Speak: on the same page",
+      "description": "A useful idiom for work and study, in under three minutes.",
+      "durationMs": 180000,
+      "language": "English",
+      "publishedOn": "2026-07-21",
+      "thumbnailUrl": null,
+      "viewCount": 89000,
+      "hasPackage": false
+    },
+    {
+      "id": "i-bbc-3",
+      "channelId": "c-bbc-learning",
+      "title": "News Review: heat records keep falling",
+      "description": "Real news headlines with the vocabulary you need to read them.",
+      "durationMs": 480000,
+      "language": "English",
+      "publishedOn": "2026-07-14",
+      "thumbnailUrl": null,
+      "viewCount": 230000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-ted-1",
+      "channelId": "c-ted-ed",
+      "title": "How does your brain learn languages?",
+      "description": "What happens inside your head when you study a language.",
+      "durationMs": 300000,
+      "language": "English",
+      "publishedOn": "2026-07-25",
+      "thumbnailUrl": null,
+      "viewCount": 3500000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-ted-2",
+      "channelId": "c-ted-ed",
+      "title": "The mysterious science of sleep",
+      "description": "Why we sleep, and what the brain does while we do.",
+      "durationMs": 270000,
+      "language": "English",
+      "publishedOn": "2026-07-11",
+      "thumbnailUrl": null,
+      "viewCount": 1800000,
+      "hasPackage": false
+    },
+    {
+      "id": "i-ted-3",
+      "channelId": "c-ted-ed",
+      "title": "Why do we dream?",
+      "description": "Three theories about the stories our sleeping brains tell.",
+      "durationMs": 320000,
+      "language": "English",
+      "publishedOn": "2026-06-30",
+      "thumbnailUrl": null,
+      "viewCount": 2200000,
+      "hasPackage": false
+    },
+    {
+      "id": "i-vox-1",
+      "channelId": "c-vox",
+      "title": "How the internet keeps changing English",
+      "description": "From LOL to brainrot — where new words really come from.",
+      "durationMs": 720000,
+      "language": "English (US)",
+      "publishedOn": "2026-07-19",
+      "thumbnailUrl": null,
+      "viewCount": 420000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-vox-2",
+      "channelId": "c-vox",
+      "title": "The hidden cost of streaming",
+      "description": "Why your favorite show may not stay on your favorite app.",
+      "durationMs": 840000,
+      "language": "English (US)",
+      "publishedOn": "2026-07-02",
+      "thumbnailUrl": null,
+      "viewCount": 670000,
+      "hasPackage": false
+    },
+    {
+      "id": "i-kurz-1",
+      "channelId": "c-kurzgesagt",
+      "title": "How your immune system works",
+      "description": "The invisible army that keeps you alive, explained.",
+      "durationMs": 540000,
+      "language": "English",
+      "publishedOn": "2026-07-22",
+      "thumbnailUrl": null,
+      "viewCount": 1500000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-kurz-2",
+      "channelId": "c-kurzgesagt",
+      "title": "Why is the universe beautiful?",
+      "description": "Order, chaos, and the patterns we see in everything.",
+      "durationMs": 600000,
+      "language": "English",
+      "publishedOn": "2026-07-06",
+      "thumbnailUrl": null,
+      "viewCount": 980000,
+      "hasPackage": false
+    },
+    {
+      "id": "i-eng-1",
+      "channelId": "c-yingyu-eng",
+      "title": "英语连读的 3 个秘密",
+      "description": "连读、弱读、失去爆破——听懂真实对话的第一步。",
+      "durationMs": 600000,
+      "language": "中文 · English",
+      "publishedOn": "2026-07-26",
+      "thumbnailUrl": null,
+      "viewCount": 150000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-eng-2",
+      "channelId": "c-yingyu-eng",
+      "title": "为什么你听不懂美剧？",
+      "description": "语速、吞音与文化梗：一次讲清楚。",
+      "durationMs": 720000,
+      "language": "中文 · English",
+      "publishedOn": "2026-07-12",
+      "thumbnailUrl": null,
+      "viewCount": 320000,
+      "hasPackage": true
+    },
+    {
+      "id": "i-scishow-1",
+      "channelId": "c-scishow",
+      "title": "Why is the ocean salty?",
+      "description": "A short answer to a question everyone has asked.",
+      "durationMs": 360000,
+      "language": "English (US)",
+      "publishedOn": "2026-07-18",
+      "thumbnailUrl": null,
+      "viewCount": 110000,
+      "hasPackage": false
+    },
+    {
+      "id": "i-scishow-2",
+      "channelId": "c-scishow",
+      "title": "The surprising science of yawning",
+      "description": "Contagious yawns, warm brains, and why we do it at all.",
+      "durationMs": 300000,
+      "language": "English (US)",
+      "publishedOn": "2026-07-04",
+      "thumbnailUrl": null,
+      "viewCount": 95000,
+      "hasPackage": false
+    }
+  ]
+}

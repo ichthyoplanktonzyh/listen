@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/provider_settings_view_models.dart';
 import '../../localization.dart';
+import '../../settings.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../player/shortcut_cheat_sheet.dart';
 import 'llm_provider_settings.dart';
+import 'media_library_settings.dart';
 import 'realtime_provider_settings.dart';
 import 'syntax_capability_settings.dart';
 
@@ -35,6 +37,9 @@ class SettingsDialog extends StatefulWidget {
     required this.transcriptionQuality,
     required this.transcriptionLanguage,
     required this.transcriptionDestination,
+    required this.mediaLibraryFolder,
+    required this.onChooseMediaLibraryFolder,
+    required this.onClearMediaLibraryFolder,
     required this.ffmpegPath,
     required this.ffprobePath,
     required this.ytDlpPath,
@@ -115,6 +120,12 @@ class SettingsDialog extends StatefulWidget {
   final String transcriptionQuality;
   final String transcriptionLanguage;
   final String transcriptionDestination;
+
+  /// The persisted media library folder plus what the disk says about it; the
+  /// dialog re-adopts whatever the host resolves after a pick or a clear.
+  final MediaLibraryFolder mediaLibraryFolder;
+  final Future<MediaLibraryFolder> Function() onChooseMediaLibraryFolder;
+  final Future<MediaLibraryFolder> Function() onClearMediaLibraryFolder;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -207,6 +218,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String transcriptionQuality;
   late String transcriptionLanguage;
   late String transcriptionDestination;
+  late MediaLibraryFolder mediaLibraryFolder;
   late bool wordSyncVisible;
   late bool markKeysEnabled;
   late String groupingMode;
@@ -280,6 +292,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptionQuality = widget.transcriptionQuality;
     transcriptionLanguage = widget.transcriptionLanguage;
     transcriptionDestination = widget.transcriptionDestination;
+    mediaLibraryFolder = widget.mediaLibraryFolder;
     wordSyncVisible = widget.wordSyncVisible;
     markKeysEnabled = widget.markKeysEnabled;
     groupingMode = widget.groupingMode;
@@ -306,6 +319,16 @@ class _SettingsDialogState extends State<SettingsDialog> {
     ytDlpController.dispose();
     openSubtitlesController.dispose();
     super.dispose();
+  }
+
+  /// The host resolves the folder (picker, then disk), so the dialog adopts the
+  /// verdict it hands back instead of guessing one from the path.
+  Future<void> _updateMediaLibraryFolder(
+    Future<MediaLibraryFolder> Function() action,
+  ) async {
+    final folder = await action();
+    if (!mounted) return;
+    setState(() => mediaLibraryFolder = folder);
   }
 
   @override
@@ -934,6 +957,25 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     const Divider(),
                     Text(
                       key: _categoryKeys[3],
+                      l.text('mediaLibraryTitle'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    MediaLibrarySettings(
+                      folder: mediaLibraryFolder,
+                      onChoose: () => unawaited(
+                        _updateMediaLibraryFolder(
+                          widget.onChooseMediaLibraryFolder,
+                        ),
+                      ),
+                      onClear: () => unawaited(
+                        _updateMediaLibraryFolder(
+                          widget.onClearMediaLibraryFolder,
+                        ),
+                      ),
+                    ),
+                    const Divider(),
+                    Text(
                       l.text('transcriptionDefaults'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),

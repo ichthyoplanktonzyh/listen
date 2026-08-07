@@ -1,12 +1,14 @@
 import '../../models/api_failure.dart';
 import '../../models/content_package.dart';
 import '../../services/api_service.dart';
+import '../../services/content_generator_setup.dart';
 import '../../services/listen_gen_process_service.dart';
 import '../../services/media_import_file_service.dart';
 
 abstract interface class ContentPackageRepository {
   bool get coreAvailable;
   bool get generatorConfigured;
+  ContentGeneratorState get generatorState;
   ApiFailure failureDetail(Object error);
   Future<String?> pickPackage();
   Future<ContentPackageImportReceipt> importPackage({
@@ -34,8 +36,15 @@ final class LocalContentPackageRepository implements ContentPackageRepository {
   @override
   bool get generatorConfigured => _generator.isConfigured;
   @override
+  ContentGeneratorState get generatorState => _generator.state;
+  @override
   ApiFailure failureDetail(Object error) => error is ListenGenProcessFailure
-      ? ApiFailure(raw: '', code: error.code, retryable: error.retryable)
+      ? ApiFailure(
+          raw: '',
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+        )
       : describeApiFailure(error);
   @override
   Future<String?> pickPackage() => _files.pickContentPackage();

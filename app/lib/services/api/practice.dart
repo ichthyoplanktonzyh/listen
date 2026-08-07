@@ -88,16 +88,88 @@ extension PracticeReviewApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  Future<List<ReviewQueueEntry>> dueReviewItems({int limit = 20}) async {
+  /// The due queue *after* the backend clips it to today's budget, together
+  /// with the budget status that explains a short or empty queue. The raw
+  /// `/v1/review/items` list is still there but says nothing about limits, so
+  /// a session built on it silently ignores them.
+  Future<ReviewQueue> reviewQueue({int limit = 20}) async =>
+      ReviewQueue.fromJson(
+        (await _request('GET', '/v1/review/queue?limit=$limit'))
+            as Map<String, dynamic>,
+      );
+
+  Future<List<ReviewIntervalPreview>> reviewIntervalPreview(
+    String itemId,
+  ) async {
     final values =
-        (await _request('GET', '/v1/review/items?limit=$limit'))
+        (await _request(
+              'GET',
+              '/v1/review/items/${Uri.encodeComponent(itemId)}'
+                  '/interval-preview',
+            ))
             as List<dynamic>;
     return values
         .map(
-          (value) => ReviewQueueEntry.fromJson(value as Map<String, dynamic>),
+          (value) =>
+              ReviewIntervalPreview.fromJson(value as Map<String, dynamic>),
         )
         .toList(growable: false);
   }
+
+  Future<ReviewDeckOverview> reviewDeckOverview() async =>
+      ReviewDeckOverview.fromJson(
+        (await _request('GET', '/v1/review/decks')) as Map<String, dynamic>,
+      );
+
+  Future<ReviewDailyLimits> reviewDailyLimits() async =>
+      ReviewDailyLimits.fromJson(
+        (await _request('GET', '/v1/review/settings/limits'))
+            as Map<String, dynamic>,
+      );
+
+  Future<ReviewDailyLimits> updateReviewDailyLimits(
+    ReviewDailyLimits limits,
+  ) async => ReviewDailyLimits.fromJson(
+    (await _request('PUT', '/v1/review/settings/limits', limits.toJson()))
+        as Map<String, dynamic>,
+  );
+
+  Future<CustomStudyQueue> customStudy(CustomStudyRequest request) async =>
+      CustomStudyQueue.fromJson(
+        (await _request('POST', '/v1/review/custom-study', request.toJson()))
+            as Map<String, dynamic>,
+      );
+
+  Future<ReviewSubmission> submitCustomStudyAttempt({
+    required String itemId,
+    required String rating,
+    required CustomStudyRequest request,
+  }) async => ReviewSubmission.fromJson(
+    (await _request('POST', '/v1/review/custom-study/attempts', {
+          'item_id': itemId,
+          'rating': rating,
+          ...request.toJson()..remove('limit'),
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<AnkiPackageImportSummary> importAnkiPackage({
+    required String packagePath,
+    required String mediaDirectory,
+  }) async => AnkiPackageImportSummary.fromJson(
+    (await _request('POST', '/v1/review/anki/import', {
+          'package_path': packagePath,
+          'media_directory': mediaDirectory,
+        }))
+        as Map<String, dynamic>,
+  );
+
+  Future<AnkiPackageExportSummary> exportAnkiPackage(
+    AnkiPackageExportRequest request,
+  ) async => AnkiPackageExportSummary.fromJson(
+    (await _request('POST', '/v1/review/anki/export', request.toJson()))
+        as Map<String, dynamic>,
+  );
 
   Future<ReviewSubmission> submitReviewAttempt(
     String itemId,

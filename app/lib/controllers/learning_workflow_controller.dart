@@ -119,7 +119,6 @@ class LearningWorkflowController {
       learning.setSelectedToken(token);
       learning.setSelectedCue(cue);
       learning.selectWord(null);
-      learning.selectSidePanel(2);
     }
     // User feedback for a missing core is owned by VocabularyActionsCoordinator,
     // which guards before delegating; this stays a pure workflow.

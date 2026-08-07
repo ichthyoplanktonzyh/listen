@@ -4,8 +4,10 @@ import 'dart:io';
 
 import '../models/embedded_subtitle.dart';
 import '../models/media_download.dart';
+import '../models/media_resolution.dart';
 
 export '../models/embedded_subtitle.dart';
+export '../models/media_resolution.dart';
 
 class ExternalTools {
   ExternalTools({
@@ -48,6 +50,35 @@ class ExternalTools {
           );
         })
         .toList(growable: false);
+  }
+
+  Future<int?> probeMediaDurationMs(String mediaPath) async {
+    try {
+      final executable = await _resolve(ffprobePath, 'ffprobe');
+      final result = await _run(executable, [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'json',
+        mediaPath,
+      ]);
+      final format =
+          (jsonDecode(result) as Map<String, dynamic>)['format']
+              as Map<String, dynamic>?;
+      // ffprobe emits the duration as a string ("400.660317") in its JSON
+      // output; tolerate numeric values from test fixtures as well.
+      final raw = format?['duration'];
+      final duration = switch (raw) {
+        num value => value.toDouble(),
+        String value => double.tryParse(value),
+        _ => null,
+      };
+      return duration == null ? null : (duration * 1000).round();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<String> extractTextSubtitle(
@@ -146,6 +177,51 @@ class ExternalTools {
       throw const ExternalToolError('yt-dlp returned no media URL.');
     }
     return urls.first;
+  }
+
+  Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async {
+    final executable = await _resolve(ytDlpPath, 'yt-dlp');
+    final result = await _run(executable, [
+      '--no-playlist',
+      '--no-warnings',
+      '-J',
+      pageUrl,
+    ], timeout: const Duration(seconds: 30));
+    final data = jsonDecode(result) as Map<String, dynamic>;
+    return ResolvedVideoDetails(
+      id: data['id'] as String? ?? '',
+      title: data['title'] as String? ?? 'YouTube Video',
+      description: data['description'] as String? ?? '',
+      durationMs: (((data['duration'] as num?)?.toDouble() ?? 0) * 1000)
+          .round(),
+      viewCount: (data['view_count'] as num?)?.toInt() ?? 0,
+      thumbnail: data['thumbnail'] as String?,
+      channelId: data['channel_id'] as String? ?? '',
+      uploadDate: data['upload_date'] as String? ?? '',
+    );
+  }
+
+  Future<ResolvedChannelDetails> resolveChannelDetails(
+    String channelUrl,
+  ) async {
+    final executable = await _resolve(ytDlpPath, 'yt-dlp');
+    final result = await _run(executable, [
+      '--playlist-end',
+      '1',
+      '--print',
+      'channel_id',
+      '--print',
+      'channel',
+      channelUrl,
+    ], timeout: const Duration(seconds: 30));
+    final lines = const LineSplitter()
+        .convert(result)
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
+    if (lines.length < 2) {
+      throw const ExternalToolError('Could not resolve channel details.');
+    }
+    return ResolvedChannelDetails(id: lines[0].trim(), name: lines[1].trim());
   }
 
   Future<OnlineMediaDownload> downloadOnlineMedia(

@@ -91,6 +91,9 @@ Map<String, dynamic> _reviewItem({
   String? target,
   String? mediaId,
   List<Map<String, dynamic>> anchors = const [],
+  double? intervalDays,
+  int lapseCount = 0,
+  String state = 'new',
 }) => {
   'item': {
     'id': id,
@@ -114,10 +117,37 @@ Map<String, dynamic> _reviewItem({
     'due_at_ms': 1,
     'stability': null,
     'difficulty': null,
-    'interval_days': null,
-    'lapse_count': 0,
+    'interval_days': intervalDays,
+    'lapse_count': lapseCount,
   },
+  'state': state,
   'card': {'kind': kind, 'cue': cue, 'answer': answer, 'target': target},
+  'origin': {
+    'kind': 'native',
+    'anki_guid': null,
+    'deck_id': null,
+    'deck_name': null,
+    'has_listening_enhancements': true,
+  },
+};
+
+/// The `/v1/review/queue` envelope: entries plus the daily-budget status that
+/// explains a short or empty queue. [limitStatus] defaults to a budget nothing
+/// has run into.
+Map<String, dynamic> _queueBody(
+  List<Map<String, dynamic>> entries, {
+  Map<String, dynamic>? limitStatus,
+}) => {
+  'entries': entries,
+  'limit_status':
+      limitStatus ??
+      {
+        'limits': {'new_cards': 20, 'reviews': 200},
+        'new_completed': 0,
+        'reviews_completed': 0,
+        'new_limit_reached': false,
+        'review_limit_reached': false,
+      },
 };
 
 Map<String, dynamic> _submission(String rating) => {
@@ -202,20 +232,25 @@ void main() {
               '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
             return (statusCode: 200, body: '[]');
           }
-          if (path != '/v1/review/items?limit=20') {
+          if (path.endsWith('/interval-preview')) {
+            return (statusCode: 200, body: '[]');
+          }
+          if (path != '/v1/review/queue?limit=20') {
             throw StateError('unexpected $method $path');
           }
           return (
             statusCode: 200,
-            body: jsonEncode([
-              _reviewItem(
-                id: 'review-${scenario.kind}',
-                kind: scenario.kind,
-                cue: scenario.cue.isEmpty ? null : scenario.cue,
-                answer: scenario.answer,
-                target: scenario.target.isEmpty ? null : scenario.target,
-              ),
-            ]),
+            body: jsonEncode(
+              _queueBody([
+                _reviewItem(
+                  id: 'review-${scenario.kind}',
+                  kind: scenario.kind,
+                  cue: scenario.cue.isEmpty ? null : scenario.cue,
+                  answer: scenario.answer,
+                  target: scenario.target.isEmpty ? null : scenario.target,
+                ),
+              ]),
+            ),
           );
         },
       );
@@ -252,6 +287,111 @@ void main() {
     });
   }
 
+  // S11: the head names the state the FSRS scheduler reports in the entry's
+  // `state` field. It used to print "New card" for every card with zero
+  // lapses — including a card reviewed for months and never once forgotten,
+  // which is a false statement about what the learner is looking at, not a
+  // styling gap. The `review`/0-lapse row below is exactly that case. The
+  // interval beside it comes from `interval_days`, which the backend has
+  // always sent and the head threw away.
+  for (final scenario
+      in <
+        ({
+          String state,
+          double? intervalDays,
+          int lapseCount,
+          String label,
+          String? detail,
+        })
+      >[
+        (
+          state: 'new',
+          intervalDays: null,
+          lapseCount: 0,
+          label: 'New card',
+          detail: null,
+        ),
+        (
+          state: 'learning',
+          intervalDays: 0.007,
+          lapseCount: 0,
+          label: 'Learning',
+          detail: 'Interval 10 min',
+        ),
+        (
+          state: 'relearning',
+          intervalDays: 0.007,
+          lapseCount: 2,
+          label: 'Relearning',
+          detail: 'Interval 10 min · Relearn 2',
+        ),
+        (
+          state: 'review',
+          intervalDays: 9,
+          lapseCount: 0,
+          label: 'In review',
+          detail: 'Interval 9 d',
+        ),
+      ]) {
+    testWidgets(
+      'a "${scenario.state}" card with ${scenario.lapseCount} lapses reads as '
+      '"${scenario.label}"',
+      (tester) async {
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async {
+            if (path ==
+                '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+              return (statusCode: 200, body: '[]');
+            }
+            return (
+              statusCode: 200,
+              body: jsonEncode(
+                _queueBody([
+                  _reviewItem(
+                    id: 'review-state-1',
+                    kind: 'word_recognition',
+                    answer: 'would',
+                    intervalDays: scenario.intervalDays,
+                    lapseCount: scenario.lapseCount,
+                    state: scenario.state,
+                  ),
+                ]),
+              ),
+            );
+          },
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ReviewQueueScreen(
+              controller: ReviewController(LocalReviewRepository(api)),
+              resolver: _fakeResolver(),
+              slicePlayer: SlicePlayerController(),
+              onStartShadowing: (_) async {},
+              onStartDelayedRetelling: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(scenario.label), findsOneWidget);
+        if (scenario.state != 'new') {
+          // The regression this whole group exists for.
+          expect(find.text('New card'), findsNothing);
+        }
+        if (scenario.detail == null) {
+          // No interval yet — the head says nothing rather than rounding a
+          // missing number down to "0 d".
+          expect(find.textContaining('Interval'), findsNothing);
+        } else {
+          expect(find.text(scenario.detail!), findsOneWidget);
+        }
+      },
+    );
+  }
+
   testWidgets(
     'delayed retelling shows a prompt instead of collapsing, and enters '
     'speaking',
@@ -265,29 +405,34 @@ void main() {
               '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
             return (statusCode: 200, body: '[]');
           }
+          if (path.endsWith('/interval-preview')) {
+            return (statusCode: 200, body: '[]');
+          }
           return (
             statusCode: 200,
-            body: jsonEncode([
-              _reviewItem(
-                id: 'review-speaking-1',
-                kind: 'delayed_retelling',
-                answer: 'The ferry leaves on Tuesday.',
-                mediaId: 'media-1',
-                anchors: const [
-                  {
-                    'kind': 'sentence',
-                    'id': 'cue-1',
-                    'label': 'en',
-                    'lexical_entry_id': null,
-                    'sentence_id': 'cue-1',
-                    'token_start': null,
-                    'token_end': null,
-                    'start_ms': 1000,
-                    'end_ms': 12000,
-                  },
-                ],
-              ),
-            ]),
+            body: jsonEncode(
+              _queueBody([
+                _reviewItem(
+                  id: 'review-speaking-1',
+                  kind: 'delayed_retelling',
+                  answer: 'The ferry leaves on Tuesday.',
+                  mediaId: 'media-1',
+                  anchors: const [
+                    {
+                      'kind': 'sentence',
+                      'id': 'cue-1',
+                      'label': 'en',
+                      'lexical_entry_id': null,
+                      'sentence_id': 'cue-1',
+                      'token_start': null,
+                      'token_end': null,
+                      'start_ms': 1000,
+                      'end_ms': 12000,
+                    },
+                  ],
+                ),
+              ]),
+            ),
           );
         },
       );
@@ -333,20 +478,25 @@ void main() {
               '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
             return (statusCode: 200, body: '[]');
           }
-          if (path != '/v1/review/items?limit=20') {
+          if (path.endsWith('/interval-preview')) {
+            return (statusCode: 200, body: '[]');
+          }
+          if (path != '/v1/review/queue?limit=20') {
             throw StateError('unexpected $method $path');
           }
           return (
             statusCode: 200,
-            body: jsonEncode([
-              _reviewItem(
-                id: 'review-playback-1',
-                kind: 'source_sentence_recall',
-                answer: 'A bounded source sentence.',
-                mediaId: 'media-1',
-                anchors: _bounded,
-              ),
-            ]),
+            body: jsonEncode(
+              _queueBody([
+                _reviewItem(
+                  id: 'review-playback-1',
+                  kind: 'source_sentence_recall',
+                  answer: 'A bounded source sentence.',
+                  mediaId: 'media-1',
+                  anchors: _bounded,
+                ),
+              ]),
+            ),
           );
         },
       );
@@ -402,17 +552,22 @@ void main() {
             '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
           return (statusCode: 200, body: '[]');
         }
+        if (path.endsWith('/interval-preview')) {
+          return (statusCode: 200, body: '[]');
+        }
         return (
           statusCode: 200,
-          body: jsonEncode([
-            _reviewItem(
-              id: 'review-playback-1',
-              kind: 'source_sentence_recall',
-              answer: 'A bounded source sentence.',
-              mediaId: 'media-1',
-              anchors: _bounded,
-            ),
-          ]),
+          body: jsonEncode(
+            _queueBody([
+              _reviewItem(
+                id: 'review-playback-1',
+                kind: 'source_sentence_recall',
+                answer: 'A bounded source sentence.',
+                mediaId: 'media-1',
+                anchors: _bounded,
+              ),
+            ]),
+          ),
         );
       },
     );
@@ -452,6 +607,9 @@ void main() {
             '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
           return (statusCode: 200, body: '[]');
         }
+        if (path.endsWith('/interval-preview')) {
+          return (statusCode: 200, body: '[]');
+        }
         if (path == '/v1/review/attempts') {
           final decoded = jsonDecode(body!) as Map<String, dynamic>;
           submittedRating = decoded['rating'] as String?;
@@ -459,13 +617,15 @@ void main() {
         }
         return (
           statusCode: 200,
-          body: jsonEncode([
-            _reviewItem(
-              id: 'review-playback-1',
-              kind: 'source_sentence_recall',
-              answer: 'A bounded source sentence.',
-            ),
-          ]),
+          body: jsonEncode(
+            _queueBody([
+              _reviewItem(
+                id: 'review-playback-1',
+                kind: 'source_sentence_recall',
+                answer: 'A bounded source sentence.',
+              ),
+            ]),
+          ),
         );
       },
     );
@@ -491,6 +651,303 @@ void main() {
     expect(submittedRating, 'easy');
   });
 
+  testWidgets('each grade carries the interval FSRS predicts for it', (
+    tester,
+  ) async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path == '/v1/review/items/review-preview-1/interval-preview') {
+          return (
+            statusCode: 200,
+            body: jsonEncode([
+              {
+                'rating': 'again',
+                'due_at_ms': 600000,
+                'interval_days': 0.007,
+                'state': 'relearning',
+              },
+              {
+                'rating': 'hard',
+                'due_at_ms': 86400000,
+                'interval_days': 1.0,
+                'state': 'review',
+              },
+              {
+                'rating': 'good',
+                'due_at_ms': 345600000,
+                'interval_days': 4.0,
+                'state': 'review',
+              },
+              {
+                'rating': 'easy',
+                'due_at_ms': 777600000,
+                'interval_days': 9.0,
+                'state': 'review',
+              },
+            ]),
+          );
+        }
+        return (
+          statusCode: 200,
+          body: jsonEncode(
+            _queueBody([
+              _reviewItem(
+                id: 'review-preview-1',
+                kind: 'source_sentence_recall',
+                answer: 'A bounded source sentence.',
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The prediction belongs to the answer side, so it is not fetched before
+    // the card flips.
+    expect(find.text('10 min'), findsNothing);
+
+    await tester.tap(find.text('Show the sentence'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('10 min'), findsOneWidget);
+    expect(find.text('1 d'), findsOneWidget);
+    expect(find.text('4 d'), findsOneWidget);
+    expect(find.text('9 d'), findsOneWidget);
+  });
+
+  testWidgets('a failed prediction leaves the grades bare, never invented', (
+    tester,
+  ) async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path.endsWith('/interval-preview')) {
+          return (statusCode: 500, body: '{"message":"nope"}');
+        }
+        return (
+          statusCode: 200,
+          body: jsonEncode(
+            _queueBody([
+              _reviewItem(
+                id: 'review-preview-2',
+                kind: 'source_sentence_recall',
+                answer: 'A bounded source sentence.',
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Show the sentence'));
+    await tester.pumpAndSettle();
+
+    // All four grades still work; none of them claims an interval.
+    for (final grade in ['Missed it', 'Fuzzy', 'Got it', 'Easy']) {
+      expect(find.text(grade), findsOneWidget);
+    }
+    expect(find.textContaining(' d'), findsNothing);
+    expect(find.textContaining(' min'), findsNothing);
+  });
+
+  testWidgets('a queue emptied by the daily budget says so, and does not '
+      'pretend nothing is due', (tester) async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: '[]');
+        }
+        return (
+          statusCode: 200,
+          body: jsonEncode(
+            _queueBody(
+              const [],
+              limitStatus: const {
+                'limits': {'new_cards': 20, 'reviews': 200},
+                'new_completed': 20,
+                'reviews_completed': 143,
+                'new_limit_reached': true,
+                'review_limit_reached': false,
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('That is enough for today'), findsOneWidget);
+    expect(find.text('No sound cards due right now'), findsNothing);
+    expect(find.textContaining('20/20 new, 143/200 reviews'), findsOneWidget);
+  });
+
+  testWidgets('an imported Anki card offers no listening affordances', (
+    tester,
+  ) async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path.endsWith('/interval-preview')) {
+          return (statusCode: 200, body: '[]');
+        }
+        final entry = _reviewItem(
+          id: 'review-imported-1',
+          kind: 'word_recognition',
+          answer: 'Vorstellung',
+          mediaId: 'media-1',
+          anchors: _bounded,
+        );
+        return (
+          statusCode: 200,
+          body: jsonEncode(
+            _queueBody([
+              {
+                ...entry,
+                'origin': {
+                  'kind': 'imported_anki',
+                  'anki_guid': 'guid-1',
+                  'deck_id': 'deck-1',
+                  'deck_name': 'German::Nouns',
+                  'has_listening_enhancements': false,
+                },
+              },
+            ]),
+          ),
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('From Anki · German::Nouns · no listening enhancements'),
+      findsOneWidget,
+    );
+    // The card carries anchors and a media id, so these controls would have
+    // rendered on a native card. An imported card has no listening evidence
+    // behind it, so they are absent rather than dead.
+    expect(find.text('Play sound clip'), findsNothing);
+    expect(find.text('Shadow this clip'), findsNothing);
+  });
+
+  testWidgets('the card head names the kind, and claims no capability '
+      'channel', (tester) async {
+    final api = LocalApi.withTransport(
+      baseUrl: 'http://test',
+      token: 'tok',
+      transport: (method, path, body) async {
+        if (path ==
+            '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {
+          return (statusCode: 200, body: '[]');
+        }
+        if (path.endsWith('/interval-preview')) {
+          return (statusCode: 200, body: '[]');
+        }
+        return (
+          statusCode: 200,
+          body: jsonEncode(
+            _queueBody([
+              _reviewItem(
+                id: 'review-head-1',
+                kind: 'word_recognition',
+                answer: 'would',
+              ),
+            ]),
+          ),
+        );
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReviewQueueScreen(
+          controller: ReviewController(LocalReviewRepository(api)),
+          resolver: _fakeResolver(),
+          slicePlayer: SlicePlayerController(),
+          onStartShadowing: (_) async {},
+          onStartDelayedRetelling: (_) async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The kind alone. The head used to prefix a channel derived here from
+    // `card.kind` — a rule that could only ever say listening or speaking, and
+    // that disagreed with the backend, which files a card under a channel by
+    // `source.kind`. Two rules for one question is one rule too many.
+    expect(find.text('Word recognition'), findsOneWidget);
+    for (final channel in ['Listening', 'Speaking', 'Reading', 'Writing']) {
+      expect(find.textContaining('$channel ·'), findsNothing);
+    }
+  });
+
   testWidgets('finished queue shows a non-blocking upgrade suggestion', (
     tester,
   ) async {
@@ -500,8 +957,8 @@ void main() {
       token: 'tok',
       transport: (method, path, body) async {
         requests.add('$method $path');
-        if (path == '/v1/review/items?limit=20') {
-          return (statusCode: 200, body: '[]');
+        if (path == '/v1/review/queue?limit=20') {
+          return (statusCode: 200, body: jsonEncode(_queueBody(const [])));
         }
         if (path ==
             '/v1/review/upgrade-suggestions?status=pending&limit=100&offset=0') {

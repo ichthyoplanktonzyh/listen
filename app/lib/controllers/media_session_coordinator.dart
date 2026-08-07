@@ -267,7 +267,6 @@ class MediaSessionCoordinator {
         error: subtitle.timelineResourceError,
       );
       await resourceActions.loadSubtitleResources(updateStatus: false);
-      learning.selectSidePanel(1);
     } catch (error) {
       player.setStatus(
         text('statusLLTimelineImportFailed'),

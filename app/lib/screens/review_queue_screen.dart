@@ -7,9 +7,11 @@ import '../controllers/review_controller.dart';
 import '../controllers/slice_player_controller.dart';
 import '../localization.dart';
 import '../models/practice.dart';
+import '../models/review_deck.dart';
 import '../state/builder.dart';
 import '../theme/breakpoints.dart';
 import '../theme/icon_size.dart';
+import '../theme/listen_theme.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/common/listen_error_state.dart';
@@ -24,7 +26,13 @@ class ReviewQueueScreen extends StatefulWidget {
     required this.onStartShadowing,
     required this.onStartDelayedRetelling,
     this.onPauseBackgroundPlayback,
+    this.autoLoad = true,
   });
+
+  /// Whether the screen loads a queue on mount. False when the caller already
+  /// started the round — a custom-study queue would otherwise be replaced by
+  /// the day's schedule the moment the screen appeared.
+  final bool autoLoad;
 
   final Future<void> Function(ReviewQueueEntry entry) onStartShadowing;
   final Future<void> Function(ReviewQueueEntry entry) onStartDelayedRetelling;
@@ -57,7 +65,7 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
   @override
   void initState() {
     super.initState();
-    unawaited(controller.load());
+    if (widget.autoLoad) unawaited(controller.load());
   }
 
   @override
@@ -132,34 +140,70 @@ class _ReviewQueueScreenState extends State<ReviewQueueScreen> {
             );
           }
           final entry = state.current!;
-          return _ReviewCard(
-            key: ValueKey(entry.item.id),
-            entry: entry,
-            clipAvailable: _clipAvailable(entry),
-            shadowAvailable: _canShadow(entry),
-            revealed: state.revealed,
-            busy: state.busy,
-            error: state.error,
-            slicePlayer: _slicePlayer,
-            onPlayClip: () => unawaited(_playClip(entry)),
-            onShadowing: () async {
-              await _slicePlayer.close();
-              if (!context.mounted) return;
-              Navigator.of(context).pop();
-              if (entry.card.kind == 'delayed_retelling') {
-                await widget.onStartDelayedRetelling(entry);
-              } else {
-                await widget.onStartShadowing(entry);
-              }
-            },
-            onReveal: controller.reveal,
-            onRate: (rating) async {
-              await _slicePlayer.close();
-              return controller.rate(rating);
-            },
-          );
+          final customStudy = state.customStudy;
+          if (customStudy != null) {
+            // A custom-study round is not the day's schedule, and whether it
+            // moves the real one is the backend's answer, not an assumption.
+            return Column(
+              children: [
+                Material(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Padding(
+                    padding: ListenPadding.card,
+                    child: Text(
+                      l.text(
+                        state.advancesNormalSchedule == true
+                            ? 'reviewCustomStudyAdvancesSchedule'
+                            : 'reviewCustomStudyExtraPractice',
+                      ),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
+                ),
+                Expanded(child: _card(context, state, entry)),
+              ],
+            );
+          }
+          return _card(context, state, entry);
         },
       ),
+    );
+  }
+
+  Widget _card(
+    BuildContext context,
+    ReviewState state,
+    ReviewQueueEntry entry,
+  ) {
+    return _ReviewCard(
+      key: ValueKey(entry.item.id),
+      entry: entry,
+      clipAvailable: _clipAvailable(entry),
+      shadowAvailable: _canShadow(entry),
+      revealed: state.revealed,
+      busy: state.busy,
+      previews: state.previews,
+      error: state.error,
+      slicePlayer: _slicePlayer,
+      onPlayClip: () => unawaited(_playClip(entry)),
+      onShadowing: () async {
+        await _slicePlayer.close();
+        if (!context.mounted) return;
+        // As a shell route there is nothing to pop; only pushed
+        // contexts (deep links, tests) dismiss themselves.
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+        if (entry.card.kind == 'delayed_retelling') {
+          await widget.onStartDelayedRetelling(entry);
+        } else {
+          await widget.onStartShadowing(entry);
+        }
+      },
+      onReveal: controller.reveal,
+      onRate: (rating) async {
+        await _slicePlayer.close();
+        return controller.rate(rating);
+      },
     );
   }
 
@@ -234,6 +278,7 @@ class _ReviewCard extends StatefulWidget {
     required this.shadowAvailable,
     required this.revealed,
     required this.busy,
+    required this.previews,
     required this.slicePlayer,
     required this.onPlayClip,
     required this.onShadowing,
@@ -247,6 +292,7 @@ class _ReviewCard extends StatefulWidget {
   final bool shadowAvailable;
   final bool revealed;
   final bool busy;
+  final List<ReviewIntervalPreview> previews;
   final String? error;
   final SlicePlayerController slicePlayer;
   final VoidCallback onPlayClip;
@@ -293,27 +339,34 @@ class _ReviewCardState extends State<_ReviewCard> {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: ListenSpacing.gap32),
-                  _PlaybackControls(
-                    slicePlayer: widget.slicePlayer,
-                    clipAvailable: widget.clipAvailable,
-                    onPlayClip: widget.onPlayClip,
-                  ),
-                  const SizedBox(height: ListenSpacing.gap8),
-                  OutlinedButton.icon(
-                    onPressed: widget.shadowAvailable && !widget.busy
-                        ? () => unawaited(widget.onShadowing())
-                        : null,
-                    icon: Icon(
-                      card.kind == 'delayed_retelling'
-                          ? Icons.record_voice_over_outlined
-                          : Icons.mic_none,
+                  // #73: an imported Anki card carries no listening evidence of
+                  // its own. The backend says so in `has_listening_enhancements`
+                  // and the card obeys: no slice player, no shadowing, and the
+                  // head says where the card came from — rather than offering
+                  // affordances that would silently do nothing.
+                  if (widget.entry.origin.hasListeningEnhancements) ...[
+                    _PlaybackControls(
+                      slicePlayer: widget.slicePlayer,
+                      clipAvailable: widget.clipAvailable,
+                      onPlayClip: widget.onPlayClip,
                     ),
-                    label: Text(
-                      card.kind == 'delayed_retelling'
-                          ? l.text('reviewStartDelayedRetelling')
-                          : l.text('reviewShadowClip'),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    OutlinedButton.icon(
+                      onPressed: widget.shadowAvailable && !widget.busy
+                          ? () => unawaited(widget.onShadowing())
+                          : null,
+                      icon: Icon(
+                        card.kind == 'delayed_retelling'
+                            ? Icons.record_voice_over_outlined
+                            : Icons.mic_none,
+                      ),
+                      label: Text(
+                        card.kind == 'delayed_retelling'
+                            ? l.text('reviewStartDelayedRetelling')
+                            : l.text('reviewShadowClip'),
+                      ),
                     ),
-                  ),
+                  ],
                   const SizedBox(height: ListenSpacing.gap24),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 180),
@@ -484,7 +537,11 @@ class _ReviewCardState extends State<_ReviewCard> {
         // enum has always had four; the frontend previously exposed three and
         // never let a learner press Easy. Descriptive labels are kept (P4 —
         // no guilt), Good stays the emphasized default.
-        _GradeRow(busy: widget.busy, onRate: widget.onRate),
+        _GradeRow(
+          busy: widget.busy,
+          previews: widget.previews,
+          onRate: widget.onRate,
+        ),
       ],
     );
   }
@@ -505,63 +562,97 @@ class _ReviewCardState extends State<_ReviewCard> {
       });
 }
 
-/// R2: the card head names *which channel* the card trains (derived from its
-/// kind, a durable backend fact) with the shared capability graphic language,
-/// instead of a raw stock icon that said nothing about the practice. The
-/// per-word three-state ring is deferred — the queue entry carries no
-/// capability profile, and fetching one would be new backend work (波次 D).
+/// The card head names what this card is and where its schedule stands.
+///
+/// It used to open with a capability channel too, derived here from
+/// `card.kind`. That claim is gone, for three reasons. It was **wrong**: the
+/// backend files a card under a channel by `source.kind` (a Sentence-sourced
+/// card is Reading), so the head and the deck it was counted in disagreed
+/// about the same card. It was **narrower than it looked**: this rule could
+/// only ever return listening or speaking, so two of the four faces were
+/// unreachable. And it was **redundant**: the card kind beside it already says
+/// what the learner is about to do, more precisely and without a second rule
+/// to drift.
 class _CardHead extends StatelessWidget {
   const _CardHead({required this.entry});
 
   final ReviewQueueEntry entry;
-
-  /// Every review kind trains one channel; the mapping is presentation, not a
-  /// new judgment (the kinds themselves are generated by the backend).
-  static String _channel(String kind) => switch (kind) {
-    'delayed_retelling' || 'source_sentence_recall' => 'speaking',
-    _ => 'listening',
-  };
-
-  static ({String labelKey, IconData icon}) _channelFace(String channel) =>
-      switch (channel) {
-        'speaking' => (
-          labelKey: 'capabilitySpeaking',
-          icon: Icons.record_voice_over_outlined,
-        ),
-        'reading' => (
-          labelKey: 'capabilityReading',
-          icon: Icons.menu_book_outlined,
-        ),
-        'writing' => (labelKey: 'capabilityWriting', icon: Icons.edit_outlined),
-        _ => (labelKey: 'capabilityListening', icon: Icons.hearing_outlined),
-      };
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final card = entry.card;
-    final face = _channelFace(_channel(card.kind));
-    return Row(
+    final imported = entry.origin.isImportedAnki;
+    final detail = _scheduleDetail(l, entry.schedule);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(face.icon, size: ListenIconSize.control, color: colors.primary),
-        const SizedBox(width: ListenSpacing.gap8),
-        Expanded(
-          child: Text(
-            '${l.text(face.labelKey)} · ${_kindLabel(l, card.kind)}',
-            style: Theme.of(context).textTheme.labelLarge,
+        Row(
+          children: [
+            Icon(
+              imported ? Icons.inventory_2_outlined : Icons.hearing_outlined,
+              size: ListenIconSize.control,
+              color: imported ? colors.onSurfaceVariant : colors.primary,
+            ),
+            const SizedBox(width: ListenSpacing.gap8),
+            Expanded(
+              child: Text(
+                _kindLabel(l, card.kind),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
+            _StateChip(state: entry.state),
+          ],
+        ),
+        if (entry.origin.isImportedAnki) ...[
+          const SizedBox(height: ListenSpacing.gap4),
+          Text(
+            entry.origin.deckName == null
+                ? l.text('reviewOriginImportedAnki')
+                : l
+                      .text('reviewOriginImportedAnkiDeck')
+                      .replaceAll('{deck}', '${entry.origin.deckName}'),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
           ),
-        ),
-        Text(
-          entry.schedule.lapseCount == 0
-              ? l.text('reviewNewCard')
-              : l
-                    .text('reviewRelearnCount')
-                    .replaceAll('{count}', '${entry.schedule.lapseCount}'),
-          style: TextStyle(color: colors.onSurfaceVariant),
-        ),
+        ],
+        if (detail != null) ...[
+          const SizedBox(height: ListenSpacing.gap4),
+          Text(
+            detail,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ],
       ],
     );
+  }
+
+  /// The durable scheduling facts the backend already sends and the card head
+  /// used to throw away: the current interval, and the lapse count when the
+  /// card has actually lapsed. A card with no interval yet gets no line —
+  /// there is nothing true to say about its spacing.
+  static String? _scheduleDetail(AppLocalizations l, ReviewSchedule schedule) {
+    final parts = <String>[];
+    final interval = schedule.intervalDays;
+    if (interval != null) {
+      parts.add(
+        l
+            .text('reviewIntervalLabel')
+            .replaceAll('{interval}', _intervalText(l, interval)),
+      );
+    }
+    if (schedule.lapseCount > 0) {
+      parts.add(
+        l
+            .text('reviewRelearnCount')
+            .replaceAll('{count}', '${schedule.lapseCount}'),
+      );
+    }
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   static String _kindLabel(AppLocalizations l, String kind) =>
@@ -573,6 +664,84 @@ class _CardHead extends StatelessWidget {
         'delayed_retelling' => 'reviewKindDelayedRetelling',
         _ => 'reviewKindGeneric',
       });
+}
+
+/// `interval_days` is a fraction of a day for cards in sub-day steps, so it is
+/// spelled in whatever unit keeps the number readable rather than being
+/// rounded to a misleading "0 days". Shared by the card head (the interval the
+/// card carries now) and the grade row (the interval each rating would give
+/// it).
+String _intervalText(AppLocalizations l, double days) {
+  String plug(String key, num count) =>
+      l.text(key).replaceAll('{count}', '${count.round()}');
+  if (days < 1) {
+    final minutes = days * 24 * 60;
+    if (minutes < 60) {
+      return plug('reviewIntervalMinutes', minutes < 1 ? 1 : minutes);
+    }
+    return plug('reviewIntervalHours', days * 24);
+  }
+  if (days < 30) return plug('reviewIntervalDays', days);
+  return plug('reviewIntervalMonths', days / 30);
+}
+
+/// Diameter of the state dot. Large enough that the hue is unambiguous beside
+/// a label-sized word, small enough that it marks the state rather than
+/// competing with the channel name it sits opposite.
+const _stateDotSize = 8.0;
+
+/// S11: the card's scheduling state, as a colour that *is* the state — 月蓝
+/// for first sight, amber for the sub-day learning loop (the same amber #47
+/// uses for a practice target), signal teal for a card that has reached
+/// day-scale intervals. The state is the scheduler's own `state` field; the
+/// head previously said "New card" for every card with zero lapses, which is
+/// a different question entirely.
+class _StateChip extends StatelessWidget {
+  const _StateChip({required this.state});
+
+  final ReviewCardState state;
+
+  /// The three hues are content status, not chrome, so they read straight off
+  /// the palette like the vocabulary list's status bar does — the same colour
+  /// has to mean the same thing in both places under either brightness.
+  static Color _color(ReviewCardState state) => switch (state) {
+    ReviewCardState.newCard => ListenColors.moonBlue,
+    ReviewCardState.learning ||
+    ReviewCardState.relearning => ListenColors.learningNeedsReview,
+    ReviewCardState.review => ListenColors.learningRecognized,
+  };
+
+  static String _labelKey(ReviewCardState state) => switch (state) {
+    ReviewCardState.newCard => 'reviewNewCard',
+    ReviewCardState.learning => 'reviewStateLearning',
+    ReviewCardState.relearning => 'reviewStateRelearning',
+    ReviewCardState.review => 'reviewStateReview',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: _stateDotSize,
+          height: _stateDotSize,
+          decoration: BoxDecoration(
+            color: _color(state),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: ListenSpacing.gap6),
+        Text(
+          AppLocalizations.of(context).text(_labelKey(state)),
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: colors.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
 }
 
 /// R1: the play button is backed by the independent second decoder, so it
@@ -644,22 +813,46 @@ class _PlaybackControls extends StatelessWidget {
   }
 }
 
+/// The four grades, each carrying FSRS's prediction of where it would put the
+/// card. The prediction is a pure read (`/interval-preview`, no schedule
+/// write); when it has not arrived or the call failed, [previews] is empty and
+/// the buttons render bare rather than with an invented number.
 class _GradeRow extends StatelessWidget {
-  const _GradeRow({required this.busy, required this.onRate});
+  const _GradeRow({
+    required this.busy,
+    required this.previews,
+    required this.onRate,
+  });
 
   final bool busy;
+  final List<ReviewIntervalPreview> previews;
   final Future<bool> Function(String rating) onRate;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final byRating = {for (final preview in previews) preview.rating: preview};
     Widget grade(String rating, String labelKey, {bool emphasized = false}) {
-      final child = Text(
-        l.text(labelKey),
-        textAlign: TextAlign.center,
-        style: const TextStyle(fontSize: 12),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      final preview = byRating[rating];
+      final child = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            l.text(labelKey),
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (preview != null)
+            Text(
+              _intervalText(l, preview.intervalDays),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+        ],
       );
       final onPressed = busy ? null : () => onRate(rating);
       return Expanded(
@@ -706,6 +899,48 @@ class _Finished extends StatelessWidget {
   final Future<bool> Function() onRetry;
   final Future<bool> Function(String id, bool confirm) onResolve;
 
+  /// An empty queue has three different causes and they must not be told as
+  /// one story: the day's budget is spent, a custom-study round ended, or
+  /// there is genuinely nothing due. Only `limit_status` can distinguish the
+  /// first, so the limit wording appears only when the backend reported it.
+  static String _headline(AppLocalizations l, ReviewState state) {
+    if (state.customStudy != null) {
+      return l
+          .text('reviewCustomStudyCompleted')
+          .replaceAll('{count}', '${state.completedCount}');
+    }
+    if (state.completedCount > 0) {
+      return l
+          .text('reviewRoundCompleted')
+          .replaceAll('{count}', '${state.completedCount}');
+    }
+    final limits = state.limitStatus;
+    if (limits != null && limits.anyLimitReached) {
+      return l.text('reviewDailyLimitReached');
+    }
+    return l.text('reviewNoDueCards');
+  }
+
+  static String _note(AppLocalizations l, ReviewState state) {
+    if (state.customStudy != null) {
+      return l.text(
+        state.advancesNormalSchedule == true
+            ? 'reviewCustomStudyAdvancedSchedule'
+            : 'reviewCustomStudyLeftScheduleAlone',
+      );
+    }
+    final limits = state.limitStatus;
+    if (limits != null && limits.anyLimitReached) {
+      return l
+          .text('reviewDailyLimitNote')
+          .replaceAll('{new}', '${limits.newCompleted}')
+          .replaceAll('{newLimit}', '${limits.limits.newCards}')
+          .replaceAll('{reviews}', '${limits.reviewsCompleted}')
+          .replaceAll('{reviewLimit}', '${limits.limits.reviews}');
+    }
+    return l.text('reviewDueInfoNote');
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -727,17 +962,12 @@ class _Finished extends StatelessWidget {
             ),
             const SizedBox(height: ListenSpacing.gap12),
             Text(
-              state.error ??
-                  (state.completedCount == 0
-                      ? l.text('reviewNoDueCards')
-                      : l
-                            .text('reviewRoundCompleted')
-                            .replaceAll('{count}', '${state.completedCount}')),
+              state.error ?? _headline(l, state),
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: ListenSpacing.gap8),
             if (state.error == null)
-              Text(l.text('reviewDueInfoNote'))
+              Text(_note(l, state), textAlign: TextAlign.center)
             else
               TextButton(onPressed: onRetry, child: Text(l.text('retry'))),
             if (state.upgradeSuggestions.isNotEmpty) ...[

@@ -27,14 +27,16 @@ import 'package:llplayer_next/data/repositories/speaking_session_repository.dart
 import 'package:llplayer_next/data/repositories/writing_task_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/content_channel.dart';
+import 'package:llplayer_next/models/workbench_study_mode.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/widgets/channels/reading_channel.dart';
 import 'package:llplayer_next/widgets/channels/speaking_channel.dart';
 import 'package:llplayer_next/widgets/channels/writing_channel.dart';
-import 'package:llplayer_next/widgets/layout/content_channel_switcher.dart';
+import 'package:llplayer_next/widgets/layout/content_channel_availability.dart';
 import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/widgets/layout/study_menu.dart';
 
 Cue _cue(int index, String text, {required int startMs, required int endMs}) =>
     Cue(
@@ -225,13 +227,27 @@ class _Harness {
           mediaFraction: 0.42,
           onMediaFractionChanged: (_) {},
           selectedChannel: channels.selected,
-          channelAvailability: const {
-            ContentChannel.listening: ContentChannelAvailability.available(),
-            ContentChannel.reading: ContentChannelAvailability.available(),
-            ContentChannel.speaking: ContentChannelAvailability.available(),
-            ContentChannel.writing: ContentChannelAvailability.available(),
-          },
-          onChannelSelected: (channel) => channels.select(channel),
+          studyMenu: StudyMenu(
+            selectedChannel: channels.selected,
+            channelAvailability: const {
+              ContentChannel.listening: ContentChannelAvailability.available(),
+              ContentChannel.reading: ContentChannelAvailability.available(),
+              ContentChannel.speaking: ContentChannelAvailability.available(),
+              ContentChannel.writing: ContentChannelAvailability.available(),
+            },
+            onChannelSelected: channels.select,
+            selectedMode: WorkbenchStudyMode.normal,
+            // The listening displays enter the listening channel; the test
+            // returns to listening by picking 通读.
+            onModeSelected: (_) => channels.select(ContentChannel.listening),
+            hasCue: true,
+            canCloze: true,
+            canChunkDictation: true,
+            onShadow: () {},
+            onCloze: () {},
+            onChunkDictation: () {},
+            onSentenceDictation: () {},
+          ),
           immersiveStage: switch (channels.selected) {
             ContentChannel.writing => WritingChannelHost(
               writingChannel: writingChannel,
@@ -287,9 +303,21 @@ class _Harness {
 }
 
 Future<void> _tapChannel(WidgetTester tester, String name) async {
-  await tester.tap(find.byKey(ValueKey('content-channel-$name')));
+  // The channels live on the study menu now, beside the intensive modes — one
+  // control for "how do I want to work this material" instead of four. Listening
+  // has no item of its own: it is entered through its displays, so 'listening'
+  // maps to picking the read-through display (通读 → mode-normal).
+  final key = name == 'listening'
+      ? const ValueKey('study-mode-normal')
+      : ValueKey('content-channel-$name');
+  await tester.tap(find.byKey(const Key('study-menu')));
+  // Explicit pumps rather than pumpAndSettle: the channel surfaces animate in
+  // (and one of them breathes), so settling never arrives.
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 50));
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.tap(find.byKey(key));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {

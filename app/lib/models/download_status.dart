@@ -8,6 +8,13 @@ enum DownloadStatusKind { downloading, completed, failed }
 /// This presentation model lives outside the widget layer so the controller
 /// remains independent of the concrete view that renders it.
 class DownloadStatusSnapshot {
+  /// A [progress] of null means the download is running with no known total.
+  ///
+  /// An enclosure served without `Content-Length` — a chunked response — has
+  /// no denominator, and the feed's advertised `length` is advisory. Inventing
+  /// a fraction there would be a made-up fact, and holding the last one shows
+  /// a bar frozen at 0% that reads as a hang. The surface says "running,
+  /// length unknown" instead.
   const DownloadStatusSnapshot.downloading({required this.progress})
     : kind = DownloadStatusKind.downloading,
       downloadedMediaPath = null,
@@ -28,7 +35,7 @@ class DownloadStatusSnapshot {
       downloadedMediaPath = null;
 
   final DownloadStatusKind kind;
-  final double progress;
+  final double? progress;
   final String? downloadedMediaPath;
   final ApiFailure? failure;
 }

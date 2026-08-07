@@ -115,6 +115,21 @@ class MediaLibraryCoordinator {
     }
   }
 
+  /// Paths Core already holds, or null while that answer is unknown. Feeds the
+  /// folder scan's cheap identification layer, which must not treat "the
+  /// library has not loaded" as "nothing is registered".
+  List<String>? get registeredMediaPaths =>
+      mediaLibrary?.map((entry) => entry.media.path).toList(growable: false);
+
+  /// Subset of [mediaLibrary] whose local media file still exists on disk.
+  List<MediaLibraryEntry>? get offlineLibrary {
+    final library = mediaLibrary;
+    if (library == null) return null;
+    return library
+        .where((entry) => fileService.exists(entry.media.path))
+        .toList(growable: false);
+  }
+
   /// Opens a library row like any other media — triage never changes what
   /// opening a file does.
   Future<void> openLibraryEntry(MediaLibraryEntry entry) async {
@@ -151,7 +166,7 @@ class MediaLibraryCoordinator {
       return;
     }
     await openMediaPath(entry.media.path);
-    if (isMounted()) learning.selectSidePanel(0);
+    if (isMounted()) learning.selectTab(SidePanelTab.transcript);
   }
 
   Future<void> setLibraryTriageIntent(

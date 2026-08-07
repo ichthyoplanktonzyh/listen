@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/review_controller.dart';
 import 'package:llplayer_next/data/repositories/review_repository.dart';
 import 'package:llplayer_next/models/practice.dart';
-import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/models/review_deck.dart';
 import 'package:llplayer_next/services/api_service.dart';
+
+import 'support/review_repository_fake.dart';
 
 ReviewQueueEntry _entry(String id) => ReviewQueueEntry.fromJson({
   'item': {
@@ -34,39 +36,30 @@ ReviewQueueEntry _entry(String id) => ReviewQueueEntry.fromJson({
     'interval_days': null,
     'lapse_count': 0,
   },
+  'state': 'new',
   'card': {'kind': 'word_recognition', 'answer': id},
+  'origin': {
+    'kind': 'native',
+    'anki_guid': null,
+    'deck_id': null,
+    'deck_name': null,
+    'has_listening_enhancements': true,
+  },
 });
 
-class _ControlledReviewRepository implements ReviewRepository {
-  final dueRequests = <Completer<List<ReviewQueueEntry>>>[];
+class _ControlledReviewRepository extends FakeReviewRepositoryBase {
+  final dueRequests = <Completer<ReviewQueue>>[];
 
   @override
-  Future<List<ReviewQueueEntry>> dueItems({int limit = 20}) {
-    final request = Completer<List<ReviewQueueEntry>>();
+  Future<ReviewQueue> queue({int limit = 20}) {
+    final request = Completer<ReviewQueue>();
     dueRequests.add(request);
     return request.future;
   }
-
-  @override
-  Future<List<UpgradeSuggestion>> pendingUpgradeSuggestions() async => const [];
-
-  @override
-  Future<String> fingerprintFile(String path) => throw UnimplementedError();
-
-  @override
-  Future<MediaItem> readMedia(String mediaId) => throw UnimplementedError();
-
-  @override
-  Future<void> registerMedia(String path) => throw UnimplementedError();
-
-  @override
-  Future<void> resolveUpgradeSuggestion(String id, {required bool confirm}) =>
-      throw UnimplementedError();
-
-  @override
-  Future<ReviewSubmission> submitRating(String itemId, String rating) =>
-      throw UnimplementedError();
 }
+
+ReviewQueue _queueOf(List<ReviewQueueEntry> entries) =>
+    ReviewQueue(entries: entries, limitStatus: fakeLimitStatus());
 
 void main() {
   test(
@@ -78,11 +71,11 @@ void main() {
 
       final oldLoad = controller.load();
       final newLoad = controller.load();
-      repository.dueRequests[1].complete([_entry('new')]);
+      repository.dueRequests[1].complete(_queueOf([_entry('new')]));
       expect(await newLoad, isTrue);
       expect(controller.current?.item.id, 'new');
 
-      repository.dueRequests[0].complete([_entry('old')]);
+      repository.dueRequests[0].complete(_queueOf([_entry('old')]));
       expect(await oldLoad, isFalse);
       expect(controller.current?.item.id, 'new');
     },
@@ -94,7 +87,7 @@ void main() {
 
     final load = controller.load();
     controller.dispose();
-    repository.dueRequests.single.complete([_entry('late')]);
+    repository.dueRequests.single.complete(_queueOf([_entry('late')]));
 
     expect(await load, isFalse);
   });
@@ -109,54 +102,84 @@ void main() {
         transport: (method, path, body) async {
           final decoded = body == null ? null : jsonDecode(body);
           requests.add((method: method, path: path, body: decoded));
-          if (path == '/v1/review/items?limit=20') {
+          if (path == '/v1/review/queue?limit=20') {
+            return (
+              statusCode: 200,
+              body: jsonEncode({
+                'entries': [
+                  {
+                    'item': {
+                      'id': 'review-1',
+                      'source': {
+                        'kind': 'listening_inbox',
+                        'id': 'inbox-1',
+                        'practice_attempt_id': null,
+                        'lexical_entry_id': null,
+                        'media_id': 'media-1',
+                        'track_id': 'track-1',
+                      },
+                      'anchors': [
+                        {
+                          'kind': 'sentence',
+                          'id': 'sentence-1',
+                          'label': 'would have',
+                          'lexical_entry_id': null,
+                          'sentence_id': 'sentence-1',
+                          'token_start': 0,
+                          'token_end': 1,
+                          'start_ms': 100,
+                          'end_ms': 900,
+                        },
+                      ],
+                      'prompt_snapshot': 'would have',
+                      'status': 'active',
+                      'created_at_ms': 1,
+                      'updated_at_ms': 1,
+                    },
+                    'schedule': {
+                      'item_id': 'review-1',
+                      'algorithm': 'listen_review_v1_heuristic_proxy',
+                      'due_at_ms': 1,
+                      'stability': null,
+                      'difficulty': null,
+                      'interval_days': null,
+                      'lapse_count': 0,
+                    },
+                    'state': 'new',
+                    'card': {
+                      'kind': 'phrase_presence',
+                      'cue': 'would have',
+                      'answer': 'I would have gone',
+                      'target': 'would have',
+                    },
+                    'origin': {
+                      'kind': 'native',
+                      'anki_guid': null,
+                      'deck_id': null,
+                      'deck_name': null,
+                      'has_listening_enhancements': true,
+                    },
+                  },
+                ],
+                'limit_status': limitStatusJson,
+              }),
+            );
+          }
+          if (path == '/v1/review/items/review-1/interval-preview') {
             return (
               statusCode: 200,
               body: jsonEncode([
                 {
-                  'item': {
-                    'id': 'review-1',
-                    'source': {
-                      'kind': 'listening_inbox',
-                      'id': 'inbox-1',
-                      'practice_attempt_id': null,
-                      'lexical_entry_id': null,
-                      'media_id': 'media-1',
-                      'track_id': 'track-1',
-                    },
-                    'anchors': [
-                      {
-                        'kind': 'sentence',
-                        'id': 'sentence-1',
-                        'label': 'would have',
-                        'lexical_entry_id': null,
-                        'sentence_id': 'sentence-1',
-                        'token_start': 0,
-                        'token_end': 1,
-                        'start_ms': 100,
-                        'end_ms': 900,
-                      },
-                    ],
-                    'prompt_snapshot': 'would have',
-                    'status': 'active',
-                    'created_at_ms': 1,
-                    'updated_at_ms': 1,
-                  },
-                  'schedule': {
-                    'item_id': 'review-1',
-                    'algorithm': 'listen_review_v1_heuristic_proxy',
-                    'due_at_ms': 1,
-                    'stability': null,
-                    'difficulty': null,
-                    'interval_days': null,
-                    'lapse_count': 0,
-                  },
-                  'card': {
-                    'kind': 'phrase_presence',
-                    'cue': 'would have',
-                    'answer': 'I would have gone',
-                    'target': 'would have',
-                  },
+                  'rating': 'again',
+                  'due_at_ms': 600000,
+                  'interval_days': 0.007,
+                  'state': 'relearning',
+                },
+                {
+                  'rating': 'good',
+                  'due_at_ms': 345600000,
+                  'interval_days': 4.0,
+                  'state': 'review',
                 },
               ]),
             );
@@ -214,6 +237,13 @@ void main() {
       expect(controller.current?.card.target, 'would have');
       controller.reveal();
       expect(controller.state.revealed, isTrue);
+      // The preview is fetched when the card flips; it is a read, and the
+      // grades work whether or not it lands.
+      await pumpEventQueue();
+      expect(controller.state.previews.map((preview) => preview.rating), [
+        'again',
+        'good',
+      ]);
       expect(await controller.rate('hard'), isTrue);
       expect(controller.state.completedCount, 1);
       expect(controller.state.finished, isTrue);
@@ -237,6 +267,14 @@ void main() {
     },
   );
 }
+
+const limitStatusJson = <String, dynamic>{
+  'limits': {'new_cards': 20, 'reviews': 200},
+  'new_completed': 0,
+  'reviews_completed': 0,
+  'new_limit_reached': false,
+  'review_limit_reached': false,
+};
 
 const upgradeSuggestionJson = <String, dynamic>{
   'id': 'suggestion-1',

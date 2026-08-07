@@ -31,9 +31,13 @@ Future<void> showAppSettings({
   // Best-effort read: with no sidecar the field shows unset and stays inert.
   await learnerViewModel?.load();
   final l1Language = learnerViewModel?.state.l1Language ?? '';
+  // The folder may have been deleted or unmounted since the last check, so the
+  // dialog opens on a fresh verdict rather than on a remembered one.
+  await settingsController.refreshMediaLibraryFolderState();
   if (!context.mounted) {
     return;
   }
+  final l = AppLocalizations.of(context);
   await showDialog<void>(
     context: context,
     builder: (_) => SettingsDialog(
@@ -56,6 +60,12 @@ Future<void> showAppSettings({
       transcriptionQuality: settingsController.transcriptionQuality,
       transcriptionLanguage: settingsController.transcriptionLanguage,
       transcriptionDestination: settingsController.transcriptionDestination,
+      mediaLibraryFolder: settingsController.mediaLibraryFolder,
+      onChooseMediaLibraryFolder: () =>
+          settingsController.chooseMediaLibraryFolder(
+            confirmButtonText: l.text('mediaLibraryPickerConfirm'),
+          ),
+      onClearMediaLibraryFolder: settingsController.clearMediaLibraryFolder,
       ffmpegPath: settingsController.ffmpegPath,
       ffprobePath: settingsController.ffprobePath,
       ytDlpPath: settingsController.ytDlpPath,
