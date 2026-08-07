@@ -207,7 +207,7 @@ void _analysisGroup() {
     );
   });
 
-  testWidgets('a word tap reports where it landed, for the bubble anchor', (
+  testWidgets('a word double-tap reports where it landed, for the anchor', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(620, 420));
@@ -229,20 +229,99 @@ void _analysisGroup() {
     );
     await tester.pumpAndSettle();
 
-    // Tap a word in the first sentence. The panel records the press itself,
-    // because `TokenLine` hands word taps over without a position. The
-    // transcript is left-aligned, so aim just inside the row's leading edge —
-    // where the opening word sits — rather than the row's geometric centre,
-    // which now lands in the ragged-right whitespace past the text.
+    // Double-tap a word in the first sentence (the dictionary gesture). The
+    // panel records the press itself, because `TokenLine` hands word taps over
+    // without a position. The transcript is left-aligned, so aim just inside
+    // the row's leading edge — where the opening word sits — rather than the
+    // row's geometric centre, which now lands in the ragged-right whitespace
+    // past the text.
     final row = tester.getRect(
       find.byKey(const ValueKey('transcript-cue-cue-0')),
     );
     final target = Offset(row.left + 40, row.top + 22);
     await tester.tapAt(target);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(target);
     await tester.pumpAndSettle();
 
     expect(anchor, isNotNull);
     expect(anchor, target);
+  });
+
+  testWidgets('with click-to-play, a single tap on a word plays from it', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(4, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    Offset? anchor;
+    SubtitleToken? played;
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[0],
+        onWord: (_, _, position) async => anchor = position,
+        onSeekWord: (token, _) async => played = token,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = tester.getRect(
+      find.byKey(const ValueKey('transcript-cue-cue-0')),
+    );
+    await tester.tapAt(Offset(row.left + 40, row.top + 22));
+    // A single tap has to outwait the double-tap window before it resolves.
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    // The word plays; the dictionary stays shut (that is the double tap now).
+    expect(played, isNotNull);
+    expect(played!.kind, 'word');
+    expect(anchor, isNull);
+  });
+
+  testWidgets('with click-to-play, a double tap on a word opens the dictionary', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(620, 420));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final cues = List.generate(4, _cue);
+    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+
+    Offset? anchor;
+    SubtitleToken? played;
+    await tester.pumpWidget(
+      _Harness(
+        controller: controller,
+        track: track,
+        currentCue: cues[0],
+        onWord: (_, _, position) async => anchor = position,
+        onSeekWord: (token, _) async => played = token,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = tester.getRect(
+      find.byKey(const ValueKey('transcript-cue-cue-0')),
+    );
+    final target = Offset(row.left + 40, row.top + 22);
+    await tester.tapAt(target);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tapAt(target);
+    await tester.pumpAndSettle();
+
+    // The dictionary opens at the aimed pixel; no word-seek is fired.
+    expect(anchor, target);
+    expect(played, isNull);
   });
 }
 
@@ -418,6 +497,7 @@ class _Harness extends StatelessWidget {
     this.onToggleAnalysis,
     this.analysisExpanded = false,
     this.onWord,
+    this.onSeekWord,
     this.studyMode = WorkbenchStudyMode.normal,
   });
 
@@ -427,6 +507,7 @@ class _Harness extends StatelessWidget {
   final VoidCallback? onToggleAnalysis;
   final bool analysisExpanded;
   final Future<void> Function(SubtitleToken, Cue, Offset)? onWord;
+  final Future<void> Function(SubtitleToken, Cue)? onSeekWord;
   final WorkbenchStudyMode studyMode;
 
   @override
@@ -455,6 +536,7 @@ class _Harness extends StatelessWidget {
             baseColor: Colors.black,
             onWord: onWord ?? (_, _, _) async {},
             onSeekCue: (_) async {},
+            onSeekWord: onSeekWord,
             onToggleAnalysis: onToggleAnalysis,
             analysisExpanded: analysisExpanded,
             studyMode: studyMode,

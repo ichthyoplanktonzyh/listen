@@ -251,7 +251,7 @@ void main() {
       expect(find.textContaining('Welcome'), findsWidgets);
     });
 
-    testWidgets('word tap maps back to the original cue', (tester) async {
+    testWidgets('word double-tap maps back to the original cue', (tester) async {
       final controller = ReadingController();
       controller.open(
         _track([
@@ -270,10 +270,18 @@ void main() {
           },
         ),
       );
-      await tester.tap(find.text('brave'));
+      // The dictionary is a double tap everywhere words are shown now.
+      Future<void> doubleTap(Finder finder) async {
+        await tester.tap(finder);
+        await tester.pump(const Duration(milliseconds: 50));
+        await tester.tap(finder);
+        await tester.pumpAndSettle();
+      }
+
+      await doubleTap(find.text('brave'));
       expect(tappedToken?.text, 'brave');
       expect(tappedCue?.id, 'cue-0');
-      await tester.tap(find.text('world.'));
+      await doubleTap(find.text('world.'));
       expect(tappedToken?.text, 'world.');
       expect(tappedCue?.id, 'cue-1');
     });

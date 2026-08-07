@@ -839,22 +839,42 @@ class PlaybackControls extends StatelessWidget {
           onPressed: () => onSubtitlesVisibleChanged(!subtitlesVisible),
           icon: Icons.subtitles_outlined,
         ),
-        const Spacer(),
-        DropdownButtonHideUnderline(
-          child: DropdownButton<double>(
-            value: rate,
-            borderRadius: ListenRadii.controlBorder,
-            items: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                .map(
-                  (value) =>
-                      DropdownMenuItem(value: value, child: Text('${value}x')),
-                )
-                .toList(),
-            onChanged: (value) {
-              if (value != null) onRateChanged(value);
-            },
-          ),
-        ),
+        // Middle media section (三段式中段, 对齐参考底栏): a thumbnail tile plus
+        // the reading title, so the transport says what is playing the way the
+        // reference bar does. No artwork source is threaded into this widget, so
+        // the tile is an honest icon rather than faked cover art. Falls back to
+        // a plain Spacer when there is no title (nothing loaded / tests).
+        if ((mediaTitle ?? '').trim().isNotEmpty)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap12,
+              ),
+              child: Row(
+                children: [
+                  _MediaThumbnail(playing: playing),
+                  const SizedBox(width: ListenSpacing.gap8),
+                  Expanded(
+                    child: Tooltip(
+                      message: mediaTitle ?? '',
+                      child: Text(
+                        displayMediaTitle(mediaTitle ?? ''),
+                        key: const Key('playback-media-title'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          const Spacer(),
+        _SpeedButton(rate: rate, onRateChanged: onRateChanged),
         IconButton(
           tooltip: muted ? 'Unmute' : 'Mute',
           onPressed: onMuteToggle,
@@ -1074,6 +1094,94 @@ class _AbLoopButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The transport's now-playing tile (三段式中段的方形缩略图).
+///
+/// The reference bar shows the episode's cover art here. No cover URL reaches
+/// this widget — workbench media are local files with no artwork — so rather
+/// than fake a picture, the tile carries the same music/equalizer glyph the
+/// compact mini-player uses, and flips to the equalizer while playing.
+class _MediaThumbnail extends StatelessWidget {
+  const _MediaThumbnail({required this.playing});
+
+  final bool playing;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: ListenRadii.surfaceBorder,
+      ),
+      child: Icon(
+        playing ? Icons.equalizer_rounded : Icons.music_note_rounded,
+        size: ListenIconSize.control,
+        color: colors.onPrimaryContainer,
+      ),
+    );
+  }
+}
+
+/// Playback speed as a small pill that opens the rate menu (三段式右段的 `1x`).
+///
+/// Replaces the bare dropdown so the control reads like the reference bar's
+/// `1x` chip and lines up with the AB button beside it. The label drops a
+/// trailing `.0`, so 1.0 shows as `1x` rather than `1.0x`.
+class _SpeedButton extends StatelessWidget {
+  const _SpeedButton({required this.rate, required this.onRateChanged});
+
+  final double rate;
+  final ValueChanged<double> onRateChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return PopupMenuButton<double>(
+      tooltip: l.text('rate'),
+      initialValue: rate,
+      onSelected: onRateChanged,
+      itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+          .map(
+            (value) => CheckedPopupMenuItem<double>(
+              value: value,
+              checked: value == rate,
+              child: Text(_formatRate(value)),
+            ),
+          )
+          .toList(),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: ListenRadii.controlBorder,
+          border: Border.all(color: colors.outlineVariant),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: ListenSpacing.gap8,
+            vertical: ListenSpacing.gap4,
+          ),
+          child: Text(
+            _formatRate(rate),
+            key: const Key('playback-speed-pill'),
+            style: ListenType.emphasis.copyWith(color: colors.onSurfaceVariant),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// `1.0 → 1x`, `1.25 → 1.25x`, `0.5 → 0.5x`.
+String _formatRate(double rate) {
+  final text = rate == rate.roundToDouble()
+      ? rate.toStringAsFixed(0)
+      : rate.toString();
+  return '${text}x';
 }
 
 class _PlaybackMenuButton extends StatelessWidget {

@@ -47,6 +47,7 @@ class SidePanel extends StatefulWidget {
     required this.transcriptController,
     required this.onOpenWord,
     required this.onSeekCue,
+    this.onSeekWord,
     required this.onSetSelectedWordStatus,
     required this.onSetCapabilityOverride,
     required this.onSaveSelectedLearningContent,
@@ -73,6 +74,10 @@ class SidePanel extends StatefulWidget {
   final ScrollController transcriptController;
   final Future<void> Function(SubtitleToken token, Cue cue) onOpenWord;
   final Future<void> Function(Cue? cue) onSeekCue;
+
+  /// Single-tap a transcript word to play from that word. Null keeps single-tap
+  /// dictionary lookup (see [TranscriptPanel.onSeekWord]).
+  final Future<void> Function(SubtitleToken token, Cue cue)? onSeekWord;
   final Future<void> Function(String? selected) onSetSelectedWordStatus;
   final Future<void> Function(String capability, String? conclusion)
   onSetCapabilityOverride;
@@ -218,6 +223,7 @@ class _SidePanelState extends State<SidePanel> {
     baseColor: settingsController.primaryColor,
     onWord: _openWord,
     onSeekCue: _seekCue,
+    onSeekWord: widget.onSeekWord,
     onImportSubtitle: playerController.mediaId == null
         ? null
         : () async => mediaSession.openSubtitle(secondary: false),

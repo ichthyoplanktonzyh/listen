@@ -26,6 +26,7 @@ class TranscriptPanel extends StatefulWidget {
     required this.baseColor,
     required this.onWord,
     required this.onSeekCue,
+    this.onSeekWord,
     this.onImportSubtitle,
     this.groupingMode = 'off',
     this.chunkPartitionsBySentence = const {},
@@ -59,6 +60,12 @@ class TranscriptPanel extends StatefulWidget {
   final Future<void> Function(SubtitleToken token, Cue cue, Offset anchor)
   onWord;
   final Future<void> Function(Cue? cue) onSeekCue;
+
+  /// Single-tap a word to play from that word. Non-null turns on the transcript
+  /// click-to-play behaviour: one tap seeks to the tapped word (this callback),
+  /// a double tap opens the dictionary ([onWord]). Null keeps single-tap
+  /// dictionary lookup.
+  final Future<void> Function(SubtitleToken token, Cue cue)? onSeekWord;
   final Future<void> Function()? onImportSubtitle;
 
   /// Opens or closes the floating analysis window for the current sentence.
@@ -251,6 +258,7 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                         cue,
                                         _lastPressPosition,
                                       ),
+                                      onWordTap: widget.onSeekWord,
                                       groupingMode: widget.groupingMode,
                                       chunkDisplayStyle:
                                           widget.chunkDisplayStyle,

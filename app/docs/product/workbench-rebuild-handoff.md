@@ -25,6 +25,7 @@
 | 截图 | 由 **owner 手动提供**，agent 不操控电脑 |
 | 提交 | **仅在 owner 要求时提交**；每步 owner 提供实机截图做「现状 vs 参考」回归 |
 | 顺序 | **P0 → P1 → P2** |
+| 底栏范围 | **只加中段 + 倍速药丸**（owner 2026-08-07 定）：保留现状两行 + 扁平工具行、不丢功能（分块菜单/播放设置/全屏/A-B 全留），只在工具行中段补「缩略图 + 标题」、把倍速下拉换成 `1x` 药丸。**不做**参考那种单行三段/把控件收进「更多」的重排。 |
 
 ## 3. 路线图与状态
 
@@ -38,10 +39,13 @@
 **P1**（进行中）：
 - [x] **精听浮动窗外壳对齐真图**——⚠️**前提更正**：早先 gap-analysis/本文写「浮动窗→**全覆盖**专注壳」是**错的**（owner 当场纠正 + 真图复核）。`单句精听.png` 里精听练习是**可拖拽的圆角+投影浮动小窗**（四角圆、不贴边、下方文稿透出、视频右下角 PiP），**不是全覆盖**。故**保持** `intensive_practice_window.dart` 的可拖拽浮动 `Positioned`（≤860×560、标题栏拖动），只把**窗内外壳**换成真图那套：`_titleBar`(标题+×，拖动手柄，去掉旧 mini-player 开关) · `_metaRow`(左 `N/总` 进度药丸 + 右 `倍速｜次数｜间隔` **诚实占位**药丸) · `Expanded(_body)`(复用 `_practiceContent` 跟读/答题/结果渲染器，居中限宽 `ListenBreakpoints.contentColumnMax`) · `_keyboardHintBar`(`<`·`⌘P 播放/暂停`·`⌘R 重听本句`·`>`，均可点 + `CallbackShortcuts` 绑 ⌘P/⌘R)。**移除 mini-player**（真图无，播放走键盘条）。`次数/间隔` + `⌘L 返回前2秒` 诚实占位记台账 §5/§6。**未提交**。改 `intensive_practice_window.dart`、`localization.dart`(+4键)；测试改 2 例（去 mini-player 断言、play/pause 改点键盘条）。三闸全绿。**教训**：又一次照文字文档臆测（这次是「全覆盖」）被真图/owner 打回——`intensive_practice_window` 是**浮动窗**，别改形态。
 - [x] **句子解析改可拖拽浮窗 + `文字/语音` 切换**——⚠️**形态更正**：owner 当场纠正，解析**不是覆盖式面板，是可拖拽浮窗**（跟精听浮窗一套），**默认浮在工作台中间、不绑定某区**。新建 `widgets/panels/sentence_analysis_window.dart`（照 `intensive_practice_window.dart` 的 `Positioned`+标题栏拖动+`ListenRadii.panelBorder`+`ListenBreakpoints` 限宽；`_offset` null 时居中，拖过才钉住）。顶部【文字/语音】`SegmentedButton`：**文字层面**=当前句 + 整句译文（有副字幕才真实）+ `📚 语法分析`/`✍️ 搭配积累` 分节标题 + **诚实占位卡**（`analysis-text-unavailable`，缺 AI 契约、指向语音层，不伪造）；**语音层面**=复用现成 `DiagnosisCard`（切到语音且 `diagnosis==null` 才 `onRequestDiagnosis`，默认开在文字层不预取）。**挂载**在工作台 Stack（`main.dart` `_analysisWindow()`，紧邻 `PlayerOverlays`），`learningController.diagnosisExpanded` 驱动开关（文稿 `解析` 入口 `_toggleAnalysis` 只翻这个 flag）。**文稿改动**：`transcript_panel.dart` 去掉内联 `analysis` body 参数与渲染；`_AnalysisControl` 重做为 `ⓘ 解析` **行内药丸**（pillBorder 描边，开态 primary/闭态 outline），**贴当前句句尾**（gap §98 🟡 解决）——`TokenLine` 新增 `trailing` 参数（把 widget 作 `WidgetSpan(middle)` 追加到 token span 尾，随文字换行），文稿把入口作 `trailing:` 挂到当前句源文 `TokenLine`；仅译文模式（源文行隐藏）回退为下方独立一行。入口点击开/关浮窗。**side_panel 瘦身**：删 `_diagnosisCard/_currentRhythmFrame/_timingQuality/_AnalysisPending` 及随之失效的字段 `playbackActions/onRequestDiagnosis/onOpenL1Specialty/timingQuality`（这些搬进浮窗，只 main.dart 调 SidePanel，故连带清 main.dart 调用点与死掉的 `_timingQuality`）。本地化 +6 键（`aiAnalysis`/`analysisLayerText|Voice`/`analysisGrammarSection`/`analysisCollocationSection`/`analysisTextUnavailable{Title,Body}`）en+zh。测试：`transcript_panel_test` 第二例重写为「入口只开窗、不displace文稿」并去 `analysis:` 参数；新增 `sentence_analysis_window_test`（默认文字层+占位、切语音取诊断+pending、×关闭）。台账补 §7。三闸全绿。**教训**：又一次差点照"覆盖式面板"臆测——owner 用真图纠正为**可拖拽浮窗**，形态以 owner/真图为准。
-- [ ] 底栏三段式 + 媒体缩略图/标题 + 倍速药丸。
-- [ ] 导出/打印（纯前端可做部分）+ 分享入口。
+- [x] **底栏中段媒体信息 + 倍速药丸**（范围＝§2「底栏范围」，只加中段不重排）：`playback_controls.dart` `_fullControlRow` 里把原来右侧的 `const Spacer()` 换成**有标题时**的 `Expanded` 中段＝`_MediaThumbnail`(40×40 占位方块，无封面源→`music_note/equalizer` 图标，`ListenRadii.surfaceBorder`) + 省略号标题(`Key('playback-media-title')`，`displayMediaTitle` 去扩展名，tooltip 存原名)；无标题回退 `Spacer`（保 null/测试路径）。倍速 `DropdownButton<double>` → `_SpeedButton` 药丸(`Key('playback-speed-pill')`，`PopupMenuButton<double>`+`CheckedPopupMenuItem`，`controlBorder` 描边，`_formatRate` 让 1.0→`1x`)；tooltip 复用 `rate` 键，**无新增本地化键**。**未提交**（owner 未要求）。改 `playback_controls.dart`；`media_workbench_test.dart` 加 1 例（中段 tile+标题+`1x` 药丸+不横向滚）。三闸全绿。**注**：缩略图无封面数据源（`CoverArtCache` 只喂 discovery 播客/YT，本地媒体无 cover URL 穿进 `PlaybackControls`）——真封面要另开缺口穿 URL，属 P2/后端账。
+- [~] 导出/打印（纯前端可做部分）+ 分享入口 —— **owner 2026-08-07 暂缓（不做）**。顶栏 P0-b 的禁用占位保留原样。真图 `离线:导出:打印.png` 是下拉菜单 7 项（离线缓存/导出视频/音频/字幕/PDF/讲义PDF/打印），纯前端只有「导出字幕(SRT/VTT)」可真做，其余需 printing/pdf 包或后端；owner 选择先跳过。要重启看 §5。
 
-**P2**：播放列表（queue model，后端缺口）· 桌面浮层字幕 · 词典气泡丰富度 · 全屏 · 设置分区（桌面字幕 tab）。
+**P2**：播放列表（queue model，后端缺口）· 桌面浮层字幕 · 词典气泡丰富度 · 全屏 · 设置分区（桌面字幕 tab）。P2 owner 2026-08-07 定**暂不推进**，转做 UX 完善（见下）。
+
+**UX 完善（owner 逐条提，不在 P0/P1/P2 路线内）**
+- [x] **点击语义统一：双击=查词（全局）+ 文稿单击=从该处播放**（owner 2026-08-07，两次追加）。**词典气泡改为「双击词」，所有出现单词的界面统一**（文稿 / 视频字幕浮层 / 阅读视图）——`token_line.dart` 的词 `InkWell` **`onDoubleTap` 永远= `onWord`（词典）**；`onTap` 只在接了 `onWordTap` 的宿主（文稿）触发 seek，其余宿主单击不消费、落到背后（浮层落视频、阅读视图落段落锚定）。**文稿单击词 → 从该词时间戳播放**（无词级时间回退句首）、单击句空白 → seek 句首（原行为）。链路：`token_line.dart` 加可选 `onWordTap`；`transcript_panel.dart` 加 `onSeekWord` → TokenLine `onWordTap`；`side_panel.dart` 透传；`main.dart` `_seekWord(token,cue)` 用 `subtitleController.timingsBySentence[cue.id]` 按 `tokenIndex` 找 `WordTiming.start`、`adapter.seek(cursor.mediaAt(start))`（`display.dart` 加 `mediaAt(Duration)`，`mediaStart` 改调它）。测试：`transcript_panel_test` +2（文稿单击=seek词、双击=词典）+ 锚点测试改双击；`reading_view_test` 「word tap→word double-tap」改双击。三闸全绿（1265 例）。**未提交**。**注**：视频浮层/阅读视图现在单击词不再查词（改双击），单击落到背后手势——若日后觉得浮层也该「单击=从词播放」，照文稿那套给 player_stage 接 `onWordTap` 即可。
 
 **后端缺口台账**：`docs/product/workbench-backend-gaps.md`（P0-b 已建）——已记：媒体来源层级/双语标题（§1）、导出/打印/离线（§2）、分享（§3）、跟读评分绑定 cue（§4）、精听「次数/间隔」自动重复（§5）、精听「返回前2秒」seek-back（§6）；待记：听写先选句、文字层面 AI 解析契约、解析按 cue 缓存、播放列表 queue。（选词数据**不是缺口**，见台账 §3 后的修正注。）逐条随 P1 消账。
 
@@ -60,9 +64,9 @@
 
 ## 5. 下一步 —— 入口（P1 剩余）
 
-P0 四条 + P1「精听浮动窗外壳对齐真图」+「句子解析改可拖拽浮窗 + 文字/语音切换」已完成。下一步在 P1 剩余里挑（见 §3 P1 行）。**动手任何一条前先看 `~/Desktop/每日英语听力UI/` 真图**（`底栏…` / `离线:导出:打印.png` / `右下角字幕.png`）。建议顺序：
-- **底栏三段式 + 媒体缩略图/标题 + 倍速药丸**（推荐下一步）：`widgets/player/playback_controls.dart` `_fullControlRow`，现为两行扁平，无三段/媒体缩略图。
-- 导出/打印（纯前端部分）+ 分享入口。
+P0 四条 + P1「精听浮动窗」+「解析浮窗」+「底栏中段媒体信息 + 倍速药丸」已完成。下一步在 P1 剩余里挑（见 §3 P1 行）。**动手任何一条前先看 `~/Desktop/每日英语听力UI/` 真图**（`离线:导出:打印.png` / `右下角字幕.png`）。建议顺序：
+- **导出/打印（纯前端可做部分）+ 分享入口**（推荐下一步）：顶栏 P0-b 已放「导出/打印」「分享」**禁用占位**按钮，本步把纯前端能做的部分（如导出文稿为文本/打印视图）接上，分享缺口记台账。真图见 `离线:导出:打印.png`。
+- （底栏若之后要更贴参考的单行三段重排，需 owner 另行确认——本轮 owner 明确只做「中段 + 倍速药丸」，见 §2「底栏范围」。）
 
 （P0-a/b/c/d + 精听窗 的落地要点见 §3 各条；回看实现改动见其列出的文件。）
 

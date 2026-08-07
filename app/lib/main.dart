@@ -2056,6 +2056,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     await adapter.seek(subtitleController.primaryCursor.mediaStart(cue));
   }
 
+  /// Plays from the tapped word: a single click on a transcript word seeks to
+  /// that word's own start when the file has word-level timing, so the reader
+  /// hears exactly where they pointed. Files without word timing fall back to
+  /// the sentence start — the same place [_seekCue] lands — rather than
+  /// pretending to a precision the timeline does not have.
+  Future<void> _seekWord(SubtitleToken token, Cue cue) async {
+    final timings = subtitleController.timingsBySentence[cue.id] ?? const [];
+    final matches = timings.where(
+      (timing) => timing.tokenIndex == token.index,
+    );
+    if (matches.isEmpty) {
+      await _seekCue(cue);
+      return;
+    }
+    subtitleController.setCurrentPrimaryCue(cue);
+    unawaited(_refreshDiagnosis());
+    await adapter.seek(
+      subtitleController.primaryCursor.mediaAt(matches.first.start),
+    );
+  }
+
   @override
   void dispose() {
     unawaited(coreSessionController.shutdown());
@@ -2845,6 +2866,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     transcriptController: transcriptController,
     onOpenWord: vocabularyActions.openWord,
     onSeekCue: _seekCue,
+    onSeekWord: _seekWord,
     onSetSelectedWordStatus: vocabularyActions.setSelectedWordStatus,
     onSetCapabilityOverride: vocabularyActions.setCapabilityOverride,
     onSaveSelectedLearningContent:
