@@ -134,6 +134,7 @@ import 'widgets/layout/study_menu.dart';
 import 'widgets/layout/translation_mode_button.dart';
 import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
+import 'widgets/panels/listening_inbox_panel.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/sentence_analysis_window.dart';
 import 'widgets/player/download_status_bar.dart';
@@ -2209,8 +2210,34 @@ class _PlayerScreenState extends State<PlayerScreen>
     onToggleListening: () => unawaited(_toggleExtensiveListening()),
     onToggleHunting: () => unawaited(huntingActions.toggleHuntingMode()),
     onCaptureInbox: () => unawaited(inboxActions.captureListeningInbox()),
+    onViewInbox: () => unawaited(_openListeningInbox()),
     onHardInterrupt: () => unawaited(_hardInterruptListening()),
   );
+
+  /// Opens the Listening Inbox — the box the `mark` action fills — as a modal
+  /// sheet reachable straight from the session menu, so what was marked can be
+  /// read back without hunting through the side panel. Mirrors how the vocab
+  /// screen surfaces the Hunting List.
+  Future<void> _openListeningInbox() async {
+    await inboxActions.refreshListeningInbox();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          child: ListeningInboxPanel(
+            controller: extensiveListeningController,
+            onRefresh: inboxActions.refreshListeningInbox,
+            onReplay: inboxActions.replayListeningInboxItem,
+            onProcess: inboxActions.processListeningInboxItem,
+          ),
+        ),
+      ),
+    );
+  }
 
   /// Switches the transcript between original, bilingual and translation.
   Widget _translationMenu() => TranslationModeButton(

@@ -24,6 +24,7 @@ class ListeningSessionMenu extends StatelessWidget {
     required this.onToggleHunting,
     required this.onCaptureInbox,
     required this.onHardInterrupt,
+    this.onViewInbox,
   });
 
   final bool active;
@@ -36,6 +37,10 @@ class ListeningSessionMenu extends StatelessWidget {
   final VoidCallback? onToggleHunting;
   final VoidCallback onCaptureInbox;
   final VoidCallback onHardInterrupt;
+
+  /// Opens the box the marks land in. Null where the host cannot show it;
+  /// the row then greys out with the same empty reason as an empty box.
+  final VoidCallback? onViewInbox;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +60,8 @@ class ListeningSessionMenu extends StatelessWidget {
             onToggleHunting?.call();
           case 'mark-inbox':
             onCaptureInbox();
+          case 'view-inbox':
+            onViewInbox?.call();
           case 'hard-interrupt':
             onHardInterrupt();
         }
@@ -87,6 +94,16 @@ class ListeningSessionMenu extends StatelessWidget {
             enabled: markEnabled,
             icon: Icons.bookmark_add_outlined,
             title: l.text('markListeningInbox'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'view-inbox',
+          enabled: onViewInbox != null && inboxCount > 0,
+          child: ListenMenuRow(
+            enabled: onViewInbox != null && inboxCount > 0,
+            icon: Icons.inbox_outlined,
+            title: l.text('viewListeningInbox'),
+            subtitle: inboxCount > 0 ? null : l.text('listeningInboxEmpty'),
           ),
         ),
         PopupMenuItem(

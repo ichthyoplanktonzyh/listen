@@ -144,6 +144,75 @@ void main() {
       expect(find.byKey(const Key('listening-inbox-badge')), findsOneWidget);
       expect(find.text('3'), findsOneWidget);
     });
+
+    testWidgets('viewing the box opens once there is something marked', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(700, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      var viewed = 0;
+      await tester.pumpWidget(
+        _menuHarness(
+          ListeningSessionMenu(
+            active: true,
+            huntingActive: false,
+            markEnabled: true,
+            inboxCount: 2,
+            onToggleListening: _noop,
+            onToggleHunting: _noop,
+            onCaptureInbox: _noop,
+            onHardInterrupt: _noop,
+            onViewInbox: () => viewed++,
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('listening-session-menu')));
+      await tester.pumpAndSettle();
+
+      final view = tester.widget<PopupMenuItem<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is PopupMenuItem<String> && widget.value == 'view-inbox',
+        ),
+      );
+      expect(view.enabled, isTrue);
+
+      await tester.tap(find.text('查看泛听收集箱'));
+      await tester.pumpAndSettle();
+      expect(viewed, 1);
+    });
+
+    testWidgets('viewing is disabled while the box is empty', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(700, 600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        _menuHarness(
+          ListeningSessionMenu(
+            active: true,
+            huntingActive: false,
+            markEnabled: true,
+            inboxCount: 0,
+            onToggleListening: _noop,
+            onToggleHunting: _noop,
+            onCaptureInbox: _noop,
+            onHardInterrupt: _noop,
+            onViewInbox: _noop,
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const Key('listening-session-menu')));
+      await tester.pumpAndSettle();
+
+      final view = tester.widget<PopupMenuItem<String>>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is PopupMenuItem<String> && widget.value == 'view-inbox',
+        ),
+      );
+      expect(view.enabled, isFalse);
+    });
   });
 }
 

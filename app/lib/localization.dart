@@ -1264,6 +1264,7 @@ class AppLocalizations {
       'extensiveListeningActive': 'Extensive listening is active',
       'extensiveListeningIdle': 'Extensive listening is idle',
       'markListeningInbox': 'Mark Listening Inbox',
+      'viewListeningInbox': 'View Listening Inbox',
       'hardInterruptListening': 'Pause and inspect',
       'listeningInbox': 'Listening Inbox',
       'listeningInboxEmpty': 'No marked listening moments yet.',
@@ -3323,6 +3324,7 @@ class AppLocalizations {
       'extensiveListeningActive': '泛听进行中',
       'extensiveListeningIdle': '泛听未开始',
       'markListeningInbox': '标记到泛听收集箱',
+      'viewListeningInbox': '查看泛听收集箱',
       'hardInterruptListening': '暂停查看',
       // Owner ruling 2026-07-28: this was the English source string, which made
       // the Chinese interface read 「Listening Inbox」 next to 「泛听进行中」 and
