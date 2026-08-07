@@ -55,7 +55,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // No manual interaction yet: the back-to-current affordance stays hidden.
-    expect(find.text('回到当前句'), findsNothing);
+    expect(find.byKey(const Key('transcript-back-to-current')), findsNothing);
 
     // Drag the transcript away from the current cue.
     await tester.drag(
@@ -66,18 +66,18 @@ void main() {
 
     // Following is paused, so a new current cue must not scroll the list, and
     // the resume affordance appears.
-    expect(find.text('回到当前句'), findsOneWidget);
+    expect(find.byKey(const Key('transcript-back-to-current')), findsOneWidget);
 
-    await tester.tap(find.text('回到当前句'));
+    await tester.tap(find.byKey(const Key('transcript-back-to-current')));
     await tester.pumpAndSettle();
 
     // Resuming following scrolls the current cue back into view and hides the
     // affordance again.
-    expect(find.text('回到当前句'), findsNothing);
+    expect(find.byKey(const Key('transcript-back-to-current')), findsNothing);
     _expectCueVisible(tester, 'cue-4');
   });
 
-  testWidgets('back-to-current sits under the list and covers no sentence', (
+  testWidgets('back-to-current floats over the list without shrinking it', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(620, 420));
@@ -101,19 +101,21 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final bar = tester.getRect(
+    final fab = tester.getRect(
       find.byKey(const Key('transcript-back-to-current')),
     );
     final listAfter = tester.getRect(find.byType(ListView));
 
-    // The strip is laid out below the list rather than stacked over it, so no
-    // transcript row can be behind it (§3.7 item 2 / charter P2).
-    expect(bar.top, greaterThanOrEqualTo(listAfter.bottom - 0.5));
+    // The FAB is stacked over the list, not laid out beneath it: the list keeps
+    // its full height instead of giving up a row's worth to the affordance.
+    expect(listAfter.height, closeTo(listBefore.height, 0.5));
 
-    // It pays for its own space: the list gives up exactly the strip's height
-    // instead of keeping a row hidden underneath.
-    expect(listBefore.bottom - listAfter.bottom, closeTo(bar.height, 0.5));
-    expect(bar.height, greaterThan(0));
+    // It floats inside the list's bounds, tucked into the bottom-right corner —
+    // where it can only ever overlap a sentence the reader has scrolled past.
+    expect(fab.bottom, lessThanOrEqualTo(listAfter.bottom + 0.5));
+    expect(fab.right, lessThanOrEqualTo(listAfter.right + 0.5));
+    expect(fab.top, greaterThan(listAfter.center.dy));
+    expect(fab.left, greaterThan(listAfter.center.dx));
   });
 }
 
@@ -250,42 +252,43 @@ void _studyModeGroup() {
   String plainOf(WidgetTester tester, Key key) =>
       tester.widget<Text>(find.byKey(key)).textSpan!.toPlainText();
 
-  testWidgets('blind mode focuses the current sentence, blanked, with a count', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(620, 420));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  testWidgets(
+    'blind mode focuses the current sentence, blanked, with a count',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(620, 420));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    final controller = ScrollController();
-    addTearDown(controller.dispose);
-    final cues = List.generate(8, _cue);
-    final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+      final cues = List.generate(8, _cue);
+      final track = SubtitleTrack(id: 'track-1', cues: cues, source: 'fixture');
 
-    await tester.pumpWidget(
-      _Harness(
-        controller: controller,
-        track: track,
-        currentCue: cues[2],
-        studyMode: WorkbenchStudyMode.blindListening,
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _Harness(
+          controller: controller,
+          track: track,
+          currentCue: cues[2],
+          studyMode: WorkbenchStudyMode.blindListening,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // Only the current sentence is on screen — the list is gone — and it is
-    // blanked (underscore runs) with some scaffolding words kept.
-    expect(find.byType(ListView), findsNothing);
-    expect(
-      find.byKey(const Key('transcript-blind-sentence')),
-      findsOneWidget,
-    );
-    final plain = plainOf(tester, const Key('transcript-blind-sentence'));
-    expect(plain, contains('_'));
-    expect(plain.replaceAll('_', '').trim(), isNotEmpty);
-    // The count stands where in the piece the ear is: sentence 3 of 8.
-    expect(find.text('3 / 8'), findsOneWidget);
-    // Blind shows no candidate words — that is word-select's job.
-    expect(find.byType(OutlinedButton), findsNothing);
-  });
+      // Only the current sentence is on screen — the list is gone — and it is
+      // blanked (underscore runs) with some scaffolding words kept.
+      expect(find.byType(ListView), findsNothing);
+      expect(
+        find.byKey(const Key('transcript-blind-sentence')),
+        findsOneWidget,
+      );
+      final plain = plainOf(tester, const Key('transcript-blind-sentence'));
+      expect(plain, contains('_'));
+      expect(plain.replaceAll('_', '').trim(), isNotEmpty);
+      // The count stands where in the piece the ear is: sentence 3 of 8.
+      expect(find.text('3 / 8'), findsOneWidget);
+      // Blind shows no candidate words — that is word-select's job.
+      expect(find.byType(OutlinedButton), findsNothing);
+    },
+  );
 
   testWidgets('word select offers the removed words as chips and fills a blank', (
     tester,
@@ -311,15 +314,18 @@ void _studyModeGroup() {
     // The current sentence, blanked, plus the prompt and a chip per blank.
     expect(find.byType(ListView), findsNothing);
     expect(find.text('请选择下列单词进行填空'), findsOneWidget);
-    final before = plainOf(tester, const Key('transcript-word-select-sentence'));
+    final before = plainOf(
+      tester,
+      const Key('transcript-word-select-sentence'),
+    );
     final blanks = RegExp(r'_+').allMatches(before).length;
     final chips = find.byType(OutlinedButton);
     expect(tester.widgetList(chips), hasLength(blanks));
     expect(blanks, greaterThan(0));
 
     // Tapping a chip drops its word into the first empty blank and consumes it.
-    final label = ((tester.widget<OutlinedButton>(chips.first)).child! as Text)
-        .data!;
+    final label =
+        ((tester.widget<OutlinedButton>(chips.first)).child! as Text).data!;
     await tester.ensureVisible(chips.first);
     await tester.tap(chips.first);
     await tester.pumpAndSettle();
@@ -328,10 +334,7 @@ void _studyModeGroup() {
     expect(after, contains(label));
     expect(RegExp(r'_+').allMatches(after).length, blanks - 1);
     // The used chip stays visible but disabled, so the pool keeps its shape.
-    expect(
-      tester.widget<OutlinedButton>(chips.first).onPressed,
-      isNull,
-    );
+    expect(tester.widget<OutlinedButton>(chips.first).onPressed, isNull);
   });
 
   testWidgets('focus modes ask for a sentence when none is playing', (
@@ -355,10 +358,7 @@ void _studyModeGroup() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const Key('transcript-focus-awaiting')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('transcript-focus-awaiting')), findsOneWidget);
   });
 }
 

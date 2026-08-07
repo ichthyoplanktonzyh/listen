@@ -8,12 +8,10 @@ import 'package:llplayer_next/data/repositories/practice_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/api_service.dart';
-import 'package:llplayer_next/theme/icon_size.dart';
-import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/panels/intensive_practice_window.dart';
 
 void main() {
-  testWidgets('window can hide its player, navigate, and close', (
+  testWidgets('window shows progress, navigates by sentence, and closes', (
     tester,
   ) async {
     final api = _practiceApi();
@@ -74,41 +72,12 @@ void main() {
       ),
     );
 
-    expect(find.text('Current sentence'), findsOneWidget);
+    // The floating window carries sentence progress in its meta row; there is
+    // no mini player any more — playback lives in the keyboard-hint foot.
     expect(find.text('Sentence 1 of 3'), findsOneWidget);
-
-    // Token provenance. The mini player's glyph is the one `illustration` in
-    // this window — it stands in for a video surface that is not there — while
-    // the header identity glyph stays a `control` beside its 13px title.
-    expect(
-      tester.widget<Icon>(find.byIcon(Icons.play_circle_outline)).size,
-      ListenIconSize.illustration,
-    );
-    expect(
-      tester.widget<Icon>(find.byIcon(Icons.fact_check_outlined)).size,
-      ListenIconSize.control,
-    );
-    expect(
-      tester
-          .widget<Padding>(
-            find
-                .ancestor(
-                  of: find.byIcon(Icons.play_circle_outline),
-                  matching: find.byType(Padding),
-                )
-                .first,
-          )
-          .padding,
-      ListenPadding.card,
-    );
-
-    await tester.tap(find.byTooltip('Hide player'));
-    await tester.pump();
     expect(find.text('Current sentence'), findsNothing);
-    expect(find.text('Sentence 1 of 3'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Show player'));
-    await tester.pump();
+    // Prev/next live in the foot's keyboard-hint strip.
     await tester.tap(find.byTooltip('Next sentence'));
     expect(navigated, 1);
 
@@ -373,7 +342,9 @@ void main() {
     expect(find.byTooltip('Previous sentence'), findsNothing);
     expect(find.byTooltip('Next sentence'), findsNothing);
     expect(find.text('Sentence 9 of 20'), findsNothing);
-    await tester.tap(find.byIcon(Icons.play_arrow));
+    // Play/pause stays available in the keyboard-hint strip even when
+    // sentence navigation is suppressed for a cross-media source.
+    await tester.tap(find.text('Play / pause'));
     expect(toggled, isTrue);
     expect(navigated, isFalse);
     controller.dispose();

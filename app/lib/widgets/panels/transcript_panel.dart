@@ -182,129 +182,142 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
         onPointerSignal: (event) {
           if (event is PointerScrollEvent) _pauseFollowing();
         },
-        // A column, not a stack: the resume-following control is a strip
-        // attached under the list instead of a pill floating on top of it. The
-        // reference app floats it, and floating it covers whichever sentence
-        // happens to be at the bottom-right — a different one at every window
-        // height. A strip costs one row and covers nothing.
-        child: Column(
+        // A stack, so the resume-following control floats as a FAB over the
+        // bottom-right of the list, matching the reference app. It is offered
+        // only while following is paused *and* the list has drifted off the
+        // current sentence, so whatever row sits beneath it is by definition
+        // not the one the reader is tracking; one tap scrolls that sentence
+        // back into view and the FAB retires.
+        child: Stack(
           children: [
-            // Said once, at the top, because it is a fact about the file.
-            // Repeating it under all 200 sentences would be the same fact 200
-            // times, and would drown the sentences that genuinely have no line
-            // of their own.
-            if (widget.translationMode.showsTranslation &&
-                !widget.hasTranslationTrack)
-              _NoTranslationTrackNotice(
-                message: l.text('noTranslationTrack'),
-                actionLabel: l.text('importSubtitle'),
-                onImport: widget.onImportTranslation,
-              ),
-            Expanded(
-              child: ListView.builder(
-                controller: widget.scrollController,
-                padding: const EdgeInsets.symmetric(
-                  vertical: ListenSpacing.gap8,
-                ),
-                itemCount: widget.track!.cues.length,
-                itemBuilder: (context, index) {
-                  final cue = widget.track!.cues[index];
-                  final selected = cue.id == widget.currentCue?.id;
-                  return KeyedSubtree(
-                    key: _keyFor(cue),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _TranscriptCueRow(
-                          key: ValueKey('transcript-cue-${cue.id}'),
-                          selected: selected,
-                          accentColor: colors.primary,
-                          onTap: () => widget.onSeekCue(cue),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.translationMode.showsSource)
-                                TokenLine(
-                                  cue: cue,
-                                  profiles: widget.wordEntries,
-                                  capabilityProfiles: widget.capabilityProfiles,
-                                  showStyles: widget.showStyles,
-                                  // Read as a paragraph, ragged-right. TokenLine
-                                  // defaults to centre for the on-video subtitle
-                                  // overlay; in the transcript that centres every
-                                  // wrapped line, which reads as a column of
-                                  // poetry rather than prose.
-                                  textAlign: TextAlign.start,
-                                  // Tight prose leading so one wrapped sentence
-                                  // reads as one sentence.
-                                  lineHeight: 1.35,
-                                  // The playing sentence reads in the primary
-                                  // hue rather than under a full-width fill
-                                  // block: a fill that wide becomes the
-                                  // brightest thing on the panel — louder than
-                                  // the words it is meant to point at.
-                                  baseColor: selected
-                                      ? colors.primary
-                                      : effectiveBaseColor,
-                                  onWord: (token, cue) => widget.onWord(
-                                    token,
-                                    cue,
-                                    _lastPressPosition,
-                                  ),
-                                  groupingMode: widget.groupingMode,
-                                  chunkDisplayStyle: widget.chunkDisplayStyle,
-                                  chunkPartition: widget
-                                      .chunkPartitionsBySentence[cue.id],
-                                  senseGroups:
-                                      widget.senseGroupsBySentence[cue.id] ??
-                                      const [],
-                                ),
-                              if (widget.translationMode.showsTranslation &&
-                                  widget.hasTranslationTrack)
-                                _TranslationLine(
-                                  text: widget.translationFor?.call(cue),
-                                  missingLabel: l.text(
-                                    'sentenceHasNoTranslation',
-                                  ),
-                                  alone: !widget.translationMode.showsSource,
-                                ),
-                            ],
-                          ),
-                        ),
-                        // The analysis belongs to one sentence, so it opens
-                        // inside that sentence. As a panel tab it could be
-                        // "open" while the sentence it described was scrolled
-                        // out of sight, and reaching it always cost the
-                        // transcript.
-                        if (selected && widget.onToggleAnalysis != null)
-                          _AnalysisControl(
-                            expanded: widget.analysisExpanded,
-                            label: l.text('analyseSentence'),
-                            onPressed: widget.onToggleAnalysis!,
-                          ),
-                        if (selected &&
-                            widget.analysisExpanded &&
-                            widget.analysis != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              ListenSpacing.gap12,
-                              0,
-                              ListenSpacing.gap12,
-                              ListenSpacing.gap12,
-                            ),
-                            child: widget.analysis,
-                          ),
-                      ],
+            Column(
+              children: [
+                // Said once, at the top, because it is a fact about the file.
+                // Repeating it under all 200 sentences would be the same fact 200
+                // times, and would drown the sentences that genuinely have no line
+                // of their own.
+                if (widget.translationMode.showsTranslation &&
+                    !widget.hasTranslationTrack)
+                  _NoTranslationTrackNotice(
+                    message: l.text('noTranslationTrack'),
+                    actionLabel: l.text('importSubtitle'),
+                    onImport: widget.onImportTranslation,
+                  ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: widget.scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: ListenSpacing.gap8,
                     ),
-                  );
-                },
-              ),
+                    itemCount: widget.track!.cues.length,
+                    itemBuilder: (context, index) {
+                      final cue = widget.track!.cues[index];
+                      final selected = cue.id == widget.currentCue?.id;
+                      return KeyedSubtree(
+                        key: _keyFor(cue),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _TranscriptCueRow(
+                              key: ValueKey('transcript-cue-${cue.id}'),
+                              selected: selected,
+                              accentColor: colors.primary,
+                              onTap: () => widget.onSeekCue(cue),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (widget.translationMode.showsSource)
+                                    TokenLine(
+                                      cue: cue,
+                                      profiles: widget.wordEntries,
+                                      capabilityProfiles:
+                                          widget.capabilityProfiles,
+                                      showStyles: widget.showStyles,
+                                      // Read as a paragraph, ragged-right. TokenLine
+                                      // defaults to centre for the on-video subtitle
+                                      // overlay; in the transcript that centres every
+                                      // wrapped line, which reads as a column of
+                                      // poetry rather than prose.
+                                      textAlign: TextAlign.start,
+                                      // Tight prose leading so one wrapped sentence
+                                      // reads as one sentence.
+                                      lineHeight: 1.35,
+                                      // The playing sentence reads in the primary
+                                      // hue rather than under a full-width fill
+                                      // block: a fill that wide becomes the
+                                      // brightest thing on the panel — louder than
+                                      // the words it is meant to point at.
+                                      baseColor: selected
+                                          ? colors.primary
+                                          : effectiveBaseColor,
+                                      onWord: (token, cue) => widget.onWord(
+                                        token,
+                                        cue,
+                                        _lastPressPosition,
+                                      ),
+                                      groupingMode: widget.groupingMode,
+                                      chunkDisplayStyle:
+                                          widget.chunkDisplayStyle,
+                                      chunkPartition: widget
+                                          .chunkPartitionsBySentence[cue.id],
+                                      senseGroups:
+                                          widget.senseGroupsBySentence[cue
+                                              .id] ??
+                                          const [],
+                                    ),
+                                  if (widget.translationMode.showsTranslation &&
+                                      widget.hasTranslationTrack)
+                                    _TranslationLine(
+                                      text: widget.translationFor?.call(cue),
+                                      missingLabel: l.text(
+                                        'sentenceHasNoTranslation',
+                                      ),
+                                      alone:
+                                          !widget.translationMode.showsSource,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            // The analysis belongs to one sentence, so it opens
+                            // inside that sentence. As a panel tab it could be
+                            // "open" while the sentence it described was scrolled
+                            // out of sight, and reaching it always cost the
+                            // transcript.
+                            if (selected && widget.onToggleAnalysis != null)
+                              _AnalysisControl(
+                                expanded: widget.analysisExpanded,
+                                label: l.text('analyseSentence'),
+                                onPressed: widget.onToggleAnalysis!,
+                              ),
+                            if (selected &&
+                                widget.analysisExpanded &&
+                                widget.analysis != null)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  ListenSpacing.gap12,
+                                  0,
+                                  ListenSpacing.gap12,
+                                  ListenSpacing.gap12,
+                                ),
+                                child: widget.analysis,
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
             if (!_following && widget.currentCue != null)
-              _BackToCurrentBar(
-                label: l.text('backToCurrentSentence'),
-                onPressed: _resumeFollowing,
+              Positioned(
+                right: ListenSpacing.gap16,
+                bottom: ListenSpacing.gap16,
+                child: _BackToCurrentFab(
+                  label: l.text('backToCurrentSentence'),
+                  onPressed: _resumeFollowing,
+                ),
               ),
           ],
         ),
@@ -480,7 +493,7 @@ class _FocusHeader extends StatelessWidget {
               style: theme.labelLarge?.copyWith(color: colors.onSurfaceVariant),
             ),
           ),
-          ),
+        ),
       ],
     );
   }
@@ -778,9 +791,7 @@ class _WordChip extends StatelessWidget {
       onPressed: used ? null : onTap,
       style: OutlinedButton.styleFrom(
         shape: const StadiumBorder(),
-        side: BorderSide(
-          color: used ? colors.outlineVariant : colors.outline,
-        ),
+        side: BorderSide(color: used ? colors.outlineVariant : colors.outline),
         foregroundColor: colors.onSurface,
         padding: const EdgeInsets.symmetric(
           horizontal: ListenSpacing.gap16,
@@ -870,7 +881,6 @@ InlineSpan _underscoreSpan(BuildContext context, int wordLength) {
     style: TextStyle(color: colors.onSurfaceVariant),
   );
 }
-
 
 /// The translation of one sentence, under the original.
 ///
@@ -1013,13 +1023,15 @@ class _AnalysisControl extends StatelessWidget {
 
 /// The strip that offers to resume following the current sentence.
 ///
-/// It takes its own row at the bottom edge of the list rather than floating
-/// over it: the transcript is content, and a control that hides a line of it
-/// covers a different line at every window height. Being laid out also makes
-/// it honest about its cost — the list gets shorter while the offer stands,
-/// and gets its height back the moment following resumes.
-class _BackToCurrentBar extends StatelessWidget {
-  const _BackToCurrentBar({required this.label, required this.onPressed});
+/// It floats as a small pill over the bottom-right of the list rather than
+/// taking a laid-out row, matching the reference app. The trade-off a laid-out
+/// strip avoided — covering a line of transcript — does not bite here: the
+/// offer only stands while following is paused and the current sentence has
+/// scrolled away, so the row it overlaps is never the one the reader is on, and
+/// the tap that would reveal it also retires the pill. Icon-only, with the
+/// label carried as a tooltip so it stays legible to a screen reader.
+class _BackToCurrentFab extends StatelessWidget {
+  const _BackToCurrentFab({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
@@ -1027,38 +1039,31 @@ class _BackToCurrentBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Material(
-      key: const Key('transcript-back-to-current'),
-      color: colors.surfaceContainerLowest,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: colors.outlineVariant)),
+    return Tooltip(
+      message: label,
+      child: Material(
+        key: const Key('transcript-back-to-current'),
+        color: colors.surfaceContainerHighest,
+        shape: RoundedRectangleBorder(
+          borderRadius: ListenRadii.surfaceBorder,
+          side: BorderSide(color: colors.outlineVariant),
         ),
+        elevation: 2,
+        shadowColor: colors.shadow,
         child: InkWell(
           onTap: onPressed,
-          child: Padding(
-            padding: ListenPadding.row,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.vertical_align_center,
-                  size: ListenIconSize.control,
-                  color: colors.primary,
-                ),
-                const SizedBox(width: ListenSpacing.gap6),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: colors.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
+          borderRadius: ListenRadii.surfaceBorder,
+          child: Semantics(
+            button: true,
+            label: label,
+            child: SizedBox(
+              width: 40,
+              height: 52,
+              child: Icon(
+                Icons.keyboard_double_arrow_down,
+                size: ListenIconSize.chrome,
+                color: colors.onSurfaceVariant,
+              ),
             ),
           ),
         ),
