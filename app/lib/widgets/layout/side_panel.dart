@@ -5,22 +5,18 @@ import 'package:flutter/material.dart';
 import '../../controllers/extensive_listening_controller.dart';
 import '../../controllers/learning_controller.dart';
 import '../../controllers/media_session_coordinator.dart';
-import '../../controllers/playback_actions_coordinator.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
 import '../../models/listening.dart';
 import '../../models/timeline.dart';
-import '../../models/types.dart';
 import '../../models/workbench_study_mode.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/icon_size.dart';
-import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/transcript_translation.dart';
 import '../panels/content_fit_card.dart';
-import '../panels/diagnosis_card.dart';
 import '../panels/listening_inbox_panel.dart';
 import '../panels/transcript_panel.dart';
 import '../panels/word_bubble.dart';
@@ -48,7 +44,6 @@ class SidePanel extends StatefulWidget {
     required this.extensiveListeningController,
     required this.settingsController,
     required this.mediaSession,
-    required this.playbackActions,
     required this.transcriptController,
     required this.onOpenWord,
     required this.onSeekCue,
@@ -56,16 +51,13 @@ class SidePanel extends StatefulWidget {
     required this.onSetCapabilityOverride,
     required this.onSaveSelectedLearningContent,
     required this.onObserveSelected,
-    required this.onRequestDiagnosis,
     required this.onOpenSlicePlayback,
     this.onOpenListeningDictionary,
     this.onPlayPronunciationAudio,
-    this.onOpenL1Specialty,
     this.onCorrectLemma,
     required this.onRefreshListeningInbox,
     required this.onReplayListeningInboxItem,
     required this.onProcessListeningInboxItem,
-    required this.timingQuality,
     this.onStartColdStart,
     this.onRecordCurrentSource,
     this.onReadingMark,
@@ -78,7 +70,6 @@ class SidePanel extends StatefulWidget {
   final ExtensiveListeningController extensiveListeningController;
   final SettingsController settingsController;
   final MediaSessionCoordinator mediaSession;
-  final PlaybackActionsCoordinator playbackActions;
   final ScrollController transcriptController;
   final Future<void> Function(SubtitleToken token, Cue cue) onOpenWord;
   final Future<void> Function(Cue? cue) onSeekCue;
@@ -89,14 +80,10 @@ class SidePanel extends StatefulWidget {
   onSaveSelectedLearningContent;
   final Future<void> Function(bool heard) onObserveSelected;
 
-  /// Loads the analysis for the current sentence. Called when the reader
-  /// expands it and nothing has been loaded yet.
-  final Future<void> Function() onRequestDiagnosis;
   final Future<void> Function(Map<String, dynamic> occurrence)
   onOpenSlicePlayback;
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
   final ValueChanged<String>? onPlayPronunciationAudio;
-  final Future<void> Function(L1DiagnosisHint hint)? onOpenL1Specialty;
 
   /// Corrects the lemma of the currently selected token (#16 moved this out
   /// of the global AppBar menu, where it had no context to act on).
@@ -106,7 +93,6 @@ class SidePanel extends StatefulWidget {
   onReplayListeningInboxItem;
   final Future<void> Function(ListeningInboxItem item, String resolution)
   onProcessListeningInboxItem;
-  final String Function(String sentenceId) timingQuality;
   final VoidCallback? onStartColdStart;
   final VoidCallback? onRecordCurrentSource;
 
@@ -129,7 +115,6 @@ class _SidePanelState extends State<SidePanel> {
       widget.extensiveListeningController;
   SettingsController get settingsController => widget.settingsController;
   MediaSessionCoordinator get mediaSession => widget.mediaSession;
-  PlaybackActionsCoordinator get playbackActions => widget.playbackActions;
   ScrollController get transcriptController => widget.transcriptController;
   AppLocalizations get l => AppLocalizations.of(context);
 
@@ -148,19 +133,6 @@ class _SidePanelState extends State<SidePanel> {
     ListeningInboxItem item,
     String resolution,
   ) => widget.onProcessListeningInboxItem(item, resolution);
-  String _timingQuality(String sentenceId) => widget.timingQuality(sentenceId);
-
-  RhythmFrame? get _currentRhythmFrame {
-    final cue = subtitleController.currentPrimaryCue;
-    if (cue == null) return null;
-    return subtitleController.llTimelineDocument?.rhythmFrameForSentence(
-          cue.id,
-        ) ??
-        subtitleController
-            .phoneticAnalysisBySentence[cue.id]
-            ?.soundAnalysis
-            ?.rhythmFrame;
-  }
 
   /// Looks the word up and shows the result over the word, not instead of it.
   ///
@@ -193,13 +165,11 @@ class _SidePanelState extends State<SidePanel> {
     );
   }
 
-  void _toggleAnalysis() {
-    final expanded = !learningController.diagnosisExpanded;
-    learningController.setDiagnosisExpanded(expanded);
-    if (expanded && learningController.diagnosis == null) {
-      unawaited(widget.onRequestDiagnosis());
-    }
-  }
+  /// Opens or closes the floating analysis window. The window itself fetches
+  /// the diagnosis when its voice layer is opened, so opening it need only flip
+  /// the flag [SentenceAnalysisWindow] reads.
+  void _toggleAnalysis() =>
+      learningController.setDiagnosisExpanded(!learningController.diagnosisExpanded);
 
   @override
   Widget build(BuildContext context) => Material(
@@ -267,13 +237,6 @@ class _SidePanelState extends State<SidePanel> {
         ? null
         : _toggleAnalysis,
     analysisExpanded: learningController.diagnosisExpanded,
-    analysis: learningController.diagnosis == null
-        ? _AnalysisPending(
-            message: l.text('openSentenceDiagnosisHint'),
-            actionLabel: l.text('openDiagnosis'),
-            onAction: () => unawaited(widget.onRequestDiagnosis()),
-          )
-        : _diagnosisCard(),
   );
 
   /// The session's own notes: the word being studied in full, and — while an
@@ -336,119 +299,6 @@ class _SidePanelState extends State<SidePanel> {
     );
   }
 
-  Widget _diagnosisCard() => ValueListenableBuilder<DetectedPhone?>(
-    valueListenable: subtitleController.currentDetectedPhoneListenable,
-    builder: (context, currentDetectedPhone, _) => DiagnosisCard(
-      diagnosis: learningController.diagnosis!,
-      pronunciation: subtitleController.currentPrimaryCue == null
-          ? null
-          : subtitleController.pronunciationBySentence[subtitleController
-                .currentPrimaryCue!
-                .id],
-      ruleHintsLevel: settingsController.ruleHintsLevel,
-      pronunciationProviders: subtitleController.pronunciationProviders,
-      timingQuality:
-          subtitleController.currentPrimaryCue == null ||
-              (subtitleController.timingsBySentence[subtitleController
-                          .currentPrimaryCue!
-                          .id] ??
-                      const [])
-                  .isEmpty
-          ? null
-          : _timingQuality(subtitleController.currentPrimaryCue!.id),
-      rhythmFrame: _currentRhythmFrame,
-      phoneticAnalysis: subtitleController.currentPrimaryCue == null
-          ? null
-          : subtitleController.phoneticAnalysisBySentence[subtitleController
-                .currentPrimaryCue!
-                .id],
-      currentDetectedPhone: currentDetectedPhone,
-      onLoopDetectedPhone: (phone) => unawaited(
-        playbackActions.loopRange(
-          phone.start.inMilliseconds,
-          phone.end.inMilliseconds,
-          'Looping detected phone ${phone.displayIpa}',
-          labelKey: 'loopPhone',
-        ),
-      ),
-      onLoopHotspot: (hotspot) => unawaited(
-        playbackActions.loopRange(
-          hotspot.start.inMilliseconds,
-          hotspot.end.inMilliseconds,
-          'Looping listening hotspot ${hotspot.label}',
-          labelKey: 'loopHotspot',
-        ),
-      ),
-      onLoopFinding: (finding) => unawaited(
-        playbackActions.loopRange(
-          finding.audioStartMs,
-          finding.audioEndMs,
-          'Looping audio finding evidence',
-          labelKey: 'loopEvidence',
-        ),
-      ),
-      onFindingFeedback: (finding, value) => unawaited(
-        playbackActions.savePhoneticFindingFeedback(finding, value),
-      ),
-      onOpenListeningDictionary: widget.onOpenListeningDictionary,
-      onLoopL1Span: (span) => unawaited(
-        playbackActions.loopRange(
-          span.startMs,
-          span.endMs,
-          'Looping L1 difficulty evidence ${span.label}',
-          labelKey: 'l1ListenAgain',
-        ),
-      ),
-      onOpenL1Specialty: widget.onOpenL1Specialty == null
-          ? null
-          : (hint) => unawaited(widget.onOpenL1Specialty!(hint)),
-    ),
-  );
-}
-
-/// What the expanded analysis shows before anything has been loaded.
-///
-/// It states that there is nothing yet and offers to fetch it, rather than
-/// rendering an empty box that reads as "this sentence has no findings".
-class _AnalysisPending extends StatelessWidget {
-  const _AnalysisPending({
-    required this.message,
-    required this.actionLabel,
-    required this.onAction,
-  });
-
-  final String message;
-  final String actionLabel;
-  final VoidCallback onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      key: const Key('transcript-analysis-pending'),
-      decoration: BoxDecoration(
-        borderRadius: ListenRadii.controlBorder,
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Padding(
-        padding: ListenPadding.row,
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                message,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
-              ),
-            ),
-            const SizedBox(width: ListenSpacing.gap8),
-            TextButton(onPressed: onAction, child: Text(actionLabel)),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _PanelEmptyState extends StatelessWidget {

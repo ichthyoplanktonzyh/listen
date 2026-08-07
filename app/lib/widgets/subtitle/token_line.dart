@@ -43,6 +43,7 @@ class TokenLine extends StatefulWidget {
     this.subtitleOffset = Duration.zero,
     this.textAlign = TextAlign.center,
     this.lineHeight,
+    this.trailing,
   });
 
   final Cue cue;
@@ -81,6 +82,11 @@ class TokenLine extends StatefulWidget {
   /// tighter value so a single sentence's lines sit together instead of drifting
   /// apart like separate sentences.
   final double? lineHeight;
+
+  /// An inline widget flowed after the sentence's last word, wrapping with the
+  /// text rather than taking a row of its own. The transcript hangs its `解析`
+  /// entry here so it sits at the sentence end, matching the reference.
+  final Widget? trailing;
 
   /// Unified grouping presentation: `off`, `prosodic`, `semantic`, `compare`.
   /// The prosodic ([chunkPartition]) and semantic ([senseGroups]) data both
@@ -226,7 +232,16 @@ class _TokenLineState extends State<TokenLine> {
 
   @override
   Widget build(BuildContext context) => Text.rich(
-    TextSpan(children: _spans(context)),
+    TextSpan(
+      children: [
+        ..._spans(context),
+        if (widget.trailing != null)
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: widget.trailing!,
+          ),
+      ],
+    ),
     textAlign: widget.textAlign,
   );
 

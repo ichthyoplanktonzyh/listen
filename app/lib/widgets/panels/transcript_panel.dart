@@ -33,7 +33,6 @@ class TranscriptPanel extends StatefulWidget {
     this.chunkDisplayStyle = 'capsule',
     this.onToggleAnalysis,
     this.analysisExpanded = false,
-    this.analysis,
     this.translationMode = TranscriptTranslation.source,
     this.translationFor,
     this.hasTranslationTrack = false,
@@ -62,16 +61,12 @@ class TranscriptPanel extends StatefulWidget {
   final Future<void> Function(Cue? cue) onSeekCue;
   final Future<void> Function()? onImportSubtitle;
 
-  /// Opens or closes the analysis of the current sentence. Null on hosts with
-  /// no analysis wired, which hides the control rather than offering a dead
-  /// one.
+  /// Opens or closes the floating analysis window for the current sentence.
+  /// Null on hosts with no analysis wired, which hides the control rather than
+  /// offering a dead one. [analysisExpanded] reflects whether that window is
+  /// currently open, so the entry can read as pressed.
   final VoidCallback? onToggleAnalysis;
   final bool analysisExpanded;
-
-  /// The analysis body, rendered inside the current sentence while
-  /// [analysisExpanded]. It arrives built so this panel stays free of the
-  /// eight controllers a diagnosis card reads from.
-  final Widget? analysis;
 
   /// Which of the two tracks the transcript shows.
   final TranscriptTranslation translationMode;
@@ -265,6 +260,21 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                           widget.senseGroupsBySentence[cue
                                               .id] ??
                                           const [],
+                                      // The analysis is about one sentence, so
+                                      // its entry rides the end of that
+                                      // sentence's text — inline at the sentence
+                                      // tail, matching the reference — rather
+                                      // than a row of its own. Tapping it opens
+                                      // the floating analysis window.
+                                      trailing:
+                                          selected &&
+                                              widget.onToggleAnalysis != null
+                                          ? _AnalysisControl(
+                                              expanded: widget.analysisExpanded,
+                                              label: l.text('analyseSentence'),
+                                              onPressed: widget.onToggleAnalysis!,
+                                            )
+                                          : null,
                                     ),
                                   if (widget.translationMode.showsTranslation &&
                                       widget.hasTranslationTrack)
@@ -276,32 +286,20 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                       alone:
                                           !widget.translationMode.showsSource,
                                     ),
+                                  // Translation-only mode hides the source line
+                                  // the entry would hang from, so it falls back
+                                  // to a row of its own there.
+                                  if (!widget.translationMode.showsSource &&
+                                      selected &&
+                                      widget.onToggleAnalysis != null)
+                                    _AnalysisControl(
+                                      expanded: widget.analysisExpanded,
+                                      label: l.text('analyseSentence'),
+                                      onPressed: widget.onToggleAnalysis!,
+                                    ),
                                 ],
                               ),
                             ),
-                            // The analysis belongs to one sentence, so it opens
-                            // inside that sentence. As a panel tab it could be
-                            // "open" while the sentence it described was scrolled
-                            // out of sight, and reaching it always cost the
-                            // transcript.
-                            if (selected && widget.onToggleAnalysis != null)
-                              _AnalysisControl(
-                                expanded: widget.analysisExpanded,
-                                label: l.text('analyseSentence'),
-                                onPressed: widget.onToggleAnalysis!,
-                              ),
-                            if (selected &&
-                                widget.analysisExpanded &&
-                                widget.analysis != null)
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  ListenSpacing.gap12,
-                                  0,
-                                  ListenSpacing.gap12,
-                                  ListenSpacing.gap12,
-                                ),
-                                child: widget.analysis,
-                              ),
                           ],
                         ),
                       );
@@ -997,24 +995,46 @@ class _AnalysisControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(left: ListenSpacing.gap16),
-        child: TextButton.icon(
+    // Open reads in the primary hue; closed is a quiet outline chip so it sits
+    // at the sentence tail without competing with the words.
+    final accent = expanded ? colors.primary : colors.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.only(left: ListenSpacing.gap6),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
           key: const Key('transcript-analyse-sentence'),
-          onPressed: onPressed,
-          style: TextButton.styleFrom(
-            foregroundColor: colors.primary,
-            padding: ListenPadding.tight,
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          onTap: onPressed,
+          borderRadius: ListenRadii.pillBorder,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: ListenRadii.pillBorder,
+              border: Border.all(color: expanded ? colors.primary : colors.outlineVariant),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ListenSpacing.gap8,
+                vertical: ListenSpacing.gap2,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    expanded ? Icons.info : Icons.info_outline,
+                    size: ListenIconSize.inline,
+                    color: accent,
+                  ),
+                  const SizedBox(width: ListenSpacing.gap4),
+                  Text(
+                    label,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(color: accent),
+                  ),
+                ],
+              ),
+            ),
           ),
-          icon: Icon(
-            expanded ? Icons.expand_less : Icons.expand_more,
-            size: ListenIconSize.inline,
-          ),
-          label: Text(label, style: Theme.of(context).textTheme.labelMedium),
         ),
       ),
     );

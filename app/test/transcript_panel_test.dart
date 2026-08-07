@@ -156,10 +156,13 @@ void _analysisGroup() {
     final currentCue = tester.getRect(
       find.byKey(const ValueKey('transcript-cue-cue-2')),
     );
-    expect(control.top, greaterThanOrEqualTo(currentCue.bottom - 0.5));
+    // The entry rides inside the current sentence — inline at its tail — rather
+    // than taking a row of its own below it.
+    expect(control.top, greaterThanOrEqualTo(currentCue.top - 0.5));
+    expect(control.bottom, lessThanOrEqualTo(currentCue.bottom + 0.5));
   });
 
-  testWidgets('expanding the analysis keeps every sentence on screen', (
+  testWidgets('the analysis entry opens the window, never displacing the text', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(620, 420));
@@ -183,6 +186,9 @@ void _analysisGroup() {
     await tester.tap(find.byKey(const Key('transcript-analyse-sentence')));
     expect(toggles, 1);
 
+    // Marking it open only restyles the entry; the body lives in a floating
+    // window mounted outside the transcript, so the list is never replaced and
+    // no analysis body is injected inline.
     await tester.pumpWidget(
       _Harness(
         controller: controller,
@@ -190,20 +196,15 @@ void _analysisGroup() {
         currentCue: cues[2],
         onToggleAnalysis: () {},
         analysisExpanded: true,
-        analysis: const Text('analysis body', key: Key('analysis-body')),
       ),
     );
     await tester.pumpAndSettle();
 
-    // The analysis renders inside the sentence it describes, and the transcript
-    // is still a transcript — the list did not get replaced by it.
-    expect(find.byKey(const Key('analysis-body')), findsOneWidget);
     expect(find.byType(ListView), findsOneWidget);
-    final body = tester.getRect(find.byKey(const Key('analysis-body')));
-    final currentCue = tester.getRect(
-      find.byKey(const ValueKey('transcript-cue-cue-2')),
+    expect(
+      find.byKey(const Key('transcript-analyse-sentence')),
+      findsOneWidget,
     );
-    expect(body.top, greaterThanOrEqualTo(currentCue.bottom - 0.5));
   });
 
   testWidgets('a word tap reports where it landed, for the bubble anchor', (
@@ -416,7 +417,6 @@ class _Harness extends StatelessWidget {
     required this.currentCue,
     this.onToggleAnalysis,
     this.analysisExpanded = false,
-    this.analysis,
     this.onWord,
     this.studyMode = WorkbenchStudyMode.normal,
   });
@@ -426,7 +426,6 @@ class _Harness extends StatelessWidget {
   final Cue? currentCue;
   final VoidCallback? onToggleAnalysis;
   final bool analysisExpanded;
-  final Widget? analysis;
   final Future<void> Function(SubtitleToken, Cue, Offset)? onWord;
   final WorkbenchStudyMode studyMode;
 
@@ -458,7 +457,6 @@ class _Harness extends StatelessWidget {
             onSeekCue: (_) async {},
             onToggleAnalysis: onToggleAnalysis,
             analysisExpanded: analysisExpanded,
-            analysis: analysis,
             studyMode: studyMode,
           ),
         ),

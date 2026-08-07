@@ -135,6 +135,7 @@ import 'widgets/layout/translation_mode_button.dart';
 import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
+import 'widgets/panels/sentence_analysis_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
 import 'widgets/player/shortcut_cheat_sheet.dart';
@@ -2725,6 +2726,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                                         onCloseSlicePlayback:
                                             _closeSlicePlayback,
                                       ),
+                                      _analysisWindow(),
                                     ],
                                   ),
                                 ),
@@ -2833,16 +2835,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     onToggleFullscreen: () => unawaited(immersiveMode.toggle()),
   );
 
-  /// Describes where the word timings for [sentenceId] came from. Returns an
-  /// empty string when the sentence has no timings; callers are expected to
-  /// skip the label in that case (see [SidePanel]'s `timingQuality` guard).
-  String _timingQuality(String sentenceId) {
-    final timings = subtitleController.timingsBySentence[sentenceId];
-    if (timings == null || timings.isEmpty) return '';
-    final first = timings.first;
-    return '${first.source.replaceAll('_', ' ')} · ${first.provider}';
-  }
-
   Widget _sidePanel() => SidePanel(
     playerController: playerController,
     subtitleController: subtitleController,
@@ -2850,7 +2842,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     extensiveListeningController: extensiveListeningController,
     settingsController: settingsController,
     mediaSession: mediaSession,
-    playbackActions: playbackActions,
     transcriptController: transcriptController,
     onOpenWord: vocabularyActions.openWord,
     onSeekCue: _seekCue,
@@ -2859,22 +2850,42 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSaveSelectedLearningContent:
         vocabularyActions.saveSelectedLearningContent,
     onObserveSelected: vocabularyActions.observeSelected,
-    onRequestDiagnosis: _refreshDiagnosis,
     onOpenSlicePlayback: _openSlicePlayback,
     onOpenListeningDictionary: _openListeningDictionaryEntry,
     onPlayPronunciationAudio: _playPronunciationAudio,
-    onOpenL1Specialty: _openL1Specialty,
     onCorrectLemma: () => unawaited(_correctCurrentLemma()),
     onRefreshListeningInbox: inboxActions.refreshListeningInbox,
     onReplayListeningInboxItem: inboxActions.replayListeningInboxItem,
     onProcessListeningInboxItem: inboxActions.processListeningInboxItem,
-    timingQuality: _timingQuality,
     onStartColdStart: _openColdStartMarking,
     onRecordCurrentSource: vocabularyActions.recordCurrentSource,
     onReadingMark: readingController.isOpen
         ? (understood) => unawaited(_recordReadingMark(understood))
         : null,
     studyMode: _studyMode,
+  );
+
+  /// The draggable sentence-analysis window, floated centre-stage over the
+  /// workbench. Its open/close flag is [LearningController.diagnosisExpanded] —
+  /// the same flag the transcript's `解析` entry toggles — so it rebuilds when
+  /// that, the current sentence, or a freshly loaded diagnosis changes.
+  Widget _analysisWindow() => ListenableBuilder(
+    listenable: Listenable.merge([learningController, subtitleController]),
+    builder: (context, _) {
+      if (!learningController.diagnosisExpanded) {
+        return const SizedBox.shrink();
+      }
+      return SentenceAnalysisWindow(
+        subtitleController: subtitleController,
+        learningController: learningController,
+        settingsController: settingsController,
+        playbackActions: playbackActions,
+        onRequestDiagnosis: _refreshDiagnosis,
+        onClose: () => learningController.setDiagnosisExpanded(false),
+        onOpenListeningDictionary: _openListeningDictionaryEntry,
+        onOpenL1Specialty: _openL1Specialty,
+      );
+    },
   );
 
   Widget _controls() => PlaybackBar(

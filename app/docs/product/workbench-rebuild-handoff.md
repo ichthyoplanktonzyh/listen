@@ -37,7 +37,7 @@
 
 **P1**（进行中）：
 - [x] **精听浮动窗外壳对齐真图**——⚠️**前提更正**：早先 gap-analysis/本文写「浮动窗→**全覆盖**专注壳」是**错的**（owner 当场纠正 + 真图复核）。`单句精听.png` 里精听练习是**可拖拽的圆角+投影浮动小窗**（四角圆、不贴边、下方文稿透出、视频右下角 PiP），**不是全覆盖**。故**保持** `intensive_practice_window.dart` 的可拖拽浮动 `Positioned`（≤860×560、标题栏拖动），只把**窗内外壳**换成真图那套：`_titleBar`(标题+×，拖动手柄，去掉旧 mini-player 开关) · `_metaRow`(左 `N/总` 进度药丸 + 右 `倍速｜次数｜间隔` **诚实占位**药丸) · `Expanded(_body)`(复用 `_practiceContent` 跟读/答题/结果渲染器，居中限宽 `ListenBreakpoints.contentColumnMax`) · `_keyboardHintBar`(`<`·`⌘P 播放/暂停`·`⌘R 重听本句`·`>`，均可点 + `CallbackShortcuts` 绑 ⌘P/⌘R)。**移除 mini-player**（真图无，播放走键盘条）。`次数/间隔` + `⌘L 返回前2秒` 诚实占位记台账 §5/§6。**未提交**。改 `intensive_practice_window.dart`、`localization.dart`(+4键)；测试改 2 例（去 mini-player 断言、play/pause 改点键盘条）。三闸全绿。**教训**：又一次照文字文档臆测（这次是「全覆盖」）被真图/owner 打回——`intensive_practice_window` 是**浮动窗**，别改形态。
-- [ ] 解析面板 `文字/语音` 切换（`side_panel.dart` `_diagnosisCard()`；文字层面诚实占位）。
+- [x] **句子解析改可拖拽浮窗 + `文字/语音` 切换**——⚠️**形态更正**：owner 当场纠正，解析**不是覆盖式面板，是可拖拽浮窗**（跟精听浮窗一套），**默认浮在工作台中间、不绑定某区**。新建 `widgets/panels/sentence_analysis_window.dart`（照 `intensive_practice_window.dart` 的 `Positioned`+标题栏拖动+`ListenRadii.panelBorder`+`ListenBreakpoints` 限宽；`_offset` null 时居中，拖过才钉住）。顶部【文字/语音】`SegmentedButton`：**文字层面**=当前句 + 整句译文（有副字幕才真实）+ `📚 语法分析`/`✍️ 搭配积累` 分节标题 + **诚实占位卡**（`analysis-text-unavailable`，缺 AI 契约、指向语音层，不伪造）；**语音层面**=复用现成 `DiagnosisCard`（切到语音且 `diagnosis==null` 才 `onRequestDiagnosis`，默认开在文字层不预取）。**挂载**在工作台 Stack（`main.dart` `_analysisWindow()`，紧邻 `PlayerOverlays`），`learningController.diagnosisExpanded` 驱动开关（文稿 `解析` 入口 `_toggleAnalysis` 只翻这个 flag）。**文稿改动**：`transcript_panel.dart` 去掉内联 `analysis` body 参数与渲染；`_AnalysisControl` 重做为 `ⓘ 解析` **行内药丸**（pillBorder 描边，开态 primary/闭态 outline），**贴当前句句尾**（gap §98 🟡 解决）——`TokenLine` 新增 `trailing` 参数（把 widget 作 `WidgetSpan(middle)` 追加到 token span 尾，随文字换行），文稿把入口作 `trailing:` 挂到当前句源文 `TokenLine`；仅译文模式（源文行隐藏）回退为下方独立一行。入口点击开/关浮窗。**side_panel 瘦身**：删 `_diagnosisCard/_currentRhythmFrame/_timingQuality/_AnalysisPending` 及随之失效的字段 `playbackActions/onRequestDiagnosis/onOpenL1Specialty/timingQuality`（这些搬进浮窗，只 main.dart 调 SidePanel，故连带清 main.dart 调用点与死掉的 `_timingQuality`）。本地化 +6 键（`aiAnalysis`/`analysisLayerText|Voice`/`analysisGrammarSection`/`analysisCollocationSection`/`analysisTextUnavailable{Title,Body}`）en+zh。测试：`transcript_panel_test` 第二例重写为「入口只开窗、不displace文稿」并去 `analysis:` 参数；新增 `sentence_analysis_window_test`（默认文字层+占位、切语音取诊断+pending、×关闭）。台账补 §7。三闸全绿。**教训**：又一次差点照"覆盖式面板"臆测——owner 用真图纠正为**可拖拽浮窗**，形态以 owner/真图为准。
 - [ ] 底栏三段式 + 媒体缩略图/标题 + 倍速药丸。
 - [ ] 导出/打印（纯前端可做部分）+ 分享入口。
 
@@ -52,7 +52,7 @@
 - 文稿：`lib/widgets/panels/transcript_panel.dart`（P0-a 已改 `_TranscriptCueRow`；P0-c 加 study-mode 分支）。`build` 按 `studyMode` 分派：normal→`_readThroughList()`(~164 滚动列表)、blind→`_BlindView`(~518)、word→`_WordSelectView`(~579)。挖空逻辑 `_blankSentence()`(~817，按 `cue.id` 确定性种子)。行高经 `TokenLine.lineHeight`（默认 null 不影响视频字幕，文稿传 1.35）。
 - 右侧宿主 + tabs：`side_panel.dart`、`side_panel_tabs.dart`（`原文/笔记` 两 tab —— **参考也有，保留**，别按老指令删）。
 - 学习菜单：`lib/widgets/layout/study_menu.dart`（单下拉三组：整篇=通读/盲听/选词/读 · 单句=跟读/挖空/语块听写/整句听写 · 产出=说/写）。listening 频道被表达成「整篇」里的通读/盲听/选词三个单选项（无独立「听」项）；接 `selectedMode/onModeSelected`。
-- 解析：`side_panel.dart` `_diagnosisCard()`（=语音层面）+ 文稿内联展开。
+- 解析（P1 已改）：**可拖拽浮窗** `widgets/panels/sentence_analysis_window.dart`（文字/语音切换；语音层=`DiagnosisCard`，文字层=占位）。挂在 `main.dart` `_analysisWindow()`（工作台 Stack，紧邻 `PlayerOverlays`），`learningController.diagnosisExpanded` 驱动；文稿 `解析` 入口在 `transcript_panel.dart` `_AnalysisControl`（`ⓘ` 图标，开/关浮窗，不再内联展开）。`side_panel.dart` 已不再建诊断卡。
 - 精听逻辑（**好资产，全复用**）：`controllers/practice_controller.dart`、`controllers/practice_actions_coordinator.dart`、`widgets/panels/intensive_practice_window.dart`（**可拖拽浮动窗** `Positioned` in Stack ≤860×560，标题栏拖动——**就是对的形态，别改成全覆盖**；P1 已把窗内外壳对齐真图＝`_titleBar`/`_metaRow`(进度+设置药丸)/`_body`/`_keyboardHintBar`）。
 - 底栏：`widgets/player/playback_controls.dart` `_fullControlRow`(~644)，现为两行扁平（进度行 + 一条工具行），无三段/播放列表/媒体缩略图。
 - 词典气泡：`widgets/panels/word_bubble.dart`（锚定、点外/Esc 关闭、加载/失败态齐 —— 已达标）。
@@ -60,9 +60,9 @@
 
 ## 5. 下一步 —— 入口（P1 剩余）
 
-P0 四条 + P1「精听浮动窗外壳对齐真图」已完成。下一步在 P1 剩余里挑（见 §3 P1 行）。**动手任何一条前先看 `~/Desktop/每日英语听力UI/` 真图**（`文本高亮以及解析.png` / `双击解析唤醒词典气泡.png` / `底栏…` / `离线:导出:打印.png` / `右下角字幕.png`）。建议顺序：
-- **解析面板 `文字/语音` 切换**（推荐下一步）：`side_panel.dart` `_diagnosisCard()`（=语音层面）加「文字/语音」切换，文字层面诚实占位（AI 解析契约/按 cue 缓存记台账「待记」）。
-- 底栏三段式 + 媒体缩略图/标题 + 倍速药丸；导出/打印（纯前端部分）+ 分享入口。
+P0 四条 + P1「精听浮动窗外壳对齐真图」+「句子解析改可拖拽浮窗 + 文字/语音切换」已完成。下一步在 P1 剩余里挑（见 §3 P1 行）。**动手任何一条前先看 `~/Desktop/每日英语听力UI/` 真图**（`底栏…` / `离线:导出:打印.png` / `右下角字幕.png`）。建议顺序：
+- **底栏三段式 + 媒体缩略图/标题 + 倍速药丸**（推荐下一步）：`widgets/player/playback_controls.dart` `_fullControlRow`，现为两行扁平，无三段/媒体缩略图。
+- 导出/打印（纯前端部分）+ 分享入口。
 
 （P0-a/b/c/d + 精听窗 的落地要点见 §3 各条；回看实现改动见其列出的文件。）
 
