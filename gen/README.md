@@ -143,6 +143,30 @@ process group, clean up temporary audio, and emit `cancelled` with exit code
 See [docs/machine-event-protocol-v1.md](docs/machine-event-protocol-v1.md) for
 the full event, phase, and error-code contract.
 
+## Deterministic release bundle
+
+A deterministic, verifiable release bundle can be built from a clean
+checkout:
+
+```bash
+python tools/release_bundle.py build \
+  --source-commit "$(git rev-parse HEAD)" \
+  --output-parent dist
+```
+
+The bundle is written to `dist/listen-gen-<version>/` and consists of a
+runnable `.pyz` zipapp plus a `.release.json` manifest; both files must be
+published together. Verify it before distribution:
+
+```bash
+python tools/release_bundle.py verify \
+  dist/listen-gen-0.1.0/listen-gen-0.1.0.release.json
+```
+
+The `.pyz` requires Python 3.11 or newer. See
+[docs/release-bundle-v1.md](docs/release-bundle-v1.md) for the full bundle
+contract and distribution rules.
+
 ## Contract authority
 
 The canonical schema is owned by `listen-core` at

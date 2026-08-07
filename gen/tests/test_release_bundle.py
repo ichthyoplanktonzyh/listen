@@ -1,0 +1,549 @@
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
+
+import release_bundle as rb
+from listen_gen import protocol
+
+FAKE_COMMIT = "ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12"
+VERSION = "0.1.0"
+PYZ_NAME = f"listen-gen-{VERSION}.pyz"
+MANIFEST_NAME = f"listen-gen-{VERSION}.release.json"
+SHEBANG = b"#!/usr/bin/env python3\n"
+FIXED_DATE_TIME = (1980, 1, 1, 0, 0, 0)
+
+
+def canonical_json(document: object) -> bytes:
+    return (
+        json.dumps(
+            document,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        + b"\n"
+    )
+
+
+def env_with_src() -> dict[str, str]:
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(ROOT / "src")
+    return env
+
+
+def fixture_argv(output: Path, *, machine: bool) -> list[str]:
+    argv = [
+        "package", "from-media",
+        str(ROOT / "tests" / "fixtures" / "sample-media.wav"),
+        "--output", str(output),
+        "--provider", "fixture",
+        "--fixture", str(ROOT / "tests" / "fixtures" / "sample.asr.json"),
+        "--title", "Release bundle sample",
+        "--media-kind", "audio",
+        "--duration-ms", "2200",
+        "--created-at-ms", "1786000000000",
+    ]
+    if machine:
+        argv.append("--machine-events")
+    return argv
+
+
+def run_tool(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "release_bundle.py"), *argv],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+
+def make_malicious_pyz(bad_name: str) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name in sorted([bad_name, "__main__.py"]):
+            info = zipfile.ZipInfo(filename=name, date_time=FIXED_DATE_TIME)
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = 3
+            info.external_attr = 0o100644 << 16
+            archive.writestr(info, b"payload\n")
+    return SHEBANG + buffer.getvalue()
+
+
+class ReleaseBundleTestBase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._class_tmp = tempfile.TemporaryDirectory()
+        cls.class_tmp = Path(cls._class_tmp.name)
+        cls.output_parent = cls.class_tmp / "dist"
+        cls.artifact, cls.manifest = rb.build_release_bundle(
+            ROOT, cls.output_parent, FAKE_COMMIT
+        )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._class_tmp.cleanup()
+
+    def copy_bundle(self, directory: Path) -> tuple[Path, Path]:
+        bundle = directory / f"listen-gen-{VERSION}"
+        shutil.copytree(self.artifact.parent, bundle)
+        return bundle / PYZ_NAME, bundle / MANIFEST_NAME
+
+
+class DeterministicBuildTests(ReleaseBundleTestBase):
+    def test_same_commit_two_output_parents_byte_identical(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            parent_b = Path(tmp) / "other-dist"
+            artifact_b, manifest_b = rb.build_release_bundle(ROOT, parent_b, FAKE_COMMIT)
+            self.assertEqual(
+                self.artifact.read_bytes(), artifact_b.read_bytes()
+            )
+            self.assertEqual(self.manifest.read_bytes(), manifest_b.read_bytes())
+
+    def test_checkout_path_independent(self) -> None:
+        def make_repo_root(name: str) -> Path:
+            root = Path(tempfile.mkdtemp(prefix=name))
+            self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+            shutil.copytree(ROOT / "src" / "listen_gen", root / "src" / "listen_gen")
+            shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
+            shutil.copyfile(ROOT / "contracts.lock.json", root / "contracts.lock.json")
+            return root
+
+        root_a = make_repo_root("repo-a-")
+        root_b = make_repo_root("repo-b-")
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact_a, manifest_a = rb.build_release_bundle(
+                root_a, Path(tmp) / "dist-a", FAKE_COMMIT
+            )
+            artifact_b, manifest_b = rb.build_release_bundle(
+                root_b, Path(tmp) / "dist-b", FAKE_COMMIT
+            )
+            bytes_a = artifact_a.read_bytes()
+            bytes_b = artifact_b.read_bytes()
+            manifest_bytes_a = manifest_a.read_bytes()
+            manifest_bytes_b = manifest_b.read_bytes()
+        self.assertEqual(bytes_a, bytes_b)
+        self.assertEqual(manifest_bytes_a, manifest_bytes_b)
+        self.assertEqual(bytes_a, self.artifact.read_bytes())
+        self.assertEqual(manifest_bytes_a, self.manifest.read_bytes())
+
+
+class ManifestContentTests(ReleaseBundleTestBase):
+    def test_manifest_exact_content(self) -> None:
+        raw = self.manifest.read_bytes()
+        manifest = json.loads(raw.decode("utf-8"))
+        self.assertEqual(
+            set(manifest),
+            {
+                "schema",
+                "tool",
+                "source",
+                "machine_protocol",
+                "content_package_contract",
+                "runtime",
+                "artifact",
+            },
+        )
+        self.assertEqual(set(manifest["tool"]), {"id", "version"})
+        self.assertEqual(set(manifest["source"]), {"repository", "commit"})
+        self.assertEqual(set(manifest["machine_protocol"]), {"schema", "version"})
+        self.assertEqual(
+            set(manifest["content_package_contract"]),
+            {
+                "authority",
+                "manifest_schema_id",
+                "resource_schema_id",
+                "package_schema",
+                "schema_version",
+                "canonical_sha256",
+            },
+        )
+        self.assertEqual(
+            set(manifest["content_package_contract"]["authority"]),
+            {"repository", "path"},
+        )
+        self.assertEqual(
+            set(manifest["runtime"]), {"python_requires", "provider_requirements"}
+        )
+        self.assertEqual(
+            set(manifest["artifact"]),
+            {"filename", "format", "entrypoint", "size_bytes", "sha256"},
+        )
+        self.assertEqual(manifest["schema"], "listen_gen.release-bundle.v1")
+        self.assertEqual(manifest["source"]["commit"], FAKE_COMMIT)
+        self.assertEqual(manifest["tool"], {
+            "id": protocol.TOOL_ID,
+            "version": protocol.TOOL_VERSION,
+        })
+        self.assertEqual(manifest["machine_protocol"], {
+            "schema": protocol.MACHINE_EVENT_SCHEMA,
+            "version": protocol.MACHINE_PROTOCOL_VERSION,
+        })
+        lock = json.loads((ROOT / "contracts.lock.json").read_text("utf-8"))
+        contract = manifest["content_package_contract"]
+        self.assertEqual(contract["authority"], {
+            "repository": lock["authority"]["repository"],
+            "path": lock["authority"]["path"],
+        })
+        self.assertEqual(
+            contract["manifest_schema_id"], lock["manifest_schema_id"]
+        )
+        self.assertEqual(
+            contract["resource_schema_id"], lock["resource_schema_id"]
+        )
+        self.assertEqual(contract["package_schema"], lock["package_schema"])
+        self.assertEqual(contract["schema_version"], lock["schema_version"])
+        self.assertEqual(contract["canonical_sha256"], "sha256:" + hashlib.sha256(
+            canonical_json(lock)
+        ).hexdigest())
+        artifact_bytes = self.artifact.read_bytes()
+        self.assertEqual(manifest["artifact"], {
+            "filename": PYZ_NAME,
+            "format": "python-zipapp",
+            "entrypoint": "__main__.py",
+            "size_bytes": len(artifact_bytes),
+            "sha256": "sha256:" + hashlib.sha256(artifact_bytes).hexdigest(),
+        })
+        self.assertEqual(raw, canonical_json(manifest))
+        self.assertTrue(raw.endswith(b"\n"))
+        self.assertFalse(raw.endswith(b"\n\n"))
+        text = raw.decode("utf-8")
+        self.assertNotIn(str(ROOT), text)
+        self.assertNotIn(str(self.output_parent.resolve()), text)
+
+    def test_manifest_filename_must_match_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest = self.copy_bundle(Path(tmp))
+            renamed = manifest.parent / "wrong-name.json"
+            shutil.copyfile(manifest, renamed)
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(ROOT, renamed)
+            self.assertEqual(str(caught.exception), "release manifest is invalid")
+
+
+class ZipStructureTests(ReleaseBundleTestBase):
+    def test_zip_exact_structure(self) -> None:
+        data = self.artifact.read_bytes()
+        self.assertTrue(data.startswith(SHEBANG))
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            self.assertEqual(archive.comment, b"")
+            names = archive.namelist()
+            self.assertEqual(names, sorted(names))
+            self.assertEqual(len(names), len(set(names)))
+            expected_sources = sorted(
+                "listen_gen/" + path.relative_to(
+                    ROOT / "src" / "listen_gen"
+                ).as_posix()
+                for path in (ROOT / "src" / "listen_gen").rglob("*.py")
+                if not path.is_symlink() and path.is_file()
+            )
+            self.assertEqual(names, sorted(["__main__.py"] + expected_sources))
+            for name in names:
+                self.assertNotIn("\\", name)
+                self.assertFalse(name.startswith("/"))
+                self.assertNotIn("..", name.split("/"))
+                self.assertTrue(name.endswith(".py"))
+                self.assertNotIn("__pycache__", name)
+                self.assertFalse(name.startswith(("tests/", "docs/", "tools/")))
+            for info in archive.infolist():
+                self.assertEqual(info.date_time, FIXED_DATE_TIME)
+                self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
+                self.assertEqual(info.create_system, 3)
+                self.assertEqual(info.external_attr, 0o100644 << 16)
+                self.assertFalse(info.is_dir())
+            main = archive.read("__main__.py").decode("utf-8")
+            self.assertIn("sys.version_info < (3, 11)", main)
+            self.assertIn("from listen_gen.cli import main", main)
+            self.assertIn("raise SystemExit(main())", main)
+            for name in expected_sources:
+                source = (ROOT / "src" / name).read_bytes()
+                normalized = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+                self.assertEqual(archive.read(name), normalized)
+
+    def test_archive_excludes_repository_metadata(self) -> None:
+        with zipfile.ZipFile(io.BytesIO(self.artifact.read_bytes())) as archive:
+            names = archive.namelist()
+        for name in names:
+            self.assertNotIn("pyproject.toml", name)
+            self.assertNotIn("contracts.lock.json", name)
+            self.assertFalse(name.endswith(".pyc"))
+
+
+class ZipappRuntimeTests(ReleaseBundleTestBase):
+    def test_zipapp_package_bytes_match_source_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_output = Path(tmp) / "source.listenpkg"
+            completed = subprocess.run(
+                [sys.executable, "-m", "listen_gen",
+                 *fixture_argv(source_output, machine=False)],
+                capture_output=True, text=True, env=env_with_src(), timeout=120,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            pyz_output = Path(tmp) / "pyz.listenpkg"
+            completed = subprocess.run(
+                [sys.executable, str(self.artifact),
+                 *fixture_argv(pyz_output, machine=False)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(
+                source_output.read_bytes(), pyz_output.read_bytes()
+            )
+
+    def test_zipapp_machine_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "machine.listenpkg"
+            completed = subprocess.run(
+                [sys.executable, str(self.artifact),
+                 *fixture_argv(output, machine=True)],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            events = [
+                json.loads(line)
+                for line in completed.stdout.splitlines()
+                if line
+            ]
+            self.assertGreaterEqual(len(events), 2)
+            for index, event in enumerate(events):
+                self.assertEqual(event["schema"], "listen_gen.machine-event.v1")
+                self.assertEqual(event["protocol_version"], 1)
+                self.assertEqual(event["tool"], {
+                    "id": protocol.TOOL_ID,
+                    "version": protocol.TOOL_VERSION,
+                })
+                self.assertEqual(event["sequence"], index)
+            terminals = [
+                event for event in events
+                if event["event"] in {"completed", "failed", "cancelled"}
+            ]
+            self.assertEqual(len(terminals), 1)
+            terminal = terminals[0]
+            self.assertEqual(terminal["event"], "completed")
+            self.assertEqual(
+                terminal["package_sha256"],
+                "sha256:" + hashlib.sha256(output.read_bytes()).hexdigest(),
+            )
+
+    def test_zipapp_help_runs_without_executable_bit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / PYZ_NAME
+            shutil.copyfile(self.artifact, copy)
+            os.chmod(copy, 0o644)
+            completed = subprocess.run(
+                [sys.executable, str(copy), "--help"],
+                capture_output=True, text=True, timeout=120,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
+
+class VerifierFailureTests(ReleaseBundleTestBase):
+    def test_artifact_tamper_checksum_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact, manifest = self.copy_bundle(Path(tmp))
+            data = bytearray(artifact.read_bytes())
+            data[len(data) // 2] ^= 0xFF
+            artifact.write_bytes(bytes(data))
+            completed = run_tool(["verify", str(manifest)])
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(
+                completed.stderr.splitlines(),
+                ["release bundle error: release artifact checksum mismatch"],
+            )
+
+    def test_artifact_size_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact, manifest = self.copy_bundle(Path(tmp))
+            artifact.write_bytes(artifact.read_bytes() + b"\x00")
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(ROOT, manifest)
+            self.assertEqual(str(caught.exception), "release artifact size mismatch")
+
+    def test_missing_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest = self.copy_bundle(Path(tmp))
+            (manifest.parent / PYZ_NAME).unlink()
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(ROOT, manifest)
+            self.assertEqual(str(caught.exception), "release artifact is missing")
+
+    def test_manifest_path_traversal_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest = self.copy_bundle(Path(tmp))
+            parsed = json.loads(manifest.read_bytes())
+            parsed["artifact"]["filename"] = f"../{PYZ_NAME}"
+            manifest.write_bytes(canonical_json(parsed))
+            completed = run_tool(["verify", str(manifest)])
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(
+                completed.stderr.splitlines(),
+                ["release bundle error: release manifest is invalid"],
+            )
+
+    def test_archive_structure_tamper_detected(self) -> None:
+        for bad_name in ("../escape.py", "/absolute.py", "listen_gen\\bad.py"):
+            with tempfile.TemporaryDirectory() as tmp:
+                artifact, manifest = self.copy_bundle(Path(tmp))
+                malicious = make_malicious_pyz(bad_name)
+                artifact.write_bytes(malicious)
+                parsed = json.loads(manifest.read_bytes())
+                parsed["artifact"]["size_bytes"] = len(malicious)
+                parsed["artifact"]["sha256"] = (
+                    "sha256:" + hashlib.sha256(malicious).hexdigest()
+                )
+                manifest.write_bytes(canonical_json(parsed))
+                completed = run_tool(["verify", str(manifest)])
+                self.assertEqual(completed.returncode, 2, bad_name)
+                self.assertEqual(
+                    completed.stderr.splitlines(),
+                    ["release bundle error: release archive is invalid"],
+                    bad_name,
+                )
+
+    def test_verify_success_output(self) -> None:
+        completed = run_tool(["verify", str(self.manifest)])
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        document = json.loads(completed.stdout)
+        self.assertEqual(document["status"], "verified")
+        self.assertEqual(document["tool"], {"id": "listen-gen", "version": VERSION})
+        self.assertEqual(
+            document["artifact_sha256"],
+            "sha256:" + hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            completed.stdout,
+            canonical_json(document).decode("utf-8"),
+        )
+
+
+class BuildErrorTests(unittest.TestCase):
+    def test_invalid_source_commit(self) -> None:
+        invalid = [
+            "",
+            FAKE_COMMIT.upper(),
+            FAKE_COMMIT[:39],
+            FAKE_COMMIT + "a",
+            "z" + FAKE_COMMIT[1:],
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            for commit in invalid:
+                with self.assertRaises(rb.ReleaseBundleError) as caught:
+                    rb.build_release_bundle(ROOT, Path(tmp), commit)
+                self.assertEqual(
+                    str(caught.exception),
+                    "source commit must be a lowercase 40-character SHA",
+                )
+
+    def test_invalid_source_commit_via_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            completed = run_tool([
+                "build", "--source-commit", "NOPE", "--output-parent", tmp,
+            ])
+            self.assertEqual(completed.returncode, 2)
+            self.assertEqual(
+                completed.stderr.splitlines(),
+                ["release bundle error: source commit must be a lowercase 40-character SHA"],
+            )
+
+    def test_existing_bundle_directory_immutable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_parent = Path(tmp)
+            existing = output_parent / f"listen-gen-{VERSION}"
+            existing.mkdir()
+            sentinel = existing / "sentinel.txt"
+            sentinel.write_text("do not touch\n")
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.build_release_bundle(ROOT, output_parent, FAKE_COMMIT)
+            self.assertEqual(
+                str(caught.exception), "release bundle directory already exists"
+            )
+            self.assertEqual(sentinel.read_text(), "do not touch\n")
+            self.assertEqual(list(existing.iterdir()), [sentinel])
+            leftovers = [
+                path.name for path in output_parent.iterdir()
+                if ".staging." in path.name
+            ]
+            self.assertEqual(leftovers, [])
+
+    def test_build_failure_cleanup(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="broken-repo-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        shutil.copytree(ROOT / "src" / "listen_gen", root / "src" / "listen_gen")
+        shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
+        (root / "contracts.lock.json").write_text("{not valid json\n")
+        with tempfile.TemporaryDirectory() as tmp:
+            output_parent = Path(tmp)
+            unrelated = output_parent / "keep.txt"
+            unrelated.write_text("keep me\n")
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.build_release_bundle(root, output_parent, FAKE_COMMIT)
+            self.assertEqual(
+                str(caught.exception), "content package contract lock is invalid"
+            )
+            self.assertFalse((output_parent / f"listen-gen-{VERSION}").exists())
+            leftovers = [
+                path.name for path in output_parent.iterdir()
+                if ".staging." in path.name
+            ]
+            self.assertEqual(leftovers, [])
+            self.assertEqual(unrelated.read_text(), "keep me\n")
+
+    def test_missing_source_package_cleanup(self) -> None:
+        root = Path(tempfile.mkdtemp(prefix="no-src-"))
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        shutil.copyfile(ROOT / "pyproject.toml", root / "pyproject.toml")
+        shutil.copyfile(ROOT / "contracts.lock.json", root / "contracts.lock.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            output_parent = Path(tmp)
+            with self.assertRaises(rb.ReleaseBundleError):
+                rb.build_release_bundle(root, output_parent, FAKE_COMMIT)
+            self.assertFalse((output_parent / f"listen-gen-{VERSION}").exists())
+            self.assertEqual(
+                [path.name for path in output_parent.iterdir()], []
+            )
+
+
+class CliBuildOutputTests(unittest.TestCase):
+    def test_build_success_output_and_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            completed = run_tool([
+                "build", "--source-commit", FAKE_COMMIT,
+                "--output-parent", tmp,
+            ])
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            document = json.loads(completed.stdout)
+            self.assertEqual(document, {
+                "status": "created",
+                "artifact": f"listen-gen-{VERSION}/{PYZ_NAME}",
+                "manifest": f"listen-gen-{VERSION}/{MANIFEST_NAME}",
+            })
+            self.assertEqual(
+                completed.stdout, canonical_json(document).decode("utf-8")
+            )
+            bundle = Path(tmp) / f"listen-gen-{VERSION}"
+            self.assertEqual(
+                sorted(path.name for path in bundle.iterdir()),
+                sorted([MANIFEST_NAME, PYZ_NAME]),
+            )
+            mode = (bundle / PYZ_NAME).stat().st_mode & 0o777
+            self.assertEqual(mode, 0o755)
+            verify = run_tool(["verify", str(bundle / MANIFEST_NAME)])
+            self.assertEqual(verify.returncode, 0, verify.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()

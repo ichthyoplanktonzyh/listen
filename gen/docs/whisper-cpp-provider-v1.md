@@ -181,6 +181,7 @@ pre-existing final output untouched. The run then emits exactly one
 
 ## Future work
 
-Word-level alignment (DTW, WhisperX, MFA, or another aligner) is explicitly
-out of scope for this PR and is planned for PR-GEN-03. Until then,
-whisper.cpp output remains a subtitle-only package.
+Word-level alignment remains deferred until the immutable Gen handoff and
+the three-repository exact-media round trip have been completed and observed.
+A later provider slice may add DTW, WhisperX, MFA, or another aligner without
+changing the subtitle-only contract of this provider version.
