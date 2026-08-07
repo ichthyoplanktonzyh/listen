@@ -39,6 +39,13 @@ migrate_working_dir/
 /test/failures/
 /dist/
 .backend/
+# Local, uncommitted listen-gen release bundle (.pyz + .release.json) lives here.
+/.listen-gen/
+# Generator artifacts are never committed: they are produced locally from the
+# pinned source and bound by listen_gen.lock.json, not stored in the app.
+*.pyz
+*.release.json
+*.listenpkg
 /test/fixtures/smoke/generated/
 
 # Symbolication related

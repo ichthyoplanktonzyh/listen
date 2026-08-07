@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-08-01 CST
+> Updated: 2026-08-07 CST
 
 ## Position
 
@@ -8,18 +8,21 @@
 - Default implementation owner: Claude
 - Backend authority: `ichthyoplanktonzyh/listen-core`
 - Flutter package version: `0.7.0+8`
-- Contract pin: `1.0.0`
+- Contract pin: `1.1.0`
 - Runtime pin: `0.7.0`
-- Core commit pin: `4f4bad8b97a651e1cb731bfccb8fd7e1c4645e0a`
+- Core commit pin: `b980a20666f746685db1fd06bfa425d762d7a678`
+- Gen source pin: `41a53336fd893522abf7ef168fd2ace9fa6ac678`
+- Gen tool version: `0.1.0`
 - Split release: `v0.7.0-split.1`
 
 ## Current Work
 
-Phase 001 implements the additive local content-package journey against typed
-App fixtures: existing package selection, strict external `listen-gen`
-orchestration, Core import receipt, honest provenance, cancellation/retry, and
-explicit subtitle/word-timeline selection. The pinned Core artifact is still
-unchanged, so immutable-release and packaged end-to-end validation remain open.
+App now consumes the pinned `listen-gen` release bundle and completes the local
+three-repository round trip: a fixture provider produces a `.listenpkg`, which
+the pinned Core imports as a candidate-only receipt. The App trusts only the
+bundle whose bytes match the committed `listen_gen.lock.json` (manifest hash +
+artifact size/hash), and machine events must carry the verified tool version.
+No arbitrary `listen-gen` executable is honored anymore.
 
 ## Established Boundaries
 
@@ -43,8 +46,8 @@ that constraint.
 
 ## Next
 
-1. Receive immutable Core and versioned Gen handoffs for the Phase 001 requests.
-2. Sync the final fixtures, update `backend.lock.json` only for the immutable
-   Core release, and run the three-repository fixture E2E plus packaged smoke.
-3. Keep the existing whole-media flow until the additive package path has been
-   integrated and observed end to end.
+1. Observe the additive package path in the running app end to end.
+2. Only afterward, migrate the old whole-media production path onto Gen; do not
+   delete the existing implementation yet.
+3. Handle formal release/installer delivery of the bundle in a separate PR (the
+   `.pyz` is not yet packed into the shipped macOS app bundle).

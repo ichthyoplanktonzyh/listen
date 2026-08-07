@@ -71,6 +71,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # The pinned listen-gen release lock. It is the only thing the app trusts to
+  # decide which generator bundle may run; it ships as an asset so the release
+  # verifier can read the committed bytes at runtime.
+  assets:
+    - listen_gen.lock.json
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

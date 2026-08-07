@@ -1,5 +1,15 @@
 # Generator protocol request
 
+> **Status: Fulfilled by listen-gen 0.1.0 release bundle**
+> (source commit `41a53336fd893522abf7ef168fd2ace9fa6ac678`).
+>
+> The App now consumes the pinned release bundle and has completed the local
+> three-repository round trip (fixture provider → `.listenpkg` → Core import)
+> under `tool/verify_local_content_package_roundtrip.sh`. The bundle is bound
+> byte-for-byte by `listen_gen.lock.json` and machine events must carry tool
+> version `0.1.0`. The original request below is retained as the protocol of
+> record.
+
 > **Owner-approved App request.** This describes App needs, not a generator
 > release or evidence of completed end-to-end integration.
 

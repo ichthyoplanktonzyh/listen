@@ -31,6 +31,7 @@ import 'subtitle_analysis_repository.dart';
 import 'transcription_repository.dart';
 import 'writing_task_repository.dart';
 import '../../services/listen_gen_process_service.dart';
+import '../../services/listen_gen_release_service.dart';
 import '../../services/media_import_file_service.dart';
 
 /// Composition provider that keeps the raw LocalApi handle out of the UI.
@@ -51,7 +52,9 @@ final class LocalCoreRepositories {
       contentPackage = LocalContentPackageRepository(
         () => _transport.currentApi,
         const LocalMediaImportFileService(),
-        LocalListenGenProcessService(),
+        LocalListenGenProcessService(
+          releaseService: LocalListenGenReleaseService(),
+        ),
       ),
       readingTask = LocalReadingTaskRepository(() => _transport.currentApi),
       readingSession = LocalReadingSessionRepository(
