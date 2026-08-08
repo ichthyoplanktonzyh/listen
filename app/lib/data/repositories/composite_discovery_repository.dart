@@ -35,13 +35,6 @@ final class CompositeDiscoveryRepository implements DiscoveryRepository {
   Future<List<MediaEntry>> entriesFor(String sourceId) =>
       _ownerOf(sourceId).entriesFor(sourceId);
 
-  /// Package status is Core's fact, not a feed's, and neither family can ask
-  /// Core from here — so both answer the same way and there is nothing to
-  /// route. The view model resolves it against the media library instead.
-  @override
-  Future<PackageStatus> checkPackage(String entryId) =>
-      _youtube.checkPackage(entryId);
-
   @override
   Future<MediaEntry> resolveCustomVideo(
     String url,

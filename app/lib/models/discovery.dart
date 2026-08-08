@@ -34,45 +34,32 @@ enum MediaAcquisition {
 /// because the first source the app ever had was YouTube.
 enum MediaKind { audio, video }
 
-/// What is known about an entry's learning package.
+/// Whether this discovery entry's media is known to exist on this machine.
 ///
-/// "We could not find out" is a state of its own: rendering [notAvailable]
-/// when the core never answered claims a fact nobody checked.
-enum PackageStatus {
-  /// Nothing has been asked yet.
+/// This answers exactly one question — "do we have the bytes to open?" — and
+/// nothing else. Whether the media has a learning transcript is Workbench's
+/// fact, never Discovery's: a local entry with no transcript is still local
+/// and still learnable, and only Workbench decides how to make it ready.
+enum DiscoveryMediaAvailability {
+  /// Nothing has been checked yet.
   unknown,
 
-  /// A lookup is in flight.
+  /// A local-media lookup is in flight.
   checking,
 
-  /// Checked: a package exists for this entry.
-  available,
-
-  /// Checked: this entry has no package.
-  notAvailable,
-
-  /// The lookup could not run or failed — core disconnected, listing error —
-  /// so the answer is still missing.
-  undetermined,
-}
-
-/// Lifecycle of local learning-package generation driven by listen-gen.
-enum ContentGenerationStatus {
-  idle,
-  preparing,
-  generating,
-  importing,
-  completed,
-  failed,
-
-  /// The generator is not configured on this machine, so generation cannot be
-  /// attempted at all.
+  /// Checked: the media is not registered with the local library.
   ///
-  /// Distinct from [failed]: nothing ran and nothing went wrong. Retrying is
-  /// guaranteed to land here again, so the surface owes the user the real next
-  /// step — configure `listen-gen` — rather than a retry button.
-  unavailable,
-  cancelled,
+  /// Remote is not the same as "cannot acquire": whether this entry's bytes
+  /// can be fetched is the entry's own [MediaAcquisition] fact.
+  remote,
+
+  /// Checked: the media exists locally and can be opened.
+  local,
+
+  /// The lookup could not run or failed — core disconnected, library query
+  /// error — so the answer is still missing. Distinct from [remote]: claiming
+  /// "not on this machine" when the library never answered would be a guess.
+  undetermined,
 }
 
 /// Cover artwork is a tone from the active color scheme.
@@ -109,7 +96,6 @@ class MediaEntry {
     required this.publishedOn,
     required this.thumbnailUrl,
     required this.viewCount,
-    required this.hasPackage,
     this.acquisition = MediaAcquisition.none,
     this.mediaKind = MediaKind.video,
     this.mediaUrl,
@@ -134,7 +120,6 @@ class MediaEntry {
   final String publishedOn;
   final String? thumbnailUrl;
   final int viewCount;
-  final bool hasPackage;
 
   final MediaAcquisition acquisition;
   final MediaKind mediaKind;

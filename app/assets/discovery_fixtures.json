@@ -65,8 +65,7 @@
       "language": "English",
       "publishedOn": "2026-07-28",
       "thumbnailUrl": null,
-      "viewCount": 142000,
-      "hasPackage": true
+      "viewCount": 142000
     },
     {
       "id": "i-bbc-2",
@@ -77,8 +76,7 @@
       "language": "English",
       "publishedOn": "2026-07-21",
       "thumbnailUrl": null,
-      "viewCount": 89000,
-      "hasPackage": false
+      "viewCount": 89000
     },
     {
       "id": "i-bbc-3",
@@ -89,8 +87,7 @@
       "language": "English",
       "publishedOn": "2026-07-14",
       "thumbnailUrl": null,
-      "viewCount": 230000,
-      "hasPackage": true
+      "viewCount": 230000
     },
     {
       "id": "i-ted-1",
@@ -101,8 +98,7 @@
       "language": "English",
       "publishedOn": "2026-07-25",
       "thumbnailUrl": null,
-      "viewCount": 3500000,
-      "hasPackage": true
+      "viewCount": 3500000
     },
     {
       "id": "i-ted-2",
@@ -113,8 +109,7 @@
       "language": "English",
       "publishedOn": "2026-07-11",
       "thumbnailUrl": null,
-      "viewCount": 1800000,
-      "hasPackage": false
+      "viewCount": 1800000
     },
     {
       "id": "i-ted-3",
@@ -125,8 +120,7 @@
       "language": "English",
       "publishedOn": "2026-06-30",
       "thumbnailUrl": null,
-      "viewCount": 2200000,
-      "hasPackage": false
+      "viewCount": 2200000
     },
     {
       "id": "i-vox-1",
@@ -137,8 +131,7 @@
       "language": "English (US)",
       "publishedOn": "2026-07-19",
       "thumbnailUrl": null,
-      "viewCount": 420000,
-      "hasPackage": true
+      "viewCount": 420000
     },
     {
       "id": "i-vox-2",
@@ -149,8 +142,7 @@
       "language": "English (US)",
       "publishedOn": "2026-07-02",
       "thumbnailUrl": null,
-      "viewCount": 670000,
-      "hasPackage": false
+      "viewCount": 670000
     },
     {
       "id": "i-kurz-1",
@@ -161,8 +153,7 @@
       "language": "English",
       "publishedOn": "2026-07-22",
       "thumbnailUrl": null,
-      "viewCount": 1500000,
-      "hasPackage": true
+      "viewCount": 1500000
     },
     {
       "id": "i-kurz-2",
@@ -173,8 +164,7 @@
       "language": "English",
       "publishedOn": "2026-07-06",
       "thumbnailUrl": null,
-      "viewCount": 980000,
-      "hasPackage": false
+      "viewCount": 980000
     },
     {
       "id": "i-eng-1",
@@ -185,8 +175,7 @@
       "language": "中文 · English",
       "publishedOn": "2026-07-26",
       "thumbnailUrl": null,
-      "viewCount": 150000,
-      "hasPackage": true
+      "viewCount": 150000
     },
     {
       "id": "i-eng-2",
@@ -197,8 +186,7 @@
       "language": "中文 · English",
       "publishedOn": "2026-07-12",
       "thumbnailUrl": null,
-      "viewCount": 320000,
-      "hasPackage": true
+      "viewCount": 320000
     },
     {
       "id": "i-scishow-1",
@@ -209,8 +197,7 @@
       "language": "English (US)",
       "publishedOn": "2026-07-18",
       "thumbnailUrl": null,
-      "viewCount": 110000,
-      "hasPackage": false
+      "viewCount": 110000
     },
     {
       "id": "i-scishow-2",
@@ -221,8 +208,7 @@
       "language": "English (US)",
       "publishedOn": "2026-07-04",
       "thumbnailUrl": null,
-      "viewCount": 95000,
-      "hasPackage": false
+      "viewCount": 95000
     }
   ]
 }

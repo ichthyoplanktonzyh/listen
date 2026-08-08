@@ -7,14 +7,13 @@ import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/format_duration.dart';
-import '../common/listen_loading.dart';
 import 'cover_image.dart';
 import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
 import 'source_display_name.dart';
 
 /// A YouTube-style video card representing a MediaEntry: thumbnail, title,
-/// views count, published time, and local package/download controls.
+/// views count, published time, and the acquisition/local state.
 class DiscoveryContentCard extends StatelessWidget {
   const DiscoveryContentCard({
     super.key,
@@ -23,7 +22,7 @@ class DiscoveryContentCard extends StatelessWidget {
     this.durationMs,
     required this.downloadState,
     required this.downloadProgress,
-    required this.packageStatus,
+    required this.mediaAvailability,
     required this.selected,
     required this.onTap,
     required this.onDownload,
@@ -38,7 +37,7 @@ class DiscoveryContentCard extends StatelessWidget {
 
   /// Null while the total is unknown; renders indeterminate.
   final double? downloadProgress;
-  final PackageStatus packageStatus;
+  final DiscoveryMediaAvailability mediaAvailability;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onDownload;
@@ -129,16 +128,22 @@ class DiscoveryContentCard extends StatelessWidget {
           runSpacing: ListenSpacing.gap4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _PackageChip(
-              status: packageStatus,
-              labelText: _packageLabel(l, packageStatus),
-            ),
-            _DownloadControl(
-              state: downloadState,
-              progress: downloadProgress,
-              onDownload: onDownload,
-              onCancel: onCancel,
-            ),
+            if (mediaAvailability == DiscoveryMediaAvailability.local)
+              _LocalChip(labelText: l.text('discoveryAvailableOnDevice'))
+            else if (entry.acquisition == MediaAcquisition.none)
+              Text(
+                l.text('discoveryUnacquirable'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              )
+            else
+              _DownloadControl(
+                state: downloadState,
+                progress: downloadProgress,
+                onDownload: onDownload,
+                onCancel: onCancel,
+              ),
           ],
         ),
       ],
@@ -155,17 +160,6 @@ class DiscoveryContentCard extends StatelessWidget {
     return '$count $viewsText';
   }
 
-  /// Every status says what it is. "Not checked yet" and "could not check" are
-  /// not the same claim as "there is none".
-  String _packageLabel(AppLocalizations l, PackageStatus status) {
-    return switch (status) {
-      PackageStatus.unknown => l.text('discoveryPackageUnknown'),
-      PackageStatus.checking => l.text('discoveryCheckingPackage'),
-      PackageStatus.available => l.text('discoveryPackageAvailable'),
-      PackageStatus.notAvailable => l.text('discoveryPackageNotAvailable'),
-      PackageStatus.undetermined => l.text('discoveryPackageUndetermined'),
-    };
-  }
 }
 
 String _coverInitial(String text) {
@@ -303,83 +297,39 @@ class _CoverPlaceholder extends StatelessWidget {
   }
 }
 
-class _PackageChip extends StatelessWidget {
-  const _PackageChip({required this.status, required this.labelText});
+class _LocalChip extends StatelessWidget {
+  const _LocalChip({required this.labelText});
 
-  final PackageStatus status;
   final String labelText;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final colorMap = _chipColors(scheme);
-
     return Container(
       padding: ListenPadding.tight,
       decoration: BoxDecoration(
-        color: colorMap.$1,
+        color: scheme.secondaryContainer,
         borderRadius: ListenRadii.pillBorder,
-        border: colorMap.$3 != null ? Border.all(color: colorMap.$3!) : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (status == PackageStatus.checking) ...[
-            const ListenLoading.inline(size: 10),
-            const SizedBox(width: ListenSpacing.gap4),
-          ],
-          // The one status carrying a glyph of its own: a missing answer must
-          // not read like the quiet "none" chip beside it.
-          if (status == PackageStatus.undetermined) ...[
-            Icon(
-              Icons.help_outline,
-              size: ListenIconSize.inline,
-              color: colorMap.$2,
-            ),
-            const SizedBox(width: ListenSpacing.gap4),
-          ],
+          Icon(
+            Icons.check_circle_outline,
+            size: ListenIconSize.inline,
+            color: scheme.onSecondaryContainer,
+          ),
+          const SizedBox(width: ListenSpacing.gap4),
           Text(
             labelText,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: colorMap.$2,
+              color: scheme.onSecondaryContainer,
               fontWeight: FontWeight.w500,
             ),
           ),
         ],
       ),
     );
-  }
-
-  (Color, Color, Color?) _chipColors(ColorScheme scheme) {
-    return switch (status) {
-      PackageStatus.available => (
-        scheme.secondaryContainer,
-        scheme.onSecondaryContainer,
-        null,
-      ),
-      PackageStatus.checking => (
-        scheme.surfaceContainerLow,
-        scheme.onSurfaceVariant,
-        scheme.outlineVariant,
-      ),
-      PackageStatus.notAvailable => (
-        Colors.transparent,
-        scheme.onSurfaceVariant.withValues(alpha: 0.7),
-        scheme.outlineVariant,
-      ),
-      PackageStatus.unknown => (
-        Colors.transparent,
-        scheme.onSurfaceVariant.withValues(alpha: 0.5),
-        scheme.outlineVariant,
-      ),
-      // Full-strength ink and a solid outline: unlike "none", this one is
-      // asking to be read.
-      PackageStatus.undetermined => (
-        Colors.transparent,
-        scheme.onSurfaceVariant,
-        scheme.outline,
-      ),
-    };
   }
 }
 
@@ -509,7 +459,6 @@ Widget discoveryContentCardPreview() => discoveryPreviewShell(
         publishedOn: '2026-07-28',
         thumbnailUrl: null,
         viewCount: 142000,
-        hasPackage: true,
       ),
       source: MediaSource(
         id: 'c-preview',
@@ -522,7 +471,7 @@ Widget discoveryContentCardPreview() => discoveryPreviewShell(
       ),
       downloadState: DownloadState.done,
       downloadProgress: 1,
-      packageStatus: PackageStatus.available,
+      mediaAvailability: DiscoveryMediaAvailability.local,
       selected: false,
       onTap: _noop,
       onDownload: _noop,
@@ -560,7 +509,6 @@ Widget discoveryContentCardUnknownDurationPreview() => discoveryPreviewShell(
         publishedOn: '2026-07-28',
         thumbnailUrl: null,
         viewCount: 0,
-        hasPackage: false,
         acquisition: MediaAcquisition.enclosure,
         mediaKind: MediaKind.audio,
         mediaUrl: 'https://cdn.example.com/ep001.mp3',
@@ -576,7 +524,7 @@ Widget discoveryContentCardUnknownDurationPreview() => discoveryPreviewShell(
       ),
       downloadState: DownloadState.none,
       downloadProgress: 0,
-      packageStatus: PackageStatus.undetermined,
+      mediaAvailability: DiscoveryMediaAvailability.remote,
       selected: false,
       onTap: _noop,
       onDownload: _noop,
@@ -613,7 +561,6 @@ Widget discoveryContentCardIndeterminatePreview() => discoveryPreviewShell(
         publishedOn: '2026-07-28',
         thumbnailUrl: null,
         viewCount: 0,
-        hasPackage: false,
         acquisition: MediaAcquisition.enclosure,
         mediaKind: MediaKind.audio,
         mediaUrl: 'https://cdn.example.com/ep001.mp3',
@@ -629,7 +576,7 @@ Widget discoveryContentCardIndeterminatePreview() => discoveryPreviewShell(
       ),
       downloadState: DownloadState.downloading,
       downloadProgress: null,
-      packageStatus: PackageStatus.undetermined,
+      mediaAvailability: DiscoveryMediaAvailability.remote,
       selected: false,
       onTap: _noop,
       onDownload: _noop,

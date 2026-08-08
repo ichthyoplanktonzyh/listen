@@ -92,12 +92,6 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
     ];
   }
 
-  /// Whether a package exists is Core's fact, and this repository has no way
-  /// to ask it, so it does not claim one either way.
-  @override
-  Future<PackageStatus> checkPackage(String entryId) async =>
-      PackageStatus.undetermined;
-
   /// A podcast has no per-episode subscribe action; an episode is reached
   /// through its feed.
   @override
@@ -190,7 +184,6 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
       // does not report this", and the surface omits the figure rather than
       // showing a channel where every episode has no listeners.
       viewCount: 0,
-      hasPackage: false,
       acquisition: url == null
           ? MediaAcquisition.none
           : MediaAcquisition.enclosure,

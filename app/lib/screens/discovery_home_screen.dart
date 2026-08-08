@@ -32,17 +32,20 @@ class DiscoveryHome extends StatelessWidget {
 
   final ValueChanged<String>? onPlayMedia;
 
-  /// The player affordance exists only when a local file backs the entry.
-  /// Falling back to [onOpenMedia] would put a file picker behind a button
-  /// labelled "open for learning".
-  VoidCallback? _openPlayerAction(String entryId, {VoidCallback? before}) {
-    final localPath = viewModel.localPathFor(entryId);
+  /// The single "start learning" intent: acquires local media when needed
+  /// (progress stays on this surface), then hands the path to the workbench
+  /// opener. Returns without opening on failure or cancel — the discovery
+  /// state carries the typed failure for a retry instead.
+  Future<void> _startLearning(
+    String entryId, {
+    VoidCallback? beforeOpen,
+  }) async {
     final play = onPlayMedia;
-    if (localPath == null || play == null) return null;
-    return () {
-      before?.call();
-      play(localPath);
-    };
+    if (play == null) return;
+    final path = await viewModel.acquireForLearning(entryId);
+    if (path == null) return;
+    beforeOpen?.call();
+    play(path);
   }
 
   @override
@@ -61,10 +64,7 @@ class DiscoveryHome extends StatelessWidget {
               onSelectItem: (id) {
                 viewModel.selectItem(id);
                 if (!showDetail) {
-                  final entry = state.entryById(id);
-                  if (entry != null) {
-                    _showDetailBottomSheet(context, entry);
-                  }
+                  _showDetailBottomSheet(context);
                 }
               },
               onDownload: viewModel.startDownload,
@@ -97,30 +97,17 @@ class DiscoveryHome extends StatelessWidget {
                     downloadFailure: state.downloadFailureOf(
                       state.selectedEntry!.id,
                     ),
-                    packageStatus: state.packageStatusOf(
+                    mediaAvailability: state.mediaAvailabilityOf(
                       state.selectedEntry!.id,
                     ),
-                    generationStatus: state.generationStatusOf(
-                      state.selectedEntry!.id,
-                    ),
-                    generatorPhase: state.generatorPhaseOf(
-                      state.selectedEntry!.id,
-                    ),
-                    generationFailure: state.generationFailureOf(
-                      state.selectedEntry!.id,
-                    ),
-                    onDownload: () =>
-                        viewModel.startDownload(state.selectedEntry!.id),
+                    onStartLearning: onPlayMedia == null
+                        ? null
+                        : () => _startLearning(state.selectedEntry!.id),
                     onCancelDownload: () =>
                         viewModel.cancelDownload(state.selectedEntry!.id),
-                    onOpenPlayer: _openPlayerAction(state.selectedEntry!.id),
-                    onViewPackage: () => _showPackageDialog(context),
-                    onGenerate: () =>
-                        viewModel.startGeneration(state.selectedEntry!.id),
-                    onCancelGenerate: () =>
-                        viewModel.cancelGeneration(state.selectedEntry!.id),
-                    onRecheckPackage: () =>
-                        viewModel.checkPackage(state.selectedEntry!.id),
+                    onRecheckAvailability: () => viewModel.refreshMediaAvailability(
+                      state.selectedEntry!.id,
+                    ),
                   ),
                 ),
             ];
@@ -135,11 +122,14 @@ class DiscoveryHome extends StatelessWidget {
     );
   }
 
-  void _showDetailBottomSheet(BuildContext context, MediaEntry entry) {
+  void _showDetailBottomSheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // The sheet closes itself only after acquisition succeeds: while media
+      // is downloading or has failed, it stays open so the progress and the
+      // retry have a surface to live on.
       builder: (bottomSheetContext) {
         final scheme = Theme.of(context).colorScheme;
         return DraggableScrollableSheet(
@@ -176,32 +166,20 @@ class DiscoveryHome extends StatelessWidget {
                           downloadProgress: state.downloadProgressOf(
                             currentEntry.id,
                           ),
-                          packageStatus: state.packageStatusOf(currentEntry.id),
-                          generationStatus: state.generationStatusOf(
+                          mediaAvailability: state.mediaAvailabilityOf(
                             currentEntry.id,
                           ),
-                          generatorPhase: state.generatorPhaseOf(
-                            currentEntry.id,
-                          ),
-                          generatorState: state.generatorState,
-                          generationFailure: state.generationFailureOf(
-                            currentEntry.id,
-                          ),
-                          onDownload: () =>
-                              viewModel.startDownload(currentEntry.id),
+                          onStartLearning: onPlayMedia == null
+                              ? null
+                              : () => _startLearning(
+                                  currentEntry.id,
+                                  beforeOpen: () =>
+                                      Navigator.of(bottomSheetContext).pop(),
+                                ),
                           onCancelDownload: () =>
                               viewModel.cancelDownload(currentEntry.id),
-                          onOpenPlayer: _openPlayerAction(
-                            currentEntry.id,
-                            before: Navigator.of(bottomSheetContext).pop,
-                          ),
-                          onViewPackage: () => _showPackageDialog(context),
-                          onGenerate: () =>
-                              viewModel.startGeneration(currentEntry.id),
-                          onCancelGenerate: () =>
-                              viewModel.cancelGeneration(currentEntry.id),
-                          onRecheckPackage: () =>
-                              viewModel.checkPackage(currentEntry.id),
+                          onRecheckAvailability: () =>
+                              viewModel.refreshMediaAvailability(currentEntry.id),
                         ),
                       ),
                       Positioned(
@@ -232,56 +210,6 @@ class DiscoveryHome extends StatelessWidget {
     );
   }
 
-  void _showPackageDialog(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l.text('discoveryPackageTitle')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l.text('discoveryPackageNote'),
-              style: Theme.of(
-                dialogContext,
-              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: ListenSpacing.gap12),
-            for (final entry in const [
-              ('discoveryPackageSubtitle', Icons.subtitles_outlined),
-              ('discoveryPackageTimeline', Icons.timeline_outlined),
-              ('discoveryPackagePhonetics', Icons.record_voice_over_outlined),
-            ]) ...[
-              Row(
-                children: [
-                  Icon(
-                    entry.$2,
-                    size: ListenIconSize.inline,
-                    color: scheme.primary,
-                  ),
-                  const SizedBox(width: ListenSpacing.gap8),
-                  Text(
-                    l.text(entry.$1),
-                    style: Theme.of(dialogContext).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-              const SizedBox(height: ListenSpacing.gap6),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(l.text('discoveryClose')),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _DiscoveryChannelChips extends StatelessWidget {
@@ -573,7 +501,9 @@ class _DiscoveryShelf extends StatelessWidget {
                           durationMs: durationMsFor(entry.id),
                           downloadState: state.downloadStateOf(entry.id),
                           downloadProgress: state.downloadProgressOf(entry.id),
-                          packageStatus: state.packageStatusOf(entry.id),
+                          mediaAvailability: state.mediaAvailabilityOf(
+                            entry.id,
+                          ),
                           selected: entry.id == state.selectedEntryId,
                           onTap: () => onSelectItem(entry.id),
                           onDownload: () => onDownload(entry.id),
@@ -595,7 +525,9 @@ class _DiscoveryShelf extends StatelessWidget {
                             downloadProgress: state.downloadProgressOf(
                               entry.id,
                             ),
-                            packageStatus: state.packageStatusOf(entry.id),
+                            mediaAvailability: state.mediaAvailabilityOf(
+                              entry.id,
+                            ),
                             selected: entry.id == state.selectedEntryId,
                             onTap: () => onSelectItem(entry.id),
                             onDownload: () => onDownload(entry.id),

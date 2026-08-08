@@ -296,7 +296,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       YoutubeDiscoveryRepository(subscriptions: subscriptionStore),
     ),
     mediaImportRepository,
-    coreRepositories.contentPackage,
     coreRepositories.mediaLibrary,
     // The composition root is the only place that hands out a ledger backed by
     // a real directory; everything else defaults to remembering nothing.
@@ -877,6 +876,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       unawaited(subtitleSources.checkSyntaxCapability());
       unawaited(mediaLibraryActions.prefetchHomeSummary());
       unawaited(_runSmokeIfConfigured());
+      // The first load may have run before Core was reachable and answered
+      // "undetermined"; a fresh connected generation is a meaningful
+      // invalidation, so re-ask for whatever entry is selected. No polling.
+      unawaited(discoveryViewModel.refreshSelectedMediaAvailability());
       _refreshDueCountWhileVisible();
     }
     if (!state.isConnected) reviewDueController.reset();

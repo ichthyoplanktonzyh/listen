@@ -1,4 +1,3 @@
-import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'dart:async';
 import 'package:llplayer_next/models/discovery.dart';
 import 'package:llplayer_next/models/media_download.dart';
@@ -6,14 +5,10 @@ import 'package:llplayer_next/models/media_resolution.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/data/repositories/discovery_repository.dart';
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
-import 'package:llplayer_next/data/repositories/content_package_repository.dart';
 import 'package:llplayer_next/data/repositories/media_library_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
-import 'package:llplayer_next/models/content_package.dart';
 import 'package:llplayer_next/models/saved_vocabulary_count.dart';
-import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/embedded_subtitle.dart';
-import 'package:llplayer_next/services/listen_gen_process_service.dart';
 
 class TestMediaDownloadHandle implements MediaDownloadHandle {
   TestMediaDownloadHandle(String entryId, Completer<String?> completedCompleter)
@@ -83,6 +78,7 @@ class TestMediaImportRepository implements MediaImportRepository {
     this.resolveGate,
     this.downloadFails = false,
     this.holdDownload = false,
+    this.downloadLaunchGate,
   });
 
   /// True makes every download end in an error instead of a path.
@@ -91,6 +87,11 @@ class TestMediaImportRepository implements MediaImportRepository {
   /// True keeps `completed` pending so a test can settle a cancel first and
   /// then release the late callback.
   final bool holdDownload;
+
+  /// When set, the downloader launch parks before returning its handle, so a
+  /// test can hold the window between `controller.starting()` and
+  /// `controller.attach()` open and cancel inside it.
+  Completer<void>? downloadLaunchGate;
 
   final int? probedDurationMs;
   final int resolvedDurationMs;
@@ -131,6 +132,7 @@ class TestMediaImportRepository implements MediaImportRepository {
     if (downloadFails) return TestFailingDownloadHandle();
     final completer = Completer<String?>();
     completers[entryId] = completer;
+    if (downloadLaunchGate != null) await downloadLaunchGate!.future;
     if (holdDownload) return TestHeldDownloadHandle(completer);
     return TestMediaDownloadHandle(entryId, completer);
   }
@@ -150,6 +152,7 @@ class TestMediaImportRepository implements MediaImportRepository {
     final entryId = mediaUrl.contains('i-bbc-1') ? 'i-bbc-1' : 'i-bbc-2';
     final completer = Completer<String?>();
     completers[entryId] = completer;
+    if (downloadLaunchGate != null) await downloadLaunchGate!.future;
     if (holdDownload) return TestHeldDownloadHandle(completer);
     return TestMediaDownloadHandle(entryId, completer);
   }
@@ -183,125 +186,6 @@ class TestMediaImportRepository implements MediaImportRepository {
     String mediaPath,
     EmbeddedSubtitle subtitle,
   ) async => '';
-}
-
-class TestContentPackageRun implements ListenGenProcessRun {
-  TestContentPackageRun();
-
-  final StreamController<ListenGenMachineEvent> _controller =
-      StreamController<ListenGenMachineEvent>.broadcast();
-  final Completer<String> _packagePath = Completer<String>();
-
-  bool get isComplete => _packagePath.isCompleted;
-
-  @override
-  Stream<ListenGenMachineEvent> get events => _controller.stream;
-
-  @override
-  Future<String> get packagePath => _packagePath.future;
-
-  /// Emits the machine protocol lifecycle up to the first progress phase.
-  void emitRunning() {
-    _controller.add(
-      ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
-    );
-    _controller.add(
-      ListenGenMachineEvent(sequence: 1, kind: ListenGenEventKind.started),
-    );
-    _controller.add(
-      ListenGenMachineEvent(
-        sequence: 2,
-        kind: ListenGenEventKind.phase,
-        phase: 'transcribing',
-      ),
-    );
-    _controller.add(
-      ListenGenMachineEvent(
-        sequence: 3,
-        kind: ListenGenEventKind.completed,
-        packageSha256: 'sha256:${'a' * 64}',
-        mediaFingerprint: 'sha256:${'b' * 64}',
-        resources: const [],
-        warnings: const [],
-      ),
-    );
-  }
-
-  /// Resolves the package path, the way a successful listen-gen run does.
-  void completeSuccessfully() {
-    _packagePath.complete('/tmp/generated.listenpkg');
-  }
-
-  /// Emits a failed terminal event and fails the package path.
-  void failWith(String code) {
-    _controller.add(
-      ListenGenMachineEvent(
-        sequence: 1,
-        kind: ListenGenEventKind.failed,
-        code: code,
-        message: 'generator failed',
-      ),
-    );
-    if (!_packagePath.isCompleted) {
-      _packagePath.completeError(ListenGenProcessFailure(code));
-    }
-  }
-
-  @override
-  void cancel() {
-    _controller.add(
-      ListenGenMachineEvent(sequence: 4, kind: ListenGenEventKind.cancelled),
-    );
-    if (!_packagePath.isCompleted) {
-      _packagePath.completeError(const ListenGenProcessFailure('cancelled'));
-    }
-  }
-
-  @override
-  Future<void> cleanUp() async {}
-}
-
-class TestContentPackageRepository implements ContentPackageRepository {
-  final List<TestContentPackageRun> runs = [];
-  final List<ContentPackageGenerationRequest> requests = [];
-
-  @override
-  bool get coreAvailable => true;
-
-  @override
-  bool get generatorConfigured => true;
-
-  @override
-  ContentGeneratorState get generatorState => generatorConfigured
-      ? ContentGeneratorState.ready
-      : ContentGeneratorState.generatorMissing;
-
-  @override
-  ApiFailure failureDetail(Object error) => error is ListenGenProcessFailure
-      ? ApiFailure(raw: '', code: error.code, retryable: true)
-      : ApiFailure(raw: error.toString(), message: error.toString());
-
-  @override
-  Future<String?> pickPackage() async => null;
-
-  @override
-  Future<ContentPackageImportReceipt> importPackage({
-    required String mediaId,
-    required String packagePath,
-  }) async => ContentPackageImportReceipt(
-    manifestSha256: 'sha256:${'c' * 64}',
-    track: SubtitleTrack(id: 'track-$mediaId', cues: const []),
-  );
-
-  @override
-  Future<ListenGenProcessRun> startGeneration(
-    ContentPackageGenerationRequest request,
-  ) async {
-    requests.add(request);
-    final run = TestContentPackageRun();
-    runs.add(run);
-    return run;
-  }
 }
 
 /// A download that never finishes on its own; the test completes it by hand.
@@ -359,12 +243,20 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   final int? mediaDurationMs;
 
   /// False stands in for a disconnected core: nothing can be asked.
-  final bool available;
+  bool available;
 
   /// True makes the listing throw, the way a broken core connection does.
   final bool failListing;
 
   final List<MediaLibraryEntry> _entries = [];
+
+  /// Grows the library after construction (e.g. a core reconnect seeding the
+  /// entry the first, disconnected check could not see).
+  void addEntry(MediaLibraryEntry entry) => _entries.add(entry);
+
+  /// Drops every row (e.g. a folder emptied on disk), so a test can show a
+  /// definitive no-match where an earlier refresh answered local.
+  void clearEntries() => _entries.clear();
 
   @override
   bool get isAvailable => available;
@@ -446,7 +338,6 @@ MediaEntry testMediaEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  hasPackage: false,
   acquisition: MediaAcquisition.externalTool,
   mediaUrl: 'https://www.youtube.com/watch?v=$id',
 );
@@ -463,7 +354,6 @@ MediaEntry testPodcastEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  hasPackage: false,
   acquisition: MediaAcquisition.enclosure,
   mediaKind: MediaKind.audio,
   mediaUrl: 'https://cdn.example.com/$id.mp3',
@@ -481,7 +371,6 @@ MediaEntry testUnacquirableEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  hasPackage: false,
 );
 
 /// A discovery feed the test drives: which sources exist, which entries each
@@ -520,10 +409,6 @@ class TestDiscoveryRepository implements DiscoveryRepository {
     }
     return List.unmodifiable(_entries[sourceId] ?? const <MediaEntry>[]);
   }
-
-  @override
-  Future<PackageStatus> checkPackage(String entryId) async =>
-      PackageStatus.undetermined;
 
   @override
   Future<MediaEntry> resolveCustomVideo(

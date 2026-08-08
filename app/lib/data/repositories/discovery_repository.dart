@@ -18,8 +18,6 @@ abstract interface class DiscoveryRepository {
 
   Future<List<MediaEntry>> entriesFor(String sourceId);
 
-  Future<PackageStatus> checkPackage(String entryId);
-
   Future<MediaEntry> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
@@ -77,17 +75,6 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<PackageStatus> checkPackage(String entryId) async {
-    await _ensureLoaded();
-    // Simulate core lookup delay
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    final entry = _entries!.firstWhere((e) => e.id == entryId);
-    return entry.hasPackage
-        ? PackageStatus.available
-        : PackageStatus.notAvailable;
-  }
-
-  @override
   Future<MediaEntry> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
@@ -130,7 +117,6 @@ MediaEntry _entryFromMap(Map<dynamic, dynamic> map, MediaSourceType type) {
     publishedOn: map['publishedOn'] as String,
     thumbnailUrl: map['thumbnailUrl'] as String?,
     viewCount: map['viewCount'] as int? ?? 0,
-    hasPackage: map['hasPackage'] as bool? ?? false,
     acquisition: isYoutube
         ? MediaAcquisition.externalTool
         : MediaAcquisition.enclosure,
@@ -338,7 +324,6 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
           publishedOn: published,
           thumbnailUrl: thumb,
           viewCount: views,
-          hasPackage: false,
           acquisition: MediaAcquisition.externalTool,
           mediaKind: MediaKind.video,
           mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
@@ -378,13 +363,6 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
     }
   }
 
-  /// The feed carries no package information, and this repository has no way
-  /// to ask the core — so the honest answer is that it does not know.
-  @override
-  Future<PackageStatus> checkPackage(String entryId) async {
-    return PackageStatus.undetermined;
-  }
-
   @override
   Future<MediaEntry> resolveCustomVideo(
     String url,
@@ -401,7 +379,6 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
       publishedOn: details.uploadDate,
       thumbnailUrl: details.thumbnail,
       viewCount: details.viewCount,
-      hasPackage: false,
       acquisition: MediaAcquisition.externalTool,
       mediaKind: MediaKind.video,
       mediaUrl: url,

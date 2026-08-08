@@ -5,11 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../data/repositories/discovery_repository.dart';
 import '../data/repositories/media_import_repository.dart';
 import '../data/repositories/media_library_repository.dart';
-import '../data/repositories/content_package_repository.dart';
 import '../controllers/download_controller.dart';
-import '../models/content_package.dart';
-import '../services/content_generator_setup.dart';
-import '../services/listen_gen_process_service.dart';
 import '../models/discovery.dart';
 import '../models/media_download.dart';
 import '../models/media_resolution.dart';
@@ -34,19 +30,11 @@ class DiscoveryState {
     this.selectedEntryId,
     this.entriesFailure,
     Map<String, DownloadStatusSnapshot> downloadSnapshots = const {},
-    Map<String, PackageStatus> packageStatuses = const {},
-    Map<String, ContentGenerationStatus> generationStatuses = const {},
-    Map<String, String?> generatorPhases = const {},
-    Map<String, ApiFailure?> generationFailures = const {},
-    this.generatorConfigured = true,
-    this.generatorState = ContentGeneratorState.ready,
+    Map<String, DiscoveryMediaAvailability> mediaAvailability = const {},
   }) : sources = List.unmodifiable(sources),
        entries = List.unmodifiable(entries),
        downloadSnapshots = Map.unmodifiable(downloadSnapshots),
-       packageStatuses = Map.unmodifiable(packageStatuses),
-       generationStatuses = Map.unmodifiable(generationStatuses),
-       generatorPhases = Map.unmodifiable(generatorPhases),
-       generationFailures = Map.unmodifiable(generationFailures);
+       mediaAvailability = Map.unmodifiable(mediaAvailability);
 
   /// The first catalog load — the surface has no sources yet.
   final bool loading;
@@ -75,21 +63,14 @@ class DiscoveryState {
   /// [DownloadController]. Absent means nothing has been acquired or attempted.
   final Map<String, DownloadStatusSnapshot> downloadSnapshots;
 
-  final Map<String, PackageStatus> packageStatuses;
-  final Map<String, ContentGenerationStatus> generationStatuses;
-  final Map<String, String?> generatorPhases;
-  final Map<String, ApiFailure?> generationFailures;
-
-  /// Whether `listen-gen` is configured on this machine. Read from the
-  /// repository when the ViewModel is built, so the surface knows before it
-  /// offers the action — an unavailable capability is never dressed up as a
-  /// button that fails on press.
-  final bool generatorConfigured;
-
-  /// Which piece of the toolchain is missing when it is not configured, so
-  /// the surface can name the one thing to fix instead of saying "not
-  /// configured" at someone.
-  final ContentGeneratorState generatorState;
+  /// Whether each entry's media is known to exist on this machine.
+  ///
+  /// Deliberately separate from [downloadSnapshots]: "is the media local" and
+  /// "what is this acquisition attempt doing" are different questions and
+  /// must not be fused into one enum. A local row also projects a completed
+  /// download snapshot so the acquisition UI reads naturally, but the
+  /// availability answer is its own fact.
+  final Map<String, DiscoveryMediaAvailability> mediaAvailability;
 
   bool get hasSources => sources.isNotEmpty;
 
@@ -132,23 +113,8 @@ class DiscoveryState {
   ApiFailure? downloadFailureOf(String entryId) =>
       downloadSnapshots[entryId]?.failure;
 
-  PackageStatus packageStatusOf(String entryId) =>
-      packageStatuses[entryId] ?? PackageStatus.unknown;
-
-  /// With no generator on this machine there is no idle state to be in: the
-  /// capability is absent before anything is attempted, so the surface reads
-  /// `unavailable` from the start rather than offering an action that can only
-  /// fail on press.
-  ContentGenerationStatus generationStatusOf(String entryId) =>
-      generationStatuses[entryId] ??
-      (generatorConfigured
-          ? ContentGenerationStatus.idle
-          : ContentGenerationStatus.unavailable);
-
-  String? generatorPhaseOf(String entryId) => generatorPhases[entryId];
-
-  ApiFailure? generationFailureOf(String entryId) =>
-      generationFailures[entryId];
+  DiscoveryMediaAvailability mediaAvailabilityOf(String entryId) =>
+      mediaAvailability[entryId] ?? DiscoveryMediaAvailability.unknown;
 
   /// Nullable fields take an explicit `clear*` flag: `selectedEntryId: null`
   /// cannot mean "drop the selection" when every field merges with `??`.
@@ -167,12 +133,7 @@ class DiscoveryState {
     ApiFailure? entriesFailure,
     bool clearEntriesFailure = false,
     Map<String, DownloadStatusSnapshot>? downloadSnapshots,
-    Map<String, PackageStatus>? packageStatuses,
-    Map<String, ContentGenerationStatus>? generationStatuses,
-    Map<String, String?>? generatorPhases,
-    Map<String, ApiFailure?>? generationFailures,
-    bool? generatorConfigured,
-    ContentGeneratorState? generatorState,
+    Map<String, DiscoveryMediaAvailability>? mediaAvailability,
   }) => DiscoveryState(
     loading: loading ?? this.loading,
     entriesLoading: entriesLoading ?? this.entriesLoading,
@@ -191,42 +152,31 @@ class DiscoveryState {
         ? null
         : entriesFailure ?? this.entriesFailure,
     downloadSnapshots: downloadSnapshots ?? this.downloadSnapshots,
-    packageStatuses: packageStatuses ?? this.packageStatuses,
-    generationStatuses: generationStatuses ?? this.generationStatuses,
-    generatorPhases: generatorPhases ?? this.generatorPhases,
-    generationFailures: generationFailures ?? this.generationFailures,
-    generatorConfigured: generatorConfigured ?? this.generatorConfigured,
-    generatorState: generatorState ?? this.generatorState,
+    mediaAvailability: mediaAvailability ?? this.mediaAvailability,
   );
 }
 
 /// Owns the media discovery presentation state.
+///
+/// Discovery's responsibility ends at "which content, and can we get its
+/// bytes on this machine". Whether those bytes are learnable — transcript
+/// present, one or several, needs generation — is Workbench's fact, owned by
+/// [TranscriptReadinessViewModel] after the media opens. This view model
+/// therefore knows nothing about packages, generation, or listen-gen.
 final class DiscoveryViewModel extends ChangeNotifier {
   DiscoveryViewModel(
     this._repository, [
     MediaImportRepository? importRepository,
-    ContentPackageRepository? contentPackageRepository,
     MediaLibraryRepository? mediaLibraryRepository,
     AcquisitionLedger? ledger,
   ]) : _ledger = ledger ?? AcquisitionLedger.inMemory(),
        _importRepository =
            importRepository ?? const _FakeMediaImportRepository(),
-       _contentPackageRepository =
-           contentPackageRepository ?? const _FakeContentPackageRepository(),
        _mediaLibraryRepository =
-           mediaLibraryRepository ?? const _FakeMediaLibraryRepository() {
-    // Read once at construction rather than on press. Whether the generator
-    // exists is a property of this machine, not of any entry, and the surface
-    // needs it before it decides what to offer.
-    _state = _state.copyWith(
-      generatorConfigured: _contentPackageRepository.generatorConfigured,
-      generatorState: _contentPackageRepository.generatorState,
-    );
-  }
+           mediaLibraryRepository ?? const _FakeMediaLibraryRepository();
 
   final DiscoveryRepository _repository;
   final MediaImportRepository _importRepository;
-  final ContentPackageRepository _contentPackageRepository;
   final MediaLibraryRepository _mediaLibraryRepository;
 
   /// What earlier sessions acquired, so a restart does not offer a download
@@ -250,10 +200,32 @@ final class DiscoveryViewModel extends ChangeNotifier {
   final Map<String, String> _mediaIds = {};
   final Map<String, int?> _mediaDurations = {};
   final Map<String, DownloadController> _downloadControllers = {};
+
+  /// Per-entry single-flight for the "start learning" intent: one intent owns
+  /// one acquisition, and a second caller joins the same future instead of
+  /// starting a second download.
+  final Map<String, Completer<String?>> _acquisitionCompleters = {};
+
+  /// Per-entry in-flight local-media checks, so a reconnect recheck and a
+  /// selection-triggered check share one lookup and callers can await it.
+  final Map<String, Future<void>> _availabilityChecks = {};
+
+  /// Which launch attempt is currently awaiting its download handle, per
+  /// entry. Present while a `startDownload` is between `controller.starting()`
+  /// and `controller.attach()` — the window where the controller has no
+  /// downloading state yet and a second caller must join instead of relaunch.
+  ///
+  /// The value is the attempt token: cancellation bumps the token so the
+  /// pending launch sees itself as stale when its handle finally lands.
+  final Map<String, int> _launchesInFlight = {};
+
+  /// Monotonic per-entry launch token. A launch records the token it started
+  /// with; `cancelDownload` bumps it to invalidate the in-flight launch. A
+  /// handle that returns after its token was bumped belongs to an attempt
+  /// nobody wants and is dropped without attach or adoption.
+  final Map<String, int> _launchTokens = {};
+
   final List<MediaEntry> _customEntries = [];
-  final Map<String, ListenGenProcessRun> _generationRuns = {};
-  final Map<String, StreamSubscription<ListenGenMachineEvent>>
-  _generationSubscriptions = {};
   String? _downloadDirectory;
   bool _disposed = false;
 
@@ -351,7 +323,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
     );
     notifyListeners();
     if (entries.isNotEmpty) {
-      unawaited(checkPackage(entries.first.id));
+      unawaited(refreshMediaAvailability(entries.first.id));
     }
     unawaited(_hydrateLocalDurations(entries));
     unawaited(_resolveRemoteDurations(sourceId, entries));
@@ -362,37 +334,93 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
     _state = _state.copyWith(selectedEntryId: entryId);
     notifyListeners();
-    final status = state.packageStatusOf(entryId);
-    if (status == PackageStatus.unknown ||
-        status == PackageStatus.undetermined) {
-      unawaited(checkPackage(entryId));
+    final availability = state.mediaAvailabilityOf(entryId);
+    if (availability == DiscoveryMediaAvailability.unknown ||
+        availability == DiscoveryMediaAvailability.undetermined) {
+      unawaited(refreshMediaAvailability(entryId));
     }
   }
 
-  Future<void> checkPackage(String entryId) async {
-    if (_state.packageStatusOf(entryId) == PackageStatus.checking) return;
+  /// Reconciles whether [entryId]'s media exists on this machine.
+  ///
+  /// The only question asked is "is the media local". Whether it has a
+  /// transcript is never consulted: local media whose primary learning track
+  /// is not set is still local and still learnable. Workbench decides whether
+  /// a transcript is needed after the media opens.
+  ///
+  /// Result states:
+  ///
+  /// * core/library unavailable → [DiscoveryMediaAvailability.undetermined]
+  /// * library query failed → [DiscoveryMediaAvailability.undetermined]
+  /// * matching local media found → [DiscoveryMediaAvailability.local], with
+  ///   `_localPaths`/`_mediaIds`/`_mediaDurations` filled, the ledger recorded,
+  ///   and the download snapshot projected to completed
+  /// * no match → [DiscoveryMediaAvailability.remote]
+  Future<void> refreshMediaAvailability(String entryId) {
+    final inFlight = _availabilityChecks[entryId];
+    if (inFlight != null) return inFlight;
+    late final Future<void> future;
+    future = _refreshMediaAvailability(entryId).whenComplete(() {
+      if (identical(_availabilityChecks[entryId], future)) {
+        _availabilityChecks.remove(entryId);
+      }
+    });
+    _availabilityChecks[entryId] = future;
+    return future;
+  }
 
-    _setPackageStatus(entryId, PackageStatus.checking);
+  /// The same reconciliation for whatever entry is selected, so a meaningful
+  /// invalidation (core reconnect, entry change) can re-ask without polling.
+  Future<void> refreshSelectedMediaAvailability() async {
+    final selectedId = _state.selectedEntryId;
+    if (selectedId == null) return;
+    await refreshMediaAvailability(selectedId);
+  }
 
+  Future<void> _refreshMediaAvailability(String entryId) async {
     // Without the core there is nothing to ask, so the answer stays missing —
-    // "no package" would be a guess dressed up as a fact.
+    // "not on this machine" would be a guess dressed up as a fact.
     if (!_mediaLibraryRepository.isAvailable) {
-      _setPackageStatus(entryId, PackageStatus.undetermined);
+      _setMediaAvailability(entryId, DiscoveryMediaAvailability.undetermined);
       return;
     }
+    _setMediaAvailability(entryId, DiscoveryMediaAvailability.checking);
 
     final MediaLibraryEntry? localEntry;
     try {
       localEntry = await _findLocalEntry(entryId);
     } catch (error) {
       debugPrint('Error searching local media entry: $error');
-      _setPackageStatus(entryId, PackageStatus.undetermined);
+      if (_disposed) return;
+      _setMediaAvailability(entryId, DiscoveryMediaAvailability.undetermined);
       return;
     }
     if (_disposed) return;
 
     if (localEntry == null) {
-      _setPackageStatus(entryId, PackageStatus.notAvailable);
+      // Definitive answer: this entry's media is not on this machine. Any
+      // local identity from an earlier, now-refuted answer must go with it —
+      // a stale path would let Start Learning open a file Core no longer
+      // knows about, and a projected "completed" snapshot would keep saying
+      // "on this device" after the media is gone.
+      _localPaths.remove(entryId);
+      _mediaIds.remove(entryId);
+      final snapshots = Map<String, DownloadStatusSnapshot>.of(
+        _state.downloadSnapshots,
+      );
+      // Only the stale completed projection is dropped. A live downloading or
+      // failed snapshot is the acquisition lifecycle's own fact and survives.
+      if (snapshots[entryId]?.kind == DownloadStatusKind.completed) {
+        snapshots.remove(entryId);
+      }
+      _state = _state.copyWith(
+        downloadSnapshots: snapshots,
+        mediaAvailability: {
+          ..._state.mediaAvailability,
+          entryId: DiscoveryMediaAvailability.remote,
+        },
+      );
+      notifyListeners();
       return;
     }
 
@@ -401,12 +429,6 @@ final class DiscoveryViewModel extends ChangeNotifier {
     final finished = Map<String, DownloadStatusSnapshot>.of(
       _state.downloadSnapshots,
     )..[entryId] = DownloadStatusSnapshot.completed(localEntry.media.path);
-    final updatedStatuses =
-        Map<String, PackageStatus>.of(_state.packageStatuses)
-          ..[entryId] = localEntry.primaryTrackId != null
-              ? PackageStatus.available
-              : PackageStatus.notAvailable;
-
     _localPaths[entryId] = localEntry.media.path;
     _mediaIds[entryId] = localEntry.media.id;
     unawaited(
@@ -420,23 +442,26 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
     _state = _state.copyWith(
       downloadSnapshots: finished,
-      packageStatuses: updatedStatuses,
+      mediaAvailability: {
+        ..._state.mediaAvailability,
+        entryId: DiscoveryMediaAvailability.local,
+      },
     );
     notifyListeners();
   }
 
-  void _setPackageStatus(String entryId, PackageStatus status) {
+  void _setMediaAvailability(String entryId, DiscoveryMediaAvailability value) {
     if (_disposed) return;
-    final statuses = Map<String, PackageStatus>.of(_state.packageStatuses)
-      ..[entryId] = status;
-    _state = _state.copyWith(packageStatuses: statuses);
+    _state = _state.copyWith(
+      mediaAvailability: {..._state.mediaAvailability, entryId: value},
+    );
     notifyListeners();
   }
 
   /// Recognises media this app downloaded for [entryId] in an earlier session.
   ///
   /// Throws when the library cannot be listed; the caller turns that into an
-  /// undetermined status rather than an answer.
+  /// undetermined answer rather than a claim.
   ///
   /// The written record answers first: the app knows what it downloaded, so
   /// it does not have to re-derive it from a filename. yt-dlp's `[id]`
@@ -499,6 +524,12 @@ final class DiscoveryViewModel extends ChangeNotifier {
       snapshots.remove(entryId);
     } else {
       snapshots[entryId] = value;
+      if (value.kind == DownloadStatusKind.failed) {
+        // A failed attempt ends the "start learning" intent without a path;
+        // Workbench must not open for an acquisition that never landed. The
+        // typed failure stays in the download state for the retry surface.
+        _completeAcquisition(entryId, null);
+      }
     }
     _state = _state.copyWith(downloadSnapshots: snapshots);
     notifyListeners();
@@ -512,25 +543,47 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// with nothing to acquire never starts one.
   Future<void> startDownload(String entryId) async {
     if (_state.downloadStateOf(entryId) == DownloadState.done) return;
+    // Established single-flight: once a handle is attached the controller is
+    // in `downloading`, and restarting it would cancel the live handle and
+    // relaunch. A joiner (e.g. `acquireForLearning`) waits on the acquisition
+    // completer instead, which the original handle's adoption resolves.
+    if (_state.downloadStateOf(entryId) == DownloadState.downloading) return;
+    // Launch-window single-flight: another attempt is still between
+    // `controller.starting()` and `controller.attach()`. A launch whose token
+    // was invalidated by a cancel is not in flight anymore and may be
+    // superseded by a fresh attempt.
+    final inFlight = _launchesInFlight[entryId];
+    if (inFlight != null && inFlight == _launchTokens[entryId]) return;
 
     final entry = _state.entryById(entryId);
     final mediaUrl = entry?.mediaUrl;
     if (entry == null ||
         mediaUrl == null ||
         entry.acquisition == MediaAcquisition.none) {
+      _completeAcquisition(entryId, null);
       return;
     }
 
     final controller = _downloadControllerFor(entryId);
     controller.starting();
+    final token = (_launchTokens[entryId] ?? 0) + 1;
+    _launchTokens[entryId] = token;
+    _launchesInFlight[entryId] = token;
 
     try {
       if (_downloadDirectory == null) {
         final directory = await _importRepository.pickDownloadDirectory(
           confirmButtonText: 'Select',
         );
-        if (_disposed) return;
-        if (directory == null) return; // User cancelled directory pick
+        if (_disposed) {
+          _completeAcquisition(entryId, null);
+          return;
+        }
+        if (directory == null) {
+          // User cancelled directory pick: the intent ends without a path.
+          _completeAcquisition(entryId, null);
+          return;
+        }
         _downloadDirectory = directory;
       }
 
@@ -549,6 +602,14 @@ final class DiscoveryViewModel extends ChangeNotifier {
       };
       if (_disposed) {
         handle.cancel();
+        _completeAcquisition(entryId, null);
+        return;
+      }
+      // A cancel during the launch window invalidated this attempt: the
+      // handle belongs to nobody and must be dropped without attach, without
+      // adoption, and without disturbing the cancelled state.
+      if (!_isCurrentLaunch(entryId, token)) {
+        handle.cancel();
         return;
       }
 
@@ -561,7 +622,97 @@ final class DiscoveryViewModel extends ChangeNotifier {
     } catch (error) {
       debugPrint('Error starting download: $error');
       if (_disposed) return;
-      controller.fail(_importRepository.failureDetail(error));
+      // Only a current attempt may surface its launch failure. A stale launch
+      // that errors after a cancel must not flip the cancelled/none state to
+      // failed.
+      if (_isCurrentLaunch(entryId, token)) {
+        controller.fail(_importRepository.failureDetail(error));
+      }
+    } finally {
+      // Remove this attempt's own marker only: a newer attempt that started
+      // while this one was still finishing keeps its bookkeeping.
+      if (_launchesInFlight[entryId] == token) {
+        _launchesInFlight.remove(entryId);
+      }
+    }
+  }
+
+  bool _isCurrentLaunch(String entryId, int token) =>
+      !_disposed && _launchTokens[entryId] == token;
+
+  /// The "start learning" intent, as a future that resolves to a local path.
+  ///
+  /// Semantics:
+  ///
+  /// * media already local → returns the registered path without touching the
+  ///   downloader;
+  /// * remote and acquirable → starts (or joins) one acquisition, waits for
+  ///   probe → Core registration → ledger, then returns the path;
+  /// * cancelled / failed / unacquirable → null; the typed failure (if any)
+  ///   is already in the download state for the surface to show and retry.
+  ///
+  /// Workbench opening is the caller's decision: this only guarantees local
+  /// media, and a non-null result is the signal to open it.
+  Future<String?> acquireForLearning(String entryId) async {
+    // Let an in-flight local-media check land first: media already on disk
+    // must not be re-downloaded because the check lost the race.
+    final inFlightCheck = _availabilityChecks[entryId];
+    if (inFlightCheck != null) await inFlightCheck;
+
+    final localPath = _localPaths[entryId];
+    if (localPath != null) return localPath;
+
+    final existing = _acquisitionCompleters[entryId];
+    if (existing != null) return existing.future;
+
+    final completer = Completer<String?>();
+    _acquisitionCompleters[entryId] = completer;
+    unawaited(
+      completer.future.then(
+        (_) => _dropAcquisitionCompleter(entryId, completer),
+        onError: (_) => _dropAcquisitionCompleter(entryId, completer),
+      ),
+    );
+
+    // Launch in the background. The returned future resolves the moment the
+    // acquisition lifecycle resolves — adoption with the path, failure or
+    // cancel with null — so a cancel during the launch window is answered
+    // promptly instead of waiting for the stale launch to settle.
+    unawaited(() async {
+      try {
+        await startDownload(entryId);
+      } catch (_) {
+        // The launch reports its own failures through the download state.
+      }
+      // Safety net: a launch that decided there is nothing to acquire (no
+      // URL, acquisition none, directory pick cancelled) resolves the intent
+      // empty rather than hanging the caller. An active download resolves
+      // the bridge itself.
+      final state = _state.downloadStateOf(entryId);
+      if (!completer.isCompleted &&
+          !_launchesInFlight.containsKey(entryId) &&
+          state != DownloadState.downloading &&
+          state != DownloadState.done) {
+        completer.complete(null);
+      }
+    }());
+
+    return completer.future;
+  }
+
+  void _dropAcquisitionCompleter(
+    String entryId,
+    Completer<String?> completer,
+  ) {
+    if (identical(_acquisitionCompleters[entryId], completer)) {
+      _acquisitionCompleters.remove(entryId);
+    }
+  }
+
+  void _completeAcquisition(String entryId, String? path) {
+    final completer = _acquisitionCompleters[entryId];
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(path);
     }
   }
 
@@ -586,8 +737,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
       _mediaIds[entryId] = media.id;
       unawaited(_ledger.record(entryId, mediaId: media.id, path: path));
       _mediaDurations[entryId] = media.durationMs ?? probedDurationMs;
-      notifyListeners();
-      await checkPackage(entryId);
+      _setMediaAvailability(entryId, DiscoveryMediaAvailability.local);
+      _completeAcquisition(entryId, path);
     } catch (error) {
       debugPrint('Error registering downloaded media: $error');
       if (_disposed) return;
@@ -597,8 +748,18 @@ final class DiscoveryViewModel extends ChangeNotifier {
     }
   }
 
-  void cancelDownload(String entryId) =>
-      _downloadControllers[entryId]?.cancel();
+  void cancelDownload(String entryId) {
+    _downloadControllers[entryId]?.cancel();
+    // Invalidate an in-flight launch: a handle that lands later belongs to
+    // an attempt nobody wants, so the pending `startDownload` will see a
+    // stale token and drop it. (No launch in flight → nothing to invalidate;
+    // an attached download is already handled by the controller's own cancel.)
+    if (_launchesInFlight.containsKey(entryId)) {
+      _launchTokens[entryId] = (_launchTokens[entryId] ?? 0) + 1;
+    }
+    // A cancelled run ends the intent empty: no adoption, no Workbench.
+    _completeAcquisition(entryId, null);
+  }
 
   String? localPathFor(String entryId) => _localPaths[entryId];
 
@@ -682,165 +843,6 @@ final class DiscoveryViewModel extends ChangeNotifier {
     await Future.wait(workers);
   }
 
-  /// Generates a local learning package with listen-gen for a downloaded
-  /// entry and imports the result into Core. Replaces the Core-side
-  /// transcription job path.
-  Future<void> startGeneration(String entryId) async {
-    final mediaId = _mediaIds[entryId];
-    final mediaPath = _localPaths[entryId];
-    final entry = _state.entryById(entryId);
-    if (mediaId == null || mediaPath == null || entry == null) return;
-
-    // Nothing to attempt without a generator. Land on `unavailable` rather
-    // than running the journey into a `failed` that names an internal code and
-    // offers a retry that cannot ever succeed.
-    if (!_contentPackageRepository.generatorConfigured) {
-      _setGenerationStatus(entryId, ContentGenerationStatus.unavailable);
-      _setGenerationFailure(entryId, null);
-      return;
-    }
-
-    final current = _state.generationStatusOf(entryId);
-    if (current == ContentGenerationStatus.preparing ||
-        current == ContentGenerationStatus.generating ||
-        current == ContentGenerationStatus.importing ||
-        current == ContentGenerationStatus.completed) {
-      return;
-    }
-
-    // The local file is the authority here: it is the thing being generated
-    // from. The feed's stated duration is the last resort, and when nothing
-    // knows, the probe result stands as zero rather than a made-up length.
-    final durationMs =
-        _mediaDurations[entryId] ??
-        await _importRepository.probeMediaDurationMs(mediaPath) ??
-        entry.durationMs ??
-        0;
-    _mediaDurations[entryId] = durationMs;
-
-    final request = ContentPackageGenerationRequest(
-      mediaPath: mediaPath,
-      title: entry.title,
-      mediaKind: switch (entry.mediaKind) {
-        MediaKind.audio => 'audio',
-        MediaKind.video => 'video',
-      },
-      durationMs: durationMs,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-    );
-
-    ListenGenProcessRun? run;
-    StreamSubscription<ListenGenMachineEvent>? events;
-    ApiFailure? eventFailure;
-    try {
-      run = await _contentPackageRepository.startGeneration(request);
-      _generationRuns[entryId] = run;
-      _setGenerationStatus(entryId, ContentGenerationStatus.preparing);
-
-      events = run.events.listen(
-        (event) {
-          switch (event.kind) {
-            case ListenGenEventKind.protocol:
-            case ListenGenEventKind.started:
-              _setGenerationStatus(entryId, ContentGenerationStatus.generating);
-            case ListenGenEventKind.phase:
-              _setGenerationPhase(entryId, event.phase);
-              _setGenerationStatus(entryId, ContentGenerationStatus.generating);
-            case ListenGenEventKind.completed:
-              // Package path resolution gates the import below.
-              break;
-            case ListenGenEventKind.failed:
-              eventFailure = ApiFailure(
-                raw: '',
-                code: event.code ?? 'generator_failed',
-                message: event.message,
-                retryable: true,
-              );
-            case ListenGenEventKind.cancelled:
-              _setGenerationStatus(entryId, ContentGenerationStatus.cancelled);
-          }
-        },
-        onError: (Object error) {
-          eventFailure = _contentPackageRepository.failureDetail(error);
-        },
-      );
-      _generationSubscriptions[entryId] = events;
-
-      final packagePath = await run.packagePath;
-      if (eventFailure != null) {
-        _setGenerationFailure(entryId, eventFailure);
-        _setGenerationStatus(entryId, ContentGenerationStatus.failed);
-        return;
-      }
-
-      _setGenerationStatus(entryId, ContentGenerationStatus.importing);
-      await _contentPackageRepository.importPackage(
-        mediaId: mediaId,
-        packagePath: packagePath,
-      );
-      if (_disposed) return;
-
-      _setGenerationStatus(entryId, ContentGenerationStatus.completed);
-      _setGenerationFailure(entryId, null);
-      final packages = Map<String, PackageStatus>.of(_state.packageStatuses)
-        ..[entryId] = PackageStatus.available;
-      _state = _state.copyWith(packageStatuses: packages);
-      notifyListeners();
-    } catch (error) {
-      debugPrint('Error generating learning package: $error');
-      if (!_disposed) {
-        final cancelled =
-            error is ListenGenProcessFailure && error.code == 'cancelled';
-        _setGenerationFailure(
-          entryId,
-          cancelled ? null : _contentPackageRepository.failureDetail(error),
-        );
-        _setGenerationStatus(
-          entryId,
-          cancelled
-              ? ContentGenerationStatus.cancelled
-              : ContentGenerationStatus.failed,
-        );
-      }
-    } finally {
-      await events?.cancel();
-      _generationSubscriptions.remove(entryId);
-      if (identical(_generationRuns[entryId], run)) {
-        _generationRuns.remove(entryId);
-      }
-      await run?.cleanUp();
-    }
-  }
-
-  void cancelGeneration(String entryId) {
-    _generationRuns[entryId]?.cancel();
-  }
-
-  void _setGenerationStatus(String entryId, ContentGenerationStatus status) {
-    if (_disposed) return;
-    final statuses = Map<String, ContentGenerationStatus>.of(
-      _state.generationStatuses,
-    )..[entryId] = status;
-    _state = _state.copyWith(generationStatuses: statuses);
-    notifyListeners();
-  }
-
-  void _setGenerationPhase(String entryId, String? phase) {
-    if (_disposed) return;
-    final phases = Map<String, String?>.of(_state.generatorPhases)
-      ..[entryId] = phase;
-    _state = _state.copyWith(generatorPhases: phases);
-    notifyListeners();
-  }
-
-  void _setGenerationFailure(String entryId, ApiFailure? failure) {
-    if (_disposed) return;
-    final failures = Map<String, ApiFailure?>.of(_state.generationFailures)
-      ..[entryId] = failure;
-    _state = _state.copyWith(generationFailures: failures);
-    notifyListeners();
-  }
-
   Future<void> importCustomUrl(String url) async {
     if (url.trim().isEmpty) return;
 
@@ -876,7 +878,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
         );
         notifyListeners();
 
-        await checkPackage(entry.id);
+        await refreshMediaAvailability(entry.id);
       } else {
         // Channel URL
         final channel = await _repository.resolveCustomChannel(
@@ -908,14 +910,10 @@ final class DiscoveryViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    for (final sub in _generationSubscriptions.values) {
-      sub.cancel();
+    for (final completer in _acquisitionCompleters.values) {
+      if (!completer.isCompleted) completer.complete(null);
     }
-    _generationSubscriptions.clear();
-    for (final run in _generationRuns.values) {
-      run.cancel();
-    }
-    _generationRuns.clear();
+    _acquisitionCompleters.clear();
     for (final controller in _downloadControllers.values) {
       controller.dispose();
     }
@@ -981,32 +979,6 @@ class _FakeMediaDownloadHandle implements MediaDownloadHandle {
   Future<String?> get completed => Future.value(null);
   @override
   void cancel() {}
-}
-
-class _FakeContentPackageRepository implements ContentPackageRepository {
-  const _FakeContentPackageRepository();
-  @override
-  ApiFailure failureDetail(Object error) =>
-      ApiFailure(raw: error.toString(), message: error.toString());
-  @override
-  bool get coreAvailable => false;
-  @override
-  bool get generatorConfigured => false;
-  @override
-  ContentGeneratorState get generatorState => generatorConfigured
-      ? ContentGeneratorState.ready
-      : ContentGeneratorState.generatorMissing;
-  @override
-  Future<String?> pickPackage() async => null;
-  @override
-  Future<ContentPackageImportReceipt> importPackage({
-    required String mediaId,
-    required String packagePath,
-  }) async => throw StateError('No fake import configured');
-  @override
-  Future<ListenGenProcessRun> startGeneration(
-    ContentPackageGenerationRequest request,
-  ) async => throw StateError('No fake generator configured');
 }
 
 class _FakeMediaLibraryRepository implements MediaLibraryRepository {

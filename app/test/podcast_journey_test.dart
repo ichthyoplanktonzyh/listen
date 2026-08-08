@@ -11,7 +11,7 @@ import 'package:llplayer_next/models/discovery.dart';
 
 import 'discovery_test_helpers.dart';
 
-/// The podcast journey: feed listing through acquisition into generation.
+/// The podcast journey: feed listing through acquisition into local media.
 ///
 /// What these pin is that the source's own facts drive the journey rather than
 /// the app's first source doing so by default. Discovery, playback and
@@ -31,14 +31,12 @@ void main() {
     avatarUrl: null,
   );
 
-  (DiscoveryViewModel, TestMediaImportRepository, TestContentPackageRepository)
-  podcastViewModel({
+  (DiscoveryViewModel, TestMediaImportRepository) podcastViewModel({
     List<MediaEntry>? entries,
     TestMediaLibraryRepository? library,
     AcquisitionLedger? ledger,
   }) {
     final imports = TestMediaImportRepository();
-    final packages = TestContentPackageRepository();
     final vm = DiscoveryViewModel(
       TestDiscoveryRepository(
         sources: const [podcastSource],
@@ -48,19 +46,18 @@ void main() {
         },
       ),
       imports,
-      packages,
       library ?? TestMediaLibraryRepository(),
       ledger,
     );
     addTearDown(vm.dispose);
-    return (vm, imports, packages);
+    return (vm, imports);
   }
 
   group('acquiring a podcast episode', () {
     testWidgets('fetches the enclosure instead of running the external tool', (
       tester,
     ) async {
-      final (vm, imports, _) = podcastViewModel();
+      final (vm, imports) = podcastViewModel();
       await vm.load();
 
       await vm.startDownload('i-bbc-1');
@@ -79,7 +76,7 @@ void main() {
     testWidgets('passes the advertised size along for the progress fraction', (
       tester,
     ) async {
-      final (vm, imports, _) = podcastViewModel();
+      final (vm, imports) = podcastViewModel();
       await vm.load();
 
       await vm.startDownload('i-bbc-1');
@@ -93,7 +90,7 @@ void main() {
     testWidgets('does not start an acquisition for an item with no enclosure', (
       tester,
     ) async {
-      final (vm, imports, _) = podcastViewModel(
+      final (vm, imports) = podcastViewModel(
         entries: [testUnacquirableEntry('i-notes', podcastSource.id)],
       );
       await vm.load();
@@ -109,7 +106,7 @@ void main() {
     testWidgets('does not run duration workers against enclosure URLs', (
       tester,
     ) async {
-      final (vm, imports, _) = podcastViewModel();
+      final (vm, imports) = podcastViewModel();
       await vm.load();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -120,27 +117,49 @@ void main() {
     });
   });
 
-  group('generating from a podcast episode', () {
-    testWidgets('tells the generator the media is audio, not video', (
+  group('start learning an episode', () {
+    testWidgets(
+      'acquireForLearning fetches the enclosure, registers it, and returns the path',
+      (tester) async {
+        final (vm, imports) = podcastViewModel();
+        await tester.runAsync(() => vm.load());
+        await tester.pump(const Duration(milliseconds: 20));
+
+        final path = await tester.runAsync(
+          () => vm.acquireForLearning('i-bbc-1'),
+        );
+
+        expect(path, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(imports.enclosureRequests, hasLength(1));
+        expect(imports.downloadedUrls, isEmpty);
+        expect(
+          vm.state.mediaAvailabilityOf('i-bbc-1'),
+          DiscoveryMediaAvailability.local,
+        );
+      },
+    );
+
+    testWidgets('two start-learning intents share one enclosure fetch', (
       tester,
     ) async {
-      final (vm, _, packages) = podcastViewModel();
-      await tester.runAsync(() async {
-        await vm.load();
-        await vm.startDownload('i-bbc-1');
-        // The fake handle finishes on real timers.
-        await Future<void>.delayed(const Duration(milliseconds: 700));
+      final (vm, imports) = podcastViewModel();
+      await tester.runAsync(() => vm.load());
+      await tester.pump(const Duration(milliseconds: 20));
+
+      // Both intents live inside runAsync so the fake handle's timer runs on
+      // the real event loop.
+      final result = await tester.runAsync(() async {
+        final first = vm.acquireForLearning('i-bbc-1');
+        final second = vm.acquireForLearning('i-bbc-1');
+        final a = await first;
+        final b = await second;
+        return (a, b);
       });
-      await tester.pumpAndSettle();
 
-      vm.startGeneration('i-bbc-1');
-      await tester.pump();
-
-      expect(packages.requests, hasLength(1));
-      expect(packages.requests.single.mediaKind, 'audio');
-      // The registered file's own duration, not the feed's claim of 360000:
-      // generation runs on the local bytes, so the local reading wins.
-      expect(packages.requests.single.durationMs, 300000);
+      expect(result, isNotNull);
+      expect(result!.$1, isNotNull);
+      expect(result.$2, same(result.$1));
+      expect(imports.enclosureRequests, hasLength(1));
     });
   });
 
@@ -224,7 +243,7 @@ void main() {
           ),
         ],
       );
-      final (vm, _, _) = podcastViewModel(library: library, ledger: restarted);
+      final (vm, _) = podcastViewModel(library: library, ledger: restarted);
       await vm.load();
       await vm.selectChannel(podcastSource.id);
       vm.selectItem('i-bbc-1');
@@ -245,7 +264,7 @@ void main() {
       await ledger.load();
       await ledger.record('i-bbc-1', mediaId: 'm-gone', path: '/gone.mp3');
 
-      final (vm, _, _) = podcastViewModel(
+      final (vm, _) = podcastViewModel(
         library: TestMediaLibraryRepository(),
         ledger: ledger,
       );
@@ -268,10 +287,6 @@ class _RecordingDiscoveryRepository implements DiscoveryRepository {
 
   @override
   Future<List<MediaEntry>> entriesFor(String sourceId) async => const [];
-
-  @override
-  Future<PackageStatus> checkPackage(String entryId) async =>
-      PackageStatus.undetermined;
 
   @override
   Future<MediaEntry> resolveCustomVideo(

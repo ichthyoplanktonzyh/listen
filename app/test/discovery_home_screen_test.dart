@@ -16,13 +16,13 @@ void main() {
     ValueChanged<String>? onPlayMedia,
     DiscoveryRepository? repository,
     TestMediaLibraryRepository? libraryRepository,
+    String locale = 'zh',
   }) async {
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final viewModel = DiscoveryViewModel(
       repository ?? FixtureDiscoveryRepository(),
       TestMediaImportRepository(),
-      TestContentPackageRepository(),
       libraryRepository ?? TestMediaLibraryRepository(),
     );
     addTearDown(viewModel.dispose);
@@ -30,7 +30,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ListenTheme.light(),
-        locale: const Locale('zh'),
+        locale: Locale(locale),
         supportedLocales: AppLocalizations.supportedLocales,
         localizationsDelegates: const [
           AppLocalizations.delegate,
@@ -46,10 +46,6 @@ void main() {
           ),
         ),
       ),
-    );
-    // wait for mock package checking delayed calls
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 400)),
     );
     await tester.pumpAndSettle();
     return viewModel;
@@ -70,19 +66,17 @@ void main() {
     expect(find.text('The English We Speak: on the same page'), findsOneWidget);
     expect(find.text('3 个视频'), findsOneWidget);
 
-    expect(find.text('暂无配套学习包'), findsWidgets);
-    expect(find.widgetWithText(FilledButton, '下载媒体'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, '查看配套学习包'), findsNothing);
+    // A remote entry's detail offers the single start-learning intent.
+    expect(find.text('媒体尚未在本机'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '开始学习'), findsOneWidget);
+    expect(find.text('暂无配套学习包'), findsNothing);
+    expect(find.text('查看配套学习包'), findsNothing);
   });
 
   testWidgets('switching channel swaps the lesson shelf', (tester) async {
     await pumpDiscovery(tester);
 
     await tester.tap(find.text('TED-Ed'));
-    // wait for package checking delay
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 400)),
-    );
     await tester.pumpAndSettle();
 
     expect(find.text('How does your brain learn languages?'), findsNWidgets(2));
@@ -90,69 +84,53 @@ void main() {
     expect(find.text('6 Minute English: Why do we forget?'), findsNothing);
   });
 
-  testWidgets('selecting a lesson without a package updates the detail', (
+  testWidgets('selecting another lesson updates the detail panel', (
     tester,
   ) async {
     await pumpDiscovery(tester);
 
     await tester.tap(find.text('The English We Speak: on the same page'));
-    // wait for package checking delay
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 400)),
-    );
     await tester.pumpAndSettle();
 
-    expect(find.text('暂无配套学习包'), findsWidgets);
-    expect(find.widgetWithText(OutlinedButton, '查看配套学习包'), findsNothing);
     expect(
       find.text('The English We Speak: on the same page'),
       findsNWidgets(2),
     );
-  });
-
-  testWidgets('download completes and unlocks the player action', (
-    tester,
-  ) async {
-    var openedMedia = 0;
-    final played = <String>[];
-    await pumpDiscovery(
-      tester,
-      onOpenMedia: () => openedMedia++,
-      onPlayMedia: played.add,
-    );
-
-    await tester.tap(find.widgetWithText(FilledButton, '下载媒体'));
-    await tester.pump();
-
-    expect(find.widgetWithText(OutlinedButton, '取消下载'), findsOneWidget);
-    expect(find.textContaining('下载媒体中'), findsWidgets);
-
-    await tester.pump(const Duration(seconds: 2));
     expect(find.widgetWithText(FilledButton, '开始学习'), findsOneWidget);
-    expect(find.text('媒体已下载'), findsWidgets);
-
-    await tester.tap(find.widgetWithText(FilledButton, '开始学习'));
-    // The button opens *this* entry's file, never the generic file picker.
-    expect(played, ['/path/to/downloaded/[i-bbc-1].mp4']);
-    expect(openedMedia, 0);
   });
 
-  testWidgets('the player action stays disabled without a local file', (
+  testWidgets(
+    'start learning on a remote entry acquires the media and opens the workbench automatically',
+    (tester) async {
+      final played = <String>[];
+      await pumpDiscovery(tester, onPlayMedia: played.add);
+
+      await tester.tap(find.widgetWithText(FilledButton, '开始学习'));
+      await tester.pump();
+
+      // The acquisition progress stays visible on the detail panel.
+      expect(find.text('正在获取媒体…'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '取消下载'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      // One intent, one open: no second tap after the download finishes.
+      expect(played, ['/path/to/downloaded/[i-bbc-1].mp4']);
+    },
+  );
+
+  testWidgets('the start-learning action stays disabled with no player', (
     tester,
   ) async {
-    var openedMedia = 0;
     // No `onPlayMedia`: nothing in this app can play the entry, so the
     // affordance must not pretend otherwise by falling back to a file picker.
-    await pumpDiscovery(tester, onOpenMedia: () => openedMedia++);
+    await pumpDiscovery(tester);
 
-    await tester.tap(find.widgetWithText(FilledButton, '下载媒体'));
-    await tester.pump(const Duration(seconds: 2));
-
-    final player = tester.widget<FilledButton>(
+    final button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, '开始学习'),
     );
-    expect(player.onPressed, isNull);
-    expect(openedMedia, 0);
+    expect(button.onPressed, isNull);
   });
 
   testWidgets('a failed feed reads as failed, not as an empty channel', (
@@ -173,61 +151,123 @@ void main() {
 
     repository.failingSources.clear();
     await tester.tap(find.widgetWithText(OutlinedButton, '重试'));
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 400)),
-    );
     await tester.pumpAndSettle();
 
     expect(find.text('这个媒体源加载失败。'), findsNothing);
     expect(find.text('Entry e-one'), findsWidgets);
   });
 
-  testWidgets('a disconnected core reports an unchecked package, not none', (
+  testWidgets(
+    'a disconnected core reports an undetermined answer, not remote and not a dead CTA',
+    (tester) async {
+      await pumpDiscovery(
+        tester,
+        libraryRepository: TestMediaLibraryRepository(available: false),
+      );
+
+      expect(find.text('暂时无法确认本地媒体'), findsWidgets);
+      expect(find.widgetWithText(OutlinedButton, '重新检查'), findsOneWidget);
+      // Nothing may be started on an answer nobody has.
+      expect(find.widgetWithText(FilledButton, '开始学习'), findsNothing);
+      expect(find.text('媒体尚未在本机'), findsNothing);
+    },
+  );
+
+  testWidgets('local media shows "已在本机" and opens without downloading', (
     tester,
   ) async {
+    final played = <String>[];
     await pumpDiscovery(
       tester,
-      libraryRepository: TestMediaLibraryRepository(available: false),
+      onPlayMedia: played.add,
+      libraryRepository: TestMediaLibraryRepository(
+        seed: [
+          TestMediaLibraryRepository.entry(
+            id: 'media-i-bbc-1',
+            path: '/library/[i-bbc-1].mp4',
+          ),
+        ],
+      ),
     );
 
-    expect(find.text('无法确认学习包状态'), findsWidgets);
-    expect(find.text('暂无配套学习包'), findsNothing);
-    expect(find.widgetWithText(OutlinedButton, '重新查询'), findsOneWidget);
-    // Nothing may be generated on an answer nobody has.
-    expect(find.widgetWithText(FilledButton, '生成学习资源包'), findsNothing);
+    expect(find.text('已在本机'), findsWidgets);
+    await tester.tap(find.widgetWithText(FilledButton, '开始学习'));
+    await tester.pumpAndSettle();
+
+    expect(played, ['/library/[i-bbc-1].mp4']);
   });
 
-  testWidgets('package dialog lists the package contents and closes', (
+  testWidgets(
+    'the narrow bottom sheet stays open through acquisition and closes on success',
+    (tester) async {
+      final played = <String>[];
+      await pumpDiscovery(
+        tester,
+        size: const Size(600, 800),
+        onPlayMedia: played.add,
+      );
+
+      await tester.tap(find.text('6 Minute English: Why do we forget?'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, '开始学习'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, '开始学习'));
+      await tester.pump();
+
+      // The sheet must not close on press: the progress needs a surface.
+      expect(find.text('正在获取媒体…'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '取消下载'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(played, ['/path/to/downloaded/[i-bbc-1].mp4']);
+      // The sheet closed itself after the path was ready.
+      expect(find.text('正在获取媒体…'), findsNothing);
+    },
+  );
+
+  testWidgets('an unacquirable entry explains itself instead of a dead CTA', (
+    tester,
+  ) async {
+    final repository = TestDiscoveryRepository(
+      sources: [testMediaSource('c-notes', name: 'Notes')],
+      entries: {
+        'c-notes': [testUnacquirableEntry('i-notes', 'c-notes')],
+      },
+    );
+    await pumpDiscovery(tester, repository: repository);
+
+    expect(find.text('当前无法自动获取此内容'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '开始学习'), findsNothing);
+    expect(find.widgetWithText(FilledButton, '下载媒体'), findsNothing);
+  });
+
+  testWidgets('discovery surfaces carry no package or generator vocabulary', (
     tester,
   ) async {
     await pumpDiscovery(tester);
 
-    // Download first to unlock view package button
-    await tester.tap(find.widgetWithText(FilledButton, '下载媒体'));
-    await tester.pump(const Duration(seconds: 2));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(OutlinedButton, '查看配套学习包'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('配套学习包'), findsOneWidget);
-    expect(find.text('字幕轨道'), findsOneWidget);
-    expect(find.text('词时间轴'), findsOneWidget);
-    expect(find.text('发音标注'), findsOneWidget);
-
-    await tester.tap(find.text('关闭'));
-    await tester.pumpAndSettle();
-    expect(find.text('配套学习包'), findsNothing);
+    for (final forbidden in ['学习包', '资源包', '生成']) {
+      expect(
+        find.textContaining(forbidden, findRichText: true),
+        findsNothing,
+        reason: 'Discovery must not speak package/generation language',
+      );
+    }
   });
 
-  testWidgets('narrow window degrades to channel chips and hides detail', (
+  testWidgets('english discovery surfaces carry no package vocabulary', (
     tester,
   ) async {
-    await pumpDiscovery(tester, size: const Size(600, 800));
+    await pumpDiscovery(tester, locale: 'en');
 
-    expect(find.text('媒体源'), findsOneWidget);
-    expect(find.byType(ChoiceChip), findsWidgets);
-    expect(find.text('6 Minute English: Why do we forget?'), findsOneWidget);
-    expect(find.text('时长'), findsNothing);
+    for (final forbidden in ['Package', 'Generate', 'listen-gen']) {
+      expect(
+        find.textContaining(forbidden, findRichText: true),
+        findsNothing,
+        reason: 'Discovery must not speak package/generation language',
+      );
+    }
   });
 }
