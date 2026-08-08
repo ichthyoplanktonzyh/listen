@@ -117,24 +117,29 @@ installs it as candidates and preserves the learner's current active choices.
 
 ## Current Reality And Migration
 
-- Core owns the v1 contract, bounded inspector, typed projection, and atomic
-  candidate-only import seam. There is not yet a public package-import HTTP
-  journey.
-- The local `listen-gen` prototype natively produces Subtitle Text Track plus
-  Word Timeline packages and retains LLTimeline conversion for migration. It
-  has no remote or published distribution yet.
-- The App still invokes Core's legacy whole-media transcription routes. It has
-  no package Registry UI, native `.listenpkg` import journey, or listen-gen
-  orchestration yet.
-- Core's old whole-media generation and `scripts/timeline-production` remain
-  migration paths. They are removed only after semantic migration, App cutover,
-  downstream trigger rewiring, and observed compatibility. Learner recording
-  and realtime paths must first be separated and retained.
+- Core owns content-package v1 validation, typed projection, atomic
+  candidate-only import and explicit activation. Contract `2.0.0` removes the
+  old `/v1/transcription/jobs*` surface while retaining learner-recording and
+  realtime/model APIs; immutable release `v0.7.0-split.3` is the App baseline.
+- `listen-gen` commit `41a53336` natively produces deterministic Subtitle Text
+  Track packages, plus Word Timeline when the provider supplies complete word
+  timing, behind a verified release bundle and machine protocol.
+- App merge `a3e6564` verifies and launches that pinned Gen bundle, imports its
+  `.listenpkg` through Core, and has no Core whole-media transcription job UI,
+  DTO/event or call. Missing-transcript preparation has one Gen package journey.
+- The real pinned three-repository gate passes through Core HTTP import and
+  proves imported resources remain candidates rather than silently becoming
+  active.
+- At R1 `whisper-cli`, `ffmpeg` and `ffprobe` are shared verified runtime tools:
+  Core still needs them for learner recording, SoundLine and other media paths,
+  while App also uses the ffmpeg tools. App supplies their paths to Gen only
+  after the pinned Core runtime and Gen release verify; none is Gen-only today.
+- `scripts/timeline-production` and later rich-resource producer overlap remain
+  migration targets for R2-R5. They are not a fallback whole-media ASR journey.
 
-The next architecture work is to define Content Edition and timeline
-compatibility, then the Package Listing/Release interface and App journey.
-Implementation proceeds additively: publish contracts, cut over consumers,
-observe, and only then delete legacy behavior.
+The next architecture work remains native aligned Word Timeline production and
+timeline semantic compatibility, followed by the Package Listing/Release
+interface and App journey. R2 is not started by the R1 closeout.
 
 ## Decisions Still Open
 
