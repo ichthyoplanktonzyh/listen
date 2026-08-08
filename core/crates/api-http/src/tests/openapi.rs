@@ -30,7 +30,7 @@ fn openapi_version_snapshot_and_path_count() {
 
     // API version snapshot — bump intentionally, never accidentally.
     assert!(
-        openapi.contains("version: 1.1.0"),
+        openapi.contains("version: 2.0.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -92,6 +92,67 @@ fn openapi_version_snapshot_and_path_count() {
             "OpenAPI schema missing: {schema}"
         );
     }
+}
+
+#[test]
+fn recording_transcription_routes_stay_while_whole_media_jobs_are_absent() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+    let router_source = concat!(
+        include_str!("../lib.rs"),
+        include_str!("../routes/router.rs")
+    );
+    let documented = openapi_v1_operations(openapi);
+    let implemented = implemented_v1_operations(router_source);
+
+    // Learner-recording transcription and the provider/model catalog remain part
+    // of the contract and the router.
+    for path in [
+        "/v1/recording-transcriptions",
+        "/v1/recording-transcriptions/{job_id}",
+        "/v1/recording-transcriptions/{job_id}/cancel",
+        "/v1/transcription/providers",
+        "/v1/transcription/models",
+        "/v1/transcription/models/install",
+        "/v1/transcription/models/register-custom",
+        "/v1/transcription/models/{model_id}/cancel-install",
+        "/v1/transcription/models/{model_id}",
+    ] {
+        assert!(
+            implemented
+                .iter()
+                .any(|(_, implemented)| implemented == path),
+            "router missing retained transcription route: {path}"
+        );
+        assert!(
+            documented.iter().any(|(_, documented)| documented == path),
+            "OpenAPI missing retained transcription route: {path}"
+        );
+    }
+
+    // The whole-media job surface stays deleted from both the contract and the
+    // router.
+    for path in [
+        "/v1/transcription/jobs",
+        "/v1/transcription/jobs/{job_id}",
+        "/v1/transcription/jobs/{job_id}/cancel",
+        "/v1/transcription/jobs/{job_id}/retry",
+        "/v1/transcription/jobs/{job_id}/archive",
+    ] {
+        assert!(
+            !documented.iter().any(|(_, documented)| documented == path),
+            "removed OpenAPI path must stay absent: {path}"
+        );
+        assert!(
+            !implemented
+                .iter()
+                .any(|(_, implemented)| implemented == path),
+            "removed router path must stay absent: {path}"
+        );
+    }
+    assert!(
+        !router_source.contains("/v1/transcription/jobs"),
+        "removed transcription jobs route must stay absent from the router"
+    );
 }
 
 #[test]

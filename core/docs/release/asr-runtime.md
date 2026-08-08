@@ -1,6 +1,6 @@
 # ASR Runtime Build And Redistribution
 
-Milestone 1.7 packages three macOS Apple Silicon command-line runtimes inside
+Milestone 1.7 packaged three macOS Apple Silicon command-line runtimes inside
 `LLPlayerNext.app/Contents/Resources/runtime`:
 
 - whisper.cpp `whisper-cli` v1.7.6, source commit
@@ -19,6 +19,11 @@ the versioned `third_party/runtime/manifest.json`. Transcription models are not
 redistributed; users explicitly download checksum-pinned model files from the
 Model Manager or register their own compatible model.
 
+Current ownership: `whisper-cli` is consumed by Core's learner-recording
+transcription (`/v1/recording-transcriptions*`) and realtime model selection.
+`ffmpeg`/`ffprobe` remain shared because SoundLine and other Core media paths
+still consume them. Whole-media transcription jobs were removed from Core; the
+reusable whole-media producer lives in `listen-gen`.
+
 The application does not expose whisper.cpp command flags through its public
-domain or HTTP contracts. Historical jobs snapshot provider, runtime, model
-revision, checksum, and normalized settings.
+domain or HTTP contracts.

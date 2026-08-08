@@ -6,8 +6,7 @@ use application::{
     LearningObservationRepository, LexicalCapabilityRepository, LexicalEntryRepository,
     ListeningInboxRepository, MediaRepository, PhoneTimelineRepository, PhoneticAnalysisRepository,
     PracticeRepository, PronunciationRepository, RecognitionUpgradeRepository, RegisterMedia,
-    ReviewQueueRepository, SenseGroupRepository, SubtitleTrackRepository,
-    TranscriptionJobTransition, TranscriptionRepository, UpsertLexicalEntry,
+    ReviewQueueRepository, SenseGroupRepository, SubtitleTrackRepository, UpsertLexicalEntry,
     VocabularyAssetRepository, WordTimelineRepository,
 };
 
@@ -327,45 +326,6 @@ fn table_column_count(connection: &Connection, table: &str, columns: &[&str]) ->
             |row| row.get::<_, u32>(0),
         )
         .unwrap()
-}
-
-fn transcription_job(
-    id: &str,
-    input_fingerprint: &str,
-    status: TranscriptionJobStatus,
-    updated_at_ms: u64,
-) -> TranscriptionJob {
-    TranscriptionJob {
-        id: TranscriptionJobId::parse(id).unwrap(),
-        media_id: MediaId::parse("media-1").unwrap(),
-        media_title: "Media".into(),
-        media_fingerprint: "media-fp".into(),
-        provider_id: "test-provider".into(),
-        provider_version: "v1".into(),
-        runtime_id: "test-runtime".into(),
-        runtime_version: "v1".into(),
-        model_id: TranscriptionModelId::parse("model-1").unwrap(),
-        model_revision: "rev-1".into(),
-        model_checksum_sha256: "checksum".into(),
-        destination: TranscriptionDestination::Primary,
-        purpose: TranscriptionPurpose::Transcribe,
-        requested_language: Some("en".into()),
-        detected_language: Some("en".into()),
-        audio_track: None,
-        settings_json: "{}".into(),
-        input_fingerprint: input_fingerprint.into(),
-        status,
-        phase_progress: 100,
-        error_code: None,
-        error_message: None,
-        retry_of_job_id: None,
-        generated_track_id: Some(SubtitleTrackId::parse("track-1").unwrap()),
-        created_at_ms: 1,
-        started_at_ms: Some(2),
-        completed_at_ms: Some(3),
-        updated_at_ms,
-        archived_at_ms: None,
-    }
 }
 
 fn transcription_media() -> MediaItem {

@@ -36,7 +36,7 @@ HTTP_ROUTE_RUNTIME_DEBT: dict[str, dict[str, str]] = {
         "local_runtime": "uses legacy speech-synthesis workflow DTOs",
     },
     "crates/api-http/src/routes/transcription.rs": {
-        "local_runtime": "accepts a legacy transcription request DTO",
+        "local_runtime": "exposes recording transcription and model lifecycle workflow types",
     },
     "crates/api-http/src/routes/phonetic_analysis.rs": {
         "local_runtime": "uses the legacy finding-id parser",

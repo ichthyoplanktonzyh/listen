@@ -1,9 +1,9 @@
 //! Typed SSE payload shapes for events whose payloads were previously
 //! hand-built `serde_json::json!` maps. Emit sites construct these structs so
 //! every payload key has a single greppable owner; events that already
-//! serialize a whole domain/DTO value (`transcription-job-changed`,
-//! `phonetic-analysis-job-changed`, `lexical-entry-changed`,
-//! `sound-line-changed`, ...) keep that value as their payload contract.
+//! serialize a whole domain/DTO value (`phonetic-analysis-job-changed`,
+//! `lexical-entry-changed`, `sound-line-changed`, ...) keep that value as
+//! their payload contract.
 //!
 //! The wire shapes the Flutter client parses into typed models are pinned by
 //! `contracts/events/examples.json`: the producer side is asserted by
@@ -199,37 +199,6 @@ mod tests {
     /// Representative envelopes for every event the Flutter client parses into
     /// a typed model, built through the same producers the runtime uses.
     fn contract_examples() -> Vec<EventEnvelope> {
-        let transcription_job = TranscriptionJob {
-            id: TranscriptionJobId::parse("job-transcribe-1").unwrap(),
-            media_id: MediaId::parse("media-1").unwrap(),
-            media_title: "Example Media".into(),
-            media_fingerprint: "media-fingerprint".into(),
-            provider_id: "whisper.cpp".into(),
-            provider_version: "v1".into(),
-            runtime_id: "local".into(),
-            runtime_version: "v1".into(),
-            model_id: TranscriptionModelId::parse("model-base").unwrap(),
-            model_revision: "r1".into(),
-            model_checksum_sha256: "checksum".into(),
-            destination: TranscriptionDestination::Primary,
-            purpose: TranscriptionPurpose::Transcribe,
-            requested_language: Some("en".into()),
-            detected_language: Some("en".into()),
-            audio_track: None,
-            settings_json: "{}".into(),
-            input_fingerprint: "input-fingerprint".into(),
-            status: TranscriptionJobStatus::Transcribing,
-            phase_progress: 42,
-            error_code: None,
-            error_message: None,
-            retry_of_job_id: None,
-            generated_track_id: Some(SubtitleTrackId::parse("track-1").unwrap()),
-            created_at_ms: 1,
-            started_at_ms: Some(2),
-            completed_at_ms: None,
-            updated_at_ms: 3,
-            archived_at_ms: None,
-        };
         let phonetic_job = PhoneticAnalysisJob {
             id: PhoneticAnalysisJobId::parse("job-phonetic-1").unwrap(),
             media_id: MediaId::parse("media-1").unwrap(),
@@ -311,10 +280,6 @@ mod tests {
                 acoustic_cue_count: 34,
             }
             .envelope(),
-            EventEnvelope::v1(
-                EventName::TranscriptionJobChanged,
-                serde_json::to_value(&transcription_job).unwrap(),
-            ),
             EventEnvelope::v1(
                 EventName::PhoneticAnalysisJobChanged,
                 serde_json::to_value(&phonetic_job).unwrap(),

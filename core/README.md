@@ -110,7 +110,6 @@ python3 -m unittest scripts/test_release_artifacts.py
 # Milestone 2.0 contracts, schema v9, and fake-provider workflow
 ./scripts/verify-m20.sh
 ./scripts/verify-m16.sh
-./scripts/verify-m17.sh
 ./scripts/verify-m18.sh
 ./scripts/verify-m19.sh
 ```
@@ -127,8 +126,10 @@ Versioned consumer inputs are built with `scripts/package-contracts.sh` and
 source commit, compatibility versions, and per-file SHA-256 hashes.
 
 Build and license-check the pinned ASR runtime with
-`./scripts/build-asr-runtime.sh`. Runtime provenance and redistribution notes
-are documented in `docs/release/asr-runtime.md`.
+`./scripts/build-asr-runtime.sh`. The bundled `whisper-cli` is owned by
+learner-recording transcription; `ffmpeg`/`ffprobe` remain shared because
+SoundLine and other Core paths still consume them. Runtime provenance and
+redistribution notes are documented in `docs/release/asr-runtime.md`.
 
 No license is granted for this repository at this stage. The old LLPlayer
 repository is a behavioral reference only; source code is not copied into this

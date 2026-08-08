@@ -32,6 +32,10 @@ python3 -m unittest scripts/test_release_artifacts.py
 - local realtime contract fixtures for snapshot transcripts, chunk merging,
   loopback/keyless policy, plus sidecar pool-readiness and process reaping;
 - OpenAPI method+path parity and structural validation;
+- focused OpenAPI/router regression assertions that learner-recording
+  transcription (`/v1/recording-transcriptions*`) and the transcription
+  provider/model routes remain present while the removed whole-media
+  `/v1/transcription/jobs*` surface stays absent;
 - committed schema/example/fixture validation;
 - package-import HTTP tests cover the typed receipt, repeated-import
   idempotency, candidate-only active-selection invariant, exact-media mismatch,

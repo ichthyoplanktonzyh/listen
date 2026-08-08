@@ -144,6 +144,5 @@ if [[ "${LLPLAYERNEXT_M18_SKIP_HISTORY:-0}" != "1" ]]; then
   "$root/scripts/verify-m1.sh"
   "$root/scripts/verify-m15.sh"
   "$root/scripts/verify-m16.sh"
-  "$root/scripts/verify-m17.sh"
   echo "Milestone 1.8 full headless regression passed."
 fi

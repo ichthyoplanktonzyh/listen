@@ -29,8 +29,12 @@ Repository separation baseline 已建立：
    [listen-app#101](https://github.com/ichthyoplanktonzyh/listen-app/pull/101) 已让三仓
    round-trip 闸门结构化验证目标 E2E 确实执行并通过；任一跳过、失败或依赖准备
    错误均非零退出，同时修复 worktree 定位与 Gen contract lock 对账。
-2. **R1 · Whole-media ASR cutover** — 拆开 Core whole-media 与 learner-recording
-   transcription；App 只走 pinned Gen package journey，并删除旧 job surface。
+2. **R1 · Whole-media ASR cutover — Core slice implemented, App cutover pending** —
+   拆开 Core whole-media 与 learner-recording transcription；Core 侧的
+   `/v1/transcription/jobs*` 路由、job DTO/event 与 SQLite CAS job store 已删除，
+   `TranscriptionCoordinator` 收敛为 `RecordingTranscriptionCoordinator`；
+   App 仍保留旧 job surface，须在 [listen-app#100](https://github.com/ichthyoplanktonzyh/listen-app/issues/100)
+   迁移到 pinned Gen package journey 后才能发布。
 3. **R2 · Native aligned Word Timeline** — alignment 作为 Gen 内部 stage，直接
    输出 package-native `word_timeline`，不复制 legacy production tree。
 4. **R3 · Chunk/Prosody semantic alignment** — 消除 Core `ChunkTimeline` 与 package
@@ -47,9 +51,12 @@ Repository separation baseline 已建立：
 
 ## Product Work
 
-未发布的 contract `1.1.0` local realtime cascade 已完成并合并：
-credential-free loopback profile、独立协议 codec、SQLite v53 与 opt-in managed
-sidecar 已进入 core；后续 release、app lock/DTO handoff，以及经显式授权的 Apple
+Unreleased contract `2.0.0` folds the additive local realtime cascade work
+(previously planned as `1.1.0`) together with the R1 whole-media ASR deletion.
+The deletion of published `/v1/transcription/jobs*` is a breaking contract
+change, so the next release is a major `2.0.0`: credential-free loopback
+profile、独立协议 codec、SQLite v53 与 opt-in managed sidecar 已完成并合并；
+后续 release、app lock/DTO handoff，以及经显式授权的 Apple
 Silicon 实机短音频 smoke 继续遵循既有发布门禁。
 
 Owner 已将语言学习模型重构设为下一条 P0 主线：

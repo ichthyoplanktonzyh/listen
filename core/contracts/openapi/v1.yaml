@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 1.1.0
+  version: 2.0.0
   description: Versioned loopback-only application-service adapter. Playback control is excluded.
 servers:
   - url: http://127.0.0.1:{port}
@@ -3466,43 +3466,6 @@ paths:
       operationId: deleteTranscriptionModel
       responses:
         "204": { description: Model removed }
-  /v1/transcription/jobs:
-    get:
-      operationId: transcriptionJobs
-      responses:
-        "200": { description: Durable transcription jobs }
-    post:
-      operationId: createTranscriptionJob
-      responses:
-        "200": { description: Queued or idempotently reused transcription job }
-  /v1/transcription/jobs/{job_id}:
-    parameters:
-      - { name: job_id, in: path, required: true, schema: { type: string } }
-    get:
-      operationId: transcriptionJob
-      responses:
-        "200": { description: Durable transcription job }
-  /v1/transcription/jobs/{job_id}/cancel:
-    parameters:
-      - { name: job_id, in: path, required: true, schema: { type: string } }
-    post:
-      operationId: cancelTranscriptionJob
-      responses:
-        "200": { description: Cancelled transcription job }
-  /v1/transcription/jobs/{job_id}/retry:
-    parameters:
-      - { name: job_id, in: path, required: true, schema: { type: string } }
-    post:
-      operationId: retryTranscriptionJob
-      responses:
-        "200": { description: Retried transcription job }
-  /v1/transcription/jobs/{job_id}/archive:
-    parameters:
-      - { name: job_id, in: path, required: true, schema: { type: string } }
-    post:
-      operationId: archiveTranscriptionJob
-      responses:
-        "200": { description: Archived transcription job }
   /v1/phonetic-analysis/providers:
     get:
       operationId: phoneticAnalysisProviders

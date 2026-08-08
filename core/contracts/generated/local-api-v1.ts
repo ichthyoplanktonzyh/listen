@@ -1595,39 +1595,6 @@ export class LocalApiV1 {
     });
   }
 
-  transcriptionJobs(): Promise<unknown[]> {
-    return this.request("/v1/transcription/jobs");
-  }
-
-  createTranscriptionJob(input: unknown): Promise<unknown> {
-    return this.request("/v1/transcription/jobs", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-  }
-
-  transcriptionJob(jobId: string): Promise<unknown> {
-    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}`);
-  }
-
-  cancelTranscriptionJob(jobId: string): Promise<unknown> {
-    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}/cancel`, {
-      method: "POST",
-    });
-  }
-
-  retryTranscriptionJob(jobId: string): Promise<unknown> {
-    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}/retry`, {
-      method: "POST",
-    });
-  }
-
-  archiveTranscriptionJob(jobId: string): Promise<unknown> {
-    return this.request(`/v1/transcription/jobs/${encodeURIComponent(jobId)}/archive`, {
-      method: "POST",
-    });
-  }
-
   phoneticAnalysisProviders(): Promise<unknown[]> {
     return this.request("/v1/phonetic-analysis/providers");
   }

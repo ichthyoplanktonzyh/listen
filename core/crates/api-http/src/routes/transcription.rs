@@ -1,6 +1,5 @@
 use crate::{
-    ApiError, ApiState, ApplicationError, CreateJobRequest, Deserialize, Json, Path, Query, State,
-    StatusCode,
+    ApiError, ApiState, ApplicationError, Deserialize, Json, Path, Query, State, StatusCode,
 };
 
 #[derive(Debug, Deserialize)]
@@ -109,42 +108,6 @@ pub(crate) async fn delete_transcription_model(
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub(crate) async fn transcription_jobs(
-    State(state): State<ApiState>,
-) -> Result<Json<Vec<domain::TranscriptionJob>>, ApiError> {
-    state
-        .analysis
-        .transcription
-        .jobs()
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn create_transcription_job(
-    State(state): State<ApiState>,
-    Json(request): Json<CreateJobRequest>,
-) -> Result<Json<domain::TranscriptionJob>, ApiError> {
-    state
-        .analysis
-        .transcription
-        .clone()
-        .create_job(request)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn transcription_job(
-    State(state): State<ApiState>,
-    Path(job_id): Path<String>,
-) -> Result<Json<domain::TranscriptionJob>, ApiError> {
-    state
-        .analysis
-        .transcription
-        .job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)?
-        .map(Json)
-        .ok_or_else(|| ApiError::not_found("transcription job"))
-}
-
 pub(crate) async fn create_recording_transcription(
     State(state): State<ApiState>,
     Json(request): Json<local_runtime::CreateRecordingTranscriptionRequest>,
@@ -182,43 +145,6 @@ pub(crate) async fn cancel_recording_transcription(
         .cancel_recording_transcription(
             &domain::RecordingTranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?,
         )
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn cancel_transcription_job(
-    State(state): State<ApiState>,
-    Path(job_id): Path<String>,
-) -> Result<Json<domain::TranscriptionJob>, ApiError> {
-    state
-        .analysis
-        .transcription
-        .cancel_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn retry_transcription_job(
-    State(state): State<ApiState>,
-    Path(job_id): Path<String>,
-) -> Result<Json<domain::TranscriptionJob>, ApiError> {
-    state
-        .analysis
-        .transcription
-        .clone()
-        .retry_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
-        .map(Json)
-        .map_err(ApiError::from)
-}
-
-pub(crate) async fn archive_transcription_job(
-    State(state): State<ApiState>,
-    Path(job_id): Path<String>,
-) -> Result<Json<domain::TranscriptionJob>, ApiError> {
-    state
-        .analysis
-        .transcription
-        .archive_job(&domain::TranscriptionJobId::parse(job_id).map_err(ApplicationError::from)?)
         .map(Json)
         .map_err(ApiError::from)
 }
