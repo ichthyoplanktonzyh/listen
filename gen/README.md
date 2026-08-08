@@ -7,8 +7,12 @@ provider payloads are not part of that interface.
 The production entry point transcribes media behind a provider-neutral ASR
 adapter. It always writes a native v1 `subtitle_text_track` resource; a
 `word_timeline` resource is generated only when the provider supplies
-complete word-level timing. The offline fixture provider exercises the full
-CLI without model credentials or network access:
+complete word-level timing. An optional word-alignment stage can additionally
+align the emitted subtitle tokenization against the media and produce a
+`word_timeline` behind the same provider-neutral seam; alignment failures
+degrade honestly to the subtitle package with a stable typed warning. The
+offline fixture provider exercises the full CLI without model credentials or
+network access:
 
 ```bash
 python -m listen_gen package from-media input.wav \
@@ -57,13 +61,39 @@ The `command` provider's normalized contract is unchanged: the wrapper must
 still emit one `listen_gen.asr-result.v1` document on stdout with word timing
 for every segment.
 
+## Optional word alignment
+
+An optional word-alignment stage runs after transcription, aligns the exact
+emitted Subtitle Text Track tokenization against the media, and emits a v1
+`word_timeline` with its own alignment provenance. It is selected with
+`--aligner` (`none`, `fixture`, `command`, `whisper-cpp`). Alignment failure
+never fails generation: it preserves the ASR subtitle package and reports a
+stable typed warning in the ordinary result and the machine `completed`
+event. Cancellation never degrades.
+
+```bash
+python -m listen_gen package from-media input.mp4 \
+  --provider whisper-cpp \
+  --whisper-cli /path/to/whisper-cli \
+  --whisper-model /path/to/ggml-base.bin \
+  --whisper-model-id whisper.cpp:base@main \
+  --whisper-language auto \
+  --aligner whisper-cpp \
+  --title "Lesson" --media-kind video --duration-ms 125000 \
+  --created-at-ms 1786000000000 --output lesson.listenpkg
+```
+
+See [docs/alignment-provider-v1.md](docs/alignment-provider-v1.md) for the
+adapter selection, the normalized command protocol, whisper.cpp alignment,
+provenance, warnings, and determinism guarantees.
+
 ## First-class whisper.cpp provider
 
 `whisper-cpp` is a first-class provider: `listen-gen` runs a local
 `whisper-cli` directly (never through a shell) against the same temporary
 16 kHz mono PCM WAV used by the `command` provider, parses whisper.cpp
-standard JSON (`-oj`), and emits a subtitle-only package because that format
-does not provide word-level timing:
+standard JSON (`-oj`), and emits a subtitle package because that format does
+not provide word-level timing:
 
 ```bash
 listen-gen package from-media input.mp4 \
@@ -87,6 +117,15 @@ binds the provider version to the whisper-cli file bytes, the model version
 to the model file bytes, and the config identity to a canonical provider
 configuration; no local paths are recorded, so identical bytes and
 configuration produce identical packages across different installation paths.
+
+Word-level timing is available as an optional separate stage: add
+`--aligner whisper-cpp` and the first-class whisper.cpp aligner reruns
+`whisper-cli` with full JSON output against the same normalized WAV, aggregates
+the ASR decoder's per-token offsets into each exact emitted subtitle word
+(typed `asr_aligned`), and emits a native v1 `word_timeline` with alignment
+provenance. Alignment failures degrade honestly to the subtitle package with a
+stable typed warning. See
+[docs/alignment-provider-v1.md](docs/alignment-provider-v1.md).
 
 See [docs/whisper-cpp-provider-v1.md](docs/whisper-cpp-provider-v1.md) for
 the full provider contract, machine phases, error mapping, and cancellation
@@ -135,10 +174,13 @@ listen-gen package from-media input.mp4 \
 
 Every line is one JSON object of the `listen_gen.machine-event.v1` schema with
 a continuous `sequence` starting at 0. The first event is `protocol`, followed
-by `started`, fixed pipeline `phase` events, and exactly one terminal event
+by `started`, fixed pipeline `phase` events (an `aligning` phase appears when
+an optional aligner was selected), and exactly one terminal event
 (`completed`, `failed`, or `cancelled`). SIGINT/SIGTERM terminate the provider
 process group, clean up temporary audio, and emit `cancelled` with exit code
-`130`. Ordinary mode output is unchanged when the flag is absent.
+`130`. Ordinary mode output is unchanged when the flag is absent. The
+`completed` event carries an additive `alignment` object describing produced,
+degraded, or skipped alignment with stable typed warnings.
 
 See [docs/machine-event-protocol-v1.md](docs/machine-event-protocol-v1.md) for
 the full event, phase, and error-code contract.
@@ -160,7 +202,7 @@ published together. Verify it before distribution:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.1.0/listen-gen-0.1.0.release.json
+  dist/listen-gen-0.2.0/listen-gen-0.2.0.release.json
 ```
 
 The `.pyz` requires Python 3.11 or newer. See

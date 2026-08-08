@@ -17,9 +17,71 @@ PHASE_NAMES = (
     "probing_media",
     "normalizing_audio",
     "transcribing",
+    "aligning",
     "building_package",
 )
 TERMINAL_EVENTS = frozenset({"completed", "failed", "cancelled"})
+
+# The optional word-alignment stage degrades honestly: every failure below
+# preserves the ASR Subtitle Text Track package and is reported as a stable
+# typed warning code with a safe human message. Cancellation and media-change
+# failures are never treated as degradation.
+ALIGNMENT_WARNING_MESSAGES: dict[str, str] = {
+    "alignment_start_failed": (
+        "The word aligner could not be started; the subtitle package was preserved."
+    ),
+    "alignment_timeout": (
+        "Word alignment timed out; the subtitle package was preserved."
+    ),
+    "alignment_failed": (
+        "The word aligner failed; the subtitle package was preserved."
+    ),
+    "alignment_output_invalid": (
+        "The word aligner returned an invalid result; the subtitle package was preserved."
+    ),
+    "alignment_output_too_large": (
+        "The word aligner produced too much output; the subtitle package was preserved."
+    ),
+    "alignment_qualification_failed": (
+        "Word alignment did not qualify; the subtitle package was preserved."
+    ),
+}
+
+
+class AlignmentFailure(ConversionError):
+    """A degradable alignment failure carrying a stable typed warning code.
+
+    The human message is always the safe, stable message from
+    :data:`ALIGNMENT_WARNING_MESSAGES`; internal details never leak into the
+    package, machine events, or ordinary result.
+    """
+
+    def __init__(self, code: str):
+        super().__init__(ALIGNMENT_WARNING_MESSAGES[code])
+        self.code = code
+
+
+def alignment_warning(error: BaseException) -> tuple[str, str]:
+    """Map a degradable alignment error to a stable typed warning."""
+    if isinstance(error, AlignmentFailure):
+        return error.code, ALIGNMENT_WARNING_MESSAGES[error.code]
+    message = str(error).lower()
+    if "timed out" in message:
+        return (
+            "alignment_timeout",
+            ALIGNMENT_WARNING_MESSAGES["alignment_timeout"],
+        )
+    if "safety limit" in message:
+        return (
+            "alignment_output_too_large",
+            ALIGNMENT_WARNING_MESSAGES["alignment_output_too_large"],
+        )
+    if "could not be started" in message:
+        return (
+            "alignment_start_failed",
+            ALIGNMENT_WARNING_MESSAGES["alignment_start_failed"],
+        )
+    return ("alignment_failed", ALIGNMENT_WARNING_MESSAGES["alignment_failed"])
 
 MACHINE_ERROR_MESSAGES: dict[str, str] = {
     "invalid_arguments": "Generation arguments are invalid.",
@@ -45,6 +107,12 @@ def protocol_capabilities() -> dict[str, object]:
         "machine_protocol_version": MACHINE_PROTOCOL_VERSION,
         "events": list(EVENT_TYPES),
         "phases": list(PHASE_NAMES),
+        "alignment": {
+            "optional": True,
+            "degradation": "preserve_subtitle",
+            "adapters": ["fixture", "command", "whisper-cpp"],
+            "warning_codes": sorted(ALIGNMENT_WARNING_MESSAGES),
+        },
     }
 
 
@@ -75,14 +143,17 @@ class MachineEventEmitter:
         media_fingerprint: str,
         resources: list[dict[str, object]],
         warnings: list[str],
+        alignment: dict[str, object] | None = None,
     ) -> None:
-        self._emit(
-            "completed",
+        payload: dict[str, object] = dict(
             package_sha256=package_sha256,
             media_fingerprint=media_fingerprint,
             resources=resources,
             warnings=warnings,
         )
+        if alignment is not None:
+            payload["alignment"] = alignment
+        self._emit("completed", **payload)
 
     def failed(self, *, code: str, message: str) -> None:
         self._emit("failed", code=code, message=message)
@@ -153,6 +224,16 @@ def _classify_error(error: BaseException) -> str:
         "whisper.cpp language must be a valid language tag",
         "whisper.cpp timeout must be positive",
         "whisper.cpp executable must be non-empty",
+        "whisper.cpp aligner model must be a regular file",
+        "whisper.cpp aligner model id must be non-empty",
+        "whisper.cpp aligner language must be a valid language tag",
+        "whisper.cpp aligner timeout must be positive",
+        "whisper.cpp aligner executable must be non-empty",
+        "alignment fixture must be a regular file",
+        "alignment command executable must be non-empty",
+        "alignment command arguments must contain exactly one {media} "
+        "and one {transcript} placeholder",
+        "alignment command timeout must be positive",
     )
     if message in whisper_invalid_arguments:
         return "invalid_arguments"

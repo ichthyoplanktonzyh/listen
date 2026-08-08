@@ -13,6 +13,15 @@ def main() -> int:
     media_path = Path(sys.argv[2])
     fixture_path = Path(sys.argv[3])
     observation_path = Path(sys.argv[4])
+    if mode == "hang":
+        # Write the observation exactly once, after the pid is known, so a
+        # supervisor waiting on the file can never read a half-written marker.
+        observation_path.write_text(
+            json.dumps({"media_path": str(media_path), "pid": os.getpid()}),
+            encoding="utf-8",
+        )
+        while True:
+            time.sleep(3600)
     observation_path.write_text(str(media_path), encoding="utf-8")
     if mode == "fail":
         print("provider-secret-must-not-leak", file=sys.stderr)
@@ -21,13 +30,6 @@ def main() -> int:
     if mode == "sleep":
         time.sleep(2)
         return 0
-    if mode == "hang":
-        observation_path.write_text(
-            json.dumps({"media_path": str(media_path), "pid": os.getpid()}),
-            encoding="utf-8",
-        )
-        while True:
-            time.sleep(3600)
     if mode == "invalid-json":
         print('{"provider_raw":"must-not-leak-invalid-json"')
         return 0
