@@ -40,9 +40,9 @@ candidate installation, active selection and durable learning history.
 
 The first extraction slice is working rather than hypothetical:
 
-- `listen-gen` commit `41a53336` has native media preprocessing, ASR adapters,
-  machine events, cancellation, deterministic package production and a
-  verifiable release bundle;
+- `listen-gen` merge `c3564c35` / tool `0.2.0` has native media preprocessing,
+  ASR and alignment adapters, machine events, cancellation, deterministic
+  package production and a verifiable release bundle;
 - `listen-app/listen_gen.lock.json` pins that exact producer and verifies the
   release and artifact bytes before launch;
 - Core commit `54497e9` exposes bounded content-package inspection and atomic,
@@ -53,7 +53,7 @@ The first extraction slice is working rather than hypothetical:
 - Core still contains forced alignment, content-bound
   SoundLine/phonetic/foundation producers and `scripts/timeline-production`;
   whole-media transcription jobs/routes were deleted in the R1 Core slice;
-- App merge `a3e6564` contains no reachable Core whole-media transcription job
+- App merge `813c58b1` contains no reachable Core whole-media transcription job
   client or UI and routes missing-transcript preparation through pinned Gen;
 - App pins immutable Core release `v0.7.0-split.3`, contract `2.0.0` and runtime
   `0.7.0`. The runtime's `whisper-cli`, `ffmpeg` and `ffprobe` are shared R1
@@ -128,7 +128,7 @@ against pinned Gen `41a53336`, pinned Core
 This slice supersedes [listen-core#103](https://github.com/ichthyoplanktonzyh/listen-core/issues/103),
 whose plan kept whole-media ASR orchestration in Core.
 
-### R2 — Produce aligned Word Timeline natively in Gen
+### R2 — Produce aligned Word Timeline natively in Gen — complete
 
 Owner: Gen.
 
@@ -143,6 +143,27 @@ Owner: Gen.
 
 Exit: the first-class `whisper-cpp` path can produce a useful aligned package,
 and Core accepts it without a producer-specific interface.
+
+Completed by [listen-gen#5](https://github.com/ichthyoplanktonzyh/listen-gen/pull/5)
+(merge `c3564c35`). Gen now owns a provider-neutral alignment seam with
+deterministic fixture and command adapters plus the first-class `whisper-cpp`
+adapter. The package-native `word_timeline` has an exact Subtitle dependency,
+alignment provider/model/config provenance and typed `asr_aligned` timing.
+Optional failure emits typed alignment warnings while preserving a valid
+subtitle package; cancellation, timeout, process reaping, bounded output,
+redaction and runtime/model mutation checks have deterministic coverage.
+
+[listen-app#103](https://github.com/ichthyoplanktonzyh/listen-app/pull/103)
+added consumer compatibility coverage for the additive v1 machine events.
+[listen-app#104](https://github.com/ichthyoplanktonzyh/listen-app/pull/104)
+(merge `813c58b1`) pins Gen tool `0.2.0` at `c3564c35` with release-manifest
+SHA-256 `b82c6cd4463008efe8b7e6559398407a0d5c2c8be0f50d48a9467e9276374c0b`
+and artifact SHA-256
+`1130342a2d3455a7d9e4772cd7d4cf8608da93f12551f56a9b2e0bb00ddd611a`.
+The credential-free round trip uses deterministic fixture alignment and proves
+`listen-gen.alignment/0.2.0` provenance, exact Core `54497e9` candidate-only
+import and no active timeline selection. Core contract `2.0.0`, runtime `0.7.0`
+and the R1 shared-tool ownership are unchanged.
 
 [listen-core#9](https://github.com/ichthyoplanktonzyh/listen-core/issues/9)
 remains relevant as an algorithm-quality backlog, but reusable production
