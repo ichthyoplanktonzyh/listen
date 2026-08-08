@@ -42,12 +42,13 @@ Repository separation baseline 已建立：
    作为 Gen 内部 provider-neutral stage，直接输出 package-native
    `word_timeline`；App PR [#104](https://github.com/ichthyoplanktonzyh/listen-app/pull/104)
    精确 pin Gen `0.2.0` 并通过真实 candidate-only round trip。
-4. **R3 · Chunk/Prosody semantic alignment** — Core `ProsodyAnalysis` is now the
+4. **R3 · Chunk/Prosody semantic alignment — complete** — Core `ProsodyAnalysis` is now the
    单一真源 for the Prosodic Chunk foundation slot：content-package v1
    `prosody_analysis` 无损投影为 candidate 资源并接入 readiness（不激活），
    prosodic chunk token spans 由 package 明示、播放时间由 Word Timeline
    实时派生，Sense Group 保持独立；foundation 不再生成 legacy
-   `ChunkTimeline` fallback，其重复语义由 R5 退役。in progress。
+   `ChunkTimeline` fallback，其重复语义由 R5 退役。由 Core PR
+   [#118](https://github.com/ichthyoplanktonzyh/listen-core/pull/118) 合并。
 5. **R4 · Rich resources** — 按依赖顺序生产 Sense Group、Word Acoustics、Prosody
    Analysis 和可选 Phone Timeline。
 6. **R5 · Legacy retirement** — 删除 `scripts/timeline-production`、旧 Core/App
