@@ -61,7 +61,7 @@ The old path is now duplication, not a fallback to extend.
 
 ## Sequencing
 
-### R0 — Trust the cutover evidence
+### R0 — Trust the cutover evidence — complete
 
 Owner: App, with Core/Gen fixtures.
 
@@ -76,6 +76,17 @@ Owner: App, with Core/Gen fixtures.
 Exit: one command proves the exact pinned producer bytes can generate a package
 accepted by the exact pinned Core runtime, and every skipped or failed stage is
 non-zero.
+
+Completed by [listen-app#101](https://github.com/ichthyoplanktonzyh/listen-app/pull/101)
+(merge commit `2531f2a`). The gate resolves App dependencies offline from the
+caller's existing Pub cache, verifies a Flutter JSON event report for the exact
+non-skipped passing E2E case, and prints success only after every build, verify,
+test, report, and checkout-cleanliness check succeeds. Its regression suite
+covers dependency, Gen build/verify, Core build, Flutter runner, skipped,
+failed, missing, and malformed-report failures. The real credential-free run
+proved pinned Gen `41a53336` -> native `.listenpkg` -> pinned Core `b980a206`
+HTTP import, then exported Core state with no active Word, Phone, or Chunk
+Timeline selection.
 
 ### R1 — Cut over and delete whole-media ASR in Core
 

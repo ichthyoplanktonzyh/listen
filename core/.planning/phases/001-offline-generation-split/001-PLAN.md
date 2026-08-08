@@ -42,8 +42,14 @@ facts unknown. The contract remains unreleased.
 
 A real three-repository fixture round trip has passed from the pinned Gen bundle
 through native `.listenpkg` production into pinned Core HTTP candidate import.
-The initial extraction acceptance is therefore satisfied. Production cutover,
-richer native resources and legacy deletion continue under
+The R0 gate is now fail-closed:
+[listen-app#101](https://github.com/ichthyoplanktonzyh/listen-app/pull/101)
+verifies structured Flutter test events, rejects every skipped or failed stage,
+understands Gen's actual contract lock, resolves repository paths deliberately
+from ordinary checkouts and worktrees, and asserts through exported Core state
+that package import leaves all active timeline selections empty. The initial
+extraction and trustworthy cutover-evidence acceptance are therefore satisfied.
+Production cutover, richer native resources and legacy deletion continue under
 [`001-ROADMAP.md`](001-ROADMAP.md) and the linked cross-repository issues.
 
 Core whole-media generation is no longer a path to extend. Learner-recording

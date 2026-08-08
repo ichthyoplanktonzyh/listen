@@ -24,6 +24,11 @@ owns the package-generation journey.
 The additive local package-import HTTP contract exposes the bounded, atomic
 candidate-only application seam with a typed receipt and stable redacted
 failure codes. A real pinned Gen -> package -> Core fixture round trip passes.
+[listen-app#101](https://github.com/ichthyoplanktonzyh/listen-app/pull/101)
+made that gate fail-closed: structured Flutter events prove the
+named test ran and passed, every skipped or failed stage is non-zero, repository
+status resolves worktrees deliberately and reconciles Gen's contract lock, and
+exported Core state proves no imported timeline became active.
 Core's whole-media transcription/jobs and legacy production tree remain
 reachable duplication and are now explicit deletion targets, not fallback
 surfaces to extend.
@@ -49,23 +54,21 @@ not code evidence.
 
 ## Next
 
-1. Fix the three-repository round-trip false-positive path and worktree/Gen-lock
-   status reporting so cutover evidence cannot succeed without executing.
-2. Split Core whole-media from learner-recording transcription, cut the App's
+1. Split Core whole-media from learner-recording transcription, cut the App's
    remaining media transcription consumers to Gen and delete the old job surface.
-3. Add native aligned Word Timeline production in Gen.
-4. Resolve Core ChunkTimeline versus package Prosody semantics, then migrate
+2. Add native aligned Word Timeline production in Gen.
+3. Resolve Core ChunkTimeline versus package Prosody semantics, then migrate
    Sense Group, Word Acoustics, Prosody and optional Phone Timeline producers.
-5. Delete `scripts/timeline-production` and runtime/release inputs exclusive to
+4. Delete `scripts/timeline-production` and runtime/release inputs exclusive to
    the retired Core production path.
-6. Define Content Edition, Media Rendition, Timeline Compatibility, and the
+5. Define Content Edition, Media Rendition, Timeline Compatibility, and the
    Package Listing/Release interface before a hosted catalog journey.
-7. Split core issue #80 into a production-model slice followed by an
+6. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
-8. Publish immutable `1.1.0` contract/runtime artifacts only after owner
+7. Publish immutable `1.1.0` contract/runtime artifacts only after owner
    approval, then complete the `listen-app` lock and DTO handoff.
-9. Run the Apple Silicon short-audio cascade smoke only with explicit model
+8. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-10. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+9. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.

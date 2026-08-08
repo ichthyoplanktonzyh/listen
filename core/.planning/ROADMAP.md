@@ -25,8 +25,10 @@ Repository separation baseline 已建立：
 [active cutover roadmap](phases/001-offline-generation-split/001-ROADMAP.md)
 完成唯一生产 seam 和旧实现删除：
 
-1. **R0 · Honest integration gate** — 修复可在 E2E 未执行时返回成功的三仓
-   round-trip 闸门，以及 worktree/Gen lock 状态误报。
+1. **R0 · Honest integration gate — complete** —
+   [listen-app#101](https://github.com/ichthyoplanktonzyh/listen-app/pull/101) 已让三仓
+   round-trip 闸门结构化验证目标 E2E 确实执行并通过；任一跳过、失败或依赖准备
+   错误均非零退出，同时修复 worktree 定位与 Gen contract lock 对账。
 2. **R1 · Whole-media ASR cutover** — 拆开 Core whole-media 与 learner-recording
    transcription；App 只走 pinned Gen package journey，并删除旧 job surface。
 3. **R2 · Native aligned Word Timeline** — alignment 作为 Gen 内部 stage，直接
