@@ -23,6 +23,10 @@ identity, and the artifact filename, size, and SHA-256.
   wrapper.
 - The `whisper-cpp` provider needs `ffprobe`, `ffmpeg`, `whisper-cli`, and a
   whisper model.
+- Optional alignment reuses those tools: `--aligner fixture` needs no media
+  commands, `--aligner command` needs `ffprobe`, `ffmpeg`, and the external
+  aligner command, and `--aligner whisper-cpp` needs `ffprobe`, `ffmpeg`,
+  `whisper-cli`, and a whisper model.
 - These native tools and models are never placed inside the zipapp.
 
 ## Building
@@ -39,9 +43,9 @@ python tools/release_bundle.py build \
 Output layout:
 
 ```text
-dist/listen-gen-0.1.0/
-├── listen-gen-0.1.0.pyz
-└── listen-gen-0.1.0.release.json
+dist/listen-gen-0.2.0/
+├── listen-gen-0.2.0.pyz
+└── listen-gen-0.2.0.release.json
 ```
 
 The build is deterministic: identical source, version, and generation rules
@@ -57,7 +61,7 @@ Run the verifier before publishing:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.1.0/listen-gen-0.1.0.release.json
+  dist/listen-gen-0.2.0/listen-gen-0.2.0.release.json
 ```
 
 The verifier strictly parses the manifest, checks the artifact size,
@@ -71,8 +75,8 @@ executing the `.pyz`.
 ## Fixture smoke
 
 ```bash
-python dist/listen-gen-0.1.0/listen-gen-0.1.0.pyz --help
-python dist/listen-gen-0.1.0/listen-gen-0.1.0.pyz package from-media \
+python dist/listen-gen-0.2.0/listen-gen-0.2.0.pyz --help
+python dist/listen-gen-0.2.0/listen-gen-0.2.0.pyz package from-media \
   tests/fixtures/sample-media.wav \
   --provider fixture --fixture tests/fixtures/sample.asr.json \
   --title "Smoke" --media-kind audio --duration-ms 2200 \

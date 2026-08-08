@@ -76,7 +76,7 @@ Every event carries these fields:
   "sequence": 0,
   "tool": {
     "id": "listen-gen",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "event": "protocol"
 }
@@ -98,7 +98,7 @@ run:
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 0,
-  "tool": {"id": "listen-gen", "version": "0.1.0"},
+  "tool": {"id": "listen-gen", "version": "0.2.0"},
   "event": "protocol",
   "capabilities": {
     "package_schema": "listen.resource-package.v1",
@@ -116,8 +116,22 @@ run:
       "probing_media",
       "normalizing_audio",
       "transcribing",
+      "aligning",
       "building_package"
-    ]
+    ],
+    "alignment": {
+      "optional": true,
+      "degradation": "preserve_subtitle",
+      "adapters": ["fixture", "command", "whisper-cpp"],
+      "warning_codes": [
+        "alignment_failed",
+        "alignment_output_invalid",
+        "alignment_output_too_large",
+        "alignment_qualification_failed",
+        "alignment_start_failed",
+        "alignment_timeout"
+      ]
+    }
   }
 }
 ```
@@ -135,7 +149,7 @@ commands, credentials, or temporary directories.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 2,
-  "tool": {"id": "listen-gen", "version": "0.1.0"},
+  "tool": {"id": "listen-gen", "version": "0.2.0"},
   "event": "phase",
   "phase": "validating"
 }
@@ -155,7 +169,7 @@ See [completed example](#completed-example). This is a terminal event.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 3,
-  "tool": {"id": "listen-gen", "version": "0.1.0"},
+  "tool": {"id": "listen-gen", "version": "0.2.0"},
   "event": "failed",
   "code": "input_not_found",
   "message": "Input media is unavailable."
@@ -174,7 +188,7 @@ a terminal event.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 4,
-  "tool": {"id": "listen-gen", "version": "0.1.0"},
+  "tool": {"id": "listen-gen", "version": "0.2.0"},
   "event": "cancelled"
 }
 ```
@@ -192,11 +206,15 @@ validating
 probing_media
 normalizing_audio
 transcribing
+aligning
 building_package
 ```
 
 `probing_media` and `normalizing_audio` appear only when the command provider
 uses real media preprocessing. The offline fixture provider skips them.
+`aligning` appears only when an optional word aligner was selected
+(`--aligner`); see [docs/alignment-provider-v1.md](alignment-provider-v1.md)
+for the alignment stage and its degradation semantics.
 
 ## Error codes
 
@@ -271,7 +289,7 @@ never both appear for the same run.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 6,
-  "tool": {"id": "listen-gen", "version": "0.1.0"},
+  "tool": {"id": "listen-gen", "version": "0.2.0"},
   "event": "completed",
   "package_sha256": "sha256:<64 lowercase hex>",
   "media_fingerprint": "sha256:<64 lowercase hex>",
@@ -287,7 +305,11 @@ never both appear for the same run.
       "review_status": "machine_checked"
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "alignment": {
+    "status": "produced",
+    "warnings": []
+  }
 }
 ```
 
@@ -299,6 +321,27 @@ the original media file, never of the temporary normalized WAV. The
 resource document. The event never contains `output_path`, `input_path`,
 `temporary_path`, `provider_command`, `provider_stdout`, `provider_stderr`,
 `credential`, or `raw_response`.
+
+## Alignment in the completed event
+
+When the optional word-alignment stage was selected (`--aligner`), the
+`completed` event carries an additive `alignment` object:
+
+```json
+"alignment": {
+  "status": "produced",
+  "warnings": []
+}
+```
+
+`status` is `produced`, `degraded`, or `skipped`. `warnings` is a list of
+stable typed warnings, each `{"code": ..., "message": ...}` using the codes
+advertised in the protocol capabilities under `alignment.warning_codes`.
+Degradation preserves the ASR Subtitle Text Track package; the human `message`
+is also appended to the top-level `warnings` string list so existing consumers
+can surface it. Without `--aligner`, `status` is `skipped` with an empty
+warning list. Consumers that do not understand the additive `alignment` field
+must ignore it, and must keep accepting the top-level `warnings` string list.
 
 ## Ownership of the output path
 

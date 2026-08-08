@@ -7,8 +7,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from .asr import LANGUAGE_RE, AsrSegment, AsrTranscript
-from .package import ConversionError
+from .asr import AsrSegment, AsrTranscript
+from .package import LANGUAGE_RE, ConversionError
 from .process import ProcessTimedOut, run_argv
 
 WHISPER_CONFIG_SCHEMA = "listen_gen.whisper-cpp-config.v1"

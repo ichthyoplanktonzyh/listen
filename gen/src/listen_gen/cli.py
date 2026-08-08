@@ -19,6 +19,11 @@ from .asr import (
     PreprocessingAsrAdapter,
     package_media,
 )
+from .alignment import (
+    CommandAlignerAdapter,
+    FixtureAlignerAdapter,
+    WhisperCppAlignerAdapter,
+)
 from .media import FfmpegAudioPreprocessor
 from .package import ConversionError, package_from_lltimeline
 from .protocol import (
@@ -132,6 +137,33 @@ def parser(
     native.add_argument("--ffprobe-command", default="ffprobe")
     native.add_argument("--ffmpeg-command", default="ffmpeg")
     native.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
+    native.add_argument(
+        "--aligner",
+        default="none",
+        choices=["none", "fixture", "command", "whisper-cpp"],
+        help="optional word-alignment adapter; alignment is always optional",
+    )
+    native.add_argument(
+        "--alignment-fixture",
+        type=Path,
+        help="normalized align-result JSON for the fixture aligner",
+    )
+    native.add_argument(
+        "--alignment-command",
+        help="external word-aligner executable; no shell is used",
+    )
+    native.add_argument(
+        "--alignment-command-arg",
+        action="append",
+        default=[],
+        help=(
+            "one argv item for the command aligner; include {media} and "
+            "{transcript} exactly once each"
+        ),
+    )
+    native.add_argument(
+        "--alignment-command-timeout-seconds", type=float, default=3600.0
+    )
     native.add_argument("--title", required=True)
     native.add_argument("--media-kind", required=True, choices=["audio", "video"])
     native.add_argument("--duration-ms", required=True, type=int)
@@ -207,6 +239,7 @@ def _run(
                 audio_stream_index=args.audio_stream_index,
                 progress=progress,
             )
+        aligner, aligner_preprocessor = _build_aligner(args)
         return package_media(
             args.input,
             args.output,
@@ -216,8 +249,57 @@ def _run(
             duration_ms=args.duration_ms,
             created_at_ms=args.created_at_ms,
             progress=progress,
+            aligner=aligner,
+            aligner_preprocessor=aligner_preprocessor,
+            aligner_audio_stream_index=args.audio_stream_index,
         )
     return package_from_lltimeline(args.input, args.output)
+
+
+def _build_aligner(
+    args: argparse.Namespace,
+) -> tuple[Any | None, FfmpegAudioPreprocessor | None]:
+    """Resolve the optional alignment adapter and its audio preprocessor.
+
+    The whisper-cpp aligner reuses the whisper provider arguments so the
+    first-class whisper.cpp path can select it directly
+    (``--provider whisper-cpp --aligner whisper-cpp``). The alignment
+    preprocessor never emits machine phases; ``aligning`` covers the whole
+    stage.
+    """
+    if args.aligner == "none":
+        return None, None
+    preprocessor = FfmpegAudioPreprocessor(
+        ffprobe_executable=args.ffprobe_command,
+        ffmpeg_executable=args.ffmpeg_command,
+        timeout_seconds=args.media_command_timeout_seconds,
+    )
+    if args.aligner == "fixture":
+        if args.alignment_fixture is None:
+            raise ConversionError(
+                "--alignment-fixture is required for the fixture aligner"
+            )
+        return FixtureAlignerAdapter(args.alignment_fixture), None
+    if args.aligner == "command":
+        if args.alignment_command is None:
+            raise ConversionError(
+                "--alignment-command is required for the command aligner"
+            )
+        aligner = CommandAlignerAdapter(
+            args.alignment_command,
+            args.alignment_command_arg,
+            args.alignment_command_timeout_seconds,
+        )
+        return aligner, preprocessor
+    whisper_aligner = WhisperCppAlignerAdapter(
+        args.whisper_cli,
+        args.whisper_model,
+        args.whisper_model_id,
+        args.whisper_language,
+        args.whisper_translate_to_english,
+        args.whisper_timeout_seconds,
+    )
+    return whisper_aligner, preprocessor
 
 
 def _completed_details(package_path: Path) -> tuple[str, str, list[dict[str, object]]]:
@@ -296,6 +378,7 @@ def _main_machine(
                         media_fingerprint=media_fingerprint,
                         resources=resources,
                         warnings=result["warnings"],
+                        alignment=result.get("alignment"),
                     )
                 return 0
             finally:

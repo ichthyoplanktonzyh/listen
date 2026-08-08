@@ -66,8 +66,8 @@ WAV is deleted after success, provider failure, timeout, or cancellation.
 
 ## Output: subtitle-only package
 
-The transcript segments carry no word timing, so this PR emits exactly one
-resource:
+The transcript segments carry no word timing, so the ASR provider alone emits
+exactly one resource:
 
 ```text
 subtitle_text_track
@@ -78,13 +78,23 @@ No empty `word_timeline` is created and the package manifest has a single
 segments mix word-bearing and word-free entries with
 `ASR transcript must provide word timings for every segment or none`.
 
-## Why no word_timeline in this PR
+## Word alignment
 
 whisper.cpp's standard JSON output exposes segment-level text and offsets
-only. Building a `word_timeline` would require estimating word boundaries
-from segment text or mechanically mapping whisper tokens to package words,
-which this PR deliberately does not do. Word-level alignment is a separate,
-provider-specific problem and lands in a later slice.
+only, so the ASR provider never fabricates word timing. Word-level alignment
+is a separate optional stage selected with `--aligner whisper-cpp`: the
+first-class whisper.cpp aligner reruns `whisper-cli` with full JSON output
+(`-ojf`) against the same normalized WAV and derives timing from the ASR
+decoder's per-token offsets. The token timestamps are model/BPE tokens, not
+guaranteed one per word, so one-or-more consecutive lexical tokens are
+aggregated deterministically into each exact emitted subtitle word token
+(first component start, last component end, minimum confidence); anything that
+cannot resolve exactly degrades honestly. These ASR-decoder token timestamps
+are typed `asr_aligned` — not text-constrained forced alignment, which is
+reserved for a command adapter that may honestly declare `forced_aligned`.
+The alignment result is read with a hard 16 MiB bound. See
+[docs/alignment-provider-v1.md](alignment-provider-v1.md) for the exact
+argv, aggregation rules, provenance, and degradation semantics.
 
 ## Provider / model / config provenance
 
@@ -177,11 +187,12 @@ SIGINT/SIGTERM during a whisper run terminates whisper-cli and its children
 as a group, deletes the whisper temporary directory, deletes the normalized
 audio temporary directory, removes the machine staging package, and leaves a
 pre-existing final output untouched. The run then emits exactly one
-`cancelled` terminal event and exits `130`.
+`cancelled` terminal event and exits `130`. The same semantics apply to the
+whisper.cpp aligner run, including process-group reaping of aligner children.
 
 ## Future work
 
-Word-level alignment remains deferred until the immutable Gen handoff and
-the three-repository exact-media round trip have been completed and observed.
-A later provider slice may add DTW, WhisperX, MFA, or another aligner without
-changing the subtitle-only contract of this provider version.
+The whisper.cpp aligner derives word timing from whisper.cpp full-JSON
+per-token offsets. A later slice may add DTW, WhisperX, MFA, or another
+aligner behind the same provider-neutral alignment seam without changing the
+subtitle contract of this provider version.

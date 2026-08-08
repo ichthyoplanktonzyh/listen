@@ -20,7 +20,7 @@ import release_bundle as rb
 from listen_gen import protocol
 
 FAKE_COMMIT = "ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 PYZ_NAME = f"listen-gen-{VERSION}.pyz"
 MANIFEST_NAME = f"listen-gen-{VERSION}.release.json"
 SHEBANG = b"#!/usr/bin/env python3\n"
@@ -688,10 +688,10 @@ class ModuleIsolationAndSourceTests(unittest.TestCase):
         pyproject = root / "pyproject.toml"
         pyproject.write_text(
             pyproject.read_text("utf-8").replace(
-                'version = "0.1.0"', 'version = "9.9.9"', 1
+                'version = "0.2.0"', 'version = "9.9.9"', 1
             )
         )
-        # The checkout protocol identity stays at 0.1.0.
+        # The checkout protocol identity stays at 0.2.0.
         self.assertEqual(protocol.TOOL_VERSION, VERSION)
         with tempfile.TemporaryDirectory() as tmp:
             _, manifest = rb.build_release_bundle(ROOT, Path(tmp), FAKE_COMMIT)

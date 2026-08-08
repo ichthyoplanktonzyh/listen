@@ -19,6 +19,17 @@ RESOURCE_SCHEMAS = {
     "sense_group_analysis": "listen.resource.sense-group-analysis.v1",
     "word_acoustics": "listen.resource.word-acoustics.v1",
 }
+# Contract vocabulary shared by every v1 resource producer and the optional
+# word-alignment stage. These constants mirror the canonical Core schemas:
+# a language tag pattern and the closed set of typed word-timing sources.
+LANGUAGE_RE = re.compile(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
+TIMING_SOURCES = {
+    "asr_reported",
+    "asr_aligned",
+    "forced_aligned",
+    "estimated",
+    "user_adjusted",
+}
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 SHA256_RE = re.compile(r"^(?:sha256:)?([0-9a-fA-F]{64})$")
 
@@ -100,7 +111,7 @@ def _provenance(
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "created_at_ms": created_at_ms,
-        "tool": {"id": "listen-gen.lltimeline-compat", "version": "0.1.0"},
+        "tool": {"id": "listen-gen.lltimeline-compat", "version": "0.2.0"},
     }
     if provider := _producer(source):
         result["provider"] = provider

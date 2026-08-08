@@ -11,25 +11,28 @@ from typing import Any, Callable, Protocol
 from .media import AudioPreprocessor
 from .process import ProcessOutputTooLarge, ProcessTimedOut, run_argv
 
+from .alignment import (
+    AlignmentFailure,
+    AlignmentRequest,
+    AlignmentSentence,
+    AlignmentToken,
+    AlignerAdapter,
+    run_alignment,
+)
 from .package import (
     PACKAGE_SCHEMA,
     RESOURCE_SCHEMAS,
+    TIMING_SOURCES,
+    LANGUAGE_RE,
     ConversionError,
     ResourceFile,
     _envelope,
     write_package,
 )
+from .protocol import ALIGNMENT_WARNING_MESSAGES, alignment_warning
 
-TOOL_VERSION = "0.1.0"
-LANGUAGE_RE = re.compile(r"^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$")
+TOOL_VERSION = "0.2.0"
 TOKEN_RE = re.compile(r"\w+(?:['\u2019]\w+)*|\s+|[^\w\s]", re.UNICODE)
-TIMING_SOURCES = {
-    "asr_reported",
-    "asr_aligned",
-    "forced_aligned",
-    "estimated",
-    "user_adjusted",
-}
 ASR_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 
 
@@ -337,6 +340,9 @@ def package_media(
     duration_ms: int,
     created_at_ms: int,
     progress: Callable[[str], None] | None = None,
+    aligner: AlignerAdapter | None = None,
+    aligner_preprocessor: AudioPreprocessor | None = None,
+    aligner_audio_stream_index: int | None = None,
 ) -> dict[str, Any]:
     if not media_path.is_file():
         raise ConversionError("media input is not a regular file")
@@ -401,7 +407,63 @@ def package_media(
         required=True,
     )
     resources: list[ResourceFile] = [subtitle]
-    if has_word_timeline:
+    warnings: list[str] = []
+    alignment_outcome: dict[str, Any] = {"status": "skipped", "warnings": []}
+    if aligner is not None:
+        # The optional word-alignment stage is authoritative for the
+        # word_timeline resource when it is selected. Its failures degrade
+        # honestly to the ASR subtitle package; media changes and cancellation
+        # are never treated as degradation.
+        try:
+            if aligner_preprocessor is not None:
+                with aligner_preprocessor.prepare(
+                    media_path, audio_stream_index=aligner_audio_stream_index
+                ) as prepared:
+                    status, word_timeline, typed_warnings = run_alignment(
+                        aligner=aligner,
+                        media_path=media_path,
+                        audio_path=prepared.path,
+                        audio_stream_index=prepared.stream_index,
+                        language=transcript.language,
+                        sentences=_alignment_sentences(sentences),
+                        subtitle=subtitle,
+                        media_fingerprint=media_fingerprint,
+                        duration_ms=duration_ms,
+                        created_at_ms=created_at_ms,
+                        progress=progress,
+                    )
+            else:
+                status, word_timeline, typed_warnings = run_alignment(
+                    aligner=aligner,
+                    media_path=media_path,
+                    audio_path=media_path,
+                    audio_stream_index=None,
+                    language=transcript.language,
+                    sentences=_alignment_sentences(sentences),
+                    subtitle=subtitle,
+                    media_fingerprint=media_fingerprint,
+                    duration_ms=duration_ms,
+                    created_at_ms=created_at_ms,
+                    progress=progress,
+                )
+        except (ConversionError, OSError, json.JSONDecodeError, UnicodeDecodeError) as error:
+            if isinstance(error, AlignmentFailure):
+                code = error.code
+            else:
+                code, _message = alignment_warning(error)
+            message = ALIGNMENT_WARNING_MESSAGES[code]
+            status, word_timeline, typed_warnings = (
+                "degraded",
+                None,
+                [{"code": code, "message": message}],
+            )
+        if _fingerprint(media_path) != media_fingerprint:
+            raise ConversionError("media input changed during processing")
+        alignment_outcome = {"status": status, "warnings": typed_warnings}
+        warnings.extend(item["message"] for item in typed_warnings)
+        if word_timeline is not None:
+            resources.append(word_timeline)
+    elif has_word_timeline:
         word_timeline = _envelope(
             kind="word_timeline", media_fingerprint=media_fingerprint,
             dependencies=[subtitle], provenance=provenance, quality=quality,
@@ -427,5 +489,21 @@ def package_media(
     return {
         "status": "created", "output": str(output_path),
         "media_fingerprint": media_fingerprint, "package_sha256": package_sha256,
-        "resource_count": len(resources), "warnings": [],
+        "resource_count": len(resources), "warnings": warnings,
+        "alignment": alignment_outcome,
     }
+
+
+def _alignment_sentences(sentences: list[dict[str, Any]]) -> tuple[AlignmentSentence, ...]:
+    return tuple(
+        AlignmentSentence(
+            id=sentence["id"],
+            index=sentence["index"],
+            start_ms=sentence["start_ms"],
+            end_ms=sentence["end_ms"],
+            original_text=sentence["original_text"],
+            display_text=sentence["display_text"],
+            tokens=tuple(AlignmentToken(**token) for token in sentence["tokens"]),
+        )
+        for sentence in sentences
+    )
