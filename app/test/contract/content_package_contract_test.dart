@@ -74,6 +74,45 @@ void main() {
     );
   });
 
+  test('accepts additive alignment fields and string warnings in completed', () {
+    // R2 adds an optional word-alignment stage. The completed event carries an
+    // additive `alignment` object while `warnings` stays a plain string list;
+    // the parser must ignore the unknown field and keep the existing shape.
+    final completed = jsonDecode(
+      (File('test/fixtures/content-package/gen-machine-events.ndjson')
+              .readAsLinesSync())
+          .last,
+    ) as Map<String, dynamic>;
+    completed['alignment'] = {
+      'status': 'degraded',
+      'warnings': [
+        {
+          'code': 'alignment_qualification_failed',
+          'message': 'Word alignment did not qualify; the subtitle package '
+              'was preserved.',
+        },
+      ],
+    };
+    completed['warnings'] = [
+      'Word alignment did not qualify; the subtitle package was preserved.',
+    ];
+
+    final event = parseListenGenMachineEvent(
+      completed,
+      expectedToolVersion: '0.1.0',
+    );
+
+    expect(event.kind, ListenGenEventKind.completed);
+    expect(event.warnings, isA<List<String>>());
+    expect(event.warnings, hasLength(1));
+    expect(
+      event.warnings.single,
+      contains('Word alignment did not qualify'),
+    );
+    expect(event.resources, hasLength(2));
+    expect(event.packageSha256, startsWith('sha256:'));
+  });
+
   test('rejects unknown Gen protocol versions and tool identities', () {
     Map<String, dynamic> event({required int version, required String tool}) =>
         {
