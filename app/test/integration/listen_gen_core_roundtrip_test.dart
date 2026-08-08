@@ -59,10 +59,10 @@ void main() {
         reason: 'LISTEN_GEN_RELEASE_MANIFEST must point at the pinned manifest',
       );
       final verified = await release.verify();
-      expect(verified.toolVersion, '0.1.0');
+      expect(verified.toolVersion, '0.2.0');
       expect(
         verified.artifactSha256,
-        'sha256:49907a11025165be31feaf94e3b8fdc9e404cd32c0e88bee886a4bd40566b0fd',
+        'sha256:1130342a2d3455a7d9e4772cd7d4cf8608da93f12551f56a9b2e0bb00ddd611a',
       );
 
       final generator = LocalListenGenProcessService(releaseService: release);
@@ -138,18 +138,33 @@ void main() {
           containsAll(const ['subtitle_text_track', 'word_timeline']),
         );
 
-        for (final kind in const ['subtitle_text_track', 'word_timeline']) {
-          final resource = byKind[kind]!;
-          expect(
-            resource.localIds,
-            isNotEmpty,
-            reason: '$kind should be consumed as a candidate',
-          );
-          // The pinned Core stamps the specific producing component
-          // (e.g. listen-gen.asr-package) at the pinned tool version.
-          expect(resource.provenance?.tool.id, startsWith('listen-gen'));
-          expect(resource.provenance?.tool.version, '0.1.0');
-        }
+        // The pinned Core stamps the specific producing component at the
+        // pinned tool version. The word timeline must come from the
+        // alignment stage (`listen-gen.alignment`), not from the ASR-supplied
+        // timing — the aligned package is what this round trip proves.
+        final subtitle = byKind['subtitle_text_track']!;
+        expect(
+          subtitle.localIds,
+          isNotEmpty,
+          reason: 'subtitle_text_track should be consumed as a candidate',
+        );
+        expect(subtitle.provenance?.tool.id, 'listen-gen.asr-package');
+        expect(subtitle.provenance?.tool.version, '0.2.0');
+
+        final wordTimeline = byKind['word_timeline']!;
+        expect(
+          wordTimeline.localIds,
+          isNotEmpty,
+          reason: 'word_timeline should be consumed as a candidate',
+        );
+        expect(
+          wordTimeline.provenance?.tool.id,
+          'listen-gen.alignment',
+          reason:
+              'word_timeline must be produced by the alignment stage, not '
+              'the ASR-supplied word timing',
+        );
+        expect(wordTimeline.provenance?.tool.version, '0.2.0');
 
         final exportedTimeline = await api.exportTrackLLTimeline(
           receipt.track.id,

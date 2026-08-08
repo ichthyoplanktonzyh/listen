@@ -1,7 +1,7 @@
 {
   "schema": "listen_app.content-package-roundtrip-fixture.v1",
   "source_repository": "ichthyoplanktonzyh/listen-gen",
-  "source_commit": "41a53336fd893522abf7ef168fd2ace9fa6ac678",
+  "source_commit": "c3564c357ecd46c3a52326f1362b78874379a56f",
   "files": {
     "sample-media.wav": "34faebfe4439bd33484a89ef52e4dd5314e6a1d6cc17556487ac3c9cec82a26a",
     "sample.asr.json": "66f9858a7abcf1133369a75e0bff52a94256265ff2865f66f89b6b31fed073c2"

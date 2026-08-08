@@ -15,7 +15,7 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 final class _FakeReleaseService implements ListenGenReleaseService {
   _FakeReleaseService({
     required this.artifactPath,
-    this.toolVersion = '0.1.0',
+    this.toolVersion = '0.2.0',
     this.configured = true,
     this.failure,
     this.onVerify,
@@ -44,6 +44,7 @@ final class _FakeReleaseService implements ListenGenReleaseService {
     if (onVerify != null) await onVerify!();
     return VerifiedListenGenRelease(
       artifactPath: artifactPath,
+      artifactFilename: 'listen-gen.pyz',
       toolVersion: toolVersion,
       sourceCommit: 'a' * 40,
       artifactSha256: sha,
@@ -53,7 +54,7 @@ final class _FakeReleaseService implements ListenGenReleaseService {
 
 LocalListenGenProcessService _service(
   String artifactPath, {
-  String toolVersion = '0.1.0',
+  String toolVersion = '0.2.0',
   List<String> providerArgs = const ['--provider', 'fixture'],
 }) => LocalListenGenProcessService(
   releaseService: _FakeReleaseService(
@@ -357,7 +358,7 @@ while True:
   test(
     'rejects machine events whose tool version is not the verified one',
     () async {
-      // The bundle is verified as 0.1.0 but the events claim 9.9.9.
+      // The bundle is verified as 0.2.0 but the events claim 9.9.9.
       final script = await _script('''
 ${_emit(_event(0, 'protocol', version: '9.9.9'))}
 ${_emit(_event(1, 'started', version: '9.9.9'))}
@@ -365,7 +366,7 @@ ${_emit(_event(1, 'started', version: '9.9.9'))}
       addTearDown(() => script.parent.delete(recursive: true));
       final run = await _service(
         script.path,
-        toolVersion: '0.1.0',
+        toolVersion: '0.2.0',
       ).start(request);
       run.events.listen((_) {}, onError: (_) {});
 
@@ -390,7 +391,7 @@ ${_emit(_completedEvent(2))}
       addTearDown(() => script.parent.delete(recursive: true));
       final run = await _service(
         script.path,
-        toolVersion: '0.1.0',
+        toolVersion: '0.2.0',
       ).start(request);
 
       expect(
@@ -451,7 +452,7 @@ String _event(
   int sequence,
   String event, {
   String extra = '',
-  String version = '0.1.0',
+  String version = '0.2.0',
 }) =>
     '{"schema":"listen_gen.machine-event.v1","protocol_version":1,'
     '"sequence":$sequence,"tool":{"id":"listen-gen","version":"$version"},'

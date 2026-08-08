@@ -20,7 +20,7 @@
         "review_status": "machine_checked",
         "provenance": {
           "created_at_ms": 1785542400000,
-          "tool": {"id": "listen-gen", "version": "0.1.0"},
+          "tool": {"id": "listen-gen.asr-package", "version": "0.2.0"},
           "provider": {"id": "fixture", "version": "1"},
           "model": {"id": "fixture-v1", "version": "1"},
           "config_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333"

@@ -1,15 +1,15 @@
 {
   "manifest_version": 1,
   "repository": "ichthyoplanktonzyh/listen-gen",
-  "source_git_sha": "41a53336fd893522abf7ef168fd2ace9fa6ac678",
+  "source_git_sha": "c3564c357ecd46c3a52326f1362b78874379a56f",
   "release_manifest": {
     "schema": "listen_gen.release-bundle.v1",
-    "filename": "listen-gen-0.1.0.release.json",
-    "sha256": "sha256:de72e20af59e70fe8c9b8e17d1a3a0cc18722e74dc8d9ab827a938caf0d283cf"
+    "filename": "listen-gen-0.2.0.release.json",
+    "sha256": "sha256:b82c6cd4463008efe8b7e6559398407a0d5c2c8be0f50d48a9467e9276374c0b"
   },
   "tool": {
     "id": "listen-gen",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "machine_protocol": {
     "schema": "listen_gen.machine-event.v1",
@@ -30,10 +30,10 @@
     "python_requires": ">=3.11"
   },
   "artifact": {
-    "filename": "listen-gen-0.1.0.pyz",
+    "filename": "listen-gen-0.2.0.pyz",
     "format": "python-zipapp",
     "entrypoint": "__main__.py",
-    "size_bytes": 83190,
-    "sha256": "sha256:49907a11025165be31feaf94e3b8fdc9e404cd32c0e88bee886a4bd40566b0fd"
+    "size_bytes": 130038,
+    "sha256": "sha256:1130342a2d3455a7d9e4772cd7d4cf8608da93f12551f56a9b2e0bb00ddd611a"
   }
 }

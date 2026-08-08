@@ -43,7 +43,7 @@ void main() {
 
       expect(find.text('Unsigned local'), findsOneWidget);
       expect(find.text('Publisher unknown'), findsOneWidget);
-      expect(find.text('machine_checked · listen-gen/0.1.0'), findsNothing);
+      expect(find.text('machine_checked · listen-gen/0.2.0'), findsNothing);
       await tester.ensureVisible(
         find.byKey(const Key('select-imported-subtitle')),
       );
