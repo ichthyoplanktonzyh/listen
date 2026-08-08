@@ -169,7 +169,7 @@ and the R1 shared-tool ownership are unchanged.
 remains relevant as an algorithm-quality backlog, but reusable production
 implementation belongs in Gen.
 
-### R3 — Resolve Chunk/Prosody semantics — in progress
+### R3 — Resolve Chunk/Prosody semantics — complete
 
 Owner: Core contract/domain, coordinated with Gen and App.
 
@@ -197,12 +197,19 @@ claiming foundation parity.
 Exit: an imported package can satisfy the agreed foundation slots without Core
 regenerating an equivalent content-bound resource.
 
-Progress (Core slice): `ProsodyAnalysis` domain resource with lossless package
+Completed by Core PR
+[#118](https://github.com/ichthyoplanktonzyh/listen-core/pull/118)
+(merge `81a1977`). `ProsodyAnalysis` domain resource with lossless package
 projection, `prosody_analysis_runs` persistence (SQLite v56), candidate-only
 import consumption with a typed Consumed receipt, derived prosody chunk
 projection, LLTimeline export/import of the new resource family (additive
 contract fields), and foundation readiness that reuses an imported analysis
 matching the selected WordTimeline without regeneration or activation.
+
+Contract impact is additive `2.1.0`; runtime remains `0.7.0`. The published
+App baseline stays immutable at contract `2.0.0` / `v0.7.0-split.3`. Gen's v1
+lock values are unchanged and its existing packages remain compatible, so R3
+does not create a no-op Gen/App change or start R4 producer work.
 
 ### R4 — Add rich package producers
 
