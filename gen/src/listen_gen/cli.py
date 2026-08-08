@@ -26,11 +26,29 @@ from .alignment import (
 )
 from .media import FfmpegAudioPreprocessor
 from .package import ConversionError, package_from_lltimeline
+from .phone import (
+    CommandPhoneAdapter,
+    FixturePhoneAdapter,
+    Wav2Vec2CtcPhoneAdapter,
+)
 from .protocol import (
     MACHINE_ERROR_MESSAGES,
     MachineEventEmitter,
     machine_error,
     protocol_capabilities,
+)
+from .rich import (
+    CommandAcousticsAdapter,
+    CommandProsodyAdapter,
+    CommandSenseGroupAdapter,
+    FixtureAcousticsAdapter,
+    FixtureProsodyAdapter,
+    FixtureSenseGroupAdapter,
+)
+from .rich_baselines import (
+    AcousticProsodyBaseline,
+    PunctuationSenseGroupBaseline,
+    WavWordAcousticsBaseline,
 )
 from .whisper_cpp import WhisperCppAsrAdapter
 
@@ -164,6 +182,111 @@ def parser(
     native.add_argument(
         "--alignment-command-timeout-seconds", type=float, default=3600.0
     )
+    native.add_argument(
+        "--sense-groups",
+        default="none",
+        choices=["none", "fixture", "command", "baseline"],
+        help=(
+            "optional sense-group stage adapter; the stage is always optional "
+            "(baseline is the built-in deterministic punctuation/length producer)"
+        ),
+    )
+    native.add_argument(
+        "--sense-groups-fixture",
+        type=Path,
+        help="normalized sense-group-result JSON for the fixture adapter",
+    )
+    native.add_argument(
+        "--sense-groups-command",
+        help="external sense-group analyzer; no shell is used",
+    )
+    native.add_argument(
+        "--sense-groups-command-arg",
+        action="append",
+        default=[],
+        help=(
+            "one argv item for the sense-group analyzer; include {input} "
+            "exactly once"
+        ),
+    )
+    native.add_argument(
+        "--sense-groups-command-timeout-seconds", type=float, default=3600.0
+    )
+    native.add_argument(
+        "--acoustics",
+        default="none",
+        choices=["none", "fixture", "command", "baseline"],
+        help=(
+            "optional word-acoustics stage adapter; requires a word timeline "
+            "(baseline measures the normalized 16 kHz mono PCM WAV in-process)"
+        ),
+    )
+    native.add_argument(
+        "--acoustics-fixture",
+        type=Path,
+        help="normalized acoustics-result JSON for the fixture adapter",
+    )
+    native.add_argument(
+        "--acoustics-command",
+        help="external acoustics extractor; no shell is used",
+    )
+    native.add_argument(
+        "--acoustics-command-arg",
+        action="append",
+        default=[],
+        help=(
+            "one argv item for the acoustics extractor; include {media} and "
+            "{timeline} exactly once each"
+        ),
+    )
+    native.add_argument(
+        "--acoustics-command-timeout-seconds", type=float, default=3600.0
+    )
+    native.add_argument(
+        "--prosody",
+        default="none",
+        choices=["none", "fixture", "command", "baseline"],
+        help=(
+            "optional prosody stage adapter; requires a word timeline and acoustics "
+            "(baseline is the built-in acoustic-rule producer)"
+        ),
+    )
+    native.add_argument(
+        "--prosody-fixture",
+        type=Path,
+        help="normalized prosody-result JSON for the fixture adapter",
+    )
+    native.add_argument(
+        "--prosody-command",
+        help="external prosody analyzer; no shell is used",
+    )
+    native.add_argument(
+        "--prosody-command-arg",
+        action="append",
+        default=[],
+        help=(
+            "one argv item for the prosody analyzer; include {input} exactly once"
+        ),
+    )
+    native.add_argument(
+        "--prosody-command-timeout-seconds", type=float, default=3600.0
+    )
+    native.add_argument(
+        "--phone",
+        default="none",
+        choices=["none", "fixture", "command", "wav2vec2-ctc"],
+        help="optional audio-backed phone analysis; unselected means explicit abstention",
+    )
+    native.add_argument("--phone-fixture", type=Path)
+    native.add_argument("--phone-command")
+    native.add_argument("--phone-command-arg", action="append", default=[])
+    native.add_argument("--phone-command-timeout-seconds", type=float, default=3600.0)
+    native.add_argument("--phone-python", type=Path)
+    native.add_argument("--phone-sidecar", type=Path)
+    native.add_argument("--phone-model-dir", type=Path)
+    native.add_argument("--phone-model-id")
+    native.add_argument("--phone-model-revision")
+    native.add_argument("--phone-timeout-seconds", type=float, default=3600.0)
     native.add_argument("--title", required=True)
     native.add_argument("--media-kind", required=True, choices=["audio", "video"])
     native.add_argument("--duration-ms", required=True, type=int)
@@ -240,6 +363,13 @@ def _run(
                 progress=progress,
             )
         aligner, aligner_preprocessor = _build_aligner(args)
+        (
+            sense_analyzer,
+            acoustics_extractor,
+            acoustics_preprocessor,
+            prosody_analyzer,
+        ) = _build_rich(args)
+        phone_analyzer, phone_preprocessor = _build_phone(args)
         return package_media(
             args.input,
             args.output,
@@ -252,6 +382,14 @@ def _run(
             aligner=aligner,
             aligner_preprocessor=aligner_preprocessor,
             aligner_audio_stream_index=args.audio_stream_index,
+            sense_analyzer=sense_analyzer,
+            acoustics_extractor=acoustics_extractor,
+            acoustics_preprocessor=acoustics_preprocessor,
+            acoustics_audio_stream_index=args.audio_stream_index,
+            prosody_analyzer=prosody_analyzer,
+            phone_analyzer=phone_analyzer,
+            phone_preprocessor=phone_preprocessor,
+            phone_audio_stream_index=args.audio_stream_index,
         )
     return package_from_lltimeline(args.input, args.output)
 
@@ -300,6 +438,157 @@ def _build_aligner(
         args.whisper_timeout_seconds,
     )
     return whisper_aligner, preprocessor
+
+
+def _rich_command(
+    args: argparse.Namespace,
+    *,
+    stage: str,
+    fixture: str,
+    command: str,
+    command_args: str,
+    timeout: str,
+) -> Any:
+    """Resolve one optional rich-stage adapter from the CLI arguments.
+
+    The ``baseline`` choice selects the built-in deterministic, credential-free
+    producer for the stage; it needs no fixture, command, or timeout and is
+    never selected implicitly.
+    """
+    selected = getattr(args, stage)
+    fixture_path = getattr(args, fixture)
+    executable = getattr(args, command)
+    arguments = getattr(args, command_args)
+    timeout_seconds = getattr(args, timeout)
+    if selected == "baseline":
+        if stage == "sense_groups":
+            return PunctuationSenseGroupBaseline()
+        if stage == "acoustics":
+            return WavWordAcousticsBaseline()
+        return AcousticProsodyBaseline()
+    if selected == "fixture":
+        if fixture_path is None:
+            flag = fixture.replace("_", "-")
+            raise ConversionError(f"--{flag} is required for the {stage} fixture adapter")
+        if stage == "sense_groups":
+            return FixtureSenseGroupAdapter(fixture_path)
+        if stage == "acoustics":
+            return FixtureAcousticsAdapter(fixture_path)
+        return FixtureProsodyAdapter(fixture_path)
+    if selected == "command":
+        if executable is None:
+            flag = command.replace("_", "-")
+            raise ConversionError(f"--{flag} is required for the {stage} command adapter")
+        if stage == "sense_groups":
+            return CommandSenseGroupAdapter(executable, arguments, timeout_seconds)
+        if stage == "acoustics":
+            return CommandAcousticsAdapter(executable, arguments, timeout_seconds)
+        return CommandProsodyAdapter(executable, arguments, timeout_seconds)
+    return None
+
+
+def _build_rich(
+    args: argparse.Namespace,
+) -> tuple[Any | None, Any | None, FfmpegAudioPreprocessor | None, Any | None]:
+    """Resolve the optional sense-group, acoustics, and prosody adapters.
+
+    The acoustics stage receives the same temporary 16 kHz mono PCM WAV as the
+    ASR stage when a command adapter is selected; the fixture adapters replay
+    committed results and need no media commands. The acoustics preprocessor
+    never emits machine phases; the ``measuring_acoustics`` phase covers the
+    whole stage.
+    """
+    sense_analyzer = _rich_command(
+        args,
+        stage="sense_groups",
+        fixture="sense_groups_fixture",
+        command="sense_groups_command",
+        command_args="sense_groups_command_arg",
+        timeout="sense_groups_command_timeout_seconds",
+    )
+    acoustics_extractor = _rich_command(
+        args,
+        stage="acoustics",
+        fixture="acoustics_fixture",
+        command="acoustics_command",
+        command_args="acoustics_command_arg",
+        timeout="acoustics_command_timeout_seconds",
+    )
+    prosody_analyzer = _rich_command(
+        args,
+        stage="prosody",
+        fixture="prosody_fixture",
+        command="prosody_command",
+        command_args="prosody_command_arg",
+        timeout="prosody_command_timeout_seconds",
+    )
+    acoustics_preprocessor: FfmpegAudioPreprocessor | None = None
+    if getattr(args, "acoustics") in {"command", "baseline"}:
+        acoustics_preprocessor = FfmpegAudioPreprocessor(
+            ffprobe_executable=args.ffprobe_command,
+            ffmpeg_executable=args.ffmpeg_command,
+            timeout_seconds=args.media_command_timeout_seconds,
+        )
+    return (
+        sense_analyzer,
+        acoustics_extractor,
+        acoustics_preprocessor,
+        prosody_analyzer,
+    )
+
+
+def _build_phone(
+    args: argparse.Namespace,
+) -> tuple[Any | None, FfmpegAudioPreprocessor | None]:
+    if args.phone == "none":
+        return None, None
+    if args.phone == "fixture":
+        if args.phone_fixture is None:
+            raise ConversionError("--phone-fixture is required for the fixture adapter")
+        try:
+            return FixturePhoneAdapter(args.phone_fixture), None
+        except ValueError as error:
+            raise ConversionError(str(error)) from error
+    preprocessor = FfmpegAudioPreprocessor(
+        ffprobe_executable=args.ffprobe_command,
+        ffmpeg_executable=args.ffmpeg_command,
+        timeout_seconds=args.media_command_timeout_seconds,
+    )
+    if args.phone == "command":
+        if args.phone_command is None:
+            raise ConversionError("--phone-command is required for the command adapter")
+        try:
+            adapter = CommandPhoneAdapter(
+                args.phone_command,
+                args.phone_command_arg,
+                args.phone_command_timeout_seconds,
+            )
+        except ValueError as error:
+            raise ConversionError(str(error)) from error
+        return adapter, preprocessor
+    required = (
+        args.phone_python,
+        args.phone_sidecar,
+        args.phone_model_dir,
+        args.phone_model_id,
+        args.phone_model_revision,
+    )
+    if any(value is None for value in required):
+        raise ConversionError(
+            "wav2vec2 phone analysis requires python, sidecar, model directory, id and revision"
+        )
+    try:
+        adapter = Wav2Vec2CtcPhoneAdapter(
+            args.phone_python,
+            args.phone_sidecar,
+            args.phone_model_dir,
+            args.phone_model_id,
+            args.phone_model_revision,
+            args.phone_timeout_seconds,
+        )
+    except ValueError as error:
+        raise ConversionError(str(error)) from error
+    return adapter, preprocessor
 
 
 def _completed_details(package_path: Path) -> tuple[str, str, list[dict[str, object]]]:
@@ -379,6 +668,7 @@ def _main_machine(
                         resources=resources,
                         warnings=result["warnings"],
                         alignment=result.get("alignment"),
+                        rich_resources=result.get("rich_resources"),
                     )
                 return 0
             finally:

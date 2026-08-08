@@ -34,6 +34,20 @@ PROVIDER_REQUIREMENTS = {
     "fixture": [],
     "command": ["ffprobe", "ffmpeg", "asr-wrapper"],
     "whisper-cpp": ["ffprobe", "ffmpeg", "whisper-cli", "whisper-model"],
+    "sense-groups-fixture": [],
+    "sense-groups-command": ["sense-group-extractor"],
+    "sense-groups-baseline": [],
+    "acoustics-fixture": [],
+    "acoustics-command": ["ffprobe", "ffmpeg", "acoustics-extractor"],
+    "acoustics-baseline": ["ffprobe", "ffmpeg"],
+    "prosody-fixture": [],
+    "prosody-command": ["prosody-extractor"],
+    "prosody-baseline": [],
+    "phone-fixture": [],
+    "phone-command": ["ffprobe", "ffmpeg", "phone-analyzer"],
+    "phone-wav2vec2-ctc": [
+        "ffprobe", "ffmpeg", "python", "wav2vec2-phone-sidecar", "wav2vec2-phone-model"
+    ],
 }
 EXPECTED_LOCK = {
     "authority": {

@@ -27,6 +27,19 @@ identity, and the artifact filename, size, and SHA-256.
   commands, `--aligner command` needs `ffprobe`, `ffmpeg`, and the external
   aligner command, and `--aligner whisper-cpp` needs `ffprobe`, `ffmpeg`,
   `whisper-cli`, and a whisper model.
+- Optional rich stages (R4) follow the same pattern: the `fixture` adapters
+  for `--sense-groups`, `--acoustics`, and `--prosody` need no media commands;
+  `--sense-groups command` needs the external sense-group analyzer,
+  `--acoustics command` needs `ffprobe`, `ffmpeg`, and the external acoustics
+  extractor, and `--prosody command` needs the external prosody analyzer. The
+  `baseline` adapters (`--sense-groups baseline`, `--acoustics baseline`,
+  `--prosody baseline`) are the built-in deterministic, in-process producers
+  and need no model or provider command. `--acoustics baseline` uses
+  `ffprobe`/`ffmpeg` to produce its normalized 16 kHz mono PCM WAV input.
+- Optional Phone Timeline production uses `--phone fixture` without external
+  tools, `--phone command` with `ffmpeg`/`ffprobe` and an analyzer, or
+  `--phone wav2vec2-ctc` with explicit Python, sidecar, and local model inputs.
+  The bundle never downloads a phone model.
 - These native tools and models are never placed inside the zipapp.
 
 ## Building
@@ -43,9 +56,9 @@ python tools/release_bundle.py build \
 Output layout:
 
 ```text
-dist/listen-gen-0.2.0/
-├── listen-gen-0.2.0.pyz
-└── listen-gen-0.2.0.release.json
+dist/listen-gen-0.3.0/
+├── listen-gen-0.3.0.pyz
+└── listen-gen-0.3.0.release.json
 ```
 
 The build is deterministic: identical source, version, and generation rules
@@ -61,7 +74,7 @@ Run the verifier before publishing:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.2.0/listen-gen-0.2.0.release.json
+  dist/listen-gen-0.3.0/listen-gen-0.3.0.release.json
 ```
 
 The verifier strictly parses the manifest, checks the artifact size,
@@ -75,8 +88,8 @@ executing the `.pyz`.
 ## Fixture smoke
 
 ```bash
-python dist/listen-gen-0.2.0/listen-gen-0.2.0.pyz --help
-python dist/listen-gen-0.2.0/listen-gen-0.2.0.pyz package from-media \
+python dist/listen-gen-0.3.0/listen-gen-0.3.0.pyz --help
+python dist/listen-gen-0.3.0/listen-gen-0.3.0.pyz package from-media \
   tests/fixtures/sample-media.wav \
   --provider fixture --fixture tests/fixtures/sample.asr.json \
   --title "Smoke" --media-kind audio --duration-ms 2200 \

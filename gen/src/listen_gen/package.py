@@ -18,6 +18,7 @@ RESOURCE_SCHEMAS = {
     "phone_timeline": "listen.resource.phone-timeline.v1",
     "sense_group_analysis": "listen.resource.sense-group-analysis.v1",
     "word_acoustics": "listen.resource.word-acoustics.v1",
+    "prosody_analysis": "listen.resource.prosody-analysis.v1",
 }
 # Contract vocabulary shared by every v1 resource producer and the optional
 # word-alignment stage. These constants mirror the canonical Core schemas:
@@ -111,7 +112,7 @@ def _provenance(
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "created_at_ms": created_at_ms,
-        "tool": {"id": "listen-gen.lltimeline-compat", "version": "0.2.0"},
+        "tool": {"id": "listen-gen.lltimeline-compat", "version": "0.3.0"},
     }
     if provider := _producer(source):
         result["provider"] = provider
