@@ -61,3 +61,20 @@ the provider/model catalog. Because the deletion removes the published
 Learner-recording and realtime behavior remain Core responsibilities. The App
 legacy entry points and `scripts/timeline-production` remain deletion targets
 after their corresponding roadmap slice exits.
+
+## R3 Core Slice Progress
+
+R3 resolves the Core `ChunkTimeline` versus content-package v1
+`prosody_analysis` semantics. The single semantic source for the Prosodic
+Chunk foundation slot is now the package `prosody_analysis` resource, projected
+losslessly into the Core `ProsodyAnalysis` domain resource with its own
+candidate/active lifecycle (`prosody_analysis_runs`, SQLite v56). Package
+import consumes the resource with a typed `Consumed` receipt instead of the
+previous preserved-not-consumed warning. Prosodic chunk spans are declared by
+the resource; only playback times are derived through the parent Word Timeline.
+Sense Group analysis remains a separate
+resource family with a separate lifecycle. Foundation readiness reuses an
+imported analysis whose parent WordTimeline matches the selected timeline as a
+candidate — the slot is satisfied without Core regenerating an equivalent
+resource and without silently activating the imported prosody. Foundation no
+longer generates legacy `ChunkTimeline` as a fallback; R5 retires it.

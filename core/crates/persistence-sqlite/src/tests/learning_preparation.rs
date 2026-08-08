@@ -90,7 +90,7 @@ impl FoundationPreparationInspector for ChangingFoundationAdapter {
         Ok(FoundationSourceInspection::Selected(FoundationInputs {
             word_timeline: availability("word"),
             word_timeline_precision: WordTimelinePrecision::Estimated,
-            chunk_timeline: availability("chunk"),
+            prosody: availability("prosody"),
             sense_group: availability("sense"),
             audible_structure: FoundationDerivedAvailability::Available,
         }))
@@ -107,7 +107,7 @@ impl ScriptedFoundationAdapter {
                     input_fingerprint: "word-fp".into(),
                 }),
                 word_timeline_precision: WordTimelinePrecision::Exact,
-                chunk_timeline: FoundationAssetAvailability::Buildable,
+                prosody: FoundationAssetAvailability::Buildable,
                 sense_group: FoundationAssetAvailability::Buildable,
                 audible_structure: FoundationDerivedAvailability::Available,
             }),
@@ -296,9 +296,9 @@ fn derived_audible_structure_is_not_a_foundation_step() {
     let mut run = prepared(&use_cases, "media-fp", 100);
     let expected = run.revision;
     run.start(110).unwrap();
-    run.plan.chunk_timeline.state = PreparationStepState::Ready {
-        artifact_ref: "chunk-from-word".into(),
-        input_fingerprint: "chunk-fp".into(),
+    run.plan.prosody.state = PreparationStepState::Ready {
+        artifact_ref: "prosody-from-word".into(),
+        input_fingerprint: "prosody-fp".into(),
         reused: false,
     };
     run.plan.sense_group.state = PreparationStepState::Ready {
@@ -341,7 +341,7 @@ fn typed_state_machine_enforces_foundation_dependencies() {
     run.start(110).unwrap();
     run.plan.word_timeline.state = PreparationStepState::Pending;
 
-    assert!(run.begin_chunk_timeline(120).is_err());
+    assert!(run.begin_prosody(120).is_err());
     run.begin_sense_group(121).unwrap();
     run.begin_word_timeline(122).unwrap();
     run.complete_word_timeline(
@@ -352,7 +352,7 @@ fn typed_state_machine_enforces_foundation_dependencies() {
         123,
     )
     .unwrap();
-    run.begin_chunk_timeline(124).unwrap();
+    run.begin_prosody(124).unwrap();
 }
 
 #[test]
@@ -398,7 +398,7 @@ fn restart_cancel_and_retry_preserve_completed_slots() {
     let mut run = prepared(&use_cases, "media-fp", 100);
     let expected = run.revision;
     run.start(110).unwrap();
-    run.plan.chunk_timeline.state = PreparationStepState::Running;
+    run.plan.prosody.state = PreparationStepState::Running;
     assert!(matches!(
         repository.transition(expected, &run).unwrap(),
         LearningPreparationRunTransition::Applied(_)
@@ -408,7 +408,7 @@ fn restart_cancel_and_retry_preserve_completed_slots() {
     assert_eq!(recovered.len(), 1);
     assert_eq!(recovered[0].status, LearningPreparationRunStatus::Queued);
     assert_eq!(
-        recovered[0].plan.chunk_timeline.state,
+        recovered[0].plan.prosody.state,
         PreparationStepState::Pending
     );
     assert!(matches!(
@@ -433,10 +433,7 @@ fn restart_cancel_and_retry_preserve_completed_slots() {
         retry.plan.word_timeline.state,
         PreparationStepState::Ready { reused: true, .. }
     ));
-    assert_eq!(
-        retry.plan.chunk_timeline.state,
-        PreparationStepState::Pending
-    );
+    assert_eq!(retry.plan.prosody.state, PreparationStepState::Pending);
 }
 
 #[test]

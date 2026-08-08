@@ -60,6 +60,9 @@ fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
     for analysis in &mut document.sense_group_analyses {
         analysis.status = TimelineStatus::Candidate;
     }
+    for analysis in &mut document.prosody_analyses {
+        analysis.status = TimelineStatus::Candidate;
+    }
     ContentPackageCandidateImport {
         track,
         metadata: document.metadata,
@@ -68,6 +71,7 @@ fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
         phone_timelines: document.phone_timelines,
         chunk_timelines: document.chunk_timelines,
         sense_group_analyses: document.sense_group_analyses,
+        prosody_analyses: document.prosody_analyses,
         corpus_occurrences: Vec::new(),
     }
 }
@@ -181,6 +185,7 @@ fn content_package_cross_source_resource_conflict_rolls_back_every_write() {
         phone_timelines: Vec::new(),
         chunk_timelines: Vec::new(),
         sense_group_analyses: Vec::new(),
+        prosody_analyses: Vec::new(),
         corpus_occurrences: Vec::new(),
     });
     assert!(result.is_err());
@@ -548,6 +553,13 @@ fn timeline_active_uniqueness_is_schema_enforced() {
     let sg_duplicate = sense_group_analysis("sg-active-unique-2", &track, TimelineStatus::Active);
     repo.save_sense_group_analysis(&sg_active).unwrap();
     assert!(repo.save_sense_group_analysis(&sg_duplicate).is_err());
+
+    let prosody_active =
+        prosody_analysis("prosody-active-unique-1", &track, TimelineStatus::Active);
+    let prosody_duplicate =
+        prosody_analysis("prosody-active-unique-2", &track, TimelineStatus::Active);
+    repo.save_prosody_analysis(&prosody_active).unwrap();
+    assert!(repo.save_prosody_analysis(&prosody_duplicate).is_err());
 }
 
 #[test]
@@ -1066,6 +1078,125 @@ fn sense_group_analysis_json_round_trip() {
     );
 }
 
+fn prosody_analysis(id: &str, track: &SubtitleTrack, status: TimelineStatus) -> ProsodyAnalysis {
+    ProsodyAnalysis {
+        id: ProsodyAnalysisId::parse(id).unwrap(),
+        track_id: track.id.clone(),
+        media_id: track.media_id.clone(),
+        parent_word_timeline_id: None,
+        provider_id: "listen-gen".into(),
+        provider_version: "0.1.0".into(),
+        algorithm: "prosody-v1".into(),
+        status,
+        created_by: TimelineCreator::Algorithm,
+        metrics_json: serde_json::json!({}).into(),
+        chunks: vec![domain::ProsodicChunk {
+            sentence_id: track.sentences[0].id.clone(),
+            chunk_index: 0,
+            start_token_index: 0,
+            end_token_index: 0,
+            nucleus_token_index: Some(0),
+            confidence: 0.9,
+        }],
+        anchors: vec![ProsodyAnchor {
+            word_ref: ProsodyWordRef {
+                sentence_id: track.sentences[0].id.clone(),
+                token_index: 0,
+            },
+            syllable_index: None,
+            lexical_stress: LexicalStress::Primary,
+            realized_prominence: 0.8,
+            utterance_role: UtteranceRole::Nucleus,
+            evidence: vec![ProsodyEvidence::Energy, ProsodyEvidence::Pitch],
+            confidence: 0.9,
+        }],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    }
+}
+
+#[test]
+fn activating_prosody_analysis_updates_active_resource() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let older = prosody_analysis("prosody-analysis-1", &track, TimelineStatus::Active);
+    let newer = prosody_analysis("prosody-analysis-2", &track, TimelineStatus::Candidate);
+    repo.save_prosody_analysis(&older).unwrap();
+    repo.save_prosody_analysis(&newer).unwrap();
+
+    let active = repo.activate_prosody_analysis(&newer.id).unwrap();
+    assert_eq!(active.status, TimelineStatus::Active);
+    assert_eq!(
+        repo.active_prosody_analysis(&track.id).unwrap().unwrap().id,
+        newer.id
+    );
+    assert_eq!(
+        repo.get_prosody_analysis(&older.id)
+            .unwrap()
+            .unwrap()
+            .status,
+        TimelineStatus::Candidate
+    );
+    assert_eq!(repo.list_prosody_analyses(&track.id).unwrap().len(), 2);
+}
+
+#[test]
+fn archiving_and_deleting_prosody_analysis_updates_repository() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let analysis = prosody_analysis("prosody-analysis-delete", &track, TimelineStatus::Candidate);
+    repo.save_prosody_analysis(&analysis).unwrap();
+
+    let archived = repo.archive_prosody_analysis(&analysis.id).unwrap();
+    assert_eq!(archived.status, TimelineStatus::Archived);
+    assert!(repo.activate_prosody_analysis(&analysis.id).is_err());
+    let deleted = repo.delete_prosody_analysis(&analysis.id).unwrap();
+    assert_eq!(deleted.id, analysis.id);
+    assert!(repo.get_prosody_analysis(&analysis.id).unwrap().is_none());
+}
+
+#[test]
+fn prosody_analysis_json_round_trip() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+
+    let mut analysis = prosody_analysis("prosody-roundtrip", &track, TimelineStatus::Candidate);
+    analysis.anchors.push(ProsodyAnchor {
+        word_ref: ProsodyWordRef {
+            sentence_id: track.sentences[0].id.clone(),
+            token_index: 1,
+        },
+        syllable_index: Some(0),
+        lexical_stress: LexicalStress::Secondary,
+        realized_prominence: 0.4,
+        utterance_role: UtteranceRole::Prenuclear,
+        evidence: vec![ProsodyEvidence::Duration],
+        confidence: 0.7,
+    });
+    repo.save_prosody_analysis(&analysis).unwrap();
+
+    let loaded = repo
+        .get_prosody_analysis(&analysis.id)
+        .unwrap()
+        .expect("analysis should be saved");
+    assert_eq!(loaded.id, analysis.id);
+    assert_eq!(loaded.provider_id, "listen-gen");
+    assert_eq!(loaded.anchors.len(), 2);
+    assert_eq!(loaded.anchors[0].utterance_role, UtteranceRole::Nucleus);
+    assert_eq!(
+        loaded.anchors[0].evidence,
+        vec![ProsodyEvidence::Energy, ProsodyEvidence::Pitch]
+    );
+    assert_eq!(loaded.anchors[1].lexical_stress, LexicalStress::Secondary);
+    assert_eq!(loaded.anchors[1].syllable_index, Some(0));
+}
+
 fn lltimeline_fixture() -> LLTimelineDocument {
     serde_json::from_str(include_str!(
         "../../../../testdata/lltimeline/v1-minimal.lltimeline.json"
@@ -1100,6 +1231,7 @@ fn assert_no_lltimeline_import_rows(repo: &SqliteRepository) {
         "phone_timeline_runs",
         "chunk_timeline_runs",
         "sense_group_analysis_runs",
+        "prosody_analysis_runs",
         "corpus_occurrences",
     ] {
         let count = connection

@@ -1,7 +1,7 @@
 use super::*;
 use domain::{
-    ChunkEvidence, LexicalEntryKind, SubtitleSentence, SubtitleSentenceId, SubtitleToken,
-    SubtitleTokenKind, TimeMs, TimingSource,
+    ChunkEvidence, LexicalEntryKind, ProsodyAnchor, ProsodyWordRef, SubtitleSentence,
+    SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs, TimingSource,
 };
 
 // ── require_text ────────────────────────────────────────────────────────
@@ -306,6 +306,8 @@ fn remap_lltimeline_ids_rewrites_rhythm_word_acoustic_cues_artifact() {
         active_chunk_timeline_id: None,
         sense_group_analyses: Vec::new(),
         active_sense_group_analysis_id: None,
+        prosody_analyses: Vec::new(),
+        active_prosody_analysis_id: None,
         artifacts: vec![LLTimelineArtifact {
             kind: "rhythm_word_acoustic_cues".into(),
             provider_id: Some("fixture".into()),
@@ -424,6 +426,35 @@ fn remap_lltimeline_identity_leaves_no_original_ids() {
         updated_at_ms: 1,
     });
     document.active_phone_timeline_id = Some(PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap());
+    document.prosody_analyses.push(ProsodyAnalysis {
+        id: ProsodyAnalysisId::parse("OLD-PROSODY-ANALYSIS").unwrap(),
+        track_id: base_timeline.track_id.clone(),
+        media_id: base_timeline.media_id.clone(),
+        parent_word_timeline_id: Some(base_timeline.id.clone()),
+        provider_id: "fixture".into(),
+        provider_version: "v1".into(),
+        algorithm: "fixture".into(),
+        status: TimelineStatus::Candidate,
+        created_by: TimelineCreator::Algorithm,
+        metrics_json: TimelineMetrics::empty(),
+        chunks: vec![],
+        anchors: vec![ProsodyAnchor {
+            word_ref: ProsodyWordRef {
+                sentence_id: old_sentence_id.clone(),
+                token_index: 0,
+            },
+            syllable_index: None,
+            lexical_stress: domain::LexicalStress::Primary,
+            realized_prominence: 0.8,
+            utterance_role: domain::UtteranceRole::Nucleus,
+            evidence: vec![domain::ProsodyEvidence::Pitch],
+            confidence: 0.9,
+        }],
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    });
+    document.active_prosody_analysis_id =
+        Some(ProsodyAnalysisId::parse("OLD-PROSODY-ANALYSIS").unwrap());
     document.artifacts.push(LLTimelineArtifact {
         kind: "rhythm_word_acoustic_cues".into(),
         provider_id: Some("fixture".into()),
@@ -456,6 +487,9 @@ fn remap_lltimeline_identity_leaves_no_original_ids() {
     }
     for timeline in &document.phone_timelines {
         original_ids.push(timeline.id.as_str().to_owned());
+    }
+    for analysis in &document.prosody_analyses {
+        original_ids.push(analysis.id.as_str().to_owned());
     }
     for frame in &document.rhythm_frames {
         original_ids.push(frame.id.as_str().to_owned());

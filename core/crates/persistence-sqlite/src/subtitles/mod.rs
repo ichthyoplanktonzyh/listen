@@ -4,6 +4,7 @@ mod lltimeline_import;
 mod lltimeline_resources;
 mod phone_timelines;
 mod pronunciations;
+mod prosody;
 mod sense_groups;
 mod subtitle_tracks;
 mod word_timelines;

@@ -148,7 +148,11 @@ impl Default for FoundationDerivedAvailability {
 pub struct FoundationInputs {
     pub word_timeline: FoundationAssetAvailability,
     pub word_timeline_precision: WordTimelinePrecision,
-    pub chunk_timeline: FoundationAssetAvailability,
+    /// The Prosodic Chunk foundation slot. Its single semantic source is a
+    /// package-native Prosody Analysis resource. Legacy `ChunkTimeline` is not
+    /// accepted as this slot and Core does not regenerate it as a fallback.
+    #[serde(alias = "chunk_timeline")]
+    pub prosody: FoundationAssetAvailability,
     #[serde(alias = "rule_sense_group")]
     pub sense_group: FoundationAssetAvailability,
     #[serde(default)]
@@ -204,7 +208,7 @@ pub struct WordTimelinePreparation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChunkTimelinePreparation {
+pub struct ProsodyPreparation {
     pub requirement: PreparationRequirement,
     pub state: PreparationStepState,
 }
@@ -218,7 +222,8 @@ pub struct SenseGroupPreparation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundationPreparationPlan {
     pub word_timeline: WordTimelinePreparation,
-    pub chunk_timeline: ChunkTimelinePreparation,
+    #[serde(alias = "chunk_timeline")]
+    pub prosody: ProsodyPreparation,
     #[serde(alias = "rule_sense_group")]
     pub sense_group: SenseGroupPreparation,
     #[serde(default)]
@@ -232,16 +237,16 @@ impl FoundationPreparationPlan {
             precision: inputs.word_timeline_precision,
             state: initial_state(inputs.word_timeline),
         };
-        let mut chunk_timeline = ChunkTimelinePreparation {
+        let mut prosody = ProsodyPreparation {
             requirement: PreparationRequirement::Required,
-            state: initial_state(inputs.chunk_timeline),
+            state: initial_state(inputs.prosody),
         };
         if matches!(
             word_timeline.state,
             PreparationStepState::Skipped { .. } | PreparationStepState::Failed { .. }
-        ) && matches!(chunk_timeline.state, PreparationStepState::Pending)
+        ) && matches!(prosody.state, PreparationStepState::Pending)
         {
-            chunk_timeline.state = PreparationStepState::Skipped {
+            prosody.state = PreparationStepState::Skipped {
                 reason: "word_timeline_unavailable".into(),
             };
         }
@@ -251,7 +256,7 @@ impl FoundationPreparationPlan {
         };
         Self {
             word_timeline,
-            chunk_timeline,
+            prosody,
             sense_group,
             audible_structure: inputs.audible_structure,
         }
@@ -259,14 +264,14 @@ impl FoundationPreparationPlan {
 
     fn all_terminal(&self) -> bool {
         self.word_timeline.state.is_terminal()
-            && self.chunk_timeline.state.is_terminal()
+            && self.prosody.state.is_terminal()
             && self.sense_group.state.is_terminal()
     }
 
     fn has_required_failure(&self) -> bool {
         [
             &self.word_timeline.state,
-            &self.chunk_timeline.state,
+            &self.prosody.state,
             &self.sense_group.state,
         ]
         .into_iter()
@@ -311,7 +316,7 @@ pub enum PreparationReadiness {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundationActivityReadiness {
     pub word_following: PreparationReadiness,
-    pub approximate_chunking: PreparationReadiness,
+    pub prosodic_chunking: PreparationReadiness,
     pub sense_groups: PreparationReadiness,
     pub citation_structure: PreparationReadiness,
     pub predicted_structure: PreparationReadiness,
@@ -343,11 +348,11 @@ pub struct LearningPreparationRun {
 impl LearningPreparationRun {
     pub fn readiness(&self) -> FoundationActivityReadiness {
         let word = readiness_for(&self.plan.word_timeline.state);
-        let chunk = readiness_for(&self.plan.chunk_timeline.state);
+        let prosody = readiness_for(&self.plan.prosody.state);
         let audible_structure = derived_readiness(&word, &self.plan.audible_structure);
         FoundationActivityReadiness {
             word_following: word,
-            approximate_chunking: chunk,
+            prosodic_chunking: prosody,
             sense_groups: readiness_for(&self.plan.sense_group.state),
             citation_structure: audible_structure.clone(),
             predicted_structure: audible_structure,
@@ -399,11 +404,8 @@ impl LearningPreparationRun {
         now_ms: u64,
     ) -> Result<(), ApplicationError> {
         fail_step(&mut self.plan.word_timeline.state, reason)?;
-        if matches!(
-            self.plan.chunk_timeline.state,
-            PreparationStepState::Pending
-        ) {
-            self.plan.chunk_timeline.state = PreparationStepState::Skipped {
+        if matches!(self.plan.prosody.state, PreparationStepState::Pending) {
+            self.plan.prosody.state = PreparationStepState::Skipped {
                 reason: "word_timeline_failed".into(),
             };
         }
@@ -411,37 +413,37 @@ impl LearningPreparationRun {
         Ok(())
     }
 
-    pub fn begin_chunk_timeline(&mut self, now_ms: u64) -> Result<(), ApplicationError> {
+    pub fn begin_prosody(&mut self, now_ms: u64) -> Result<(), ApplicationError> {
         ensure_running(self.status)?;
         if !matches!(
             self.plan.word_timeline.state,
             PreparationStepState::Ready { .. }
         ) {
             return Err(ApplicationError::Conflict(
-                "chunk preparation requires a ready word timeline",
+                "prosody preparation requires a ready word timeline",
             ));
         }
-        begin_step(&mut self.plan.chunk_timeline.state)?;
+        begin_step(&mut self.plan.prosody.state)?;
         self.bump(now_ms);
         Ok(())
     }
 
-    pub fn complete_chunk_timeline(
+    pub fn complete_prosody(
         &mut self,
         artifact: ReusableFoundationArtifact,
         now_ms: u64,
     ) -> Result<(), ApplicationError> {
-        complete_step(&mut self.plan.chunk_timeline.state, artifact)?;
+        complete_step(&mut self.plan.prosody.state, artifact)?;
         self.bump(now_ms);
         Ok(())
     }
 
-    pub fn fail_chunk_timeline(
+    pub fn fail_prosody(
         &mut self,
         reason: impl Into<String>,
         now_ms: u64,
     ) -> Result<(), ApplicationError> {
-        fail_step(&mut self.plan.chunk_timeline.state, reason)?;
+        fail_step(&mut self.plan.prosody.state, reason)?;
         self.bump(now_ms);
         Ok(())
     }
@@ -475,12 +477,12 @@ impl LearningPreparationRun {
 
     pub fn invalidate_word_timeline_artifact(&mut self, now_ms: u64) {
         invalidate_ready_step(&mut self.plan.word_timeline.state);
-        invalidate_dependent_step(&mut self.plan.chunk_timeline.state);
+        invalidate_dependent_step(&mut self.plan.prosody.state);
         self.bump(now_ms);
     }
 
-    pub fn invalidate_chunk_timeline_artifact(&mut self, now_ms: u64) {
-        invalidate_ready_step(&mut self.plan.chunk_timeline.state);
+    pub fn invalidate_prosody_artifact(&mut self, now_ms: u64) {
+        invalidate_ready_step(&mut self.plan.prosody.state);
         self.bump(now_ms);
     }
 
@@ -491,7 +493,7 @@ impl LearningPreparationRun {
 
     pub fn finish_cancellation(&mut self, now_ms: u64) {
         cancel_non_terminal(&mut self.plan.word_timeline.state);
-        cancel_non_terminal(&mut self.plan.chunk_timeline.state);
+        cancel_non_terminal(&mut self.plan.prosody.state);
         cancel_non_terminal(&mut self.plan.sense_group.state);
         self.status = LearningPreparationRunStatus::Cancelled;
         self.bump(now_ms);
@@ -500,7 +502,7 @@ impl LearningPreparationRun {
     pub fn recover_after_restart(&mut self, now_ms: u64) {
         if self.status == LearningPreparationRunStatus::Running {
             reset_running(&mut self.plan.word_timeline.state);
-            reset_running(&mut self.plan.chunk_timeline.state);
+            reset_running(&mut self.plan.prosody.state);
             reset_running(&mut self.plan.sense_group.state);
             self.status = LearningPreparationRunStatus::Queued;
             self.bump(now_ms);
@@ -509,7 +511,7 @@ impl LearningPreparationRun {
 
     pub fn invalidate(&mut self, now_ms: u64) {
         cancel_non_terminal(&mut self.plan.word_timeline.state);
-        cancel_non_terminal(&mut self.plan.chunk_timeline.state);
+        cancel_non_terminal(&mut self.plan.prosody.state);
         cancel_non_terminal(&mut self.plan.sense_group.state);
         self.status = LearningPreparationRunStatus::Failed;
         self.error = Some(INPUTS_CHANGED_ERROR.into());
@@ -525,7 +527,7 @@ impl LearningPreparationRun {
         }
         let reason = reason.into();
         fail_non_terminal(&mut self.plan.word_timeline.state, &reason);
-        fail_non_terminal(&mut self.plan.chunk_timeline.state, &reason);
+        fail_non_terminal(&mut self.plan.prosody.state, &reason);
         fail_non_terminal(&mut self.plan.sense_group.state, &reason);
         self.status = LearningPreparationRunStatus::Failed;
         self.error = Some(reason);
@@ -851,8 +853,8 @@ impl LearningPreparationUseCases {
             &previous.plan.word_timeline.state,
         );
         preserve_ready(
-            &mut refreshed_plan.chunk_timeline.state,
-            &previous.plan.chunk_timeline.state,
+            &mut refreshed_plan.prosody.state,
+            &previous.plan.prosody.state,
         );
         preserve_ready(
             &mut refreshed_plan.sense_group.state,
@@ -940,7 +942,7 @@ fn plan_fingerprint(
                 FoundationPreparationIntent::RecommendedFoundation => "recommended_foundation",
             },
             "word:required",
-            "chunk:required",
+            "prosody:required",
             "sense-group:required",
             "citation-structure:derived",
             "predicted-structure:derived",
@@ -970,7 +972,7 @@ mod tests {
         FoundationInputs {
             word_timeline: reusable("word"),
             word_timeline_precision: WordTimelinePrecision::Exact,
-            chunk_timeline: FoundationAssetAvailability::Buildable,
+            prosody: FoundationAssetAvailability::Buildable,
             sense_group: FoundationAssetAvailability::Buildable,
             audible_structure: FoundationDerivedAvailability::Available,
         }
@@ -984,10 +986,7 @@ mod tests {
             plan.word_timeline.requirement,
             PreparationRequirement::Required
         );
-        assert_eq!(
-            plan.chunk_timeline.requirement,
-            PreparationRequirement::Required
-        );
+        assert_eq!(plan.prosody.requirement, PreparationRequirement::Required);
         assert_eq!(
             plan.sense_group.requirement,
             PreparationRequirement::Required
@@ -995,12 +994,12 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_word_skips_dependent_chunk_but_not_sense_group() {
+    fn unavailable_word_skips_dependent_prosody_but_not_sense_group() {
         let plan = FoundationPreparationPlan::from_inputs(FoundationInputs {
             word_timeline: FoundationAssetAvailability::Unavailable {
                 reason: "word timeline unavailable".into(),
             },
-            chunk_timeline: FoundationAssetAvailability::Buildable,
+            prosody: FoundationAssetAvailability::Buildable,
             sense_group: reusable("sense"),
             ..inputs()
         });
@@ -1008,7 +1007,7 @@ mod tests {
         assert!(plan.all_terminal());
         assert!(plan.has_required_failure());
         assert_eq!(
-            plan.chunk_timeline.state,
+            plan.prosody.state,
             PreparationStepState::Skipped {
                 reason: "word_timeline_unavailable".into()
             }
@@ -1035,7 +1034,7 @@ mod tests {
             intent: FoundationPreparationIntent::RecommendedFoundation,
             status: LearningPreparationRunStatus::Running,
             plan: FoundationPreparationPlan::from_inputs(FoundationInputs {
-                chunk_timeline: reusable("chunk"),
+                prosody: reusable("prosody"),
                 sense_group: reusable("sense"),
                 ..inputs()
             }),
@@ -1050,7 +1049,7 @@ mod tests {
         run.invalidate_sense_group_artifact(3);
 
         assert_eq!(run.plan.word_timeline.state, PreparationStepState::Pending);
-        assert_eq!(run.plan.chunk_timeline.state, PreparationStepState::Pending);
+        assert_eq!(run.plan.prosody.state, PreparationStepState::Pending);
         assert_eq!(run.plan.sense_group.state, PreparationStepState::Pending);
     }
 
@@ -1068,5 +1067,32 @@ mod tests {
                 },
             )
         );
+    }
+
+    #[test]
+    fn legacy_persisted_plan_with_chunk_timeline_field_still_deserializes() {
+        // R3 renamed the foundation chunk slot to `prosody`; previously
+        // persisted run JSON used `chunk_timeline` and must keep parsing.
+        let json = serde_json::json!({
+            "word_timeline": {
+                "requirement": "required",
+                "precision": "exact",
+                "state": { "state": "ready", "artifact_ref": "word", "input_fingerprint": "w", "reused": true }
+            },
+            "chunk_timeline": {
+                "requirement": "required",
+                "state": { "state": "ready", "artifact_ref": "chunk", "input_fingerprint": "c", "reused": true }
+            },
+            "sense_group": {
+                "requirement": "required",
+                "state": { "state": "ready", "artifact_ref": "sense", "input_fingerprint": "s", "reused": true }
+            },
+            "audible_structure": { "state": "unavailable", "reason": "unsupported_language" }
+        });
+        let plan: FoundationPreparationPlan = serde_json::from_value(json).unwrap();
+        let PreparationStepState::Ready { artifact_ref, .. } = &plan.prosody.state else {
+            panic!("legacy chunk_timeline slot must map to the prosody slot");
+        };
+        assert_eq!(artifact_ref, "chunk");
     }
 }

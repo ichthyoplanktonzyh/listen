@@ -5,10 +5,10 @@ use crate::{
     LLTIMELINE_SCHEMA_V1, LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator,
     LLTimelineImport, LLTimelineMedia, LLTimelineMetadata, LLTimelineRhythmFrame,
     MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind, PhoneTimeline,
-    RhythmFrameId, SenseGroupAnalysis, SentenceWordTimingDiagnostics, SubtitleSentenceId,
-    SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics,
-    TimelineStatus, WordTimeline, WordTimelineId, WordTimelineSummary,
-    WordTimingBoundaryDiagnostic, build_word_timeline, detached_media_path,
+    ProsodyAnalysis, RhythmFrameId, SenseGroupAnalysis, SentenceWordTimingDiagnostics,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
+    TimelineCreator, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
+    WordTimelineSummary, WordTimingBoundaryDiagnostic, build_word_timeline, detached_media_path,
     lltimeline_segments_from_track, lltimeline_segments_to_sentences, lltimeline_track_extra,
     lltimeline_track_fingerprint, lltimeline_track_id, mark_word_timeline_published,
     merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity, require_text,
@@ -370,6 +370,71 @@ fn validate_and_prepare_lltimeline_resources(
         |analysis: &SenseGroupAnalysis| &analysis.id,
         |analysis: &mut SenseGroupAnalysis| &mut analysis.status,
         "active_sense_group_analysis_id",
+    )?;
+
+    let prosody_ids = document
+        .prosody_analyses
+        .iter()
+        .map(|analysis| analysis.id.clone())
+        .collect::<HashSet<_>>();
+    if prosody_ids.len() != document.prosody_analyses.len() {
+        return Err(ApplicationError::Invalid(
+            "duplicate LLTimeline prosody analysis id".into(),
+        ));
+    }
+    for analysis in &document.prosody_analyses {
+        if analysis.media_id != track.media_id || analysis.track_id != track.id {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline prosody analysis belongs to another source".into(),
+            ));
+        }
+        if analysis
+            .parent_word_timeline_id
+            .as_ref()
+            .is_some_and(|parent| !word_ids.contains(parent))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline prosody analysis parent is missing".into(),
+            ));
+        }
+        if analysis
+            .anchors
+            .iter()
+            .any(|anchor| !sentence_ids.contains(&anchor.word_ref.sentence_id))
+        {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline prosody anchor sentence is missing".into(),
+            ));
+        }
+        if analysis.chunks.iter().any(|chunk| {
+            !sentence_ids.contains(&chunk.sentence_id)
+                || chunk.start_token_index > chunk.end_token_index
+                || chunk.nucleus_token_index.is_some_and(|index| {
+                    index < chunk.start_token_index || index > chunk.end_token_index
+                })
+                || !track.sentences.iter().any(|sentence| {
+                    sentence.id == chunk.sentence_id
+                        && sentence
+                            .tokens
+                            .iter()
+                            .any(|token| token.index == chunk.start_token_index)
+                        && sentence
+                            .tokens
+                            .iter()
+                            .any(|token| token.index == chunk.end_token_index)
+                })
+        }) {
+            return Err(ApplicationError::Invalid(
+                "LLTimeline prosodic chunk span is invalid".into(),
+            ));
+        }
+    }
+    prepare_active_selection(
+        &mut document.prosody_analyses,
+        document.active_prosody_analysis_id.as_ref(),
+        |analysis: &ProsodyAnalysis| &analysis.id,
+        |analysis: &mut ProsodyAnalysis| &mut analysis.status,
+        "active_prosody_analysis_id",
     )?;
 
     let rhythm_ids = document
@@ -782,6 +847,11 @@ impl MediaAnalysisUseCases {
             .iter()
             .find(|a| a.status == TimelineStatus::Active)
             .map(|a| a.id.clone());
+        let prosody_analyses = self.prosody.list_prosody_analyses(track_id)?;
+        let active_prosody_analysis_id = prosody_analyses
+            .iter()
+            .find(|a| a.status == TimelineStatus::Active)
+            .map(|a| a.id.clone());
         Ok(LLTimelineDocument {
             schema: LLTIMELINE_SCHEMA_V1.to_owned(),
             metadata,
@@ -795,6 +865,8 @@ impl MediaAnalysisUseCases {
             active_chunk_timeline_id,
             sense_group_analyses,
             active_sense_group_analysis_id,
+            prosody_analyses,
+            active_prosody_analysis_id,
             artifacts,
         })
     }
@@ -915,6 +987,7 @@ impl MediaAnalysisUseCases {
             phone_timelines: document.phone_timelines,
             chunk_timelines: document.chunk_timelines,
             sense_group_analyses: document.sense_group_analyses,
+            prosody_analyses: document.prosody_analyses,
             corpus_occurrences,
         };
         self.lltimeline_imports.import_lltimeline(&import)?;
@@ -959,6 +1032,7 @@ impl MediaAnalysisUseCases {
             || document.active_phone_timeline_id.is_some()
             || document.active_chunk_timeline_id.is_some()
             || document.active_sense_group_analysis_id.is_some()
+            || document.active_prosody_analysis_id.is_some()
             || document
                 .word_timelines
                 .iter()
@@ -973,6 +1047,10 @@ impl MediaAnalysisUseCases {
                 .any(|v| v.status != TimelineStatus::Candidate)
             || document
                 .sense_group_analyses
+                .iter()
+                .any(|v| v.status != TimelineStatus::Candidate)
+            || document
+                .prosody_analyses
                 .iter()
                 .any(|v| v.status != TimelineStatus::Candidate)
         {
@@ -991,6 +1069,7 @@ impl MediaAnalysisUseCases {
                 phone_timelines: document.phone_timelines,
                 chunk_timelines: document.chunk_timelines,
                 sense_group_analyses: document.sense_group_analyses,
+                prosody_analyses: document.prosody_analyses,
                 corpus_occurrences,
             })?;
         Ok(track)

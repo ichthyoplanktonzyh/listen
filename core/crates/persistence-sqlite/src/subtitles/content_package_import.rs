@@ -10,6 +10,7 @@ use super::{
     chunk_timelines::save_chunk_timeline_in_connection, guard_timeline_ownership,
     lltimeline_resources::save_lltimeline_resource_in_connection,
     phone_timelines::save_phone_timeline_in_connection,
+    prosody::save_prosody_analysis_in_connection,
     sense_groups::save_sense_group_analysis_in_connection,
     subtitle_tracks::save_track_in_transaction, word_timelines::save_word_timeline_in_connection,
 };
@@ -173,6 +174,10 @@ impl ContentPackageImportRepository for SqliteRepository {
                 .sense_group_analyses
                 .iter()
                 .any(|value| value.status != TimelineStatus::Candidate)
+            || import
+                .prosody_analyses
+                .iter()
+                .any(|value| value.status != TimelineStatus::Candidate)
         {
             return Err(ApplicationError::Invalid(
                 "content package persistence accepts candidates only".into(),
@@ -241,6 +246,18 @@ impl ContentPackageImportRepository for SqliteRepository {
             )?;
             if !row_exists(&tx, "sense_group_analysis_runs", analysis.id.as_str())? {
                 save_sense_group_analysis_in_connection(&tx, analysis)?;
+            }
+        }
+        for analysis in &import.prosody_analyses {
+            guard_timeline_ownership(
+                &tx,
+                "prosody_analysis_runs",
+                analysis.id.as_str(),
+                &analysis.track_id,
+                &analysis.media_id,
+            )?;
+            if !row_exists(&tx, "prosody_analysis_runs", analysis.id.as_str())? {
+                save_prosody_analysis_in_connection(&tx, analysis)?;
             }
         }
 

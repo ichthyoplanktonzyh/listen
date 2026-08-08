@@ -15,19 +15,19 @@ use domain::{
     PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
     PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
     ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ProjectionDecision,
-    ProjectionProposal, ProjectionProposalId, ReadingPosition, RealtimeConversationSession,
-    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
-    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
-    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
-    ReviewSchedule, SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
-    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
-    SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord,
-    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
-    SubtitleTrackStatus, TimeMs, TranscriptionModelDescriptor, TranscriptionModelId,
-    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
-    WordPronunciation, WordTimeline, WordTimelineId, WordTiming, WritingDraft,
-    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
-    WritingFindingDispositionId,
+    ProjectionProposal, ProjectionProposalId, ProsodyAnalysis, ProsodyAnalysisId, ReadingPosition,
+    RealtimeConversationSession, RealtimeConversationSessionId, RealtimeConversationTurn,
+    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId,
+    RecognitionEvidence, RecordingAsset, RecordingAssetId, ReviewAttempt, ReviewAttemptId,
+    ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule, SecretRef, SemanticJudgment,
+    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
+    SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SentencePronunciation, ShadowingAnalysisRecord, SoundFitCalibration, SubtitleSentence,
+    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
+    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
+    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
+    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
+    WritingFindingDisposition, WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -283,6 +283,41 @@ pub trait PhoneTimelineRepository: Send + Sync {
     ) -> Result<PhoneTimeline, ApplicationError>;
 }
 
+/// Prosody analyses are the single semantic source for the Prosodic Chunk
+/// foundation slot. Imported package resources enter as candidates and are
+/// never activated by import; activation is an explicit Core lifecycle
+/// decision.
+pub trait ProsodyAnalysisRepository: Send + Sync {
+    fn save_prosody_analysis(
+        &self,
+        analysis: &ProsodyAnalysis,
+    ) -> Result<ProsodyAnalysis, ApplicationError>;
+    fn list_prosody_analyses(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Vec<ProsodyAnalysis>, ApplicationError>;
+    fn get_prosody_analysis(
+        &self,
+        id: &ProsodyAnalysisId,
+    ) -> Result<Option<ProsodyAnalysis>, ApplicationError>;
+    fn active_prosody_analysis(
+        &self,
+        track_id: &SubtitleTrackId,
+    ) -> Result<Option<ProsodyAnalysis>, ApplicationError>;
+    fn activate_prosody_analysis(
+        &self,
+        id: &ProsodyAnalysisId,
+    ) -> Result<ProsodyAnalysis, ApplicationError>;
+    fn archive_prosody_analysis(
+        &self,
+        id: &ProsodyAnalysisId,
+    ) -> Result<ProsodyAnalysis, ApplicationError>;
+    fn delete_prosody_analysis(
+        &self,
+        id: &ProsodyAnalysisId,
+    ) -> Result<ProsodyAnalysis, ApplicationError>;
+}
+
 pub trait LLTimelineResourceRepository: Send + Sync {
     fn save_lltimeline_resource(
         &self,
@@ -314,6 +349,7 @@ pub struct LLTimelineImport {
     pub phone_timelines: Vec<PhoneTimeline>,
     pub chunk_timelines: Vec<ChunkTimeline>,
     pub sense_group_analyses: Vec<SenseGroupAnalysis>,
+    pub prosody_analyses: Vec<ProsodyAnalysis>,
     pub corpus_occurrences: Vec<CorpusOccurrence>,
 }
 
@@ -342,6 +378,7 @@ pub struct ContentPackageCandidateImport {
     pub phone_timelines: Vec<PhoneTimeline>,
     pub chunk_timelines: Vec<ChunkTimeline>,
     pub sense_group_analyses: Vec<SenseGroupAnalysis>,
+    pub prosody_analyses: Vec<ProsodyAnalysis>,
     pub corpus_occurrences: Vec<CorpusOccurrence>,
 }
 

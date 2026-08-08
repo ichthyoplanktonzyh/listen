@@ -415,7 +415,21 @@ pub struct DurationMeasurement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProsodyAnalysis {
+    #[serde(default)]
+    pub chunks: Vec<ProsodicChunk>,
     pub anchors: Vec<ProsodyAnchor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProsodicChunk {
+    pub sentence_id: String,
+    pub chunk_index: u32,
+    pub start_token_index: u32,
+    pub end_token_index_exclusive: u32,
+    #[serde(default)]
+    pub nucleus_token_index: Option<u32>,
+    pub confidence: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

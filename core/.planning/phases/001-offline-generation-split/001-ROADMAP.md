@@ -169,7 +169,7 @@ and the R1 shared-tool ownership are unchanged.
 remains relevant as an algorithm-quality backlog, but reusable production
 implementation belongs in Gen.
 
-### R3 — Resolve Chunk/Prosody semantics
+### R3 — Resolve Chunk/Prosody semantics — in progress
 
 Owner: Core contract/domain, coordinated with Gen and App.
 
@@ -178,16 +178,31 @@ content-package v1 exchanges `word_acoustics` and `prosody_analysis`; Core also
 cannot yet project `prosody_analysis` losslessly. This must be resolved before
 claiming foundation parity.
 
-- Decide which existing Chunk behavior is a Prosodic Chunk resource, which is
-  a derived playback projection and which should be deleted.
-- Prefer the existing package dependency graph over adding another near-synonym
-  solely to preserve a legacy Core type.
-- Define Core projection/readiness semantics for imported Prosody without
-  silently activating candidates.
-- Keep Sense Group semantically independent from acoustic/prosodic grouping.
+- The single semantic source for the Prosodic Chunk foundation slot is the
+  content-package v1 `prosody_analysis` resource, projected losslessly into
+  the Core `ProsodyAnalysis` resource (word-anchored prominence, lexical
+  stress, and utterance roles).
+- Imported prosody is persisted as a candidate, satisfies the foundation
+  Prosody slot through explicit readiness, and is never silently activated:
+  activation remains an explicit Core lifecycle decision.
+- Prosodic chunk token spans are declared by `prosody_analysis`; only playback
+  times are derived at read time through the parent Word Timeline. Core never
+  infers boundaries from prominence or utterance-role anchors.
+- Sense Group stays semantically and lifecycle independent from
+  acoustic/prosodic grouping.
+- The legacy persisted `ChunkTimeline` remains readable for existing consumers
+  until R5, but foundation preparation neither treats it as Prosody nor
+  regenerates it as a fallback. No near-synonym package resource was added.
 
 Exit: an imported package can satisfy the agreed foundation slots without Core
 regenerating an equivalent content-bound resource.
+
+Progress (Core slice): `ProsodyAnalysis` domain resource with lossless package
+projection, `prosody_analysis_runs` persistence (SQLite v56), candidate-only
+import consumption with a typed Consumed receipt, derived prosody chunk
+projection, LLTimeline export/import of the new resource family (additive
+contract fields), and foundation readiness that reuses an imported analysis
+matching the selected WordTimeline without regeneration or activation.
 
 ### R4 — Add rich package producers
 

@@ -49,9 +49,9 @@
       "required": false
     },
     {
-      "resource_id": "sha256:02132b6a60a8aede2d7b5a98e288294afcee090993358cb90a4f331a74cef813",
+      "resource_id": "sha256:01c994f470946d8babbb0ab3f57d1ad801ca5239dc0a9c1f1fb7b133beb7549d",
       "path": "resources/prosody-analysis.json",
-      "size_bytes": 1411,
+      "size_bytes": 1651,
       "kind": "prosody_analysis",
       "schema": "listen.resource.prosody-analysis.v1",
       "required": false
