@@ -131,6 +131,55 @@ See [docs/whisper-cpp-provider-v1.md](docs/whisper-cpp-provider-v1.md) for
 the full provider contract, machine phases, error mapping, and cancellation
 semantics.
 
+## Optional rich resources
+
+Three optional rich stages (R4) run in strict dependency order behind the same
+package seam and produce the v1 `sense_group_analysis`, `word_acoustics`, and
+`prosody_analysis` Analysis Resources:
+
+1. `sense_group_analysis` is derived from the exact emitted Subtitle Text
+   Track;
+2. `word_acoustics` is derived from the exact Word Timeline plus the
+   normalized audio window;
+3. `prosody_analysis` is derived from the exact Word Timeline, the exact Word
+   Acoustics resource, and optionally the exact Sense Group evidence, and
+   declares explicit Prosodic Chunk token spans per the Core v1 schema.
+
+Each stage is selected with `--sense-groups`, `--acoustics`, and `--prosody`
+(`none`, `fixture`, `command`, or `baseline`). The fixture adapters replay
+committed result documents offline; the command adapters run external tools
+as argv-only subprocesses with the same bounded-output, timeout, and
+process-group reaping rules as every other provider. The `baseline` adapters
+are the built-in deterministic, credential-free producers: they run
+in-process, need no model or child process, and are never selected
+implicitly. A failing rich stage degrades honestly: it preserves every
+already-qualified upstream resource and reports a stable typed warning. The
+`acoustics` command stage receives the same temporary 16 kHz mono PCM WAV as
+the ASR stage; `--acoustics baseline` expects that normalized 16 kHz mono
+PCM WAV produced by the shared ffmpeg preprocessor and abstains if that
+normalized audio is unusable:
+
+```bash
+listen-gen package from-media input.wav \
+  --provider fixture --fixture normalized-asr.json \
+  --aligner fixture --alignment-fixture alignment-result.json \
+  --sense-groups baseline \
+  --acoustics baseline \
+  --prosody baseline \
+  --title "Lesson" --media-kind audio --duration-ms 2200 \
+  --created-at-ms 1786000000000 --output lesson.listenpkg
+```
+
+Phone production is optional and audio-backed. Select `--phone fixture` for
+deterministic tests, `--phone command` for a normalized provider, or
+`--phone wav2vec2-ctc` for the first-class local CTC sidecar. Every emitted
+phone is anchored to the exact Word Timeline by temporal overlap; unusable
+output abstains and preserves upstream resources. With `--phone none` Gen
+emits no `phone_timeline`, and it never derives observed phones from text. See
+[docs/rich-resources-v1.md](docs/rich-resources-v1.md)
+for the stage contracts, normalized command protocols, qualification rules,
+degradation, and determinism guarantees.
+
 The LLTimeline command is migration compatibility only:
 
 ```bash
@@ -180,7 +229,9 @@ an optional aligner was selected), and exactly one terminal event
 process group, clean up temporary audio, and emit `cancelled` with exit code
 `130`. Ordinary mode output is unchanged when the flag is absent. The
 `completed` event carries an additive `alignment` object describing produced,
-degraded, or skipped alignment with stable typed warnings.
+degraded, or skipped alignment with stable typed warnings, and an additive
+`rich_resources` object describing the produced, degraded, or skipped rich
+stages with stable typed warnings.
 
 See [docs/machine-event-protocol-v1.md](docs/machine-event-protocol-v1.md) for
 the full event, phase, and error-code contract.
@@ -202,7 +253,7 @@ published together. Verify it before distribution:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.2.0/listen-gen-0.2.0.release.json
+  dist/listen-gen-0.3.0/listen-gen-0.3.0.release.json
 ```
 
 The `.pyz` requires Python 3.11 or newer. See

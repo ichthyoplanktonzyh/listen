@@ -29,9 +29,23 @@ from .package import (
     _envelope,
     write_package,
 )
-from .protocol import ALIGNMENT_WARNING_MESSAGES, alignment_warning
+from .phone import PhoneAnalyzer, run_phone
+from .protocol import (
+    ALIGNMENT_WARNING_MESSAGES,
+    RICH_WARNING_MESSAGES,
+    alignment_warning,
+)
+from .rich import (
+    AcousticsExtractor,
+    ProsodyAnalyzer,
+    RichWord,
+    SenseGroupAnalyzer,
+    run_acoustics,
+    run_prosody,
+    run_sense_groups,
+)
 
-TOOL_VERSION = "0.2.0"
+TOOL_VERSION = "0.3.0"
 TOKEN_RE = re.compile(r"\w+(?:['\u2019]\w+)*|\s+|[^\w\s]", re.UNICODE)
 ASR_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 
@@ -343,6 +357,14 @@ def package_media(
     aligner: AlignerAdapter | None = None,
     aligner_preprocessor: AudioPreprocessor | None = None,
     aligner_audio_stream_index: int | None = None,
+    sense_analyzer: SenseGroupAnalyzer | None = None,
+    acoustics_extractor: AcousticsExtractor | None = None,
+    acoustics_preprocessor: AudioPreprocessor | None = None,
+    acoustics_audio_stream_index: int | None = None,
+    prosody_analyzer: ProsodyAnalyzer | None = None,
+    phone_analyzer: PhoneAnalyzer | None = None,
+    phone_preprocessor: AudioPreprocessor | None = None,
+    phone_audio_stream_index: int | None = None,
 ) -> dict[str, Any]:
     if not media_path.is_file():
         raise ConversionError("media input is not a regular file")
@@ -408,7 +430,13 @@ def package_media(
     )
     resources: list[ResourceFile] = [subtitle]
     warnings: list[str] = []
+
+    def check_media_unchanged() -> None:
+        if _fingerprint(media_path) != media_fingerprint:
+            raise ConversionError("media input changed during processing")
+
     alignment_outcome: dict[str, Any] = {"status": "skipped", "warnings": []}
+    word_resource: ResourceFile | None = None
     if aligner is not None:
         # The optional word-alignment stage is authoritative for the
         # word_timeline resource when it is selected. Its failures degrade
@@ -419,7 +447,7 @@ def package_media(
                 with aligner_preprocessor.prepare(
                     media_path, audio_stream_index=aligner_audio_stream_index
                 ) as prepared:
-                    status, word_timeline, typed_warnings = run_alignment(
+                    status, word_resource, typed_warnings = run_alignment(
                         aligner=aligner,
                         media_path=media_path,
                         audio_path=prepared.path,
@@ -433,7 +461,7 @@ def package_media(
                         progress=progress,
                     )
             else:
-                status, word_timeline, typed_warnings = run_alignment(
+                status, word_resource, typed_warnings = run_alignment(
                     aligner=aligner,
                     media_path=media_path,
                     audio_path=media_path,
@@ -452,24 +480,159 @@ def package_media(
             else:
                 code, _message = alignment_warning(error)
             message = ALIGNMENT_WARNING_MESSAGES[code]
-            status, word_timeline, typed_warnings = (
+            status, word_resource, typed_warnings = (
                 "degraded",
                 None,
                 [{"code": code, "message": message}],
             )
-        if _fingerprint(media_path) != media_fingerprint:
-            raise ConversionError("media input changed during processing")
+        check_media_unchanged()
         alignment_outcome = {"status": status, "warnings": typed_warnings}
         warnings.extend(item["message"] for item in typed_warnings)
-        if word_timeline is not None:
-            resources.append(word_timeline)
+        if word_resource is not None:
+            resources.append(word_resource)
     elif has_word_timeline:
-        word_timeline = _envelope(
+        word_resource = _envelope(
             kind="word_timeline", media_fingerprint=media_fingerprint,
             dependencies=[subtitle], provenance=provenance, quality=quality,
             payload={"words": timings}, required=False,
         )
-        resources.append(word_timeline)
+        resources.append(word_resource)
+
+    # The optional rich stages (R4) run in strict dependency order and each
+    # failure preserves every already-qualified upstream resource.
+    rich_outcomes: dict[str, Any] = {
+        "sense_groups": {"status": "skipped", "warnings": []},
+        "acoustics": {"status": "skipped", "warnings": []},
+        "prosody": {"status": "skipped", "warnings": []},
+    }
+
+    def degrade_rich(outcome_key: str, code: str) -> None:
+        typed = [{"code": code, "message": RICH_WARNING_MESSAGES[code]}]
+        rich_outcomes[outcome_key] = {"status": "degraded", "warnings": typed}
+        warnings.extend(item["message"] for item in typed)
+
+    if any(
+        analyzer is not None
+        for analyzer in (
+            sense_analyzer, acoustics_extractor, prosody_analyzer, phone_analyzer
+        )
+    ):
+        sentence_evidence = _alignment_sentences(sentences)
+        rich_words: tuple[RichWord, ...] = ()
+        if word_resource is not None:
+            rich_words = _rich_words(sentences, word_resource)
+    else:
+        sentence_evidence = ()
+        rich_words = ()
+
+    sense_resource: ResourceFile | None = None
+    resolved_groups: tuple[dict[str, Any], ...] = ()
+    if sense_analyzer is not None:
+        status, sense_resource, typed_warnings, resolved_groups = run_sense_groups(
+            analyzer=sense_analyzer,
+            language=transcript.language,
+            sentences=sentence_evidence,
+            subtitle=subtitle,
+            media_fingerprint=media_fingerprint,
+            created_at_ms=created_at_ms,
+            progress=progress,
+        )
+        rich_outcomes["sense_groups"] = {"status": status, "warnings": typed_warnings}
+        warnings.extend(item["message"] for item in typed_warnings)
+        if sense_resource is not None:
+            resources.append(sense_resource)
+        check_media_unchanged()
+
+    acoustics_resource: ResourceFile | None = None
+    resolved_measurements: tuple[dict[str, Any], ...] = ()
+    if acoustics_extractor is not None:
+        if word_resource is None:
+            degrade_rich("acoustics", "acoustics_upstream_missing")
+        else:
+            status, acoustics_resource, typed_warnings, resolved_measurements = run_acoustics(
+                extractor=acoustics_extractor,
+                preprocessor=acoustics_preprocessor,
+                media_path=media_path,
+                audio_stream_index=acoustics_audio_stream_index,
+                language=transcript.language,
+                sentences=sentence_evidence,
+                words=rich_words,
+                word_timeline=word_resource,
+                media_fingerprint=media_fingerprint,
+                created_at_ms=created_at_ms,
+                progress=progress,
+            )
+            rich_outcomes["acoustics"] = {"status": status, "warnings": typed_warnings}
+            warnings.extend(item["message"] for item in typed_warnings)
+            if acoustics_resource is not None:
+                resources.append(acoustics_resource)
+        check_media_unchanged()
+
+    if prosody_analyzer is not None:
+        if word_resource is None or acoustics_resource is None:
+            degrade_rich("prosody", "prosody_upstream_missing")
+        else:
+            status, prosody_resource, typed_warnings = run_prosody(
+                analyzer=prosody_analyzer,
+                language=transcript.language,
+                sentences=sentence_evidence,
+                words=rich_words,
+                measurements=resolved_measurements,
+                groups=resolved_groups if sense_resource is not None else None,
+                word_timeline=word_resource,
+                acoustics=acoustics_resource,
+                sense_group=sense_resource,
+                media_fingerprint=media_fingerprint,
+                created_at_ms=created_at_ms,
+                progress=progress,
+            )
+            rich_outcomes["prosody"] = {"status": status, "warnings": typed_warnings}
+            warnings.extend(item["message"] for item in typed_warnings)
+            if prosody_resource is not None:
+                resources.append(prosody_resource)
+        check_media_unchanged()
+
+    if phone_analyzer is not None:
+        if word_resource is None:
+            degrade_rich("phone", "phone_upstream_missing")
+        else:
+            try:
+                if phone_preprocessor is None:
+                    status, phone_resource, typed_warnings = run_phone(
+                        analyzer=phone_analyzer,
+                        audio_path=media_path,
+                        words=rich_words,
+                        word_timeline=word_resource,
+                        media_fingerprint=media_fingerprint,
+                        created_at_ms=created_at_ms,
+                        progress=progress,
+                    )
+                else:
+                    with phone_preprocessor.prepare(
+                        media_path, audio_stream_index=phone_audio_stream_index
+                    ) as prepared:
+                        status, phone_resource, typed_warnings = run_phone(
+                            analyzer=phone_analyzer,
+                            audio_path=prepared.path,
+                            words=rich_words,
+                            word_timeline=word_resource,
+                            media_fingerprint=media_fingerprint,
+                            created_at_ms=created_at_ms,
+                            progress=progress,
+                        )
+            except (ConversionError, OSError, json.JSONDecodeError, UnicodeDecodeError):
+                code = "phone_failed"
+                status, phone_resource, typed_warnings = (
+                    "degraded",
+                    None,
+                    [{"code": code, "message": RICH_WARNING_MESSAGES[code]}],
+                )
+            rich_outcomes["phone"] = {"status": status, "warnings": typed_warnings}
+            warnings.extend(item["message"] for item in typed_warnings)
+            if phone_resource is not None:
+                resources.append(phone_resource)
+        check_media_unchanged()
+
     manifest = {
         "schema": PACKAGE_SCHEMA,
         "created_at_ms": created_at_ms,
@@ -491,7 +654,26 @@ def package_media(
         "media_fingerprint": media_fingerprint, "package_sha256": package_sha256,
         "resource_count": len(resources), "warnings": warnings,
         "alignment": alignment_outcome,
+        "rich_resources": rich_outcomes,
     }
+
+
+def _rich_words(
+    sentences: list[dict[str, Any]], word_resource: ResourceFile
+) -> tuple[RichWord, ...]:
+    """Resolve the exact word timeline payload to subtitle coordinates."""
+    index_by_id = {sentence["id"]: sentence["index"] for sentence in sentences}
+    envelope = json.loads(word_resource.body)
+    return tuple(
+        RichWord(
+            sentence_index=index_by_id[entry["sentence_id"]],
+            token_index=entry["token_index"],
+            start_ms=entry["start_ms"],
+            end_ms=entry["end_ms"],
+            sentence_id=entry["sentence_id"],
+        )
+        for entry in envelope["payload"]["words"]
+    )
 
 
 def _alignment_sentences(sentences: list[dict[str, Any]]) -> tuple[AlignmentSentence, ...]:

@@ -18,6 +18,10 @@ PHASE_NAMES = (
     "normalizing_audio",
     "transcribing",
     "aligning",
+    "analyzing_sense_groups",
+    "measuring_acoustics",
+    "analyzing_prosody",
+    "analyzing_phones",
     "building_package",
 )
 TERMINAL_EVENTS = frozenset({"completed", "failed", "cancelled"})
@@ -83,6 +87,86 @@ def alignment_warning(error: BaseException) -> tuple[str, str]:
         )
     return ("alignment_failed", ALIGNMENT_WARNING_MESSAGES["alignment_failed"])
 
+
+# ---------------------------------------------------------------------------
+# Rich resource stages (R4): sense groups, word acoustics, prosody
+# ---------------------------------------------------------------------------
+
+# The optional rich stages are provider-neutral over the same
+# media -> machine events -> deterministic package interface as alignment.
+# Every failure below preserves all already-qualified upstream resources and
+# is reported as a stable typed warning code with a safe human message.
+# Cancellation and media-change failures are never treated as degradation.
+RICH_STAGE_TITLES: dict[str, str] = {
+    "sense_groups": "Sense-group",
+    "acoustics": "Acoustics",
+    "prosody": "Prosody",
+    "phone": "Phone",
+}
+RICH_WARNING_TAILS: dict[str, str] = {
+    "start_failed": "provider could not be started",
+    "timeout": "provider timed out",
+    "failed": "provider failed",
+    "output_invalid": "provider returned an invalid result",
+    "output_too_large": "provider produced too much output",
+    "qualification_failed": "result did not qualify",
+    "upstream_missing": "required upstream resource was not produced",
+}
+RICH_WARNING_MESSAGES: dict[str, str] = {
+    f"{stage}_{code}": (
+        f"The {RICH_STAGE_TITLES[stage]} {tail}; "
+        "already-qualified resources were preserved."
+    )
+    for stage in RICH_STAGE_TITLES
+    for code, tail in RICH_WARNING_TAILS.items()
+}
+
+
+class RichStageFailure(ConversionError):
+    """A degradable rich-stage failure carrying a stable typed warning code.
+
+    The human message is always the safe, stable message from
+    :data:`RICH_WARNING_MESSAGES`; internal details never leak into the
+    package, machine events, or ordinary result.
+    """
+
+    def __init__(self, stage: str, code: str):
+        if stage not in RICH_STAGE_TITLES:
+            raise ValueError(f"unknown rich stage: {stage!r}")
+        if code not in RICH_WARNING_TAILS:
+            raise ValueError(f"unknown rich warning code: {code!r}")
+        self.stage = stage
+        self.code = f"{stage}_{code}"
+        super().__init__(RICH_WARNING_MESSAGES[self.code])
+
+
+def rich_warning(error: BaseException, stage: str) -> tuple[str, str]:
+    """Map a degradable rich-stage error to a stable typed warning."""
+    if isinstance(error, RichStageFailure):
+        return error.code, RICH_WARNING_MESSAGES[error.code]
+    message = str(error).lower()
+    if "timed out" in message:
+        code = "timeout"
+    elif "safety limit" in message:
+        code = "output_too_large"
+    elif "could not be started" in message:
+        code = "start_failed"
+    else:
+        code = "failed"
+    full = f"{stage}_{code}"
+    return full, RICH_WARNING_MESSAGES[full]
+
+
+def _rich_stage_capability(stage: str) -> dict[str, object]:
+    return {
+        "optional": True,
+        "degradation": "preserve_upstream",
+        "adapters": ["fixture", "command", "baseline"],
+        "warning_codes": sorted(
+            code for code in RICH_WARNING_MESSAGES if code.startswith(f"{stage}_")
+        ),
+    }
+
 MACHINE_ERROR_MESSAGES: dict[str, str] = {
     "invalid_arguments": "Generation arguments are invalid.",
     "input_not_found": "Input media is unavailable.",
@@ -112,6 +196,24 @@ def protocol_capabilities() -> dict[str, object]:
             "degradation": "preserve_subtitle",
             "adapters": ["fixture", "command", "whisper-cpp"],
             "warning_codes": sorted(ALIGNMENT_WARNING_MESSAGES),
+        },
+        "rich_resources": {
+            "sense_groups": _rich_stage_capability("sense_groups"),
+            "acoustics": _rich_stage_capability("acoustics"),
+            "prosody": _rich_stage_capability("prosody"),
+            "phone": {
+                "optional": True,
+                "degradation": "preserve_upstream",
+                "adapters": ["fixture", "command", "wav2vec2-ctc"],
+                "warning_codes": sorted(
+                    code for code in RICH_WARNING_MESSAGES if code.startswith("phone_")
+                ),
+            },
+        },
+        "phone": {
+            "production": "optional_audio_backed",
+            "unselected": "abstain",
+            "text_derived": False,
         },
     }
 
@@ -144,6 +246,7 @@ class MachineEventEmitter:
         resources: list[dict[str, object]],
         warnings: list[str],
         alignment: dict[str, object] | None = None,
+        rich_resources: dict[str, object] | None = None,
     ) -> None:
         payload: dict[str, object] = dict(
             package_sha256=package_sha256,
@@ -153,6 +256,8 @@ class MachineEventEmitter:
         )
         if alignment is not None:
             payload["alignment"] = alignment
+        if rich_resources is not None:
+            payload["rich_resources"] = rich_resources
         self._emit("completed", **payload)
 
     def failed(self, *, code: str, message: str) -> None:
@@ -234,6 +339,26 @@ def _classify_error(error: BaseException) -> str:
         "alignment command arguments must contain exactly one {media} "
         "and one {transcript} placeholder",
         "alignment command timeout must be positive",
+        "sense group fixture must be a regular file",
+        "sense group command executable must be non-empty",
+        "sense group command arguments must contain exactly one {input} placeholder",
+        "sense group command timeout must be positive",
+        "acoustics fixture must be a regular file",
+        "acoustics command executable must be non-empty",
+        "acoustics command arguments must contain exactly one {media} "
+        "and one {timeline} placeholder",
+        "acoustics command timeout must be positive",
+        "prosody fixture must be a regular file",
+        "prosody command executable must be non-empty",
+        "prosody command arguments must contain exactly one {input} placeholder",
+        "prosody command timeout must be positive",
+        "phone fixture must be a regular file",
+        "phone command executable must be non-empty",
+        "phone command arguments must contain exactly one {media} placeholder",
+        "phone command timeout must be positive",
+        "wav2vec2 phone runtime inputs must exist",
+        "wav2vec2 phone arguments are invalid",
+        "wav2vec2 phone analysis requires python, sidecar, model directory, id and revision",
     )
     if message in whisper_invalid_arguments:
         return "invalid_arguments"

@@ -76,7 +76,7 @@ Every event carries these fields:
   "sequence": 0,
   "tool": {
     "id": "listen-gen",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "event": "protocol"
 }
@@ -98,7 +98,7 @@ run:
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 0,
-  "tool": {"id": "listen-gen", "version": "0.2.0"},
+  "tool": {"id": "listen-gen", "version": "0.3.0"},
   "event": "protocol",
   "capabilities": {
     "package_schema": "listen.resource-package.v1",
@@ -117,6 +117,10 @@ run:
       "normalizing_audio",
       "transcribing",
       "aligning",
+      "analyzing_sense_groups",
+      "measuring_acoustics",
+      "analyzing_prosody",
+      "analyzing_phones",
       "building_package"
     ],
     "alignment": {
@@ -131,6 +135,60 @@ run:
         "alignment_start_failed",
         "alignment_timeout"
       ]
+    },
+    "rich_resources": {
+      "sense_groups": {
+        "optional": true,
+        "degradation": "preserve_upstream",
+        "adapters": ["fixture", "command", "baseline"],
+        "warning_codes": [
+          "sense_groups_failed",
+          "sense_groups_output_invalid",
+          "sense_groups_output_too_large",
+          "sense_groups_qualification_failed",
+          "sense_groups_start_failed",
+          "sense_groups_timeout",
+          "sense_groups_upstream_missing"
+        ]
+      },
+      "acoustics": {
+        "optional": true,
+        "degradation": "preserve_upstream",
+        "adapters": ["fixture", "command", "baseline"],
+        "warning_codes": [
+          "acoustics_failed",
+          "acoustics_output_invalid",
+          "acoustics_output_too_large",
+          "acoustics_qualification_failed",
+          "acoustics_start_failed",
+          "acoustics_timeout",
+          "acoustics_upstream_missing"
+        ]
+      },
+      "prosody": {
+        "optional": true,
+        "degradation": "preserve_upstream",
+        "adapters": ["fixture", "command", "baseline"],
+        "warning_codes": [
+          "prosody_failed",
+          "prosody_output_invalid",
+          "prosody_output_too_large",
+          "prosody_qualification_failed",
+          "prosody_start_failed",
+          "prosody_timeout",
+          "prosody_upstream_missing"
+        ]
+      },
+      "phone": {
+        "optional": true,
+        "degradation": "preserve_upstream",
+        "adapters": ["fixture", "command", "wav2vec2-ctc"]
+      }
+    },
+    "phone": {
+      "production": "optional_audio_backed",
+      "unselected": "abstain",
+      "text_derived": false
     }
   }
 }
@@ -149,7 +207,7 @@ commands, credentials, or temporary directories.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 2,
-  "tool": {"id": "listen-gen", "version": "0.2.0"},
+  "tool": {"id": "listen-gen", "version": "0.3.0"},
   "event": "phase",
   "phase": "validating"
 }
@@ -169,7 +227,7 @@ See [completed example](#completed-example). This is a terminal event.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 3,
-  "tool": {"id": "listen-gen", "version": "0.2.0"},
+  "tool": {"id": "listen-gen", "version": "0.3.0"},
   "event": "failed",
   "code": "input_not_found",
   "message": "Input media is unavailable."
@@ -188,7 +246,7 @@ a terminal event.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 4,
-  "tool": {"id": "listen-gen", "version": "0.2.0"},
+  "tool": {"id": "listen-gen", "version": "0.3.0"},
   "event": "cancelled"
 }
 ```
@@ -207,6 +265,10 @@ probing_media
 normalizing_audio
 transcribing
 aligning
+analyzing_sense_groups
+measuring_acoustics
+analyzing_prosody
+analyzing_phones
 building_package
 ```
 
@@ -214,7 +276,10 @@ building_package
 uses real media preprocessing. The offline fixture provider skips them.
 `aligning` appears only when an optional word aligner was selected
 (`--aligner`); see [docs/alignment-provider-v1.md](alignment-provider-v1.md)
-for the alignment stage and its degradation semantics.
+for the alignment stage and its degradation semantics. The three rich-stage
+phases appear only when the corresponding optional stage was selected
+(`--sense-groups`, `--acoustics`, `--prosody`, `--phone`); see
+[docs/rich-resources-v1.md](rich-resources-v1.md) for the rich stages.
 
 ## Error codes
 
@@ -289,7 +354,7 @@ never both appear for the same run.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 6,
-  "tool": {"id": "listen-gen", "version": "0.2.0"},
+  "tool": {"id": "listen-gen", "version": "0.3.0"},
   "event": "completed",
   "package_sha256": "sha256:<64 lowercase hex>",
   "media_fingerprint": "sha256:<64 lowercase hex>",
@@ -303,12 +368,32 @@ never both appear for the same run.
       "resource_id": "sha256:<64 lowercase hex>",
       "kind": "word_timeline",
       "review_status": "machine_checked"
+    },
+    {
+      "resource_id": "sha256:<64 lowercase hex>",
+      "kind": "sense_group_analysis",
+      "review_status": "machine_checked"
+    },
+    {
+      "resource_id": "sha256:<64 lowercase hex>",
+      "kind": "word_acoustics",
+      "review_status": "machine_checked"
+    },
+    {
+      "resource_id": "sha256:<64 lowercase hex>",
+      "kind": "prosody_analysis",
+      "review_status": "machine_checked"
     }
   ],
   "warnings": [],
   "alignment": {
     "status": "produced",
     "warnings": []
+  },
+  "rich_resources": {
+    "sense_groups": {"status": "produced", "warnings": []},
+    "acoustics": {"status": "produced", "warnings": []},
+    "prosody": {"status": "produced", "warnings": []}
   }
 }
 ```
@@ -342,6 +427,34 @@ is also appended to the top-level `warnings` string list so existing consumers
 can surface it. Without `--aligner`, `status` is `skipped` with an empty
 warning list. Consumers that do not understand the additive `alignment` field
 must ignore it, and must keep accepting the top-level `warnings` string list.
+
+## Rich resources in the completed event
+
+When any optional rich stage was selected (`--sense-groups`, `--acoustics`,
+or `--prosody`), the `completed` event carries an additive `rich_resources`
+object with one entry per stage:
+
+```json
+"rich_resources": {
+  "sense_groups": {"status": "produced", "warnings": []},
+  "acoustics": {"status": "produced", "warnings": []},
+  "prosody": {"status": "produced", "warnings": []}
+}
+```
+
+Each `status` is `produced`, `degraded`, or `skipped`, and `warnings` uses the
+typed codes advertised under `rich_resources.<stage>.warning_codes`.
+Degradation preserves every already-qualified upstream resource and appends the
+human message to the top-level `warnings` string list. `skipped` (with an
+empty warning list) is the default for stages that were not selected; the
+object is always present. Consumers that do not understand the additive
+`rich_resources` field must ignore it.
+
+The additive `phone` capability declares optional audio-backed production and
+explicit abstention when no adapter is selected. When selected, the completed
+`rich_resources` object gains a `phone` outcome. Qualified output contains a
+`phone_timeline` with non-null references to the exact Word Timeline; invalid
+or unanchored output degrades without removing upstream resources.
 
 ## Ownership of the output path
 
