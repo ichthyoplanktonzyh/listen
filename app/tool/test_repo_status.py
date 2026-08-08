@@ -1,23 +1,24 @@
+import argparse
+import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_status as status
 
 
 def make_repo(root: Path) -> None:
-    """一个最小的 core 形状仓库，够 file_at / distance / tag 用。"""
     subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-    subprocess.run(
-        ["git", "-C", str(root), "config", "user.email", "t@example.com"], check=True
-    )
+    subprocess.run(["git", "-C", str(root), "config", "user.email", "t@example.com"], check=True)
     subprocess.run(["git", "-C", str(root), "config", "user.name", "t"], check=True)
 
 
-def commit(root: Path, files: dict[str, str], message: str) -> str:
+def commit(root: Path, files: dict[str, str], message: str = "fixture") -> str:
     for name, body in files.items():
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -26,198 +27,123 @@ def commit(root: Path, files: dict[str, str], message: str) -> str:
     subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", message], check=True)
     return subprocess.run(
         ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
+        capture_output=True, text=True, check=True,
     ).stdout.strip()
 
 
-def rust_lib(version: str) -> str:
-    return (
-        "pub const API_VERSION: u16 = 1;\n"
-        f'pub const CONTRACT_VERSION: &str = "{version}";\n'
-    )
+def contract_lock() -> dict:
+    return {
+        "authority": {"path": "contracts/content-package/v1", "repository": "owner/listen-core"},
+        "manifest_schema_id": "https://listen.dev/manifest.json",
+        "package_schema": "listen.resource-package.v1",
+        "resource_schema_id": "https://listen.dev/resource.json",
+        "schema_version": 1,
+    }
 
 
-def openapi(version: str) -> str:
-    return f"openapi: 3.1.0\ninfo:\n  title: t\n  version: {version}\n"
+def write_locks(app: Path, core_sha: str, gen_sha: str, contract: dict) -> None:
+    (app / "backend.lock.json").write_text(json.dumps({
+        "core_git_sha": core_sha,
+        "contract": {"version": "1.1.0"},
+        "runtime": {"version": "0.7.0"},
+    }))
+    (app / "listen_gen.lock.json").write_text(json.dumps({
+        "source_git_sha": gen_sha,
+        "tool": {"version": "0.1.0"},
+        "content_package_contract": {
+            **contract,
+            "canonical_sha256": status.canonical_contract_sha(contract),
+        },
+    }))
 
 
-class ParsingTests(unittest.TestCase):
-    def test_reads_contract_version_from_the_pinned_commit_not_the_worktree(self):
+class DiscoveryTests(unittest.TestCase):
+    def test_worktree_discovers_siblings_beside_canonical_checkout(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            make_repo(root)
-            old = commit(
-                root,
-                {
-                    "crates/api-http/src/lib.rs": rust_lib("1.0.0"),
-                    "contracts/openapi/v1.yaml": openapi("1.0.0"),
-                },
-                "contract 1.0.0",
-            )
-            commit(
-                root,
-                {
-                    "crates/api-http/src/lib.rs": rust_lib("1.1.0"),
-                    "contracts/openapi/v1.yaml": openapi("1.1.0"),
-                },
-                "contract 1.1.0",
-            )
-            core = status.Repo("listen-core", root)
+            main = root / "listen-app"
+            make_repo(main)
+            commit(main, {"README.md": "app\n"})
+            worktree = root / "worktrees" / "feature"
+            worktree.parent.mkdir()
+            subprocess.run(["git", "-C", str(main), "worktree", "add", "-q", "-b", "feature", str(worktree)], check=True)
+            paths = status.discover_repositories(worktree)
+            self.assertEqual(paths["listen-core"], (root / "listen-core").resolve())
+            self.assertEqual(paths["listen-gen"], (root / "listen-gen").resolve())
 
-            # 工作区已经是 1.1.0，但被钉的那个 commit 仍然是 1.0.0。
-            self.assertEqual(status.contract_version_at(core, old), "1.0.0")
-            self.assertEqual(status.openapi_version_at(core, old), "1.0.0")
+    def test_normal_checkout_discovers_ordinary_siblings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / "listen-app"
+            make_repo(app)
+            commit(app, {"README.md": "app\n"})
+            paths = status.discover_repositories(app)
+            self.assertEqual(paths["listen-core"], (Path(tmp) / "listen-core").resolve())
 
-    def test_missing_file_yields_none_rather_than_raising(self):
+    def test_cli_overrides_environment_and_environment_overrides_discovery(self):
+        args = argparse.Namespace(app_repo="/cli/app", core_repo="/cli/core", gen_repo=None)
+        with mock.patch.dict(os.environ, {
+            "LISTEN_APP_REPO": "/env/app",
+            "LISTEN_CORE_REPO": "/env/core",
+            "LISTEN_GEN_REPO": "/env/gen",
+        }):
+            paths = status.resolve_repository_paths(args)
+        self.assertEqual(paths["listen-app"], Path("/cli/app"))
+        self.assertEqual(paths["listen-core"], Path("/cli/core"))
+        self.assertEqual(paths["listen-gen"], Path("/env/gen"))
+
+
+class ContractTests(unittest.TestCase):
+    def test_canonical_digest_is_over_gen_lock_not_app_wrapper(self):
+        lock = contract_lock()
+        self.assertTrue(status.canonical_contract_sha(lock).startswith("sha256:"))
+        self.assertEqual(status.compare_contract_locks({
+            **lock, "canonical_sha256": status.canonical_contract_sha(lock)
+        }, lock), [])
+
+    def test_contract_lock_field_and_digest_mismatches_are_reported(self):
+        gen = contract_lock()
+        app = {**gen, "schema_version": 2, "canonical_sha256": "sha256:" + "0" * 64}
+        problems = status.compare_contract_locks(app, gen)
+        self.assertTrue(any("schema_version" in problem for problem in problems))
+        self.assertTrue(any("canonical_sha256" in problem for problem in problems))
+
+    def test_real_shaped_locks_and_resolvable_pins_are_consistent(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            make_repo(root)
-            sha = commit(root, {"README.md": "hi\n"}, "init")
-            core = status.Repo("listen-core", root)
-            self.assertIsNone(status.contract_version_at(core, sha))
+            app, core, gen = root / "listen-app", root / "listen-core", root / "listen-gen"
+            app.mkdir()
+            make_repo(core)
+            core_sha = commit(core, {
+                "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
+                "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+            })
+            make_repo(gen)
+            lock = contract_lock()
+            gen_sha = commit(gen, {"contracts.lock.json": json.dumps(lock)})
+            write_locks(app, core_sha, gen_sha, lock)
+            repos = {name: status.Repo(name, path) for name, path in {
+                "listen-app": app, "listen-core": core, "listen-gen": gen,
+            }.items()}
+            _, release, problems = status.inspect(repos)
+            self.assertEqual(release.sha, gen_sha)
+            self.assertEqual(problems, [])
+
+    def test_gen_checkout_must_contain_release_pin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gen = Path(tmp) / "gen"
+            make_repo(gen)
+            pinned = commit(gen, {"a": "one"}, "pin")
+            subprocess.run(["git", "-C", str(gen), "switch", "-q", "--orphan", "unrelated"], check=True)
+            commit(gen, {"b": "two"}, "unrelated")
+            repo = status.Repo("listen-gen", gen)
+            self.assertIsNotNone(repo.commit_date(pinned))
+            self.assertFalse(repo.contains(pinned))
 
 
 class GitHelperTests(unittest.TestCase):
-    def test_non_repository_returns_none_instead_of_raising(self):
+    def test_non_repository_is_not_present(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self.assertIsNone(status.git(Path(tmp), "log", "-1"))
-
-    def test_absent_repo_reports_not_present(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = status.Repo("listen-gen", Path(tmp) / "nope")
-            self.assertFalse(repo.present)
-
-
-class ConsistencyTests(unittest.TestCase):
-    def test_missing_core_checkout_degrades_with_one_clear_problem(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            core = status.Repo("listen-core", Path(tmp) / "absent")
-            pins = [status.Pin("listen-app", "deadbeef" * 5, "backend.lock.json")]
-            problems = status.check_consistency(core, pins)
-            self.assertEqual(len(problems), 1)
-            self.assertIn("listen-core", problems[0])
-
-    def test_flags_lock_file_recording_a_version_the_commit_never_declared(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_repo(root)
-            sha = commit(
-                root,
-                {
-                    "crates/api-http/src/lib.rs": rust_lib("1.0.0"),
-                    "contracts/openapi/v1.yaml": openapi("1.0.0"),
-                },
-                "contract 1.0.0",
-            )
-            core = status.Repo("listen-core", root)
-            pins = [
-                status.Pin(
-                    "listen-app",
-                    sha,
-                    "backend.lock.json",
-                    extra={"contract": "1.1.0"},  # lock 抄错了
-                )
-            ]
-            problems = status.check_consistency(core, pins)
-            self.assertTrue(
-                any("实际声明 CONTRACT_VERSION=1.0.0" in p for p in problems),
-                problems,
-            )
-
-    def test_flags_core_disagreeing_with_its_own_openapi(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_repo(root)
-            sha = commit(
-                root,
-                {
-                    "crates/api-http/src/lib.rs": rust_lib("1.1.0"),
-                    "contracts/openapi/v1.yaml": openapi("1.0.0"),  # 内部漂移
-                },
-                "mismatched",
-            )
-            core = status.Repo("listen-core", root)
-            pins = [
-                status.Pin(
-                    "listen-app", sha, "backend.lock.json", extra={"contract": "1.1.0"}
-                )
-            ]
-            problems = status.check_consistency(core, pins)
-            self.assertTrue(any("自身不一致" in p for p in problems), problems)
-
-    def test_flags_consumers_pinning_different_commits(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_repo(root)
-            first = commit(root, {"a.txt": "1\n"}, "first")
-            second = commit(root, {"a.txt": "2\n"}, "second")
-            core = status.Repo("listen-core", root)
-            pins = [
-                status.Pin("listen-app", second, "backend.lock.json"),
-                status.Pin("listen-gen", first, "contracts.lock.json"),
-            ]
-            problems = status.check_consistency(core, pins)
-            self.assertTrue(
-                any("钉着不同的 core commit" in p for p in problems), problems
-            )
-
-    def test_agreeing_consumers_produce_no_pin_divergence_problem(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_repo(root)
-            sha = commit(root, {"a.txt": "1\n"}, "only")
-            core = status.Repo("listen-core", root)
-            pins = [
-                status.Pin("listen-app", sha, "backend.lock.json"),
-                status.Pin("listen-gen", sha, "contracts.lock.json"),
-            ]
-            problems = status.check_consistency(core, pins)
-            self.assertFalse(
-                any("钉着不同的 core commit" in p for p in problems), problems
-            )
-
-    def test_pin_reachable_only_from_a_second_worktree_is_not_called_behind(self):
-        """core 的实际布局：主 checkout 停在功能分支，main 住在另一个 worktree。
-        只看主 checkout 会把这误报成「本地落后于消费方」。"""
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp) / "core"
-            make_repo(root)
-            base = commit(root, {"a.txt": "1\n"}, "base")
-            newer = commit(root, {"a.txt": "2\n"}, "newer")
-            # 主 checkout 退回旧提交所在的功能分支
-            subprocess.run(
-                ["git", "-C", str(root), "switch", "-q", "-c", "feature", base],
-                check=True,
-            )
-            # main 仍指向 newer，挂在另一个 worktree 上
-            tree = Path(tmp) / "wt"
-            subprocess.run(
-                ["git", "-C", str(root), "worktree", "add", "-q", str(tree), "main"],
-                check=True,
-            )
-            core = status.Repo("listen-core", root)
-
-            self.assertEqual(core.head[:7], base[:7])  # 主 checkout 确实是旧的
-            problems = status.check_consistency(
-                core, [status.Pin("listen-app", newer, "backend.lock.json")]
-            )
-            self.assertFalse(
-                any("够不着" in p for p in problems),
-                f"main worktree 里就有这个 commit，不该报够不着: {problems}",
-            )
-            self.assertIn("main", status.locate_pin(core, newer) or "")
-
-    def test_unresolvable_pin_is_reported_not_silently_skipped(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            make_repo(root)
-            commit(root, {"a.txt": "1\n"}, "only")
-            core = status.Repo("listen-core", root)
-            pins = [status.Pin("listen-app", "0" * 40, "backend.lock.json")]
-            problems = status.check_consistency(core, pins)
-            self.assertTrue(any("解析不到" in p for p in problems), problems)
+            self.assertFalse(status.Repo("missing", Path(tmp)).present)
 
 
 if __name__ == "__main__":

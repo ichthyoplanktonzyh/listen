@@ -83,7 +83,17 @@ Verification:
 ```sh
 flutter analyze --fatal-infos --fatal-warnings
 flutter test
-python3 -m unittest tool/test_backend_artifacts.py
+python3 -m unittest discover -s tool -p 'test_*.py'
 tool/build-macos-release.sh
 tool/verify-macos-release.sh
+```
+
+The discovery command is the single Python verification entry point; it
+includes backend artifact, cross-repository status, and roundtrip report/gate
+regressions. The real three-repository rebuild remains explicit:
+
+```sh
+LISTEN_CORE_REPO=/absolute/path/to/listen-core \
+LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
+  tool/verify_local_content_package_roundtrip.sh
 ```

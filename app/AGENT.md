@@ -97,7 +97,7 @@ python3 tool/repo_status.py
 ```sh
 flutter analyze --fatal-infos --fatal-warnings
 flutter test
-python3 -m unittest tool/test_backend_artifacts.py
+python3 -m unittest discover -s tool -p 'test_*.py'
 ```
 
 `--fatal-infos --fatal-warnings` 不是可选的。改动 backend lock 或打包时另跑：
@@ -116,6 +116,14 @@ tool/verify-macos-release.sh
 
 完整启动、pinned-release 测试、本地 core 联调、手动冒烟，见
 `docs/development/full-app-local-testing.md`。
+
+三仓真实 roundtrip 是显式、较重的门禁，不属于普通 `flutter test`：
+
+```sh
+LISTEN_CORE_REPO=/absolute/path/to/listen-core \
+LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
+  tool/verify_local_content_package_roundtrip.sh
+```
 
 ## 活文档 / 历史记录
 
