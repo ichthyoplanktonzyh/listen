@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-08-01 CST
+> Updated: 2026-08-08 CST
 
 ## Position
 
@@ -14,18 +14,22 @@
 
 ## Current Work
 
-The owner has accepted the shared open Resource Package ecosystem context for
-`listen-core`, `listen-app`, and `listen-gen`. Content-package v1 has bounded
-inspection, typed projection, and a candidate-only atomic import seam. The
-local `listen-gen` prototype natively produces Subtitle Text Track plus Word
-Timeline packages but has no remote or published handoff. Existing Core
-whole-media generation stays temporarily available until the new path is
-published, cut over, and observed.
+The owner has accepted the whole-media producer cutover roadmap. Content-package
+v1 has bounded inspection, typed projection, and a candidate-only atomic import
+seam. `listen-gen` now has a remote, a deterministic release bundle and native
+Subtitle Text Track production with optional provider-supplied Word Timeline.
+`listen-app` pins Gen commit `41a53336`, verifies the artifact before launch and
+owns the package-generation journey.
 
 The additive local package-import HTTP contract exposes the bounded, atomic
 candidate-only application seam with a typed receipt and stable redacted
-failure codes. It remains unreleased until an owner-approved immutable
-contract/runtime artifact exists.
+failure codes. A real pinned Gen -> package -> Core fixture round trip passes.
+Core's whole-media transcription/jobs and legacy production tree remain
+reachable duplication and are now explicit deletion targets, not fallback
+surfaces to extend.
+
+Execution is synchronized by Core #111, Gen #4 and App #100. Core #103 was
+closed as superseded because it kept whole-media ASR orchestration in Core.
 
 ## Established Boundaries
 
@@ -45,22 +49,23 @@ not code evidence.
 
 ## Next
 
-1. Complete the App-led local exact-media package round trip against this
-   unreleased import contract, then publish an owner-approved immutable Core
-   contract/runtime artifact and pin it in the App.
-2. Cut whole-media production over to `listen-gen` and observe it before
-   deleting legacy behavior.
-3. Define Content Edition, Media Rendition, Timeline Compatibility, and the
+1. Fix the three-repository round-trip false-positive path and worktree/Gen-lock
+   status reporting so cutover evidence cannot succeed without executing.
+2. Split Core whole-media from learner-recording transcription, cut the App's
+   remaining media transcription consumers to Gen and delete the old job surface.
+3. Add native aligned Word Timeline production in Gen.
+4. Resolve Core ChunkTimeline versus package Prosody semantics, then migrate
+   Sense Group, Word Acoustics, Prosody and optional Phone Timeline producers.
+5. Delete `scripts/timeline-production` and runtime/release inputs exclusive to
+   the retired Core production path.
+6. Define Content Edition, Media Rendition, Timeline Compatibility, and the
    Package Listing/Release interface before a hosted catalog journey.
-4. Split Core whole-media and learner-recording transcription responsibilities
-   before deleting any legacy coordinator code; realtime and learner-dependent
-   capabilities remain in Core.
-5. Split core issue #80 into a production-model slice followed by an
+7. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
-6. Publish immutable `1.1.0` contract/runtime artifacts only after owner
+8. Publish immutable `1.1.0` contract/runtime artifacts only after owner
    approval, then complete the `listen-app` lock and DTO handoff.
-7. Run the Apple Silicon short-audio cascade smoke only with explicit model
+9. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-8. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+10. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.

@@ -20,15 +20,28 @@ Repository separation baseline 已建立：
 
 ## Offline Resource Generation Split
 
-1. **Native ASR package slice** — external producer 原生完成 media → ASR
-   Subtitle Text Track + Word Timeline → deterministic `.listenpkg`；LLTimeline
-   只保留迁移转换。
-2. **Candidate-only Core import** — 验包后用独立 SQLite 事务幂等附加 track、
-   analysis candidates 与 corpus，不创建或改变 active。
-3. **Whole-media cutover** — 在固定 fixture 和生产观察验证后，把离线生成入口
-   切到 package producer；保留 learner recording 与 realtime ASR。
-4. **Legacy removal** — 只在切流完成后，按独立切片删除 Core whole-media 模型/
-   provider/预处理/批生成和对应 `scripts/timeline-production` 责任。
+第一条 native package vertical 与 candidate-only Core import 已完成，真实 pinned
+三仓 fixture round trip 已通过。下一阶段不再扩展 Core legacy producer，而是按
+[active cutover roadmap](phases/001-offline-generation-split/001-ROADMAP.md)
+完成唯一生产 seam 和旧实现删除：
+
+1. **R0 · Honest integration gate** — 修复可在 E2E 未执行时返回成功的三仓
+   round-trip 闸门，以及 worktree/Gen lock 状态误报。
+2. **R1 · Whole-media ASR cutover** — 拆开 Core whole-media 与 learner-recording
+   transcription；App 只走 pinned Gen package journey，并删除旧 job surface。
+3. **R2 · Native aligned Word Timeline** — alignment 作为 Gen 内部 stage，直接
+   输出 package-native `word_timeline`，不复制 legacy production tree。
+4. **R3 · Chunk/Prosody semantic alignment** — 消除 Core `ChunkTimeline` 与 package
+   `prosody_analysis` 的重复/缺失投影，确定 foundation 的一个语义真源。
+5. **R4 · Rich resources** — 按依赖顺序生产 Sense Group、Word Acoustics、Prosody
+   Analysis 和可选 Phone Timeline。
+6. **R5 · Legacy retirement** — 删除 `scripts/timeline-production`、旧 Core/App
+   contracts/UI 和只服务旧生产链的 runtime/release inputs。
+
+跨仓执行以 [listen-core#111](https://github.com/ichthyoplanktonzyh/listen-core/issues/111)、
+[listen-gen#4](https://github.com/ichthyoplanktonzyh/listen-gen/issues/4) 和
+[listen-app#100](https://github.com/ichthyoplanktonzyh/listen-app/issues/100)
+同步。Core #103 已被新 seam supersede。
 
 ## Product Work
 

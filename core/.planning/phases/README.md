@@ -9,5 +9,7 @@ Completed pre-split phases are frozen under
 Active phase:
 
 - `001-offline-generation-split`: extract the first native offline generation
-  vertical behind the content-package v1 contract and add candidate-only atomic
-  Core import.
+  vertical behind the content-package v1 contract, add candidate-only atomic
+  Core import, cut consumers over, migrate richer resource producers and delete
+  the legacy Core production path. Stable sequencing and ownership live in
+  `001-offline-generation-split/001-ROADMAP.md`.
