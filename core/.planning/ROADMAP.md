@@ -37,8 +37,11 @@ Repository separation baseline 已建立：
    已删除旧 job consumer/UI 并将 missing-transcript 唯一路由到 pinned Gen
    package journey；Core `v0.7.0-split.3`/contract `2.0.0` 已由 App 精确 pin，
    真实三仓 candidate-only round trip 通过。
-3. **R2 · Native aligned Word Timeline** — alignment 作为 Gen 内部 stage，直接
-   输出 package-native `word_timeline`，不复制 legacy production tree。
+3. **R2 · Native aligned Word Timeline — complete** — Gen PR
+   [#5](https://github.com/ichthyoplanktonzyh/listen-gen/pull/5) 已将 alignment
+   作为 Gen 内部 provider-neutral stage，直接输出 package-native
+   `word_timeline`；App PR [#104](https://github.com/ichthyoplanktonzyh/listen-app/pull/104)
+   精确 pin Gen `0.2.0` 并通过真实 candidate-only round trip。
 4. **R3 · Chunk/Prosody semantic alignment** — 消除 Core `ChunkTimeline` 与 package
    `prosody_analysis` 的重复/缺失投影，确定 foundation 的一个语义真源。
 5. **R4 · Rich resources** — 按依赖顺序生产 Sense Group、Word Acoustics、Prosody

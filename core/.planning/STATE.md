@@ -17,8 +17,8 @@
 The owner has accepted the whole-media producer cutover roadmap. Content-package
 v1 has bounded inspection, typed projection, and a candidate-only atomic import
 seam. `listen-gen` now has a remote, a deterministic release bundle and native
-Subtitle Text Track production with optional provider-supplied Word Timeline.
-`listen-app` pins Gen commit `41a53336`, verifies the artifact before launch and
+Subtitle Text Track plus aligned Word Timeline production. `listen-app` pins
+Gen merge `c3564c35` as tool `0.2.0`, verifies the artifact before launch and
 owns the package-generation journey.
 
 The additive local package-import HTTP contract exposes the bounded, atomic
@@ -55,6 +55,24 @@ SoundLine and other Core media paths; the App also uses `ffmpeg`/`ffprobe` for
 media helpers. The App supplies Gen tool paths only after the pinned Gen bundle
 and pinned Core runtime artifact verify.
 
+R2 is complete. Gen PR
+[listen-gen#5](https://github.com/ichthyoplanktonzyh/listen-gen/pull/5)
+(merge `c3564c35`) added a provider-neutral alignment seam, deterministic
+fixture and command adapters, and a first-class `whisper-cpp` adapter. Native
+content-package v1 `word_timeline` resources carry exact Subtitle dependency,
+alignment provider/model/config provenance and typed `asr_aligned` timing;
+optional alignment failure preserves the subtitle package with typed warnings,
+while timeout, cancellation, process reaping, bounded output and runtime/model
+mutation checks remain explicit. Core accepts the result through the existing
+producer-neutral package contract with no Core API or runtime change.
+
+App PR [listen-app#103](https://github.com/ichthyoplanktonzyh/listen-app/pull/103)
+(merge `f91d7b1`) added additive protocol compatibility coverage. App PR
+[listen-app#104](https://github.com/ichthyoplanktonzyh/listen-app/pull/104)
+(merge `813c58b1`) pins Gen `0.2.0` at `c3564c35`; the real model-free round
+trip proves `listen-gen.alignment/0.2.0` Word Timeline provenance, exact Core
+`54497e9` candidate-only import and no active timeline selection.
+
 The legacy `scripts/timeline-production` tree and runtime/release inputs
 exclusive to later retired production paths remain deletion targets for R5.
 
@@ -79,9 +97,9 @@ not code evidence.
 
 ## Next
 
-1. Add native aligned Word Timeline production in Gen under R2; R2 has not
-   started as part of this closeout.
-2. Resolve Core ChunkTimeline versus package Prosody semantics, then migrate
+1. R2 native aligned Word Timeline production is complete; retain Gen
+   `c3564c35` / tool `0.2.0` as the immutable App producer pin.
+2. Resolve Core ChunkTimeline versus package Prosody semantics under R3, then migrate
    Sense Group, Word Acoustics, Prosody and optional Phone Timeline producers.
 3. Delete `scripts/timeline-production` and runtime/release inputs exclusive to
    the retired Core production path.
