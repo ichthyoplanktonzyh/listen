@@ -45,7 +45,7 @@ The first extraction slice is working rather than hypothetical:
   verifiable release bundle;
 - `listen-app/listen_gen.lock.json` pins that exact producer and verifies the
   release and artifact bytes before launch;
-- Core commit `b980a206` exposes bounded content-package inspection and atomic,
+- Core commit `54497e9` exposes bounded content-package inspection and atomic,
   idempotent, candidate-only HTTP import;
 - the pinned three-repository fixture round trip passes:
   Gen release bundle -> native `.listenpkg` -> Core HTTP import -> candidate
@@ -53,9 +53,11 @@ The first extraction slice is working rather than hypothetical:
 - Core still contains forced alignment, content-bound
   SoundLine/phonetic/foundation producers and `scripts/timeline-production`;
   whole-media transcription jobs/routes were deleted in the R1 Core slice;
-- App still contains reachable clients and UI for Core's legacy whole-media
-  transcription jobs;
-- Gen's ASR tools are still delivered through the Core runtime payload.
+- App merge `a3e6564` contains no reachable Core whole-media transcription job
+  client or UI and routes missing-transcript preparation through pinned Gen;
+- App pins immutable Core release `v0.7.0-split.3`, contract `2.0.0` and runtime
+  `0.7.0`. The runtime's `whisper-cli`, `ffmpeg` and `ffprobe` are shared R1
+  inputs still required by Core/App paths, not Gen-only payload.
 
 The old path is now duplication, not a fallback to extend.
 
@@ -88,11 +90,11 @@ proved pinned Gen `41a53336` -> native `.listenpkg` -> pinned Core `b980a206`
 HTTP import, then exported Core state with no active Word, Phone, or Chunk
 Timeline selection.
 
-### R1 — Cut over and delete whole-media ASR in Core — Core slice implemented
+### R1 — Cut over and delete whole-media ASR in Core — complete
 
 Owners: Core and App. Gen's existing ASR path is the replacement.
 
-The Core slice of R1 is implemented on the current branch:
+The Core and App slices of R1 are merged:
 
 - `TranscriptionCoordinator` was split by lifecycle into
   `RecordingTranscriptionCoordinator`; learner-recording transcription, its
@@ -102,23 +104,26 @@ The Core slice of R1 is implemented on the current branch:
   `transcription-job-changed` event, the SQLite CAS job store and downstream
   legacy triggers (including the sound-line auto-trigger) were removed.
 - Deleting the published `/v1/transcription/jobs*` surface is a consumer
-  breaking change, so the unreleased contract advances to major `2.0.0`.
+  breaking change, so the replacement contract was published as major `2.0.0`.
 
-Remaining R1 work is the App cutover:
+- App PR [listen-app#102](https://github.com/ichthyoplanktonzyh/listen-app/pull/102)
+  removed the repository methods, DTO/event parser, panels, actions and settings
+  for `/v1/transcription/jobs*`. Missing-transcript and primary generation use
+  the pinned Gen package journey only; secondary generation was removed rather
+  than pretending the primary-only selection callback honored that destination.
+- Runtime ownership is explicit: Core retains `whisper-cli` for learner
+  recording and `ffmpeg`/`ffprobe` for SoundLine/other Core media paths; App
+  also uses `ffmpeg`/`ffprobe`. App supplies those shared paths to Gen only
+  after both pinned artifacts verify, so Core publishes no Gen-only input at R1.
+- Immutable Core release `v0.7.0-split.3` at `54497e9` publishes contract
+  `2.0.0` and runtime `0.7.0`; App merge `a3e6564` pins their exact hashes and
+  URLs.
 
-- Remove the App repository, view-model, panels and actions that call
-  `/v1/transcription/jobs*` for media.
-- Route missing-transcript preparation only through the pinned Gen package
-  journey.
-- Decide which remaining Core learner/realtime paths truly require
-  `whisper-cli`, and stop making Core implicitly publish Gen-only runtime
-  inputs.
-
-Exit: App contains no Core whole-media transcription call; Core contains no
-whole-media ASR job or provider ownership; learner recording and realtime tests
-remain green. Core's half of that exit is met; the App half tracks
-[listen-app#100](https://github.com/ichthyoplanktonzyh/listen-app/issues/100)
-and must land before `2.0.0` is published.
+Exit met: App contains no Core whole-media transcription call; Core contains no
+whole-media ASR job or provider ownership while retaining learner recording and
+realtime provider/model paths, whose tests remain green. The real gate passes
+against pinned Gen `41a53336`, pinned Core
+`54497e9` and App merge `a3e6564`, including the candidate-only assertion.
 
 This slice supersedes [listen-core#103](https://github.com/ichthyoplanktonzyh/listen-core/issues/103),
 whose plan kept whole-media ASR orchestration in Core.
