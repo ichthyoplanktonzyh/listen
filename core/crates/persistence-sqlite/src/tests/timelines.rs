@@ -322,6 +322,87 @@ fn public_content_package_use_case_inspects_projects_and_imports_atomically() {
 }
 
 #[test]
+fn generated_r4_package_imports_idempotently_as_candidates_only() {
+    let path = std::env::var_os("LISTEN_GEN_R4_PACKAGE")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../testdata/content-package/listen-gen-r4-rich.listenpkg")
+        });
+    let (repo, media) = lltimeline_import_services();
+    let source = MediaItem {
+        id: MediaId::parse("listen-gen-r4-import").unwrap(),
+        path: "/tmp/listen-gen-r4-import.wav".into(),
+        fingerprint: "sha256:34faebfe4439bd33484a89ef52e4dd5314e6a1d6cc17556487ac3c9cec82a26a"
+            .into(),
+        title: "Listen Gen R4 import".into(),
+        kind: MediaKind::Audio,
+        duration: Some(TimeMs::new(2_200)),
+        availability: MediaAvailability::Available,
+        created_at_ms: 1,
+        updated_at_ms: 1,
+    };
+    repo.upsert(&source).unwrap();
+
+    let first = media
+        .import_content_package_path(&source.id, &path)
+        .unwrap();
+    let second = media
+        .import_content_package_path(&source.id, &path)
+        .unwrap();
+    assert_eq!(first.track.id, second.track.id);
+    assert_eq!(first.receipt, second.receipt);
+    let track_id = &first.track.id;
+
+    let words = repo.list_word_timelines(track_id).unwrap();
+    let phones = repo.list_phone_timelines(track_id).unwrap();
+    let sense_groups = repo.list_sense_group_analyses(track_id).unwrap();
+    let prosody = repo.list_prosody_analyses(track_id).unwrap();
+    assert_eq!(words.len(), 1);
+    // Core stores one phone timeline per sentence; reimport must keep exactly
+    // those two deterministic candidates rather than duplicating either one.
+    assert_eq!(phones.len(), 2);
+    assert_eq!(sense_groups.len(), 1);
+    assert_eq!(prosody.len(), 1);
+    assert_eq!(words[0].status, TimelineStatus::Candidate);
+    assert!(
+        phones
+            .iter()
+            .all(|timeline| timeline.status == TimelineStatus::Candidate)
+    );
+    assert_eq!(sense_groups[0].status, TimelineStatus::Candidate);
+    assert_eq!(prosody[0].status, TimelineStatus::Candidate);
+
+    assert!(repo.active_word_timeline(track_id).unwrap().is_none());
+    assert!(repo.active_phone_timeline(track_id).unwrap().is_none());
+    assert!(
+        repo.active_sense_group_analysis(track_id)
+            .unwrap()
+            .is_none()
+    );
+    assert!(repo.active_prosody_analysis(track_id).unwrap().is_none());
+    assert!(repo.list_chunk_timelines(track_id).unwrap().is_empty());
+
+    let imported_kinds = first
+        .receipt
+        .resources
+        .iter()
+        .map(|resource| resource.kind.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        imported_kinds,
+        std::collections::BTreeSet::from([
+            "phone_timeline",
+            "prosody_analysis",
+            "sense_group_analysis",
+            "subtitle_text_track",
+            "word_acoustics",
+            "word_timeline",
+        ])
+    );
+}
+
+#[test]
 fn public_content_package_reimport_returns_the_preserved_archived_track() {
     let (repo, media) = lltimeline_import_services();
     let source = MediaItem {
