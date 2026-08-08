@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-08-09 — v0.7.0-split.4
+
+- Releases additive contract `2.1.0` with package-native Prosody Analysis and
+  explicit Prosodic Chunk spans. Runtime remains `0.7.0`; SQLite schema is
+  `v56`.
+- Core imports Gen-produced Sense Group, Word Acoustics, Prosody Analysis, and
+  qualified Phone Timeline resources atomically and idempotently as candidates
+  without activation. Prosodic Chunk playback time is derived only from the
+  exact Word Timeline dependency; Sense Group remains a separate lifecycle.
+- Added a deterministic `listen-gen` `0.3.0` six-resource package fixture and
+  an end-to-end persistence gate proving candidate-only import, reimport
+  idempotency, and the absence of legacy Chunk Timeline regeneration.
+- No legacy generation code was removed in this release; that work remains in
+  R5.
+
 ## 2026-07-28 16:59 CST
 
 - Replaced the monorepo-era live planning view with an independent
