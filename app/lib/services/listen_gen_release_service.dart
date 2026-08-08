@@ -18,12 +18,14 @@ typedef ListenGenLockBytesLoader = Future<List<int>> Function();
 final class VerifiedListenGenRelease {
   const VerifiedListenGenRelease({
     required this.artifactPath,
+    required this.artifactFilename,
     required this.toolVersion,
     required this.sourceCommit,
     required this.artifactSha256,
   });
 
   final String artifactPath;
+  final String artifactFilename;
   final String toolVersion;
   final String sourceCommit;
   final String artifactSha256;
@@ -282,6 +284,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
 
     return VerifiedListenGenRelease(
       artifactPath: artifactPath,
+      artifactFilename: lock.artifactFilename,
       toolVersion: lock.toolVersion,
       sourceCommit: lock.sourceGitSha,
       artifactSha256: lock.artifactSha256,

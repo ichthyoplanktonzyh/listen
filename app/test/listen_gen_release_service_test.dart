@@ -8,9 +8,9 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 /// The shebang the verifier requires as the artifact's first bytes.
 final _validArtifact = utf8.encode('#!/usr/bin/env python3\nPKbody');
-const _manifestName = 'listen-gen-0.1.0.release.json';
-const _artifactName = 'listen-gen-0.1.0.pyz';
-const _genCommit = '41a53336fd893522abf7ef168fd2ace9fa6ac678';
+const _manifestName = 'listen-gen-0.2.0.release.json';
+const _artifactName = 'listen-gen-0.2.0.pyz';
+const _genCommit = 'c3564c357ecd46c3a52326f1362b78874379a56f';
 const _otherCommit = 'b980a20666f746685db1fd06bfa425d762d7a678';
 const _contractSha =
     'sha256:3a0c67c2e4498dbbe5ad5556bac41eff01e50c06c7d020bd5af1fdcbe46c5dc5';
@@ -21,7 +21,7 @@ Map<String, dynamic> _manifestTemplate() => {
     'commit': _genCommit,
     'repository': 'https://github.com/ichthyoplanktonzyh/listen-gen',
   },
-  'tool': {'id': 'listen-gen', 'version': '0.1.0'},
+  'tool': {'id': 'listen-gen', 'version': '0.2.0'},
   'machine_protocol': {'schema': 'listen_gen.machine-event.v1', 'version': 1},
   'content_package_contract': {
     'authority': {
@@ -62,7 +62,7 @@ Map<String, dynamic> _lockTemplate() => {
     'filename': _manifestName,
     'sha256': 'sha256:${'0' * 64}',
   },
-  'tool': {'id': 'listen-gen', 'version': '0.1.0'},
+  'tool': {'id': 'listen-gen', 'version': '0.2.0'},
   'machine_protocol': {'schema': 'listen_gen.machine-event.v1', 'version': 1},
   'content_package_contract': {
     'authority': {
@@ -190,7 +190,7 @@ void main() {
     final built = await _build(await _tempDir());
     final verified = await built.service.verify();
 
-    expect(verified.toolVersion, '0.1.0');
+    expect(verified.toolVersion, '0.2.0');
     expect(verified.sourceCommit, _genCommit);
     expect(verified.artifactPath, built.artifactPath);
     expect(verified.artifactSha256, _sha(_validArtifact));

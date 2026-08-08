@@ -18,7 +18,7 @@
 set -euo pipefail
 
 readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-54497e99c19ad4414c5029970211ed6af2bd2282}"
-readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-41a53336fd893522abf7ef168fd2ace9fa6ac678}"
+readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-c3564c357ecd46c3a52326f1362b78874379a56f}"
 readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
 
 # Tests prove the gate defaults stay in lockstep with backend.lock.json /
@@ -94,7 +94,7 @@ echo "verify-roundtrip: building pinned Gen bundle"
 echo "verify-roundtrip: verifying Gen bundle"
 ( cd "$LISTEN_GEN_REPO" &&
   run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
-    "$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" )
+    "$tmp/gen/listen-gen-0.2.0/listen-gen-0.2.0.release.json" )
 
 # Build Core into a temporary target so nothing is written into the checkout.
 echo "verify-roundtrip: building pinned Core api-http"
@@ -112,8 +112,8 @@ echo "verify-roundtrip: running focused integration test"
     HOME="$tmp/home" \
     PUB_CACHE="$pub_cache" \
     LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
-    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" \
-    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\"]" \
+    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.2.0/listen-gen-0.2.0.release.json" \
+    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\",\"--aligner\",\"fixture\",\"--alignment-fixture\",\"$LISTEN_GEN_REPO/tests/fixtures/alignment-result.json\"]" \
     LISTEN_PACKAGE_E2E=1 \
     flutter test test/integration/listen_gen_core_roundtrip_test.dart \
       --reporter expanded \

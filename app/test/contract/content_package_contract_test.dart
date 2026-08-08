@@ -19,7 +19,8 @@ void main() {
     expect(receipt.track.id, 'track-local-1');
     expect(receipt.resources, hasLength(2));
     expect(receipt.resources.first.reviewStatus, 'machine_checked');
-    expect(receipt.resources.first.provenance?.tool.label, 'listen-gen/0.1.0');
+    expect(receipt.resources.first.provenance?.tool.label,
+        'listen-gen.asr-package/0.2.0');
     expect(receipt.resources.last.provenance, isNull);
   });
 
@@ -60,24 +61,52 @@ void main() {
         .map(
           (line) => parseListenGenMachineEvent(
             jsonDecode(line) as Map<String, dynamic>,
-            expectedToolVersion: '0.1.0',
+            expectedToolVersion: '0.2.0',
           ),
         )
         .toList(growable: false);
 
-    expect(events.map((event) => event.sequence), [0, 1, 2, 3, 4, 5]);
+    expect(events.map((event) => event.sequence), [0, 1, 2, 3, 4, 5, 6]);
     expect(events.first.kind, ListenGenEventKind.protocol);
     expect(events.last.kind, ListenGenEventKind.completed);
     expect(
       events.last.packageSha256,
-      'sha256:5c306bf95e086108cbed9574d5c4dd9f92a83c153cc6f8073464378acc752e6d',
+      'sha256:10b939d20d0d201b410d34bb0d9e33e58f18f285d8e6ba3104017431568caa4d',
+    );
+    // The committed stream is the real aligned 0.2.0 output: phases run
+    // validating, transcribing, aligning, building_package, and the
+    // completed event carries the additive `alignment` metadata with an empty
+    // warning list. The typed parser ignores the additive field and keeps the
+    // existing shape.
+    expect(
+      events.map((event) => event.kind),
+      [
+        ListenGenEventKind.protocol,
+        ListenGenEventKind.started,
+        ListenGenEventKind.phase,
+        ListenGenEventKind.phase,
+        ListenGenEventKind.phase,
+        ListenGenEventKind.phase,
+        ListenGenEventKind.completed,
+      ],
+    );
+    expect(events[2].phase, 'validating');
+    expect(events[3].phase, 'transcribing');
+    expect(events[4].phase, 'aligning');
+    expect(events[5].phase, 'building_package');
+    expect(events.last.warnings, isEmpty);
+    expect(
+      events.last.resources.map((resource) => resource.kind),
+      containsAll(const ['subtitle_text_track', 'word_timeline']),
     );
   });
 
   test('accepts additive alignment fields and string warnings in completed', () {
-    // R2 adds an optional word-alignment stage. The completed event carries an
-    // additive `alignment` object while `warnings` stays a plain string list;
-    // the parser must ignore the unknown field and keep the existing shape.
+    // R2 adds an optional word-alignment stage. The committed completed event
+    // already carries the produced `alignment` metadata; this test swaps in a
+    // degraded shape while `warnings` stays a plain string list — the parser
+    // must ignore the additive field in either shape and keep the existing
+    // typed model.
     final completed = jsonDecode(
       (File('test/fixtures/content-package/gen-machine-events.ndjson')
               .readAsLinesSync())
@@ -99,7 +128,7 @@ void main() {
 
     final event = parseListenGenMachineEvent(
       completed,
-      expectedToolVersion: '0.1.0',
+      expectedToolVersion: '0.2.0',
     );
 
     expect(event.kind, ListenGenEventKind.completed);
@@ -119,21 +148,21 @@ void main() {
           'schema': 'listen_gen.machine-event.v1',
           'protocol_version': version,
           'sequence': 0,
-          'tool': {'id': tool, 'version': '0.1.0'},
+          'tool': {'id': tool, 'version': '0.2.0'},
           'event': 'protocol',
         };
 
     expect(
       () => parseListenGenMachineEvent(
         event(version: 2, tool: 'listen-gen'),
-        expectedToolVersion: '0.1.0',
+        expectedToolVersion: '0.2.0',
       ),
       throwsFormatException,
     );
     expect(
       () => parseListenGenMachineEvent(
         event(version: 1, tool: 'other'),
-        expectedToolVersion: '0.1.0',
+        expectedToolVersion: '0.2.0',
       ),
       throwsFormatException,
     );
@@ -159,7 +188,7 @@ void main() {
             as Map<String, dynamic>;
     completed['package_sha256'] = 'sha256:no';
     expect(
-      () => parseListenGenMachineEvent(completed, expectedToolVersion: '0.1.0'),
+      () => parseListenGenMachineEvent(completed, expectedToolVersion: '0.2.0'),
       throwsFormatException,
     );
   });

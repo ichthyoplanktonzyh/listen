@@ -243,7 +243,9 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
       'generator_release_artifact_invalid',
       retryable: false,
     );
-    final copyPath = '${directory.path}/verified-listen-gen-0.1.0.pyz';
+    // The launched copy keeps the verified artifact's own filename; the
+    // version lives in the committed lock, never hardcoded here.
+    final copyPath = '${directory.path}/${verified.artifactFilename}';
     List<int> bytes;
     try {
       bytes = await File(verified.artifactPath).readAsBytes();

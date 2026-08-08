@@ -119,8 +119,8 @@ executable. Point it at the release manifest and pass the non-secret provider
 argv as a JSON string:
 
 ```sh
-LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.1.0.release.json \
-LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/sample.asr.json"]' \
+LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.2.0.release.json \
+LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/sample.asr.json","--aligner","fixture","--alignment-fixture","/path/to/alignment-result.json"]' \
   flutter run -d macos
 ```
 
@@ -146,7 +146,7 @@ To produce the bundle locally, build it from the pinned `listen-gen` source:
 ```sh
 cd /path/to/listen-gen
 python3 tools/release_bundle.py build \
-  --source-commit 41a53336fd893522abf7ef168fd2ace9fa6ac678 \
+  --source-commit c3564c357ecd46c3a52326f1362b78874379a56f \
   --output-parent /path/to/.listen-gen
 ```
 
@@ -159,7 +159,7 @@ The wrapper lives at a stable path outside any repository
 regardless of which `listen-gen` branch is checked out:
 
 ```sh
-LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.1.0.release.json \
+LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.2.0.release.json \
 LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","command","--command","python3","--command-arg=/Users/shadow/Library/Application Support/listen/tools/whisper_cpp_wrapper.py","--command-arg={media}","--command-arg=--model","--command-arg=/Users/shadow/Library/Application Support/listen/models/whisper/ggml-base.bin"]' \
   flutter run -d macos
 ```

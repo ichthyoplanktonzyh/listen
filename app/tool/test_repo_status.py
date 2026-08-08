@@ -49,7 +49,7 @@ def write_locks(app: Path, core_sha: str, gen_sha: str, contract: dict) -> None:
     }))
     (app / "listen_gen.lock.json").write_text(json.dumps({
         "source_git_sha": gen_sha,
-        "tool": {"version": "0.1.0"},
+        "tool": {"version": "0.2.0"},
         "content_package_contract": {
             **contract,
             "canonical_sha256": status.canonical_contract_sha(contract),
