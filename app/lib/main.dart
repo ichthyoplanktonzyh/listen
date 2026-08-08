@@ -53,7 +53,6 @@ import 'controllers/speaking_task_controller.dart';
 import 'controllers/speech_enhancement_workflow_controller.dart';
 import 'controllers/subtitle_controller.dart';
 import 'controllers/subtitle_sources_coordinator.dart';
-import 'controllers/transcription_view_models.dart';
 import 'controllers/transcript_readiness_view_model.dart';
 import 'controllers/vocabulary_actions_coordinator.dart';
 import 'controllers/vocabulary_view_model.dart';
@@ -75,7 +74,6 @@ import 'widgets/flows/shell_learning_routes.dart';
 import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
 import 'localization.dart';
-import 'models/capability_readiness.dart';
 import 'models/backend_event.dart';
 import 'models/content_activity.dart';
 import 'models/content_channel.dart';
@@ -679,7 +677,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         await vocabularyActions.loadPhraseEntries();
       },
       loadPhraseCandidates: vocabularyActions.loadPhraseCandidates,
-      generatedPrimaryStatus: _generatedPrimarySubtitleStatus,
     );
     playbackActions.bind(
       isMounted: () => mounted,
@@ -919,12 +916,9 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   void _onEvent(BackendEvent event) {
     BackendEventCoordinator(
-      currentMediaId: () => playerController.mediaId,
       currentPrimaryTrackId: () => subtitleController.primaryTrack?.id,
       loadWordEntries: vocabularyActions.loadWordEntries,
       loadTimelineResource: resourceActions.loadTimelineResource,
-      readSubtitle: mediaSessionRepository.readSubtitle,
-      loadGeneratedTrack: mediaSession.loadGeneratedTrack,
       loadSpeechEnhancements: (trackId) async {
         await mediaSession.loadSpeechEnhancements(trackId);
       },
@@ -1017,30 +1011,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     return confirmed ?? false;
   }
 
-  String _generatedPrimarySubtitleStatus(SpeechEnhancementLoadResult? result) {
-    final parts = <String>[l.text('generatedPrimarySubtitleLoaded')];
-    final readiness = _currentCapabilityReadiness();
-    parts.addAll(readiness.learningItems.map(_capabilityStatusSegment));
-    if (result != null && result.errors.isNotEmpty) {
-      parts.add(l.text('generatedSubtitleResourceWarning'));
-    }
-    return parts.join(' · ');
-  }
-
-  CapabilityReadinessSnapshot _currentCapabilityReadiness() =>
-      CapabilityReadinessSnapshot.fromResources(
-        activeTrack: subtitleController.primaryTrack,
-        document: subtitleController.llTimelineDocument,
-        wordTimelineSummaries: subtitleController.wordTimelineSummaries,
-        chunkTimelineSummaries: subtitleController.chunkTimelineSummaries,
-        phoneTimelineSummaries: subtitleController.phoneTimelineSummaries,
-        activeWordTimingCount: subtitleController.activeWordTimingCount,
-        timelineResourceError: subtitleController.timelineResourceError,
-      );
-
-  String _capabilityStatusSegment(CapabilityReadiness readiness) =>
-      '${l.text(readiness.titleKey)}: ${l.text(readiness.stateKey)}';
-
   Future<void> _openManualReviewTimeline() async {
     final controller = ManualReviewFlowController(
       coreSessionController.state.isConnected
@@ -1065,47 +1035,26 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  Future<void> _generateSubtitles({required bool secondary}) =>
-      generateSubtitlesFlow(
-        context: context,
-        viewModel: !coreSessionController.state.isConnected
-            ? null
-            : GenerateSubtitlesViewModel(
-                coreRepositories.transcription,
-                mediaId: playerController.mediaId ?? '',
-                secondary: secondary,
-                preferredQuality: settingsController.transcriptionQuality,
-                preferredLanguage: settingsController.transcriptionLanguage,
-              ),
-        playerController: playerController,
-        recordTaskStatus: (value) {
-          setState(() {
-            taskStatuses[value.kind] = value;
-          });
-        },
-      );
-
-  Future<void> _openTranscriptionCenter() {
-    final repository = coreSessionController.state.isConnected
-        ? coreRepositories.transcription
-        : null;
-    return openTranscriptionCenterFlow(
+  /// The workbench's "generate subtitles" action. Whole-media transcription
+  /// jobs are gone; this opens the same pinned listen-gen package journey the
+  /// workbench's missing-transcript surface uses, so generation, import and
+  /// selection run through [ContentPackageJourneyViewModel] with its honest
+  /// prerequisite/error/cancel/retry states. Selecting a generated subtitle
+  /// in the journey always activates it as the primary track — there is no
+  /// secondary whole-media generate entry (secondary manual import and search
+  /// remain, and they are the only secondary sourcing paths).
+  Future<void> _generateSubtitles() async {
+    final viewModel = _createContentPackageJourney();
+    if (viewModel == null) {
+      // Unavailable State (CONTEXT.md): a journey needs a media session with
+      // id, path and duration; report the missing prerequisite instead of
+      // swallowing the click.
+      playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
+      return;
+    }
+    await openContentPackageJourneyFlow(
       context: context,
-      viewModel: repository == null
-          ? null
-          : TranscriptionCenterViewModel(
-              repository,
-              loadTrack: mediaSession.loadGeneratedTrack,
-            ),
-      createRegenerateViewModel: (job) => GenerateSubtitlesViewModel(
-        repository!,
-        mediaId: job.mediaId,
-        secondary: job.destination == 'secondary',
-        preferredQuality: settingsController.transcriptionQuality,
-        preferredLanguage: settingsController.transcriptionLanguage,
-        force: true,
-      ),
-      playerController: playerController,
+      createViewModel: () => viewModel,
     );
   }
 
@@ -1896,9 +1845,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         mediaPath.isNotEmpty &&
         durationMs > 0;
     final ContentPackageJourneyViewModelFactory? packageFactory =
-        canUseContentPackages
-        ? () => _createContentPackageJourney()!
-        : null;
+        canUseContentPackages ? () => _createContentPackageJourney()! : null;
     return openSubtitleResourcesFlow(
       context: context,
       backendAvailable: coreSessionController.state.isConnected,
@@ -2093,9 +2040,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// pretending to a precision the timeline does not have.
   Future<void> _seekWord(SubtitleToken token, Cue cue) async {
     final timings = subtitleController.timingsBySentence[cue.id] ?? const [];
-    final matches = timings.where(
-      (timing) => timing.tokenIndex == token.index,
-    );
+    final matches = timings.where((timing) => timing.tokenIndex == token.index);
     if (matches.isEmpty) {
       await _seekCue(cue);
       return;
@@ -2174,7 +2119,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     onOpenSubtitleResources: () => unawaited(_openSubtitleResources()),
     onOpenLearningAssets: () => unawaited(_openLearningAssets()),
     onOpenLearningResources: () => unawaited(_openLearningResources()),
-    onOpenTranscriptionCenter: () => unawaited(_openTranscriptionCenter()),
     onOpenPhoneticAnalysisCenter: () =>
         unawaited(_openPhoneticAnalysisCenter()),
     onExportLogs: () => unawaited(_exportLogs()),
@@ -2189,14 +2133,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _sessionSubtitleMenu() => SessionSubtitleMenu(
     onImportPrimarySubtitle: () =>
         unawaited(mediaSession.openSubtitle(secondary: false)),
-    onGeneratePrimarySubtitles: () =>
-        unawaited(_generateSubtitles(secondary: false)),
+    onGeneratePrimarySubtitles: () => unawaited(_generateSubtitles()),
     onSearchPrimarySubtitles: () =>
         unawaited(_searchOpenSubtitles(secondary: false)),
     onImportSecondarySubtitle: () =>
         unawaited(mediaSession.openSubtitle(secondary: true)),
-    onGenerateSecondarySubtitles: () =>
-        unawaited(_generateSubtitles(secondary: true)),
     onSearchSecondarySubtitles: () =>
         unawaited(_searchOpenSubtitles(secondary: true)),
     onImportEmbeddedSubtitle: () => unawaited(_importEmbeddedSubtitle()),
@@ -2854,7 +2795,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       onOpenVocabulary: _openVocabulary,
       onOpenReview: () => _openReviewQueue(),
       onOpenCoach: () => currentRoute.value = AppRoute.coach,
-      onOpenTranscriptionCenter: () => unawaited(_openTranscriptionCenter()),
       onOpenPhoneticAnalysisCenter: () =>
           unawaited(_openPhoneticAnalysisCenter()),
       child: child,

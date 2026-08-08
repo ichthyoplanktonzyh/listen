@@ -27,7 +27,6 @@ class ShellToolsMenu extends StatelessWidget {
     required this.onOpenSubtitleResources,
     required this.onOpenLearningAssets,
     required this.onOpenLearningResources,
-    required this.onOpenTranscriptionCenter,
     required this.onOpenPhoneticAnalysisCenter,
     required this.onExportLogs,
     required this.onExportVocabulary,
@@ -38,7 +37,6 @@ class ShellToolsMenu extends StatelessWidget {
   final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenLearningAssets;
   final VoidCallback onOpenLearningResources;
-  final VoidCallback onOpenTranscriptionCenter;
   final VoidCallback onOpenPhoneticAnalysisCenter;
   final VoidCallback onExportLogs;
   final VoidCallback onExportVocabulary;
@@ -61,8 +59,6 @@ class ShellToolsMenu extends StatelessWidget {
             onOpenLearningAssets();
           case 'learning-resources':
             onOpenLearningResources();
-          case 'transcription':
-            onOpenTranscriptionCenter();
           case 'phonetic-analysis':
             onOpenPhoneticAnalysisCenter();
           case 'logs':
@@ -97,13 +93,6 @@ class ShellToolsMenu extends StatelessWidget {
           child: ListenMenuRow(
             icon: Icons.storage_outlined,
             title: l.text('resources'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'transcription',
-          child: ListenMenuRow(
-            icon: Icons.record_voice_over_outlined,
-            title: l.text('transcriptionCenter'),
           ),
         ),
         PopupMenuItem(

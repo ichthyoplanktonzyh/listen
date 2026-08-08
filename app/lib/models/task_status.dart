@@ -1,6 +1,6 @@
 import 'backend_event.dart';
 
-enum UserTaskKind { subtitleGeneration, audioAnalysis }
+enum UserTaskKind { audioAnalysis }
 
 enum UserTaskState { working, success, warning, error, cancelled, unknown }
 
@@ -12,15 +12,6 @@ class UserTaskStatus {
     required this.progress,
     this.targetId,
   });
-
-  factory UserTaskStatus.transcription(TranscriptionJobChangedEvent event) =>
-      UserTaskStatus(
-        kind: UserTaskKind.subtitleGeneration,
-        state: _stateFromRawStatus(event.status),
-        rawStatus: event.status,
-        progress: event.phaseProgress,
-        targetId: event.mediaId,
-      );
 
   factory UserTaskStatus.audioAnalysis(PhoneticAnalysisJobChangedEvent event) =>
       UserTaskStatus(
@@ -40,7 +31,6 @@ class UserTaskStatus {
   bool get active => state == UserTaskState.working;
 
   String get titleKey => switch (kind) {
-    UserTaskKind.subtitleGeneration => 'taskSubtitleGeneration',
     UserTaskKind.audioAnalysis => 'taskAudioAnalysis',
   };
 

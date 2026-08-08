@@ -1,7 +1,7 @@
 {
-  "core_git_sha": "b980a20666f746685db1fd06bfa425d762d7a678",
+  "core_git_sha": "54497e99c19ad4414c5029970211ed6af2bd2282",
   "files": {
-    "test/fixtures/events/examples.json": "4b93859dbe2e1134ea4dae042e21351b3a06e041593d3fa958c8df036b021b50",
+    "test/fixtures/events/examples.json": "db6bd17ab49b2ee4aa3a098f05ccf47d96a5cf5c6d7b387347aae27dd99ca4da",
     "test/fixtures/rhythm-frame/fixture-no-phone-rhythm.lltimeline.json": "a1d9acf45ce33dc151b7f9109beba5c6aa3ebf66ff093c5c1d2c5e0352d3787d",
     "test/fixtures/rhythm-frame/fixture-rhythm.lltimeline.json": "a0dc5c954aa0bfb07c233d44bfc93d0efeab49dc1728331f1eba27ec7282d1ec",
     "test/fixtures/semantic-task/gold-fixture-v1.json": "0a9fa8be20e19c27904442df2e62e27216617ebae70d1d20e97fade5e2a92587"

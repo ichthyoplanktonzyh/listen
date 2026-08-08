@@ -294,7 +294,10 @@ class LocalApi {
 }
 
 const supportedApiVersion = 1;
-const supportedContractMajor = 1;
+// The whole-media transcription cutover moved the pinned Core contract from
+// 1.x to 2.x (the split contract archive), so the app now accepts 2.x and
+// rejects 1.x/3.x. The API generation stays 1.
+const supportedContractMajor = 2;
 
 void validateSidecarHandshake(Map<String, dynamic> handshake) {
   if (handshake['event'] != 'api.started' ||

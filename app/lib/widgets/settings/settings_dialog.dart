@@ -34,9 +34,6 @@ class SettingsDialog extends StatefulWidget {
     required this.transcriptWidth,
     required this.primaryColor,
     required this.secondaryColor,
-    required this.transcriptionQuality,
-    required this.transcriptionLanguage,
-    required this.transcriptionDestination,
     required this.mediaLibraryFolder,
     required this.onChooseMediaLibraryFolder,
     required this.onClearMediaLibraryFolder,
@@ -78,9 +75,6 @@ class SettingsDialog extends StatefulWidget {
     required this.onTranscriptWidthChanged,
     required this.onPrimaryColorChanged,
     required this.onSecondaryColorChanged,
-    required this.onTranscriptionQualityChanged,
-    required this.onTranscriptionLanguageChanged,
-    required this.onTranscriptionDestinationChanged,
     required this.onWordSyncVisibleChanged,
     required this.onMarkKeysEnabledChanged,
     required this.onGroupingModeChanged,
@@ -117,9 +111,6 @@ class SettingsDialog extends StatefulWidget {
   final double transcriptWidth;
   final Color primaryColor;
   final Color secondaryColor;
-  final String transcriptionQuality;
-  final String transcriptionLanguage;
-  final String transcriptionDestination;
 
   /// The persisted media library folder plus what the disk says about it; the
   /// dialog re-adopts whatever the host resolves after a pick or a clear.
@@ -169,9 +160,6 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<double> onTranscriptWidthChanged;
   final ValueChanged<Color> onPrimaryColorChanged;
   final ValueChanged<Color> onSecondaryColorChanged;
-  final ValueChanged<String> onTranscriptionQualityChanged;
-  final ValueChanged<String> onTranscriptionLanguageChanged;
-  final ValueChanged<String> onTranscriptionDestinationChanged;
   final ValueChanged<bool> onWordSyncVisibleChanged;
   final ValueChanged<bool> onMarkKeysEnabledChanged;
   final ValueChanged<String> onGroupingModeChanged;
@@ -215,9 +203,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double transcriptWidth;
   late Color primaryColor;
   late Color secondaryColor;
-  late String transcriptionQuality;
-  late String transcriptionLanguage;
-  late String transcriptionDestination;
   late MediaLibraryFolder mediaLibraryFolder;
   late bool wordSyncVisible;
   late bool markKeysEnabled;
@@ -289,9 +274,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptWidth = widget.transcriptWidth;
     primaryColor = widget.primaryColor;
     secondaryColor = widget.secondaryColor;
-    transcriptionQuality = widget.transcriptionQuality;
-    transcriptionLanguage = widget.transcriptionLanguage;
-    transcriptionDestination = widget.transcriptionDestination;
     mediaLibraryFolder = widget.mediaLibraryFolder;
     wordSyncVisible = widget.wordSyncVisible;
     markKeysEnabled = widget.markKeysEnabled;
@@ -973,79 +955,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           widget.onClearMediaLibraryFolder,
                         ),
                       ),
-                    ),
-                    const Divider(),
-                    Text(
-                      l.text('transcriptionDefaults'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    DropdownButtonFormField<String>(
-                      initialValue: transcriptionQuality,
-                      decoration: InputDecoration(
-                        labelText: l.text('preferredQuality'),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'fast', child: Text('Fast')),
-                        DropdownMenuItem(
-                          value: 'balanced',
-                          child: Text('Balanced'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'accurate',
-                          child: Text('Accurate'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        transcriptionQuality = value;
-                        widget.onTranscriptionQualityChanged(value);
-                        refresh(() {});
-                      },
-                    ),
-                    DropdownButtonFormField<String>(
-                      initialValue: transcriptionLanguage,
-                      decoration: InputDecoration(
-                        labelText: l.text('transcriptionLanguage'),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'auto',
-                          child: Text(l.text('automatic')),
-                        ),
-                        const DropdownMenuItem(
-                          value: 'en',
-                          child: Text('English'),
-                        ),
-                        const DropdownMenuItem(value: 'zh', child: Text('中文')),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        transcriptionLanguage = value;
-                        widget.onTranscriptionLanguageChanged(value);
-                        refresh(() {});
-                      },
-                    ),
-                    DropdownButtonFormField<String>(
-                      initialValue: transcriptionDestination,
-                      decoration: InputDecoration(
-                        labelText: l.text('defaultDestination'),
-                      ),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'primary',
-                          child: Text(l.text('primarySubtitle')),
-                        ),
-                        DropdownMenuItem(
-                          value: 'secondary',
-                          child: Text(l.text('secondarySubtitle')),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        transcriptionDestination = value;
-                        widget.onTranscriptionDestinationChanged(value);
-                        refresh(() {});
-                      },
                     ),
                     const Divider(),
                     Text(

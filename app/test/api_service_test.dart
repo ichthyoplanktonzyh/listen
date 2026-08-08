@@ -9,7 +9,7 @@ void main() {
       () => validateSidecarHandshake({
         'event': 'api.started',
         'api_version': 1,
-        'contract_version': '1.3.0',
+        'contract_version': '2.3.0',
         'runtime_version': '0.7.0',
       }),
       returnsNormally,
@@ -21,21 +21,24 @@ void main() {
       () => validateSidecarHandshake({'event': 'api.started'}),
       throwsFormatException,
     );
-    expect(
-      () => validateSidecarHandshake({
-        'event': 'api.started',
-        'api_version': 1,
-        'contract_version': '2.0.0',
-        'runtime_version': '0.7.0',
-      }),
-      throwsA(
-        isA<FormatException>().having(
-          (error) => error.message,
-          'message',
-          contains('supports 1.x'),
+    for (final version in const ['1.3.0', '3.0.0']) {
+      expect(
+        () => validateSidecarHandshake({
+          'event': 'api.started',
+          'api_version': 1,
+          'contract_version': version,
+          'runtime_version': '0.7.0',
+        }),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            contains('supports 2.x'),
+          ),
         ),
-      ),
-    );
+        reason: '$version is outside the supported 2.x contract major',
+      );
+    }
   });
 
   test('development sidecar candidate stays inside frontend checkout', () {

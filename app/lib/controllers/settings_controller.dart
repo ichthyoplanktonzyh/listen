@@ -47,9 +47,6 @@ class SettingsController extends ChangeNotifier {
   String get ffmpegPath => _settings.ffmpegPath;
   String get ffprobePath => _settings.ffprobePath;
   String get ytDlpPath => _settings.ytDlpPath;
-  String get transcriptionQuality => _settings.transcriptionQuality;
-  String get transcriptionLanguage => _settings.transcriptionLanguage;
-  String get transcriptionDestination => _settings.transcriptionDestination;
   String get openSubtitlesApiKey => _settings.openSubtitlesApiKey;
   bool get wordSyncVisible => _settings.wordSyncVisible;
   String get groupingMode => _settings.groupingMode;

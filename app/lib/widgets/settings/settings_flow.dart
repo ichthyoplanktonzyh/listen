@@ -57,9 +57,6 @@ Future<void> showAppSettings({
       transcriptWidth: settingsController.transcriptWidth,
       primaryColor: settingsController.primaryColor,
       secondaryColor: settingsController.secondaryColor,
-      transcriptionQuality: settingsController.transcriptionQuality,
-      transcriptionLanguage: settingsController.transcriptionLanguage,
-      transcriptionDestination: settingsController.transcriptionDestination,
       mediaLibraryFolder: settingsController.mediaLibraryFolder,
       onChooseMediaLibraryFolder: () =>
           settingsController.chooseMediaLibraryFolder(
@@ -164,21 +161,6 @@ Future<void> showAppSettings({
       onSecondaryColorChanged: (v) {
         settingsController.update(
           settingsController.settings.copyWith(secondaryColor: v.toARGB32()),
-        );
-      },
-      onTranscriptionQualityChanged: (v) {
-        settingsController.update(
-          settingsController.settings.copyWith(transcriptionQuality: v),
-        );
-      },
-      onTranscriptionLanguageChanged: (v) {
-        settingsController.update(
-          settingsController.settings.copyWith(transcriptionLanguage: v),
-        );
-      },
-      onTranscriptionDestinationChanged: (v) {
-        settingsController.update(
-          settingsController.settings.copyWith(transcriptionDestination: v),
         );
       },
       onMarkKeysEnabledChanged: (v) {

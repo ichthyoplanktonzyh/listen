@@ -117,9 +117,24 @@ phase and contract request.
 ## Current App Reality
 
 The current checked-in baseline is a local-media-first Flutter app pinned to the
-immutable Core release in `backend.lock.json`. Whole-media transcription still
-uses Core's `/v1/transcription/*` model and job APIs. These are current code
-facts, not the target package-production boundary.
+immutable Core release in `backend.lock.json`. Whole-media transcription is
+fully cut over to the pinned `listen-gen` package journey: the app prepares a
+learning transcript by generating a `.listenpkg` with the pinned `listen-gen`
+release bundle and importing it through Core's content-package import — it no
+longer consumes Core's whole-media transcription model/job surface
+(`/v1/transcription/jobs`), and the transcription center is gone. Core's
+`/v1/transcription/models` surface remains for learner recording and realtime
+conversation model selection.
+
+At R1 the media tools are shared, not repository-exclusive: `backend.lock.json`
+verifies the Core runtime artifact, which bundles `whisper-cli`, `ffmpeg`, and
+`ffprobe`; Core still needs `whisper-cli` for learner recording and
+`ffmpeg`/`ffprobe` for the sound-line and other Core paths; the app uses
+`ffmpeg`/`ffprobe` helpers of its own; and Gen declares the tool roles its
+providers require while the app supplies paths only after the pinned Gen and
+Core artifacts verify byte-for-byte. So none of the three tools is Gen-only at
+R1, and verification claims go no further than those full-artifact SHA-256
+checks.
 
 Discovery covers two source families behind one catalog. Podcast RSS is read
 and parsed in the app, and its acquisition is a direct fetch of the
@@ -134,10 +149,10 @@ Recognising media acquired in an earlier session relies on the external tool's
 episode downloaded in a previous session is not matched back to its feed entry;
 there is no persisted acquisition record yet.
 
-The app does not yet implement `.listenpkg` discovery or import, a Catalog or
-Registry UI, `listen-gen` process orchestration, package trust presentation, or
-the complete media/package compatibility journey. Documentation and UI must not
-present those capabilities as available before their contracts and code exist.
+The app does not yet implement `.listenpkg` discovery or a Catalog/Registry UI,
+package trust presentation, or the complete media/package compatibility
+journey. Documentation and UI must not present those capabilities as available
+before their contracts and code exist.
 
 ## Migration Order
 

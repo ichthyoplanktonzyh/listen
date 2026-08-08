@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("verify_local_content_package_roundtrip.sh")
 NAME = "pinned Gen bundle to Core import round trips as a candidate"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def make_repo(path: Path) -> str:
@@ -77,6 +79,76 @@ class ScriptSemanticsTests(unittest.TestCase):
         result = self.run_gate("flutter-test")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
+
+
+class DefaultPinTests(unittest.TestCase):
+    # One declaration line per pin, with the fallback environment variable and
+    # a full 40-hex-digit default. Anything shaped differently is unexpected.
+    PIN_DECL = re.compile(
+        r'^readonly\s+(?P<const>[A-Z0-9_]+)='
+        r'"\$\{VERIFY_ROUNDTRIP_(?P<env>[A-Z0-9_]+):-(?P<pin>[0-9a-f]{40})\}"$'
+    )
+    PIN_ASSIGN = re.compile(r"\b(?:CORE_PIN|GEN_PIN)\s*=")
+    PIN_FALLBACK = re.compile(r"VERIFY_ROUNDTRIP_(?:CORE|GEN)_PIN")
+
+    def setUp(self):
+        self.script_text = SCRIPT.read_text()
+        self.script_lines = self.script_text.splitlines()
+
+    def declared_default_pins(self):
+        """Parse the declared default pins strictly; fail on any anomaly."""
+        declared = {}
+        for lineno, line in enumerate(self.script_lines, 1):
+            match = self.PIN_DECL.match(line)
+            if match is None:
+                # Anything else that assigns a pin constant or names its
+                # fallback variable is an unexpected second source of truth.
+                if self.PIN_ASSIGN.search(line) or self.PIN_FALLBACK.search(line):
+                    self.fail(
+                        f"line {lineno}: unexpected pin declaration or fallback "
+                        f"reference: {line.strip()!r}"
+                    )
+                continue
+            const = match.group("const")
+            if const in declared:
+                self.fail(
+                    f"line {lineno}: duplicate default declaration for {const} "
+                    f"(already declared on line {declared[const][2]})"
+                )
+            declared[const] = (match.group("env"), match.group("pin"), lineno)
+        self.assertEqual(
+            sorted(declared),
+            ["CORE_PIN", "GEN_PIN"],
+            "script must declare exactly the CORE_PIN and GEN_PIN defaults "
+            f"with their VERIFY_ROUNDTRIP_* fallbacks; got {sorted(declared)}",
+        )
+        pins = {}
+        for const, (env, pin, lineno) in declared.items():
+            self.assertEqual(
+                env,
+                const,
+                f"line {lineno}: {const} fallback reads "
+                f"$VERIFY_ROUNDTRIP_{env}, expected $VERIFY_ROUNDTRIP_{const}",
+            )
+            pins[const] = pin
+        return pins
+
+    def test_removed_print_pins_bypass_hook_stays_absent(self):
+        # The VERIFY_ROUNDTRIP_PRINT_PINS early exit was removed: an
+        # accidentally-set environment variable must never turn the production
+        # gate into a no-op success. The defaults are proven against the locks
+        # by text parsing above, not by executing a bypass path.
+        self.assertNotIn("VERIFY_ROUNDTRIP_PRINT_PINS", self.script_text)
+
+    def test_default_core_pin_matches_backend_lock(self):
+        pins = self.declared_default_pins()
+        lock = json.loads((REPO_ROOT / "backend.lock.json").read_text())
+        self.assertEqual(pins["CORE_PIN"], lock["core_git_sha"])
+
+    def test_default_gen_pin_matches_gen_lock(self):
+        pins = self.declared_default_pins()
+        lock = json.loads((REPO_ROOT / "listen_gen.lock.json").read_text())
+        self.assertEqual(pins["GEN_PIN"], lock["source_git_sha"])
 
 
 if __name__ == "__main__":

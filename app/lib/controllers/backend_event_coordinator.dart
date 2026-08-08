@@ -2,17 +2,13 @@ import 'dart:async';
 
 import '../models/backend_event.dart';
 import '../models/task_status.dart';
-import '../models/timeline.dart';
 import '../models/types.dart';
 
 class BackendEventCoordinator {
   const BackendEventCoordinator({
-    required this.currentMediaId,
     required this.currentPrimaryTrackId,
     required this.loadWordEntries,
     required this.loadTimelineResource,
-    required this.readSubtitle,
-    required this.loadGeneratedTrack,
     required this.loadSpeechEnhancements,
     required this.setStatus,
     required this.setTaskStatus,
@@ -26,13 +22,9 @@ class BackendEventCoordinator {
 
   String _t(String key) => text?.call(key) ?? key;
 
-  final String? Function() currentMediaId;
   final String? Function() currentPrimaryTrackId;
   final Future<void> Function() loadWordEntries;
   final Future<void> Function(String trackId) loadTimelineResource;
-  final Future<SubtitleTrack> Function(String trackId) readSubtitle;
-  final Future<void> Function(SubtitleTrack track, bool secondary)
-  loadGeneratedTrack;
   final Future<void> Function(String trackId) loadSpeechEnhancements;
   final void Function(String status) setStatus;
   final void Function(UserTaskStatus status) setTaskStatus;
@@ -50,10 +42,6 @@ class BackendEventCoordinator {
       unawaited(loadWordEntries());
       final trackId = currentPrimaryTrackId();
       if (trackId != null) unawaited(loadTimelineResource(trackId));
-      return;
-    }
-    if (event is TranscriptionJobChangedEvent) {
-      _handleTranscriptionJob(event);
       return;
     }
     if (event is WordTimingsCompletedEvent) {
@@ -78,38 +66,6 @@ class BackendEventCoordinator {
     }
     if (event is LexicalCapabilityChangedEvent) {
       _handleCapabilityChanged(event);
-    }
-  }
-
-  void _handleTranscriptionJob(TranscriptionJobChangedEvent event) {
-    if (event.mediaId != currentMediaId()) return;
-    // Archiving republishes the completed job snapshot. It is metadata churn,
-    // not a second completion, and its generated track may already be deleted.
-    if (event.archivedAtMs != null) return;
-    setTaskStatus(UserTaskStatus.transcription(event));
-    if (event.status == 'completed' && event.generatedTrackId != null) {
-      unawaited(_loadCompletedTranscription(event));
-      return;
-    }
-    setStatus(
-      _t('statusAsrProgress')
-          .replaceAll('{status}', event.status)
-          .replaceAll('{progress}', '${event.phaseProgress}'),
-    );
-  }
-
-  Future<void> _loadCompletedTranscription(
-    TranscriptionJobChangedEvent event,
-  ) async {
-    try {
-      final track = await readSubtitle(event.generatedTrackId!);
-      if (event.mediaId != currentMediaId()) return;
-      await loadGeneratedTrack(track, event.destination == 'secondary');
-    } catch (error) {
-      // The host's status hook takes a sentence and nothing else — this
-      // coordinator has no PlayerController to hang an ApiFailure on — so the
-      // exception is dropped rather than printed on a status line.
-      setStatus(_t('statusGeneratedSubtitleUnavailable'));
     }
   }
 

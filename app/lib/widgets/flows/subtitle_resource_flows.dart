@@ -10,20 +10,18 @@ import '../../controllers/phonetic_analysis_view_model.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/subtitle_controller.dart';
-import '../../controllers/transcription_view_models.dart';
 import '../../localization.dart';
-import '../../models/task_status.dart';
 import '../../models/timeline.dart';
-import '../../models/runtime_resources.dart';
 import '../../phonetic_analysis_ui.dart';
 import '../../screens/subtitle_resources_screen.dart';
 import '../../screens/content_package_journey_screen.dart';
-import '../../transcription_ui.dart';
 import '../panels/cold_start_marking_sheet.dart';
 
 /// Dialog-driven subtitle-resource flows extracted from the composition root:
-/// delete/export confirmation, subtitle generation, transcription and
-/// phonetic-analysis centers, the resources screen, and cold-start marking.
+/// delete/export confirmation, the phonetic-analysis center, the resources
+/// screen, cold-start marking, and the content-package journey. Whole-media
+/// subtitle generation is gone: that action opens the content-package journey
+/// (the pinned listen-gen release path) instead of a Core transcription job.
 /// Parameter names mirror the host's controller fields.
 
 typedef ColdStartMarkingViewModelFactory =
@@ -31,8 +29,6 @@ typedef ColdStartMarkingViewModelFactory =
       required String trackId,
       required String language,
     });
-typedef RegenerateSubtitlesViewModelFactory =
-    GenerateSubtitlesViewModel Function(TranscriptionJobView job);
 typedef ContentPackageJourneyViewModelFactory =
     ContentPackageJourneyViewModel Function();
 
@@ -128,87 +124,6 @@ Future<void> exportSubtitleResourceFlow({
   } else {
     await resourceActions.exportSubtitleSrt(track);
   }
-}
-
-Future<void> generateSubtitlesFlow({
-  required BuildContext context,
-  required GenerateSubtitlesViewModel? viewModel,
-  required PlayerController playerController,
-  required void Function(UserTaskStatus value) recordTaskStatus,
-}) async {
-  final l = AppLocalizations.of(context);
-  if (viewModel == null || playerController.mediaId == null) {
-    viewModel?.dispose();
-    playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
-    return;
-  }
-  bool created;
-  try {
-    created = await showGenerateSubtitles(
-      context: context,
-      viewModel: viewModel,
-    );
-  } finally {
-    viewModel.dispose();
-  }
-  if (created && context.mounted) {
-    playerController.setStatus(
-      viewModel.secondary
-          ? l.text('secondarySubtitleGenerationStarted')
-          : l.text('primarySubtitleGenerationStarted'),
-    );
-    recordTaskStatus(
-      UserTaskStatus(
-        kind: UserTaskKind.subtitleGeneration,
-        state: UserTaskState.working,
-        rawStatus: 'queued',
-        progress: 0,
-        targetId: playerController.mediaId,
-      ),
-    );
-  }
-}
-
-Future<void> openTranscriptionCenterFlow({
-  required BuildContext context,
-  required TranscriptionCenterViewModel? viewModel,
-  required RegenerateSubtitlesViewModelFactory createRegenerateViewModel,
-  required PlayerController playerController,
-}) async {
-  if (viewModel == null) {
-    // Unavailable State (CONTEXT.md): the transcription center is a user menu
-    // entry; report the missing core instead of swallowing the click.
-    final l = AppLocalizations.of(context);
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  await Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      builder: (routeContext) {
-        Future<void> regenerate(TranscriptionJobView job) async {
-          final regenerateViewModel = createRegenerateViewModel(job);
-          bool created;
-          try {
-            created = await showGenerateSubtitles(
-              context: routeContext,
-              viewModel: regenerateViewModel,
-            );
-          } finally {
-            regenerateViewModel.dispose();
-          }
-          if (created) await viewModel.refresh();
-        }
-
-        return _OwnedNotifierRoute(
-          notifier: viewModel,
-          child: TranscriptionCenter(
-            viewModel: viewModel,
-            onRegenerate: regenerate,
-          ),
-        );
-      },
-    ),
-  );
 }
 
 Future<void> openPhoneticAnalysisCenterFlow({

@@ -3,7 +3,6 @@ import 'package:llplayer_next/controllers/realtime_transcription_model_controlle
 import 'package:llplayer_next/data/repositories/transcription_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
-import 'package:llplayer_next/models/timeline.dart';
 
 void main() {
   test('selects an installed model compatible with the language', () async {
@@ -78,17 +77,6 @@ final class _Repository implements TranscriptionRepository {
   @override
   Future<List<TranscriptionProviderView>> providers() async => const [];
   @override
-  Future<List<TranscriptionJobView>> jobs() async => const [];
-  @override
-  Future<void> createJob({
-    required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    required bool force,
-  }) async {}
-  @override
   Future<void> registerCustomModel(String path) async {}
   @override
   Future<void> installModel(String id) async {}
@@ -96,14 +84,4 @@ final class _Repository implements TranscriptionRepository {
   Future<void> cancelModelInstall(String id) async {}
   @override
   Future<void> deleteModel(String id) async {}
-  @override
-  Future<void> cancelJob(String id) async {}
-  @override
-  Future<void> retryJob(String id) async {}
-  @override
-  Future<SubtitleTrack> readSubtitle(String id) => throw UnimplementedError();
-  @override
-  Future<String> exportSubtitleSrt(String id) => throw UnimplementedError();
-  @override
-  Future<void> archiveJob(String id) async {}
 }

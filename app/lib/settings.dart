@@ -52,9 +52,6 @@ class AppSettings {
     this.ffmpegPath = '',
     this.ffprobePath = '',
     this.ytDlpPath = '',
-    this.transcriptionQuality = 'balanced',
-    this.transcriptionLanguage = 'auto',
-    this.transcriptionDestination = 'primary',
     this.openSubtitlesApiKey = '',
     this.pronunciationVisible = true,
     this.wordSyncVisible = true,
@@ -160,12 +157,6 @@ class AppSettings {
       ffmpegPath: json['ffmpeg_path'] as String? ?? '',
       ffprobePath: json['ffprobe_path'] as String? ?? '',
       ytDlpPath: json['yt_dlp_path'] as String? ?? '',
-      transcriptionQuality:
-          json['transcription_quality'] as String? ?? 'balanced',
-      transcriptionLanguage:
-          json['transcription_language'] as String? ?? 'auto',
-      transcriptionDestination:
-          json['transcription_destination'] as String? ?? 'primary',
       openSubtitlesApiKey: json['opensubtitles_api_key'] as String? ?? '',
       pronunciationVisible: json['pronunciation_visible'] as bool? ?? true,
       wordSyncVisible: json['word_sync_visible'] as bool? ?? true,
@@ -259,9 +250,6 @@ class AppSettings {
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
-  final String transcriptionQuality;
-  final String transcriptionLanguage;
-  final String transcriptionDestination;
   final String openSubtitlesApiKey;
   final bool pronunciationVisible;
   final bool wordSyncVisible;
@@ -401,9 +389,6 @@ class AppSettings {
     'ffmpeg_path': ffmpegPath,
     'ffprobe_path': ffprobePath,
     'yt_dlp_path': ytDlpPath,
-    'transcription_quality': transcriptionQuality,
-    'transcription_language': transcriptionLanguage,
-    'transcription_destination': transcriptionDestination,
     'opensubtitles_api_key': openSubtitlesApiKey,
     'pronunciation_visible': pronunciationVisible,
     'word_sync_visible': wordSyncVisible,
@@ -464,9 +449,6 @@ class AppSettings {
     String? ffmpegPath,
     String? ffprobePath,
     String? ytDlpPath,
-    String? transcriptionQuality,
-    String? transcriptionLanguage,
-    String? transcriptionDestination,
     String? openSubtitlesApiKey,
     bool? pronunciationVisible,
     bool? wordSyncVisible,
@@ -532,10 +514,6 @@ class AppSettings {
     ffmpegPath: ffmpegPath ?? this.ffmpegPath,
     ffprobePath: ffprobePath ?? this.ffprobePath,
     ytDlpPath: ytDlpPath ?? this.ytDlpPath,
-    transcriptionQuality: transcriptionQuality ?? this.transcriptionQuality,
-    transcriptionLanguage: transcriptionLanguage ?? this.transcriptionLanguage,
-    transcriptionDestination:
-        transcriptionDestination ?? this.transcriptionDestination,
     openSubtitlesApiKey: openSubtitlesApiKey ?? this.openSubtitlesApiKey,
     pronunciationVisible: pronunciationVisible ?? this.pronunciationVisible,
     wordSyncVisible: wordSyncVisible ?? this.wordSyncVisible,

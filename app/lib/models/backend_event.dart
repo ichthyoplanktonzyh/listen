@@ -8,8 +8,6 @@ class BackendEvent {
     final payload = json['payload'];
     return switch (name) {
       'service-started' => const ServiceStartedEvent(),
-      'transcription-job-changed' when payload is Map<String, dynamic> =>
-        TranscriptionJobChangedEvent.fromJson(payload),
       'word-timings-completed' when payload is Map<String, dynamic> =>
         WordTimingsCompletedEvent.fromJson(payload),
       'sound-line-completed' when payload is Map<String, dynamic> =>
@@ -81,34 +79,6 @@ class SoundLineCompletedEvent extends BackendEvent {
   final String trackId;
   final String? timelineId;
   final int acousticCueCount;
-}
-
-class TranscriptionJobChangedEvent extends BackendEvent {
-  const TranscriptionJobChangedEvent({
-    required this.status,
-    required this.phaseProgress,
-    this.mediaId,
-    this.generatedTrackId,
-    this.destination,
-    this.archivedAtMs,
-  });
-
-  factory TranscriptionJobChangedEvent.fromJson(Map<String, dynamic> json) =>
-      TranscriptionJobChangedEvent(
-        status: json['status'] as String? ?? 'unknown',
-        phaseProgress: json['phase_progress'] as int? ?? 0,
-        mediaId: json['media_id'] as String?,
-        generatedTrackId: json['generated_track_id'] as String?,
-        destination: json['destination'] as String?,
-        archivedAtMs: json['archived_at_ms'] as int?,
-      );
-
-  final String status;
-  final int phaseProgress;
-  final String? mediaId;
-  final String? generatedTrackId;
-  final String? destination;
-  final int? archivedAtMs;
 }
 
 class PhoneticAnalysisJobChangedEvent extends BackendEvent {

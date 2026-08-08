@@ -47,7 +47,7 @@ in English.
 | `LLTimeline`, `WordTimeline` | Resource/type names that appear in exported filenames and in payloads. Note the contrast with `timeline` below: the *format* keeps its name, the *concept* does not. | `importLLTimeline`, `exportLLTimelineJson`, `statusManualReviewNoTimeline` |
 | `JSON`, `SRT`, `VTT`, `PCM`, `ms` | Formats and units. | throughout |
 | `fingerprint`, `correlation id` | Identifiers the learner may have to quote in a bug report. `correlation id` is rendered through `realtimeFailureReference` so the label around it is translated. | `resourceFingerprintMismatch`, `realtimeFailureReference` |
-| `中文`, `日本語`, `한국어` | Language endonyms. | `transcription_ui.dart`, `settings_dialog.dart`, `subtitle_resource_manager_panel.dart` |
+| `中文`, `日本語`, `한국어` | Language endonyms. | `settings_dialog.dart`, `subtitle_resource_manager_panel.dart` |
 
 The last two rows are also the exemption list inside
 `test/cjk_literal_discipline_test.dart`. Adding a proper name there means adding

@@ -103,49 +103,6 @@ class TranscriptionModelView {
   final String license;
 }
 
-class TranscriptionJobView {
-  const TranscriptionJobView({
-    required this.id,
-    required this.mediaId,
-    required this.mediaTitle,
-    required this.modelId,
-    required this.destination,
-    required this.status,
-    required this.phaseProgress,
-    required this.createdAtMs,
-    this.errorMessage,
-    this.generatedTrackId,
-    this.archivedAtMs,
-  });
-
-  factory TranscriptionJobView.fromJson(Map<String, dynamic> json) =>
-      TranscriptionJobView(
-        id: json['id'] as String,
-        mediaId: json['media_id'] as String,
-        mediaTitle: json['media_title'] as String,
-        modelId: json['model_id'] as String,
-        destination: json['destination'] as String,
-        status: json['status'] as String,
-        phaseProgress: (json['phase_progress'] as num).toInt(),
-        errorMessage: json['error_message'] as String?,
-        generatedTrackId: json['generated_track_id'] as String?,
-        createdAtMs: (json['created_at_ms'] as num).toInt(),
-        archivedAtMs: (json['archived_at_ms'] as num?)?.toInt(),
-      );
-
-  final String id;
-  final String mediaId;
-  final String mediaTitle;
-  final String modelId;
-  final String destination;
-  final String status;
-  final int phaseProgress;
-  final String? errorMessage;
-  final String? generatedTrackId;
-  final int createdAtMs;
-  final int? archivedAtMs;
-}
-
 class RecordingTranscriptSegment {
   const RecordingTranscriptSegment({
     required this.startMs,

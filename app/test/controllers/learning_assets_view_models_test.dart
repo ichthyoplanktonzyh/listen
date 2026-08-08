@@ -2,9 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_assets_view_models.dart';
-import 'package:llplayer_next/controllers/transcription_view_models.dart';
 import 'package:llplayer_next/data/repositories/learning_assets_repository.dart';
-import 'package:llplayer_next/data/repositories/transcription_repository.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
 import 'package:llplayer_next/models/types.dart';
 
@@ -47,16 +45,6 @@ class _LearningAssetsRepository implements LearningAssetsRepository {
     savedEntry = value;
     return (saveCompleter = Completer<LexicalEntryDetails>()).future;
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _TranscriptionRepository implements TranscriptionRepository {
-  final modelsCompleter = Completer<List<TranscriptionModelView>>();
-
-  @override
-  Future<List<TranscriptionModelView>> models() => modelsCompleter.future;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -116,20 +104,4 @@ void main() {
       await expectLater(saving, completes);
     },
   );
-
-  test('generate subtitles ignores a model load after dispose', () async {
-    final repository = _TranscriptionRepository();
-    final viewModel = GenerateSubtitlesViewModel(
-      repository,
-      mediaId: 'media',
-      secondary: false,
-    );
-
-    final loading = viewModel.load();
-    viewModel.dispose();
-    repository.modelsCompleter.complete(const []);
-
-    await expectLater(loading, completes);
-    expect(viewModel.state.loading, isTrue);
-  });
 }

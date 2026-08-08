@@ -496,7 +496,6 @@ _harness(LocalApi service) {
         onMediaSwitched: () {},
         reloadLearningEntries: () async {},
         loadPhraseCandidates: (_) async {},
-        generatedPrimaryStatus: (_) => 'generated',
       );
   return (
     api: service,
