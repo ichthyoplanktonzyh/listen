@@ -3,28 +3,24 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use api_events::{EventEnvelope, EventName};
-use application::{
-    AppServices, ApplicationError, ImportSubtitle, TranscriptionJobTransition,
-    TranscriptionRepository, now_ms,
-};
+use application::{AppServices, ApplicationError, TranscriptionRepository, now_ms};
 use domain::{
-    MediaId, RecordingTranscriptProvenance, RecordingTranscriptionJob, RecordingTranscriptionJobId,
-    RecordingTranscriptionStatus, SubtitleTrackProvenance, TranscriptionDestination,
-    TranscriptionJob, TranscriptionJobId, TranscriptionJobStatus, TranscriptionModelDescriptor,
-    TranscriptionModelId, TranscriptionModelState, TranscriptionProviderInfo, TranscriptionPurpose,
-    TranscriptionQuality, TranscriptionSegment,
+    RecordingTranscriptProvenance, RecordingTranscriptionJob, RecordingTranscriptionJobId,
+    RecordingTranscriptionStatus, TranscriptionModelDescriptor, TranscriptionModelId,
+    TranscriptionModelState, TranscriptionProviderInfo, TranscriptionQuality, TranscriptionSegment,
 };
-use sha2::{Digest, Sha256};
 use tokio::sync::{Semaphore, broadcast};
 
 use crate::download::{ArtifactDownloader, DownloadProgress, ReqwestArtifactDownloader};
 use crate::process::{CancellationProbe, ProcessRunner, ProcessSpec, TokioProcessRunner};
-use crate::runtime_support::{
-    ffmpeg_wav_args, file_id, hash_file, io_error, resolve_tool, support_dir,
-};
+use crate::runtime_support::{file_id, hash_file, io_error, resolve_tool, support_dir};
 
+/// Coordinates transcription of short microphone recordings, which consume an
+/// existing `RecordingAsset` and never import subtitle tracks. Whole-media
+/// transcription jobs have been removed; the model catalog methods retained
+/// here (and exposed over HTTP) serve recording and realtime model selection.
 #[derive(Clone)]
-pub struct TranscriptionCoordinator {
+pub struct RecordingTranscriptionCoordinator {
     services: AppServices,
     repository: Arc<dyn TranscriptionRepository>,
     events: broadcast::Sender<EventEnvelope>,
@@ -37,25 +33,13 @@ pub struct TranscriptionCoordinator {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct CreateJobRequest {
-    pub media_id: String,
-    pub model_id: String,
-    pub destination: TranscriptionDestination,
-    pub purpose: TranscriptionPurpose,
-    pub language: Option<String>,
-    pub audio_track: Option<u32>,
-    #[serde(default)]
-    pub force: bool,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
 pub struct CreateRecordingTranscriptionRequest {
     pub recording_id: String,
     pub model_id: String,
     pub language: Option<String>,
 }
 
-impl TranscriptionCoordinator {
+impl RecordingTranscriptionCoordinator {
     pub fn new(
         services: AppServices,
         repository: Arc<dyn TranscriptionRepository>,
@@ -104,9 +88,8 @@ impl TranscriptionCoordinator {
             downloader,
             recording_jobs: Arc::default(),
         };
-        value.repository.interrupt_active_jobs(now_ms())?;
         // Best-effort cleanup of stale work directories left behind when a
-        // previous run exited before the detached sound-line task could remove
+        // previous run exited before the detached recording task could remove
         // them. Safe at startup because no jobs are running yet.
         let _ = std::fs::remove_dir_all(&value.temp_dir);
         value.seed_catalog()?;
@@ -136,17 +119,6 @@ impl TranscriptionCoordinator {
 
     pub fn models(&self) -> Result<Vec<TranscriptionModelDescriptor>, ApplicationError> {
         self.repository.list_models()
-    }
-
-    pub fn jobs(&self) -> Result<Vec<TranscriptionJob>, ApplicationError> {
-        self.repository.list_jobs()
-    }
-
-    pub fn job(
-        &self,
-        id: &TranscriptionJobId,
-    ) -> Result<Option<TranscriptionJob>, ApplicationError> {
-        self.repository.get_job(id)
     }
 
     pub fn recording_transcription_job(
@@ -377,18 +349,22 @@ impl TranscriptionCoordinator {
     }
 
     pub async fn delete_model(&self, id: &TranscriptionModelId) -> Result<(), ApplicationError> {
-        if self.repository.list_jobs()?.iter().any(|job| {
-            job.model_id == *id
-                && matches!(
-                    job.status,
-                    TranscriptionJobStatus::Queued
-                        | TranscriptionJobStatus::Extracting
-                        | TranscriptionJobStatus::Transcribing
-                        | TranscriptionJobStatus::Importing
-                )
-        }) {
+        let in_flight_recording = self
+            .recording_jobs
+            .lock()
+            .expect("recording transcription jobs mutex poisoned")
+            .values()
+            .any(|job| {
+                job.provenance.model_id == *id
+                    && matches!(
+                        job.status,
+                        RecordingTranscriptionStatus::Queued
+                            | RecordingTranscriptionStatus::Transcribing
+                    )
+            });
+        if in_flight_recording {
             return Err(ApplicationError::Validation(
-                "model is used by an active job",
+                "model is used by an active recording transcription",
             ));
         }
         if let Some(mut model) = self.repository.get_model(id)?
@@ -425,225 +401,6 @@ impl TranscriptionCoordinator {
             self.emit(EventName::TranscriptionModelChanged, &model);
         }
         Ok(model)
-    }
-
-    pub fn create_job(
-        self: Arc<Self>,
-        request: CreateJobRequest,
-    ) -> Result<TranscriptionJob, ApplicationError> {
-        self.create_job_with_retry(request, None)
-    }
-
-    fn create_job_with_retry(
-        self: Arc<Self>,
-        request: CreateJobRequest,
-        retry_of_job_id: Option<TranscriptionJobId>,
-    ) -> Result<TranscriptionJob, ApplicationError> {
-        let media_id = MediaId::parse(request.media_id)?;
-        let media = self
-            .services
-            .media_analysis()
-            .read_media(&media_id)?
-            .ok_or(ApplicationError::NotFound("media"))?;
-        let model_id = TranscriptionModelId::parse(request.model_id)?;
-        let model = self
-            .repository
-            .get_model(&model_id)?
-            .ok_or(ApplicationError::NotFound("transcription model"))?;
-        if !matches!(
-            model.state,
-            TranscriptionModelState::Installed | TranscriptionModelState::Custom
-        ) {
-            return Err(ApplicationError::Validation(
-                "installed transcription model",
-            ));
-        }
-        let provider = self.providers().into_iter().next().expect("first provider");
-        if !provider.available {
-            return Err(ApplicationError::Validation("transcription runtime"));
-        }
-        if request.purpose == TranscriptionPurpose::TranslateToEnglish && model.english_only {
-            return Err(ApplicationError::Validation(
-                "multilingual translation model",
-            ));
-        }
-        let settings_json = serde_json::json!({
-            "destination": request.destination,
-            "purpose": request.purpose,
-            "language": request.language,
-            "audio_track": request.audio_track
-        })
-        .to_string();
-        let input_fingerprint = hex::encode(Sha256::digest(format!(
-            "{}:{}:{}:{}",
-            media.fingerprint,
-            model.id.as_str(),
-            model.checksum_sha256,
-            settings_json
-        )));
-        if !request.force
-            && let Some(job) = self.repository.find_completed_job(&input_fingerprint)?
-        {
-            return Ok(job);
-        }
-        let created_at_ms = now_ms();
-        let job = TranscriptionJob {
-            id: TranscriptionJobId::from_fingerprint(
-                "transcription-job",
-                &format!("{input_fingerprint}:{created_at_ms}"),
-            ),
-            media_id,
-            media_title: media.title,
-            media_fingerprint: media.fingerprint,
-            provider_id: provider.id,
-            provider_version: provider.runtime_version.clone(),
-            runtime_id: provider.runtime_id,
-            runtime_version: provider.runtime_version,
-            model_id: model.id,
-            model_revision: model.revision,
-            model_checksum_sha256: model.checksum_sha256,
-            destination: request.destination,
-            purpose: request.purpose,
-            requested_language: request.language,
-            detected_language: None,
-            audio_track: request.audio_track,
-            settings_json,
-            input_fingerprint,
-            status: TranscriptionJobStatus::Queued,
-            phase_progress: 0,
-            error_code: None,
-            error_message: None,
-            retry_of_job_id,
-            generated_track_id: None,
-            created_at_ms,
-            started_at_ms: None,
-            completed_at_ms: None,
-            updated_at_ms: created_at_ms,
-            archived_at_ms: None,
-        };
-        let job = self.repository.create_job(&job)?;
-        self.emit(EventName::TranscriptionJobChanged, &job);
-        let coordinator = self.clone();
-        let id = job.id.clone();
-        tokio::spawn(async move { coordinator.run_job(id).await });
-        Ok(job)
-    }
-
-    pub fn cancel_job(
-        &self,
-        id: &TranscriptionJobId,
-    ) -> Result<TranscriptionJob, ApplicationError> {
-        let mut job = self
-            .repository
-            .get_job(id)?
-            .ok_or(ApplicationError::NotFound("transcription job"))?;
-        loop {
-            if !matches!(
-                job.status,
-                TranscriptionJobStatus::Queued
-                    | TranscriptionJobStatus::Extracting
-                    | TranscriptionJobStatus::Transcribing
-            ) {
-                return Ok(job);
-            }
-            let mut cancelled = job.clone();
-            let cancelled_at_ms = now_ms();
-            cancelled.status = TranscriptionJobStatus::Cancelled;
-            cancelled.completed_at_ms = Some(cancelled_at_ms);
-            cancelled.updated_at_ms = cancelled_at_ms;
-            match self.repository.transition_job(job.status, &cancelled)? {
-                TranscriptionJobTransition::Applied(job) => {
-                    self.emit(EventName::TranscriptionJobChanged, &job);
-                    return Ok(job);
-                }
-                TranscriptionJobTransition::Rejected(current) => job = current,
-            }
-        }
-    }
-
-    pub fn retry_job(
-        self: Arc<Self>,
-        id: &TranscriptionJobId,
-    ) -> Result<TranscriptionJob, ApplicationError> {
-        let old = self
-            .repository
-            .get_job(id)?
-            .ok_or(ApplicationError::NotFound("transcription job"))?;
-        self.clone().create_job_with_retry(
-            CreateJobRequest {
-                media_id: old.media_id.as_str().into(),
-                model_id: old.model_id.as_str().into(),
-                destination: old.destination,
-                purpose: old.purpose,
-                language: old.requested_language,
-                audio_track: old.audio_track,
-                force: true,
-            },
-            Some(old.id),
-        )
-    }
-
-    pub fn archive_job(
-        &self,
-        id: &TranscriptionJobId,
-    ) -> Result<TranscriptionJob, ApplicationError> {
-        let mut job = self
-            .repository
-            .get_job(id)?
-            .ok_or(ApplicationError::NotFound("transcription job"))?;
-        if matches!(
-            job.status,
-            TranscriptionJobStatus::Queued
-                | TranscriptionJobStatus::Extracting
-                | TranscriptionJobStatus::Transcribing
-                | TranscriptionJobStatus::Importing
-        ) {
-            return Err(ApplicationError::Validation(
-                "active transcription job cannot be archived",
-            ));
-        }
-        let expected_status = job.status;
-        job.archived_at_ms = Some(now_ms());
-        job.updated_at_ms = now_ms();
-        match self.repository.transition_job(expected_status, &job)? {
-            TranscriptionJobTransition::Applied(job) => {
-                self.emit(EventName::TranscriptionJobChanged, &job);
-                Ok(job)
-            }
-            TranscriptionJobTransition::Rejected(current) => Ok(current),
-        }
-    }
-
-    async fn run_job(self: Arc<Self>, id: TranscriptionJobId) {
-        let _permit = match self.queue.acquire().await {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        let result = self.execute_job(&id).await;
-        let _ = tokio::fs::remove_dir_all(self.temp_dir.join(id.as_str())).await;
-        if let Err(error) = result
-            && let Ok(Some(job)) = self.repository.get_job(&id)
-            && matches!(
-                job.status,
-                TranscriptionJobStatus::Queued
-                    | TranscriptionJobStatus::Extracting
-                    | TranscriptionJobStatus::Transcribing
-                    | TranscriptionJobStatus::Importing
-            )
-        {
-            let expected_status = job.status;
-            let mut failed = job;
-            failed.status = TranscriptionJobStatus::Failed;
-            failed.error_code = Some("transcription_failed".into());
-            failed.error_message = Some(error.to_string());
-            failed.completed_at_ms = Some(now_ms());
-            failed.updated_at_ms = now_ms();
-            if let Ok(TranscriptionJobTransition::Applied(failed)) =
-                self.repository.transition_job(expected_status, &failed)
-            {
-                self.emit(EventName::TranscriptionJobChanged, &failed);
-            }
-        }
     }
 
     async fn run_recording_transcription(self: Arc<Self>, id: RecordingTranscriptionJobId) {
@@ -767,201 +524,6 @@ impl TranscriptionCoordinator {
             .insert(job.id.clone(), job);
     }
 
-    async fn execute_job(&self, id: &TranscriptionJobId) -> Result<(), ApplicationError> {
-        let mut job = self
-            .repository
-            .get_job(id)?
-            .ok_or(ApplicationError::NotFound("transcription job"))?;
-        if job.status != TranscriptionJobStatus::Queued {
-            return Ok(());
-        }
-        job.started_at_ms = Some(now_ms());
-        if !self.transition(&mut job, TranscriptionJobStatus::Extracting, 5)? {
-            return Ok(());
-        }
-        let media = self
-            .services
-            .media_analysis()
-            .read_media(&job.media_id)?
-            .ok_or(ApplicationError::NotFound("media"))?;
-        let model = self
-            .repository
-            .get_model(&job.model_id)?
-            .ok_or(ApplicationError::NotFound("transcription model"))?;
-        let dtw_preset = dtw_preset_for_model(&model);
-        let model_path = model
-            .local_path
-            .ok_or(ApplicationError::Validation("model path"))?;
-        let ffmpeg = resolve_tool("LLPLAYERNEXT_FFMPEG", "ffmpeg")
-            .ok_or(ApplicationError::Validation("ffmpeg runtime"))?;
-        let whisper = resolve_tool("LLPLAYERNEXT_WHISPER_CLI", "whisper-cli")
-            .ok_or(ApplicationError::Validation("whisper runtime"))?;
-        let work = self.temp_dir.join(id.as_str());
-        tokio::fs::create_dir_all(&work).await.map_err(io_error)?;
-        let wav = work.join("audio.wav");
-        let ffmpeg_args = ffmpeg_wav_args(media.path, job.audio_track, &wav);
-        self.run_command(&job.id, &ffmpeg, &ffmpeg_args).await?;
-        if !self.transition(&mut job, TranscriptionJobStatus::Transcribing, 35)? {
-            return Ok(());
-        }
-        let output = work.join("result");
-        let mut whisper_args = vec![
-            "-m".into(),
-            model_path.clone(),
-            "-f".into(),
-            wav.to_string_lossy().into_owned(),
-            "-osrt".into(),
-            "-ojf".into(),
-            "-of".into(),
-            output.to_string_lossy().into_owned(),
-        ];
-        if let Some(preset) = dtw_preset.as_ref() {
-            whisper_args.push("-dtw".into());
-            whisper_args.push(preset.clone());
-        }
-        whisper_args.extend([
-            "-l".into(),
-            job.requested_language
-                .clone()
-                .unwrap_or_else(|| "auto".into()),
-        ]);
-        if job.purpose == TranscriptionPurpose::TranslateToEnglish {
-            whisper_args.push("-tr".into());
-        }
-        self.run_command(&job.id, &whisper, &whisper_args).await?;
-        job.detected_language = tokio::fs::read(output.with_extension("json"))
-            .await
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-            .and_then(|value| {
-                value
-                    .pointer("/result/language")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned)
-            })
-            .or_else(|| job.requested_language.clone());
-        // Entering Importing is the irreversible commit point. Cancellation is
-        // accepted only before this CAS succeeds, so a durable Cancelled state
-        // proves that subtitle import never began.
-        if !self.transition(&mut job, TranscriptionJobStatus::Importing, 90)? {
-            return Ok(());
-        }
-        let srt = tokio::fs::read(output.with_extension("srt"))
-            .await
-            .map_err(io_error)?;
-        let track = self
-            .services
-            .media_analysis()
-            .import_subtitle(ImportSubtitle {
-                media_id: job.media_id.clone(),
-                source_name: format!("ASR-{}.srt", file_id(&model.display_name)),
-                content: srt,
-                language: if job.purpose == TranscriptionPurpose::TranslateToEnglish {
-                    Some("en".into())
-                } else {
-                    job.requested_language.clone()
-                },
-                identity_salt: Some(format!(
-                    "{}:{}:{}",
-                    job.provider_id,
-                    job.model_id.as_str(),
-                    job.model_revision
-                )),
-            })?;
-        // Store the text-line word timeline from JSON-full output when DTW was
-        // enabled. The sound line is a separate, independently triggered workflow
-        // (SoundLineCoordinator, driven off the transcription-completed event) —
-        // no sound-line work happens on the transcription path.
-        if dtw_preset.is_some() {
-            let json_path = output.with_extension("json");
-            if let Ok(json_bytes) = tokio::fs::read(&json_path).await
-                && let Ok(Some(result)) = self
-                    .services
-                    .media_analysis()
-                    .store_transcription_text_word_timeline(&track.id, &json_bytes)
-                    .await
-            {
-                let _ = self.events.send(
-                    crate::events::WordTimingsCompletedPayload {
-                        job_id: None,
-                        track_id: track.id.as_str().to_owned(),
-                        line: Some("text".to_owned()),
-                        count: result.extracted_word_count,
-                        timeline_id: result
-                            .final_timeline_id
-                            .as_ref()
-                            .map(|id| id.as_str().to_owned()),
-                    }
-                    .envelope(),
-                );
-            }
-        }
-        self.repository.save_provenance(&SubtitleTrackProvenance {
-            track_id: track.id.clone(),
-            transcription_job_id: job.id.clone(),
-            provider_id: job.provider_id.clone(),
-            runtime_version: job.runtime_version.clone(),
-            model_id: job.model_id.clone(),
-            model_revision: job.model_revision.clone(),
-            model_checksum_sha256: job.model_checksum_sha256.clone(),
-            settings_json: job.settings_json.clone(),
-            created_at_ms: now_ms(),
-        })?;
-        job.generated_track_id = Some(track.id);
-        if !self.transition(&mut job, TranscriptionJobStatus::Completed, 100)? {
-            return Ok(());
-        }
-        let _ = tokio::fs::remove_dir_all(work).await;
-        Ok(())
-    }
-
-    async fn run_command(
-        &self,
-        job_id: &TranscriptionJobId,
-        executable: &Path,
-        args: &[String],
-    ) -> Result<(), ApplicationError> {
-        self.process_runner
-            .run(
-                ProcessSpec::new(executable, args.to_vec()),
-                Arc::new(TranscriptionCancellation {
-                    repository: self.repository.clone(),
-                    job_id: job_id.clone(),
-                }),
-            )
-            .await
-    }
-
-    fn transition(
-        &self,
-        job: &mut TranscriptionJob,
-        status: TranscriptionJobStatus,
-        progress: u8,
-    ) -> Result<bool, ApplicationError> {
-        let expected_status = job.status;
-        let mut candidate = job.clone();
-        candidate.status = status;
-        candidate.phase_progress = progress;
-        candidate.updated_at_ms = now_ms();
-        if status == TranscriptionJobStatus::Completed {
-            candidate.completed_at_ms = Some(candidate.updated_at_ms);
-        }
-        match self
-            .repository
-            .transition_job(expected_status, &candidate)?
-        {
-            TranscriptionJobTransition::Applied(updated) => {
-                *job = updated;
-                self.emit(EventName::TranscriptionJobChanged, job);
-                Ok(true)
-            }
-            TranscriptionJobTransition::Rejected(current) => {
-                *job = current;
-                Ok(false)
-            }
-        }
-    }
-
     fn emit<T: serde::Serialize>(&self, event: EventName, value: &T) {
         let _ = self.events.send(EventEnvelope::v1(
             event,
@@ -979,11 +541,6 @@ impl TranscriptionCoordinator {
         }
         Ok(())
     }
-}
-
-struct TranscriptionCancellation {
-    repository: Arc<dyn TranscriptionRepository>,
-    job_id: TranscriptionJobId,
 }
 
 struct RecordingTranscriptionCancellation {
@@ -1018,15 +575,6 @@ impl DownloadProgress for TranscriptionDownloadProgress {
             serde_json::to_value(model).expect("transcription model serializes"),
         ));
         Ok(())
-    }
-}
-
-impl CancellationProbe for TranscriptionCancellation {
-    fn is_cancelled(&self) -> Result<bool, ApplicationError> {
-        Ok(self
-            .repository
-            .get_job(&self.job_id)?
-            .is_some_and(|job| job.status == TranscriptionJobStatus::Cancelled))
     }
 }
 
@@ -1170,19 +718,6 @@ fn catalog() -> Vec<TranscriptionModelDescriptor> {
     .collect()
 }
 
-fn dtw_preset_for_model(model: &TranscriptionModelDescriptor) -> Option<String> {
-    if model.provider_id != "whisper.cpp" {
-        return None;
-    }
-    let mut candidates = vec![model.display_name.as_str()];
-    if let Some(path) = model.local_path.as_deref()
-        && let Some(name) = Path::new(path).file_name().and_then(|value| value.to_str())
-    {
-        candidates.push(name);
-    }
-    candidates.into_iter().find_map(dtw_preset_from_name)
-}
-
 fn dtw_preset_from_name(name: &str) -> Option<String> {
     let mut normalized = name.trim().to_ascii_lowercase();
     if normalized.is_empty() {
@@ -1245,12 +780,17 @@ mod tests {
         ));
         let runtime = root.join("third_party/runtime/macos-arm64");
         std::fs::create_dir_all(&runtime).unwrap();
-        let whisper = runtime.join("whisper-cli");
+        // A unique tool name keeps this deterministic: the global
+        // `/opt/homebrew/bin` and `/usr/local/bin` fallback candidates can never
+        // shadow the bundled tool, so the test does not depend on which
+        // `whisper-cli` happens to be installed on the developer machine.
+        let tool_name = format!("whisper-cli-test-{}", application::now_ms());
+        let whisper = runtime.join(&tool_name);
         std::fs::write(&whisper, b"#!/bin/sh\n").unwrap();
 
         let executable = root.join("target/debug/api-http");
         let resolved =
-            resolve_bundled_tool("whisper-cli", &executable, &root.join("apps/desktop")).unwrap();
+            resolve_bundled_tool(&tool_name, &executable, &root.join("apps/desktop")).unwrap();
         assert_eq!(resolved, whisper);
 
         let _ = std::fs::remove_dir_all(root);
@@ -1275,58 +815,10 @@ mod tests {
     }
 
     #[test]
-    fn custom_whisper_cpp_models_enable_dtw_from_registered_path() {
-        let model = TranscriptionModelDescriptor {
-            id: TranscriptionModelId::parse("custom").unwrap(),
-            provider_id: "whisper.cpp".into(),
-            display_name: "custom.bin".into(),
-            family: "custom".into(),
-            revision: "local".into(),
-            checksum_sha256: "checksum".into(),
-            download_url: None,
-            local_path: Some("/models/ggml-large-v3-q5_0.bin".into()),
-            size_bytes: 1,
-            quality: TranscriptionQuality::Balanced,
-            english_only: false,
-            supports_translation: true,
-            state: TranscriptionModelState::Custom,
-            installed_bytes: 1,
-            error: None,
-            license: "User supplied".into(),
-            updated_at_ms: 1,
-        };
-        assert_eq!(dtw_preset_for_model(&model).as_deref(), Some("large.v3"));
-    }
-
-    #[test]
     fn recognizes_english_only_custom_model_names() {
         assert!(english_only_model_name("ggml-base.en.bin"));
         assert!(english_only_model_name("whisper-cpp-base-en-main.bin"));
         assert!(!english_only_model_name("whisper-cpp-base-main.bin"));
-    }
-
-    #[test]
-    fn non_whisper_cpp_models_do_not_enable_dtw() {
-        let model = TranscriptionModelDescriptor {
-            id: TranscriptionModelId::parse("custom").unwrap(),
-            provider_id: "other".into(),
-            display_name: "ggml-base.en.bin".into(),
-            family: "whisper".into(),
-            revision: "local".into(),
-            checksum_sha256: "checksum".into(),
-            download_url: None,
-            local_path: Some("/models/ggml-base.en.bin".into()),
-            size_bytes: 1,
-            quality: TranscriptionQuality::Balanced,
-            english_only: false,
-            supports_translation: true,
-            state: TranscriptionModelState::Custom,
-            installed_bytes: 1,
-            error: None,
-            license: "User supplied".into(),
-            updated_at_ms: 1,
-        };
-        assert!(dtw_preset_for_model(&model).is_none());
     }
 
     #[test]

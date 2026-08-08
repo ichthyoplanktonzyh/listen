@@ -51,7 +51,7 @@ mod tests {
 
     fn envelope(sequence: u64) -> EventEnvelope {
         EventEnvelope::v1(
-            EventName::TranscriptionJobChanged,
+            EventName::LexicalEntryChanged,
             serde_json::json!({"sequence": sequence}),
         )
     }

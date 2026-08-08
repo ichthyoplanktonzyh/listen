@@ -37,6 +37,12 @@ Notable runtime seams:
 - `local_runtime::LearningPreparationCoordinator` adapts the fixed foundation
   plan to `AppServices`; it has no HTTP route, SoundLine dependency, or generic
   resource/job abstraction.
+- `local_runtime::RecordingTranscriptionCoordinator` owns learner-recording
+  transcription and the provider/model catalog. Its jobs are ephemeral,
+  in-memory short-recording runs that consume existing `RecordingAsset`s and
+  never import subtitle tracks; whole-media transcription jobs were removed in
+  the R1 cutover. `whisper-cli` resolution is owned here; `ffmpeg`/`ffprobe`
+  stay shared with sound-line and other Core paths.
 - `SecretCleanupRepository` and atomic profile-mutation methods own the durable
   provider-credential cleanup outbox.
 - `SemanticLlmRuntimeFactory` and `RealtimeConversationAdapterFactory` keep

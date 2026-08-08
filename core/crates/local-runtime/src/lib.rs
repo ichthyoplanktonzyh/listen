@@ -52,6 +52,4 @@ pub use syntax_capability::{
     SyntaxCandidateFailure, SyntaxCandidateFailureStage, SyntaxCapabilityManager,
     SyntaxCapabilityStatus, SyntaxCapabilityView,
 };
-pub use transcription::{
-    CreateJobRequest, CreateRecordingTranscriptionRequest, TranscriptionCoordinator,
-};
+pub use transcription::{CreateRecordingTranscriptionRequest, RecordingTranscriptionCoordinator};

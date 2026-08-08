@@ -105,11 +105,10 @@ use super::timelines::{
     track_word_timings, word_timeline,
 };
 use super::transcription::{
-    archive_transcription_job, cancel_recording_transcription, cancel_transcription_job,
-    cancel_transcription_model_install, create_recording_transcription, create_transcription_job,
-    delete_transcription_model, install_transcription_model, pronunciation_rules,
-    recording_transcription_job, register_custom_transcription_model, retry_transcription_job,
-    transcription_job, transcription_jobs, transcription_models, transcription_providers,
+    cancel_recording_transcription, cancel_transcription_model_install,
+    create_recording_transcription, delete_transcription_model, install_transcription_model,
+    pronunciation_rules, recording_transcription_job, register_custom_transcription_model,
+    transcription_models, transcription_providers,
 };
 use super::tts::{clear_speech_synthesis_cache, speech_synthesis_capability, synthesize_speech};
 use super::vocabulary::{
@@ -385,23 +384,6 @@ fn media_analysis_routes() -> Router<ApiState> {
         .route(
             "/v1/transcription/models/{model_id}",
             axum::routing::delete(delete_transcription_model),
-        )
-        .route(
-            "/v1/transcription/jobs",
-            get(transcription_jobs).post(create_transcription_job),
-        )
-        .route("/v1/transcription/jobs/{job_id}", get(transcription_job))
-        .route(
-            "/v1/transcription/jobs/{job_id}/cancel",
-            post(cancel_transcription_job),
-        )
-        .route(
-            "/v1/transcription/jobs/{job_id}/retry",
-            post(retry_transcription_job),
-        )
-        .route(
-            "/v1/transcription/jobs/{job_id}/archive",
-            post(archive_transcription_job),
         )
         .route(
             "/v1/phonetic-analysis/providers",

@@ -16,7 +16,6 @@
         "vocabulary-assets-imported",
         "media-availability-changed",
         "transcription-model-changed",
-        "transcription-job-changed",
         "pronunciation-analysis-progress",
         "pronunciation-analysis-completed",
         "word-timings-progress",

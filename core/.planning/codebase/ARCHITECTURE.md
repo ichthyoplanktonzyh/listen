@@ -64,12 +64,12 @@ diagnostics remain internal. Projection and transaction policy stay inside
 The first generation split is the reusable whole-media path from media bytes
 through ASR Subtitle Text Track and Word Timeline to a native `.listenpkg`.
 Provider/model execution, media preprocessing, and batch generation belong on
-the external producer side of that boundary. The existing whole-media
-transcription runtime and `scripts/timeline-production` remain legacy migration
-paths until production cutover is verified; they are not the target interface
-for new generation work. Learner-recording transcription, realtime
-conversation, and learner-dependent or genuinely realtime LLM behavior remain
-Core responsibilities.
+the external producer side of that boundary. Core's whole-media transcription
+job runtime, routes, DTOs/events and SQLite CAS job store were deleted in the R1
+Core slice; `scripts/timeline-production` remains a legacy migration path until
+R5 retires it. Neither is the target interface for new generation work.
+Learner-recording transcription, realtime conversation, and learner-dependent
+or genuinely realtime LLM behavior remain Core responsibilities.
 
 Concrete LLM and realtime protocol selection is assembled in the HTTP
 composition root through application-owned factories. Forced alignment uses an
@@ -91,9 +91,13 @@ handshakes before normal requests.
 Speech-batch, sound-line, and LLM-batch lifecycle records use the shared
 application `BackgroundJobStore` interface. SQLite is the production adapter;
 state, progress, cancellation, retry lineage, interruption, and queued-job
-recovery survive a service restart. Transcription jobs use their own
-domain-specific SQLite compare-and-swap transitions because their import stage
-is an explicit irreversible commit point.
+recovery survive a service restart. Learner-recording transcription is
+deliberately different: its jobs are short, ephemeral, and held only in
+memory by `RecordingTranscriptionCoordinator`, so there is no SQLite job store
+or durable CAS transition for that path. The bundled `whisper-cli` runtime is
+owned by learner-recording transcription (and realtime model selection);
+`ffmpeg`/`ffprobe` remain shared because sound-line, media scanning and other
+Core paths still consume them.
 
 Foundation learning preparation is a separate application module rather than a
 new generic background-job kind. Its interface accepts an exact media,

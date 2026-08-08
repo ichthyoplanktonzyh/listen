@@ -40,10 +40,10 @@ mod routes;
 mod secret_store_keychain;
 use application_executor::ApplicationExecutor;
 use local_runtime::{
-    CreateJobRequest, CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
+    CreatePhoneticJobRequest, CreateSoundLineJob, CreateSpeechBatchJob,
     LearningPreparationCoordinator, LearningResourceManager, PhoneticAnalysisCoordinator,
-    SoundLineCoordinator, SpeechBatchCoordinator, SpeechSynthesisManager,
-    SubtitleSearchCoordinator, TranscriptionCoordinator,
+    RecordingTranscriptionCoordinator, SoundLineCoordinator, SpeechBatchCoordinator,
+    SpeechSynthesisManager, SubtitleSearchCoordinator,
 };
 pub use local_runtime::{SyntaxCapabilityManager, SyntaxCapabilityStatus, SyntaxCapabilityView};
 pub use secret_store_keychain::KeychainSecretStore;
@@ -51,7 +51,7 @@ pub use secret_store_keychain::KeychainSecretStore;
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub const API_VERSION: u16 = 1;
-pub const CONTRACT_VERSION: &str = "1.1.0";
+pub const CONTRACT_VERSION: &str = "2.0.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))
@@ -59,7 +59,7 @@ fn next_correlation_id() -> String {
 
 #[derive(Clone)]
 pub struct AnalysisRuntime {
-    pub transcription: Arc<TranscriptionCoordinator>,
+    pub transcription: Arc<RecordingTranscriptionCoordinator>,
     pub phonetic_analysis: Arc<PhoneticAnalysisCoordinator>,
     pub speech_jobs: Arc<SpeechBatchCoordinator>,
     pub sound_line: Arc<SoundLineCoordinator>,
@@ -130,8 +130,12 @@ impl ApiState {
                 Arc::new(ChinesePronunciationProvider::new()),
             ]);
         let transcription = Arc::new(
-            TranscriptionCoordinator::new(services.clone(), repository.clone(), events.clone())
-                .expect("transcription coordinator must initialize"),
+            RecordingTranscriptionCoordinator::new(
+                services.clone(),
+                repository.clone(),
+                events.clone(),
+            )
+            .expect("recording transcription coordinator must initialize"),
         );
         #[cfg(test)]
         let phonetic_analysis = Arc::new(

@@ -52,7 +52,12 @@ extraction and trustworthy cutover-evidence acceptance are therefore satisfied.
 Production cutover, richer native resources and legacy deletion continue under
 [`001-ROADMAP.md`](001-ROADMAP.md) and the linked cross-repository issues.
 
-Core whole-media generation is no longer a path to extend. Learner-recording
-and realtime behavior remain Core responsibilities; the whole-media job/routes,
-App legacy entry points and `scripts/timeline-production` are deletion targets
+Core whole-media generation is no longer a path to extend, and the R1 Core
+slice has now deleted it: whole-media transcription jobs/routes, their
+DTOs/events, the SQLite CAS job store and downstream legacy triggers are gone;
+`RecordingTranscriptionCoordinator` retains learner-recording transcription and
+the provider/model catalog. Because the deletion removes the published
+`/v1/transcription/jobs*` surface, the unreleased contract is a major `2.0.0`.
+Learner-recording and realtime behavior remain Core responsibilities. The App
+legacy entry points and `scripts/timeline-production` remain deletion targets
 after their corresponding roadmap slice exits.

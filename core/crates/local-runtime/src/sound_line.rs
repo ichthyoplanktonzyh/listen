@@ -12,7 +12,6 @@ use domain::{
     SubtitleTrackId,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tokio::sync::{Semaphore, broadcast};
 
 use crate::process::{
@@ -182,11 +181,9 @@ impl SoundLineCoordinator {
             tools,
             forced_aligner,
         });
-        // Auto-trigger: subscribe to transcription completions and enqueue a
-        // sound-line job for the freshly generated track. Guarded so that
+        // Recover interrupted jobs from a previous run. Guarded so that
         // constructing outside a Tokio runtime never panics.
         if tokio::runtime::Handle::try_current().is_ok() {
-            coordinator.clone().spawn_transcription_listener();
             for job in queued {
                 coordinator.clone().start(job.id.as_str().to_owned());
             }
@@ -517,28 +514,6 @@ impl SoundLineCoordinator {
         select_audio_track(counter.count(), requested_audio_track)
     }
 
-    fn spawn_transcription_listener(self: Arc<Self>) {
-        let mut receiver = self.events.subscribe();
-        tokio::spawn(async move {
-            loop {
-                match receiver.recv().await {
-                    Ok(envelope) => {
-                        if envelope.event != EventName::TranscriptionJobChanged {
-                            continue;
-                        }
-                        if let Some((track_id, audio_track)) =
-                            completed_track_provenance(&envelope.payload)
-                        {
-                            let _ = self.enqueue(track_id, audio_track, None);
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
-            }
-        });
-    }
-
     fn set_running(&self, id: &str) -> Result<bool, ApplicationError> {
         let id = BackgroundJobId::parse(id)?;
         let record = self
@@ -718,28 +693,6 @@ fn sound_line_job(job: BackgroundJob) -> Result<SoundLineJob, ApplicationError> 
     })
 }
 
-fn completed_track_provenance(payload: &Value) -> Option<(SubtitleTrackId, Option<u32>)> {
-    if payload.get("status")?.as_str()? != "completed" {
-        return None;
-    }
-    // Archiving emits another transcription-job-changed snapshot while the
-    // status remains completed. That is not a new sound-line trigger.
-    if payload
-        .get("archived_at_ms")
-        .is_some_and(|value| !value.is_null())
-    {
-        return None;
-    }
-    let track_id = payload.get("generated_track_id")?.as_str()?;
-    let audio_track = payload
-        .get("audio_track")
-        .and_then(Value::as_u64)
-        .and_then(|value| u32::try_from(value).ok());
-    SubtitleTrackId::parse(track_id.to_owned())
-        .ok()
-        .map(|track_id| (track_id, audio_track))
-}
-
 #[derive(Default)]
 struct AudioTrackCounter {
     count: AtomicUsize,
@@ -799,6 +752,7 @@ mod tests {
         MediaKind, TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, WordTiming,
     };
     use persistence_sqlite::SqliteRepository;
+    use serde_json::Value;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::mpsc;
     use std::thread;
@@ -969,48 +923,6 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(5)).await;
             }
         }
-    }
-
-    #[test]
-    fn fresh_transcription_completion_exposes_track_id() {
-        let payload = serde_json::json!({
-            "status": "completed",
-            "generated_track_id": "track-1",
-            "archived_at_ms": null,
-        });
-
-        assert_eq!(
-            completed_track_provenance(&payload)
-                .map(|(id, audio_track)| (id.as_str().to_owned(), audio_track)),
-            Some(("track-1".into(), None))
-        );
-    }
-
-    #[test]
-    fn transcription_completion_preserves_explicit_audio_track() {
-        let payload = serde_json::json!({
-            "status": "completed",
-            "generated_track_id": "track-1",
-            "audio_track": 2,
-            "archived_at_ms": null,
-        });
-
-        assert_eq!(
-            completed_track_provenance(&payload)
-                .map(|(id, audio_track)| (id.as_str().to_owned(), audio_track)),
-            Some(("track-1".into(), Some(2)))
-        );
-    }
-
-    #[test]
-    fn archived_completion_does_not_retrigger_sound_line() {
-        let payload = serde_json::json!({
-            "status": "completed",
-            "generated_track_id": "track-1",
-            "archived_at_ms": 123,
-        });
-
-        assert!(completed_track_provenance(&payload).is_none());
     }
 
     #[test]

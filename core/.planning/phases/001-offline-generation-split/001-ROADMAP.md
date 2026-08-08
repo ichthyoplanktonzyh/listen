@@ -50,9 +50,9 @@ The first extraction slice is working rather than hypothetical:
 - the pinned three-repository fixture round trip passes:
   Gen release bundle -> native `.listenpkg` -> Core HTTP import -> candidate
   receipt;
-- Core still contains whole-media transcription jobs/routes, forced alignment,
-  content-bound SoundLine/phonetic/foundation producers and
-  `scripts/timeline-production`;
+- Core still contains forced alignment, content-bound
+  SoundLine/phonetic/foundation producers and `scripts/timeline-production`;
+  whole-media transcription jobs/routes were deleted in the R1 Core slice;
 - App still contains reachable clients and UI for Core's legacy whole-media
   transcription jobs;
 - Gen's ASR tools are still delivered through the Core runtime payload.
@@ -88,16 +88,24 @@ proved pinned Gen `41a53336` -> native `.listenpkg` -> pinned Core `b980a206`
 HTTP import, then exported Core state with no active Word, Phone, or Chunk
 Timeline selection.
 
-### R1 — Cut over and delete whole-media ASR in Core
+### R1 — Cut over and delete whole-media ASR in Core — Core slice implemented
 
 Owners: Core and App. Gen's existing ASR path is the replacement.
 
-- Split the combined Core `TranscriptionCoordinator` by lifecycle, not by
-  implementation convenience.
-- Retain learner-recording transcription, its model/provenance and the
-  `/v1/recording-transcriptions*` contract.
-- Remove whole-media transcription job lifecycle, routes, DTOs/events, model
-  management exposed only for that journey and downstream legacy triggers.
+The Core slice of R1 is implemented on the current branch:
+
+- `TranscriptionCoordinator` was split by lifecycle into
+  `RecordingTranscriptionCoordinator`; learner-recording transcription, its
+  model/provenance and the `/v1/recording-transcriptions*` contract are
+  retained.
+- Whole-media transcription job lifecycle, routes, DTOs/events, the
+  `transcription-job-changed` event, the SQLite CAS job store and downstream
+  legacy triggers (including the sound-line auto-trigger) were removed.
+- Deleting the published `/v1/transcription/jobs*` surface is a consumer
+  breaking change, so the unreleased contract advances to major `2.0.0`.
+
+Remaining R1 work is the App cutover:
+
 - Remove the App repository, view-model, panels and actions that call
   `/v1/transcription/jobs*` for media.
 - Route missing-transcript preparation only through the pinned Gen package
@@ -108,7 +116,9 @@ Owners: Core and App. Gen's existing ASR path is the replacement.
 
 Exit: App contains no Core whole-media transcription call; Core contains no
 whole-media ASR job or provider ownership; learner recording and realtime tests
-remain green.
+remain green. Core's half of that exit is met; the App half tracks
+[listen-app#100](https://github.com/ichthyoplanktonzyh/listen-app/issues/100)
+and must land before `2.0.0` is published.
 
 This slice supersedes [listen-core#103](https://github.com/ichthyoplanktonzyh/listen-core/issues/103),
 whose plan kept whole-media ASR orchestration in Core.

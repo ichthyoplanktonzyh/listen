@@ -140,7 +140,6 @@ string_id!(BackgroundJobId);
 string_id!(SubtitleTrackId);
 string_id!(SubtitleSentenceId);
 string_id!(DictionaryEntryId);
-string_id!(TranscriptionJobId);
 string_id!(RecordingTranscriptionJobId);
 string_id!(TranscriptionModelId);
 string_id!(WordTimelineId);
