@@ -24,6 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Registering the handler lazily would let those early signals fall through
     // to the default action and kill us instead of shutting us down.
     let interrupt = Interrupt::install()?;
+    // Capture the parent identity before any heavyweight initialization. The
+    // parent is what the orphan watchdog watches, and an app that exits while
+    // we are still starting up must still be detected: sampling the parent
+    // later, after a slow startup under load, would already see pid 1 (we have
+    // been reparented) and read the sidecar as having no parent to watch.
+    let original_parent = original_parent_pid();
     tracing_subscriber::fmt()
         .json()
         .with_writer(std::io::stderr)
@@ -120,7 +126,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     );
     let serve_result = axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(interrupt))
+        .with_graceful_shutdown(shutdown_signal(interrupt, original_parent))
         .await;
     if let Some(runtime) = &mut local_realtime_cascade
         && let Err(error) = runtime.shutdown().await
@@ -314,10 +320,10 @@ fn semantic_embedding_root() -> PathBuf {
     }
 }
 
-async fn shutdown_signal(mut interrupt: Interrupt) {
+async fn shutdown_signal(mut interrupt: Interrupt, original_parent: i32) {
     tokio::select! {
         _ = interrupt.recv() => {}
-        _ = orphaned() => {}
+        _ = orphaned(original_parent) => {}
     }
     // Whichever of the two asked us to stop, the graceful drain must not be
     // able to hang the process: a stalled connection outliving the desktop app
@@ -370,26 +376,42 @@ impl Interrupt {
 /// connection and a port per session. Polling the parent pid catches every one
 /// of those exits, including the ones no in-app teardown can observe.
 ///
-/// The parent is captured at startup, so a sidecar that was legitimately
+/// The original parent identity is captured at the very start of `main`,
+/// before heavyweight startup, and passed in here. Comparing the current
+/// parent against that snapshot means a sidecar that was legitimately
 /// launched with no parent to watch (already reparented, e.g. daemonized) is
-/// never mistaken for an orphan.
+/// never mistaken for an orphan, while a parent that exits while the sidecar
+/// is still starting up is still detected.
 #[cfg(unix)]
-async fn orphaned() {
-    // SAFETY: `getppid` is always safe to call and cannot fail.
-    let original = unsafe { libc::getppid() };
-    if original <= 1 {
+async fn orphaned(original_parent: i32) {
+    if original_parent <= 1 {
         return std::future::pending().await;
     }
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        // SAFETY: as above.
-        if unsafe { libc::getppid() } != original {
+        // SAFETY: `getppid` is always safe to call and cannot fail.
+        if unsafe { libc::getppid() } != original_parent {
             return;
         }
     }
 }
 
 #[cfg(not(unix))]
-async fn orphaned() {
+async fn orphaned(_original_parent: i32) {
     std::future::pending().await
+}
+
+/// The identity of the process that launched this sidecar.
+///
+/// Read immediately, before heavyweight initialization gives the parent a
+/// chance to exit and leave us reparented to pid 1.
+#[cfg(unix)]
+fn original_parent_pid() -> i32 {
+    // SAFETY: `getppid` is always safe to call and cannot fail.
+    unsafe { libc::getppid() }
+}
+
+#[cfg(not(unix))]
+fn original_parent_pid() -> i32 {
+    0
 }
