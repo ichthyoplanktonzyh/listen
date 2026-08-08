@@ -169,6 +169,32 @@ under `tools/whisper_cpp_wrapper.py`; refresh the stable copy from there when
 the wrapper changes. The model file is a whisper.cpp GGML download
 (e.g. `ggml-base.bin` from https://huggingface.co/ggerganov/whisper.cpp).
 
+### R1 tool ownership: whisper-cli, ffmpeg, ffprobe
+
+At R1 none of these three tools belongs to a single repository, so none of them
+is "Gen-only":
+
+- `backend.lock.json` verifies the pinned Core runtime artifact, and that
+  artifact bundles `whisper-cli`, `ffmpeg`, and `ffprobe` beside `api-http`
+  (see `.backend/runtime/manifest.json`, `tool/build-macos-release.sh`, and
+  `tool/verify-macos-release.sh`). Core still needs `whisper-cli` for
+  learner-recording transcription, and `ffmpeg`/`ffprobe` for the sound-line
+  and other Core media paths.
+- The app uses `ffmpeg`/`ffprobe` directly through its own helpers
+  (`ExternalTools`, `FfprobeMediaProbe`, the practice file service) for media
+  probing, embedded-text subtitle extraction, and online acquisition —
+  independent of the generator.
+- `listen-gen` *declares* the tool roles its providers require in the release
+  manifest (`provider_requirements`, e.g. `whisper-cpp` requires `ffprobe`,
+  `ffmpeg`, `whisper-cli`, `whisper-model`). The app only hands resolved tool
+  paths to it (`--whisper-cli`, `--ffprobe-command`, `--ffmpeg-command`) after
+  both the pinned Gen bundle and the pinned Core artifact verify byte-for-byte.
+
+The verification claims stop exactly at those full-artifact SHA-256 checks
+(Core runtime archive via `backend.lock.json`, Gen bundle plus manifest via
+`listen_gen.lock.json`). Nothing here asserts a repository-exclusive role for
+any tool; "shared, verified bytes" is the whole claim.
+
 ### Local three-repository round trip
 
 To exercise the full `pinned .pyz -> .listenpkg -> Core import` path against a

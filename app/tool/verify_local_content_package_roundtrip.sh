@@ -17,10 +17,16 @@
 #
 set -euo pipefail
 
-readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-b980a20666f746685db1fd06bfa425d762d7a678}"
+readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-54497e99c19ad4414c5029970211ed6af2bd2282}"
 readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-41a53336fd893522abf7ef168fd2ace9fa6ac678}"
 readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
 
+# Tests prove the gate defaults stay in lockstep with backend.lock.json /
+# listen_gen.lock.json by parsing this script's text
+# (test_verify_local_content_package_roundtrip.py::DefaultPinTests). There is
+# deliberately no execution hook here: an environment-driven early exit would
+# let an accidentally-set variable turn the production gate into a no-op
+# success, which is not acceptable.
 app_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 fail() {

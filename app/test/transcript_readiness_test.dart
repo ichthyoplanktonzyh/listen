@@ -41,10 +41,7 @@ void main() {
     });
 
     test('an already-selected primary track is never replaced', () async {
-      final harness = _coordinatorHarness(const [
-        _usableTrackA,
-        _usableTrackB,
-      ]);
+      final harness = _coordinatorHarness(const [_usableTrackA, _usableTrackB]);
       harness.subtitle.setSubtitleResources(const [
         _usableTrackA,
         _usableTrackB,
@@ -57,10 +54,7 @@ void main() {
     });
 
     test('several usable tracks are left for the chooser', () async {
-      final harness = _coordinatorHarness(const [
-        _usableTrackA,
-        _usableTrackB,
-      ]);
+      final harness = _coordinatorHarness(const [_usableTrackA, _usableTrackB]);
       harness.subtitle.setSubtitleResources(const [
         _usableTrackA,
         _usableTrackB,
@@ -131,10 +125,10 @@ void main() {
       addTearDown(subject.vm.dispose);
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.choosing);
-      expect(
-        subject.vm.state.usableTracks.map((track) => track.id),
-        [_usableTrackA.id, _usableTrackB.id],
-      );
+      expect(subject.vm.state.usableTracks.map((track) => track.id), [
+        _usableTrackA.id,
+        _usableTrackB.id,
+      ]);
       // No arbitrary first item is selected on its own.
       expect(subject.subtitle.primaryTrack, isNull);
 
@@ -190,10 +184,7 @@ void main() {
 
         final future = subject.vm.prepareLearningTranscript();
         await _settle();
-        expect(
-          subject.vm.state.phase,
-          TranscriptReadinessPhase.preparing,
-        );
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.preparing);
         final run = repository.runs.single;
         run.eventsController.add(
           ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
@@ -227,17 +218,17 @@ void main() {
           TranscriptPreparationStage.transcribing,
         );
         run.eventsController.add(
-          ListenGenMachineEvent(sequence: 4, kind: ListenGenEventKind.completed),
+          ListenGenMachineEvent(
+            sequence: 4,
+            kind: ListenGenEventKind.completed,
+          ),
         );
         await _settle();
         run.packageCompleter.complete('/tmp/generated.listenpkg');
         await _settle();
         // The import is gated, so the surface sits on its importing stage
         // until the core finishes with the package.
-        expect(
-          subject.vm.state.phase,
-          TranscriptReadinessPhase.preparing,
-        );
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.preparing);
         expect(
           subject.vm.state.preparationStage,
           TranscriptPreparationStage.importing,
@@ -249,31 +240,33 @@ void main() {
       },
     );
 
-    test('a transcript-only package is still ready (no WordTimeline)', () async {
-      final receipt = _receipt(
-        track: _usableTrackA,
-        includeWordTimeline: false,
-      );
-      final repository = _FakePackageRepository(
-        receipt: receipt,
-        runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-      );
-      final subject = _readinessViewModel(
-        tracks: const [],
-        canAutoPrepare: true,
-        repository: repository,
-      );
-      addTearDown(subject.vm.dispose);
+    test(
+      'a transcript-only package is still ready (no WordTimeline)',
+      () async {
+        final receipt = _receipt(
+          track: _usableTrackA,
+          includeWordTimeline: false,
+        );
+        final repository = _FakePackageRepository(
+          receipt: receipt,
+          runForAttempt: (attempt) => _FakeRun(attempt: attempt),
+        );
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: true,
+          repository: repository,
+        );
+        addTearDown(subject.vm.dispose);
 
-      await _runGeneration(subject.vm, repository);
+        await _runGeneration(subject.vm, repository);
 
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-      expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
-      expect(
-        receipt.resources.map((resource) => resource.kind),
-        ['subtitle_text_track'],
-      );
-    });
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
+        expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
+        expect(receipt.resources.map((resource) => resource.kind), [
+          'subtitle_text_track',
+        ]);
+      },
+    );
 
     test('cancel stops the run and returns to the missing surface', () async {
       final repository = _FakePackageRepository(
@@ -359,28 +352,31 @@ void main() {
       expect(subject.subtitle.primaryTrack, isNull);
     });
 
-    test('a failed preparation never changes the selected transcript', () async {
-      final repository = _FakePackageRepository(
-        importFailure: const ApiFailure(raw: '', code: 'temporary'),
-        runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-      );
-      final subject = _readinessViewModel(
-        tracks: const [_usableTrackA],
-        canAutoPrepare: true,
-        repository: repository,
-      );
-      addTearDown(subject.vm.dispose);
+    test(
+      'a failed preparation never changes the selected transcript',
+      () async {
+        final repository = _FakePackageRepository(
+          importFailure: const ApiFailure(raw: '', code: 'temporary'),
+          runForAttempt: (attempt) => _FakeRun(attempt: attempt),
+        );
+        final subject = _readinessViewModel(
+          tracks: const [_usableTrackA],
+          canAutoPrepare: true,
+          repository: repository,
+        );
+        addTearDown(subject.vm.dispose);
 
-      await subject.vm.selectTrack(_usableTrackA);
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
+        await subject.vm.selectTrack(_usableTrackA);
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
 
-      await _runGeneration(subject.vm, repository);
+        await _runGeneration(subject.vm, repository);
 
-      expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
-      // The existing selection keeps the ready surface even when a later
-      // preparation attempt fails.
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-    });
+        expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
+        // The existing selection keeps the ready surface even when a later
+        // preparation attempt fails.
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
+      },
+    );
 
     test('generator unavailable does not start a run', () async {
       var starts = 0;
@@ -497,10 +493,8 @@ Future<void> _settle() async {
   await Future<void>.delayed(Duration.zero);
 }
 
-({
-  TranscriptReadinessViewModel vm,
-  SubtitleController subtitle,
-}) _readinessViewModel({
+({TranscriptReadinessViewModel vm, SubtitleController subtitle})
+_readinessViewModel({
   required List<SubtitleTrack> tracks,
   required bool canAutoPrepare,
   required _FakePackageRepository repository,
@@ -538,47 +532,46 @@ Future<void> _settle() async {
   return (vm: vm, subtitle: harness.subtitle);
 }
 
-({
-  SubtitleController subtitle,
-  MediaSessionCoordinator mediaSession,
-}) _coordinatorHarness(List<SubtitleTrack> tracks) {
+({SubtitleController subtitle, MediaSessionCoordinator mediaSession})
+_coordinatorHarness(List<SubtitleTrack> tracks) {
   final player = PlayerController();
   final subtitle = SubtitleController();
   final speech = SpeechEnhancementWorkflowController();
-  final resourceActions = ResourceActionsCoordinator(
-    player: player,
-    subtitle: subtitle,
-    speechEnhancement: speech,
-    repository: _FakeResourceRepository(tracks),
-  )..bind(
-    isMounted: () => true,
-    reloadSpeechEnhancements: (_) async {},
-    activatePrimaryTrack: (_, {required nextStatus}) async {},
-    reloadLearningEntries: () async {},
-  );
-  final mediaSession = MediaSessionCoordinator(
-    adapter: DesktopPlayerAdapter(),
-    player: player,
-    subtitle: subtitle,
-    learning: LearningController(),
-    settings: SettingsController(),
-    speechEnhancement: speech,
-    resourceActions: resourceActions,
-    repository: _FakeMediaSessionRepository(),
-    subtitleAnalysis: _FakeSubtitleAnalysisRepository(),
-  )..bind(
-    isMounted: () => true,
-    text: (key) => key,
-    confirmLLTimelineMismatch:
-        ({
-          required String resourceFingerprint,
-          required String currentFingerprint,
-        }) async => false,
-    onMediaSwitched: () {},
-    reloadLearningEntries: () async {},
-    loadPhraseCandidates: (_) async {},
-    generatedPrimaryStatus: (_) => 'generated',
-  );
+  final resourceActions =
+      ResourceActionsCoordinator(
+        player: player,
+        subtitle: subtitle,
+        speechEnhancement: speech,
+        repository: _FakeResourceRepository(tracks),
+      )..bind(
+        isMounted: () => true,
+        reloadSpeechEnhancements: (_) async {},
+        activatePrimaryTrack: (_, {required nextStatus}) async {},
+        reloadLearningEntries: () async {},
+      );
+  final mediaSession =
+      MediaSessionCoordinator(
+        adapter: DesktopPlayerAdapter(),
+        player: player,
+        subtitle: subtitle,
+        learning: LearningController(),
+        settings: SettingsController(),
+        speechEnhancement: speech,
+        resourceActions: resourceActions,
+        repository: _FakeMediaSessionRepository(),
+        subtitleAnalysis: _FakeSubtitleAnalysisRepository(),
+      )..bind(
+        isMounted: () => true,
+        text: (key) => key,
+        confirmLLTimelineMismatch:
+            ({
+              required String resourceFingerprint,
+              required String currentFingerprint,
+            }) async => false,
+        onMediaSwitched: () {},
+        reloadLearningEntries: () async {},
+        loadPhraseCandidates: (_) async {},
+      );
   return (subtitle: subtitle, mediaSession: mediaSession);
 }
 
@@ -620,7 +613,12 @@ const _usableTrackA = SubtitleTrack(
       end: Duration(seconds: 1),
       text: 'Hello',
       tokens: [
-        SubtitleToken(index: 0, kind: 'word', text: 'Hello', normalized: 'hello'),
+        SubtitleToken(
+          index: 0,
+          kind: 'word',
+          text: 'Hello',
+          normalized: 'hello',
+        ),
       ],
     ),
   ],
@@ -746,8 +744,7 @@ final class _FakeResourceRepository implements ResourceRepository {
   @override
   bool get isAvailable => true;
   @override
-  ApiFailure failureDetail(Object error) =>
-      ApiFailure(raw: '', code: '$error');
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
   @override
   Future<ContentDifficultyProfile> contentFit(String trackId) async =>
       throw UnimplementedError();
@@ -811,13 +808,9 @@ final class _FakeMediaSessionRepository implements MediaSessionRepository {
   @override
   bool get isAvailable => true;
   @override
-  ApiFailure failureDetail(Object error) =>
-      ApiFailure(raw: '', code: '$error');
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
   @override
   Future<void> saveProgress(String mediaId, Duration position) async {}
-  @override
-  Future<SubtitleTrack> readSubtitle(String trackId) async =>
-      throw UnimplementedError();
   @override
   Future<MediaItem> registerMedia(String path) async => MediaItem(
     id: 'media-1',
@@ -852,9 +845,8 @@ final class _FakeSubtitleAnalysisRepository
   @override
   Future<void> analyzeTrackSyntax(String trackId) async {}
   @override
-  Future<PronunciationAnalysis> analyzePronunciation(
-    String sentenceId,
-  ) async => throw UnimplementedError();
+  Future<PronunciationAnalysis> analyzePronunciation(String sentenceId) async =>
+      throw UnimplementedError();
   @override
   Future<String> startPhoneticAnalysis({
     required String trackId,

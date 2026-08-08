@@ -78,7 +78,6 @@ void main() {
               onOpenSubtitleResources: () {},
               onOpenLearningAssets: () {},
               onOpenLearningResources: () {},
-              onOpenTranscriptionCenter: () {},
               onOpenPhoneticAnalysisCenter: () {},
               onExportLogs: () {},
               onExportVocabulary: () {},

@@ -1,30 +1,24 @@
 import '../../models/api_failure.dart';
 import '../../models/runtime_resources.dart';
-import '../../models/timeline.dart';
 import '../../services/api_service.dart';
 
+/// The transcription model surface retained for learner recording and realtime
+/// conversation: selecting an installed model, installing/cancelling/removing
+/// one, and registering a custom one.
+///
+/// Whole-media transcription jobs are no longer part of this repository. The
+/// app prepares transcripts through the pinned listen-gen package journey
+/// instead of Core's `/v1/transcription/jobs` surface, so the job operations
+/// (create/cancel/retry/archive/read/export) were removed along with the
+/// transcription center that consumed them.
 abstract interface class TranscriptionRepository {
   ApiFailure failureDetail(Object error);
   Future<List<TranscriptionProviderView>> providers();
   Future<List<TranscriptionModelView>> models();
-  Future<List<TranscriptionJobView>> jobs();
-  Future<void> createJob({
-    required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    required bool force,
-  });
   Future<void> registerCustomModel(String path);
   Future<void> installModel(String id);
   Future<void> cancelModelInstall(String id);
   Future<void> deleteModel(String id);
-  Future<void> cancelJob(String id);
-  Future<void> retryJob(String id);
-  Future<SubtitleTrack> readSubtitle(String id);
-  Future<String> exportSubtitleSrt(String id);
-  Future<void> archiveJob(String id);
 }
 
 final class LocalTranscriptionRepository implements TranscriptionRepository {
@@ -38,27 +32,6 @@ final class LocalTranscriptionRepository implements TranscriptionRepository {
       _api.transcriptionProviders();
   @override
   Future<List<TranscriptionModelView>> models() => _api.transcriptionModels();
-  @override
-  Future<List<TranscriptionJobView>> jobs() => _api.transcriptionJobs();
-  @override
-  Future<void> createJob({
-    required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    required bool force,
-  }) async {
-    await _api.createTranscriptionJob(
-      mediaId: mediaId,
-      modelId: modelId,
-      secondary: secondary,
-      translate: translate,
-      language: language,
-      force: force,
-    );
-  }
-
   @override
   Future<void> registerCustomModel(String path) async {
     await _api.registerCustomTranscriptionModel(path);
@@ -76,17 +49,4 @@ final class LocalTranscriptionRepository implements TranscriptionRepository {
 
   @override
   Future<void> deleteModel(String id) => _api.deleteTranscriptionModel(id);
-  @override
-  Future<void> cancelJob(String id) => _api.cancelTranscriptionJob(id);
-  @override
-  Future<void> retryJob(String id) async {
-    await _api.retryTranscriptionJob(id);
-  }
-
-  @override
-  Future<SubtitleTrack> readSubtitle(String id) => _api.readSubtitle(id);
-  @override
-  Future<String> exportSubtitleSrt(String id) => _api.exportSubtitleSrt(id);
-  @override
-  Future<void> archiveJob(String id) => _api.archiveTranscriptionJob(id);
 }

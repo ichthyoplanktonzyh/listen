@@ -47,7 +47,6 @@ void main() {
     onOpenSubtitleResources: () => fired.add('subtitle-resources'),
     onOpenLearningAssets: () => fired.add('learning-assets'),
     onOpenLearningResources: () => fired.add('learning-resources'),
-    onOpenTranscriptionCenter: () => fired.add('transcription'),
     onOpenPhoneticAnalysisCenter: () => fired.add('phonetic-analysis'),
     onExportLogs: () => fired.add('logs'),
     onExportVocabulary: () => fired.add('export-vocabulary'),
@@ -60,7 +59,6 @@ void main() {
     onGeneratePrimarySubtitles: () => fired.add('generate-primary'),
     onSearchPrimarySubtitles: () => fired.add('search-primary'),
     onImportSecondarySubtitle: () => fired.add('import-secondary'),
-    onGenerateSecondarySubtitles: () => fired.add('generate-secondary'),
     onSearchSecondarySubtitles: () => fired.add('search-secondary'),
     onImportEmbeddedSubtitle: () => fired.add('import-embedded'),
     onOpenResources: () => fired.add('open-resources'),
@@ -97,7 +95,6 @@ void main() {
         'subtitle-resources',
         'learning-assets',
         'learning-resources',
-        'transcription',
         'phonetic-analysis',
         'export-vocabulary',
         'import-vocabulary',
@@ -142,7 +139,6 @@ void main() {
         'subtitle-resources',
         'learning-assets',
         'learning-resources',
-        'transcription',
         'phonetic-analysis',
         'export-vocabulary',
         'import-vocabulary',
@@ -171,12 +167,27 @@ void main() {
         'generate-primary',
         'search-primary',
         'import-secondary',
-        'generate-secondary',
         'search-secondary',
         'import-embedded',
         'open-resources',
         'archive-media',
       ]);
+    });
+
+    testWidgets('secondary sourcing is manual only, not whole-media generate', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(wrap(subtitleMenu()));
+
+      final values = await openMenu(tester, 'Subtitles');
+      // The pinned package journey's selection always activates the primary
+      // track; a secondary generate entry could only ignore its destination.
+      // Import and search stay the whole secondary surface.
+      expect(values, contains('import-secondary'));
+      expect(values, contains('search-secondary'));
+      expect(values, isNot(contains('generate-secondary')));
     });
 
     testWidgets('no item is disabled: the header only exists with media', (
@@ -208,7 +219,6 @@ void main() {
         'generate-primary',
         'search-primary',
         'import-secondary',
-        'generate-secondary',
         'search-secondary',
         'import-embedded',
         'open-resources',

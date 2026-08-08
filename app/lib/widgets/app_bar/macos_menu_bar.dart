@@ -41,7 +41,6 @@ class MacosMenuBar extends StatelessWidget {
     required this.onOpenVocabulary,
     required this.onOpenReview,
     required this.onOpenCoach,
-    required this.onOpenTranscriptionCenter,
     required this.onOpenPhoneticAnalysisCenter,
     required this.child,
   });
@@ -63,7 +62,6 @@ class MacosMenuBar extends StatelessWidget {
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
-  final VoidCallback onOpenTranscriptionCenter;
   final VoidCallback onOpenPhoneticAnalysisCenter;
   final Widget child;
 
@@ -84,7 +82,6 @@ class MacosMenuBar extends StatelessWidget {
       onOpenVocabulary: onOpenVocabulary,
       onOpenReview: onOpenReview,
       onOpenCoach: onOpenCoach,
-      onOpenTranscriptionCenter: onOpenTranscriptionCenter,
       onOpenPhoneticAnalysisCenter: onOpenPhoneticAnalysisCenter,
     ),
     child: child,
@@ -107,7 +104,6 @@ List<PlatformMenu> buildMacosMenus({
   required VoidCallback onOpenVocabulary,
   required VoidCallback onOpenReview,
   required VoidCallback onOpenCoach,
-  required VoidCallback onOpenTranscriptionCenter,
   required VoidCallback onOpenPhoneticAnalysisCenter,
 }) {
   // A table row as a menu item: label from the table's l10n key, callback
@@ -355,12 +351,6 @@ List<PlatformMenu> buildMacosMenus({
         ),
         PlatformMenuItemGroup(
           members: [
-            PlatformMenuItem(
-              label: l.text('transcriptionCenter'),
-              onSelected: capabilities.coreReady
-                  ? onOpenTranscriptionCenter
-                  : null,
-            ),
             PlatformMenuItem(
               label: l.text('phoneticAnalysisCenter'),
               onSelected: capabilities.coreReady

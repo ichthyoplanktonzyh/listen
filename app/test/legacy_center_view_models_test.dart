@@ -3,13 +3,10 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_assets_view_models.dart';
 import 'package:llplayer_next/controllers/phonetic_analysis_view_model.dart';
-import 'package:llplayer_next/controllers/transcription_view_models.dart';
 import 'package:llplayer_next/data/repositories/learning_assets_repository.dart';
 import 'package:llplayer_next/data/repositories/phonetic_analysis_repository.dart';
-import 'package:llplayer_next/data/repositories/transcription_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/runtime_resources.dart';
-import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
 
 void main() {
@@ -44,21 +41,6 @@ void main() {
     expect(repository.cancelled, 'job-1');
     expect(
       () => viewModel.state.jobs.add(_phoneticJob),
-      throwsUnsupportedError,
-    );
-    viewModel.dispose();
-  });
-
-  test('transcription refresh publishes immutable snapshots', () async {
-    final viewModel = TranscriptionCenterViewModel(
-      _TranscriptionRepository(),
-      loadTrack: (_, _) async {},
-    );
-    await viewModel.refresh();
-
-    expect(viewModel.state.jobs, isEmpty);
-    expect(
-      () => viewModel.state.jobs.add(_transcriptionJob),
       throwsUnsupportedError,
     );
     viewModel.dispose();
@@ -149,53 +131,4 @@ final class _PhoneticRepository implements PhoneticAnalysisRepository {
   Future<void> deleteJob(String id) async {}
   @override
   Future<void> clearTerminalJobs() async {}
-}
-
-const _transcriptionJob = TranscriptionJobView(
-  id: 'job-1',
-  mediaId: 'media-1',
-  mediaTitle: 'Media',
-  modelId: 'model',
-  destination: 'primary',
-  status: 'completed',
-  phaseProgress: 100,
-  createdAtMs: 1,
-);
-
-final class _TranscriptionRepository implements TranscriptionRepository {
-  @override
-  ApiFailure failureDetail(Object error) => ApiFailure(raw: '$error');
-  @override
-  Future<List<TranscriptionProviderView>> providers() async => [];
-  @override
-  Future<List<TranscriptionModelView>> models() async => [];
-  @override
-  Future<List<TranscriptionJobView>> jobs() async => [];
-  @override
-  Future<void> createJob({
-    required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    required bool force,
-  }) async {}
-  @override
-  Future<void> registerCustomModel(String path) async {}
-  @override
-  Future<void> installModel(String id) async {}
-  @override
-  Future<void> cancelModelInstall(String id) async {}
-  @override
-  Future<void> deleteModel(String id) async {}
-  @override
-  Future<void> cancelJob(String id) async {}
-  @override
-  Future<void> retryJob(String id) async {}
-  @override
-  Future<SubtitleTrack> readSubtitle(String id) => throw UnimplementedError();
-  @override
-  Future<String> exportSubtitleSrt(String id) => throw UnimplementedError();
-  @override
-  Future<void> archiveJob(String id) async {}
 }

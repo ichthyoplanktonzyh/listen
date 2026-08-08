@@ -36,7 +36,6 @@ void main() {
     onOpenVocabulary: () {},
     onOpenReview: () {},
     onOpenCoach: () {},
-    onOpenTranscriptionCenter: () {},
     onOpenPhoneticAnalysisCenter: () {},
   );
 
@@ -182,7 +181,6 @@ void main() {
       l.text('vocabulary'),
       l.text('review'),
       l.text('coachDashboard'),
-      l.text('transcriptionCenter'),
       l.text('phoneticAnalysisCenter'),
     ]) {
       expect(

@@ -290,7 +290,10 @@ const _rawTransportMapBaseline = <String, int>{
 
 const _modelWireCouplingBaseline = <String, int>{
   'lib/models/api_failure.dart': 1,
-  'lib/models/backend_event.dart': 27,
+  // 23, down from 27: the whole-media TranscriptionJobChangedEvent wire model
+  // is gone. The app prepares transcripts through the pinned listen-gen package
+  // journey and no longer parses Core's transcription-job SSE envelopes.
+  'lib/models/backend_event.dart': 23,
   'lib/models/coach_dashboard.dart': 32,
   'lib/models/listening.dart': 12,
   'lib/models/llm_provider.dart': 14,
@@ -312,7 +315,9 @@ const _modelWireCouplingBaseline = <String, int>{
   'lib/models/projection_review.dart': 10,
   'lib/models/reading.dart': 2,
   'lib/models/realtime_conversation.dart': 10,
-  'lib/models/runtime_resources.dart': 30,
+  // 28, down from 30: the whole-media TranscriptionJobView wire model is gone
+  // along with the Core transcription-job surface it decoded.
+  'lib/models/runtime_resources.dart': 28,
   'lib/models/semantic_embedding.dart': 18,
   'lib/models/semantic_task.dart': 67,
   'lib/models/speech_synthesis.dart': 12,

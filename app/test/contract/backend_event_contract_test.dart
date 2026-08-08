@@ -47,16 +47,6 @@ void main() {
     expect(event.acousticCueCount, greaterThan(0));
   });
 
-  test('transcription-job-changed fields survive the wire shape', () {
-    final event =
-        parsed['transcription-job-changed'] as TranscriptionJobChangedEvent;
-    expect(event.status, isNot('unknown'));
-    expect(event.phaseProgress, greaterThan(0));
-    expect(event.mediaId, isNotNull);
-    expect(event.generatedTrackId, isNotNull);
-    expect(event.destination, isNotNull);
-  });
-
   test('phonetic-analysis-job-changed fields survive the wire shape', () {
     final event =
         parsed['phonetic-analysis-job-changed']

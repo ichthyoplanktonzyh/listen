@@ -1,6 +1,9 @@
 part of '../api_service.dart';
 
-// Transcription providers, models, and jobs.
+// Transcription providers, models, and learner recording/realtime jobs.
+// Whole-media transcription jobs are gone: the app prepares transcripts
+// through the pinned listen-gen package journey, never through Core's
+// whole-media transcription job surface.
 // Split out of api_service.dart (mechanical decomposition).
 
 extension TranscriptionApi on LocalApi {
@@ -52,62 +55,6 @@ extension TranscriptionApi on LocalApi {
       '/v1/transcription/models/${Uri.encodeComponent(modelId)}',
     );
   }
-
-  Future<List<TranscriptionJobView>> transcriptionJobs() async =>
-      ((await _request('GET', '/v1/transcription/jobs')) as List<dynamic>)
-          .map(
-            (value) =>
-                TranscriptionJobView.fromJson(value as Map<String, dynamic>),
-          )
-          .toList(growable: false);
-
-  Future<TranscriptionJobView> createTranscriptionJob({
-    required String mediaId,
-    required String modelId,
-    required bool secondary,
-    required bool translate,
-    String? language,
-    int? audioTrack,
-    bool force = false,
-  }) async => TranscriptionJobView.fromJson(
-    (await _request('POST', '/v1/transcription/jobs', {
-          'media_id': mediaId,
-          'model_id': modelId,
-          'destination': secondary ? 'secondary' : 'primary',
-          'purpose': translate ? 'translate_to_english' : 'transcribe',
-          'language': language,
-          'audio_track': audioTrack,
-          'force': force,
-        }))
-        as Map<String, dynamic>,
-  );
-
-  Future<TranscriptionJobView> cancelTranscriptionJob(String jobId) async =>
-      TranscriptionJobView.fromJson(
-        (await _request(
-              'POST',
-              '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/cancel',
-            ))
-            as Map<String, dynamic>,
-      );
-
-  Future<TranscriptionJobView> retryTranscriptionJob(String jobId) async =>
-      TranscriptionJobView.fromJson(
-        (await _request(
-              'POST',
-              '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/retry',
-            ))
-            as Map<String, dynamic>,
-      );
-
-  Future<TranscriptionJobView> archiveTranscriptionJob(String jobId) async =>
-      TranscriptionJobView.fromJson(
-        (await _request(
-              'POST',
-              '/v1/transcription/jobs/${Uri.encodeComponent(jobId)}/archive',
-            ))
-            as Map<String, dynamic>,
-      );
 
   Future<RecordingTranscriptionJobView> createRecordingTranscription({
     required String recordingId,

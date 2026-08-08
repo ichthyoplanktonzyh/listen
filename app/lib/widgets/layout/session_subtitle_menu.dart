@@ -5,8 +5,12 @@ import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/menu_rows.dart';
 
-/// Subtitle sourcing for the media on the workbench: import, generate or
-/// search, per track, plus the embedded-text import and archiving.
+/// Subtitle sourcing for the media on the workbench: import or search per
+/// track, plus whole-media generation for the primary track, the embedded-text
+/// import, and archiving. Secondary sourcing is manual import and search only:
+/// the pinned package journey's selection always activates the primary track,
+/// so there is no secondary "generate" entry that could only pretend to honor
+/// a secondary destination.
 ///
 /// It lives on the session header rather than on a shell app bar, and that is
 /// the point: every item here acts on *this* media. On the app bar the same
@@ -21,7 +25,6 @@ class SessionSubtitleMenu extends StatelessWidget {
     required this.onGeneratePrimarySubtitles,
     required this.onSearchPrimarySubtitles,
     required this.onImportSecondarySubtitle,
-    required this.onGenerateSecondarySubtitles,
     required this.onSearchSecondarySubtitles,
     required this.onImportEmbeddedSubtitle,
     required this.onOpenResources,
@@ -32,7 +35,6 @@ class SessionSubtitleMenu extends StatelessWidget {
   final VoidCallback onGeneratePrimarySubtitles;
   final VoidCallback onSearchPrimarySubtitles;
   final VoidCallback onImportSecondarySubtitle;
-  final VoidCallback onGenerateSecondarySubtitles;
   final VoidCallback onSearchSecondarySubtitles;
   final VoidCallback onImportEmbeddedSubtitle;
 
@@ -60,8 +62,6 @@ class SessionSubtitleMenu extends StatelessWidget {
             onSearchPrimarySubtitles();
           case 'import-secondary':
             onImportSecondarySubtitle();
-          case 'generate-secondary':
-            onGenerateSecondarySubtitles();
           case 'search-secondary':
             onSearchSecondarySubtitles();
           case 'import-embedded':
@@ -102,13 +102,6 @@ class SessionSubtitleMenu extends StatelessWidget {
           child: ListenMenuRow(
             icon: Icons.upload_file_outlined,
             title: l.text('importSubtitleHint'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'generate-secondary',
-          child: ListenMenuRow(
-            icon: Icons.auto_fix_high_outlined,
-            title: l.text('generateSubtitles'),
           ),
         ),
         PopupMenuItem(

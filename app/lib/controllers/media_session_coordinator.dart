@@ -13,9 +13,9 @@ import 'speech_enhancement_workflow_controller.dart';
 import 'subtitle_controller.dart';
 
 /// Owns the media/session flows: opening media, importing subtitle and
-/// LLTimeline files, activating a primary track, loading generated tracks and
-/// speech enhancements. Context-free: dialogs (fingerprint-mismatch confirm)
-/// and localized status composition stay with the host and enter via [bind].
+/// LLTimeline files, and activating a primary track. Context-free: dialogs
+/// (fingerprint-mismatch confirm) and localized status composition stay with
+/// the host and enter via [bind].
 class MediaSessionCoordinator {
   MediaSessionCoordinator({
     required this.adapter,
@@ -51,8 +51,6 @@ class MediaSessionCoordinator {
   late void Function() onMediaSwitched;
   late Future<void> Function() reloadLearningEntries;
   late Future<void> Function(Cue? cue) loadPhraseCandidates;
-  late String Function(SpeechEnhancementLoadResult? result)
-  generatedPrimaryStatus;
 
   void bind({
     required bool Function() isMounted,
@@ -65,8 +63,6 @@ class MediaSessionCoordinator {
     required void Function() onMediaSwitched,
     required Future<void> Function() reloadLearningEntries,
     required Future<void> Function(Cue? cue) loadPhraseCandidates,
-    required String Function(SpeechEnhancementLoadResult? result)
-    generatedPrimaryStatus,
   }) {
     this.isMounted = isMounted;
     this.text = text;
@@ -74,7 +70,6 @@ class MediaSessionCoordinator {
     this.onMediaSwitched = onMediaSwitched;
     this.reloadLearningEntries = reloadLearningEntries;
     this.loadPhraseCandidates = loadPhraseCandidates;
-    this.generatedPrimaryStatus = generatedPrimaryStatus;
   }
 
   // ── Media open ──
@@ -355,30 +350,6 @@ class MediaSessionCoordinator {
     } catch (_) {
       // Optional enhancement: never disturb subtitle import or playback.
     }
-  }
-
-  Future<void> loadGeneratedTrack(
-    SubtitleTrack imported,
-    bool secondary,
-  ) async {
-    await adapter.disableNativeSubtitles();
-    if (!isMounted()) return;
-    if (secondary) {
-      subtitle.setSecondaryTrack(imported);
-      subtitle.setCurrentSecondaryCue(
-        subtitle.secondaryCursor.current(player.position),
-      );
-      player.setStatus(text('generatedSecondarySubtitleLoaded'));
-    } else {
-      final result = await usePrimarySubtitleTrack(
-        imported,
-        nextStatus: text('loadingGeneratedPrimarySubtitle'),
-      );
-      if (isMounted() && subtitle.primaryTrack?.id == imported.id) {
-        player.setStatus(generatedPrimaryStatus(result));
-      }
-    }
-    await resourceActions.loadSubtitleResources(updateStatus: false);
   }
 
   Future<SpeechEnhancementLoadResult?> loadSpeechEnhancements(
