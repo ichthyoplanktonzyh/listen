@@ -352,7 +352,7 @@ same underlying fact should be deduplicated in presentation.
 | Lexical Unit | `LexicalUnit`; durable wrapper `LexicalEntry` | `LexicalUnit`, `LexicalEntry`, `LexicalOccurrence` | Production |
 | Listening Phenomenon | `WordTiming`, `ChunkTimelineChunk`, `PhoneTimeline`, `ConnectedSpeechExplanation`, `RhythmFrame`, `ListeningHotspot` | Corresponding timeline and sound-analysis schemas | Conceptual family; no universal identity |
 | Sense Group | `SenseGroup`, `SenseGroupAnalysis` | `SenseGroup`, `SenseGroupAnalysis` | Production analysis |
-| Prosodic Chunk | `ChunkTimelineChunk` and rhythm/prosody analysis facts | `ChunkTimelineChunk` and related timeline schemas | Production analysis, distinct from Sense Group |
+| Prosodic Chunk | `ProsodyAnalysis` with declared token spans and word-anchored prominence/stress/utterance roles; only playback times are projected through the Word Timeline. Legacy `ChunkTimelineChunk` remains readable pending R5, never a foundation fallback | `ProsodyAnalysis` and related package/timeline schemas | Production analysis, distinct from Sense Group |
 | Construction | `Construction`, `ConstructionOccurrence`, `ConstructionEvidence`, `ConstructionCapabilityProfile` | None | Spike-only; core #80 owns productionization |
 | Construction Occurrence | `construction::ConstructionOccurrence` | None | Spike-only; production authority remains #80 work |
 | Construction Occurrence Proposal | No production type; syntax/dependency candidates are inputs, not this authority | None | Future #80 lifecycle constraint |

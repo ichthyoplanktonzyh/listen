@@ -309,6 +309,80 @@ export interface SenseGroupAnalysis {
   updated_at_ms: number;
 }
 
+export type LexicalStress = "primary" | "secondary" | "unstressed" | "unknown";
+export type UtteranceRole =
+  | "nucleus"
+  | "prenuclear"
+  | "postnuclear"
+  | "unmarked"
+  | "unknown";
+export type ProsodyEvidence =
+  | "energy"
+  | "pitch"
+  | "duration"
+  | "lexical_stress"
+  | "context";
+
+export interface ProsodyWordRef {
+  sentence_id: string;
+  token_index: number;
+}
+
+export interface ProsodyAnchor {
+  word_ref: ProsodyWordRef;
+  syllable_index: number | null;
+  lexical_stress: LexicalStress;
+  realized_prominence: number;
+  utterance_role: UtteranceRole;
+  evidence: ProsodyEvidence[];
+  confidence: number;
+}
+
+export interface ProsodicChunk {
+  sentence_id: string;
+  chunk_index: number;
+  start_token_index: number;
+  end_token_index: number;
+  nucleus_token_index: number | null;
+  confidence: number;
+}
+
+export interface ProsodyAnalysis {
+  id: string;
+  track_id: string;
+  media_id: string;
+  parent_word_timeline_id: string | null;
+  provider_id: string;
+  provider_version: string;
+  algorithm: string;
+  status: TimelineStatus;
+  created_by: TimelineCreator;
+  metrics_json: unknown;
+  chunks: ProsodicChunk[];
+  anchors: ProsodyAnchor[];
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+export interface ProsodyAnalysisSummary {
+  id: string;
+  track_id: string;
+  media_id: string;
+  parent_word_timeline_id: string | null;
+  provider_id: string;
+  provider_version: string;
+  algorithm: string;
+  status: TimelineStatus;
+  created_by: TimelineCreator;
+  chunk_count: number;
+  anchor_count: number;
+  created_at_ms: number;
+  updated_at_ms: number;
+  can_activate: boolean;
+  can_archive: boolean;
+  can_delete: boolean;
+}
+
 export interface LLTimelineDocument {
   schema: "llplayer.timeline.v1";
   metadata: {
@@ -342,6 +416,8 @@ export interface LLTimelineDocument {
   active_chunk_timeline_id: string | null;
   sense_group_analyses?: SenseGroupAnalysis[];
   active_sense_group_analysis_id?: string | null;
+  prosody_analyses?: ProsodyAnalysis[];
+  active_prosody_analysis_id?: string | null;
   artifacts: unknown[];
 }
 

@@ -30,7 +30,7 @@ fn openapi_version_snapshot_and_path_count() {
 
     // API version snapshot — bump intentionally, never accidentally.
     assert!(
-        openapi.contains("version: 2.0.0"),
+        openapi.contains("version: 2.1.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 

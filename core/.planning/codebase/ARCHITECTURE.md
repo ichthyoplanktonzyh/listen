@@ -103,8 +103,15 @@ Foundation learning preparation is a separate application module rather than a
 new generic background-job kind. Its interface accepts an exact media,
 SubtitleTrack selection plus the recommended-foundation intent. Audio-stream
 selection belongs to upstream ASR or separately confirmed phone analysis, not
-this text-derived plan. A fixed typed plan owns the three required fast slots: WordTimeline,
-ChunkTimeline, and SenseGroup. Dedicated SQLite runs use revision
+this text-derived plan. A fixed typed plan owns the three required fast slots:
+WordTimeline, Prosody (the Prosodic Chunk slot), and SenseGroup. The single
+semantic source for the Prosody slot is a Prosody Analysis resource (the
+package-native `prosody_analysis` projection); an imported analysis whose
+parent WordTimeline matches the selected timeline satisfies the slot as a
+candidate without Core regenerating an equivalent resource, and it is never
+activated by readiness. Foundation does not regenerate the legacy persisted
+ChunkTimeline as a fallback. Prosodic chunk spans are declared by Prosody;
+only playback times are derived at read time through the Word Timeline. Dedicated SQLite runs use revision
 compare-and-swap and an active-target partial unique index for durable
 single-flight; startup recovery, cancellation, retry, plan/input fingerprints,
 and artifact references remain preparation-specific.
@@ -112,12 +119,12 @@ The local-runtime coordinator validates the current media and subtitle
 fingerprints before local writes. It reuses a valid active resource or creates
 an idempotent preparation candidate, then atomically activates that candidate
 only when the resource family has no active selection. Existing user or
-higher-quality active resources are never replaced. ChunkTimeline depends only
-on the exact WordTimeline selected by the run; SenseGroup is independent and
-can complete even when word timing fails. Separate text and phrase-analysis
+higher-quality active resources are never replaced. The Prosody slot depends
+only on the exact WordTimeline selected by the run; SenseGroup is independent
+and can complete even when word timing fails. Separate text and phrase-analysis
 fingerprints prevent unrelated phrase updates from invalidating WordTimeline
-while still invalidating ChunkTimeline and SenseGroup when their true inputs
-change.
+while still invalidating Prosody and SenseGroup when their
+true inputs change.
 
 Views A and B are deterministic projections from a ready WordTimeline and the
 current language capability; they are readiness outputs, not durable resource

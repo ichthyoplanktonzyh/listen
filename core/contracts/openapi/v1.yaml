@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 2.0.0
+  version: 2.1.0
   description: Versioned loopback-only application-service adapter. Playback control is excluded.
 servers:
   - url: http://127.0.0.1:{port}
@@ -4506,6 +4506,19 @@ components:
           type: [string, "null"]
           default: null
           description: Serialized exports include this field; imports may omit it and default to no active analysis.
+        prosody_analyses:
+          type: array
+          default: []
+          description: >
+            Serialized exports include this field; imports may omit it and
+            default to an empty collection. Prosody analyses are the single
+            semantic source for the Prosodic Chunk foundation slot; imported
+            package resources stay candidates until explicitly activated.
+          items: { $ref: "#/components/schemas/ProsodyAnalysis" }
+        active_prosody_analysis_id:
+          type: [string, "null"]
+          default: null
+          description: Serialized exports include this field; imports may omit it and default to no active analysis.
         artifacts:
           type: array
           items: { $ref: "#/components/schemas/LLTimelineArtifact" }
@@ -4619,6 +4632,93 @@ components:
     SenseGroupSource:
       type: string
       enum: [dependency_parse, phrase_structure, language_model, punctuation, length_limit, rule, user]
+    ProsodyAnalysis:
+      type: object
+      description: >
+        The single semantic source for the Prosodic Chunk foundation slot
+        (content-package v1 `prosody_analysis`). Word-anchored prominence,
+        lexical stress, utterance roles, and declared prosodic chunk token
+        spans. Only playback times are derived through the Word Timeline and
+        are never persisted here.
+      required: [id, track_id, media_id, parent_word_timeline_id, provider_id, provider_version, algorithm, status, created_by, metrics_json, chunks, anchors, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        parent_word_timeline_id: { type: [string, "null"] }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        algorithm: { type: string }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        metrics_json: { type: object, additionalProperties: true }
+        chunks:
+          type: array
+          description: Declared prosodic grouping spans; playback times are derived from the parent Word Timeline.
+          items: { $ref: "#/components/schemas/ProsodicChunk" }
+        anchors:
+          type: array
+          items: { $ref: "#/components/schemas/ProsodyAnchor" }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    ProsodyAnalysisSummary:
+      type: object
+      required: [id, track_id, media_id, parent_word_timeline_id, provider_id, provider_version, algorithm, status, created_by, chunk_count, anchor_count, created_at_ms, updated_at_ms, can_activate, can_archive, can_delete]
+      properties:
+        id: { type: string }
+        track_id: { type: string }
+        media_id: { type: string }
+        parent_word_timeline_id: { type: [string, "null"] }
+        provider_id: { type: string }
+        provider_version: { type: string }
+        algorithm: { type: string }
+        status: { $ref: "#/components/schemas/TimelineStatus" }
+        created_by: { $ref: "#/components/schemas/TimelineCreator" }
+        chunk_count: { type: integer, minimum: 0 }
+        anchor_count: { type: integer, minimum: 0 }
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+        can_activate: { type: boolean }
+        can_archive: { type: boolean }
+        can_delete: { type: boolean }
+    ProsodyAnchor:
+      type: object
+      required: [word_ref, syllable_index, lexical_stress, realized_prominence, utterance_role, evidence, confidence]
+      properties:
+        word_ref: { $ref: "#/components/schemas/ProsodyWordRef" }
+        syllable_index: { type: [integer, "null"], minimum: 0 }
+        lexical_stress: { $ref: "#/components/schemas/LexicalStress" }
+        realized_prominence: { type: number, minimum: 0 }
+        utterance_role: { $ref: "#/components/schemas/UtteranceRole" }
+        evidence:
+          type: array
+          items: { $ref: "#/components/schemas/ProsodyEvidence" }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+    ProsodicChunk:
+      type: object
+      required: [sentence_id, chunk_index, start_token_index, end_token_index, nucleus_token_index, confidence]
+      properties:
+        sentence_id: { type: string }
+        chunk_index: { type: integer, minimum: 0 }
+        start_token_index: { type: integer, minimum: 0 }
+        end_token_index: { type: integer, minimum: 0, description: Inclusive Core-domain end index. }
+        nucleus_token_index: { type: [integer, "null"], minimum: 0 }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+    ProsodyWordRef:
+      type: object
+      required: [sentence_id, token_index]
+      properties:
+        sentence_id: { type: string }
+        token_index: { type: integer, minimum: 0 }
+    LexicalStress:
+      type: string
+      enum: [primary, secondary, unstressed, unknown]
+    UtteranceRole:
+      type: string
+      enum: [nucleus, prenuclear, postnuclear, unmarked, unknown]
+    ProsodyEvidence:
+      type: string
+      enum: [energy, pitch, duration, lexical_stress, context]
     ChunkTimelinePrecision:
       type: string
       enum: [precise, approximate, text_only]

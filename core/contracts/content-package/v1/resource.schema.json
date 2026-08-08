@@ -348,6 +348,22 @@
       "additionalProperties": false,
       "required": ["anchors"],
       "properties": {
+        "chunks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sentence_id", "chunk_index", "start_token_index", "end_token_index_exclusive", "confidence"],
+            "properties": {
+              "sentence_id": { "type": "string", "minLength": 1 },
+              "chunk_index": { "type": "integer", "minimum": 0 },
+              "start_token_index": { "type": "integer", "minimum": 0 },
+              "end_token_index_exclusive": { "type": "integer", "minimum": 1 },
+              "nucleus_token_index": { "type": ["integer", "null"], "minimum": 0 },
+              "confidence": { "$ref": "#/$defs/confidence" }
+            }
+          }
+        },
         "anchors": {
           "type": "array",
           "items": { "$ref": "#/$defs/prosodyAnchor" }

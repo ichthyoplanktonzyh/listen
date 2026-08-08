@@ -18,8 +18,10 @@ use super::PersistenceError;
 // v54 corrects legacy detached LLTimeline media availability without touching
 // subtitle, analysis-resource, or learning-history rows. v55 adds the dedicated
 // typed learning-preparation run store and its active-target single-flight
-// authority.
-pub const MIGRATION_VERSION: u32 = 55;
+// authority. v56 adds the prosody analysis resource family (the R3 single
+// semantic source for the Prosodic Chunk foundation slot) with its own
+// candidate/active lifecycle.
+pub const MIGRATION_VERSION: u32 = 56;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -470,6 +472,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             ))?;
         }
         tx.pragma_update(None, "user_version", 55)?;
+        tx.commit()?;
+    }
+    if current < 56 {
+        let tx = connection.unchecked_transaction()?;
+        if !table_exists(&tx, "prosody_analysis_runs")? {
+            tx.execute_batch(include_str!("../migrations/0056_prosody_analysis_runs.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 56)?;
         tx.commit()?;
     }
     Ok(())

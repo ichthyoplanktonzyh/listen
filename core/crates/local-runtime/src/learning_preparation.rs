@@ -7,10 +7,10 @@ use application::{
     LearningPreparationRun, LearningPreparationRunId, LearningPreparationRunRepository,
     LearningPreparationRunStatus, LearningPreparationRunTransition, LearningPreparationUseCases,
     PreparationStepState, PrepareFoundationResult, ReusableFoundationArtifact,
-    WordTimelinePrecision, foundation_chunk_policy, foundation_rule_sense_group_policy, now_ms,
+    WordTimelinePrecision, foundation_rule_sense_group_policy, now_ms,
 };
 use domain::{
-    ChunkTimelineId, MediaAvailability, SenseGroupAnalysisId, SubtitleTokenKind, SubtitleTrack,
+    MediaAvailability, ProsodyAnalysisId, SenseGroupAnalysisId, SubtitleTokenKind, SubtitleTrack,
     SubtitleTrackStatus, TimelineStatus, TimingSource, WordTimeline, WordTimelineId,
 };
 use sha2::{Digest, Sha256};
@@ -20,7 +20,7 @@ const WORD_POLICY: &str = "foundation-pronunciation-timing:v1";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InvalidReadyArtifact {
     WordTimeline,
-    ChunkTimeline,
+    Prosody,
     SenseGroup,
 }
 
@@ -33,7 +33,7 @@ trait FoundationPreparationExecution: FoundationPreparationInspector {
         &self,
         target: &FoundationPreparationTarget,
     ) -> Result<ReusableFoundationArtifact, ApplicationError>;
-    fn build_chunk_timeline(
+    fn build_prosody(
         &self,
         target: &FoundationPreparationTarget,
         parent_word_timeline_id: &str,
@@ -155,58 +155,41 @@ impl FoundationPreparationInspector for LocalFoundationPreparationExecution {
             })
             .unwrap_or(FoundationAssetAvailability::Buildable);
 
-        let chunks = analysis.list_chunk_timelines(&target.subtitle_track_id)?;
-        let (chunk_provider, chunk_version, chunk_algorithm) = foundation_chunk_policy();
-        let chunk = chunks
-            .iter()
-            .filter(|timeline| {
-                timeline.status != TimelineStatus::Archived
-                    && !timeline.chunks.is_empty()
-                    && timeline.track_id == target.subtitle_track_id
-                    && timeline.media_id == target.media_id
-                    && timeline
-                        .parent_word_timeline_id
-                        .as_ref()
-                        .is_some_and(|parent| {
-                            word.as_ref().is_some_and(|selected| selected.id == *parent)
-                        })
-            })
-            .find(|timeline| timeline.status == TimelineStatus::Active)
-            .or_else(|| {
-                let word = word.as_ref()?;
-                let expected = chunk_fingerprint(&analysis_input_fingerprint, word.id.as_str());
-                chunks.iter().find(|timeline| {
-                    timeline.status != TimelineStatus::Archived
-                        && !timeline.chunks.is_empty()
-                        && timeline.track_id == target.subtitle_track_id
-                        && timeline.media_id == target.media_id
-                        && timeline.parent_word_timeline_id.as_ref() == Some(&word.id)
-                        && timeline.provider_id == chunk_provider
-                        && timeline.provider_version == chunk_version
-                        && timeline.algorithm == chunk_algorithm
-                        && timeline
-                            .metrics_json
-                            .as_object()
-                            .get("preparation_input_fingerprint")
-                            .and_then(serde_json::Value::as_str)
-                            == Some(expected.as_str())
+        // Prosodic Chunk foundation slot. The single semantic source is a
+        // Prosody Analysis: an imported package resource whose parent Word
+        // Timeline matches the selected timeline satisfies the slot without
+        // Core regenerating an equivalent resource. Imported prosody is used
+        // as a candidate and is never activated by readiness; only when no
+        // matching imported analysis exists the slot is honestly unavailable;
+        // Core does not regenerate the equivalent content-bound resource.
+        let prosody_analyses = analysis.list_prosody_analyses(&target.subtitle_track_id)?;
+        let imported_prosody = prosody_analyses.iter().find(|item| {
+            item.status != TimelineStatus::Archived
+                && !item.chunks.is_empty()
+                && item.track_id == target.subtitle_track_id
+                && item.media_id == target.media_id
+                && item.parent_word_timeline_id.as_ref().is_some_and(|parent| {
+                    word.as_ref().is_some_and(|selected| selected.id == *parent)
                 })
-            });
-        let chunk_availability = chunk
-            .map(|timeline| {
-                let parent = timeline
-                    .parent_word_timeline_id
-                    .as_ref()
-                    .expect("validated chunk parent");
-                FoundationAssetAvailability::Reusable(ReusableFoundationArtifact {
-                    artifact_ref: timeline.id.as_str().into(),
-                    input_fingerprint: chunk_fingerprint(
-                        &analysis_input_fingerprint,
-                        parent.as_str(),
-                    ),
-                })
+        });
+        let prosody = if let Some(analysis) = imported_prosody {
+            let parent = analysis
+                .parent_word_timeline_id
+                .as_ref()
+                .expect("validated imported prosody parent");
+            FoundationAssetAvailability::Reusable(ReusableFoundationArtifact {
+                artifact_ref: analysis.id.as_str().into(),
+                input_fingerprint: prosody_fingerprint(
+                    &analysis_input_fingerprint,
+                    parent.as_str(),
+                    analysis.id.as_str(),
+                ),
             })
-            .unwrap_or(FoundationAssetAvailability::Buildable);
+        } else {
+            FoundationAssetAvailability::Unavailable {
+                reason: "prosody_analysis_candidate_required".into(),
+            }
+        };
 
         let sense_fingerprint = sense_group_fingerprint(&analysis_input_fingerprint);
         let (sense_provider, sense_version, sense_algorithm) = foundation_rule_sense_group_policy();
@@ -250,7 +233,7 @@ impl FoundationPreparationInspector for LocalFoundationPreparationExecution {
         Ok(FoundationSourceInspection::Selected(FoundationInputs {
             word_timeline: word_availability,
             word_timeline_precision: word_precision,
-            chunk_timeline: chunk_availability,
+            prosody,
             sense_group,
             audible_structure,
         }))
@@ -290,45 +273,33 @@ impl FoundationPreparationExecution for LocalFoundationPreparationExecution {
             }
         }
 
-        if let Some((artifact_ref, input_fingerprint)) =
-            ready_artifact(&run.plan.chunk_timeline.state)
-        {
-            let Ok(id) = ChunkTimelineId::parse(artifact_ref) else {
-                return Ok(Some(InvalidReadyArtifact::ChunkTimeline));
-            };
-            let Some(timeline) = analysis.get_chunk_timeline(&id)? else {
-                return Ok(Some(InvalidReadyArtifact::ChunkTimeline));
-            };
-            let Some(parent_id) = timeline.parent_word_timeline_id.as_ref() else {
-                return Ok(Some(InvalidReadyArtifact::ChunkTimeline));
-            };
-            if ready_artifact_ref(&run.plan.word_timeline.state) != Some(parent_id.as_str()) {
-                return Ok(Some(InvalidReadyArtifact::ChunkTimeline));
-            }
-            let Some(parent) = analysis.get_word_timeline(parent_id)? else {
-                return Ok(Some(InvalidReadyArtifact::ChunkTimeline));
-            };
-            let expected = chunk_fingerprint(&analysis_input, parent_id.as_str());
-            let (provider, version, algorithm) = foundation_chunk_policy();
-            if input_fingerprint != expected
-                || timeline.status == TimelineStatus::Archived
-                || timeline.track_id != run.target.subtitle_track_id
-                || timeline.media_id != run.target.media_id
-                || timeline.chunks.is_empty()
-                || parent.status == TimelineStatus::Archived
-                || !word_timeline_matches_track(&parent, &track)
-                || (timeline.status != TimelineStatus::Active
-                    && (timeline.provider_id != provider
-                        || timeline.provider_version != version
-                        || timeline.algorithm != algorithm
-                        || timeline
-                            .metrics_json
-                            .as_object()
-                            .get("preparation_input_fingerprint")
-                            .and_then(serde_json::Value::as_str)
-                            != Some(expected.as_str())))
+        if let Some((artifact_ref, _input_fingerprint)) = ready_artifact(&run.plan.prosody.state) {
+            // An imported Prosody Analysis satisfies the slot as a candidate;
+            // it is validated by resource identity and its Word Timeline
+            // parent, never by the local producer fingerprint.
+            if let Ok(id) = ProsodyAnalysisId::parse(artifact_ref)
+                && let Some(imported) = analysis.get_prosody_analysis(&id)?
             {
-                return Ok(Some(InvalidReadyArtifact::ChunkTimeline));
+                let Some(parent_id) = imported.parent_word_timeline_id.as_ref() else {
+                    return Ok(Some(InvalidReadyArtifact::Prosody));
+                };
+                if ready_artifact_ref(&run.plan.word_timeline.state) != Some(parent_id.as_str()) {
+                    return Ok(Some(InvalidReadyArtifact::Prosody));
+                }
+                let Some(parent) = analysis.get_word_timeline(parent_id)? else {
+                    return Ok(Some(InvalidReadyArtifact::Prosody));
+                };
+                if imported.status == TimelineStatus::Archived
+                    || imported.track_id != run.target.subtitle_track_id
+                    || imported.media_id != run.target.media_id
+                    || imported.chunks.is_empty()
+                    || parent.status == TimelineStatus::Archived
+                    || !word_timeline_matches_track(&parent, &track)
+                {
+                    return Ok(Some(InvalidReadyArtifact::Prosody));
+                }
+            } else {
+                return Ok(Some(InvalidReadyArtifact::Prosody));
             }
         }
 
@@ -382,28 +353,15 @@ impl FoundationPreparationExecution for LocalFoundationPreparationExecution {
         })
     }
 
-    fn build_chunk_timeline(
+    fn build_prosody(
         &self,
         target: &FoundationPreparationTarget,
         parent_word_timeline_id: &str,
     ) -> Result<ReusableFoundationArtifact, ApplicationError> {
-        self.validate_target(target)?;
-        let parent = WordTimelineId::parse(parent_word_timeline_id)?;
-        let analysis_input_fingerprint = self.analysis_input_fingerprint(target)?;
-        let fingerprint = chunk_fingerprint(&analysis_input_fingerprint, parent_word_timeline_id);
-        let timeline = self
-            .services
-            .media_analysis()
-            .generate_chunk_timeline_from_word_timeline(
-                &target.subtitle_track_id,
-                &parent,
-                Some(TimelineStatus::Candidate),
-                Some(&fingerprint),
-            )?;
-        Ok(ReusableFoundationArtifact {
-            artifact_ref: timeline.id.as_str().into(),
-            input_fingerprint: fingerprint,
-        })
+        let _ = (target, parent_word_timeline_id);
+        Err(ApplicationError::Invalid(
+            "prosody analysis must be imported as a package candidate".into(),
+        ))
     }
 
     fn build_sense_group(
@@ -569,9 +527,7 @@ impl LearningPreparationCoordinator {
                     InvalidReadyArtifact::WordTimeline => {
                         run.invalidate_word_timeline_artifact(now_ms())
                     }
-                    InvalidReadyArtifact::ChunkTimeline => {
-                        run.invalidate_chunk_timeline_artifact(now_ms())
-                    }
+                    InvalidReadyArtifact::Prosody => run.invalidate_prosody_artifact(now_ms()),
                     InvalidReadyArtifact::SenseGroup => {
                         run.invalidate_sense_group_artifact(now_ms())
                     }
@@ -608,17 +564,17 @@ impl LearningPreparationCoordinator {
                 continue;
             }
 
-            if matches!(run.plan.chunk_timeline.state, PreparationStepState::Pending) {
+            if matches!(run.plan.prosody.state, PreparationStepState::Pending) {
                 let source = ready_artifact_ref(&run.plan.word_timeline.state)
-                    .ok_or(ApplicationError::Conflict("chunk source is not ready"))?;
+                    .ok_or(ApplicationError::Conflict("prosody source is not ready"))?;
                 let source = source.to_owned();
                 let expected = run.revision;
-                run.begin_chunk_timeline(now_ms())?;
+                run.begin_prosody(now_ms())?;
                 run = self.persist(expected, run)?;
                 let expected = run.revision;
-                match self.execution.build_chunk_timeline(&run.target, &source) {
-                    Ok(artifact) => run.complete_chunk_timeline(artifact, now_ms())?,
-                    Err(error) => run.fail_chunk_timeline(error.to_string(), now_ms())?,
+                match self.execution.build_prosody(&run.target, &source) {
+                    Ok(artifact) => run.complete_prosody(artifact, now_ms())?,
+                    Err(error) => run.fail_prosody(error.to_string(), now_ms())?,
                 }
                 run = self.persist(expected, run)?;
                 continue;
@@ -675,12 +631,15 @@ fn step_fingerprint(input_fingerprint: &str, step: &str, fields: &[&str]) -> Str
     hex::encode(digest.finalize())
 }
 
-fn chunk_fingerprint(analysis_input_fingerprint: &str, parent: &str) -> String {
-    let (provider, version, algorithm) = foundation_chunk_policy();
+fn prosody_fingerprint(
+    analysis_input_fingerprint: &str,
+    parent: &str,
+    resource_id: &str,
+) -> String {
     step_fingerprint(
         analysis_input_fingerprint,
-        "chunk",
-        &[parent, provider, version, algorithm],
+        "prosody",
+        &[parent, resource_id],
     )
 }
 
@@ -763,7 +722,7 @@ mod tests {
             Ok(FoundationSourceInspection::Selected(FoundationInputs {
                 word_timeline: FoundationAssetAvailability::Buildable,
                 word_timeline_precision: WordTimelinePrecision::Estimated,
-                chunk_timeline: FoundationAssetAvailability::Buildable,
+                prosody: FoundationAssetAvailability::Buildable,
                 sense_group: FoundationAssetAvailability::Buildable,
                 audible_structure: FoundationDerivedAvailability::Available,
             }))
@@ -786,14 +745,14 @@ mod tests {
             Ok(artifact("word"))
         }
 
-        fn build_chunk_timeline(
+        fn build_prosody(
             &self,
             _target: &FoundationPreparationTarget,
             parent_word_timeline_id: &str,
         ) -> Result<ReusableFoundationArtifact, ApplicationError> {
             assert_eq!(parent_word_timeline_id, "word");
-            self.calls.lock().unwrap().push("chunk");
-            Ok(artifact("chunk"))
+            self.calls.lock().unwrap().push("prosody");
+            Ok(artifact("prosody"))
         }
 
         fn build_sense_group(
@@ -861,7 +820,7 @@ mod tests {
         assert_eq!(completed.status, LearningPreparationRunStatus::Completed);
         assert_eq!(
             execution.calls.lock().unwrap().as_slice(),
-            ["word", "sense", "chunk"]
+            ["word", "sense", "prosody"]
         );
         assert!(matches!(
             completed.plan.audible_structure,
@@ -883,5 +842,225 @@ mod tests {
             audible_structure_availability(None),
             FoundationDerivedAvailability::Unavailable { .. }
         ));
+    }
+
+    fn imported_prosody_track(repo: &SqliteRepository) -> FoundationPreparationTarget {
+        use application::MediaRepository;
+        use application::ProsodyAnalysisRepository;
+        use application::SubtitleTrackRepository;
+        use application::WordTimelineRepository;
+        use domain::{
+            LanguageCode, LexicalStress, MediaAvailability, MediaItem, MediaKind, ProsodyAnalysis,
+            ProsodyAnalysisId, ProsodyAnchor, ProsodyEvidence, ProsodyWordRef, SubtitleSentence,
+            SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, SubtitleTrack,
+            SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus,
+            TimingSource, UtteranceRole, WordTimeline, WordTimelineId, WordTiming,
+        };
+
+        let media = MediaItem {
+            id: MediaId::parse("media-imported").unwrap(),
+            path: "/tmp/imported.mp4".into(),
+            fingerprint: "media-imported-fingerprint".into(),
+            title: "Imported media".into(),
+            kind: MediaKind::Video,
+            duration: Some(TimeMs::new(2_500)),
+            availability: MediaAvailability::Available,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        repo.upsert(&media).unwrap();
+        let track = SubtitleTrack {
+            id: SubtitleTrackId::parse("track-imported").unwrap(),
+            media_id: media.id.clone(),
+            fingerprint: "track-imported-fingerprint".into(),
+            language: Some(LanguageCode::parse("en").unwrap()),
+            source: "listen-resource-package-v1".into(),
+            status: SubtitleTrackStatus::Available,
+            sentences: vec![SubtitleSentence {
+                id: SubtitleSentenceId::parse("sentence-1").unwrap(),
+                index: 0,
+                start: TimeMs::new(100),
+                end: TimeMs::new(500),
+                original_text: "Hello world".into(),
+                display_text: "Hello world".into(),
+                tokens: vec![
+                    SubtitleToken {
+                        index: 0,
+                        kind: SubtitleTokenKind::Word,
+                        text: "Hello".into(),
+                        normalized: Some("hello".into()),
+                        start_char: 0,
+                        end_char: 5,
+                    },
+                    SubtitleToken {
+                        index: 1,
+                        kind: SubtitleTokenKind::Word,
+                        text: "world".into(),
+                        normalized: Some("world".into()),
+                        start_char: 6,
+                        end_char: 11,
+                    },
+                ],
+            }],
+        };
+        repo.save_track(&track).unwrap();
+        let sentence_id = track.sentences[0].id.clone();
+        let word_timeline = WordTimeline {
+            id: WordTimelineId::parse("word-timeline-imported").unwrap(),
+            track_id: track.id.clone(),
+            media_id: media.id.clone(),
+            algorithm_id: "foundation-pronunciation-timing".into(),
+            algorithm_version: "v1".into(),
+            config_hash: "config".into(),
+            parent_timeline_id: None,
+            created_by: TimelineCreator::Algorithm,
+            status: TimelineStatus::Active,
+            metrics_json: TimelineMetrics::default(),
+            words: vec![
+                WordTiming {
+                    sentence_id: sentence_id.clone(),
+                    token_index: 0,
+                    text: "Hello".into(),
+                    start_ms: 100,
+                    end_ms: 250,
+                    confidence: Some(1.0),
+                    timing_source: TimingSource::AsrAligned,
+                    provider_id: "listen-gen".into(),
+                    provider_version: "0.2.0".into(),
+                },
+                WordTiming {
+                    sentence_id: sentence_id.clone(),
+                    token_index: 1,
+                    text: "world".into(),
+                    start_ms: 260,
+                    end_ms: 500,
+                    confidence: Some(1.0),
+                    timing_source: TimingSource::AsrAligned,
+                    provider_id: "listen-gen".into(),
+                    provider_version: "0.2.0".into(),
+                },
+            ],
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        };
+        repo.save_word_timeline(&word_timeline).unwrap();
+        let _ = repo.save_prosody_analysis(&ProsodyAnalysis {
+            id: ProsodyAnalysisId::parse("prosody-imported").unwrap(),
+            track_id: track.id.clone(),
+            media_id: media.id.clone(),
+            parent_word_timeline_id: Some(word_timeline.id.clone()),
+            provider_id: "listen-gen".into(),
+            provider_version: "0.2.0".into(),
+            algorithm: "prosody-v1".into(),
+            status: TimelineStatus::Candidate,
+            created_by: TimelineCreator::Algorithm,
+            metrics_json: TimelineMetrics::default(),
+            chunks: vec![domain::ProsodicChunk {
+                sentence_id: sentence_id.clone(),
+                chunk_index: 0,
+                start_token_index: 0,
+                end_token_index: 1,
+                nucleus_token_index: Some(0),
+                confidence: 0.9,
+            }],
+            anchors: vec![
+                ProsodyAnchor {
+                    word_ref: ProsodyWordRef {
+                        sentence_id: sentence_id.clone(),
+                        token_index: 0,
+                    },
+                    syllable_index: None,
+                    lexical_stress: LexicalStress::Primary,
+                    realized_prominence: 0.8,
+                    utterance_role: UtteranceRole::Nucleus,
+                    evidence: vec![ProsodyEvidence::Energy],
+                    confidence: 0.9,
+                },
+                ProsodyAnchor {
+                    word_ref: ProsodyWordRef {
+                        sentence_id: sentence_id.clone(),
+                        token_index: 1,
+                    },
+                    syllable_index: None,
+                    lexical_stress: LexicalStress::Unstressed,
+                    realized_prominence: 0.3,
+                    utterance_role: UtteranceRole::Postnuclear,
+                    evidence: vec![ProsodyEvidence::Pitch],
+                    confidence: 0.8,
+                },
+            ],
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        });
+        FoundationPreparationTarget {
+            media_id: media.id,
+            media_fingerprint: media.fingerprint,
+            subtitle_track_id: track.id,
+            subtitle_fingerprint: track.fingerprint,
+        }
+    }
+
+    #[tokio::test]
+    async fn imported_prosody_satisfies_the_foundation_slot_without_regeneration_or_activation() {
+        use application::{ChunkTimelineRepository, ProsodyAnalysisRepository};
+        let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+        let target = imported_prosody_track(&repo);
+        let services = application::AppServices::new(
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+            repo.clone(),
+        );
+        let coordinator = LearningPreparationCoordinator::new(services, repo.clone()).unwrap();
+
+        let inspection = coordinator.inspect(target.clone()).unwrap();
+        let FoundationSourceInspection::Selected(inputs) = inspection.source else {
+            panic!("expected selected foundation inputs");
+        };
+        let FoundationAssetAvailability::Reusable(prosody) = inputs.prosody else {
+            panic!("imported prosody must satisfy the foundation prosody slot");
+        };
+        assert_eq!(prosody.artifact_ref, "prosody-imported");
+
+        let PrepareFoundationResult::Run(created) = coordinator
+            .prepare(
+                target.clone(),
+                FoundationPreparationRequest {
+                    intent: FoundationPreparationIntent::RecommendedFoundation,
+                },
+            )
+            .unwrap()
+        else {
+            panic!("expected preparation run");
+        };
+        let completed = wait_terminal(&coordinator, &created.id).await;
+
+        assert_eq!(completed.status, LearningPreparationRunStatus::Completed);
+        let PreparationStepState::Ready {
+            artifact_ref,
+            reused,
+            ..
+        } = &completed.plan.prosody.state
+        else {
+            panic!("prosody slot must be ready");
+        };
+        assert_eq!(artifact_ref, "prosody-imported");
+        assert_eq!(reused, &true);
+        // The imported analysis satisfies the slot as a candidate: no chunk
+        // timeline was regenerated and the prosody analysis was not activated.
+        assert!(
+            repo.list_chunk_timelines(&target.subtitle_track_id)
+                .unwrap()
+                .is_empty()
+        );
+        let imported = repo
+            .get_prosody_analysis(&ProsodyAnalysisId::parse("prosody-imported").unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(imported.status, TimelineStatus::Candidate);
     }
 }

@@ -42,8 +42,17 @@ Key invariants:
 - `LearningPreparationRun` is an application-owned orchestration record, not a
   Learning Object or generic resource. It stores exact source selection,
   input/plan fingerprints, revision, retry lineage, and four named foundation
-  step slots. Only queued/running/cancelling runs participate in target-level
+  step slots (WordTimeline, Prosody, SenseGroup, plus derived audible
+  structure). Only queued/running/cancelling runs participate in target-level
   single-flight;
+- Prosody Analysis is the single semantic source for the Prosodic Chunk
+  foundation slot: a word-anchored resource projected losslessly from
+  content-package v1 `prosody_analysis` (schema `listen.resource.prosody-analysis.v1`).
+  Imported analyses are persisted as candidates and never activated by import
+  or readiness. Prosodic chunk spans are declared by the resource; only their
+  playback times are derived through the parent Word Timeline. Sense Group
+  analysis is a separate resource family with a separate lifecycle. Legacy
+  `ChunkTimeline` remains readable but is not a foundation fallback;
 - destructive migration or cascade behavior requires explicit requirement,
   tests, and release/migration notes.
 

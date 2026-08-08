@@ -5,10 +5,12 @@ use content_package::{KnownResource, ValidatedPackage};
 use domain::{
     DetectedPhone, LLTIMELINE_SCHEMA_V1, LLTimelineArtifact, LLTimelineDocument,
     LLTimelineGenerator, LLTimelineMedia, LLTimelineMetadata, LLTimelineSegment, LLTimelineToken,
-    LanguageCode, MediaId, MediaItem, PhoneTimeline, PhoneTimelineId, PhoneTimelinePrecision,
-    SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId, SenseGroupId, SenseGroupSource,
-    SubtitleSentenceId, SubtitleTokenKind, SubtitleTrackId, TimelineCreator, TimelineMetrics,
-    TimelineStatus, TimingSource, WordTimeline, WordTimelineId, WordTiming,
+    LanguageCode, LexicalStress, MediaId, MediaItem, PhoneTimeline, PhoneTimelineId,
+    PhoneTimelinePrecision, ProsodicChunk, ProsodyAnalysis, ProsodyAnalysisId, ProsodyAnchor,
+    ProsodyEvidence, ProsodyWordRef, SenseGroup, SenseGroupAnalysis, SenseGroupAnalysisId,
+    SenseGroupId, SenseGroupSource, SubtitleSentenceId, SubtitleTokenKind, SubtitleTrackId,
+    TimelineCreator, TimelineMetrics, TimelineStatus, TimingSource, UtteranceRole, WordTimeline,
+    WordTimelineId, WordTiming,
 };
 
 use crate::{ApplicationError, MediaAnalysisUseCases, SubtitleTrack};
@@ -444,6 +446,134 @@ pub fn prepare_content_package_document(
             .push(consumed(record, vec![id.as_str().to_owned()]));
     }
 
+    let mut prosody_analyses = Vec::new();
+    for record in &package.resources {
+        let KnownResource::ProsodyAnalysis(resource) = &record.resource else {
+            continue;
+        };
+        let parent_resource_id = dependency_id(&resource.dependencies, "word_timeline")?;
+        let Some(parent_word_id) = word_ids.get(parent_resource_id) else {
+            return Err(ApplicationError::Invalid(
+                "prosody analysis word dependency was not converted".into(),
+            ));
+        };
+        let (provider_id, provider_version) = producer(resource);
+        let chunks = resource
+            .payload
+            .chunks
+            .iter()
+            .map(|chunk| {
+                let sentence = sentence_lookup.get(&chunk.sentence_id).ok_or_else(|| {
+                    ApplicationError::Invalid("prosodic chunk sentence was not converted".into())
+                })?;
+                if chunk.end_token_index_exclusive <= chunk.start_token_index
+                    || !sentence
+                        .tokens
+                        .iter()
+                        .any(|token| token.index == chunk.start_token_index)
+                    || !sentence
+                        .tokens
+                        .iter()
+                        .any(|token| token.index == chunk.end_token_index_exclusive - 1)
+                    || chunk.nucleus_token_index.is_some_and(|index| {
+                        index < chunk.start_token_index || index >= chunk.end_token_index_exclusive
+                    })
+                {
+                    return Err(ApplicationError::Invalid(
+                        "prosodic chunk token span was not converted".into(),
+                    ));
+                }
+                Ok(ProsodicChunk {
+                    sentence_id: sentence.id.clone(),
+                    chunk_index: chunk.chunk_index,
+                    start_token_index: chunk.start_token_index,
+                    end_token_index: chunk.end_token_index_exclusive - 1,
+                    nucleus_token_index: chunk.nucleus_token_index,
+                    confidence: chunk.confidence,
+                })
+            })
+            .collect::<Result<Vec<_>, ApplicationError>>()?;
+        let anchors = resource
+            .payload
+            .anchors
+            .iter()
+            .map(|anchor| {
+                let key = (
+                    parent_resource_id.to_owned(),
+                    anchor.word_ref.sentence_id.clone(),
+                    anchor.word_ref.token_index,
+                );
+                // The prosody resource's word_timeline dependency is exact: an
+                // anchor must reference a token the parent timeline actually
+                // timed, so the read-time playback projection always resolves.
+                word_timing_lookup.get(&key).ok_or_else(|| {
+                    ApplicationError::Invalid(
+                        "prosody anchor reference has no converted timing".into(),
+                    )
+                })?;
+                let sentence = sentence_lookup
+                    .get(&anchor.word_ref.sentence_id)
+                    .ok_or_else(|| {
+                        ApplicationError::Invalid(
+                            "prosody anchor sentence was not converted".into(),
+                        )
+                    })?;
+                let token = sentence
+                    .tokens
+                    .iter()
+                    .find(|token| token.index == anchor.word_ref.token_index)
+                    .ok_or_else(|| {
+                        ApplicationError::Invalid("prosody anchor token was not converted".into())
+                    })?;
+                if token.kind != SubtitleTokenKind::Word {
+                    return Err(ApplicationError::Invalid(
+                        "prosody anchor must reference a word token".into(),
+                    ));
+                }
+                Ok(ProsodyAnchor {
+                    word_ref: ProsodyWordRef {
+                        sentence_id: sentence.id.clone(),
+                        token_index: anchor.word_ref.token_index,
+                    },
+                    syllable_index: anchor.syllable_index,
+                    lexical_stress: map_lexical_stress(anchor.lexical_stress),
+                    realized_prominence: anchor.realized_prominence,
+                    utterance_role: map_utterance_role(anchor.utterance_role),
+                    evidence: anchor
+                        .evidence
+                        .iter()
+                        .copied()
+                        .map(map_prosody_evidence)
+                        .collect(),
+                    confidence: anchor.confidence,
+                })
+            })
+            .collect::<Result<Vec<_>, ApplicationError>>()?;
+        let id = ProsodyAnalysisId::from_fingerprint(
+            "content-package-prosody",
+            &record.descriptor.resource_id,
+        );
+        prosody_analyses.push(ProsodyAnalysis {
+            id: id.clone(),
+            track_id: origin_track_id.clone(),
+            media_id: media.id.clone(),
+            parent_word_timeline_id: Some(parent_word_id.clone()),
+            provider_id,
+            provider_version,
+            algorithm: PACKAGE_GENERATOR_ID.into(),
+            status: TimelineStatus::Candidate,
+            created_by: TimelineCreator::Algorithm,
+            metrics_json: resource_metrics(record),
+            chunks,
+            anchors,
+            created_at_ms: resource.provenance.created_at_ms,
+            updated_at_ms: resource.provenance.created_at_ms,
+        });
+        receipt
+            .resources
+            .push(consumed(record, vec![id.as_str().to_owned()]));
+    }
+
     let mut artifacts = Vec::new();
     for record in &package.resources {
         match &record.resource {
@@ -523,11 +653,7 @@ pub fn prepare_content_package_document(
                 });
                 receipt.resources.push(consumed(record, Vec::new()));
             }
-            KnownResource::ProsodyAnalysis(_) => {
-                let reason = "prosody_analysis has no lossless current domain representation";
-                receipt.resources.push(not_consumed(record, reason));
-                receipt.warnings.push(reason.into());
-            }
+            KnownResource::ProsodyAnalysis(_) => {}
             _ => {}
         }
     }
@@ -581,6 +707,8 @@ pub fn prepare_content_package_document(
         active_chunk_timeline_id: None,
         sense_group_analyses,
         active_sense_group_analysis_id: None,
+        prosody_analyses,
+        active_prosody_analysis_id: None,
         artifacts,
     };
     Ok(PreparedContentPackageImport { document, receipt })
@@ -726,6 +854,35 @@ fn map_sense_source(value: content_package::SenseGroupSource) -> SenseGroupSourc
     }
 }
 
+fn map_lexical_stress(value: content_package::LexicalStress) -> LexicalStress {
+    match value {
+        content_package::LexicalStress::Primary => LexicalStress::Primary,
+        content_package::LexicalStress::Secondary => LexicalStress::Secondary,
+        content_package::LexicalStress::Unstressed => LexicalStress::Unstressed,
+        content_package::LexicalStress::Unknown => LexicalStress::Unknown,
+    }
+}
+
+fn map_utterance_role(value: content_package::UtteranceRole) -> UtteranceRole {
+    match value {
+        content_package::UtteranceRole::Nucleus => UtteranceRole::Nucleus,
+        content_package::UtteranceRole::Prenuclear => UtteranceRole::Prenuclear,
+        content_package::UtteranceRole::Postnuclear => UtteranceRole::Postnuclear,
+        content_package::UtteranceRole::Unmarked => UtteranceRole::Unmarked,
+        content_package::UtteranceRole::Unknown => UtteranceRole::Unknown,
+    }
+}
+
+fn map_prosody_evidence(value: content_package::ProsodyEvidence) -> ProsodyEvidence {
+    match value {
+        content_package::ProsodyEvidence::Energy => ProsodyEvidence::Energy,
+        content_package::ProsodyEvidence::Pitch => ProsodyEvidence::Pitch,
+        content_package::ProsodyEvidence::Duration => ProsodyEvidence::Duration,
+        content_package::ProsodyEvidence::LexicalStress => ProsodyEvidence::LexicalStress,
+        content_package::ProsodyEvidence::Context => ProsodyEvidence::Context,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -766,6 +923,7 @@ mod tests {
         assert_eq!(prepared.document.word_timelines.len(), 1);
         assert_eq!(prepared.document.phone_timelines.len(), 1);
         assert_eq!(prepared.document.sense_group_analyses.len(), 1);
+        assert_eq!(prepared.document.prosody_analyses.len(), 1);
         assert_eq!(prepared.document.artifacts.len(), 1);
         assert!(
             prepared
@@ -781,13 +939,36 @@ mod tests {
                 .iter()
                 .all(|timeline| timeline.status == TimelineStatus::Candidate)
         );
+        assert!(
+            prepared
+                .document
+                .prosody_analyses
+                .iter()
+                .all(|analysis| analysis.status == TimelineStatus::Candidate)
+        );
         assert!(prepared.document.active_word_timeline_id.is_none());
         assert!(prepared.document.active_phone_timeline_id.is_none());
         assert!(prepared.document.active_sense_group_analysis_id.is_none());
-        assert!(prepared.receipt.resources.iter().any(|resource| {
-            resource.kind == "prosody_analysis"
-                && resource.outcome == ResourceImportOutcome::PreservedNotConsumed
+        assert!(prepared.document.active_prosody_analysis_id.is_none());
+        let prosody = prepared
+            .document
+            .prosody_analyses
+            .iter()
+            .find(|analysis| analysis.parent_word_timeline_id.is_some())
+            .unwrap();
+        assert!(!prosody.anchors.is_empty());
+        assert!(prosody.anchors.iter().all(|anchor| {
+            anchor.lexical_stress != domain::LexicalStress::Unknown
+                && anchor.realized_prominence >= 0.0
         }));
+        let prosody_disposition = prepared
+            .receipt
+            .resources
+            .iter()
+            .find(|resource| resource.kind == "prosody_analysis")
+            .unwrap();
+        assert_eq!(prosody_disposition.outcome, ResourceImportOutcome::Consumed);
+        assert_eq!(prosody_disposition.local_ids.len(), 1);
         assert!(prepared.receipt.resources.iter().all(|resource| {
             resource.review_status.is_some()
                 && resource.provenance.as_ref().is_some_and(|provenance| {
@@ -812,7 +993,7 @@ mod tests {
                 .map(|provider| provider.id.as_str()),
             Some("example-asr")
         );
-        assert!(!prepared.receipt.warnings.is_empty());
+        assert!(prepared.receipt.warnings.is_empty());
         assert_eq!(
             prepared.document.artifacts[0].payload["cues"][0]["voiced_frame_ratio"],
             serde_json::Value::Null
@@ -834,6 +1015,7 @@ mod tests {
         assert!(prepared.document.word_timelines.is_empty());
         assert!(prepared.document.phone_timelines.is_empty());
         assert!(prepared.document.sense_group_analyses.is_empty());
+        assert!(prepared.document.prosody_analyses.is_empty());
         assert!(prepared.document.artifacts.is_empty());
         assert_eq!(prepared.receipt.resources.len(), 1);
     }

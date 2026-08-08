@@ -125,6 +125,11 @@ The other five kinds are replaceable Analysis Resources.
 local baselines. `prosody_analysis` exchanges the higher-level interpretation
 derived from those observations. This keeps energy, pitch, and duration
 measurements distinct from claims such as realized prominence or nucleus.
+`prosody_analysis.payload.chunks` declares Prosodic Chunk token spans. Core
+derives their playback times from the exact Word Timeline dependency and never
+infers boundaries from prominence or utterance-role anchors. Older v1
+resources without declared chunks remain valid prosody evidence, but cannot
+satisfy the Prosodic Chunk foundation slot.
 `voiced_frame_ratio: null` means the extractor did not measure voicing; it must
 not be rewritten as zero, and it does not invalidate the measurement's other
 available energy, pitch, or duration observations.

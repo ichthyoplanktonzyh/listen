@@ -750,6 +750,39 @@ fn validate_known_resource(
             require_direct_anchor_kind(id, resource, resources, "word_acoustics")?;
             let transcript = anchored_transcript(id, resource, resources)?;
             let word_timeline = direct_word_timeline(id, resource, resources)?;
+            let mut indexes_by_sentence = HashMap::<&str, u32>::new();
+            let mut end_by_sentence = HashMap::<&str, u32>::new();
+            for chunk in &value.payload.chunks {
+                validate_confidence(id, Some(chunk.confidence), "prosodic chunk confidence")?;
+                validate_token_span(
+                    id,
+                    transcript,
+                    &chunk.sentence_id,
+                    chunk.start_token_index,
+                    chunk.end_token_index_exclusive,
+                )?;
+                if chunk.nucleus_token_index.is_some_and(|index| {
+                    index < chunk.start_token_index || index >= chunk.end_token_index_exclusive
+                }) {
+                    return Err(invalid(
+                        id,
+                        "prosodic chunk nucleus is outside its token span",
+                    ));
+                }
+                let expected = indexes_by_sentence.entry(&chunk.sentence_id).or_default();
+                if chunk.chunk_index != *expected
+                    || end_by_sentence
+                        .get(chunk.sentence_id.as_str())
+                        .is_some_and(|end| chunk.start_token_index < *end)
+                {
+                    return Err(invalid(
+                        id,
+                        "prosodic chunks are not ordered non-overlapping spans",
+                    ));
+                }
+                *expected += 1;
+                end_by_sentence.insert(&chunk.sentence_id, chunk.end_token_index_exclusive);
+            }
             for anchor in &value.payload.anchors {
                 validate_confidence(id, Some(anchor.confidence), "prosody confidence")?;
                 validate_confidence(id, Some(anchor.realized_prominence), "realized prominence")?;

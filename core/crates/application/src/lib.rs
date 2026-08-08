@@ -28,7 +28,8 @@ use domain::{
     PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeKind, PracticeMode,
     PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget, PracticeTargetKind,
     ProductionCorpusDocument, ProductionCorpusEntry, ProductionCorpusHit,
-    PronunciationProviderInfo, ReadingPosition,
+    PronunciationProviderInfo, ProsodicChunkProjection, ProsodyAnalysis, ProsodyAnalysisId,
+    ProsodyAnalysisSummary, ReadingPosition,
     RealtimeConversationSession as DomainRealtimeConversationSession,
     RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
     RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecognitionEvidenceId,
@@ -78,6 +79,7 @@ mod production_corpus;
 mod projection_review;
 mod pronunciation;
 mod pronunciation_providers;
+mod prosody;
 mod providers;
 mod reading;
 mod realtime_conversation;
@@ -124,6 +126,7 @@ pub use production_corpus::ProductionCorpusUseCases;
 pub use projection_review::ProjectionReviewUseCases;
 pub use pronunciation::PronunciationUseCases;
 pub use pronunciation_providers::*;
+pub use prosody::*;
 pub use providers::*;
 pub use reading::ReadingUseCases;
 pub use realtime_conversation::*;
@@ -151,6 +154,7 @@ pub struct AppServices {
     pub(crate) word_timelines: Arc<dyn WordTimelineRepository>,
     pub(crate) chunk_timelines: Arc<dyn ChunkTimelineRepository>,
     pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
+    pub(crate) prosody: Arc<dyn ProsodyAnalysisRepository>,
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
@@ -275,6 +279,7 @@ impl AppServices {
         R: WordTimelineRepository
             + ChunkTimelineRepository
             + SenseGroupRepository
+            + ProsodyAnalysisRepository
             + PhoneTimelineRepository
             + LLTimelineImportRepository
             + ContentPackageImportRepository
@@ -294,6 +299,7 @@ impl AppServices {
             word_timelines: timelines.clone(),
             chunk_timelines: timelines.clone(),
             sense_groups: timelines.clone(),
+            prosody: timelines.clone(),
             phone_timelines: timelines.clone(),
             lltimeline_resources,
             lltimeline_imports: timelines.clone(),
@@ -1558,6 +1564,10 @@ pub(crate) fn remap_lltimeline_identity(
         analysis.media_id = media_id.clone();
         analysis.track_id = track_id.clone();
     }
+    for analysis in &mut document.prosody_analyses {
+        analysis.media_id = media_id.clone();
+        analysis.track_id = track_id.clone();
+    }
     for frame in &mut document.rhythm_frames {
         frame.media_id = media_id.clone();
         frame.track_id = track_id.clone();
@@ -1590,6 +1600,13 @@ pub(crate) fn remap_lltimeline_identity(
         for group in &mut analysis.groups {
             if let Some(sentence_id) = sentence_ids.get(&group.sentence_id) {
                 group.sentence_id = sentence_id.clone();
+            }
+        }
+    }
+    for analysis in &mut document.prosody_analyses {
+        for anchor in &mut analysis.anchors {
+            if let Some(sentence_id) = sentence_ids.get(&anchor.word_ref.sentence_id) {
+                anchor.word_ref.sentence_id = sentence_id.clone();
             }
         }
     }
@@ -1699,6 +1716,13 @@ pub(crate) fn remap_lltimeline_identity(
             *word_timeline_id = remapped.clone();
         }
     }
+    for analysis in &mut document.prosody_analyses {
+        if let Some(word_timeline_id) = analysis.parent_word_timeline_id.as_mut()
+            && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
+        {
+            *word_timeline_id = remapped.clone();
+        }
+    }
     let mut sense_group_analysis_ids = HashMap::new();
     for analysis in &mut document.sense_group_analyses {
         let original = analysis.id.clone();
@@ -1722,6 +1746,21 @@ pub(crate) fn remap_lltimeline_identity(
     }
     if let Some(active_id) = document.active_sense_group_analysis_id.as_mut()
         && let Some(remapped) = sense_group_analysis_ids.get(active_id)
+    {
+        *active_id = remapped.clone();
+    }
+    let mut prosody_analysis_ids = HashMap::new();
+    for analysis in &mut document.prosody_analyses {
+        let original = analysis.id.clone();
+        let remapped = ProsodyAnalysisId::from_fingerprint(
+            "prosody-analysis",
+            &format!("{}:{}", track_id.as_str(), original.as_str()),
+        );
+        analysis.id = remapped.clone();
+        prosody_analysis_ids.insert(original, remapped);
+    }
+    if let Some(active_id) = document.active_prosody_analysis_id.as_mut()
+        && let Some(remapped) = prosody_analysis_ids.get(active_id)
     {
         *active_id = remapped.clone();
     }

@@ -348,6 +348,7 @@ if (!openapi.includes("phonetic_finding_feedback:")) throw new Error("phonetic f
 if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Error("provider pronunciation audio missing");
 if (!client.includes("sense_group_analyses?: SenseGroupAnalysis[];")) throw new Error("generated LLTimeline sense-group analyses missing");
 if (!client.includes("active_sense_group_analysis_id?: string | null;")) throw new Error("generated LLTimeline active sense-group id missing");
+if (!client.includes("chunks: ProsodicChunk[];")) throw new Error("generated Prosody declared chunks missing");
 for (const item of examples) {
   if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid example");
 }

@@ -8,7 +8,7 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `2.0.0` (published; major bump for the whole-media ASR deletion)
+- Contract version: `2.1.0` (unreleased additive R3 projection; published consumer baseline remains `2.0.0`)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.3`
 
@@ -73,6 +73,19 @@ App PR [listen-app#103](https://github.com/ichthyoplanktonzyh/listen-app/pull/10
 trip proves `listen-gen.alignment/0.2.0` Word Timeline provenance, exact Core
 `54497e9` candidate-only import and no active timeline selection.
 
+The R3 Core slice resolves Chunk versus Prosody semantics. Core now owns a
+`ProsodyAnalysis` domain resource that is the single semantic source for the
+Prosodic Chunk foundation slot, projected losslessly from content-package v1
+`prosody_analysis`. Package import consumes the resource as a candidate (typed
+`Consumed` receipt), and foundation readiness reuses an imported analysis whose
+parent Word Timeline matches the selected timeline without regenerating an
+equivalent resource and without activating it. Playback times are derived
+through the Word Timeline (no persisted time duplication). Chunk spans are package-declared rather than inferred from
+word roles. Sense Group analysis stays a separate resource family with a
+separate lifecycle. Foundation no longer generates legacy `ChunkTimeline` as a
+fallback; that readable legacy family is an R5 retirement target. The new resource family is exposed additively through
+the LLTimeline document (`prosody_analyses` / `active_prosody_analysis_id`).
+
 The legacy `scripts/timeline-production` tree and runtime/release inputs
 exclusive to later retired production paths remain deletion targets for R5.
 
@@ -99,8 +112,14 @@ not code evidence.
 
 1. R2 native aligned Word Timeline production is complete; retain Gen
    `c3564c35` / tool `0.2.0` as the immutable App producer pin.
-2. Resolve Core ChunkTimeline versus package Prosody semantics under R3, then migrate
-   Sense Group, Word Acoustics, Prosody and optional Phone Timeline producers.
+2. R3 (Core slice) resolves the Core `ChunkTimeline` versus package
+   `prosody_analysis` semantics: `ProsodyAnalysis` is the single semantic
+   source for the Prosodic Chunk foundation slot, imported losslessly as a
+   candidate that satisfies foundation readiness without regeneration or
+   silent activation; chunk spans are declared in Prosody and only playback
+   times are projected through the Word Timeline; Sense Group stays independent;
+   legacy `ChunkTimeline` is not a foundation fallback (R5 retirement target). Next: Gen/App
+   prosody producers and consumer cutover under R4.
 3. Delete `scripts/timeline-production` and runtime/release inputs exclusive to
    the retired Core production path.
 4. Define Content Edition, Media Rendition, Timeline Compatibility, and the

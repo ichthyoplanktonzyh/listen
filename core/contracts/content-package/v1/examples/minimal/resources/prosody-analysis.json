@@ -18,6 +18,16 @@
   },
   "quality": { "review_status": "unreviewed", "confidence": 0.89, "warnings": [] },
   "payload": {
+    "chunks": [
+      {
+        "sentence_id": "sentence-000000",
+        "chunk_index": 0,
+        "start_token_index": 0,
+        "end_token_index_exclusive": 3,
+        "nucleus_token_index": 0,
+        "confidence": 0.89
+      }
+    ],
     "anchors": [
       {
         "word_ref": { "sentence_id": "sentence-000000", "token_index": 0 },

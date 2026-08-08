@@ -163,3 +163,26 @@ Reference: `.planning/discuss/learning-domain-model-v2-refinement-review.zh.md` 
 - The rule-based fallback provider provides baseline coverage. Quality improvements come from
   plugging in better providers, not from changing the domain contract.
 - No existing behavior changes: ChunkTimeline generation, storage, and consumption are untouched.
+
+## R3 Amendment (2026-08-08): Prosody Analysis is the prosodic-chunk semantic source
+
+The whole-media generation cutover (R3, [001-ROADMAP.md](../../.planning/phases/001-offline-generation-split/001-ROADMAP.md))
+resolves the prosodic-chunk side of this ADR against content-package v1:
+
+- The single semantic source for the Prosodic Chunk foundation slot is the
+  content-package v1 `prosody_analysis` resource, projected losslessly into the
+  Core `ProsodyAnalysis` resource (word-anchored prominence, lexical stress,
+  and utterance roles). This keeps the acoustic/prosodic layer independent
+  from Sense Group exactly as this ADR decided.
+- Prosodic chunk token spans are declared by Prosody Analysis. Only playback
+  times are a **derived read-time projection** through the parent Word Timeline.
+  Core never infers boundaries from prominence or utterance roles. The
+  persisted `ChunkTimeline` is readable pending R5 but is not a foundation
+  fallback.
+- Imported prosody is candidate-only; foundation readiness reuses it without
+  regenerating an equivalent resource and never activates it.
+- No near-synonym type was added to preserve `ChunkTimeline`; the package
+  dependency graph is the semantic source.
+
+Historical decisions above remain the record for the phase in which they were
+made; the amendment applies from R3 onward.

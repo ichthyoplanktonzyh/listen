@@ -1,5 +1,5 @@
 use super::*;
-use application::WordTimelineRepository;
+use application::{ProsodyAnalysisRepository, WordTimelineRepository};
 
 async fn register_package_media(app: &Router, fingerprint: String) -> serde_json::Value {
     let response = app
@@ -96,6 +96,15 @@ async fn content_package_import_returns_a_typed_receipt_and_only_candidates() {
         .unwrap();
     assert_eq!(subtitle["review_status"], "machine_checked");
     assert_eq!(subtitle["provenance"]["provider"]["id"], "example-asr");
+    let prosody = first["receipt"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| resource["kind"] == "prosody_analysis")
+        .unwrap();
+    assert_eq!(prosody["outcome"], "consumed");
+    assert_eq!(prosody["local_ids"].as_array().unwrap().len(), 1);
+    assert!(prosody["reason"].is_null());
 
     let second = app.oneshot(request()).await.unwrap();
     assert_eq!(second.status(), StatusCode::OK);
@@ -108,6 +117,14 @@ async fn content_package_import_returns_a_typed_receipt_and_only_candidates() {
             .unwrap();
     assert_eq!(repo.list_word_timelines(&track_id).unwrap().len(), 1);
     assert!(repo.active_word_timeline(&track_id).unwrap().is_none());
+    assert_eq!(repo.list_prosody_analyses(&track_id).unwrap().len(), 1);
+    let imported = repo.list_prosody_analyses(&track_id).unwrap();
+    assert!(
+        imported
+            .iter()
+            .all(|analysis| analysis.status == domain::TimelineStatus::Candidate)
+    );
+    assert!(repo.active_prosody_analysis(&track_id).unwrap().is_none());
 }
 
 #[tokio::test]

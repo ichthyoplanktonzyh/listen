@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ChunkTimeline, ChunkTimelineChunk, ChunkTimelineId, LanguageCode, MediaId, PhoneTimeline,
-    PhoneTimelineId, RhythmFrame, RhythmFrameId, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SubtitleSentenceId, SubtitleTokenKind, SubtitleTrackId, TimelineMetrics, TimelineStatus,
-    WordTimeline, WordTimelineId,
+    PhoneTimelineId, ProsodyAnalysis, ProsodyAnalysisId, RhythmFrame, RhythmFrameId,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleSentenceId, SubtitleTokenKind,
+    SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
 };
 
 pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
@@ -29,6 +29,10 @@ pub struct LLTimelineDocument {
     pub sense_group_analyses: Vec<SenseGroupAnalysis>,
     #[serde(default)]
     pub active_sense_group_analysis_id: Option<SenseGroupAnalysisId>,
+    #[serde(default)]
+    pub prosody_analyses: Vec<ProsodyAnalysis>,
+    #[serde(default)]
+    pub active_prosody_analysis_id: Option<ProsodyAnalysisId>,
     #[serde(default)]
     pub artifacts: Vec<LLTimelineArtifact>,
 }
@@ -137,6 +141,8 @@ mod tests {
         );
         assert!(document.sense_group_analyses.is_empty());
         assert_eq!(document.active_sense_group_analysis_id, None);
+        assert!(document.prosody_analyses.is_empty());
+        assert_eq!(document.active_prosody_analysis_id, None);
     }
 
     #[test]
@@ -148,15 +154,24 @@ mod tests {
         let object = fixture.as_object_mut().unwrap();
         object.remove("sense_group_analyses");
         object.remove("active_sense_group_analysis_id");
+        object.remove("prosody_analyses");
+        object.remove("active_prosody_analysis_id");
 
         let document: LLTimelineDocument = serde_json::from_value(fixture).unwrap();
 
         assert!(document.sense_group_analyses.is_empty());
         assert_eq!(document.active_sense_group_analysis_id, None);
+        assert!(document.prosody_analyses.is_empty());
+        assert_eq!(document.active_prosody_analysis_id, None);
         let serialized = serde_json::to_value(document).unwrap();
         assert_eq!(serialized["sense_group_analyses"], serde_json::json!([]));
         assert_eq!(
             serialized["active_sense_group_analysis_id"],
+            serde_json::Value::Null
+        );
+        assert_eq!(serialized["prosody_analyses"], serde_json::json!([]));
+        assert_eq!(
+            serialized["active_prosody_analysis_id"],
             serde_json::Value::Null
         );
     }
