@@ -174,12 +174,36 @@ the wrapper changes. The model file is a whisper.cpp GGML download
 To exercise the full `pinned .pyz -> .listenpkg -> Core import` path against a
 real Core, use the dedicated script. It builds both external repositories at
 their pinned commits in a throwaway directory, runs the focused integration
-test, and cleans up after itself:
+test, and cleans up after itself. Both checkouts must be clean and exactly at
+the commits recorded by App. The script resolves App dependencies offline from
+the caller's existing `PUB_CACHE`, while runtime `HOME` remains isolated. A
+missing cached package is therefore an early setup failure rather than an
+implicit network fetch.
 
 ```sh
 LISTEN_CORE_REPO=/absolute/path/to/listen-core \
 LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
   ./tool/verify_local_content_package_roundtrip.sh
+```
+
+Success is reported only after Flutter's JSON event report proves the named
+roundtrip test executed once, was not skipped, passed, and the runner finished
+successfully. Gen build/verify, Core build, dependency setup, test execution,
+report validation, and post-run external-checkout cleanliness are fail-closed.
+This command uses fixture media/provider data only and never a live model or
+credential.
+
+Inspect the same three-repository locks without building anything:
+
+```sh
+python3 tool/repo_status.py --strict
+
+# Explicit paths override worktree-aware discovery. LISTEN_APP_REPO,
+# LISTEN_CORE_REPO, and LISTEN_GEN_REPO provide equivalent env overrides.
+python3 tool/repo_status.py --strict \
+  --app-repo /absolute/path/to/listen-app \
+  --core-repo /absolute/path/to/listen-core \
+  --gen-repo /absolute/path/to/listen-gen
 ```
 
 ## Manual smoke checklist
@@ -257,7 +281,7 @@ App-side changes:
 cd "$listen_app_repo"
 flutter analyze --fatal-infos --fatal-warnings
 flutter test
-python3 -m unittest tool/test_backend_artifacts.py
+python3 -m unittest discover -s tool -p 'test_*.py'
 ```
 
 Core-side changes:

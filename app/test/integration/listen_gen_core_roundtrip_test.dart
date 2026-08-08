@@ -151,6 +151,13 @@ void main() {
           expect(resource.provenance?.tool.version, '0.1.0');
         }
 
+        final exportedTimeline = await api.exportTrackLLTimeline(
+          receipt.track.id,
+        );
+        expect(exportedTimeline.activeWordTimelineId, isNull);
+        expect(exportedTimeline.activePhoneTimelineId, isNull);
+        expect(exportedTimeline.activeChunkTimelineId, isNull);
+
         // Candidate-only: this test never selects a subtitle, activates the
         // word timeline, or mutates any active resource. The receipt is left
         // as the `available` candidate Core returned.

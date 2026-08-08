@@ -17,14 +17,27 @@
 #
 set -euo pipefail
 
-readonly CORE_PIN="b980a20666f746685db1fd06bfa425d762d7a678"
-readonly GEN_PIN="41a53336fd893522abf7ef168fd2ace9fa6ac678"
+readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-b980a20666f746685db1fd06bfa425d762d7a678}"
+readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-41a53336fd893522abf7ef168fd2ace9fa6ac678}"
+readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
 
 app_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 fail() {
   echo "verify-roundtrip: $*" >&2
   exit 1
+}
+
+# Tests inject a stage runner so failure propagation can be proven without
+# rebuilding Core. Production never sets this variable.
+run_stage() {
+  local stage="$1"
+  shift
+  if [ -n "${VERIFY_ROUNDTRIP_STAGE_RUNNER:-}" ]; then
+    "$VERIFY_ROUNDTRIP_STAGE_RUNNER" "$stage" "$@"
+  else
+    "$@"
+  fi
 }
 
 : "${LISTEN_CORE_REPO:?set LISTEN_CORE_REPO to an absolute listen-core path}"
@@ -35,10 +48,15 @@ fail() {
 
 check_repo() {
   local repo="$1" expected="$2" name="$3"
-  local head
-  head="$(git -C "$repo" rev-parse HEAD)"
+  local head status
+  if ! head="$(git -C "$repo" rev-parse HEAD)"; then
+    fail "$name is not a readable Git checkout: $repo"
+  fi
   [ "$head" = "$expected" ] || fail "$name HEAD is $head, expected $expected"
-  [ -z "$(git -C "$repo" status --porcelain)" ] || fail "$name working tree is not clean"
+  if ! status="$(git -C "$repo" status --porcelain)"; then
+    fail "cannot inspect $name working tree: $repo"
+  fi
+  [ -z "$status" ] || fail "$name working tree is not clean"
 }
 
 check_repo "$LISTEN_CORE_REPO" "$CORE_PIN" "listen-core"
@@ -47,43 +65,60 @@ check_repo "$LISTEN_GEN_REPO" "$GEN_PIN" "listen-gen"
 tmp="$(mktemp -d)"
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
+mkdir -p "$tmp/home"
+
+# Preserve the caller's populated cache while isolating runtime HOME. Offline
+# dependency resolution makes a missing cache entry an immediate setup error,
+# never a surprise network dependency midway through the gate.
+pub_cache="${PUB_CACHE:-${HOME}/.pub-cache}"
+[ -d "$pub_cache" ] || fail "PUB_CACHE does not exist: $pub_cache"
+echo "verify-roundtrip: resolving App dependencies from existing PUB_CACHE (offline)"
+( cd "$app_root" &&
+  run_stage dependency-setup \
+    env HOME="$tmp/home" PUB_CACHE="$pub_cache" flutter pub get --offline )
 
 # PYTHONDONTWRITEBYTECODE keeps the Gen build/verify from leaving __pycache__
 # behind inside the Gen checkout.
 echo "verify-roundtrip: building pinned Gen bundle"
 ( cd "$LISTEN_GEN_REPO" &&
-  PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py build \
+  run_stage gen-build env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py build \
     --source-commit "$GEN_PIN" \
     --output-parent "$tmp/gen" )
 
 echo "verify-roundtrip: verifying Gen bundle"
 ( cd "$LISTEN_GEN_REPO" &&
-  PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
+  run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
     "$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" )
 
 # Build Core into a temporary target so nothing is written into the checkout.
 echo "verify-roundtrip: building pinned Core api-http"
-CARGO_TARGET_DIR="$tmp/core-target" \
+run_stage core-build env CARGO_TARGET_DIR="$tmp/core-target" \
   cargo build \
   --locked \
+  --offline \
   --manifest-path "$LISTEN_CORE_REPO/Cargo.toml" \
   -p api-http
 
-mkdir -p "$tmp/home"
-
 echo "verify-roundtrip: running focused integration test"
 ( cd "$app_root" &&
-  HOME="$tmp/home" \
-  LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
-  LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" \
-  LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\"]" \
-  LISTEN_PACKAGE_E2E=1 \
-  flutter test test/integration/listen_gen_core_roundtrip_test.dart )
+  VERIFY_ROUNDTRIP_REPORT_PATH="$tmp/flutter-report.jsonl" \
+  run_stage flutter-test env \
+    HOME="$tmp/home" \
+    PUB_CACHE="$pub_cache" \
+    LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
+    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.1.0/listen-gen-0.1.0.release.json" \
+    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\"]" \
+    LISTEN_PACKAGE_E2E=1 \
+    flutter test test/integration/listen_gen_core_roundtrip_test.dart \
+      --reporter expanded \
+      --file-reporter "json:$tmp/flutter-report.jsonl" )
 
-# The run must leave both external checkouts untouched.
-[ -z "$(git -C "$LISTEN_CORE_REPO" status --porcelain)" ] ||
-  fail "listen-core working tree changed during the round trip"
-[ -z "$(git -C "$LISTEN_GEN_REPO" status --porcelain)" ] ||
-  fail "listen-gen working tree changed during the round trip"
+python3 "$app_root/tool/verify_flutter_test_report.py" \
+  "$tmp/flutter-report.jsonl" "$EXPECTED_TEST"
+
+# The run must leave both external checkouts untouched. Reusing check_repo also
+# fails closed if Git itself becomes unreadable during the run.
+check_repo "$LISTEN_CORE_REPO" "$CORE_PIN" "listen-core"
+check_repo "$LISTEN_GEN_REPO" "$GEN_PIN" "listen-gen"
 
 echo "verify-roundtrip: OK"

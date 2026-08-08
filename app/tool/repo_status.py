@@ -1,45 +1,42 @@
 #!/usr/bin/env python3
-"""三仓协作状态：当场读当场算。
+"""Report and verify the local listen-app/Core/Gen relationship.
 
-这个脚本刻意不写任何中间状态文件。跨仓状态曾经手抄在 `.planning/STATE.md`
-里，抄错了没有任何机制会发现——2026-08-04 的实测里，同一个仓库的 STATE.md 和
-backend.lock.json 对 core 的 pin 说了两个不同的 commit 和两个不同的契约版本。
-所以这里只有派生，没有存储。
-
-真源：
-  listen-app/backend.lock.json      app 消费 core 的哪个不可变产物
-  listen-gen/contracts.lock.json    gen 钉着 core 的哪份 content-package schema
-  三个仓库的 git 状态本身
-
-只读本地 checkout，不做任何网络操作。core 的本地 checkout 可能落后于远端，
-输出里会标出来，但脚本不会替你 fetch。
+The tool is local-only: it never fetches.  In an App git worktree, Core and Gen
+are discovered beside App's canonical checkout (the parent of git-common-dir),
+not beside the worktree directory.  Explicit CLI paths take precedence over
+LISTEN_{APP,CORE,GEN}_REPO environment variables and discovery.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SIBLINGS = {
-    "listen-app": APP_ROOT,
-    "listen-core": APP_ROOT.parent / "listen-core",
-    "listen-gen": APP_ROOT.parent / "listen-gen",
-}
+CONTRACT_FIELDS = (
+    "manifest_schema_id",
+    "resource_schema_id",
+    "package_schema",
+    "schema_version",
+)
+CONTRACT_CONST = re.compile(r'CONTRACT_VERSION:\s*&str\s*=\s*"([^"]+)"')
+OPENAPI_VERSION = re.compile(r"^\s{2}version:\s*(\S+)", re.MULTILINE)
 
 
 def git(repo: Path, *args: str) -> str | None:
-    """跑一条只读 git 命令。仓库不存在或命令失败时返回 None，不抛。"""
     if not (repo / ".git").exists():
         return None
     try:
-        out = subprocess.run(
+        result = subprocess.run(
             ["git", "-C", str(repo), *args],
             capture_output=True,
             text=True,
@@ -47,9 +44,40 @@ def git(repo: Path, *args: str) -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    if out.returncode != 0:
-        return None
-    return out.stdout.strip()
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def canonical_checkout(app_repo: Path) -> Path:
+    common = git(app_repo, "rev-parse", "--git-common-dir")
+    if not common:
+        return app_repo
+    common_path = Path(common)
+    if not common_path.is_absolute():
+        common_path = app_repo / common_path
+    common_path = common_path.resolve()
+    return common_path.parent if common_path.name == ".git" else app_repo
+
+
+def discover_repositories(app_repo: Path) -> dict[str, Path]:
+    canonical_app = canonical_checkout(app_repo)
+    return {
+        "listen-app": app_repo.resolve(),
+        "listen-core": canonical_app.parent / "listen-core",
+        "listen-gen": canonical_app.parent / "listen-gen",
+    }
+
+
+def resolve_repository_paths(args: argparse.Namespace) -> dict[str, Path]:
+    app = Path(args.app_repo or os.environ.get("LISTEN_APP_REPO") or APP_ROOT)
+    paths = discover_repositories(app)
+    overrides = {
+        "listen-core": args.core_repo or os.environ.get("LISTEN_CORE_REPO"),
+        "listen-gen": args.gen_repo or os.environ.get("LISTEN_GEN_REPO"),
+    }
+    for name, override in overrides.items():
+        if override:
+            paths[name] = Path(override).expanduser().resolve()
+    return paths
 
 
 @dataclass
@@ -59,7 +87,7 @@ class Repo:
 
     @property
     def present(self) -> bool:
-        return (self.path / ".git").exists()
+        return git(self.path, "rev-parse", "--git-dir") is not None
 
     @property
     def branch(self) -> str:
@@ -75,355 +103,199 @@ class Repo:
 
     @property
     def dirty(self) -> bool:
-        status = git(self.path, "status", "--porcelain")
-        return bool(status)
-
-    @property
-    def has_remote(self) -> bool:
-        return bool(git(self.path, "remote"))
+        return bool(git(self.path, "status", "--porcelain"))
 
     def commit_date(self, sha: str) -> str | None:
         return git(self.path, "log", "-1", "--format=%ai", sha)
 
-    def commit_subject(self, sha: str) -> str | None:
-        return git(self.path, "log", "-1", "--format=%s", sha)
-
-    def distance(self, frm: str, to: str) -> int | None:
-        """frm..to 之间的提交数。任一端解析不了就返回 None。"""
-        out = git(self.path, "rev-list", "--count", f"{frm}..{to}")
-        if out is None or not out.isdigit():
-            return None
-        return int(out)
-
-    def latest_tag(self) -> str | None:
-        return git(self.path, "describe", "--tags", "--abbrev=0")
-
-    def worktrees(self) -> list[tuple[Path, str, str]]:
-        """(路径, 分支, HEAD)。一个仓库可以有很多 checkout——core 目前有 8 个，
-        `main` 住在其中一个里。只看主 checkout 会把「主 checkout 停在功能分支上」
-        误报成「本地落后于消费方」。"""
-        out = git(self.path, "worktree", "list", "--porcelain")
-        if not out:
-            return []
-        trees: list[tuple[Path, str, str]] = []
-        path: Path | None = None
-        head = ""
-        for line in out.splitlines():
-            if line.startswith("worktree "):
-                path = Path(line[len("worktree ") :])
-                head = ""
-            elif line.startswith("HEAD "):
-                head = line[len("HEAD ") :]
-            elif line.startswith("branch ") and path is not None:
-                branch = line[len("branch ") :].removeprefix("refs/heads/")
-                trees.append((path, branch, head))
-                path = None
-            elif line == "detached" and path is not None:
-                trees.append((path, "(detached)", head))
-                path = None
-        return trees
-
-    def contains(self, sha: str, ref: str) -> bool:
-        """sha 是否可以从 ref 到达。"""
-        return (
-            git(self.path, "merge-base", "--is-ancestor", sha, ref) is not None
-        )
+    def contains(self, sha: str, ref: str = "HEAD") -> bool:
+        return git(self.path, "merge-base", "--is-ancestor", sha, ref) is not None
 
     def file_at(self, sha: str, path: str) -> str | None:
-        """读某个 commit 里的文件内容。用来核对 lock 记的版本是否真是那个
-        commit 声明的版本——只看工作区会读到「本地 checkout 恰好在哪」，
-        那不是被消费的东西。"""
         return git(self.path, "show", f"{sha}:{path}")
 
 
-CONTRACT_CONST = re.compile(r'CONTRACT_VERSION:\s*&str\s*=\s*"([^"]+)"')
-OPENAPI_VERSION = re.compile(r"^\s{2}version:\s*(\S+)", re.MULTILINE)
+@dataclass(frozen=True)
+class CorePin:
+    sha: str
+    contract_version: str
+    runtime_version: str
+
+
+@dataclass(frozen=True)
+class GenReleasePin:
+    sha: str
+    tool_version: str
+
+
+def read_json(path: Path) -> dict[str, Any] | None:
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def canonical_contract_sha(lock: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        lock, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 def contract_version_at(core: Repo, sha: str) -> str | None:
-    """某个 core commit 声明的契约版本（以 Rust 常量为准，它是运行时真正报出去的）。"""
     source = core.file_at(sha, "crates/api-http/src/lib.rs")
-    if not source:
-        return None
-    found = CONTRACT_CONST.search(source)
+    found = CONTRACT_CONST.search(source or "")
     return found.group(1) if found else None
 
 
 def openapi_version_at(core: Repo, sha: str) -> str | None:
     source = core.file_at(sha, "contracts/openapi/v1.yaml")
-    if not source:
-        return None
-    found = OPENAPI_VERSION.search(source)
+    found = OPENAPI_VERSION.search(source or "")
     return found.group(1) if found else None
 
 
-@dataclass
-class Pin:
-    """一条「谁钉了 core 的什么」记录。"""
-
-    consumer: str
-    sha: str
-    source_file: str
-    extra: dict[str, str] = field(default_factory=dict)
-
-
-def read_json(path: Path) -> dict | None:
-    try:
-        return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def collect_pins(repos: dict[str, Repo]) -> list[Pin]:
-    pins: list[Pin] = []
-
-    app = repos["listen-app"]
-    lock = read_json(app.path / "backend.lock.json")
-    if lock:
-        contract = lock.get("contract", {})
-        runtime = lock.get("runtime", {})
-        extra = {
-            "contract": contract.get("version", "?"),
-            "runtime": runtime.get("version", "?"),
-        }
-        # url 留空说明产物不是从 URL 拉的。留一个永远为空的字段会误导下一个读者，
-        # 所以这里显式点出来而不是静默跳过。
-        empty_urls = [
-            key
-            for key, block in (("contract", contract), ("runtime", runtime))
-            if not block.get("url")
-        ]
-        if empty_urls:
-            extra["url 缺失"] = ", ".join(empty_urls)
-        pins.append(
-            Pin(
-                consumer="listen-app",
-                sha=lock.get("core_git_sha", ""),
-                source_file="backend.lock.json",
-                extra=extra,
-            )
-        )
-
-    gen = repos["listen-gen"]
-    lock = read_json(gen.path / "contracts.lock.json")
-    if lock:
-        authority = lock.get("authority", {})
-        pins.append(
-            Pin(
-                consumer="listen-gen",
-                sha=authority.get("commit", ""),
-                source_file="contracts.lock.json",
-                extra={
-                    "schema": authority.get("path", "?"),
-                    "schema_version": str(lock.get("schema_version", "?")),
-                },
-            )
-        )
-
-    return pins
-
-
-def check_consistency(core: Repo, pins: list[Pin]) -> list[str]:
-    """返回需要人看一眼的问题。没问题就返回空列表。"""
+def compare_contract_locks(
+    app_contract: dict[str, Any], gen_contract: dict[str, Any]
+) -> list[str]:
     problems: list[str] = []
-
-    if not core.present:
+    app_authority = app_contract.get("authority")
+    gen_authority = gen_contract.get("authority")
+    if app_authority != gen_authority:
         problems.append(
-            "listen-core 本地 checkout 不存在，无法校验任何 pin。"
-            "（日常 app 开发不需要它，但这个脚本需要。）"
+            "App listen_gen.lock.json 与 Gen contracts.lock.json 的 authority 不一致"
         )
-        return problems
-
-    resolved = [(p, core.commit_date(p.sha)) for p in pins if p.sha]
-
-    for pin, date in resolved:
-        if date is None:
+    for field in CONTRACT_FIELDS:
+        if app_contract.get(field) != gen_contract.get(field):
             problems.append(
-                f"{pin.consumer} 钉的 core commit {pin.sha[:8]} 在本地 core 里解析不到"
-                f"（{pin.source_file}）。可能是本地落后，也可能是钉了个不存在的 commit。"
+                f"App listen_gen.lock.json 与 Gen contracts.lock.json 的 {field} 不一致"
             )
-
-    known = [(p, d) for p, d in resolved if d is not None]
-
-    # 消费方之间是否钉着不同的 core commit
-    shas = {p.sha for p, _ in known}
-    if len(shas) > 1:
-        pairs = sorted(known, key=lambda item: item[1])
-        oldest, newest = pairs[0], pairs[-1]
-        gap = core.distance(oldest[0].sha, newest[0].sha)
-        gap_text = f"，相差 {gap} 个提交" if gap is not None else ""
+    expected_digest = canonical_contract_sha(gen_contract)
+    if app_contract.get("canonical_sha256") != expected_digest:
         problems.append(
-            f"消费方钉着不同的 core commit：{oldest[0].consumer} 在 "
-            f"{oldest[0].sha[:8]}（{oldest[1][:16]}），{newest[0].consumer} 在 "
-            f"{newest[0].sha[:8]}（{newest[1][:16]}）{gap_text}。"
+            "App listen_gen.lock.json 的 canonical_sha256 与 Gen contracts.lock.json "
+            f"规范化摘要不一致（应为 {expected_digest}）"
         )
-
-    # lock 里手写的契约版本，是否真是那个 commit 声明的版本
-    for pin, _ in known:
-        recorded = pin.extra.get("contract")
-        if not recorded or recorded == "?":
-            continue
-        declared = contract_version_at(core, pin.sha)
-        if declared and declared != recorded:
-            problems.append(
-                f"{pin.consumer} 的 {pin.source_file} 记着 contract {recorded}，"
-                f"但被钉的 {pin.sha[:8]} 实际声明 CONTRACT_VERSION={declared}。"
-            )
-        openapi = openapi_version_at(core, pin.sha)
-        if declared and openapi and openapi != declared:
-            problems.append(
-                f"core {pin.sha[:8]} 自身不一致：Rust 常量 CONTRACT_VERSION={declared}，"
-                f"而 contracts/openapi/v1.yaml 写 {openapi}。"
-            )
-
-    # 被钉的 commit 是否在已发布的 tag 之内
-    tag = core.latest_tag()
-    if tag:
-        for pin, _ in known:
-            ahead = core.distance(tag, pin.sha)
-            if ahead:
-                problems.append(
-                    f"{pin.consumer} 钉的 {pin.sha[:8]} 领先最新 tag {tag} {ahead} 个提交——"
-                    f"消费的是未打 tag 的 commit，不可变性只靠 sha256 兜着。"
-                )
-
-    # 被钉的 commit 在本地任何一个 checkout 里都够不着，才算真的落后。
-    trees = core.worktrees()
-    for pin, _ in known:
-        if any(core.contains(pin.sha, head or branch) for _, branch, head in trees):
-            continue
-        problems.append(
-            f"{pin.consumer} 钉的 {pin.sha[:8]} 在本地任何 checkout 里都够不着——"
-            f"先 git fetch，再看它是否真的存在于 core。"
-        )
-
     return problems
 
 
-def locate_pin(core: Repo, sha: str) -> str | None:
-    """被钉的 commit 落在哪个本地 checkout 上。优先报告 HEAD 恰好等于它的那个。"""
-    if not core.present or not sha:
-        return None
-    # 多个 worktree 可能停在同一个 commit 上。优先报 main——「app 钉的就是 main」
-    # 比「app 钉的等于某个功能分支的当前位置」有用得多。
-    trees = sorted(core.worktrees(), key=lambda t: t[1] != "main")
-    for path, branch, head in trees:
-        if head == sha:
-            return f"{branch} @ {path.name}"
-    for path, branch, head in trees:
-        if core.contains(sha, head or branch):
-            ahead = core.distance(sha, head or branch)
-            gap = f"，该分支已前进 {ahead} 个提交" if ahead else ""
-            return f"包含于 {branch} @ {path.name}{gap}"
-    return None
-
-
-def render_text(repos: dict[str, Repo], pins: list[Pin], problems: list[str]) -> str:
-    lines = [f"listen 三仓状态  ({datetime.now():%Y-%m-%d %H:%M})", ""]
-
-    for repo in repos.values():
-        if not repo.present:
-            lines.append(f"  {repo.name:<14} (本地不存在: {repo.path})")
-            continue
-        flags = []
-        if repo.dirty:
-            flags.append("dirty")
-        if not repo.has_remote:
-            flags.append("无 remote")
-        extra_trees = len(repo.worktrees()) - 1
-        if extra_trees > 0:
-            flags.append(f"另有 {extra_trees} 个 worktree")
-        suffix = f"  [{', '.join(flags)}]" if flags else ""
-        lines.append(
-            f"  {repo.name:<14} {repo.branch:<34} {repo.head}  "
-            f"{repo.head_date[:16]}{suffix}"
-        )
-
+def inspect(repos: dict[str, Repo]) -> tuple[CorePin | None, GenReleasePin | None, list[str]]:
+    problems: list[str] = []
+    app = repos["listen-app"]
     core = repos["listen-core"]
-    lines += ["", "契约 pin（→ listen-core）"]
-    if not pins:
-        lines.append("  (没找到任何 lock 文件)")
-    for pin in pins:
-        date = core.commit_date(pin.sha) if core.present and pin.sha else None
-        subject = core.commit_subject(pin.sha) if core.present and pin.sha else None
-        when = date[:16] if date else "解析不到"
-        detail = "  ".join(f"{k} {v}" for k, v in pin.extra.items())
-        lines.append(f"  {pin.consumer:<12} {pin.sha[:8]}  {when}  {detail}")
-        if subject:
-            lines.append(f"  {'':<12} └ {subject}")
-        where = locate_pin(core, pin.sha)
-        if where:
-            lines.append(f"  {'':<12}   本地: {where}")
-        lines.append(f"  {'':<12}   源: {pin.source_file}")
+    gen = repos["listen-gen"]
+    backend = read_json(app.path / "backend.lock.json")
+    app_gen = read_json(app.path / "listen_gen.lock.json")
+    gen_contract = read_json(gen.path / "contracts.lock.json") if gen.present else None
 
+    core_pin = None
+    if backend:
+        core_pin = CorePin(
+            str(backend.get("core_git_sha", "")),
+            str(backend.get("contract", {}).get("version", "")),
+            str(backend.get("runtime", {}).get("version", "")),
+        )
+    else:
+        problems.append("App backend.lock.json 缺失或不是有效 JSON object")
+
+    gen_pin = None
+    if app_gen:
+        gen_pin = GenReleasePin(
+            str(app_gen.get("source_git_sha", "")),
+            str(app_gen.get("tool", {}).get("version", "")),
+        )
+    else:
+        problems.append("App listen_gen.lock.json 缺失或不是有效 JSON object")
+
+    if not core.present:
+        problems.append("listen-core 本地 checkout 不存在，无法校验 Core binary pin")
+    elif core_pin:
+        if not core_pin.sha or core.commit_date(core_pin.sha) is None:
+            problems.append(f"App 钉的 Core commit {core_pin.sha[:8] or '(empty)'} 在本地解析不到")
+        else:
+            declared = contract_version_at(core, core_pin.sha)
+            openapi = openapi_version_at(core, core_pin.sha)
+            if declared != core_pin.contract_version:
+                problems.append(
+                    f"backend.lock.json 记着 contract {core_pin.contract_version}，"
+                    f"但 Core pin 实际声明 {declared or '(missing)'}"
+                )
+            if declared and openapi and declared != openapi:
+                problems.append(
+                    f"Core pin 自身不一致：CONTRACT_VERSION={declared}，OpenAPI={openapi}"
+                )
+
+    if not gen.present:
+        problems.append("listen-gen 本地 checkout 不存在，无法校验 Gen release pin/contract lock")
+    elif gen_pin:
+        if not gen_pin.sha or gen.commit_date(gen_pin.sha) is None:
+            problems.append(f"App 钉的 Gen commit {gen_pin.sha[:8] or '(empty)'} 在本地解析不到")
+        elif not gen.contains(gen_pin.sha):
+            problems.append(
+                f"当前 Gen checkout 的 HEAD 不包含 App 钉的 commit {gen_pin.sha[:8]}"
+            )
+
+    if gen.present and gen_contract is None:
+        problems.append("Gen contracts.lock.json 缺失或不是有效 JSON object")
+    elif app_gen and gen_contract:
+        app_contract = app_gen.get("content_package_contract")
+        if not isinstance(app_contract, dict):
+            problems.append("App listen_gen.lock.json 缺少 content_package_contract")
+        else:
+            problems.extend(compare_contract_locks(app_contract, gen_contract))
+
+    return core_pin, gen_pin, problems
+
+
+def render(repos: dict[str, Repo], core_pin: CorePin | None, gen_pin: GenReleasePin | None, problems: list[str], markdown: bool) -> str:
+    if markdown:
+        lines = [f"## listen 三仓状态 ({datetime.now():%Y-%m-%d %H:%M})", ""]
+        for repo in repos.values():
+            state = f"`{repo.branch}` @ `{repo.head}`" if repo.present else "本地不存在"
+            lines.append(f"- `{repo.name}`: {state} — `{repo.path}`")
+        lines += ["", "### Pins", ""]
+    else:
+        lines = [f"listen 三仓状态  ({datetime.now():%Y-%m-%d %H:%M})", ""]
+        for repo in repos.values():
+            state = f"{repo.branch} @ {repo.head}" if repo.present else "本地不存在"
+            dirty = " [dirty]" if repo.present and repo.dirty else ""
+            lines.append(f"  {repo.name:<12} {state}{dirty}  ({repo.path})")
+        lines += ["", "Pins"]
+    if core_pin:
+        lines.append(
+            f"  Core binary core_git_sha: {core_pin.sha}  "
+            f"contract {core_pin.contract_version}  runtime {core_pin.runtime_version}"
+        )
+    if gen_pin:
+        lines.append(
+            f"  Gen release source_git_sha: {gen_pin.sha}  tool {gen_pin.tool_version}"
+        )
     lines += ["", "一致性"]
     if problems:
-        lines += [f"  ⚠ {p}" for p in problems]
+        lines.extend(f"  ⚠ {problem}" for problem in problems)
     else:
-        lines.append("  ✓ 未发现问题")
-
+        lines.append("  ✓ Core pin、Gen release pin 与 content-package contract lock 一致")
     return "\n".join(lines)
 
 
-def render_markdown(
-    repos: dict[str, Repo], pins: list[Pin], problems: list[str]
-) -> str:
-    core = repos["listen-core"]
-    lines = [
-        f"## listen 三仓状态 ({datetime.now():%Y-%m-%d %H:%M})",
-        "",
-        "| 仓库 | 分支 | HEAD | 时间 | 备注 |",
-        "| --- | --- | --- | --- | --- |",
-    ]
-    for repo in repos.values():
-        if not repo.present:
-            lines.append(f"| `{repo.name}` | — | — | — | 本地不存在 |")
-            continue
-        flags = []
-        if repo.dirty:
-            flags.append("dirty")
-        if not repo.has_remote:
-            flags.append("无 remote")
-        lines.append(
-            f"| `{repo.name}` | `{repo.branch}` | `{repo.head}` | "
-            f"{repo.head_date[:16]} | {', '.join(flags) or '—'} |"
-        )
-
-    lines += ["", "### 契约 pin（→ listen-core）", ""]
-    lines += ["| 消费方 | core commit | 时间 | 详情 | 源 |", "| --- | --- | --- | --- | --- |"]
-    for pin in pins:
-        date = core.commit_date(pin.sha) if core.present and pin.sha else None
-        detail = ", ".join(f"{k} {v}" for k, v in pin.extra.items())
-        lines.append(
-            f"| `{pin.consumer}` | `{pin.sha[:8]}` | {date[:16] if date else '解析不到'} "
-            f"| {detail} | `{pin.source_file}` |"
-        )
-
-    lines += ["", "### 一致性", ""]
-    lines += [f"- ⚠ {p}" for p in problems] if problems else ["- ✓ 未发现问题"]
-    return "\n".join(lines)
-
-
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--markdown", action="store_true", help="输出 markdown，便于贴进 issue"
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="发现一致性问题时以非零码退出",
-    )
-    args = parser.parse_args()
+    parser.add_argument("--app-repo", help="listen-app checkout (or LISTEN_APP_REPO)")
+    parser.add_argument("--core-repo", help="listen-core checkout (or LISTEN_CORE_REPO)")
+    parser.add_argument("--gen-repo", help="listen-gen checkout (or LISTEN_GEN_REPO)")
+    parser.add_argument("--markdown", action="store_true")
+    parser.add_argument("--strict", action="store_true")
+    return parser.parse_args(argv)
 
-    repos = {name: Repo(name, path) for name, path in DEFAULT_SIBLINGS.items()}
-    pins = collect_pins(repos)
-    problems = check_consistency(repos["listen-core"], pins)
 
-    render = render_markdown if args.markdown else render_text
-    print(render(repos, pins, problems))
-
-    return 1 if (args.strict and problems) else 0
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    repos = {
+        name: Repo(name, path) for name, path in resolve_repository_paths(args).items()
+    }
+    core_pin, gen_pin, problems = inspect(repos)
+    print(render(repos, core_pin, gen_pin, problems, args.markdown))
+    return 1 if args.strict and problems else 0
 
 
 if __name__ == "__main__":
