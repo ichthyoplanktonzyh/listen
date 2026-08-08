@@ -29,10 +29,9 @@
 ## Progress
 
 The contract inspection and candidate-only Core import slice is implemented and
-covered by the strict local gate. An unpublished external-producer prototype
-has passed deterministic fake/command-adapter tests, the legacy semantic
-comparison, and the Core inspector. It has no remote handoff, release, or
-production-model smoke evidence yet.
+covered by the strict local gate. `listen-gen` is now a separate remote
+repository with a deterministic release bundle; `listen-app` pins commit
+`41a53336` and verifies the release and artifact bytes before launch.
 
 Core now also has an additive local-path HTTP adapter for exact-media package
 import. It returns the imported track and structured receipt, preserves the
@@ -41,6 +40,13 @@ invalid-package and media-mismatch errors. The receipt carries validated
 resource provenance and review status while leaving opaque-resource trust
 facts unknown. The contract remains unreleased.
 
-Production cutover and legacy deletion remain open. No existing Core
-whole-media, learner-recording, realtime, or `scripts/timeline-production`
-implementation is removed by this slice.
+A real three-repository fixture round trip has passed from the pinned Gen bundle
+through native `.listenpkg` production into pinned Core HTTP candidate import.
+The initial extraction acceptance is therefore satisfied. Production cutover,
+richer native resources and legacy deletion continue under
+[`001-ROADMAP.md`](001-ROADMAP.md) and the linked cross-repository issues.
+
+Core whole-media generation is no longer a path to extend. Learner-recording
+and realtime behavior remain Core responsibilities; the whole-media job/routes,
+App legacy entry points and `scripts/timeline-production` are deletion targets
+after their corresponding roadmap slice exits.
