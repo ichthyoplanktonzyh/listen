@@ -10,6 +10,10 @@ slice, establishing a material-centered release contract, Core inspection and
 candidate installation planning, and deterministic Gen production with both
 referenced and embedded media delivery.
 
+The official product-development stage is **Foundation Convergence — Closing**.
+After Content Package v2 closes, the project enters **Product Alpha**, beginning
+with the single-user material-to-learning loop.
+
 ## Confirmed project decisions
 
 - multilingual, material-centered, listening-first product semantics;
@@ -19,9 +23,13 @@ referenced and embedded media delivery.
 - Owner / Supervisor / replaceable Worker operating model;
 - repository-local, contract-evolution, and cross-repository work modes;
 - this repository as the single project-level documentation authority.
+- the ordered outcome roadmap in `ROADMAP.md`;
+- a dedicated Learning Experience Review & Optimization phase after Personal
+  Corpus and before Multi-device Sync, without redefining accepted learning
+  activity semantics or forcing a fixed learning sequence.
 
-## Next decision
+## Next transition
 
-After Content Package v2 closeout, determine the project's current development
-stage and approve the outcome-based roadmap before starting the next feature
-slice.
+Finish Content Package v2 and its three-repository delivery. The next feature
+slice then belongs to Phase 1, Single-user Core Loop Alpha. Repository work must
+be selected from that outcome rather than from an unprioritized feature list.
