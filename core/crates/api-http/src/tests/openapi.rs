@@ -29,10 +29,10 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 3.1.0 adds the material-retention surface on top of the R5 breaking
-    // 3.0.0 as a backward-compatible minor.
+    // 3.2.0 adds the learning-material surface on top of the material
+    // retention 3.1.0 (itself an additive minor over the R5 breaking 3.0.0).
     assert!(
-        openapi.contains("version: 3.1.0"),
+        openapi.contains("version: 3.2.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -104,6 +104,14 @@ fn openapi_version_snapshot_and_path_count() {
         "LearningResource:",
         "SubtitleSearchResult:",
         "UpdateLexicalLearningContent:",
+        "LearningMaterial:",
+        "MaterialAsset:",
+        "DocumentTextAsset:",
+        "MediaRenditionAsset:",
+        "MaterialRevision:",
+        "MaterialDetails:",
+        "CreateLearningMaterial:",
+        "AppendMaterialRevision:",
     ] {
         assert!(
             openapi.contains(&format!("    {schema}")),

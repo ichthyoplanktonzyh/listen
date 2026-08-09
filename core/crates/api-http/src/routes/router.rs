@@ -12,6 +12,11 @@ use super::llm::{
     judge_via_llm_provider, list_llm_providers, llm_batch_status, probe_llm_provider,
     register_llm_provider,
 };
+use super::material::{
+    append_learning_material_revision, create_learning_material, list_learning_materials,
+    read_learning_material, read_learning_material_revision, resolve_learning_material_for_media,
+    retain_learning_material, unretain_learning_material,
+};
 use super::media::{
     archive_subtitle, cold_start_words, content_fit_calibration_samples, delete_subtitle,
     export_subtitle, import_content_package, import_lltimeline, import_lltimeline_for_media,
@@ -121,9 +126,37 @@ use crate::{ApiState, authorize};
 pub(crate) fn protected_router(state: &ApiState) -> Router<ApiState> {
     media_analysis_routes()
         .merge(learning_routes())
+        .merge(material_routes())
         .merge(generative_routes())
         .merge(provider_and_event_routes())
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize))
+}
+
+/// Learning-material routes (contract `3.2.0`). The router only wires
+/// handlers; every policy decision stays in the application layer.
+fn material_routes() -> Router<ApiState> {
+    Router::new()
+        .route(
+            "/v1/materials",
+            get(list_learning_materials).post(create_learning_material),
+        )
+        .route("/v1/materials/{material_id}", get(read_learning_material))
+        .route(
+            "/v1/materials/{material_id}/revisions",
+            post(append_learning_material_revision),
+        )
+        .route(
+            "/v1/materials/{material_id}/revisions/{revision_id}",
+            get(read_learning_material_revision),
+        )
+        .route(
+            "/v1/materials/{material_id}/library-membership",
+            put(retain_learning_material).delete(unretain_learning_material),
+        )
+        .route(
+            "/v1/media/{media_id}/material",
+            get(resolve_learning_material_for_media),
+        )
 }
 
 fn media_analysis_routes() -> Router<ApiState> {

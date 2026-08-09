@@ -6,6 +6,7 @@ use domain::{
 use rusqlite::{Connection, params};
 
 use super::PersistenceError;
+use super::learning_material::backfill_legacy_media_materials;
 
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
@@ -25,8 +26,12 @@ use super::PersistenceError;
 // migration 0013; it removes replaceable analysis storage only and never
 // cascades to learner history. v58 adds explicit Personal Library membership
 // evidence (`retained_at_ms`) to every media item and backfills preexisting
-// rows as retained so the library projection survives the upgrade.
-pub const MIGRATION_VERSION: u32 = 58;
+// rows as retained so the library projection survives the upgrade. v59 adds
+// the durable learning-material schema: materials, immutable content
+// revisions, typed assets, and media bindings. Its material/revision
+// reference is circular, so `current_revision_id` is a deferred foreign key,
+// and the media binding deliberately carries no FK to `media_items`.
+pub const MIGRATION_VERSION: u32 = 59;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -508,6 +513,13 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.pragma_update(None, "user_version", 58)?;
         tx.commit()?;
     }
+    if current < 59 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0059_learning_materials.sql"))?;
+        backfill_legacy_media_materials(&tx)?;
+        tx.pragma_update(None, "user_version", 59)?;
+        tx.commit()?;
+    }
     Ok(())
 }
 
@@ -530,7 +542,7 @@ fn role_reply_recording_paths(connection: &Connection) -> Result<Vec<String>, Pe
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-fn table_exists(connection: &Connection, table: &str) -> Result<bool, PersistenceError> {
+pub(crate) fn table_exists(connection: &Connection, table: &str) -> Result<bool, PersistenceError> {
     Ok(connection.query_row(
         "SELECT EXISTS(
            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1

@@ -5,6 +5,7 @@ pub(crate) mod learner;
 pub(crate) mod learning_resources;
 pub(crate) mod lexical_entries;
 pub(crate) mod llm;
+pub(crate) mod material;
 pub(crate) mod media;
 pub(crate) mod personal_expression;
 pub(crate) mod phonetic_analysis;

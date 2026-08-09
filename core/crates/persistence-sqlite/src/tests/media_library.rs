@@ -1,4 +1,6 @@
-use application::{ApplicationError, PlaybackProgressRepository, RegisterMedia};
+use application::{
+    ApplicationError, MaterialRepository, PlaybackProgressRepository, RegisterMedia,
+};
 
 use super::*;
 
@@ -254,6 +256,10 @@ fn reregistering_at_a_managed_path_preserves_identity_learning_state_and_members
     );
     assert_eq!(rebound.title, "Original learner title");
     assert!(rebound.retained_at_ms.is_some());
+    assert!(
+        rebound.updated_at_ms >= original.updated_at_ms,
+        "the fresh rebind update time is preserved, never rolled back"
+    );
     assert_eq!(
         services
             .media_analysis()
@@ -330,6 +336,123 @@ fn put_after_delete_obtains_a_new_membership_timestamp() {
         "PUT after DELETE must obtain a fresh membership timestamp"
     );
     assert!(library_ids(&services).contains(&item.id));
+}
+
+#[test]
+fn legacy_retain_keeps_media_and_material_membership_in_agreement() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "both-lists-media", Some(false));
+
+    // Temporary registration: absent from both projections.
+    assert!(!library_ids(&services).contains(&item.id));
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert!(material.retained_at_ms.is_none());
+
+    // Legacy Media API retain: the material and the library agree on the
+    // exact membership timestamp.
+    let retained = services.media_analysis().retain_media(&item.id).unwrap();
+    let membership = retained.retained_at_ms.expect("membership time");
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert_eq!(material.retained_at_ms, Some(membership));
+    assert!(library_ids(&services).contains(&item.id));
+    let retained_list = repo.list_retained_materials().unwrap();
+    assert_eq!(retained_list.len(), 1);
+    assert_eq!(retained_list[0].id, material.id);
+
+    // Repeated retain is a no-op that keeps the original timestamp on both
+    // the media and the material.
+    let again = services.media_analysis().retain_media(&item.id).unwrap();
+    assert_eq!(again.retained_at_ms, Some(membership));
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert_eq!(material.retained_at_ms, Some(membership));
+}
+
+#[test]
+fn legacy_unretain_clears_material_and_media_membership_together() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "unretain-both-media", Some(true));
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert!(material.retained_at_ms.is_some());
+
+    PlaybackProgressRepository::save(repo.as_ref(), &item.id, TimeMs::new(1_200)).unwrap();
+    let graph_before = (
+        count_rows(&repo, "learning_materials"),
+        count_rows(&repo, "material_revisions"),
+        count_rows(&repo, "material_assets"),
+        count_rows(&repo, "material_media_bindings"),
+    );
+
+    let unretained = services.media_analysis().unretain_media(&item.id).unwrap();
+    assert!(unretained.retained_at_ms.is_none());
+    assert!(!library_ids(&services).contains(&item.id));
+
+    // The material clears together with the media inside the same transaction,
+    // so the retained material list agrees with the media library projection.
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert!(material.retained_at_ms.is_none());
+    assert_eq!(
+        repo.list_retained_materials().unwrap().len(),
+        0,
+        "the retained material list agrees with the media library"
+    );
+    // The graph and learner-owned state remain.
+    assert_eq!(
+        (
+            count_rows(&repo, "learning_materials"),
+            count_rows(&repo, "material_revisions"),
+            count_rows(&repo, "material_assets"),
+            count_rows(&repo, "material_media_bindings"),
+        ),
+        graph_before
+    );
+    assert_eq!(
+        services.media_analysis().read_progress(&item.id).unwrap(),
+        Some(TimeMs::new(1_200)),
+        "unretaining preserves playback progress"
+    );
+    assert_eq!(
+        repo.get(&item.id).unwrap().unwrap().id,
+        item.id,
+        "the media stays registered and readable"
+    );
+}
+
+fn count_rows(repo: &SqliteRepository, table: &str) -> u32 {
+    repo.connection
+        .lock()
+        .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+            row.get(0)
+        })
+        .unwrap()
+}
+
+#[test]
+fn direct_membership_on_unknown_media_is_not_found() {
+    // The repository boundary itself must reject unknown media with
+    // NotFound, independent of the application layer's pre-checks.
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let missing = MediaId::parse("repo-missing-media").unwrap();
+    assert!(matches!(
+        MediaRepository::set_library_membership(repo.as_ref(), &missing, Some(1), 1),
+        Err(ApplicationError::NotFound("media"))
+    ));
+    assert!(matches!(
+        MediaRepository::set_library_membership(repo.as_ref(), &missing, None, 1),
+        Err(ApplicationError::NotFound("media"))
+    ));
+    // Nothing was created for the unknown media.
+    assert_eq!(
+        count_rows(&repo, "media_items"),
+        0,
+        "unknown membership must not create a media row"
+    );
+    assert_eq!(
+        count_rows(&repo, "learning_materials"),
+        0,
+        "unknown membership must not create a material"
+    );
 }
 
 #[test]
@@ -443,17 +566,22 @@ fn membership_mutation_changes_only_retained_and_updated_columns() {
     )
     .unwrap();
     let before = media_row(&repo, &item.id);
+    // A valid membership stamp pair: retention evidence never postdates the
+    // latest update, so the caller's exact values are preserved verbatim.
     let updated =
-        MediaRepository::set_library_membership(repo.as_ref(), &item.id, Some(123_456), 9).unwrap();
+        MediaRepository::set_library_membership(repo.as_ref(), &item.id, Some(123_456), 123_456)
+            .unwrap();
     let after = media_row(&repo, &item.id);
 
     // Only `retained_at_ms` and `updated_at_ms` change; every other column is
-    // byte-identical before and after the membership mutation.
+    // byte-identical before and after the membership mutation, and the caller's
+    // exact membership and update values are preserved.
     let mut expected_after = before.clone();
-    expected_after["updated_at_ms"] = serde_json::json!(9);
+    expected_after["updated_at_ms"] = serde_json::json!(123_456);
     expected_after["retained_at_ms"] = serde_json::json!(123_456);
     assert_eq!(after, expected_after);
     assert_eq!(updated.retained_at_ms, Some(123_456));
+    assert_eq!(updated.updated_at_ms, 123_456);
 
     // Clearing membership changes the same two columns only.
     let cleared =

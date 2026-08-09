@@ -1,4 +1,5 @@
 use super::*;
+use application::MaterialRepository;
 
 fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
     let mut document = lltimeline_fixture();
@@ -1156,6 +1157,12 @@ fn assert_no_lltimeline_import_rows(repo: &SqliteRepository) {
         "sense_group_analysis_runs",
         "prosody_analysis_runs",
         "corpus_occurrences",
+        // The media registration and its canonical material graph commit with
+        // the import: a failed import leaves no graph rows either.
+        "learning_materials",
+        "material_revisions",
+        "material_assets",
+        "material_media_bindings",
     ] {
         let count = connection
             .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
@@ -1164,6 +1171,83 @@ fn assert_no_lltimeline_import_rows(repo: &SqliteRepository) {
             .unwrap();
         assert_eq!(count, 0, "{table} must remain empty after failed import");
     }
+}
+
+fn table_count(repo: &SqliteRepository, table: &str) -> u64 {
+    repo.connection
+        .lock()
+        .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+            row.get::<_, u64>(0)
+        })
+        .unwrap()
+}
+
+#[test]
+fn lltimeline_import_creates_media_and_its_material_graph_atomically() {
+    let (repo, media) = lltimeline_import_services();
+    media
+        .import_lltimeline_document(lltimeline_fixture())
+        .unwrap();
+
+    // The detached media creation and its canonical material graph commit in
+    // the same transaction, resolving through the public media->material query
+    // immediately after import.
+    let media_item = repo
+        .get(&MediaId::parse("media-fixture").unwrap())
+        .unwrap()
+        .expect("import creates the media row");
+    let material = repo
+        .material_for_media(&media_item.id)
+        .unwrap()
+        .expect("import creates the material graph");
+    assert_eq!(material.retained_at_ms, media_item.retained_at_ms);
+    assert_eq!(material.created_at_ms, media_item.created_at_ms);
+    assert_eq!(material.updated_at_ms, media_item.updated_at_ms);
+
+    // Exactly one deterministic graph: one material, one initial revision, one
+    // rendition asset, one binding, and the asset JSON never carries a path.
+    assert_eq!(table_count(&repo, "learning_materials"), 1);
+    assert_eq!(table_count(&repo, "material_revisions"), 1);
+    assert_eq!(table_count(&repo, "material_assets"), 1);
+    assert_eq!(table_count(&repo, "material_media_bindings"), 1);
+    let revision = repo
+        .get_revision(&material.current_revision_id)
+        .unwrap()
+        .expect("initial revision stored");
+    let assets = revision.assets;
+    assert_eq!(assets.len(), 1);
+    assert!(matches!(
+        assets.first(),
+        Some(MaterialAsset::MediaRendition(_))
+    ));
+    let asset_json = serde_json::to_string(&assets[0]).unwrap();
+    assert!(
+        !asset_json.contains("\"path\""),
+        "the rendition asset must never carry a path: {asset_json}"
+    );
+}
+
+#[test]
+fn lltimeline_media_graph_failure_rolls_back_the_whole_import() {
+    let (repo, media) = lltimeline_import_services();
+    // Fail the material graph write inside the import's transaction: the media
+    // row, subtitle resources, timelines, and corpus projection must all roll
+    // back together with the graph.
+    repo.connection
+        .lock()
+        .execute_batch(
+            "CREATE TRIGGER fail_import BEFORE INSERT ON learning_materials
+             BEGIN SELECT RAISE(ABORT, 'injected LLTimeline graph failure'); END;",
+        )
+        .unwrap();
+
+    assert!(
+        media
+            .import_lltimeline_document(lltimeline_fixture())
+            .is_err(),
+        "a material graph failure must reach the caller"
+    );
+    assert_no_lltimeline_import_rows(&repo);
 }
 
 #[test]

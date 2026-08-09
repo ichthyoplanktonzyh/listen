@@ -48,6 +48,15 @@ python3 -m unittest scripts/test_release_artifacts.py
 - release-artifact tests assert the packaged v2 contract inventory exactly, so
   adding or removing any v2 schema/example requires an intentional inventory
   update;
+- Learning Material domain/application tests cover text, media and mixed
+  shapes, exact deterministic convergence, temporary/default-retained create,
+  revision ownership, idempotent membership and path-free serialization;
+- SQLite material tests cover v59 backfill, atomic initial/revision binding,
+  rollback, restart reload, retained-list filtering, media-resolution and
+  transactional synchronization with the legacy media membership projection;
+- material HTTP/OpenAPI tests cover all eight operations, flat typed assets,
+  omitted/null/false retain semantics, historical revision ownership, stable
+  failures, route parity and generated-client identity;
 - package-import HTTP tests cover the typed receipt, repeated-import
   idempotency, candidate-only active-selection invariant, exact-media mismatch,
   resource provenance/review status, and path/hash redaction; application tests

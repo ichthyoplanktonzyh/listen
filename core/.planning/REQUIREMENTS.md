@@ -21,6 +21,15 @@
 - CORE-CONTRACT-011: Package Installation 与 Learning Edition Adoption 必须是
   独立语义操作；App 可以由一个明确 Learner intent 编排两者，但 package data
   不得声明本地采用或 active 状态。
+- CORE-CONTRACT-012: Learning Material 必须同等表示 text、audio、video 与 mixed
+  composition；Material Revision 不可变，current revision 指针与 media bindings
+  必须原子持久化。
+- CORE-CONTRACT-013: Learner-facing material contract 不得暴露本地文件路径；
+  Media Rendition 只通过已注册 media identity、kind、fingerprint 与 availability
+  表达。
+- CORE-CONTRACT-014: Personal Library membership 以 Learning Material 为权威；
+  retained list 只返回有 membership evidence 的 material，membership mutation
+  不得删除 revision、binding、resource 或 learner state。
 
 ## Runtime and Releases
 
@@ -48,6 +57,8 @@
   Assistance 可依赖 Base，生产输入关系只进入 Resource Provenance。
 - CORE-ARCH-010: Core 的 material/package interface 必须返回可理解的能力、缺失
   条件与计划，不得要求 App 解析 Resource DAG 或推导 package policy。
+- CORE-ARCH-011: Material membership 与 legacy media library projection 必须在同一
+  persistence transaction 内同步，compatibility projection 不得成为第二个权威。
 
 ## Quality
 

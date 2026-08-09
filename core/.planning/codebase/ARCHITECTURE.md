@@ -53,6 +53,30 @@ delivery classification without network or persistence; its pure
 rendition availability, and missing blobs without selecting, activating,
 installing, or adopting anything.
 
+Durable learner-facing material is independent from package inspection.
+`domain::LearningMaterial` owns stable identity, current-revision membership
+evidence and timestamps; immutable `MaterialRevision` owns a title and a typed
+asset composition. `DocumentTextAsset` stores exact UTF-8 text with digest,
+byte size and optional language. `MediaRenditionAsset` refers to an already
+registered media identity and snapshots kind, fingerprint and availability,
+never a local path. Text, audio, video and mixed shapes share this aggregate.
+
+`application::LearningMaterialUseCases` validates asset inputs through the
+media repository, derives deterministic initial material/revision identities,
+and owns create, append, read, retained-list, membership and media-resolution
+policy. `MaterialRepository` requires initial creation, revision append and
+media bindings to commit atomically. SQLite v59 backfills one material and
+revision for each pre-existing media item, and material membership changes
+synchronize every bound media row in the same transaction so the legacy media
+library remains a compatibility projection rather than a second authority.
+
+The HTTP adapter exposes the additive Core 3.2 surface under `/v1/materials`
+and `/v1/media/{media_id}/material`. Wire assets use a flat `asset_type`
+discriminator, every material response carries the actual current revision and
+derived shape, and no response contains a file location. Creation defaults to
+retained when `retain` is omitted or null; explicit false creates a Temporary
+Material that remains readable by id and resolvable from media.
+
 The existing v1 application adapter projects supported package resources into
 candidate-only Core records and reports unsupported-but-preserved resources
 explicitly. A dedicated
@@ -238,11 +262,12 @@ attaching text/analysis cannot silently repair source loss.
 
 ## Contract Boundary
 
-OpenAPI and resource/event schemas are core-owned. Content Package v2 is
-currently a pure contract/inspection/Installation Plan boundary; generic
-Learning Material persistence, Package Installation, Learning Edition Adoption,
-catalog distribution, and synchronization remain later application slices and
-must not be inferred from the inspector. Route parity validates
+OpenAPI and resource/event schemas are core-owned. Content Package v2 remains
+a pure contract/inspection/Installation Plan boundary. Durable Learning
+Material persistence is a separate application boundary; Package Installation,
+Learning Edition Adoption, catalog distribution, and synchronization remain
+later slices and must not be inferred from either material persistence or the
+inspector. Route parity validates
 method+path coverage. Contract and runtime archives include manifests,
 core commit, versions, and hashes. `listen-app` consumes releases through its
 lock file; no compile-time source dependency exists.

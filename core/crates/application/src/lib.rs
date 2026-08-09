@@ -64,6 +64,7 @@ mod error;
 mod evaluator;
 mod hunting;
 mod learner_profile;
+mod learning_material;
 mod learning_preparation;
 mod lexical;
 mod listening;
@@ -115,6 +116,7 @@ pub use dto::*;
 pub use error::ApplicationError;
 pub use evaluator::PracticeAnswerEvaluator;
 pub use learner_profile::{LearnerProfileUseCases, LearnerProfileView};
+pub use learning_material::*;
 pub use learning_preparation::*;
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
@@ -147,6 +149,7 @@ pub(crate) use vocabulary::ObservationContext;
 #[derive(Clone)]
 pub struct AppServices {
     pub(crate) media: Arc<dyn MediaRepository>,
+    pub(crate) materials: Arc<dyn MaterialRepository>,
     pub(crate) progress: Arc<dyn PlaybackProgressRepository>,
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
@@ -193,6 +196,10 @@ impl AppServices {
 
     pub fn media_analysis(&self) -> MediaAnalysisUseCases {
         MediaAnalysisUseCases::from_services(self)
+    }
+
+    pub fn materials(&self) -> MaterialUseCases {
+        MaterialUseCases::new(self.materials.clone(), self.media.clone())
     }
 
     pub fn lexical_learning(&self) -> LexicalLearningUseCases {
@@ -290,6 +297,7 @@ impl AppServices {
     {
         Self {
             media,
+            materials: Arc::new(DisabledMaterialRepository),
             progress,
             subtitle_tracks,
             pronunciations,
@@ -335,6 +343,11 @@ impl AppServices {
         repository: Arc<dyn CoachDashboardRepository>,
     ) -> Self {
         self.coach_dashboard = repository;
+        self
+    }
+
+    pub fn with_material_repository(mut self, materials: Arc<dyn MaterialRepository>) -> Self {
+        self.materials = materials;
         self
     }
 

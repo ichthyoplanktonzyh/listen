@@ -16,6 +16,9 @@ pub use lexical_unit::{LexicalUnit, baseline_normalized_key};
 mod media;
 pub use media::*;
 
+mod learning_material;
+pub use learning_material::*;
+
 mod subtitle;
 pub use subtitle::*;
 
@@ -198,6 +201,9 @@ string_id!(PhoneticAnalysisJobId);
 string_id!(PhoneticAnalysisId);
 string_id!(PhoneticFindingId);
 string_id!(ShadowingAnalysisId);
+string_id!(LearningMaterialId);
+string_id!(MaterialRevisionId);
+string_id!(MaterialAssetId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -262,6 +268,16 @@ pub enum DomainError {
     InvalidPhoneticFinding,
     #[error("lexical entry {0} projection diverges from its lexical unit identity")]
     LexicalUnitMismatch(&'static str),
+    #[error("whitespace-only text is not allowed")]
+    WhitespaceOnlyText,
+    #[error("asset list contains duplicate MaterialAssetIds")]
+    DuplicateAssetId,
+    #[error("initial material identity is ambiguous: multiple different media renditions")]
+    AmbiguousInitialMediaIdentity,
+    #[error("revision material id diverges from the deterministic initial identity")]
+    MaterialIdentityMismatch,
+    #[error("material timestamps are inconsistent: {0}")]
+    InvalidTimestamp(&'static str),
 }
 
 pub fn normalize_lemma(value: &str) -> String {
