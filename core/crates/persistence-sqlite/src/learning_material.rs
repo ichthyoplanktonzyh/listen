@@ -62,9 +62,9 @@
 
 use application::{ApplicationError, MaterialRepository};
 use domain::{
-    DocumentTextAsset, LearningMaterial, LearningMaterialId, MaterialAsset, MaterialRevision,
-    MaterialRevisionId, MediaAvailability, MediaId, MediaKind, MediaRenditionAsset,
-    initial_material_id,
+    DocumentTextAsset, DomainError, LearningMaterial, LearningMaterialId, MaterialAsset,
+    MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId, MediaItem, MediaKind,
+    MediaRenditionAsset, initial_material_id,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
@@ -212,6 +212,263 @@ pub(crate) fn backfill_legacy_media_materials(
              ON CONFLICT(media_id) DO NOTHING",
             params![row.media_id.as_str(), material.id.as_str()],
         )?;
+    }
+    Ok(())
+}
+
+/// Ensures the deterministic learning-material graph exists for a persisted
+/// `media_items` row and reconciles membership between the media and its
+/// material.
+///
+/// Called from the legacy [`MediaRepository`](application::MediaRepository)
+/// write paths (`upsert_media_in_transaction`,
+/// `set_library_membership`) inside the same transaction, so a media write and
+/// its canonical material graph are committed together or not at all. The
+/// caller passes the ACTUAL persisted row: an
+/// `INSERT ... ON CONFLICT(fingerprint)` can keep a stored id and membership
+/// that differ from the input, and the graph must follow the row that actually
+/// won.
+///
+/// Every row is derived through the domain constructors with the same
+/// validation conventions as the v59 backfill: one material keyed on the media
+/// id, one initial revision, one `media_rendition` asset snapshotting only
+/// id/kind/fingerprint/availability (never the path), and one binding.
+/// Repeated registration and managed-path rebinding converge on the stored
+/// aggregate without appending a revision or rewriting identity, creation
+/// time, the current pointer, or learner state. A media already bound to a
+/// different material is a conflict that rolls back the whole operation.
+pub(crate) fn ensure_media_material_in_transaction(
+    tx: &Transaction<'_>,
+    media: &MediaItem,
+) -> Result<(), ApplicationError> {
+    let title = if media.title.trim().is_empty() {
+        LEGACY_BLANK_TITLE_FALLBACK.to_owned()
+    } else {
+        media.title.clone()
+    };
+    let rendition = MediaRenditionAsset::new(
+        media.id.clone(),
+        media.kind,
+        media.fingerprint.clone(),
+        media.availability,
+    )
+    .map_err(media_graph_error)?;
+    let assets = vec![MaterialAsset::MediaRendition(rendition)];
+    let material_id = initial_material_id(&assets).map_err(media_graph_error)?;
+    let revision = MaterialRevision::new(material_id.clone(), title, assets, media.created_at_ms)
+        .map_err(media_graph_error)?;
+    let material = LearningMaterial::new(
+        &revision,
+        media.retained_at_ms,
+        media.created_at_ms,
+        media.updated_at_ms,
+    )
+    .map_err(media_graph_error)?;
+
+    let existing: Option<String> = tx
+        .query_row(
+            "SELECT material_id FROM material_media_bindings WHERE media_id=?1",
+            [media.id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(repo)?;
+    match existing {
+        Some(bound) if bound == material.id.as_str() => {
+            // The deterministic graph already exists: converge on the stored
+            // aggregate. Binding facts (path, title, kind) that changed
+            // through the legacy register API never append a revision or
+            // rewrite identity, creation time, the current pointer, or
+            // learner state.
+            let stored = query_material(tx, material.id.as_str())?.ok_or_else(|| {
+                ApplicationError::Repository(format!(
+                    "media {} is bound to missing material {}",
+                    media.id.as_str(),
+                    material.id.as_str()
+                ))
+            })?;
+            let stored_revision = query_revision(tx, stored.current_revision_id.as_str())?
+                .ok_or_else(|| {
+                    ApplicationError::Repository(format!(
+                        "material {} current revision {} is missing",
+                        stored.id.as_str(),
+                        stored.current_revision_id.as_str()
+                    ))
+                })?;
+            // A current pointer to a revision owned by another material is
+            // repository corruption: surface it and roll back the surrounding
+            // media write instead of silently converging on a wrong graph.
+            if stored_revision.material_id != stored.id {
+                return Err(ApplicationError::Repository(format!(
+                    "material {} current revision {} belongs to material {}",
+                    stored.id.as_str(),
+                    stored.current_revision_id.as_str(),
+                    stored_revision.material_id.as_str()
+                )));
+            }
+            reconcile_media_material_membership(tx, media, &stored)?;
+        }
+        Some(_) => {
+            return Err(ApplicationError::Conflict(
+                "media rendition belongs to another material",
+            ));
+        }
+        None => {
+            // Fresh deterministic graph: one material, one initial revision,
+            // one rendition asset, one binding. The media row already carries
+            // the material's membership values and this material binds exactly
+            // this one media, so no membership synchronization is needed.
+            tx.execute(
+                "INSERT INTO learning_materials
+                   (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+                 VALUES (?1,?2,?3,?4,?5)",
+                params![
+                    material.id.as_str(),
+                    revision.id.as_str(),
+                    material.retained_at_ms,
+                    material.created_at_ms,
+                    material.updated_at_ms,
+                ],
+            )
+            .map_err(|error| {
+                if is_primary_key_violation(&error) {
+                    ApplicationError::Repository(format!(
+                        "material {} already exists without a media binding",
+                        material.id.as_str()
+                    ))
+                } else {
+                    repo(error)
+                }
+            })?;
+            insert_revision(tx, &revision)?;
+            insert_assets(tx, &revision)?;
+            insert_bindings(tx, &revision)?;
+        }
+    }
+    Ok(())
+}
+
+fn media_graph_error(error: DomainError) -> ApplicationError {
+    ApplicationError::Repository(format!("media material graph is invalid: {error}"))
+}
+
+/// Reconciles membership between a persisted media row and its material.
+///
+/// The material is the durable membership authority: when it is retained its
+/// original retained timestamp synchronizes back to the media (a temporary
+/// re-registration can never clear it) without overwriting the media's own
+/// operation timestamp from registration/rebind, and when the actual persisted
+/// media is retained while the material is still temporary (for example a Keep
+/// re-registration) the material is promoted with exactly the media retained
+/// timestamp and operation update time, then every media bound to the material
+/// follows. When both sides agree on membership the media row is left
+/// untouched.
+fn reconcile_media_material_membership(
+    tx: &Transaction<'_>,
+    media: &MediaItem,
+    material: &LearningMaterial,
+) -> Result<(), ApplicationError> {
+    match (material.retained_at_ms, media.retained_at_ms) {
+        (Some(retained), Some(media_retained)) if retained == media_retained => Ok(()),
+        (Some(_), _) => {
+            // Material retained: its original membership timestamp is
+            // authoritative and synchronizes back to the media, while the
+            // media's fresh operation timestamp (a newer registration or
+            // rebind update) is preserved exactly.
+            tx.execute(
+                "UPDATE media_items SET retained_at_ms=?2 WHERE id=?1",
+                params![media.id.as_str(), material.retained_at_ms],
+            )
+            .map_err(repo)?;
+            Ok(())
+        }
+        (None, Some(retained)) => {
+            // Media retained while the material is temporary: promote the
+            // material with exactly the media retained timestamp and operation
+            // update time, then synchronize every bound media. The media row is
+            // already valid (the graph constructor enforced retained <=
+            // updated), so the operation time is used verbatim.
+            tx.execute(
+                "UPDATE learning_materials
+                 SET retained_at_ms=?2, updated_at_ms=?3
+                 WHERE id=?1",
+                params![material.id.as_str(), retained, media.updated_at_ms],
+            )
+            .map_err(repo)?;
+            sync_media_membership(
+                tx,
+                material.id.as_str(),
+                Some(retained),
+                media.updated_at_ms,
+            )?;
+            Ok(())
+        }
+        (None, None) => Ok(()),
+    }
+}
+
+/// Applies an explicit legacy media membership operation to the material and
+/// every media bound to it, inside the caller's transaction.
+///
+/// The material is the durable membership authority: a retain request on an
+/// already-retained material keeps the original retained timestamp and
+/// re-asserts it on every bound registered media without rolling their
+/// operation timestamps backward, while a retain on a temporary material and
+/// an unretain promote/clear the material and synchronize all bound media with
+/// the operation timestamp.
+pub(crate) fn apply_media_membership_in_transaction(
+    tx: &Transaction<'_>,
+    media_id: &str,
+    retained_at_ms: Option<u64>,
+    updated_at_ms: u64,
+) -> Result<(), ApplicationError> {
+    let material_id: String = tx
+        .query_row(
+            "SELECT material_id FROM material_media_bindings WHERE media_id=?1",
+            [media_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(repo)?
+        .ok_or_else(|| {
+            ApplicationError::Repository(format!("media {media_id} has no material binding"))
+        })?;
+    let stored = query_material(tx, &material_id)?.ok_or_else(|| {
+        ApplicationError::Repository(format!("material {material_id} is missing"))
+    })?;
+    match retained_at_ms {
+        Some(_) if stored.retained_at_ms.is_some() => {
+            // The original material retained timestamp is authoritative: keep
+            // it and re-assert it on every bound registered media without
+            // overwriting their operation timestamps.
+            tx.execute(
+                "UPDATE media_items
+                 SET retained_at_ms=?2
+                 WHERE id IN (SELECT media_id FROM material_media_bindings WHERE material_id=?1)",
+                params![material_id, stored.retained_at_ms],
+            )
+            .map_err(repo)?;
+        }
+        Some(requested) => {
+            tx.execute(
+                "UPDATE learning_materials
+                 SET retained_at_ms=?2, updated_at_ms=?3
+                 WHERE id=?1",
+                params![material_id, requested, updated_at_ms],
+            )
+            .map_err(repo)?;
+            sync_media_membership(tx, &material_id, Some(requested), updated_at_ms)?;
+        }
+        None => {
+            tx.execute(
+                "UPDATE learning_materials
+                 SET retained_at_ms=NULL, updated_at_ms=?2
+                 WHERE id=?1",
+                params![material_id, updated_at_ms],
+            )
+            .map_err(repo)?;
+            sync_media_membership(tx, &material_id, None, updated_at_ms)?;
+        }
     }
     Ok(())
 }

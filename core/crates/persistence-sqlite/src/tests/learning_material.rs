@@ -207,6 +207,13 @@ fn create_covers_text_media_and_mixed_shapes_and_reads_back_faithfully() {
         })
         .unwrap();
     assert_eq!(mixed.shape(), MaterialShape::Mixed);
+    // One raw media -> one canonical material: media-audio already owns its
+    // deterministic material, so the mixed revision converges on that same
+    // material instead of creating a second one.
+    assert_eq!(
+        mixed.material.id, audio.material.id,
+        "a media input bound to its material converges on that material"
+    );
 
     // The repository rehydrates exactly what it persisted.
     let read = services
@@ -740,9 +747,10 @@ fn create_and_append_synchronize_registered_media_membership() {
     };
     assert_eq!(row, (Some(retained_at), retained_at));
 
-    // Appending media to an already-retained material: the new media
-    // immediately follows aggregate membership in the same transaction.
-    let appended = services
+    // One raw media -> one canonical material: every registered media already
+    // owns its deterministic material, so appending media-sync-b (bound to its
+    // own material) into material-a is a conflict, never a silent rebind.
+    let err = services
         .materials()
         .append_revision(
             &material_id,
@@ -751,11 +759,59 @@ fn create_and_append_synchronize_registered_media_membership() {
                 assets: vec![media_input("media-sync-a"), media_input("media-sync-b")],
             },
         )
-        .unwrap();
+        .expect_err("cross-material append");
+    assert!(matches!(
+        err,
+        ApplicationError::Conflict("media rendition belongs to another material")
+    ));
+
+    // A media registered after its material became retained immediately
+    // follows aggregate membership: registration converges on the existing
+    // retained material (never a duplicate graph) inside the same transaction,
+    // and the new media row mirrors the material's membership authority.
+    let late_rendition = MediaRenditionAsset::new(
+        MediaId::parse("media-late-register").unwrap(),
+        MediaKind::Audio,
+        "fp-late-register".to_owned(),
+        MediaAvailability::Available,
+    )
+    .unwrap();
+    let late_assets = vec![MaterialAsset::MediaRendition(late_rendition)];
+    let late_material_id = initial_material_id(&late_assets).unwrap();
+    let late_revision = MaterialRevision::new(
+        late_material_id.clone(),
+        "Retained late register",
+        late_assets,
+        2000,
+    )
+    .unwrap();
+    let late_material = LearningMaterial::new(&late_revision, Some(2000), 2000, 2000).unwrap();
+    MaterialRepository::create_material(repo.as_ref(), &late_material, &late_revision).unwrap();
+    assert_eq!(
+        count(&repo, "media_items"),
+        2,
+        "the graph may bind unregistered media"
+    );
+    let registered = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-late-register").unwrap(),
+            path: "/tmp/late-register.mp4".into(),
+            fingerprint: "fp-late-register".into(),
+            title: "Late register".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 5000,
+            updated_at_ms: 5000,
+        },
+    )
+    .unwrap();
     let row: (Option<u64>, u64) = {
         let conn = repo.connection.lock();
         conn.query_row(
-            "SELECT retained_at_ms, updated_at_ms FROM media_items WHERE id='media-sync-b'",
+            "SELECT retained_at_ms, updated_at_ms FROM media_items WHERE id='media-late-register'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -763,12 +819,36 @@ fn create_and_append_synchronize_registered_media_membership() {
     };
     assert_eq!(
         row.0,
-        Some(retained_at),
-        "new media follows the aggregate membership"
+        Some(2000),
+        "a media registered under a retained material follows aggregate membership"
     );
     assert_eq!(
-        row.1, appended.material.updated_at_ms,
-        "the append operation timestamp is used for the legacy media update"
+        row.1, 5000,
+        "the fresh registration updated_at_ms is preserved, never rolled back to the material's"
+    );
+    assert!(
+        row.1 >= 5000,
+        "the preserved media updated_at_ms is never older than its created_at_ms"
+    );
+    assert_eq!(registered.id.as_str(), "media-late-register");
+    assert_eq!(registered.updated_at_ms, 5000);
+    assert_eq!(
+        repo.material_for_media(&registered.id).unwrap().unwrap().id,
+        late_material_id,
+        "registration converges on the existing retained material"
+    );
+    assert_eq!(
+        repo.material_for_media(&registered.id)
+            .unwrap()
+            .unwrap()
+            .updated_at_ms,
+        2000,
+        "the retained material's own update time is untouched by the registration"
+    );
+    assert_eq!(
+        count(&repo, "learning_materials"),
+        3,
+        "registering the media never creates a duplicate material"
     );
 
     // Creating a retained material synchronizes its media immediately.
@@ -1421,4 +1501,731 @@ fn repository_reads_backfilled_legacy_materials() {
     for asset_json in stored_asset_json(&repo, revision.id.as_str()) {
         assert!(!asset_json.contains("\"path\""));
     }
+}
+
+#[test]
+fn media_upsert_immediately_yields_one_deterministic_graph_without_paths() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+
+    // Temporary registration: the graph exists from the very first write and
+    // resolves deterministically through the public media->material query.
+    let temporary = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-graph-temp").unwrap(),
+            path: "/tmp/media-graph-temp.mp4".into(),
+            fingerprint: "media-graph-temp-fp".into(),
+            title: "Temporary media".into(),
+            kind: MediaKind::Video,
+            duration: Some(TimeMs::new(1_000)),
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 100,
+            updated_at_ms: 200,
+        },
+    )
+    .unwrap();
+    let temporary_material = repo
+        .material_for_media(&temporary.id)
+        .unwrap()
+        .expect("temporary media resolves through its material");
+    assert!(temporary_material.retained_at_ms.is_none());
+    assert_eq!(temporary_material.created_at_ms, 100);
+    assert_eq!(temporary_material.updated_at_ms, 200);
+
+    // Retained registration resolves too, carrying the membership evidence.
+    let retained = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-graph-kept").unwrap(),
+            path: "/tmp/media-graph-kept.mp4".into(),
+            fingerprint: "media-graph-kept-fp".into(),
+            title: "Kept media".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: Some(300),
+            created_at_ms: 100,
+            updated_at_ms: 400,
+        },
+    )
+    .unwrap();
+    let kept_material = repo
+        .material_for_media(&retained.id)
+        .unwrap()
+        .expect("retained media resolves through its material");
+    assert_eq!(kept_material.retained_at_ms, Some(300));
+
+    // Exactly one deterministic graph per media: one material, one initial
+    // revision, one asset, one binding.
+    assert_eq!(count(&repo, "learning_materials"), 2);
+    assert_eq!(count(&repo, "material_revisions"), 2);
+    assert_eq!(count(&repo, "material_assets"), 2);
+    assert_eq!(count(&repo, "material_media_bindings"), 2);
+
+    // The rendition asset is a typed snapshot: media id, kind, fingerprint,
+    // and availability only. The path must never be serialized or stored.
+    for material in [&temporary_material, &kept_material] {
+        let revision = repo
+            .get_revision(&material.current_revision_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(revision.assets.len(), 1);
+        let MaterialAsset::MediaRendition(rendition) = &revision.assets[0] else {
+            panic!("media material carries exactly one rendition asset");
+        };
+        assert_eq!(rendition.media_id, material_media_id(&revision));
+        for asset_json in stored_asset_json(&repo, material.current_revision_id.as_str()) {
+            assert!(
+                !asset_json.contains("\"path\""),
+                "stored asset JSON must never carry a path: {asset_json}"
+            );
+            let value: serde_json::Value = serde_json::from_str(&asset_json).unwrap();
+            let object = value["media_rendition"]
+                .as_object()
+                .expect("rendition object");
+            for key in ["id", "media_id", "kind", "fingerprint", "availability"] {
+                assert!(object.contains_key(key), "missing key: {key}");
+            }
+        }
+    }
+
+    // The material identity matches the domain derivation from the media id.
+    let rendition = MediaRenditionAsset::new(
+        temporary.id.clone(),
+        MediaKind::Video,
+        "media-graph-temp-fp".to_owned(),
+        MediaAvailability::Available,
+    )
+    .unwrap();
+    assert_eq!(
+        temporary_material.id,
+        initial_material_id(&[MaterialAsset::MediaRendition(rendition)]).unwrap()
+    );
+}
+
+/// The media id snapshotted by a media-backed revision's rendition asset.
+fn material_media_id(revision: &MaterialRevision) -> MediaId {
+    match revision.assets.first().expect("revision carries assets") {
+        MaterialAsset::MediaRendition(rendition) => rendition.media_id.clone(),
+        MaterialAsset::DocumentText(_) => panic!("expected a media rendition"),
+    }
+}
+
+#[test]
+fn repeated_registration_and_rebind_preserve_graph_identity_and_learner_state() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let item = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-rebind-graph").unwrap(),
+            path: "/tmp/rebind-v1.mp4".into(),
+            fingerprint: "rebind-graph-fp".into(),
+            title: "Original title".into(),
+            kind: MediaKind::Video,
+            duration: Some(TimeMs::new(1_000)),
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 50,
+            updated_at_ms: 60,
+        },
+    )
+    .unwrap();
+
+    // Learner-owned state attached before any re-registration.
+    PlaybackProgressRepository::save(repo.as_ref(), &item.id, TimeMs::new(4_200)).unwrap();
+    LearningEventRepository::append_learning_event(
+        repo.as_ref(),
+        &LearningEvent {
+            id: LearningEventId::from_fingerprint("learning-event", "rebind-graph"),
+            occurred_at_ms: 42,
+            kind: LearningEventKind::FamiliarMaterialMarked,
+            subject: LearningEventSubject {
+                kind: LearningEventSubjectKind::Media,
+                id: item.id.as_str().to_owned(),
+            },
+            payload: serde_json::json!({}),
+            session_id: None,
+        },
+    )
+    .unwrap();
+    let track = SubtitleTrack {
+        id: SubtitleTrackId::from_fingerprint("track", "rebind-graph"),
+        media_id: item.id.clone(),
+        fingerprint: "rebind-graph-track".into(),
+        language: Some(LanguageCode::parse("en").unwrap()),
+        source: "test".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: vec![SubtitleSentence {
+            id: SubtitleSentenceId::from_fingerprint("sentence", "rebind-graph"),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(5_000),
+            original_text: "Hello".into(),
+            display_text: "Hello".into(),
+            tokens: vec![SubtitleToken {
+                index: 0,
+                kind: SubtitleTokenKind::Word,
+                text: "Hello".into(),
+                normalized: Some("hello".into()),
+                start_char: 0,
+                end_char: 5,
+            }],
+        }],
+    };
+    repo.save_track(&track).unwrap();
+
+    let first_material = repo.material_for_media(&item.id).unwrap().unwrap();
+    let first_revision = repo
+        .get_revision(&first_material.current_revision_id)
+        .unwrap()
+        .unwrap();
+    let first_membership_row = media_row(&repo, item.id.as_str());
+
+    // Managed-path rebind: the same fingerprint at a new path, title, kind,
+    // and duration. The legacy register API updates those binding facts only.
+    let rebound = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-rebind-graph").unwrap(),
+            path: "/managed-assets/rebind-v2.mp3".into(),
+            fingerprint: "rebind-graph-fp".into(),
+            title: "Rebound title".into(),
+            kind: MediaKind::Audio,
+            duration: Some(TimeMs::new(2_000)),
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 50,
+            updated_at_ms: 70,
+        },
+    )
+    .unwrap();
+
+    // Graph identity, current revision pointer, creation time, and revision
+    // content are preserved: no revision is appended for binding facts.
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert_eq!(material.id, first_material.id);
+    assert_eq!(
+        material.current_revision_id, first_material.current_revision_id,
+        "a rebind never advances the current revision pointer"
+    );
+    assert_eq!(material.created_at_ms, 50);
+    assert_eq!(
+        material.updated_at_ms, 60,
+        "a rebind never advances the material update time"
+    );
+    let revision = repo
+        .get_revision(&material.current_revision_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(revision, first_revision);
+    assert_eq!(count(&repo, "learning_materials"), 1);
+    assert_eq!(count(&repo, "material_revisions"), 1);
+    assert_eq!(count(&repo, "material_assets"), 1);
+    assert_eq!(count(&repo, "material_media_bindings"), 1);
+
+    // The media row carries the rebound binding facts while the durable
+    // revision keeps its original typed snapshot.
+    assert_eq!(rebound.path, "/managed-assets/rebind-v2.mp3");
+    assert_eq!(rebound.title, "Rebound title");
+    assert_eq!(rebound.kind, MediaKind::Audio);
+    let MaterialAsset::MediaRendition(rendition) = &revision.assets[0] else {
+        panic!("expected a media rendition asset");
+    };
+    assert_eq!(
+        rendition.kind,
+        MediaKind::Video,
+        "the durable revision keeps its original snapshot"
+    );
+    assert_eq!(media_row(&repo, item.id.as_str()), {
+        let mut expected = first_membership_row.clone();
+        expected["path"] = serde_json::json!("/managed-assets/rebind-v2.mp3");
+        expected["title"] = serde_json::json!("Rebound title");
+        expected["kind"] = serde_json::json!("\"audio\"");
+        expected["duration_ms"] = serde_json::json!(2000);
+        expected["updated_at_ms"] = serde_json::json!(70);
+        expected
+    });
+
+    // Learner-owned state survives: progress, subtitles, history, and the
+    // graph rows.
+    assert_eq!(
+        PlaybackProgressRepository::load(repo.as_ref(), &item.id).unwrap(),
+        Some(TimeMs::new(4_200))
+    );
+    assert_eq!(repo.get_track(&track.id).unwrap(), Some(track));
+    assert_eq!(
+        repo.list_event_subject_ids(
+            LearningEventKind::FamiliarMaterialMarked,
+            LearningEventSubjectKind::Media,
+        )
+        .unwrap(),
+        vec![item.id.as_str().to_owned()]
+    );
+}
+
+#[test]
+fn fingerprint_conflict_keeps_the_stored_identity_and_graph() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let stored = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("stored-id").unwrap(),
+            path: "/tmp/stored.mp4".into(),
+            fingerprint: "shared-fp".into(),
+            title: "Stored".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: Some(1),
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        },
+    )
+    .unwrap();
+
+    // Re-registration presents the same fingerprint with a different input id
+    // and explicit temporary membership. The stored id wins the conflict and
+    // existing membership wins via COALESCE, so the graph must follow the
+    // ACTUAL persisted row — never the input.
+    let re_registered = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("input-id").unwrap(),
+            path: "/tmp/input.mp4".into(),
+            fingerprint: "shared-fp".into(),
+            title: "Input".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        re_registered.id.as_str(),
+        "stored-id",
+        "the stored id wins the fingerprint conflict"
+    );
+    assert_eq!(
+        re_registered.retained_at_ms,
+        Some(1),
+        "existing membership wins via COALESCE"
+    );
+    assert_eq!(re_registered.kind, MediaKind::Audio);
+    assert_eq!(re_registered.title, "Input");
+
+    // The graph keys on the actual stored media id, not the input id, and the
+    // deterministic aggregate is untouched by the rebinding facts.
+    let material = repo.material_for_media(&stored.id).unwrap().unwrap();
+    assert_eq!(material.retained_at_ms, Some(1));
+    assert_eq!(material.created_at_ms, 1);
+    assert!(
+        repo.material_for_media(&MediaId::parse("input-id").unwrap())
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(count(&repo, "learning_materials"), 1);
+    assert_eq!(count(&repo, "material_revisions"), 1);
+    assert_eq!(count(&repo, "material_assets"), 1);
+    assert_eq!(count(&repo, "material_media_bindings"), 1);
+}
+
+#[test]
+fn blank_title_media_uses_the_legacy_fallback_in_its_graph() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let item = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-blank-title").unwrap(),
+            path: "/tmp/blank-title.mp4".into(),
+            fingerprint: "blank-title-fp".into(),
+            title: "   ".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        },
+    )
+    .unwrap();
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    let revision = repo
+        .get_revision(&material.current_revision_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(revision.title, LEGACY_BLANK_TITLE_FALLBACK);
+}
+
+#[test]
+fn media_bound_to_another_material_conflicts_and_rolls_back_the_media_write() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    // A text material to serve as the corruption target.
+    let asset = DocumentTextAsset::new("other material", None).unwrap();
+    let assets = vec![MaterialAsset::DocumentText(asset)];
+    let other_id = initial_material_id(&assets).unwrap();
+    let revision = MaterialRevision::new(other_id.clone(), "Other", assets, 1).unwrap();
+    let material = LearningMaterial::new(&revision, None, 1, 1).unwrap();
+    MaterialRepository::create_material(repo.as_ref(), &material, &revision).unwrap();
+
+    // Corruption: the media is bound to a material that is not its
+    // deterministic one (unreachable through the public APIs, which always
+    // bind a media to its own material).
+    {
+        let conn = repo.connection.lock();
+        conn.execute(
+            "INSERT INTO material_media_bindings (media_id, material_id)
+             VALUES ('media-corrupt-bound', ?1)",
+            [other_id.as_str()],
+        )
+        .unwrap();
+    }
+    let graph_before = graph_counts(&repo);
+
+    let err = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-corrupt-bound").unwrap(),
+            path: "/tmp/corrupt.mp4".into(),
+            fingerprint: "corrupt-bound-fp".into(),
+            title: "Corrupt bound".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        },
+    )
+    .expect_err("media bound to another material must not be moved");
+    assert!(matches!(
+        err,
+        ApplicationError::Conflict("media rendition belongs to another material")
+    ));
+
+    // All-or-nothing: the media row itself rolled back and no graph row moved.
+    assert_eq!(
+        count(&repo, "media_items"),
+        0,
+        "the media write must roll back together with the conflict"
+    );
+    assert_eq!(graph_counts(&repo), graph_before);
+    let binding: String = {
+        let conn = repo.connection.lock();
+        conn.query_row(
+            "SELECT material_id FROM material_media_bindings
+             WHERE media_id='media-corrupt-bound'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(binding, other_id.as_str(), "the binding is never moved");
+}
+
+#[test]
+fn invalid_media_that_cannot_form_a_graph_rolls_back_atomically() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+
+    // A blank fingerprint fails the rendition asset constructor: the upsert
+    // must fail with no media row and no graph row.
+    let blank = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-blank-fp").unwrap(),
+            path: "/tmp/blank.mp4".into(),
+            fingerprint: "   ".into(),
+            title: "Blank fingerprint".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        },
+    );
+    assert!(matches!(blank, Err(ApplicationError::Repository(_))));
+    assert_eq!(
+        count(&repo, "media_items"),
+        0,
+        "the media row must not survive a graph construction failure"
+    );
+    assert_eq!(graph_counts(&repo), (0, 0, 0, 0));
+
+    // Inverted timestamps (updated before created) fail the material
+    // constructor: nothing is persisted either.
+    let inverted = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-inverted-time").unwrap(),
+            path: "/tmp/inverted.mp4".into(),
+            fingerprint: "inverted-time-fp".into(),
+            title: "Inverted".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 10,
+            updated_at_ms: 5,
+        },
+    );
+    assert!(matches!(inverted, Err(ApplicationError::Repository(_))));
+    assert_eq!(count(&repo, "media_items"), 0);
+    assert_eq!(graph_counts(&repo), (0, 0, 0, 0));
+
+    // Retention evidence after the update time fails the material constructor
+    // too: the media row written by the upsert rolls back with the graph.
+    let retained_after_update = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-retained-after-update").unwrap(),
+            path: "/tmp/retained-after.mp4".into(),
+            fingerprint: "retained-after-update-fp".into(),
+            title: "Retained after".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: Some(300),
+            created_at_ms: 1,
+            updated_at_ms: 200,
+        },
+    );
+    assert!(matches!(
+        retained_after_update,
+        Err(ApplicationError::Repository(_))
+    ));
+    assert_eq!(count(&repo, "media_items"), 0);
+    assert_eq!(graph_counts(&repo), (0, 0, 0, 0));
+}
+
+#[test]
+fn invalid_membership_timestamp_pair_rolls_back_atomically() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let item = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-invalid-membership").unwrap(),
+            path: "/tmp/invalid-membership.mp4".into(),
+            fingerprint: "invalid-membership-fp".into(),
+            title: "Invalid membership".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 7,
+            updated_at_ms: 8,
+        },
+    )
+    .unwrap();
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    let media_before = media_row(&repo, item.id.as_str());
+    let material_before = material_row(&repo, material.id.as_str());
+
+    // A retained stamp after its own update time cannot be represented by the
+    // material invariant (retention evidence never postdates the latest
+    // update), so the operation must fail transactionally instead of silently
+    // rewriting the caller's timestamps.
+    let err = MediaRepository::set_library_membership(repo.as_ref(), &item.id, Some(123_456), 9)
+        .expect_err("retained_at_ms after updated_at_ms must fail");
+    assert!(matches!(err, ApplicationError::Repository(_)));
+
+    // Both the media and the material rows rolled back byte-for-byte,
+    // membership and update columns included.
+    assert_eq!(
+        media_row(&repo, item.id.as_str()),
+        media_before,
+        "the media row must be byte-for-byte unchanged after the failed membership"
+    );
+    assert_eq!(
+        material_row(&repo, material.id.as_str()),
+        material_before,
+        "the material row must be byte-for-byte unchanged after the failed membership"
+    );
+    assert_eq!(
+        count(&repo, "learning_materials"),
+        1,
+        "the graph is left intact"
+    );
+}
+
+#[test]
+fn retained_rebind_preserves_the_fresh_media_updated_at_ms() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let original = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-retained-rebind").unwrap(),
+            path: "/tmp/rebind-old.mp4".into(),
+            fingerprint: "retained-rebind-fp".into(),
+            title: "Original".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: Some(1),
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        },
+    )
+    .unwrap();
+    let material_before = repo.material_for_media(&original.id).unwrap().unwrap();
+    assert_eq!(material_before.retained_at_ms, Some(1));
+
+    // Re-registration with an explicit temporary intent cannot clear the
+    // retained membership, and the fresh registration update time must never
+    // be rolled back to the older material time.
+    let rebound = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-retained-rebind").unwrap(),
+            path: "/managed-assets/rebind-new.mp3".into(),
+            fingerprint: "retained-rebind-fp".into(),
+            title: "Rebound".into(),
+            kind: MediaKind::Audio,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 5000,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        rebound.retained_at_ms,
+        Some(1),
+        "existing membership survives a temporary re-registration"
+    );
+    assert_eq!(
+        rebound.updated_at_ms, 5000,
+        "the fresh rebind update time is preserved"
+    );
+    assert_eq!(rebound.path, "/managed-assets/rebind-new.mp3");
+
+    let material = repo.material_for_media(&original.id).unwrap().unwrap();
+    assert_eq!(material.retained_at_ms, Some(1));
+    assert_eq!(
+        material.updated_at_ms, material_before.updated_at_ms,
+        "the material update time is not advanced by the rebind"
+    );
+    assert_eq!(count(&repo, "learning_materials"), 1);
+    assert_eq!(count(&repo, "material_revisions"), 1);
+}
+
+#[test]
+fn direct_idempotent_membership_never_rolls_media_updated_backward() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let item = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-no-rollback").unwrap(),
+            path: "/tmp/no-rollback.mp4".into(),
+            fingerprint: "no-rollback-fp".into(),
+            title: "No rollback".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: Some(1),
+            created_at_ms: 1,
+            updated_at_ms: 2,
+        },
+    )
+    .unwrap();
+    let material_before = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert_eq!(material_before.retained_at_ms, Some(1));
+
+    // A direct idempotent membership call on an already-retained item keeps the
+    // material's original retained timestamp but must preserve the newer
+    // requested update time instead of rolling it back to the material's.
+    let result =
+        MediaRepository::set_library_membership(repo.as_ref(), &item.id, Some(1), 5000).unwrap();
+    assert_eq!(result.retained_at_ms, Some(1));
+    assert_eq!(
+        result.updated_at_ms, 5000,
+        "the newer requested update time is preserved"
+    );
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    assert_eq!(material.retained_at_ms, Some(1));
+    assert_eq!(
+        material.updated_at_ms, material_before.updated_at_ms,
+        "the material is untouched by the idempotent membership call"
+    );
+}
+
+#[test]
+fn cross_material_current_revision_pointer_is_corruption_and_rolls_back() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+
+    // A second material whose revision will be stolen by the corrupt pointer.
+    let asset = DocumentTextAsset::new("another material", None).unwrap();
+    let assets = vec![MaterialAsset::DocumentText(asset)];
+    let other_id = initial_material_id(&assets).unwrap();
+    let other_revision = MaterialRevision::new(other_id.clone(), "Other", assets, 1).unwrap();
+    let other_material = LearningMaterial::new(&other_revision, None, 1, 1).unwrap();
+    MaterialRepository::create_material(repo.as_ref(), &other_material, &other_revision).unwrap();
+
+    // The media's deterministic material, created through registration.
+    let item = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-bad-pointer").unwrap(),
+            path: "/tmp/bad-pointer.mp4".into(),
+            fingerprint: "bad-pointer-fp".into(),
+            title: "Bad pointer".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 1,
+        },
+    )
+    .unwrap();
+    let media_before = media_row(&repo, item.id.as_str());
+    let graph_before = graph_counts(&repo);
+
+    // Corruption: point the media's material at the other material's revision.
+    // The current pointer is a deferred FK and carries no ownership constraint,
+    // so this shape is only reachable through direct storage tampering.
+    let material = repo.material_for_media(&item.id).unwrap().unwrap();
+    {
+        let conn = repo.connection.lock();
+        conn.execute(
+            "UPDATE learning_materials SET current_revision_id=?1 WHERE id=?2",
+            params![other_revision.id.as_str(), material.id.as_str()],
+        )
+        .unwrap();
+    }
+
+    // Re-registration converges on the stored material and detects the
+    // cross-material pointer as corruption, rolling back the media write with
+    // no half-written media or graph state.
+    let err = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("media-bad-pointer").unwrap(),
+            path: "/tmp/bad-pointer-new.mp4".into(),
+            fingerprint: "bad-pointer-fp".into(),
+            title: "Bad pointer new".into(),
+            kind: MediaKind::Video,
+            duration: None,
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 1,
+            updated_at_ms: 5000,
+        },
+    )
+    .expect_err("a cross-material current revision pointer is corruption");
+    assert!(matches!(err, ApplicationError::Repository(_)));
+    assert_eq!(
+        media_row(&repo, item.id.as_str()),
+        media_before,
+        "the media write rolled back byte-for-byte"
+    );
+    assert_eq!(
+        graph_counts(&repo),
+        graph_before,
+        "no graph rows were added or moved by the failed upsert"
+    );
 }
