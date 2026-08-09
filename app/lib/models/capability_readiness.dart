@@ -67,13 +67,13 @@ class CapabilityReadinessSnapshot {
     required SubtitleTrack? activeTrack,
     required LLTimelineDocument? document,
     required List<WordTimelineSummary> wordTimelineSummaries,
-    required List<ChunkTimelineSummary> chunkTimelineSummaries,
+    required List<ProsodyAnalysis> prosodyAnalyses,
     required List<PhoneTimelineSummary> phoneTimelineSummaries,
     int activeWordTimingCount = 0,
     String? timelineResourceError,
   }) {
     final activeWord = _firstActive(wordTimelineSummaries);
-    final activeChunk = _firstActive(chunkTimelineSummaries);
+    final activeProsody = _firstActive(prosodyAnalyses);
     final activePhone = _firstActive(phoneTimelineSummaries);
     final activeFrames = _activeRhythmFrames(document);
     final hasTrack = activeTrack != null;
@@ -117,7 +117,7 @@ class CapabilityReadinessSnapshot {
     final chunkReplay = _chunkReplayReadiness(
       hasTrack: hasTrack,
       hasWordSync: hasWordSync,
-      activeChunk: activeChunk,
+      activeProsody: activeProsody,
       timelineError: timelineError,
     );
     final listeningStructure = _listeningStructureReadiness(
@@ -214,7 +214,7 @@ CapabilityReadiness _wordSyncReadiness({
 CapabilityReadiness _chunkReplayReadiness({
   required bool hasTrack,
   required bool hasWordSync,
-  required ChunkTimelineSummary? activeChunk,
+  required ProsodyAnalysis? activeProsody,
   required bool timelineError,
 }) {
   if (!hasTrack) {
@@ -231,7 +231,7 @@ CapabilityReadiness _chunkReplayReadiness({
       detailKey: 'capChunkReplayUnavailableNoWord',
     );
   }
-  if (activeChunk == null || activeChunk.chunkCount == 0) {
+  if (activeProsody == null || activeProsody.chunks.isEmpty) {
     return CapabilityReadiness(
       capability: UserCapability.chunkReplay,
       state: timelineError
@@ -246,9 +246,9 @@ CapabilityReadiness _chunkReplayReadiness({
     capability: UserCapability.chunkReplay,
     state: CapabilityReadinessState.available,
     detailKey: 'capChunkReplayAvailable',
-    count: activeChunk.chunkCount,
+    count: activeProsody.chunks.length,
     countLabelKey: 'chunks',
-    technicalDetail: activeChunk.precision,
+    technicalDetail: activeProsody.algorithm,
   );
 }
 
@@ -340,7 +340,7 @@ T? _firstActive<T>(Iterable<T> values) {
   for (final value in values) {
     final active = switch (value) {
       WordTimelineSummary summary => summary.isActive,
-      ChunkTimelineSummary summary => summary.isActive,
+      ProsodyAnalysis analysis => analysis.isActive,
       PhoneTimelineSummary summary => summary.isActive,
       _ => false,
     };

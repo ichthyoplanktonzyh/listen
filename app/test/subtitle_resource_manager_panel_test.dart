@@ -140,7 +140,8 @@ void main() {
               ),
               activeWordTimelineId: null,
               activePhoneTimelineId: null,
-              activeChunkTimelineId: null,
+              prosodyAnalyses: [],
+              activeProsodyAnalysisId: null,
               rhythmFrames: [],
               artifacts: [],
             ),
@@ -191,7 +192,6 @@ SubtitleResourceManagerPanel _resourceManager({
   timelineDocument: document,
   wordTimelineSummaries: const [],
   phoneTimelineSummaries: const [],
-  chunkTimelineSummaries: const [],
   activeWordTimingCount: activeWordTimingCount,
   timelineResourceError: null,
   onImportSubtitle: () async {},
@@ -210,10 +210,6 @@ SubtitleResourceManagerPanel _resourceManager({
   onActivatePhoneTimeline: (_) async {},
   onArchivePhoneTimeline: (_) async {},
   onDeletePhoneTimeline: (_) async {},
-  onGenerateChunkTimeline: () async {},
-  onActivateChunkTimeline: (_) async {},
-  onArchiveChunkTimeline: (_) async {},
-  onDeleteChunkTimeline: (_) async {},
 );
 
 class _Harness extends StatelessWidget {

@@ -59,10 +59,10 @@ void main() {
         reason: 'LISTEN_GEN_RELEASE_MANIFEST must point at the pinned manifest',
       );
       final verified = await release.verify();
-      expect(verified.toolVersion, '0.3.0');
+      expect(verified.toolVersion, '0.4.0');
       expect(
         verified.artifactSha256,
-        'sha256:08a64fac7ace6a4e6a1de0030e931977923363abe5339f945196fb9ca8b4dc55',
+        'sha256:47cef5bb9c1711432db1bcd285c1f0e4f637842d1ef199e13abeef83ca46cf63',
       );
 
       final generator = LocalListenGenProcessService(releaseService: release);
@@ -178,7 +178,7 @@ void main() {
           reason: 'subtitle_text_track should be consumed as a candidate',
         );
         expect(subtitle.provenance?.tool.id, 'listen-gen.asr-package');
-        expect(subtitle.provenance?.tool.version, '0.3.0');
+        expect(subtitle.provenance?.tool.version, '0.4.0');
 
         final wordTimeline = byKind['word_timeline']!;
         expect(
@@ -193,7 +193,7 @@ void main() {
               'word_timeline must be produced by the alignment stage, not '
               'the ASR-supplied word timing',
         );
-        expect(wordTimeline.provenance?.tool.version, '0.3.0');
+        expect(wordTimeline.provenance?.tool.version, '0.4.0');
 
         expect(
           byKind['phone_timeline']!.provenance?.tool.id,
@@ -217,7 +217,7 @@ void main() {
           'word_acoustics',
           'prosody_analysis',
         ]) {
-          expect(byKind[kind]!.provenance?.tool.version, '0.3.0');
+          expect(byKind[kind]!.provenance?.tool.version, '0.4.0');
         }
 
         final exportedTimeline = await api.exportTrackLLTimeline(
@@ -225,11 +225,14 @@ void main() {
         );
         expect(exportedTimeline.activeWordTimelineId, isNull);
         expect(exportedTimeline.activePhoneTimelineId, isNull);
-        expect(exportedTimeline.activeChunkTimelineId, isNull);
+        // The imported prosody analysis is exported as a candidate: it is the
+        // sole prosodic-chunk source but stays unactivated.
+        expect(exportedTimeline.prosodyAnalyses, isNotEmpty);
+        expect(exportedTimeline.activeProsodyAnalysisId, isNull);
 
         // Candidate-only: this test never selects a subtitle or activates any
-        // imported analysis. In particular, rich prosody does not synthesize
-        // or activate the legacy ChunkTimeline foundation slot.
+        // imported analysis. Rich prosody stays a candidate and the retired
+        // legacy ChunkTimeline family is absent entirely.
 
         await run.cleanUp();
         run = null;

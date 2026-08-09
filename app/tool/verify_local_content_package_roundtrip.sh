@@ -18,7 +18,7 @@
 set -euo pipefail
 
 readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-b0b0dc81a212ae5e5c97e2234439eb0d6a53ab5d}"
-readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-42649d9f3687bdc9374151efcbc827c6a4dae61b}"
+readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-24e07d37da07dc9be88b5e8d514b2d298579d9a6}"
 readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
 
 # Tests prove the gate defaults stay in lockstep with backend.lock.json /
@@ -94,7 +94,7 @@ echo "verify-roundtrip: building pinned Gen bundle"
 echo "verify-roundtrip: verifying Gen bundle"
 ( cd "$LISTEN_GEN_REPO" &&
   run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
-    "$tmp/gen/listen-gen-0.3.0/listen-gen-0.3.0.release.json" )
+    "$tmp/gen/listen-gen-0.4.0/listen-gen-0.4.0.release.json" )
 
 # Build Core into a temporary target so nothing is written into the checkout.
 echo "verify-roundtrip: building pinned Core api-http"
@@ -112,7 +112,7 @@ echo "verify-roundtrip: running focused integration test"
     HOME="$tmp/home" \
     PUB_CACHE="$pub_cache" \
     LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
-    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.3.0/listen-gen-0.3.0.release.json" \
+    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.4.0/listen-gen-0.4.0.release.json" \
     LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\",\"--aligner\",\"fixture\",\"--alignment-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/alignment-result.json\",\"--sense-groups\",\"fixture\",\"--sense-groups-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sense-group-result.json\",\"--acoustics\",\"fixture\",\"--acoustics-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/acoustics-result.json\",\"--prosody\",\"fixture\",\"--prosody-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/prosody-result.json\",\"--phone\",\"fixture\",\"--phone-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/phone-result.json\"]" \
     LISTEN_PACKAGE_E2E=1 \
     flutter test test/integration/listen_gen_core_roundtrip_test.dart \

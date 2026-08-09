@@ -296,7 +296,6 @@ class MediaSessionCoordinator {
       subtitle.setTimelineResource(
         summaries: subtitle.wordTimelineSummaries,
         phoneSummaries: subtitle.phoneTimelineSummaries,
-        chunkSummaries: subtitle.chunkTimelineSummaries,
         document: LLTimelineDocument.fromJson(decoded),
         error: subtitle.timelineResourceError,
       );

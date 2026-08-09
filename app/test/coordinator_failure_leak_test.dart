@@ -180,19 +180,19 @@ void main() {
       'sentence, not the sentence plus the exception', () async {
     final w = wireResources(
       api(
-        fail: (method, path) => path.contains('/chunk-timelines')
+        fail: (method, path) => path.contains('/phone-timelines')
             ? (statusCode: 500, body: envelope)
             : null,
       ),
     );
     w.subtitle.setPrimaryTrack(const SubtitleTrack(id: 'track-1', cues: []));
 
-    await w.resources.generateChunkTimeline();
+    await w.resources.activatePhoneTimeline('phone-active');
 
     // `_runTimelineAction` used to build `'$failurePrefix: $error'`; the prefix
     // is now the whole message. (The prefixes are still hard-coded English —
     // that is #7's slice, not this one.)
-    expect(w.player.status, 'ChunkTimeline generation failed');
+    expect(w.player.status, 'PhoneTimeline activation failed');
     expectNoLeak(w.player.status, from: 'the status line');
     expect(w.player.statusFailure?.correlationId, 'api-853');
   });

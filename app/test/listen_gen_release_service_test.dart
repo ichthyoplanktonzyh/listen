@@ -15,6 +15,23 @@ const _otherCommit = 'b980a20666f746685db1fd06bfa425d762d7a678';
 const _contractSha =
     'sha256:3a0c67c2e4498dbbe5ad5556bac41eff01e50c06c7d020bd5af1fdcbe46c5dc5';
 
+Map<String, dynamic> _runtimeIdentityTemplate() => {
+  'schema': 'listen_gen.runtime-identity.v1',
+  'version': 1,
+  'runtime': {'family': 'python', 'requires': '>=3.11'},
+  'toolchain': {
+    'schema': 'listen_gen.toolchain-identity.v1',
+    'version': 1,
+    'tools': [
+      {'id': 'asr-wrapper', 'roles': ['asr']},
+      {'id': 'ffmpeg', 'roles': ['media', 'asr', 'alignment', 'acoustics', 'phone']},
+      {'id': 'ffprobe', 'roles': ['media', 'asr', 'alignment', 'acoustics', 'phone']},
+      {'id': 'whisper-cli', 'roles': ['asr', 'alignment']},
+      {'id': 'whisper-model', 'roles': ['asr', 'alignment']},
+    ],
+  },
+};
+
 Map<String, dynamic> _manifestTemplate() => {
   'schema': 'listen_gen.release-bundle.v1',
   'source': {
@@ -44,6 +61,7 @@ Map<String, dynamic> _manifestTemplate() => {
     },
     'python_requires': '>=3.11',
   },
+  'runtime_identity': _runtimeIdentityTemplate(),
   'artifact': {
     'entrypoint': '__main__.py',
     'filename': _artifactName,
@@ -78,6 +96,7 @@ Map<String, dynamic> _lockTemplate() => {
     'canonical_sha256': _contractSha,
   },
   'runtime': {'python_requires': '>=3.11'},
+  'runtime_identity': _runtimeIdentityTemplate(),
   'artifact': {
     'filename': _artifactName,
     'format': 'python-zipapp',
@@ -433,6 +452,23 @@ void main() {
           (lock['content_package_contract'] as Map)['schema_version'] = 2,
       'python requires': (lock) =>
           (lock['runtime'] as Map)['python_requires'] = '>=3.10',
+      'runtime identity schema': (lock) =>
+          (lock['runtime_identity'] as Map)['schema'] =
+              'listen_gen.runtime-identity.v2',
+      'runtime identity version': (lock) =>
+          (lock['runtime_identity'] as Map)['version'] = 2,
+      'runtime family': (lock) =>
+          ((lock['runtime_identity'] as Map)['runtime'] as Map)['family'] =
+              'cpython',
+      'runtime requires': (lock) =>
+          ((lock['runtime_identity'] as Map)['runtime'] as Map)['requires'] =
+              '>=3.10',
+      'toolchain schema': (lock) =>
+          ((lock['runtime_identity'] as Map)['toolchain'] as Map)['schema'] =
+              'listen_gen.toolchain-identity.v2',
+      'toolchain version': (lock) =>
+          ((lock['runtime_identity'] as Map)['toolchain'] as Map)['version'] =
+              2,
     };
     for (final entry in mutations.entries) {
       final built = await _build(await _tempDir(), mutateLock: entry.value);
@@ -440,6 +476,51 @@ void main() {
         built.service.verify(),
         _failsWith('generator_release_lock_invalid'),
         reason: 'lock identity: ${entry.key}',
+      );
+    }
+  });
+
+  test('rejects a manifest whose runtime identity drifts from the lock', () async {
+    final mutations = <String, void Function(Map<String, dynamic>)>{
+      'schema': (manifest) =>
+          (manifest['runtime_identity'] as Map)['schema'] =
+              'listen_gen.runtime-identity.v2',
+      'version': (manifest) =>
+          (manifest['runtime_identity'] as Map)['version'] = 2,
+      'runtime family': (manifest) =>
+          ((manifest['runtime_identity'] as Map)['runtime'] as Map)['family'] =
+              'cpython',
+      'runtime requires': (manifest) =>
+          ((manifest['runtime_identity'] as Map)['runtime'] as Map)['requires'] =
+              '>=3.10',
+      'toolchain schema': (manifest) =>
+          ((manifest['runtime_identity'] as Map)['toolchain'] as Map)['schema'] =
+              'listen_gen.toolchain-identity.v2',
+      'toolchain version': (manifest) =>
+          ((manifest['runtime_identity'] as Map)['toolchain'] as Map)['version'] =
+              2,
+      'toolchain extra tool': (manifest) =>
+          ((manifest['runtime_identity'] as Map)['toolchain'] as Map)['tools'] =
+              [
+                ...(((manifest['runtime_identity'] as Map)['toolchain']
+                        as Map)['tools'] as List),
+                {'id': 'extra-tool', 'roles': ['phone']},
+              ],
+      'toolchain dropped tool': (manifest) =>
+          (((manifest['runtime_identity'] as Map)['toolchain'] as Map)['tools']
+                  as List)
+              .removeLast(),
+      'toolchain re-roled tool': (manifest) =>
+          (((manifest['runtime_identity'] as Map)['toolchain'] as Map)['tools']
+                  as List)
+              .first['roles'] = ['phone'],
+    };
+    for (final entry in mutations.entries) {
+      final built = await _build(await _tempDir(), mutateManifest: entry.value);
+      await expectLater(
+        built.service.verify(),
+        _failsWith('generator_release_manifest_invalid'),
+        reason: 'manifest runtime identity: ${entry.key}',
       );
     }
   });

@@ -57,68 +57,6 @@ extension TimelinesApi on LocalApi {
             as Map<String, dynamic>,
       );
 
-  Future<List<ChunkTimelineSummary>> trackChunkTimelineSummaries(
-    String trackId,
-  ) async =>
-      ((await _request(
-                'GET',
-                '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-timelines/summary',
-              ))
-              as List<dynamic>)
-          .map(
-            (value) =>
-                ChunkTimelineSummary.fromJson(value as Map<String, dynamic>),
-          )
-          .toList(growable: false);
-
-  Future<ChunkTimeline> chunkTimeline(String timelineId) async =>
-      ChunkTimeline.fromJson(
-        (await _request(
-              'GET',
-              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
-            ))
-            as Map<String, dynamic>,
-      );
-
-  Future<ChunkTimeline> generateChunkTimeline(
-    String trackId, {
-    String status = 'candidate',
-  }) async => ChunkTimeline.fromJson(
-    (await _request(
-          'POST',
-          '/v1/subtitles/${Uri.encodeComponent(trackId)}/chunk-timelines',
-          {'status': status},
-        ))
-        as Map<String, dynamic>,
-  );
-
-  Future<ChunkTimeline> activateChunkTimeline(String timelineId) async =>
-      ChunkTimeline.fromJson(
-        (await _request(
-              'POST',
-              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/activate',
-            ))
-            as Map<String, dynamic>,
-      );
-
-  Future<ChunkTimeline> archiveChunkTimeline(String timelineId) async =>
-      ChunkTimeline.fromJson(
-        (await _request(
-              'POST',
-              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}/archive',
-            ))
-            as Map<String, dynamic>,
-      );
-
-  Future<ChunkTimeline> deleteChunkTimeline(String timelineId) async =>
-      ChunkTimeline.fromJson(
-        (await _request(
-              'DELETE',
-              '/v1/chunk-timelines/${Uri.encodeComponent(timelineId)}',
-            ))
-            as Map<String, dynamic>,
-      );
-
   Future<List<SenseGroupAnalysis>> trackSenseGroupAnalyses(
     String trackId,
   ) async =>

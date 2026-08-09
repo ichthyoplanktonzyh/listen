@@ -21,7 +21,6 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.timelineDocument,
     required this.wordTimelineSummaries,
     required this.phoneTimelineSummaries,
-    required this.chunkTimelineSummaries,
     required this.activeWordTimingCount,
     required this.timelineResourceError,
     required this.onImportSubtitle,
@@ -40,10 +39,6 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
     required this.onActivatePhoneTimeline,
     required this.onArchivePhoneTimeline,
     required this.onDeletePhoneTimeline,
-    required this.onGenerateChunkTimeline,
-    required this.onActivateChunkTimeline,
-    required this.onArchiveChunkTimeline,
-    required this.onDeleteChunkTimeline,
     this.onStartColdStart,
   });
 
@@ -56,7 +51,6 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final LLTimelineDocument? timelineDocument;
   final List<WordTimelineSummary> wordTimelineSummaries;
   final List<PhoneTimelineSummary> phoneTimelineSummaries;
-  final List<ChunkTimelineSummary> chunkTimelineSummaries;
   final int activeWordTimingCount;
   final String? timelineResourceError;
   final Future<void> Function() onImportSubtitle;
@@ -76,10 +70,6 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
   final Future<void> Function(String timelineId) onActivatePhoneTimeline;
   final Future<void> Function(String timelineId) onArchivePhoneTimeline;
   final Future<void> Function(String timelineId) onDeletePhoneTimeline;
-  final Future<void> Function() onGenerateChunkTimeline;
-  final Future<void> Function(String timelineId) onActivateChunkTimeline;
-  final Future<void> Function(String timelineId) onArchiveChunkTimeline;
-  final Future<void> Function(String timelineId) onDeleteChunkTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -163,16 +153,33 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final resource = resources[index];
                         final active = resource.id == activeTrack?.id;
+                        // R5: the persisted ChunkTimeline family was retired;
+                        // the chunk capability count for the active track
+                        // comes from the loaded Prosody Analysis, the sole
+                        // prosodic-chunk source.
+                        final activeChunkCount =
+                            active && timelineDocument != null
+                            ? timelineDocument!
+                                  .activeProsodyAnalysis
+                                  ?.chunks
+                                  .length ??
+                                  0
+                            : 0;
+                        final baseCapabilities =
+                            capabilities[resource.id] ??
+                            SubtitleResourceCapabilities.fromCounts(
+                              sentenceCount: resource.cues.length,
+                              wordTimingCount: 0,
+                              chunkCount: 0,
+                              phoneCount: 0,
+                            );
                         return _SubtitleResourceTile(
                           resource: resource,
-                          capabilities:
-                              capabilities[resource.id] ??
-                              SubtitleResourceCapabilities.fromCounts(
-                                sentenceCount: resource.cues.length,
-                                wordTimingCount: 0,
-                                chunkCount: 0,
-                                phoneCount: 0,
-                              ),
+                          capabilities: activeChunkCount > 0
+                              ? baseCapabilities.copyWith(
+                                  chunkCount: activeChunkCount,
+                                )
+                              : baseCapabilities,
                           active: active,
                           onActivate: () => onActivateSubtitle(resource),
                           onArchive: () => onArchiveSubtitle(resource),
@@ -190,7 +197,6 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                       document: timelineDocument,
                       summaries: wordTimelineSummaries,
                       phoneSummaries: phoneTimelineSummaries,
-                      chunkSummaries: chunkTimelineSummaries,
                       activeWordTimingCount: visibleWordTimingCount,
                       error: timelineResourceError,
                       onImport: onImportLLTimeline,
@@ -200,10 +206,6 @@ class SubtitleResourceManagerPanel extends StatelessWidget {
                       onActivatePhoneTimeline: onActivatePhoneTimeline,
                       onArchivePhoneTimeline: onArchivePhoneTimeline,
                       onDeletePhoneTimeline: onDeletePhoneTimeline,
-                      onGenerateChunkTimeline: onGenerateChunkTimeline,
-                      onActivateChunkTimeline: onActivateChunkTimeline,
-                      onArchiveChunkTimeline: onArchiveChunkTimeline,
-                      onDeleteChunkTimeline: onDeleteChunkTimeline,
                       onExportLLTimeline: activeTrack == null
                           ? null
                           : () => onExportLLTimeline(activeTrack!),

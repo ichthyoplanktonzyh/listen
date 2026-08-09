@@ -16,7 +16,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     required this.document,
     required this.summaries,
     required this.phoneSummaries,
-    required this.chunkSummaries,
     required this.activeWordTimingCount,
     required this.error,
     required this.onImport,
@@ -26,10 +25,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     required this.onActivatePhoneTimeline,
     required this.onArchivePhoneTimeline,
     required this.onDeletePhoneTimeline,
-    required this.onGenerateChunkTimeline,
-    required this.onActivateChunkTimeline,
-    required this.onArchiveChunkTimeline,
-    required this.onDeleteChunkTimeline,
     required this.onExportLLTimeline,
   });
 
@@ -37,7 +32,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
   final LLTimelineDocument? document;
   final List<WordTimelineSummary> summaries;
   final List<PhoneTimelineSummary> phoneSummaries;
-  final List<ChunkTimelineSummary> chunkSummaries;
   final int activeWordTimingCount;
   final String? error;
   final Future<void> Function() onImport;
@@ -47,10 +41,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
   final Future<void> Function(String timelineId) onActivatePhoneTimeline;
   final Future<void> Function(String timelineId) onArchivePhoneTimeline;
   final Future<void> Function(String timelineId) onDeletePhoneTimeline;
-  final Future<void> Function() onGenerateChunkTimeline;
-  final Future<void> Function(String timelineId) onActivateChunkTimeline;
-  final Future<void> Function(String timelineId) onArchiveChunkTimeline;
-  final Future<void> Function(String timelineId) onDeleteChunkTimeline;
   final Future<void> Function()? onExportLLTimeline;
 
   @override
@@ -60,24 +50,17 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
     final activePhone = phoneSummaries
         .where((value) => value.isActive)
         .firstOrNull;
-    final activeChunk = chunkSummaries
-        .where((value) => value.isActive)
-        .firstOrNull;
     final readiness = CapabilityReadinessSnapshot.fromResources(
       activeTrack: activeTrack,
       document: document,
       wordTimelineSummaries: summaries,
-      chunkTimelineSummaries: chunkSummaries,
+      prosodyAnalyses: document?.prosodyAnalyses ?? const [],
       phoneTimelineSummaries: phoneSummaries,
       activeWordTimingCount: activeWordTimingCount,
       timelineResourceError: error,
     );
-    final hasWordSync = active != null || activeWordTimingCount > 0;
     final hasResource =
-        document != null ||
-        summaries.isNotEmpty ||
-        phoneSummaries.isNotEmpty ||
-        chunkSummaries.isNotEmpty;
+        document != null || summaries.isNotEmpty || phoneSummaries.isNotEmpty;
     final artifacts = document?.artifacts ?? const <LLTimelineArtifact>[];
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -166,11 +149,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                   onPressed: hasResource ? onManualReview : null,
                 ),
                 FilledButton.tonalIcon(
-                  icon: const Icon(Icons.auto_awesome_motion_outlined),
-                  label: Text(l.text('generateChunks')),
-                  onPressed: hasWordSync ? onGenerateChunkTimeline : null,
-                ),
-                FilledButton.tonalIcon(
                   icon: const Icon(Icons.file_download_outlined),
                   label: Text(l.text('exportLLTimelineJson')),
                   onPressed: hasResource ? onExportLLTimeline : null,
@@ -225,7 +203,7 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                     const SizedBox(height: ListenSpacing.gap6),
                     _ActivePhoneLine(active: activePhone),
                     const SizedBox(height: ListenSpacing.gap6),
-                    _ActiveChunkLine(active: activeChunk),
+                    _ActiveProsodyLine(active: document?.activeProsodyAnalysis),
                     const SizedBox(height: ListenSpacing.gap8),
                     SizedBox(
                       height: phoneSummaries.isEmpty ? 34 : 74,
@@ -248,31 +226,6 @@ class TimelineResourceSummaryPanel extends StatelessWidget {
                                     onActivate: onActivatePhoneTimeline,
                                     onArchive: onArchivePhoneTimeline,
                                     onDelete: onDeletePhoneTimeline,
-                                  ),
-                            ),
-                    ),
-                    const SizedBox(height: ListenSpacing.gap8),
-                    SizedBox(
-                      height: chunkSummaries.isEmpty ? 34 : 74,
-                      child: chunkSummaries.isEmpty
-                          ? Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                l.text('noChunkTimelineCandidates'),
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            )
-                          : ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: chunkSummaries.length,
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(width: ListenSpacing.gap8),
-                              itemBuilder: (context, index) =>
-                                  _ChunkCandidateTile(
-                                    summary: chunkSummaries[index],
-                                    onActivate: onActivateChunkTimeline,
-                                    onArchive: onArchiveChunkTimeline,
-                                    onDelete: onDeleteChunkTimeline,
                                   ),
                             ),
                     ),
@@ -533,17 +486,17 @@ class _ActiveTimelineLine extends StatelessWidget {
   }
 }
 
-class _ActiveChunkLine extends StatelessWidget {
-  const _ActiveChunkLine({required this.active});
+class _ActiveProsodyLine extends StatelessWidget {
+  const _ActiveProsodyLine({required this.active});
 
-  final ChunkTimelineSummary? active;
+  final ProsodyAnalysis? active;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final text = active == null
-        ? l.text('activeChunkTimelineMissing')
-        : '${active!.algorithm} · ${active!.chunkCount} ${l.text('chunks')} · ${active!.precision}';
+        ? l.text('activeProsodyMissing')
+        : '${active!.algorithm} · ${active!.chunks.length} ${l.text('chunks')}';
     return Row(
       children: [
         Icon(
@@ -785,116 +738,6 @@ class _PhoneCandidateTile extends StatelessWidget {
                     value: 'delete',
                     enabled: summary.canDelete,
                     child: Text(l.text('delete')),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ChunkCandidateTile extends StatelessWidget {
-  const _ChunkCandidateTile({
-    required this.summary,
-    required this.onActivate,
-    required this.onArchive,
-    required this.onDelete,
-  });
-
-  final ChunkTimelineSummary summary;
-  final Future<void> Function(String timelineId) onActivate;
-  final Future<void> Function(String timelineId) onArchive;
-  final Future<void> Function(String timelineId) onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    final confidence = summary.averageConfidence == null
-        ? null
-        : '${(summary.averageConfidence! * 100).round()}%';
-    return ConstrainedBox(
-      constraints: const BoxConstraints.tightFor(width: 250, height: 74),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: summary.isActive
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainer,
-          border: Border.all(
-            color: summary.isActive
-                ? Theme.of(context).colorScheme.primary
-                : Theme.of(context).colorScheme.outlineVariant,
-          ),
-          borderRadius: ListenRadii.controlBorder,
-        ),
-        child: Padding(
-          padding: ListenPadding.row,
-          child: Row(
-            children: [
-              Icon(
-                summary.isActive ? Icons.check_circle : Icons.grid_view,
-                size: ListenIconSize.control,
-                color: summary.isActive
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: ListenSpacing.gap8),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      summary.algorithm,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(height: ListenSpacing.gap2),
-                    Text(
-                      [
-                        '${summary.chunkCount} ${l.text('chunks')}',
-                        summary.precision,
-                        ?confidence,
-                      ].join(' · '),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: summary.isActive
-                    ? l.text('activeTimeline')
-                    : l.text('activateTimeline'),
-                icon: Icon(
-                  summary.isActive
-                      ? Icons.play_circle_fill
-                      : Icons.play_circle_outline,
-                ),
-                onPressed: summary.canActivate && !summary.isActive
-                    ? () => onActivate(summary.id)
-                    : null,
-              ),
-              PopupMenuButton<String>(
-                tooltip: l.text('resourceActions'),
-                onSelected: (value) {
-                  if (value == 'archive') onArchive(summary.id);
-                  if (value == 'delete') onDelete(summary.id);
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'archive',
-                    enabled: summary.canArchive,
-                    child: Text(l.text('archiveResource')),
-                  ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    enabled: summary.canDelete,
-                    child: Text(l.text('deleteResource')),
                   ),
                 ],
               ),

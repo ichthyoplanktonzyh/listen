@@ -7,11 +7,9 @@ class ExistingTimelineResourceState {
   ExistingTimelineResourceState({
     List<WordTimelineSummary> wordSummaries = const [],
     List<PhoneTimelineSummary> phoneSummaries = const [],
-    List<ChunkTimelineSummary> chunkSummaries = const [],
     this.document,
   }) : _wordSummaries = List.unmodifiable(wordSummaries),
-       _phoneSummaries = List.unmodifiable(phoneSummaries),
-       _chunkSummaries = List.unmodifiable(chunkSummaries);
+       _phoneSummaries = List.unmodifiable(phoneSummaries);
 
   final List<WordTimelineSummary> _wordSummaries;
   List<WordTimelineSummary> get wordSummaries =>
@@ -19,9 +17,6 @@ class ExistingTimelineResourceState {
   final List<PhoneTimelineSummary> _phoneSummaries;
   List<PhoneTimelineSummary> get phoneSummaries =>
       List.unmodifiable(_phoneSummaries);
-  final List<ChunkTimelineSummary> _chunkSummaries;
-  List<ChunkTimelineSummary> get chunkSummaries =>
-      List.unmodifiable(_chunkSummaries);
   final LLTimelineDocument? document;
 }
 
@@ -29,14 +24,12 @@ class TimelineResourceLoadResult {
   TimelineResourceLoadResult({
     List<WordTimelineSummary> wordSummaries = const [],
     List<PhoneTimelineSummary> phoneSummaries = const [],
-    List<ChunkTimelineSummary> chunkSummaries = const [],
     this.document,
     this.error,
     List<ApiFailure> failures = const [],
     this.unavailable = false,
   }) : _wordSummaries = List.unmodifiable(wordSummaries),
        _phoneSummaries = List.unmodifiable(phoneSummaries),
-       _chunkSummaries = List.unmodifiable(chunkSummaries),
        _failures = List.unmodifiable(failures);
 
   final List<WordTimelineSummary> _wordSummaries;
@@ -45,9 +38,6 @@ class TimelineResourceLoadResult {
   final List<PhoneTimelineSummary> _phoneSummaries;
   List<PhoneTimelineSummary> get phoneSummaries =>
       List.unmodifiable(_phoneSummaries);
-  final List<ChunkTimelineSummary> _chunkSummaries;
-  List<ChunkTimelineSummary> get chunkSummaries =>
-      List.unmodifiable(_chunkSummaries);
   final LLTimelineDocument? document;
 
   /// The named state, or null when nothing failed. One sentence — the four
@@ -148,11 +138,7 @@ class SpeechEnhancementWorkflowController {
       timeline.phoneSummaries,
       errors,
     );
-    final partitions = await _loadChunkPartitions(
-      trackId,
-      timeline.chunkSummaries,
-      errors,
-    );
+    final partitions = await _loadChunkPartitions(trackId, errors);
     final senseGroups = await _loadSenseGroups(trackId, errors);
     final analyses = await _loadPronunciationEnhancements(trackId, errors);
     return SpeechEnhancementLoadResult(
@@ -176,7 +162,6 @@ class SpeechEnhancementWorkflowController {
     final errors = <ApiFailure>[];
     late List<WordTimelineSummary> summaries;
     late List<PhoneTimelineSummary> phoneSummaries;
-    late List<ChunkTimelineSummary> chunkSummaries;
     LLTimelineDocument? document;
 
     try {
@@ -194,13 +179,6 @@ class SpeechEnhancementWorkflowController {
     }
 
     try {
-      chunkSummaries = await repository.chunkTimelineSummaries(trackId);
-    } catch (error) {
-      errors.add(repository.failureDetail(error));
-      chunkSummaries = previous.chunkSummaries;
-    }
-
-    try {
       final exportedDocument = await repository.exportTimeline(trackId);
       final preservedArtifacts = previous.document?.artifacts ?? const [];
       // The export endpoint derives fresh rhythm frames from the current word
@@ -215,7 +193,8 @@ class SpeechEnhancementWorkflowController {
               metadata: exportedDocument.metadata,
               activeWordTimelineId: exportedDocument.activeWordTimelineId,
               activePhoneTimelineId: exportedDocument.activePhoneTimelineId,
-              activeChunkTimelineId: exportedDocument.activeChunkTimelineId,
+              prosodyAnalyses: exportedDocument.prosodyAnalyses,
+              activeProsodyAnalysisId: exportedDocument.activeProsodyAnalysisId,
               rhythmFrames: exportedDocument.rhythmFrames,
               artifacts: preservedArtifacts,
             )
@@ -228,13 +207,11 @@ class SpeechEnhancementWorkflowController {
     final hasTimelineData =
         summaries.isNotEmpty ||
         phoneSummaries.isNotEmpty ||
-        chunkSummaries.isNotEmpty ||
         document != null;
-    if (!hasTimelineData && errors.length == 4) {
+    if (!hasTimelineData && errors.length == 3) {
       return TimelineResourceLoadResult(
         wordSummaries: summaries,
         phoneSummaries: phoneSummaries,
-        chunkSummaries: chunkSummaries,
         document: document,
         error: 'Timeline resource unavailable',
         failures: errors,
@@ -244,7 +221,6 @@ class SpeechEnhancementWorkflowController {
     return TimelineResourceLoadResult(
       wordSummaries: summaries,
       phoneSummaries: phoneSummaries,
-      chunkSummaries: chunkSummaries,
       document: document,
       error: errors.isEmpty ? null : 'Timeline resource refresh warning',
       failures: errors,
@@ -300,21 +276,11 @@ class SpeechEnhancementWorkflowController {
 
   Future<Map<String, SentenceChunkPartition>> _loadChunkPartitions(
     String trackId,
-    List<ChunkTimelineSummary> chunkSummaries,
     List<ApiFailure> errors,
   ) async {
-    final active = chunkSummaries
-        .where((summary) => summary.isActive)
-        .firstOrNull;
-    if (active != null) {
-      try {
-        return chunkPartitionsFromTimeline(
-          await repository.chunkTimeline(active.id),
-        );
-      } catch (error) {
-        errors.add(repository.failureDetail(error));
-      }
-    }
+    // R5: the persisted ChunkTimeline family was retired. Chunk partitions
+    // always come from the live Core partitioner, whose per-sentence spans
+    // stay the product-facing chunk replay source.
     final partitions = await _loadOptionalResourceCapability(
       () => repository.chunkPartitions(trackId),
       errors,

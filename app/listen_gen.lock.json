@@ -1,15 +1,15 @@
 {
   "manifest_version": 1,
   "repository": "ichthyoplanktonzyh/listen-gen",
-  "source_git_sha": "42649d9f3687bdc9374151efcbc827c6a4dae61b",
+  "source_git_sha": "24e07d37da07dc9be88b5e8d514b2d298579d9a6",
   "release_manifest": {
     "schema": "listen_gen.release-bundle.v1",
-    "filename": "listen-gen-0.3.0.release.json",
-    "sha256": "sha256:92e489f806c930a1f6af0fabf9212e424ec4fa3069aaaffde13f473e788e2c63"
+    "filename": "listen-gen-0.4.0.release.json",
+    "sha256": "sha256:a2cf56bd8b431af7ee79d8a6ecebe07bde93d5b00c4a4e74e5de8c64c6625d44"
   },
   "tool": {
     "id": "listen-gen",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "machine_protocol": {
     "schema": "listen_gen.machine-event.v1",
@@ -29,11 +29,37 @@
   "runtime": {
     "python_requires": ">=3.11"
   },
+  "runtime_identity": {
+    "schema": "listen_gen.runtime-identity.v1",
+    "version": 1,
+    "runtime": {
+      "family": "python",
+      "requires": ">=3.11"
+    },
+    "toolchain": {
+      "schema": "listen_gen.toolchain-identity.v1",
+      "version": 1,
+      "tools": [
+        {"id": "acoustics-extractor", "roles": ["acoustics"]},
+        {"id": "asr-wrapper", "roles": ["asr"]},
+        {"id": "ffmpeg", "roles": ["media", "asr", "alignment", "acoustics", "phone"]},
+        {"id": "ffprobe", "roles": ["media", "asr", "alignment", "acoustics", "phone"]},
+        {"id": "phone-analyzer", "roles": ["phone"]},
+        {"id": "prosody-extractor", "roles": ["prosody"]},
+        {"id": "python", "roles": ["phone"]},
+        {"id": "sense-group-extractor", "roles": ["sense_groups"]},
+        {"id": "wav2vec2-phone-model", "roles": ["phone"]},
+        {"id": "wav2vec2-phone-sidecar", "roles": ["phone"]},
+        {"id": "whisper-cli", "roles": ["asr", "alignment"]},
+        {"id": "whisper-model", "roles": ["asr", "alignment"]}
+      ]
+    }
+  },
   "artifact": {
-    "filename": "listen-gen-0.3.0.pyz",
+    "filename": "listen-gen-0.4.0.pyz",
     "format": "python-zipapp",
     "entrypoint": "__main__.py",
     "size_bytes": 259730,
-    "sha256": "sha256:08a64fac7ace6a4e6a1de0030e931977923363abe5339f945196fb9ca8b4dc55"
+    "sha256": "sha256:47cef5bb9c1711432db1bcd285c1f0e4f637842d1ef199e13abeef83ca46cf63"
   }
 }
