@@ -62,7 +62,10 @@ Repository separation baseline 已建立：
    只服务旧生产链的 exclusive runtime/release inputs 与 App 兼容解析；
    Gen release 已绑定显式 verifier-checked runtime/toolchain identity。
    历史 migration/ADR/CHANGELOG 保持不可变，仅以新增 forward migration
-   (v57) 与 superseded 标注记录退役。
+   (v57) 与 superseded 标注记录退役。Core PR [#123](https://github.com/ichthyoplanktonzyh/listen-core/pull/123)、
+   Gen PR [#7](https://github.com/ichthyoplanktonzyh/listen-gen/pull/7) 与 App PR
+   [#106](https://github.com/ichthyoplanktonzyh/listen-app/pull/106) 已合并；App
+   精确 pin 本地验证的 Core `3.0.0` 制品与已发布的 Gen `v0.4.0`。
 
 跨仓执行以 [listen-core#111](https://github.com/ichthyoplanktonzyh/listen-core/issues/111)、
 [listen-gen#4](https://github.com/ichthyoplanktonzyh/listen-gen/issues/4) 和
