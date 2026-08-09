@@ -303,7 +303,7 @@ the provider/model identities, and a canonical `config_sha256`:
 ```json
 {
   "created_at_ms": 1786000000000,
-  "tool": {"id": "listen-gen.prosody", "version": "0.3.0"},
+  "tool": {"id": "listen-gen.prosody", "version": "0.4.0"},
   "provider": {"id": "prosody", "version": "1"},
   "model": {"id": "prosody-model", "version": "2026-08"},
   "config_sha256": "sha256:<provider config identity>"

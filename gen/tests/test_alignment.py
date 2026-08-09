@@ -159,7 +159,7 @@ class FixtureAlignmentTests(unittest.TestCase):
             subtitle = package["documents"]["subtitle_text_track"]
             words = package["documents"]["word_timeline"]
             self.assertEqual(words["provenance"]["tool"], {
-                "id": "listen-gen.alignment", "version": "0.3.0",
+                "id": "listen-gen.alignment", "version": "0.4.0",
             })
             self.assertEqual(words["provenance"]["provider"], {
                 "id": "fixture-aligner", "version": "1",
@@ -707,7 +707,7 @@ class WhisperCppAlignmentTests(unittest.TestCase):
             words = self.read_word_timeline(output)
             provenance = words["provenance"]
             self.assertEqual(provenance["tool"], {
-                "id": "listen-gen.alignment", "version": "0.3.0",
+                "id": "listen-gen.alignment", "version": "0.4.0",
             })
             self.assertEqual(provenance["provider"], {
                 "id": "whisper.cpp",

@@ -253,7 +253,7 @@ published together. Verify it before distribution:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.3.0/listen-gen-0.3.0.release.json
+  dist/listen-gen-0.4.0/listen-gen-0.4.0.release.json
 ```
 
 The `.pyz` requires Python 3.11 or newer. See

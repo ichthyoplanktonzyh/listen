@@ -251,7 +251,7 @@ class PhonePackageTests(unittest.TestCase):
             }])
             self.assertEqual(phone["payload"]["precision"], "detected")
             self.assertTrue(all(item["word_ref"] is not None for item in phone["payload"]["phones"]))
-            self.assertEqual(phone["provenance"]["tool"], {"id": "listen-gen.phone", "version": "0.3.0"})
+            self.assertEqual(phone["provenance"]["tool"], {"id": "listen-gen.phone", "version": "0.4.0"})
 
     def test_package_is_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

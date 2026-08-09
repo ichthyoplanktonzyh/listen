@@ -112,7 +112,7 @@ def _provenance(
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "created_at_ms": created_at_ms,
-        "tool": {"id": "listen-gen.lltimeline-compat", "version": "0.3.0"},
+        "tool": {"id": "listen-gen.lltimeline-compat", "version": "0.4.0"},
     }
     if provider := _producer(source):
         result["provider"] = provider

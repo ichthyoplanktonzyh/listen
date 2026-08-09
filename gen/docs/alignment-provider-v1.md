@@ -186,7 +186,7 @@ provenance:
 ```json
 {
   "created_at_ms": 1786000000000,
-  "tool": {"id": "listen-gen.alignment", "version": "0.3.0"},
+  "tool": {"id": "listen-gen.alignment", "version": "0.4.0"},
   "provider": {"id": "whisper.cpp", "version": "sha256:<whisper-cli bytes>"},
   "model": {"id": "whisper.cpp:base@main", "version": "sha256:<model bytes>"},
   "config_sha256": "sha256:<alignment config identity>"

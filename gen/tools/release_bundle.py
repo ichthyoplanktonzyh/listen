@@ -60,6 +60,81 @@ EXPECTED_LOCK = {
     "schema_version": 1,
 }
 
+# The release binds to an explicit runtime/toolchain identity that the
+# verifier checks strictly and consumers record immutably. The runtime is the
+# interpreter family and version requirement; the toolchain is every external
+# tool the released bundle may bind to, with the Gen stage families that
+# require it. A manifest cannot silently add, drop, or re-role a tool: the
+# verifier recomputes the canonical identity from these constants and from the
+# union of ``PROVIDER_REQUIREMENTS``.
+RUNTIME_IDENTITY_SCHEMA = "listen_gen.runtime-identity.v1"
+RUNTIME_IDENTITY_VERSION = 1
+RUNTIME_FAMILY = "python"
+TOOLCHAIN_IDENTITY_SCHEMA = "listen_gen.toolchain-identity.v1"
+TOOLCHAIN_IDENTITY_VERSION = 1
+RUNTIME_ROLE_NAMES = (
+    "media",
+    "asr",
+    "alignment",
+    "sense_groups",
+    "acoustics",
+    "prosody",
+    "phone",
+)
+TOOLCHAIN_ROLES: dict[str, tuple[str, ...]] = {
+    "acoustics-extractor": ("acoustics",),
+    "asr-wrapper": ("asr",),
+    "ffmpeg": ("media", "asr", "alignment", "acoustics", "phone"),
+    "ffprobe": ("media", "asr", "alignment", "acoustics", "phone"),
+    "phone-analyzer": ("phone",),
+    "prosody-extractor": ("prosody",),
+    "python": ("phone",),
+    "sense-group-extractor": ("sense_groups",),
+    "wav2vec2-phone-model": ("phone",),
+    "wav2vec2-phone-sidecar": ("phone",),
+    "whisper-cli": ("asr", "alignment"),
+    "whisper-model": ("asr", "alignment"),
+}
+
+
+def _canonical_toolchain() -> list[dict[str, object]]:
+    """The canonical, sorted toolchain identity for this release.
+
+    The declared tool ids must be exactly the union of the per-provider
+    requirements and every role must be a known stage family; a source edit
+    that drifts these apart is a release identity error, not a silent
+    manifest change.
+    """
+    required: set[str] = set()
+    for tools in PROVIDER_REQUIREMENTS.values():
+        required.update(tools)
+    if set(TOOLCHAIN_ROLES) != required:
+        raise ReleaseBundleError("release manifest is invalid")
+    known_roles = set(RUNTIME_ROLE_NAMES)
+    for tool_id, roles in TOOLCHAIN_ROLES.items():
+        if not tool_id or set(roles) - known_roles:
+            raise ReleaseBundleError("release manifest is invalid")
+    return [
+        {"id": tool_id, "roles": list(roles)}
+        for tool_id, roles in sorted(TOOLCHAIN_ROLES.items())
+    ]
+
+
+def _canonical_runtime_identity() -> dict[str, object]:
+    return {
+        "schema": RUNTIME_IDENTITY_SCHEMA,
+        "version": RUNTIME_IDENTITY_VERSION,
+        "runtime": {
+            "family": RUNTIME_FAMILY,
+            "requires": REQUIRED_PYTHON,
+        },
+        "toolchain": {
+            "schema": TOOLCHAIN_IDENTITY_SCHEMA,
+            "version": TOOLCHAIN_IDENTITY_VERSION,
+            "tools": _canonical_toolchain(),
+        },
+    }
+
 SOURCE_COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 SHA256_RE = re.compile(r"sha256:[0-9a-f]{64}")
 SHEBANG = b"#!/usr/bin/env python3\n"
@@ -88,6 +163,7 @@ MANIFEST_ROOT_FIELDS = frozenset(
         "machine_protocol",
         "content_package_contract",
         "runtime",
+        "runtime_identity",
         "artifact",
     }
 )
@@ -106,6 +182,12 @@ MANIFEST_CONTRACT_FIELDS = frozenset(
 )
 MANIFEST_AUTHORITY_FIELDS = frozenset({"repository", "path"})
 MANIFEST_RUNTIME_FIELDS = frozenset({"python_requires", "provider_requirements"})
+MANIFEST_RUNTIME_IDENTITY_FIELDS = frozenset(
+    {"schema", "version", "runtime", "toolchain"}
+)
+MANIFEST_RUNTIME_IDENTITY_RUNTIME_FIELDS = frozenset({"family", "requires"})
+MANIFEST_TOOLCHAIN_FIELDS = frozenset({"schema", "version", "tools"})
+MANIFEST_TOOLCHAIN_TOOL_FIELDS = frozenset({"id", "roles"})
 MANIFEST_ARTIFACT_FIELDS = frozenset(
     {"filename", "format", "entrypoint", "size_bytes", "sha256"}
 )
@@ -297,6 +379,7 @@ def _build_manifest(
             "python_requires": REQUIRED_PYTHON,
             "provider_requirements": PROVIDER_REQUIREMENTS,
         },
+        "runtime_identity": _canonical_runtime_identity(),
         "artifact": {
             "filename": f"listen-gen-{version}.pyz",
             "format": "python-zipapp",
@@ -432,6 +515,46 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
         raise ReleaseBundleError("release manifest is invalid")
     if runtime["provider_requirements"] != PROVIDER_REQUIREMENTS:
         raise ReleaseBundleError("release manifest is invalid")
+    runtime_identity = parsed["runtime_identity"]
+    _check_keys(runtime_identity, MANIFEST_RUNTIME_IDENTITY_FIELDS)
+    if runtime_identity["schema"] != RUNTIME_IDENTITY_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    identity_version = runtime_identity["version"]
+    if type(identity_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if identity_version != RUNTIME_IDENTITY_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    identity_runtime = runtime_identity["runtime"]
+    _check_keys(identity_runtime, MANIFEST_RUNTIME_IDENTITY_RUNTIME_FIELDS)
+    if identity_runtime["family"] != RUNTIME_FAMILY:
+        raise ReleaseBundleError("release manifest is invalid")
+    if identity_runtime["requires"] != REQUIRED_PYTHON:
+        raise ReleaseBundleError("release manifest is invalid")
+    if identity_runtime["requires"] != runtime["python_requires"]:
+        raise ReleaseBundleError("release manifest is invalid")
+    toolchain = runtime_identity["toolchain"]
+    _check_keys(toolchain, MANIFEST_TOOLCHAIN_FIELDS)
+    if toolchain["schema"] != TOOLCHAIN_IDENTITY_SCHEMA:
+        raise ReleaseBundleError("release manifest is invalid")
+    toolchain_version = toolchain["version"]
+    if type(toolchain_version) is not int:
+        raise ReleaseBundleError("release manifest is invalid")
+    if toolchain_version != TOOLCHAIN_IDENTITY_VERSION:
+        raise ReleaseBundleError("release manifest is invalid")
+    tools = toolchain["tools"]
+    if not isinstance(tools, list):
+        raise ReleaseBundleError("release manifest is invalid")
+    for tool in tools:
+        _check_keys(tool, MANIFEST_TOOLCHAIN_TOOL_FIELDS)
+        if not isinstance(tool["id"], str) or not tool["id"]:
+            raise ReleaseBundleError("release manifest is invalid")
+        roles = tool["roles"]
+        if not isinstance(roles, list):
+            raise ReleaseBundleError("release manifest is invalid")
+        if any(not isinstance(role, str) or not role for role in roles):
+            raise ReleaseBundleError("release manifest is invalid")
+    if tools != _canonical_toolchain():
+        raise ReleaseBundleError("release manifest is invalid")
     artifact = parsed["artifact"]
     _check_keys(artifact, MANIFEST_ARTIFACT_FIELDS)
     filename = artifact["filename"]
@@ -560,6 +683,7 @@ def verify_release_bundle(
         "status": "verified",
         "tool": {"id": TOOL_ID, "version": version},
         "artifact_sha256": artifact["sha256"],
+        "runtime_identity": manifest["runtime_identity"],
     }
 
 

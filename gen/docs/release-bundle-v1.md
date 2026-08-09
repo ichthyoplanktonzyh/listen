@@ -13,7 +13,53 @@ listen-gen-<version>.release.json
 The `.pyz` is a runnable Python zipapp containing the complete `listen_gen`
 source. The `.release.json` manifest pins the tool version, the Git source
 commit, the machine-event protocol identity, the Content Package contract
-identity, and the artifact filename, size, and SHA-256.
+identity, the runtime/toolchain identity, and the artifact filename, size,
+and SHA-256.
+
+## Runtime identity
+
+The manifest carries an explicit, versioned runtime/toolchain identity in
+`runtime_identity`:
+
+```json
+"runtime_identity": {
+  "schema": "listen_gen.runtime-identity.v1",
+  "version": 1,
+  "runtime": {"family": "python", "requires": ">=3.11"},
+  "toolchain": {
+    "schema": "listen_gen.toolchain-identity.v1",
+    "version": 1,
+    "tools": [
+      {"id": "acoustics-extractor", "roles": ["acoustics"]},
+      {"id": "asr-wrapper", "roles": ["asr"]},
+      {"id": "ffmpeg", "roles": ["media", "asr", "alignment", "acoustics", "phone"]},
+      {"id": "ffprobe", "roles": ["media", "asr", "alignment", "acoustics", "phone"]},
+      {"id": "phone-analyzer", "roles": ["phone"]},
+      {"id": "prosody-extractor", "roles": ["prosody"]},
+      {"id": "python", "roles": ["phone"]},
+      {"id": "sense-group-extractor", "roles": ["sense_groups"]},
+      {"id": "wav2vec2-phone-model", "roles": ["phone"]},
+      {"id": "wav2vec2-phone-sidecar", "roles": ["phone"]},
+      {"id": "whisper-cli", "roles": ["asr", "alignment"]},
+      {"id": "whisper-model", "roles": ["asr", "alignment"]}
+    ]
+  }
+}
+```
+
+The identity is the verifier-checked contract between the released bundle and
+the runtime/toolchain it may bind to:
+
+- The runtime is the interpreter family and version requirement the zipapp
+  itself needs.
+- The toolchain is every external tool the bundle may invoke across the
+  declared providers, with the Gen stage families (`media`, `asr`,
+  `alignment`, `sense_groups`, `acoustics`, `prosody`, `phone`) that require
+  each tool. It is exactly the union of the per-provider requirements in
+  `runtime.provider_requirements`.
+- Consumers record this identity immutably in their pin and the verifier
+  rejects any manifest whose identity drifts from the source constants, so a
+  release cannot silently add, drop, or re-role a tool.
 
 ## Runtime requirements
 
@@ -56,9 +102,9 @@ python tools/release_bundle.py build \
 Output layout:
 
 ```text
-dist/listen-gen-0.3.0/
-├── listen-gen-0.3.0.pyz
-└── listen-gen-0.3.0.release.json
+dist/listen-gen-0.4.0/
+├── listen-gen-0.4.0.pyz
+└── listen-gen-0.4.0.release.json
 ```
 
 The build is deterministic: identical source, version, and generation rules
@@ -74,22 +120,26 @@ Run the verifier before publishing:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.3.0/listen-gen-0.3.0.release.json
+  dist/listen-gen-0.4.0/listen-gen-0.4.0.release.json
 ```
 
-The verifier strictly parses the manifest, checks the artifact size,
+The verifier strictly parses the manifest — including the complete
+`runtime_identity` block, whose schema, versions, runtime, and toolchain must
+exactly match the release source constants — and checks the artifact size,
 SHA-256, shebang, and the complete archive structure and entry contents
 against the source tree, without executing any archive code. On success it
-prints one canonical JSON line with `"status": "verified"`.
+prints one canonical JSON line with `"status": "verified"`, the tool
+identity, the artifact SHA-256, and the verified `runtime_identity`.
 
 Recipients must at minimum verify the manifest's artifact SHA-256 before
-executing the `.pyz`.
+executing the `.pyz`, and record the returned `runtime_identity` immutably
+with the bundle pin.
 
 ## Fixture smoke
 
 ```bash
-python dist/listen-gen-0.3.0/listen-gen-0.3.0.pyz --help
-python dist/listen-gen-0.3.0/listen-gen-0.3.0.pyz package from-media \
+python dist/listen-gen-0.4.0/listen-gen-0.4.0.pyz --help
+python dist/listen-gen-0.4.0/listen-gen-0.4.0.pyz package from-media \
   tests/fixtures/sample-media.wav \
   --provider fixture --fixture tests/fixtures/sample.asr.json \
   --title "Smoke" --media-kind audio --duration-ms 2200 \
