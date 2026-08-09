@@ -1,0 +1,23 @@
+{
+  "extensions": {},
+  "language": "en",
+  "segments": [
+    {
+      "end_char": 44,
+      "extensions": {},
+      "id": "s1",
+      "index": 0,
+      "language": "en",
+      "start_char": 0
+    },
+    {
+      "end_char": 78,
+      "extensions": {},
+      "id": "s2",
+      "index": 1,
+      "language": "en",
+      "start_char": 44
+    }
+  ],
+  "text": "Coffee first reached Europe through Venice. Cafes spread across the continent."
+}

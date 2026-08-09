@@ -37,6 +37,17 @@ python3 -m unittest scripts/test_release_artifacts.py
   provider/model routes remain present while the removed whole-media
   `/v1/transcription/jobs*` surface stays absent;
 - committed schema/example/fixture validation;
+- Content Package v2 golden-carrier tests cover canonical release/resource/
+  rendition identity, embedded/referenced/hybrid delivery, exact missing-blob
+  plans, typed and opaque compatibility, explicit multilingual role rules, and
+  deterministic release IDs;
+- Content Package v2 adversarial tests cover path traversal and symlinks,
+  undeclared files, non-canonical JSON, digest/size mismatch, bounded combined
+  resource/rendition inventory, dependency cycles and invalid transitive role
+  edges, missing strict provenance/quality fields, and payload extension shape;
+- release-artifact tests assert the packaged v2 contract inventory exactly, so
+  adding or removing any v2 schema/example requires an intentional inventory
+  update;
 - package-import HTTP tests cover the typed receipt, repeated-import
   idempotency, candidate-only active-selection invariant, exact-media mismatch,
   resource provenance/review status, and path/hash redaction; application tests

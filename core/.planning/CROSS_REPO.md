@@ -4,7 +4,8 @@
 
 | Concern | Authority |
 |---|---|
-| User journey, UI states, discovery and acquisition UX | `listen-app` |
+| Product purpose, shared language, top-level journeys and project roadmap | `listen` |
+| Detailed UI states, discovery and acquisition UX | `listen-app` |
 | Canonical OpenAPI and `.listenpkg` schemas | `listen-core` |
 | Package validation, candidate installation and learning semantics | `listen-core` |
 | Offline media preprocessing, provider adapters and package production | `listen-gen` |
@@ -14,9 +15,9 @@
 | Pinned consumer baseline | `listen-app/backend.lock.json` |
 | Community And Sync server | Required future context; implementation repository and service decomposition remain undecided |
 
-`PRODUCT.md`, `CONTEXT.md`, and `CONTEXT-MAP.md` are the shared semantic
-authority. Each repository's planning tree contains only facts and work owned by
-that repository.
+`ichthyoplanktonzyh/listen` is the shared product, language, context, journey,
+development, and roadmap authority. Each code repository's planning tree
+contains only facts and work owned by that repository.
 
 ## App To Core Contract Request
 

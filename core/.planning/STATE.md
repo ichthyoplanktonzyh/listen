@@ -15,6 +15,23 @@
 
 ## Current Work
 
+Content Package v2 is complete as a contract and producer vertical. It defines
+one immutable Package Release per Learning Edition snapshot, with separate
+release, resource, blob, Media Rendition and delivery identities. Core now owns
+the v2 contract, three golden material shapes, bounded two-pass inspection and a
+pure candidate Installation Plan beside unchanged v1 behavior; Gen produces
+deterministic hybrid/referenced-media and embedded carriers. Credential-free
+Gen-to-Core probes cover both delivery modes. This slice does not force
+text-only material into the current media-centered persistence or change the
+App/HTTP contract.
+
+The owner also fixed the learner-journey constraint: import or discover a
+material, use it immediately, enrich it when useful, retain it intentionally,
+and rediscover it through the corpus. RSS/Atom subscriptions are a first-class
+Content Source entry path. Package Installation stays candidate-only while a
+separate explicit Learning Edition Adoption intent lets App keep **start
+learning** simple without leaking package internals.
+
 The owner has accepted the whole-media producer cutover roadmap. Content-package
 v1 has bounded inspection, typed projection, and a candidate-only atomic import
 seam. `listen-gen` now has a remote, a deterministic release bundle and native
@@ -161,8 +178,9 @@ not code evidence.
    merge `a660946a` / tool `0.4.0` and Core merge `105568ed` / contract
    `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
    exact SHA-256, while Gen `v0.4.0` is published immutably.
-2. Define Content Edition, Media Rendition, Timeline Compatibility, and the
-   Package Listing/Release interface before a hosted catalog journey.
+2. Treat Content Package v2 as the completed release/inspection/producer seam;
+   design generic Learning Material persistence or a hosted catalog journey
+   only from a subsequent product phase and learner journey.
 3. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.

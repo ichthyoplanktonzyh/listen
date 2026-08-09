@@ -9,29 +9,31 @@ to `listen-gen`.
 
 - The product owner has final authority over scope, compatibility, releases,
   repository settings, and cross-repository decisions.
-- Codex is the default implementation agent for this repository.
-- Claude is the default implementation agent for `listen-app`.
-- Agent ownership is a coordination rule, not an access-control mechanism.
-  Do not edit `listen-app` from a core task unless the owner explicitly asks
-  for a coordinated cross-repository change.
+- The Supervisor owns architecture, decomposition, Worker selection, review,
+  independent validation, documentation, and authorized Git/release delivery.
+- Source, test, schema, migration, script, and runtime-configuration changes
+  belong to a configured implementation Worker. Worker is a replaceable role;
+  the current model/provider belongs in execution configuration, not durable
+  project semantics.
+- Do not edit another repository from a Core-local task unless the owner has
+  authorized a coordinated cross-repository slice.
 - Consumer UI code, Flutter state, UI/UX decisions, and app packaging belong in
   `ichthyoplanktonzyh/listen-app`.
 
 ## First Read
 
-Read these files before planning or changing code:
+Read the canonical project documents in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen)
+when work touches product meaning, journeys, repository ownership, development
+policy, or the cross-repository roadmap. Then read these Core-local files:
 
-1. `PRODUCT.md`
-2. `CONTEXT.md`
-3. `CONTEXT-MAP.md`
-4. `.planning/STATE.md`
-5. `.planning/PROJECT.md`
-6. `.planning/MAINTENANCE.md`
-7. `.planning/codebase/ARCHITECTURE.md`
-8. `.planning/codebase/STRUCTURE.md`
-9. `.planning/codebase/TESTING.md`
-10. `.planning/CROSS_REPO.md` when work can affect `listen-app`, `listen-gen`,
-   or a future hosted catalog/registry
+1. `.planning/STATE.md`
+2. `.planning/PROJECT.md`
+3. `.planning/MAINTENANCE.md`
+4. `.planning/codebase/ARCHITECTURE.md`
+5. `.planning/codebase/STRUCTURE.md`
+6. `.planning/codebase/TESTING.md`
+7. `.planning/CROSS_REPO.md` when work affects another context
 
 Read only the active phase under `.planning/phases/`. Everything under
 `.planning/archive/monorepo-baseline/` is frozen historical context and is not
@@ -168,16 +170,14 @@ local commands and results; only the owner may authorize merge without CI.
 
 ## Planning and Documentation
 
-The root semantic documents have distinct, non-overlapping authority:
-
-- `PRODUCT.md`: product purpose, principles, and non-goals;
-- `CONTEXT.md`: canonical cross-repository glossary only;
-- `CONTEXT-MAP.md`: context ownership, relationships, and stable seams;
-- `ECOSYSTEM.md`: navigation for legacy links, never a duplicate authority.
+Project semantics, shared language, context ownership, learner journeys,
+development policy, project state, and the cross-repository roadmap belong in
+the `listen` documentation repository. The root `PRODUCT.md`, `CONTEXT.md`,
+`CONTEXT-MAP.md`, and `ECOSYSTEM.md` files are compatibility navigation only.
 
 The live `.planning` tree describes only implementation facts and work owned by
-this repository. It must link to the root semantic documents instead of copying
-their product definitions.
+this repository. It must link to the `listen` project documents instead of
+copying their product definitions.
 
 - `PROJECT.md`: repository-local mission and boundaries
 - `REQUIREMENTS.md`: testable backend requirements

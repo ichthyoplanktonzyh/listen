@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/payload/document-text.v1.schema.json",
+  "title": "Listen document_text payload v1",
+  "description": "A full plain-text document with per-segment BCP47 language tags and text anchors (half-open character spans into the document text).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "language",
+    "text",
+    "segments"
+  ],
+  "properties": {
+    "language": {
+      "$ref": "#/$defs/languageTag"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/segment"
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "index",
+        "language",
+        "start_char",
+        "end_char"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "language": {
+          "$ref": "#/$defs/languageTag"
+        },
+        "start_char": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_char": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "extensions": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

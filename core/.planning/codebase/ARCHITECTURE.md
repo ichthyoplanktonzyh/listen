@@ -27,19 +27,35 @@ is not embedded in the lightweight consumer runtime. New reusable offline
 production belongs to the separate `listen-gen` producer; Core remains the
 contract and import authority.
 
-The portable content-resource contract lives under
-`contracts/content-package/v1`. A deterministic `.listenpkg` ZIP binds one
-Content Document descriptor to immutable, raw-byte-SHA-addressed resource
-files. Its common typed envelope carries subject, closed hash dependencies,
-provenance, quality, and a kind-specific payload. At least one Subtitle Text
-Track is required in v1; every Analysis Resource is optional so the package can
-represent partial generation honestly. Package data excludes core-local
-identity and lifecycle state as well as all learner facts.
+The portable content-resource contracts live under `contracts/content-package`.
+V1 remains the unchanged legacy resource-package contract: a deterministic
+`.listenpkg` binds one Content Document descriptor to raw-byte-addressed typed
+resource envelopes, requires a Subtitle Text Track, and represents optional
+analysis resources honestly.
 
-`content-package` owns bounded directory/ZIP inspection, raw-byte identity
-verification, compatibility checks, and typed decoding. The application
-adapter projects supported package resources into candidate-only Core records
-and reports unsupported-but-preserved resources explicitly. A dedicated
+V2 is a separate, material-centered contract. One canonical `release.json`
+fixes exactly one Learning Edition of one Material Revision while keeping
+Package Release, Learning Resource, payload Blob, Media Rendition, and Delivery
+identities independent. A carrier may embed every blob, reference every blob,
+or mix both; text, audio, video, and mixed materials use the same release model.
+Resource descriptors carry explicit role/language, subject, production
+provenance, quality, and a closed runtime dependency DAG. The optional
+`delivery.json` may describe acquisition hints but never participates in
+release identity. Both versions exclude local lifecycle state and learner
+facts.
+
+`content-package` owns shared bounded directory/ZIP reading and exposes two
+explicit consumer interfaces. The v1 inspector continues to verify and decode
+legacy envelopes. The v2 inspector verifies canonical identities, descriptors,
+blob size/hash, compatibility, language/role/subject/dependency invariants, and
+delivery classification without network or persistence; its pure
+`installation_plan` projects release-order candidate/opaque/missing resources,
+rendition availability, and missing blobs without selecting, activating,
+installing, or adopting anything.
+
+The existing v1 application adapter projects supported package resources into
+candidate-only Core records and reports unsupported-but-preserved resources
+explicitly. A dedicated
 `ContentPackageImportRepository` operation commits the track, metadata,
 resources, and corpus projection in one transaction. Reimport skips existing
 identities, never creates or changes an active selection, and rejects a
@@ -222,7 +238,11 @@ attaching text/analysis cannot silently repair source loss.
 
 ## Contract Boundary
 
-OpenAPI and resource/event schemas are core-owned. Route parity validates
+OpenAPI and resource/event schemas are core-owned. Content Package v2 is
+currently a pure contract/inspection/Installation Plan boundary; generic
+Learning Material persistence, Package Installation, Learning Edition Adoption,
+catalog distribution, and synchronization remain later application slices and
+must not be inferred from the inspector. Route parity validates
 method+path coverage. Contract and runtime archives include manifests,
 core commit, versions, and hashes. `listen-app` consumes releases through its
 lock file; no compile-time source dependency exists.

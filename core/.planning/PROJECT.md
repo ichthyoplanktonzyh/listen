@@ -1,10 +1,9 @@
 # listen-core Project Scope
 
 This file defines the current repository mission. It does not redefine the
-Listen product. Product purpose, shared terminology, and cross-context authority
-are canonical in [`../PRODUCT.md`](../PRODUCT.md),
-[`../CONTEXT.md`](../CONTEXT.md), and
-[`../CONTEXT-MAP.md`](../CONTEXT-MAP.md).
+Listen product. Product purpose, shared language, cross-context authority,
+learner journeys, development policy, and the project roadmap are canonical in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
 
 ## Mission
 

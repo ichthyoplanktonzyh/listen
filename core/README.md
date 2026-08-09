@@ -4,12 +4,11 @@
 implements language-material, learning-resource, personal-state, corpus, and
 provider-neutral application behavior behind a loopback HTTP runtime.
 
-Start with the semantic documents before reading implementation history:
-
-- [PRODUCT.md](PRODUCT.md) — what Listen is, why it exists, and its non-goals;
-- [CONTEXT.md](CONTEXT.md) — canonical cross-repository terminology;
-- [CONTEXT-MAP.md](CONTEXT-MAP.md) — authority and stable seams across App,
-  Core, Gen, and the required future Community And Sync context.
+Project semantics, shared language, learner journeys, development policy, and
+the cross-repository roadmap are canonical in the
+[`listen`](https://github.com/ichthyoplanktonzyh/listen) documentation
+repository. The root compatibility pages in this repository point there for
+older links.
 
 [ECOSYSTEM.md](ECOSYSTEM.md) is only a compatibility navigation page for older
 links. Planning files and historical decisions do not override the semantic
@@ -29,8 +28,10 @@ This repository owns:
 - immutable Core contract and runtime release artifacts.
 
 It does not own Flutter experience design, reusable offline content-production
-implementations, or the future multi-tenant Community And Sync infrastructure.
-See [CONTEXT-MAP.md](CONTEXT-MAP.md) for the complete authority map.
+implementations, project governance, or the future multi-tenant Community And
+Sync infrastructure. See the project
+[context map](https://github.com/ichthyoplanktonzyh/listen/blob/main/CONTEXT-MAP.md)
+for the complete authority map.
 
 ## Consumer Contract
 

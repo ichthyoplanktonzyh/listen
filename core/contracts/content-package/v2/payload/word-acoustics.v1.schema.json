@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/payload/word-acoustics.v1.schema.json",
+  "title": "Listen word_acoustics payload v1",
+  "description": "The v1 word acoustics payload shape, reused verbatim in v2. References a word_timeline anchor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sample_rate_hz",
+    "energy_baseline",
+    "pitch_baseline",
+    "measurements"
+  ],
+  "properties": {
+    "sample_rate_hz": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "energy_baseline": {
+      "const": "sentence_median_dbfs"
+    },
+    "pitch_baseline": {
+      "const": "sentence_median_f0_hz"
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/measurement"
+      }
+    }
+  },
+  "$defs": {
+    "tokenRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sentence_id",
+        "token_index"
+      ],
+      "properties": {
+        "sentence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "token_index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "word_ref",
+        "energy",
+        "pitch",
+        "duration",
+        "voiced_frame_ratio"
+      ],
+      "properties": {
+        "word_ref": {
+          "$ref": "#/$defs/tokenRef"
+        },
+        "energy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rms_dbfs",
+            "local_baseline_dbfs",
+            "delta_db",
+            "prominence"
+          ],
+          "properties": {
+            "rms_dbfs": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "local_baseline_dbfs": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "delta_db": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "prominence": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/confidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "pitch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "median_f0_hz",
+            "local_baseline_f0_hz",
+            "delta_semitones",
+            "range_semitones",
+            "prominence",
+            "reset_after"
+          ],
+          "properties": {
+            "median_f0_hz": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "local_baseline_f0_hz": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            },
+            "delta_semitones": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "range_semitones": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "prominence": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/confidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "reset_after": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/confidence"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "duration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "duration_ms",
+            "local_ratio"
+          ],
+          "properties": {
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "local_ratio": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        "voiced_frame_ratio": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/confidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
