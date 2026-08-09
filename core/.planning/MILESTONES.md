@@ -12,8 +12,9 @@
 - Single-user material retention — contract `3.1.0` and SQLite v58 published in
   `v0.7.0-phase1.1`; temporary registration and Personal Library membership are
   separate durable facts.
-- Durable Learning Material — contract `3.2.0` and SQLite v59 are code-complete
-  and locally verified; immutable release remains.
+- Durable Learning Material — contract `3.2.0`, runtime `0.7.0` and SQLite v59
+  published in `v0.7.0-phase1.2`; clean-archive and extracted-runtime smoke
+  passed.
 
 ## Historical Era
 
