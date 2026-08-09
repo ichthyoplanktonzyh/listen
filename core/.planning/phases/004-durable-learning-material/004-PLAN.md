@@ -1,7 +1,7 @@
 # Durable Learning Material Plan
 
-> Status: implementation and local validation complete; immutable release and
-> consumer handoff pending.
+> Status: complete. See [004-CLOSEOUT.md](004-CLOSEOUT.md). Consumer pinning is
+> the remaining cross-repository handoff, not Core implementation work.
 
 ## Domain And Application
 

@@ -93,12 +93,13 @@ is complete: contract `3.1.0`, SQLite v58 and immutable release
 `v0.7.0-phase1.1` separate temporary media registration from explicit Personal
 Library membership without deleting learner-owned state.
 
-The active Core phase is
-[`004-durable-learning-material`](phases/004-durable-learning-material/004-CONTEXT.md).
-It introduces the generic, path-free Learning Material aggregate for text,
-media and mixed compositions; immutable revisions; material membership; and
-media resolution. Contract `3.2.0` and SQLite v59 are implemented and locally
-verified, with immutable release and consumer pinning pending. Source Identity,
+Core phase
+[`004-durable-learning-material`](phases/004-durable-learning-material/004-CLOSEOUT.md)
+is complete. It introduces the generic, path-free Learning Material aggregate
+for text, media and mixed compositions; immutable revisions; material
+membership; and media resolution. Contract `3.2.0`, SQLite v59 and runtime
+`0.7.0` are published immutably in `v0.7.0-phase1.2`; consumer pinning remains.
+Source Identity,
 Package Installation, Learning Edition Adoption and RSS/Atom convergence
 remain subsequent Phase 1 slices rather than hidden additions.
 

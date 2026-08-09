@@ -18,10 +18,13 @@ Completed phase:
   registration from explicit Personal Library membership for media, preserved
   upgraded libraries and learner-owned state, and published contract `3.1.0`
   in `v0.7.0-phase1.1`.
+- `004-durable-learning-material`: added the path-free Learning Material
+  aggregate, immutable revisions, text/media/mixed assets, material membership
+  and media resolution; contract `3.2.0` and SQLite v59 are published in
+  `v0.7.0-phase1.2`.
 
 Active phase:
 
-- `004-durable-learning-material`: adds the path-free Learning Material
-  aggregate, immutable revisions, text/media/mixed assets, material membership
-  and media resolution as contract `3.2.0`; implementation is locally verified
-  and awaiting immutable release.
+- No Core implementation phase is active. The next transition is consumer
+  pinning and cross-repository acceptance against `v0.7.0-phase1.2`; later Core
+  work starts from the next explicit Phase 1 contract request.

@@ -9,7 +9,7 @@
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
 - Contract version: `3.2.0` (additive durable Learning Material lifecycle;
-  implemented and locally verified, pending immutable release)
+  published in `v0.7.0-phase1.2`)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
@@ -20,14 +20,16 @@ project roadmap. Core phase
 [`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CLOSEOUT.md)
 is complete and published as `v0.7.0-phase1.1` with contract `3.1.0`.
 
-The active Core slice is
-[`004-durable-learning-material`](phases/004-durable-learning-material/004-CONTEXT.md).
-Contract `3.2.0` adds path-free text, media and mixed Learning Materials,
-immutable revisions, explicit material membership, media-to-material
+Core phase
+[`004-durable-learning-material`](phases/004-durable-learning-material/004-CLOSEOUT.md)
+is complete and published as `v0.7.0-phase1.2`. Contract `3.2.0` adds path-free
+text, media and mixed Learning Materials, immutable revisions, explicit
+material membership, media-to-material
 resolution, and SQLite v59 backfill. Material membership synchronizes the
-legacy retained-media projection for compatibility. Domain, application,
-persistence, HTTP, OpenAPI and generated-client gates pass locally; immutable
-Core artifacts remain before consumer pinning and the next Phase 1 slice.
+legacy retained-media projection for compatibility. The clean tagged runtime
+passed archive verification, startup handshake, health and graceful-shutdown
+smoke outside the source tree. Consumer pinning and cross-repository acceptance
+are the next transition; no new Core implementation phase is active.
 
 ## Completed Foundation
 
@@ -190,9 +192,8 @@ not code evidence.
 
 ## Next
 
-1. Merge the verified `3.2.0` durable Learning Material slice, publish contract
-   and runtime artifacts from a clean commit, and hand exact identities to the
-   consumer.
+1. Complete the consumer pin to `v0.7.0-phase1.2` and the material lifecycle
+   cross-repository acceptance against those exact artifacts.
 2. Retain `v0.7.0-split.4` as the immutable R4 baseline. App R5 now pins Gen
    merge `a660946a` / tool `0.4.0` and Core merge `105568ed` / contract
    `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
