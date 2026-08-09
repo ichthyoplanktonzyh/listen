@@ -25,8 +25,12 @@ use super::PersistenceError;
 // migration 0013; it removes replaceable analysis storage only and never
 // cascades to learner history. v58 adds explicit Personal Library membership
 // evidence (`retained_at_ms`) to every media item and backfills preexisting
-// rows as retained so the library projection survives the upgrade.
-pub const MIGRATION_VERSION: u32 = 58;
+// rows as retained so the library projection survives the upgrade. v59 adds
+// the durable learning-material schema: materials, immutable content
+// revisions, typed assets, and media bindings. Its material/revision
+// reference is circular, so `current_revision_id` is a deferred foreign key,
+// and the media binding deliberately carries no FK to `media_items`.
+pub const MIGRATION_VERSION: u32 = 59;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -506,6 +510,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             tx.execute_batch(include_str!("../migrations/0058_media_retained_at.sql"))?;
         }
         tx.pragma_update(None, "user_version", 58)?;
+        tx.commit()?;
+    }
+    if current < 59 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0059_learning_materials.sql"))?;
+        tx.pragma_update(None, "user_version", 59)?;
         tx.commit()?;
     }
     Ok(())

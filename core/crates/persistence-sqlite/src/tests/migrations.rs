@@ -1009,10 +1009,10 @@ fn v58_backfills_preexisting_media_rows_as_retained_with_creation_time() {
 }
 
 #[test]
-fn fresh_schema_ends_at_v58_with_nullable_membership_column() {
-    // A database created from scratch runs the forward v58 migration too:
-    // `media_items` gains the nullable `retained_at_ms` column and no rows
-    // exist to backfill.
+fn fresh_schema_ends_at_v59_with_nullable_membership_column() {
+    // A database created from scratch runs the forward v58 migration too, so
+    // the latest (v59) schema still carries the nullable `retained_at_ms`
+    // membership column on `media_items`, with no rows to backfill.
     let connection = Connection::open_in_memory().unwrap();
     migrate(&connection).unwrap();
     assert_eq!(
@@ -1035,4 +1035,274 @@ fn fresh_schema_ends_at_v58_with_nullable_membership_column() {
         )
         .unwrap();
     assert_eq!(nullable, 0, "retained_at_ms must be nullable");
+}
+
+#[test]
+fn fresh_schema_reports_v59_with_learning_material_tables_and_columns() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    // Read the schema version before locking the connection: `schema_version`
+    // acquires the same non-reentrant mutex.
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    let connection = repo.connection.lock();
+    for table in [
+        "learning_materials",
+        "material_revisions",
+        "material_assets",
+        "material_media_bindings",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "learning_materials",
+            &[
+                "id",
+                "current_revision_id",
+                "retained_at_ms",
+                "created_at_ms",
+                "updated_at_ms",
+            ],
+        ),
+        5
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_revisions",
+            &["id", "material_id", "title", "created_at_ms"],
+        ),
+        4
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_assets",
+            &[
+                "revision_id",
+                "ordinal",
+                "asset_id",
+                "asset_kind",
+                "asset_json"
+            ],
+        ),
+        5
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_media_bindings",
+            &["media_id", "material_id"],
+        ),
+        2
+    );
+    // A PRIMARY KEY on a SQLite rowid table does not imply NOT NULL, so the
+    // identifier columns must declare it explicitly.
+    for (table, column) in [
+        ("learning_materials", "id"),
+        ("material_revisions", "id"),
+        ("material_media_bindings", "media_id"),
+    ] {
+        let notnull: u8 = connection
+            .query_row(
+                &format!(
+                    "SELECT \"notnull\" FROM pragma_table_info('{table}')
+                     WHERE name='{column}'"
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(notnull, 1, "{table}.{column} must be NOT NULL");
+    }
+}
+
+#[test]
+fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_foreign_key() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let connection = repo.connection.lock();
+    // The material/revision reference is circular, so the material row is
+    // inserted before its revision exists; the deferred `current_revision_id`
+    // foreign key only validates at commit time.
+    {
+        let tx = connection.unchecked_transaction().unwrap();
+        tx.execute_batch(
+            r#"
+            INSERT INTO learning_materials
+              (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+            VALUES ('material-1','revision-1',100,100,100);
+            INSERT INTO material_revisions
+              (id,material_id,title,created_at_ms)
+            VALUES ('revision-1','material-1','First title',100);
+            INSERT INTO material_assets
+              (revision_id,ordinal,asset_id,asset_kind,asset_json)
+            VALUES
+              ('revision-1',0,'asset-text','document_text','{"text":"hello"}'),
+              ('revision-1',1,'asset-media','media_rendition','{"media_id":"media-1"}');
+            INSERT INTO material_media_bindings
+              (media_id,material_id)
+            VALUES ('media-1','material-1');
+            "#,
+        )
+        .unwrap();
+        tx.commit().unwrap();
+    }
+    // A material whose current revision is never created cannot commit.
+    {
+        let tx = connection.unchecked_transaction().unwrap();
+        tx.execute(
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('orphan','missing-revision',NULL,1,1)",
+            [],
+        )
+        .unwrap();
+        assert!(tx.commit().is_err());
+    }
+    // The failed COMMIT (deferred foreign key violation) left no active
+    // transaction behind: the orphan row was rolled back and the connection
+    // is clean for the checks below.
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM learning_materials WHERE id='orphan'",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        0
+    );
+    // Timestamp and asset invariants reject invalid rows.
+    for (label, sql) in [
+        (
+            "updated_at_ms precedes created_at_ms",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('bad-time','revision-1',NULL,200,100)",
+        ),
+        (
+            "retained_at_ms precedes created_at_ms",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('bad-retained','revision-1',50,100,100)",
+        ),
+        (
+            "retained_at_ms postdates updated_at_ms",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES ('bad-retained-late','revision-1',150,100,100)",
+        ),
+        (
+            "negative asset ordinal",
+            "INSERT INTO material_assets
+               (revision_id,ordinal,asset_id,asset_kind,asset_json)
+             VALUES ('revision-1',-1,'asset-bad','document_text','{}')",
+        ),
+        (
+            "unknown asset_kind",
+            "INSERT INTO material_assets
+               (revision_id,ordinal,asset_id,asset_kind,asset_json)
+             VALUES ('revision-1',2,'asset-bad','audio','{}')",
+        ),
+        (
+            "malformed asset_json",
+            "INSERT INTO material_assets
+               (revision_id,ordinal,asset_id,asset_kind,asset_json)
+             VALUES ('revision-1',3,'asset-bad','document_text','{not json}')",
+        ),
+        // Rowid-table PRIMARY KEYs in SQLite do not imply NOT NULL; the FK
+        // references below are valid, so rejection must come from the explicit
+        // NOT NULL on the identifier columns.
+        (
+            "NULL learning_materials identifier",
+            "INSERT INTO learning_materials
+               (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+             VALUES (NULL,'revision-1',NULL,100,100)",
+        ),
+        (
+            "NULL material_revisions identifier",
+            "INSERT INTO material_revisions
+               (id,material_id,title,created_at_ms)
+             VALUES (NULL,'material-1','Title',100)",
+        ),
+        (
+            "NULL material_media_bindings identifier",
+            "INSERT INTO material_media_bindings
+               (media_id,material_id)
+             VALUES (NULL,'material-1')",
+        ),
+    ] {
+        assert!(
+            connection.execute(sql, []).is_err(),
+            "{label} must be rejected"
+        );
+    }
+    // RESTRICT (never CASCADE/SET NULL) keeps learner history durable.
+    assert!(
+        connection
+            .execute("DELETE FROM learning_materials WHERE id='material-1'", [])
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute("DELETE FROM material_revisions WHERE id='revision-1'", [])
+            .is_err()
+    );
+    // Valid rows committed above are readable after the rejected writes.
+    let (title, asset_count): (String, u32) = connection
+        .query_row(
+            "SELECT title, (SELECT COUNT(*) FROM material_assets
+                            WHERE revision_id='revision-1')
+             FROM material_revisions WHERE id='revision-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(title, "First title");
+    assert_eq!(asset_count, 2);
+}
+
+#[test]
+fn sparse_v58_fixture_without_media_items_upgrades_to_v59_learning_material_schema() {
+    // Sparse historical fixtures model a schema that never carried the v1
+    // media foundation. The v59 learning-material schema must upgrade such a
+    // database cleanly: `material_media_bindings` deliberately has no FK to
+    // `media_items`, so materials can reference media that is not registered.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    // Rebuild the fixture shape: full v58 schema minus the v59 learning-material
+    // tables and the v1 media foundation. Dropping a table removes its own
+    // indexes, and children are dropped before parents for clarity even though
+    // foreign keys are disabled during the rebuild.
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE material_assets;
+             DROP TABLE material_media_bindings;
+             DROP TABLE material_revisions;
+             DROP TABLE learning_materials;
+             DROP TABLE media_items;
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 58).unwrap();
+    assert!(!table_exists(&connection, "media_items"));
+    assert!(!table_exists(&connection, "learning_materials"));
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    for table in [
+        "learning_materials",
+        "material_revisions",
+        "material_assets",
+        "material_media_bindings",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
 }
