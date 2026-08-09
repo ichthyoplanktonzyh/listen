@@ -3,6 +3,12 @@
 单人项目，owner 独立开发。这份文件只写两类东西：**agent 自己查不到的硬约束**，
 以及**推翻既有做法时需要知道的边界**。
 
+项目采用 Owner / Supervisor / 可替换 Implementation Worker 模式，完整规则以
+`ichthyoplanktonzyh/listen/DEVELOPMENT.md` 为准。Supervisor 负责架构、拆解、
+Worker 选择、审查、独立验证、文档和授权范围内的 Git/release 交付；源码、测试、
+脚本、schema、migration 和运行配置由当前配置的 Worker 实现。Worker 是角色，
+不在本仓长期绑定某个模型或 provider。
+
 其余一切——目录结构、代码放在哪、有哪些模块、各层怎么分——去读代码。
 文档里的结构描述会随重构变质，读它不如 `ls` 一次。
 
@@ -129,7 +135,11 @@ LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
 
 会主动指向你的只有这几份：
 
-- `CONTEXT.md` — 领域词汇表（Content Source / Edition / Rendition 等）
+- `CONTEXT.md` — App 自己拥有的交互词汇；跨仓产品语义、共享词汇、上下文映射、
+  用户旅程、开发方式和项目 roadmap 以 `ichthyoplanktonzyh/listen` 为准。
+  `backend.lock.json` 只锁定运行时行为，不兼任产品语义版本
+- `JOURNEYS.md` — 只保留指向项目级用户旅程的兼容入口；当前实现状态由代码和测试负责
+- `ECOSYSTEM.md` — 只提供上述权威文档的导航，不复制产品定义
 - `docs/development/` — 实操手册
 
 `.planning/` 下的 phase、roadmap、handoff，以及 `docs/decisions/` 里的 ADR，是**历史记录**：

@@ -1,91 +1,103 @@
-# Ubiquitous Language
+# Listen App Context
 
-## Content Source
+Canonical product purpose, shared language, context ownership, and learner
+journeys live in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
+`backend.lock.json` independently pins runtime behavior and compatibility.
 
-An external origin from which a piece of content is known, such as a podcast
-feed, a YouTube channel, a publisher catalog, or a user-owned local collection.
+This glossary adds only concepts owned by the learner-facing application.
 
-## Source Identity
+## Material Intake
 
-A stable, source-scoped identifier for one content item, such as a podcast
-episode GUID or a YouTube video ID. It identifies provenance, not byte-level or
-timeline compatibility.
+**Material Intake**:
+The learner-facing act of opening a source asset or community item and resolving
+what Listen can use immediately.
+_Avoid_: Package Installation, Content Enrichment
 
-## Content Edition
+**Local Asset Binding**:
+A learner-approved association between a local file and a Language Material or
+Material Revision.
+_Avoid_: Source Identity, ownership proof
 
-A particular editorial version of a source item. Trimming, replaced audio,
-redubbing, or another change that alters the learning timeline creates a
-different edition even when the Source Identity remains the same.
+**Retention Decision**:
+The Learner's explicit choice to move a Temporary Material into the Personal
+Library.
+_Avoid_: Automatic import, recent-file history
 
-## Media Rendition
+## Discovery And Acquisition
 
-A concrete encoded media file for a Content Edition, including its container,
-audio tracks, codecs, duration, and byte fingerprint. Multiple renditions can
-represent the same edition without being byte-identical.
+**Discovery Result**:
+A learner-facing description of a potentially useful Language Material,
+Learning Edition, or Package Listing that has not yet entered the Personal
+Library.
+_Avoid_: Learning Material, Package Installation
 
-## Timeline Compatibility
+**Acquisition Option**:
+A declared way to play, obtain, or bind a required source asset, including its
+availability and rights context.
+_Avoid_: Download entitlement, Discovery Result
 
-Evidence that package time coordinates can be applied safely to a Media
-Rendition. Compatibility may be exact, verified compatible, unverified, or
-incompatible; sharing a Source Identity alone is not sufficient evidence.
+**Package Match**:
+A candidate relation between a Material Revision or Media Rendition and a
+compatible Package Release.
+_Avoid_: Package Installation, matching title
 
-## Media Offer
+**Discovery Inbox**:
+The learner-facing stream of Discovery Items collected from Content
+Subscriptions, direct imports, and future community discovery.
+_Avoid_: Personal Library, automatic retention
 
-A lawful way to obtain or play a Media Rendition, together with availability,
-license, integrity, and acquisition metadata. It is separate from a learning
-resource package.
+**Start Learning Intent**:
+The Learner's explicit decision to make one Discovery Item locally usable and
+retain it for learning. The App may orchestrate Material Acquisition, Package
+Installation, and Learning Edition Adoption without exposing those steps.
+_Avoid_: Preview, Package Installation, implicit activation
 
-## Catalog Entry
+## Experience And Capabilities
 
-The discoverable record that relates a Content Source and Content Edition to
-its metadata, Media Offers, and Package Listings.
+**Unavailable State**:
+A learner-facing state that names why a requested capability cannot currently
+run and, when possible, identifies a recovery action.
+_Avoid_: Silent no-op, disabled control without explanation, generic failure
 
-## Catalog Channel
+**Capability Presentation**:
+The App's honest presentation of which Learning Activities are available,
+degraded, unavailable, or still being prepared for the current material.
+_Avoid_: Hard-coded language workflow, feature flag list
 
-A versioned, subscribable collection of Catalog Entries curated by an official
-or community publisher.
+**Generation Request**:
+A learner-visible request to enrich one material, including selected
+capabilities, progress, cancellation, warnings, and the resulting artifact.
+_Avoid_: Provider command line, Content Package schema
 
-## Package Listing
+**Search Scope Selection**:
+The Learner's choice among Current Material, Personal Corpus, and Community
+Corpus for one query.
+_Avoid_: Separate search product
 
-A mutable discovery record for a package series, including description,
-publisher presentation, ratings, reports, and pointers to Package Releases.
+**External Context Presentation**:
+An attributed, provider-limited presentation of External Context References
+that remains separate from Listen-owned corpus results.
+_Avoid_: Imported corpus data, hidden fallback
 
-## Package Release
+## Updates And Synchronization
 
-An immutable, content-addressed publication of a `.listenpkg`, identified by
-its digest and carrying its resource inventory, provenance, compatibility,
-license, and optional publisher signature.
+**Package Update Notice**:
+A notification that a newer Package Release exists for an installed Learning
+Edition. It never changes the active release by itself.
+_Avoid_: Automatic replacement, release installation
 
-## Package Installation
+**Package Update Decision**:
+The Learner's explicit acceptance, deferral, or rejection of a Package Update
+Notice.
+_Avoid_: Background mutation
 
-The local record that a particular Package Release was verified and imported,
-including its installed resources and local lifecycle state.
+**Sync State**:
+The learner-visible condition of private data replication across devices,
+including current, pending, offline, conflicted, and failed states.
+_Avoid_: Network connectivity, package download status
 
-## Learning Material
-
-The local composition of a playable Media Rendition with installed resource
-candidates and the learner's explicit active selections.
-
-## Publisher Status
-
-The verified identity or trust classification of the entity distributing a
-Package Release, such as official, verified community, ordinary community, or
-unsigned local. It does not imply review quality or license validity.
-
-## Review Status
-
-The independently reported degree of quality review applied to a Package
-Release, such as machine checked, sample reviewed, or fully human reviewed. It
-does not imply publisher identity or license validity.
-
-## License Status
-
-The independently reported state of rights and redistribution evidence for a
-Media Offer or Package Release, such as verified, publisher declared, or
-unknown. It does not imply publisher identity or review quality.
-
-## Official Starter Catalog
-
-The official, permanently free, preferably sign-in-free Catalog Channel of
-lawfully distributable starter materials and Package Releases used to provide
-a complete first-run learning experience and public quality examples.
+**Sync Conflict**:
+A concurrent change to learner-owned data that cannot be merged without
+preserving both versions or asking the Learner.
+_Avoid_: Last-write-wins for every data type, server error
