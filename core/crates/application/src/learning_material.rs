@@ -434,9 +434,19 @@ impl MaterialUseCases {
         &self,
         material: &LearningMaterial,
     ) -> Result<MaterialRevision, ApplicationError> {
-        self.materials
+        let revision = self
+            .materials
             .get_revision(&material.current_revision_id)?
-            .ok_or_else(|| ApplicationError::Repository("current revision is missing".into()))
+            .ok_or_else(|| ApplicationError::Repository("current revision is missing".into()))?;
+        if revision.material_id != material.id {
+            // A repository must never point a material's current-revision
+            // pointer at a revision owned by another material. Surface the
+            // corruption instead of silently substituting or repointing.
+            return Err(ApplicationError::Repository(
+                "current revision belongs to another material".into(),
+            ));
+        }
+        Ok(revision)
     }
 
     /// Resolves typed inputs into domain assets, strictly through the media
@@ -737,6 +747,23 @@ mod tests {
 
         fn set_misbehaving_list_retained(&self, misbehave: bool) {
             self.state.lock().unwrap().misbehave_list_retained = misbehave;
+        }
+
+        /// Directly points a material's current-revision pointer, simulating a
+        /// corrupt repository that breaks the material-to-revision ownership
+        /// invariant. Adversarial tests use this seam to prove the use case
+        /// revalidates ownership instead of trusting the pointer.
+        fn set_current_revision_pointer(
+            &self,
+            material_id: &LearningMaterialId,
+            revision_id: &MaterialRevisionId,
+        ) {
+            let mut state = self.state.lock().unwrap();
+            state
+                .materials
+                .get_mut(material_id.as_str())
+                .expect("material must exist before repointing its current revision")
+                .current_revision_id = revision_id.clone();
         }
 
         fn set_rewrite_revision_created_at(&self, created_at_ms: Option<u64>) {
@@ -1701,6 +1728,75 @@ mod tests {
         assert_eq!(read.material.id, created.material.id);
         assert_eq!(read.current_revision.id, created.current_revision.id);
         assert_eq!(read.shape(), MaterialShape::Text);
+    }
+
+    #[test]
+    fn current_revision_guard_rejects_missing_and_cross_material_pointers() {
+        let (use_cases, materials, media) = setup();
+        media.seed(media_item("media-guard", MediaKind::Audio, "fp-guard"));
+        let a = use_cases
+            .create(CreateLearningMaterial {
+                title: "A".into(),
+                assets: vec![media_input("media-guard")],
+                retain: None,
+            })
+            .expect("material A");
+        let b = use_cases
+            .create(CreateLearningMaterial {
+                title: "B".into(),
+                assets: vec![text_input("b content")],
+                retain: None,
+            })
+            .expect("material B");
+        assert_ne!(a.material.id, b.material.id);
+
+        // A valid current revision still assembles details on every path.
+        let valid = use_cases
+            .read(&a.material.id)
+            .expect("read")
+            .expect("valid details");
+        assert_eq!(valid.current_revision.id, a.current_revision.id);
+
+        // Corruption 1: the pointer names no revision at all. The existing
+        // missing-current-revision Repository behavior is preserved.
+        materials.set_current_revision_pointer(
+            &a.material.id,
+            &MaterialRevisionId::from_fingerprint("material-revision", "missing"),
+        );
+        let err = use_cases
+            .read(&a.material.id)
+            .expect_err("missing current revision");
+        assert!(matches!(
+            err,
+            ApplicationError::Repository(message) if message == "current revision is missing"
+        ));
+
+        // Corruption 2: the pointer names a revision owned by another
+        // material. Every details path must reject it as repository corruption
+        // instead of assembling cross-material MaterialDetails.
+        materials.set_current_revision_pointer(&a.material.id, &b.current_revision.id);
+        let corrupted = "current revision belongs to another material";
+        let err = use_cases
+            .read(&a.material.id)
+            .expect_err("cross-material current revision on read");
+        assert!(matches!(
+            err,
+            ApplicationError::Repository(message) if message == corrupted
+        ));
+        let err = use_cases
+            .resolve_for_media(&MediaId::parse("media-guard").unwrap())
+            .expect_err("cross-material current revision on resolve_for_media");
+        assert!(matches!(
+            err,
+            ApplicationError::Repository(message) if message == corrupted
+        ));
+        let err = use_cases
+            .list_retained()
+            .expect_err("cross-material current revision on list_retained");
+        assert!(matches!(
+            err,
+            ApplicationError::Repository(message) if message == corrupted
+        ));
     }
 
     fn assert_not_configured<T: std::fmt::Debug>(result: Result<T, ApplicationError>) {
