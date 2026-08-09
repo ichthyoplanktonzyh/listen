@@ -20,7 +20,7 @@ import release_bundle as rb
 from listen_gen import protocol
 
 FAKE_COMMIT = "ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 PYZ_NAME = f"listen-gen-{VERSION}.pyz"
 MANIFEST_NAME = f"listen-gen-{VERSION}.release.json"
 SHEBANG = b"#!/usr/bin/env python3\n"
@@ -164,6 +164,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
                 "machine_protocol",
                 "content_package_contract",
                 "runtime",
+                "runtime_identity",
                 "artifact",
             },
         )
@@ -189,6 +190,17 @@ class ManifestContentTests(ReleaseBundleTestBase):
             set(manifest["runtime"]), {"python_requires", "provider_requirements"}
         )
         self.assertEqual(
+            set(manifest["runtime_identity"]),
+            {"schema", "version", "runtime", "toolchain"},
+        )
+        self.assertEqual(
+            set(manifest["runtime_identity"]["runtime"]), {"family", "requires"}
+        )
+        self.assertEqual(
+            set(manifest["runtime_identity"]["toolchain"]),
+            {"schema", "version", "tools"},
+        )
+        self.assertEqual(
             set(manifest["artifact"]),
             {"filename", "format", "entrypoint", "size_bytes", "sha256"},
         )
@@ -202,6 +214,48 @@ class ManifestContentTests(ReleaseBundleTestBase):
             "schema": protocol.MACHINE_EVENT_SCHEMA,
             "version": protocol.MACHINE_PROTOCOL_VERSION,
         })
+        runtime_identity = manifest["runtime_identity"]
+        self.assertEqual(
+            runtime_identity["schema"], rb.RUNTIME_IDENTITY_SCHEMA
+        )
+        self.assertEqual(runtime_identity["version"], rb.RUNTIME_IDENTITY_VERSION)
+        self.assertEqual(runtime_identity["runtime"], {
+            "family": rb.RUNTIME_FAMILY,
+            "requires": ">=3.11",
+        })
+        self.assertEqual(
+            runtime_identity["toolchain"]["schema"],
+            rb.TOOLCHAIN_IDENTITY_SCHEMA,
+        )
+        self.assertEqual(
+            runtime_identity["toolchain"]["version"],
+            rb.TOOLCHAIN_IDENTITY_VERSION,
+        )
+        self.assertEqual(
+            runtime_identity["toolchain"]["tools"],
+            rb._canonical_toolchain(),
+        )
+        self.assertEqual(
+            runtime_identity["runtime"]["requires"],
+            manifest["runtime"]["python_requires"],
+        )
+        # The toolchain is exactly the union of per-provider requirements and
+        # every tool carries a role.
+        required_tools = {
+            tool
+            for tools in manifest["runtime"]["provider_requirements"].values()
+            for tool in tools
+        }
+        self.assertEqual(
+            {tool["id"] for tool in runtime_identity["toolchain"]["tools"]},
+            required_tools,
+        )
+        for tool in runtime_identity["toolchain"]["tools"]:
+            self.assertEqual(set(tool), {"id", "roles"})
+            self.assertEqual(
+                tool["roles"], list(rb.TOOLCHAIN_ROLES[tool["id"]])
+            )
+            self.assertEqual(len(tool["roles"]), len(set(tool["roles"])))
         lock = json.loads((ROOT / "contracts.lock.json").read_text("utf-8"))
         contract = manifest["content_package_contract"]
         self.assertEqual(contract["authority"], {
@@ -438,6 +492,10 @@ class VerifierFailureTests(ReleaseBundleTestBase):
             "sha256:" + hashlib.sha256(self.artifact.read_bytes()).hexdigest(),
         )
         self.assertEqual(
+            document["runtime_identity"],
+            json.loads(self.manifest.read_bytes())["runtime_identity"],
+        )
+        self.assertEqual(
             completed.stdout,
             canonical_json_file_bytes(document).decode("utf-8"),
         )
@@ -668,6 +726,112 @@ class StrictVerifierTests(ReleaseBundleTestBase):
             self.assertEqual(str(caught.exception), "release manifest is invalid")
 
 
+class RuntimeIdentityVerifierTests(ReleaseBundleTestBase):
+    def assert_manifest_rejected(self, raw: bytes) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _, manifest = self.copy_bundle(Path(tmp))
+            manifest.write_bytes(raw)
+            with self.assertRaises(rb.ReleaseBundleError) as caught:
+                rb.verify_release_bundle(ROOT, manifest)
+            self.assertEqual(str(caught.exception), "release manifest is invalid")
+
+    def test_bool_cannot_impersonate_identity_versions(self) -> None:
+        mutations = [
+            lambda document: document["runtime_identity"].__setitem__(
+                "version", True
+            ),
+            lambda document: document["runtime_identity"]["toolchain"].__setitem__(
+                "version", True
+            ),
+        ]
+        for mutate in mutations:
+            variant = json.loads(self.manifest.read_bytes())
+            mutate(variant)
+            self.assert_manifest_rejected(canonical_json_file_bytes(variant))
+
+    def test_identity_schema_or_version_tamper_rejected(self) -> None:
+        parsed = json.loads(self.manifest.read_bytes())
+        variants = []
+        identity = parsed["runtime_identity"]
+        identity["schema"] = "listen_gen.runtime-identity.v2"
+        variants.append(canonical_json_file_bytes(parsed))
+        identity["schema"] = "listen_gen.runtime-identity.v1"
+        identity["version"] = 2
+        variants.append(canonical_json_file_bytes(parsed))
+        identity["version"] = 1
+        identity["toolchain"]["schema"] = "listen_gen.toolchain-identity.v2"
+        variants.append(canonical_json_file_bytes(parsed))
+        identity["toolchain"]["schema"] = "listen_gen.toolchain-identity.v1"
+        identity["toolchain"]["version"] = 2
+        variants.append(canonical_json_file_bytes(parsed))
+        for raw in variants:
+            self.assert_manifest_rejected(raw)
+
+    def test_runtime_identity_family_or_requires_tamper_rejected(self) -> None:
+        parsed = json.loads(self.manifest.read_bytes())
+        variants = []
+        runtime = parsed["runtime_identity"]["runtime"]
+        runtime["family"] = "cpython"
+        variants.append(canonical_json_file_bytes(parsed))
+        runtime["family"] = "python"
+        runtime["requires"] = ">=3.10"
+        variants.append(canonical_json_file_bytes(parsed))
+        for raw in variants:
+            self.assert_manifest_rejected(raw)
+
+    def test_runtime_identity_requires_must_match_runtime(self) -> None:
+        parsed = json.loads(self.manifest.read_bytes())
+        # The identity requires must stay coherent with the top-level runtime.
+        parsed["runtime_identity"]["runtime"]["requires"] = ">=3.12"
+        self.assert_manifest_rejected(canonical_json_file_bytes(parsed))
+
+    def test_toolchain_mutation_rejected(self) -> None:
+        variants = []
+        parsed = json.loads(self.manifest.read_bytes())
+        tools = parsed["runtime_identity"]["toolchain"]["tools"]
+        tools[0]["id"] = "evil-tool"
+        variants.append(canonical_json_file_bytes(parsed))
+        tools[0]["id"] = "asr-wrapper"
+        tools[0]["roles"] = ["evil"]
+        variants.append(canonical_json_file_bytes(parsed))
+        tools[0]["roles"] = ["asr"]
+        tools[0]["extra"] = True
+        variants.append(canonical_json_file_bytes(parsed))
+        del tools[0]["roles"]
+        variants.append(canonical_json_file_bytes(parsed))
+        tools[0] = {"id": "asr-wrapper", "roles": ["asr"]}
+        del parsed["runtime_identity"]["toolchain"]["tools"]
+        variants.append(canonical_json_file_bytes(parsed))
+        for raw in variants:
+            self.assert_manifest_rejected(raw)
+
+    def test_toolchain_unsorted_rejected(self) -> None:
+        parsed = json.loads(self.manifest.read_bytes())
+        tools = parsed["runtime_identity"]["toolchain"]["tools"]
+        parsed["runtime_identity"]["toolchain"]["tools"] = list(reversed(tools))
+        self.assert_manifest_rejected(canonical_json_file_bytes(parsed))
+
+    def test_canonical_toolchain_matches_provider_requirements(self) -> None:
+        # The canonical toolchain is exactly the union of provider tools and
+        # every role is a known Gen stage family.
+        required = {
+            tool
+            for tools in rb.PROVIDER_REQUIREMENTS.values()
+            for tool in tools
+        }
+        self.assertEqual(set(rb.TOOLCHAIN_ROLES), required)
+        known_roles = set(rb.RUNTIME_ROLE_NAMES)
+        for tool_id, roles in rb.TOOLCHAIN_ROLES.items():
+            self.assertTrue(tool_id)
+            self.assertEqual(len(roles), len(set(roles)))
+            self.assertTrue(set(roles) <= known_roles)
+        tools = rb._canonical_toolchain()
+        self.assertEqual([tool["id"] for tool in tools], sorted(tool["id"] for tool in tools))
+        self.assertEqual(
+            {tool["id"] for tool in tools}, set(rb.TOOLCHAIN_ROLES)
+        )
+
+
 class ModuleIsolationAndSourceTests(unittest.TestCase):
     def test_repo_root_module_isolation(self) -> None:
         root = copy_repo_root("isolated-repo-")
@@ -688,10 +852,10 @@ class ModuleIsolationAndSourceTests(unittest.TestCase):
         pyproject = root / "pyproject.toml"
         pyproject.write_text(
             pyproject.read_text("utf-8").replace(
-                'version = "0.3.0"', 'version = "9.9.9"', 1
+                'version = "0.4.0"', 'version = "9.9.9"', 1
             )
         )
-        # The checkout protocol identity stays at 0.3.0.
+        # The checkout protocol identity stays at 0.4.0.
         self.assertEqual(protocol.TOOL_VERSION, VERSION)
         with tempfile.TemporaryDirectory() as tmp:
             _, manifest = rb.build_release_bundle(ROOT, Path(tmp), FAKE_COMMIT)

@@ -318,7 +318,7 @@ class FixtureRichResourceTests(unittest.TestCase):
             acoustics = package["documents"]["word_acoustics"]
             prosody = package["documents"]["prosody_analysis"]
             self.assertEqual(sense["provenance"]["tool"], {
-                "id": "listen-gen.sense-groups", "version": "0.3.0",
+                "id": "listen-gen.sense-groups", "version": "0.4.0",
             })
             self.assertEqual(sense["provenance"]["provider"], {
                 "id": "fixture-sense-groups", "version": "1",
@@ -326,12 +326,12 @@ class FixtureRichResourceTests(unittest.TestCase):
             self.assertEqual(sense["provenance"]["config_sha256"],
                              "sha256:" + FIXTURE_SHA["sense"])
             self.assertEqual(acoustics["provenance"]["tool"], {
-                "id": "listen-gen.acoustics", "version": "0.3.0",
+                "id": "listen-gen.acoustics", "version": "0.4.0",
             })
             self.assertEqual(acoustics["provenance"]["config_sha256"],
                              "sha256:" + FIXTURE_SHA["acoustics"])
             self.assertEqual(prosody["provenance"]["tool"], {
-                "id": "listen-gen.prosody", "version": "0.3.0",
+                "id": "listen-gen.prosody", "version": "0.4.0",
             })
             self.assertEqual(prosody["provenance"]["config_sha256"],
                              "sha256:" + FIXTURE_SHA["prosody"])

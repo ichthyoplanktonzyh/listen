@@ -45,7 +45,7 @@ from .rich import (
     run_sense_groups,
 )
 
-TOOL_VERSION = "0.3.0"
+TOOL_VERSION = "0.4.0"
 TOKEN_RE = re.compile(r"\w+(?:['\u2019]\w+)*|\s+|[^\w\s]", re.UNICODE)
 ASR_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 

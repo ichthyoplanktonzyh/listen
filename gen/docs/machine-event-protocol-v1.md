@@ -76,7 +76,7 @@ Every event carries these fields:
   "sequence": 0,
   "tool": {
     "id": "listen-gen",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "event": "protocol"
 }
@@ -98,7 +98,7 @@ run:
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 0,
-  "tool": {"id": "listen-gen", "version": "0.3.0"},
+  "tool": {"id": "listen-gen", "version": "0.4.0"},
   "event": "protocol",
   "capabilities": {
     "package_schema": "listen.resource-package.v1",
@@ -207,7 +207,7 @@ commands, credentials, or temporary directories.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 2,
-  "tool": {"id": "listen-gen", "version": "0.3.0"},
+  "tool": {"id": "listen-gen", "version": "0.4.0"},
   "event": "phase",
   "phase": "validating"
 }
@@ -227,7 +227,7 @@ See [completed example](#completed-example). This is a terminal event.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 3,
-  "tool": {"id": "listen-gen", "version": "0.3.0"},
+  "tool": {"id": "listen-gen", "version": "0.4.0"},
   "event": "failed",
   "code": "input_not_found",
   "message": "Input media is unavailable."
@@ -246,7 +246,7 @@ a terminal event.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 4,
-  "tool": {"id": "listen-gen", "version": "0.3.0"},
+  "tool": {"id": "listen-gen", "version": "0.4.0"},
   "event": "cancelled"
 }
 ```
@@ -354,7 +354,7 @@ never both appear for the same run.
   "schema": "listen_gen.machine-event.v1",
   "protocol_version": 1,
   "sequence": 6,
-  "tool": {"id": "listen-gen", "version": "0.3.0"},
+  "tool": {"id": "listen-gen", "version": "0.4.0"},
   "event": "completed",
   "package_sha256": "sha256:<64 lowercase hex>",
   "media_fingerprint": "sha256:<64 lowercase hex>",
