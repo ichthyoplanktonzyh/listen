@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-10 — v0.7.0-phase1.2
+
+- Releases additive contract `3.2.0` with a durable, path-free Learning
+  Material lifecycle. Runtime remains `0.7.0`; SQLite schema is `v59`.
+- Text, media and mixed compositions share immutable Material Revisions.
+  Deterministic initial identities make equal create retries converge, while
+  media renditions refer only to registered media identity and availability.
+- Adds retained material listing and creation, material/revision reads,
+  revision append, material membership, and media-to-material resolution.
+  Every response carries the actual current revision and derived shape.
+- Existing media rows are backfilled into equivalent material/revision graphs.
+  Material membership synchronizes the legacy retained-media projection in the
+  same transaction without deleting resources or learner-owned state.
+- Content Package v2 inspection remains candidate-only. Package Installation
+  and Learning Edition Adoption are still separate later lifecycle operations.
+
 ## 2026-08-10 — v0.7.0-phase1.1
 
 - Releases additive contract `3.1.0` with explicit Temporary versus Personal
