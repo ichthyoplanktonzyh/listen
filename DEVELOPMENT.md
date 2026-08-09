@@ -26,10 +26,21 @@ irreversible and was not authorized.
 
 ### Implementation Worker
 
-Worker is a role, not a model name. The configured Worker may currently be
-DeepSeek V4 Flash through OpenCode and later be GPT-5.6 Luna or another suitable
-implementation agent. The Supervisor selects it by task complexity, reliability,
-latency, and cost; the owner may explicitly override the choice.
+Worker is a role, not a model name or provider. A Worker may be a native Codex
+subagent, an agent reached through OpenCode, or another configured implementation
+runtime. The Supervisor may create and select Workers by task complexity,
+reliability, latency, cost, and tool compatibility; the owner may explicitly
+override the choice.
+
+The current default Worker is the native `luna_max_coder`, using GPT-5.6 Luna
+with `max` reasoning effort. DeepSeek V4 Flash through OpenCode remains an
+approved alternative. These are execution defaults rather than product or
+repository architecture and may be replaced as models and runtimes evolve.
+
+The Supervisor may use different Worker types in one deliverable when ownership
+does not overlap. The selected runtime is stated in each assignment and handoff;
+changing it does not require owner approval unless it also changes product scope,
+compatibility policy, cost authorization, or an irreversible external action.
 
 Source code, tests, schemas, migrations, scripts, and runtime configuration are
 implemented by Workers. The Supervisor directly owns prose documentation and
@@ -80,9 +91,10 @@ Every implementation assignment states:
 - exact local validation;
 - required handoff evidence.
 
-Parallel Workers must have non-overlapping ownership. Shared contracts and
-shared files are changed serially. Workers preserve other edits and adapt to
-concurrent work rather than reverting it.
+Parallel Workers, including Workers using different models or runtimes, must
+have non-overlapping ownership. Shared contracts and shared files are changed
+serially. Workers preserve other edits and adapt to concurrent work rather than
+reverting it.
 
 ## Review and validation
 
@@ -98,8 +110,9 @@ Generated output, a Worker summary, or a green focused test alone is not review.
 No paid model or live credential test runs unless explicitly authorized.
 
 The Supervisor waits for Worker events rather than repeatedly polling. Failed or
-incomplete handoffs are narrowed and returned to a Worker; they are not silently
-finished under a different execution model.
+incomplete handoffs are narrowed and returned or reassigned. A reassignment keeps
+the original scope and ownership explicit, records the execution-model change,
+and receives the same independent review and validation.
 
 ## Git and releases
 
