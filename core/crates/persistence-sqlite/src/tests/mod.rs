@@ -557,6 +557,7 @@ mod content_fit;
 mod l1_diagnosis;
 mod learner_profile;
 mod learning_loop;
+mod learning_material;
 mod learning_preparation;
 mod lexical;
 mod llm_provider;
