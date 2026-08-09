@@ -12,11 +12,13 @@ import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/transcript_readiness_view_model.dart';
 import 'package:llplayer_next/data/repositories/content_package_repository.dart';
+import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/content_package.dart';
+import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
@@ -562,6 +564,7 @@ _coordinatorHarness(List<SubtitleTrack> tracks) {
         repository: _FakeMediaSessionRepository(),
         subtitleAnalysis: _FakeSubtitleAnalysisRepository(),
         managedStore: _UnavailableManagedStore(),
+        materialRepository: _NoopLearningMaterialRepository(),
       )..bind(
         isMounted: () => true,
         text: (key) => key,
@@ -861,4 +864,52 @@ final class _UnavailableManagedStore implements ManagedAssetStoreService {
       throw const ManagedStoreUnavailable();
   @override
   Future<void> deleteStoreCopy(String path) async {}
+}
+
+/// Transcript readiness never touches the learning-material boundary; this
+/// wall keeps the coordinator constructible and provably inert.
+final class _NoopLearningMaterialRepository
+    implements LearningMaterialRepository {
+  @override
+  bool get isAvailable => false;
+
+  @override
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
+
+  @override
+  Future<List<MaterialDetails>> listLearningMaterials() async => const [];
+
+  @override
+  Future<MaterialDetails> createLearningMaterial(
+    CreateLearningMaterialInput input, {
+    MaterialRetainDirective retain = const MaterialRetainOmitted(),
+  }) => throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> readLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> appendMaterialRevision(
+    String materialId,
+    AppendMaterialRevisionInput input,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MaterialRevision> readMaterialRevision(
+    String materialId,
+    String revisionId,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> retainLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> unretainLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
+      throw UnimplementedError();
 }

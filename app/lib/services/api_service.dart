@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../models/api_failure.dart';
 import '../models/content_package.dart';
 import '../models/coach_dashboard.dart';
+import '../models/learning_material.dart';
 import '../models/listening.dart';
 import '../models/llm_provider.dart';
 import '../models/personal_expression.dart';
@@ -43,6 +44,7 @@ part 'api/reading.dart';
 part 'api/realtime.dart';
 part 'api/semantic.dart';
 part 'api/semantic_embedding.dart';
+part 'api/materials.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
   final file = File(path);
@@ -297,6 +299,11 @@ const supportedApiVersion = 1;
 // R5 removes the published legacy ChunkTimeline HTTP/LLTimeline surface, so
 // the pinned Core contract is 3.x. The API generation remains 1.
 const supportedContractMajor = 3;
+// The App consumes the Core 3.2 learning-material surface, so a sidecar must
+// present contract >= 3.2.0 within the supported major. 3.0/3.1 sidecars are
+// rejected here instead of connecting and then failing on the first material
+// call.
+const supportedContractMinor = 2;
 
 void validateSidecarHandshake(Map<String, dynamic> handshake) {
   if (handshake['event'] != 'api.started' ||
@@ -321,6 +328,13 @@ void validateSidecarHandshake(Map<String, dynamic> handshake) {
     throw FormatException(
       'incompatible local core contract $contractVersion; '
       'this app supports $supportedContractMajor.x',
+    );
+  }
+  final contractMinor = int.parse(contractMatch.group(2)!);
+  if (contractMinor < supportedContractMinor) {
+    throw FormatException(
+      'incompatible local core contract $contractVersion; '
+      'this app requires $supportedContractMajor.$supportedContractMinor+',
     );
   }
 }

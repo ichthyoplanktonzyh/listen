@@ -6,6 +6,7 @@ import 'content_package_repository.dart';
 import 'external_vocabulary_repository.dart';
 import 'hunting_repository.dart';
 import 'learning_assets_repository.dart';
+import 'learning_material_repository.dart';
 import 'learning_repository.dart';
 import 'lexical_repository.dart';
 import 'listening_repository.dart';
@@ -47,6 +48,9 @@ final class LocalCoreRepositories {
       listening = LocalListeningRepository(() => _transport.currentApi),
       mediaLibrary = LocalMediaLibraryRepository(() => _transport.currentApi),
       mediaSession = LocalMediaSessionRepository(() => _transport.currentApi),
+      learningMaterial = LocalLearningMaterialRepository(
+        () => _transport.currentApi,
+      ),
       playback = LocalPlaybackRepository(() => _transport.currentApi),
       resource = LocalResourceRepository(() => _transport.currentApi),
       contentPackage = LocalContentPackageRepository(
@@ -81,6 +85,7 @@ final class LocalCoreRepositories {
   final ListeningRepository listening;
   final MediaLibraryRepository mediaLibrary;
   final MediaSessionRepository mediaSession;
+  final LearningMaterialRepository learningMaterial;
   final PlaybackRepository playback;
   final ResourceRepository resource;
   final ContentPackageRepository contentPackage;

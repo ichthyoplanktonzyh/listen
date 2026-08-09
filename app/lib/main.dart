@@ -404,6 +404,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     repository: mediaSessionRepository,
     subtitleAnalysis: subtitleAnalysisRepository,
     managedStore: managedAssetStore,
+    materialRepository: coreRepositories.learningMaterial,
   );
   late final huntingActions = HuntingActionsCoordinator(
     huntingSession: huntingSessionController,
