@@ -67,6 +67,11 @@ capabilities that may vary or be unavailable without breaking basic use.
 
 Opening a material temporarily does not add it to the Personal Library. The
 Learner explicitly retains a material before it is durably indexed and synced.
+Personal Library membership is independent of file location. By default,
+Listen may keep a verified device-local copy in its Managed Asset Store while
+leaving the original untouched; learners may instead reference an asset in
+place. Either storage choice preserves the same learner-owned material and
+learning records.
 
 ### Replaceable production, reusable results
 

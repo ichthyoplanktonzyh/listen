@@ -23,7 +23,14 @@ remain the authority for what a current build already supports.
 3. Resolve compatible installed or community capabilities in the background.
 4. Generate missing learning data locally when useful.
 5. Explicitly keep the material when it should enter the Personal Library;
-   temporary preview remains possible.
+   temporary preview remains possible. By default, Listen verifies a copy in
+   its Managed Asset Store and leaves the original untouched; the learner may
+   instead choose to reference the source asset in place.
+
+Personal Library membership does not depend on a file's storage location.
+Keeping a material, copying or moving its asset, and deleting a managed copy are
+separate actions. If the Managed Asset Store is unavailable, the material stays
+in the Personal Library while its local asset is reported as unavailable.
 
 ## Start from community content
 
