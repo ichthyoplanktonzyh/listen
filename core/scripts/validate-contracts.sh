@@ -211,6 +211,10 @@ for (const path of ["/v1/health", "/v1/media", "/v1/lltimeline/import", "/v1/med
 for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id}", "/v1/transcription/jobs/{job_id}/cancel", "/v1/transcription/jobs/{job_id}/retry", "/v1/transcription/jobs/{job_id}/archive", "/v1/subtitles/{track_id}/chunk-timelines", "/v1/subtitles/{track_id}/chunk-timelines/summary", "/v1/chunk-timelines/{timeline_id}", "/v1/chunk-timelines/{timeline_id}/activate", "/v1/chunk-timelines/{timeline_id}/archive", "/v1/chunk-timelines/{timeline_id}/export"]) {
   if (openapi.includes(removed + ":")) throw new Error(`removed OpenAPI path ${removed} must stay absent`);
 }
+for (const removedWire of ["chunk_timelines:", "active_chunk_timeline_id:", "ChunkTimeline:", "ChunkTimelineSummary:", "ChunkBoundarySource:", "GenerateChunkTimeline:"]) {
+  if (openapi.includes(removedWire)) throw new Error(`removed OpenAPI wire surface ${removedWire} must stay absent`);
+}
+if (!openapi.includes("version: 3.0.0")) throw new Error("OpenAPI must report the current R5 contract 3.0.0");
 if (routerSource.includes("/v1/transcription/jobs")) throw new Error("removed transcription jobs route must stay absent from the router");
 const implementedPaths = [...new Set([...routerSource.matchAll(/"((?:\/v1\/)[^"]+)"/g)].map(match => match[1]))].sort();
 const documentedPaths = [...new Set([...openapi.matchAll(/^  (\/v1\/[^:]+):/gm)].map(match => match[1]))].sort();

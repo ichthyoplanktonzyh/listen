@@ -8,7 +8,8 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `2.1.0` (published and pinned by the App)
+- Contract version: `3.0.0` (R5 breaking, unreleased; the App R4 baseline pins
+  the previously published `2.1.0` from `v0.7.0-split.4`)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
@@ -114,7 +115,10 @@ R5 is complete. Core PR (this branch, merge to be recorded) deleted
 `scripts/timeline-production`, the legacy `ChunkTimeline` domain and
 persistence, the LLTimeline chunk fields, and the eight
 `/v1/*chunk-timelines*` HTTP operations with their OpenAPI schemas and
-generated-client identity. Corpus chunk occurrences now project from the
+generated-client identity. Removing published operations and LLTimeline
+fields is breaking, so the current contract is `3.0.0` (unreleased); the App
+R4 baseline stays pinned to the previously published `2.1.0` until the R5
+release is published. Corpus chunk occurrences now project from the
 active Prosody Analysis (the sole prosodic-chunk semantic source); Sense Group
 stays independent; content-package import stays candidate-only and foundation
 preparation never regenerates a chunk representation. Historical migration

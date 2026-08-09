@@ -118,9 +118,13 @@ installs it as candidates and preserves the learner's current active choices.
 ## Current Reality And Migration
 
 - Core owns content-package v1 validation, typed projection, atomic
-  candidate-only import and explicit activation. Contract `2.1.0` retains the
-  R1 removal of `/v1/transcription/jobs*` and additively projects package-native
-  Prosody Analysis; immutable release `v0.7.0-split.4` is the App baseline.
+  candidate-only import and explicit activation. The current R5 contract is
+  `3.0.0` (breaking, unreleased): it retains the R1 removal of
+  `/v1/transcription/jobs*` and the R3 Prosody Analysis projection, and
+  additionally removes the retired ChunkTimeline wire surface. The App R4
+  baseline pins the previously published `2.1.0` from immutable release
+  `v0.7.0-split.4`; re-pinning to `3.0.0` happens when the R5 release is
+  published.
 - `listen-gen` commit `42649d9f` / tool `0.3.0` natively produces deterministic
   Subtitle Text Track, aligned Word Timeline, Sense Group, Word Acoustics,
   Prosody Analysis with explicit chunk spans, and optional qualified

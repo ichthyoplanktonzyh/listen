@@ -279,7 +279,10 @@ Completed:
 - Core PR #124 (merge to be recorded) deleted `scripts/timeline-production`,
   the legacy `ChunkTimeline` domain/persistence, LLTimeline chunk fields, the
   eight `/v1/*chunk-timelines*` HTTP operations, their OpenAPI schemas and the
-  generated client identity. Corpus chunk occurrences now project from the
+  generated client identity. Removing the published operations and LLTimeline
+  fields is breaking, so the current contract is `3.0.0` (unreleased); the
+  App R4 baseline stays pinned to the previously published `2.1.0` until the
+  R5 release is published. Corpus chunk occurrences now project from the
   active Prosody Analysis; foundation/content-fit read prosody as the sole
   prosodic-chunk source; Sense Group stays independent; the content-package
   import stays candidate-only. Migration 0013 (immutable history) is retained

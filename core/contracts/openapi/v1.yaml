@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 2.1.0
+  version: 3.0.0
   description: Versioned loopback-only application-service adapter. Playback control is excluded.
 servers:
   - url: http://127.0.0.1:{port}

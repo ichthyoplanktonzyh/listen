@@ -326,8 +326,6 @@ def timit_to_lltimeline(args: argparse.Namespace) -> int:
         "active_word_timeline_id": word_timeline_id,
         "phone_timelines": [],
         "active_phone_timeline_id": None,
-        "chunk_timelines": [],
-        "active_chunk_timeline_id": None,
         "artifacts": [
             {
                 "kind": "benchmark_dataset_manifest",
