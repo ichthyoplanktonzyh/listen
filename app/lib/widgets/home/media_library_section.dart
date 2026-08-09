@@ -405,13 +405,13 @@ class _MiniFitChip extends StatelessWidget {
   }
 }
 
-/// The media-library folder scan as the "my media" surface shows it.
+/// The managed asset store scan as the "my media" surface shows it.
 ///
 /// Every outcome gets its own sentence, because they ask for different things
-/// from the user: no folder chosen sends them to the picker, a folder gone off
-/// disk sends them to the drive, an unreachable core says the contents are
-/// unknown — which is the one this surface must never collapse into "you have
-/// no media".
+/// from the user: a custom location gone off disk sends them to the drive, an
+/// unreachable core says the contents are unknown — which is the one this
+/// surface must never collapse into "you have no media". The default
+/// app-managed store always scans like a ready folder.
 class MediaLibraryScanCard extends StatelessWidget {
   const MediaLibraryScanCard({
     super.key,
@@ -438,8 +438,7 @@ class MediaLibraryScanCard extends StatelessWidget {
         state.status == MediaLibraryScanStatus.failed;
     final message = switch (state.status) {
       MediaLibraryScanStatus.idle => l.text('mediaScanIdle'),
-      MediaLibraryScanStatus.folderUnset => l.text('mediaScanFolderUnset'),
-      MediaLibraryScanStatus.folderMissing => l.text('mediaLibraryMissing'),
+      MediaLibraryScanStatus.folderMissing => l.text('managedStoreMissing'),
       MediaLibraryScanStatus.coreUnavailable => l.text(
         'mediaScanCoreUnavailable',
       ),
@@ -470,8 +469,6 @@ class MediaLibraryScanCard extends StatelessWidget {
                 else
                   Icon(
                     switch (state.status) {
-                      MediaLibraryScanStatus.folderUnset =>
-                        Icons.folder_off_outlined,
                       MediaLibraryScanStatus.folderMissing =>
                         Icons.warning_amber_outlined,
                       MediaLibraryScanStatus.coreUnavailable =>
@@ -571,13 +568,9 @@ class MediaLibraryScanCard extends StatelessWidget {
   };
 
   Widget _action(AppLocalizations l) => switch (state.status) {
-    MediaLibraryScanStatus.folderUnset => OutlinedButton(
-      onPressed: onChooseFolder,
-      child: Text(l.text('mediaLibraryChoose')),
-    ),
     MediaLibraryScanStatus.folderMissing => OutlinedButton(
       onPressed: onChooseFolder,
-      child: Text(l.text('mediaLibraryChange')),
+      child: Text(l.text('managedStoreChange')),
     ),
     MediaLibraryScanStatus.scanning => TextButton(
       onPressed: onCancel,

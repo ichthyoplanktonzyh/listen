@@ -21,7 +21,8 @@ final class LocalOccurrenceMediaRepository
   Future<String> fingerprintFile(String path) => _api.fingerprintFile(path);
 
   @override
-  Future<void> registerMedia(String path) async {
-    await _api.registerMedia(path);
-  }
+  /// Resolving an occurrence's source lets the learner inspect it now; it
+  /// never creates Personal Library membership without an explicit Keep.
+  Future<void> registerMedia(String path) async =>
+      _api.registerMedia(path, retain: false);
 }

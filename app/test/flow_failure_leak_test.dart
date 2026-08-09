@@ -26,6 +26,7 @@ import 'package:llplayer_next/models/media_download.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/external_tools.dart';
+import 'package:llplayer_next/services/managed_asset_store.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
 import 'package:llplayer_next/widgets/flows/manual_review_flow.dart';
 import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
@@ -484,6 +485,7 @@ _harness(LocalApi service) {
         resourceActions: resourceActions,
         repository: LocalMediaSessionRepository(() => service),
         subtitleAnalysis: LocalSubtitleAnalysisRepository(() => service),
+        managedStore: _UnavailableManagedStore(),
       )..bind(
         isMounted: () => true,
         text: (key) => const AppLocalizations(Locale('en')).text(key),
@@ -504,4 +506,14 @@ _harness(LocalApi service) {
     resourceActions: resourceActions,
     mediaSession: mediaSession,
   );
+}
+
+/// A store that can never be reached — this suite drives real failures at the
+/// transport level, so the store stays a wall rather than a promise.
+final class _UnavailableManagedStore implements ManagedAssetStoreService {
+  @override
+  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) =>
+      throw const ManagedStoreUnavailable();
+  @override
+  Future<void> deleteStoreCopy(String path) async {}
 }

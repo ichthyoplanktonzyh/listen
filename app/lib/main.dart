@@ -97,6 +97,7 @@ import 'services/acquisition_ledger.dart';
 import 'services/subscription_store.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
+import 'services/managed_asset_store.dart';
 import 'services/platform_capabilities.dart';
 import 'services/smoke_launch_configuration_service.dart';
 import 'settings.dart';
@@ -137,6 +138,7 @@ import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/sentence_analysis_window.dart';
 import 'widgets/player/download_status_bar.dart';
 import 'widgets/player/player_global_shortcuts.dart';
+import 'widgets/player/retention_menu.dart';
 import 'widgets/player/shortcut_cheat_sheet.dart';
 import 'widgets/settings/settings_flow.dart';
 
@@ -316,6 +318,17 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final mediaSessionRepository = coreRepositories.mediaSession;
   late final subtitleAnalysisRepository = coreRepositories.subtitleAnalysis;
 
+  /// The managed asset store: kept material is copied here, content-addressed
+  /// by SHA-256. The root follows the settings verdict, so a missing custom
+  /// location resolves to null and the store reports itself unavailable.
+  late final managedAssetStore = LocalManagedAssetStoreService(
+    resolveRoot: () => switch (settingsController.managedStoreLocation.state) {
+      ManagedStoreState.appManaged ||
+      ManagedStoreState.ready => settingsController.managedStoreLocation.path,
+      ManagedStoreState.missing => null,
+    },
+  );
+
   // ── Controllers ──
   final playerController = PlayerController();
   final subtitleController = SubtitleController();
@@ -390,6 +403,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     resourceActions: resourceActions,
     repository: mediaSessionRepository,
     subtitleAnalysis: subtitleAnalysisRepository,
+    managedStore: managedAssetStore,
   );
   late final huntingActions = HuntingActionsCoordinator(
     huntingSession: huntingSessionController,
@@ -447,10 +461,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     ),
     repository: coreRepositories.mediaLibrary,
     resolveFolder: () async {
-      // A folder can go off disk between visits (unmounted volume, rename), so
-      // the verdict is re-read at the start of every scan.
-      await settingsController.refreshMediaLibraryFolderState();
-      return settingsController.mediaLibraryFolder;
+      // A custom location can go off disk between visits (unmounted volume,
+      // rename), so the verdict is re-read at the start of every scan. The
+      // default app-managed store is created on demand: a not-yet-existing
+      // default store is an empty store, never the missing-folder story.
+      await settingsController.refreshManagedStoreState();
+      final location = settingsController.managedStoreLocation;
+      if (location.state == ManagedStoreState.appManaged) {
+        final defaultStore = Directory(location.path);
+        if (!await defaultStore.exists()) {
+          await defaultStore.create(recursive: true);
+        }
+        return (path: location.path, state: ManagedStoreState.ready);
+      }
+      return location;
     },
     registeredPaths: () => mediaLibraryActions.registeredMediaPaths,
     refreshLibrary: mediaLibraryActions.loadMediaLibrary,
@@ -591,13 +615,15 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   /// The media surface sends the user to the same picker Settings uses; a
-  /// folder that was actually chosen is scanned right away, because otherwise
-  /// the surface would sit on "no folder" until the next visit.
-  Future<void> _chooseMediaLibraryFolder() async {
-    final folder = await settingsController.chooseMediaLibraryFolder(
-      confirmButtonText: l.text('mediaLibraryPickerConfirm'),
+  /// location that actually changed is scanned right away, because otherwise
+  /// the surface would sit on the previous store until the next visit.
+  Future<void> _chooseManagedStoreLocation() async {
+    final before = settingsController.managedStoreLocation;
+    final location = await settingsController.chooseManagedStoreLocation(
+      confirmButtonText: l.text('managedStorePickerConfirm'),
     );
-    if (!mounted || folder.state == MediaLibraryFolderState.unset) return;
+    if (!mounted) return;
+    if (location.path == before.path) return;
     await mediaLibraryScan.refresh();
   }
 
@@ -2217,6 +2243,17 @@ class _PlayerScreenState extends State<PlayerScreen>
         unawaited(settingsController.setTranscriptTranslation(mode)),
   );
 
+  /// The retention affordance for the current media: Keep (copy into the
+  /// managed store), reference in place, or unretain. The menu reads its
+  /// state from the player, and the coordinator owns the work.
+  Widget _retentionMenu() => RetentionMenu(
+    player: playerController,
+    onKeepCopy: () => unawaited(mediaSession.keepCurrentMedia()),
+    onKeepReference: () =>
+        unawaited(mediaSession.referenceCurrentMediaInPlace()),
+    onUnretain: () => unawaited(mediaSession.unretainCurrentMedia()),
+  );
+
   /// Ways of working the material on the workbench. One menu, because these
   /// were spread over a posture grid, a popup inside it, and two transport
   /// menus — four places to look for one decision.
@@ -2335,8 +2372,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             onScanCancel: mediaLibraryScan.cancel,
             onRetryScanRegistrations: () =>
                 unawaited(mediaLibraryScan.retryFailedRegistrations()),
-            onChooseMediaLibraryFolder: () =>
-                unawaited(_chooseMediaLibraryFolder()),
+            onChooseManagedStoreLocation: () =>
+                unawaited(_chooseManagedStoreLocation()),
             onOpenLibraryEntry: (entry) =>
                 unawaited(mediaLibraryActions.openLibraryEntry(entry)),
             onStartExtensiveEntry: (entry) =>
@@ -2643,6 +2680,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         unawaited(
                                                           _openSettings(),
                                                         ),
+                                                    retentionMenu:
+                                                        _retentionMenu(),
                                                     translationMenu:
                                                         _translationMenu(),
                                                     mediaTitle: widget

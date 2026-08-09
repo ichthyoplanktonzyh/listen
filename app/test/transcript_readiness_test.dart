@@ -19,6 +19,7 @@ import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/content_package.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/services/managed_asset_store.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
@@ -560,6 +561,7 @@ _coordinatorHarness(List<SubtitleTrack> tracks) {
         resourceActions: resourceActions,
         repository: _FakeMediaSessionRepository(),
         subtitleAnalysis: _FakeSubtitleAnalysisRepository(),
+        managedStore: _UnavailableManagedStore(),
       )..bind(
         isMounted: () => true,
         text: (key) => key,
@@ -796,17 +798,29 @@ final class _FakeMediaSessionRepository implements MediaSessionRepository {
   @override
   Future<void> saveProgress(String mediaId, Duration position) async {}
   @override
-  Future<MediaItem> registerMedia(String path) async => MediaItem(
+  Future<MediaItem> registerMedia(
+    String path, {
+    required bool retain,
+    String? title,
+    String? kind,
+  }) async => MediaItem(
     id: 'media-1',
     path: path,
     fingerprint: 'fingerprint',
-    title: 'Title',
+    title: title ?? 'Title',
     kind: 'audio',
     durationMs: 2200,
     availability: 'available',
     createdAtMs: 0,
     updatedAtMs: 0,
+    retainedAtMs: retain ? 1 : null,
   );
+  @override
+  Future<MediaItem> retainMedia(String mediaId) async =>
+      throw UnimplementedError();
+  @override
+  Future<MediaItem> unretainMedia(String mediaId) async =>
+      throw UnimplementedError();
   @override
   Future<Duration?> readProgress(String mediaId) async => null;
   @override
@@ -837,4 +851,14 @@ final class _FakeSubtitleAnalysisRepository
     required String? sentenceId,
     required String preferredModelId,
   }) async => throw UnimplementedError();
+}
+
+/// A store that can never be reached — used by harnesses whose scenario does
+/// not touch retention, so the store is a wall rather than a promise.
+final class _UnavailableManagedStore implements ManagedAssetStoreService {
+  @override
+  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) =>
+      throw const ManagedStoreUnavailable();
+  @override
+  Future<void> deleteStoreCopy(String path) async {}
 }

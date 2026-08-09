@@ -9,7 +9,7 @@ import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../player/shortcut_cheat_sheet.dart';
 import 'llm_provider_settings.dart';
-import 'media_library_settings.dart';
+import 'managed_store_settings.dart';
 import 'realtime_provider_settings.dart';
 import 'syntax_capability_settings.dart';
 
@@ -34,9 +34,9 @@ class SettingsDialog extends StatefulWidget {
     required this.transcriptWidth,
     required this.primaryColor,
     required this.secondaryColor,
-    required this.mediaLibraryFolder,
-    required this.onChooseMediaLibraryFolder,
-    required this.onClearMediaLibraryFolder,
+    required this.managedStoreLocation,
+    required this.onChooseManagedStoreLocation,
+    required this.onClearManagedStoreLocation,
     required this.ffmpegPath,
     required this.ffprobePath,
     required this.ytDlpPath,
@@ -112,11 +112,11 @@ class SettingsDialog extends StatefulWidget {
   final Color primaryColor;
   final Color secondaryColor;
 
-  /// The persisted media library folder plus what the disk says about it; the
+  /// The managed asset store location plus what the disk says about it; the
   /// dialog re-adopts whatever the host resolves after a pick or a clear.
-  final MediaLibraryFolder mediaLibraryFolder;
-  final Future<MediaLibraryFolder> Function() onChooseMediaLibraryFolder;
-  final Future<MediaLibraryFolder> Function() onClearMediaLibraryFolder;
+  final ManagedStoreLocation managedStoreLocation;
+  final Future<ManagedStoreLocation> Function() onChooseManagedStoreLocation;
+  final Future<ManagedStoreLocation> Function() onClearManagedStoreLocation;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -203,7 +203,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late double transcriptWidth;
   late Color primaryColor;
   late Color secondaryColor;
-  late MediaLibraryFolder mediaLibraryFolder;
+  late ManagedStoreLocation managedStoreLocation;
   late bool wordSyncVisible;
   late bool markKeysEnabled;
   late String groupingMode;
@@ -274,7 +274,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     transcriptWidth = widget.transcriptWidth;
     primaryColor = widget.primaryColor;
     secondaryColor = widget.secondaryColor;
-    mediaLibraryFolder = widget.mediaLibraryFolder;
+    managedStoreLocation = widget.managedStoreLocation;
     wordSyncVisible = widget.wordSyncVisible;
     markKeysEnabled = widget.markKeysEnabled;
     groupingMode = widget.groupingMode;
@@ -303,14 +303,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
     super.dispose();
   }
 
-  /// The host resolves the folder (picker, then disk), so the dialog adopts the
-  /// verdict it hands back instead of guessing one from the path.
-  Future<void> _updateMediaLibraryFolder(
-    Future<MediaLibraryFolder> Function() action,
+  /// The host resolves the managed store location (picker, then disk), so the
+  /// dialog adopts the verdict it hands back instead of guessing one from the
+  /// path.
+  Future<void> _updateManagedStoreLocation(
+    Future<ManagedStoreLocation> Function() action,
   ) async {
-    final folder = await action();
+    final location = await action();
     if (!mounted) return;
-    setState(() => mediaLibraryFolder = folder);
+    setState(() => managedStoreLocation = location);
   }
 
   @override
@@ -939,20 +940,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     const Divider(),
                     Text(
                       key: _categoryKeys[3],
-                      l.text('mediaLibraryTitle'),
+                      l.text('managedStoreTitle'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: ListenSpacing.gap8),
-                    MediaLibrarySettings(
-                      folder: mediaLibraryFolder,
+                    ManagedStoreSettings(
+                      location: managedStoreLocation,
                       onChoose: () => unawaited(
-                        _updateMediaLibraryFolder(
-                          widget.onChooseMediaLibraryFolder,
+                        _updateManagedStoreLocation(
+                          widget.onChooseManagedStoreLocation,
                         ),
                       ),
                       onClear: () => unawaited(
-                        _updateMediaLibraryFolder(
-                          widget.onClearMediaLibraryFolder,
+                        _updateManagedStoreLocation(
+                          widget.onClearManagedStoreLocation,
                         ),
                       ),
                     ),

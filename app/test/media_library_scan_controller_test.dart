@@ -20,6 +20,7 @@ class _FakeLibrary implements MediaLibraryRepository {
   final refused = <String>{};
   final registeredPaths = <String>[];
   final registeredDurations = <String, int?>{};
+  final registeredRetains = <String, bool>{};
   int registerCalls = 0;
   int listCalls = 0;
 
@@ -31,7 +32,11 @@ class _FakeLibrary implements MediaLibraryRepository {
       const ApiFailure(raw: 'fake', message: 'core refused the media');
 
   @override
-  Future<MediaItem> registerMedia(String path, {int? durationMs}) async {
+  Future<MediaItem> registerMedia(
+    String path, {
+    int? durationMs,
+    required bool retain,
+  }) async {
     registerCalls++;
     if (registerLatency > Duration.zero) {
       await Future<void>.delayed(registerLatency);
@@ -39,6 +44,7 @@ class _FakeLibrary implements MediaLibraryRepository {
     if (refused.contains(path)) throw StateError('refused');
     registeredPaths.add(path);
     registeredDurations[path] = durationMs;
+    registeredRetains[path] = retain;
     return MediaItem(
       id: path,
       path: path,
@@ -106,7 +112,7 @@ void main() {
   MediaLibraryScanController controller({
     required _FakeLibrary library,
     MediaProbe? probe,
-    MediaLibraryFolder? folderState,
+    ManagedStoreLocation? folderState,
     List<String>? Function()? registeredPaths,
     int refreshEvery = 25,
     void Function()? onRefreshLibrary,
@@ -114,8 +120,7 @@ void main() {
     scanner: MediaLibraryScanner(probe ?? _CountingProbe()),
     repository: library,
     resolveFolder: () async =>
-        folderState ??
-        (path: folder.path, state: MediaLibraryFolderState.ready),
+        folderState ?? (path: folder.path, state: ManagedStoreState.ready),
     registeredPaths: registeredPaths ?? () => library.registeredPaths,
     refreshLibrary: () async {
       onRefreshLibrary?.call();
@@ -125,35 +130,52 @@ void main() {
     refreshEvery: refreshEvery,
   );
 
-  test(
-    'an unset folder and a missing folder are two different answers',
-    () async {
-      final library = _FakeLibrary();
-      final probe = _CountingProbe();
+  test('the default store and a missing custom folder are two different '
+      'answers', () async {
+    final library = _FakeLibrary();
+    final defaultProbe = _CountingProbe();
+    final missingProbe = _CountingProbe();
 
-      final unset = controller(
-        library: library,
-        probe: probe,
-        folderState: (path: '', state: MediaLibraryFolderState.unset),
-      );
-      await unset.enterLibrary();
-      expect(unset.state.status, MediaLibraryScanStatus.folderUnset);
+    // No custom location: the app-managed default store is a real, scannable
+    // location, never a "no store" story.
+    write('talk.mp4');
+    final appManaged = controller(
+      library: library,
+      probe: defaultProbe,
+      folderState: (path: folder.path, state: ManagedStoreState.appManaged),
+    );
+    await appManaged.enterLibrary();
+    expect(appManaged.state.status, MediaLibraryScanStatus.completed);
+    expect(library.registeredPaths, hasLength(1));
 
-      final missing = controller(
-        library: library,
-        probe: probe,
-        folderState: (
-          path: '/volumes/gone/media',
-          state: MediaLibraryFolderState.missing,
-        ),
-      );
-      await missing.enterLibrary();
-      expect(missing.state.status, MediaLibraryScanStatus.folderMissing);
-      // The remembered path is what makes "remount the drive" actionable.
-      expect(missing.state.folderPath, '/volumes/gone/media');
-      expect(probe.calls, 0);
-    },
-  );
+    final missing = controller(
+      library: library,
+      probe: missingProbe,
+      folderState: (
+        path: '/volumes/gone/media',
+        state: ManagedStoreState.missing,
+      ),
+    );
+    await missing.enterLibrary();
+    expect(missing.state.status, MediaLibraryScanStatus.folderMissing);
+    // The remembered path is what makes "remount the drive" actionable.
+    expect(missing.state.folderPath, '/volumes/gone/media');
+    expect(missingProbe.calls, 0);
+  });
+
+  test('scan registration is discovery and never silently retains', () async {
+    final path = write('discovery.mp4');
+    final library = _FakeLibrary();
+    final scan = controller(
+      library: library,
+      registeredPaths: () => const <String>[],
+    );
+
+    await scan.enterLibrary();
+
+    expect(scan.state.status, MediaLibraryScanStatus.completed);
+    expect(library.registeredRetains[path], isFalse);
+  });
 
   test('an unreachable core leaves the library unknown, never empty', () async {
     write('talk.mp4');

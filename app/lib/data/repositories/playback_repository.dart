@@ -58,7 +58,11 @@ class LocalPlaybackRepository implements PlaybackRepository {
   @override
   Future<String> fingerprintFile(String path) => _api.fingerprintFile(path);
   @override
-  Future<void> registerMedia(String path) async => _api.registerMedia(path);
+  /// Playback/relinking only attaches a usable source to existing learning
+  /// state. It is not an explicit Keep, so a newly registered file stays
+  /// Temporary Material.
+  Future<void> registerMedia(String path) async =>
+      _api.registerMedia(path, retain: false);
   @override
   Future<void> updatePhoneticFindingFeedback({
     required String findingId,

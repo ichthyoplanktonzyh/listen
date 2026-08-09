@@ -120,7 +120,7 @@ class LocalReviewRepository implements ReviewRepository {
   Future<String> fingerprintFile(String path) => _api.fingerprintFile(path);
 
   @override
-  Future<void> registerMedia(String path) async {
-    await _api.registerMedia(path);
-  }
+  /// A review-media relink is source resolution, not retention.
+  Future<void> registerMedia(String path) async =>
+      _api.registerMedia(path, retain: false);
 }

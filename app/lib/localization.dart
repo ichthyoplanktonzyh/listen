@@ -427,22 +427,40 @@ class AppLocalizations {
       'transcriptWidth': 'Transcript width',
       'primaryColor': 'Primary color',
       'secondaryColor': 'Secondary color',
-      'mediaLibraryTitle': 'Media library folder',
-      'mediaLibraryDescription':
-          'Downloads land in this folder, and everything in it is what "My '
-          'media" shows.',
-      'mediaLibraryNotSet': 'No folder chosen yet',
-      'mediaLibraryChoose': 'Choose folder…',
-      'mediaLibraryChange': 'Change folder…',
-      'mediaLibraryClear': 'Clear',
-      'mediaLibraryPickerConfirm': 'Use this folder',
-      'mediaLibraryMissing':
+      'managedStoreTitle': 'Managed asset store',
+      'managedStoreDescription':
+          'Kept material is copied into this folder, and "My media" reads '
+          'from here. With no folder chosen, the app manages its own store '
+          'under Application Support.',
+      'managedStoreDefault': 'Default app-managed folder',
+      'managedStoreChoose': 'Choose folder…',
+      'managedStoreChange': 'Change folder…',
+      'managedStoreClear': 'Back to default',
+      'managedStorePickerConfirm': 'Use this folder',
+      'managedStoreMissing':
           'This folder is not on disk right now — it may have been moved or '
           'renamed, or its drive is not connected.',
-      'mediaLibraryAccessHint':
+      'managedStoreAccessHint':
           'If the folder is in Documents, Desktop or Downloads, macOS asks for '
           'permission once the first time it is read. Allow it, otherwise the '
           'folder will look empty.',
+      // ── Retention: Keep / reference / unretain ──
+      'retentionKeepAction': 'Keep',
+      'retentionRetainedLabel': 'In your library',
+      'retentionKeepCopyAction': 'Keep a copy',
+      'retentionKeepCopyHint':
+          'Copies into the app-managed folder; the original stays put',
+      'retentionReferenceAction': 'Keep as reference',
+      'retentionReferenceHint': 'Keeps the original file exactly where it is',
+      'retentionUnkeepAction': 'Remove from library',
+      'statusMediaKept': 'Kept in your library',
+      'statusMediaKeptInPlace': 'Kept as reference',
+      'statusMediaUnkept': 'Removed from your library',
+      'statusKeepFailed': 'Could not keep this media',
+      'statusUnkeepFailed': 'Could not remove this media from your library',
+      'statusManagedStoreUnavailable':
+          'Managed storage is unavailable right now — nothing was changed',
+      'statusOpenMediaFirst': 'Open local media first',
       'externalTools': 'Optional external tools',
       'close': 'Close',
       'save': 'Save',
@@ -1460,22 +1478,19 @@ class AppLocalizations {
       'coldStartSkip': 'Skip',
       'mediaLibrary': 'Media library',
       'mediaLibraryEmpty': 'Media you open will appear here.',
-      'mediaScanIdle': 'The media library folder has not been scanned yet.',
-      'mediaScanFolderUnset':
-          'Choose a media library folder and what you already have will show up '
-          'here.',
+      'mediaScanIdle': 'The managed asset store has not been scanned yet.',
       'mediaScanCoreUnavailable':
           'The local core is not connected, so the library contents are '
           'unknown — this does not mean the library is empty.',
-      'mediaScanScanning': 'Scanning the media library folder…',
-      'mediaScanCompleted': 'Folder scan finished.',
+      'mediaScanScanning': 'Scanning the managed asset store…',
+      'mediaScanCompleted': 'Store scan finished.',
       'mediaScanCancelled':
-          'Folder scan stopped. Everything already added stays.',
-      'mediaScanFailed': 'The folder scan broke down.',
+          'Store scan stopped. Everything already added stays.',
+      'mediaScanFailed': 'The store scan broke down.',
       'mediaScanCounts':
           '{new} added · {unchanged} unchanged · {skipped} skipped',
       'mediaScanCancel': 'Stop',
-      'mediaScanRefresh': 'Rescan folder',
+      'mediaScanRefresh': 'Rescan store',
       'mediaScanRetryFailed': 'Retry those files',
       'mediaScanRegisterFailed':
           '{count} file(s) could not be added to the library.',
@@ -2570,16 +2585,32 @@ class AppLocalizations {
       'transcriptWidth': '文稿宽度',
       'primaryColor': '主字幕颜色',
       'secondaryColor': '副字幕颜色',
-      'mediaLibraryTitle': '媒体库文件夹',
-      'mediaLibraryDescription': '下载会落在这个文件夹里；「我的媒体」显示的就是它里面的内容。',
-      'mediaLibraryNotSet': '尚未选择文件夹',
-      'mediaLibraryChoose': '选择文件夹…',
-      'mediaLibraryChange': '更换文件夹…',
-      'mediaLibraryClear': '清除',
-      'mediaLibraryPickerConfirm': '使用这个文件夹',
-      'mediaLibraryMissing': '这个文件夹当前不在磁盘上——可能已被移动或改名，也可能所在的磁盘没有连接。',
-      'mediaLibraryAccessHint':
+      'managedStoreTitle': '受管素材库',
+      'managedStoreDescription':
+          '保留的素材会被复制到这个文件夹；「我的媒体」从这里读取。未选择文件夹时，应用会在「应用程序支持」下自己管理一个目录。',
+      'managedStoreDefault': '应用默认管理目录',
+      'managedStoreChoose': '选择文件夹…',
+      'managedStoreChange': '更换文件夹…',
+      'managedStoreClear': '恢复默认',
+      'managedStorePickerConfirm': '使用这个文件夹',
+      'managedStoreMissing': '这个文件夹当前不在磁盘上——可能已被移动或改名，也可能所在的磁盘没有连接。',
+      'managedStoreAccessHint':
           '文件夹若位于「文稿」「桌面」或「下载」，macOS 会在首次读取时请求一次授权。请允许，否则文件夹会显示为空。',
+      // ── 保留：保留 / 引用 / 移除 ──
+      'retentionKeepAction': '保留',
+      'retentionRetainedLabel': '已在媒体库',
+      'retentionKeepCopyAction': '保存副本',
+      'retentionKeepCopyHint': '复制到应用管理目录；原文件保持不动',
+      'retentionReferenceAction': '仅保留引用',
+      'retentionReferenceHint': '原文件留在当前位置',
+      'retentionUnkeepAction': '从媒体库移除',
+      'statusMediaKept': '已保留到媒体库',
+      'statusMediaKeptInPlace': '已按引用保留',
+      'statusMediaUnkept': '已从媒体库移除',
+      'statusKeepFailed': '无法保留这个媒体',
+      'statusUnkeepFailed': '无法从媒体库移除这个媒体',
+      'statusManagedStoreUnavailable': '受管存储当前不可用——没有做任何改动',
+      'statusOpenMediaFirst': '请先打开本地媒体',
       'externalTools': '可选外部工具',
       'close': '关闭',
       'save': '保存',
@@ -3484,16 +3515,15 @@ class AppLocalizations {
       'coldStartSkip': '跳过',
       'mediaLibrary': '媒体库',
       'mediaLibraryEmpty': '打开过的媒体会出现在这里。',
-      'mediaScanIdle': '媒体库文件夹还没有扫描过。',
-      'mediaScanFolderUnset': '选择媒体库文件夹后，你手上已有的媒体会出现在这里。',
+      'mediaScanIdle': '受管素材库还没有扫描过。',
       'mediaScanCoreUnavailable': '本地内核未连接，媒体库里有什么无法确认——这不等于库是空的。',
-      'mediaScanScanning': '正在扫描媒体库文件夹…',
-      'mediaScanCompleted': '文件夹扫描完成。',
+      'mediaScanScanning': '正在扫描受管素材库…',
+      'mediaScanCompleted': '素材库扫描完成。',
       'mediaScanCancelled': '扫描已停止，已经加入的条目保留。',
-      'mediaScanFailed': '文件夹扫描中断。',
+      'mediaScanFailed': '素材库扫描中断。',
       'mediaScanCounts': '新增 {new} · 未变化 {unchanged} · 跳过 {skipped}',
       'mediaScanCancel': '停止',
-      'mediaScanRefresh': '重新扫描文件夹',
+      'mediaScanRefresh': '重新扫描素材库',
       'mediaScanRetryFailed': '重试这些文件',
       'mediaScanRegisterFailed': '有 {count} 个文件没能加入媒体库。',
       'sidecarSubtitleBadge': '旁边有字幕文件',

@@ -24,10 +24,7 @@ enum MediaLibraryScanStatus {
   /// Nothing has been asked of the scanner yet — unknown, not empty.
   idle,
 
-  /// No media-library folder has ever been chosen.
-  folderUnset,
-
-  /// A folder is remembered, but the disk does not have it.
+  /// A custom location is remembered, but the disk does not have it.
   folderMissing,
 
   /// Core is not reachable, so what the library holds cannot be known.
@@ -112,12 +109,14 @@ class MediaLibraryScanState {
   bool get libraryContentsKnown => status == MediaLibraryScanStatus.completed;
 }
 
-/// Owns the media-library folder scan: walk the folder, register what is new
+/// Owns the managed asset store scan: walk the folder, register what is new
 /// with Core, then let Core's own list refresh the surface.
 ///
 /// Core stays the authority. Nothing here is rendered as a library row — a
 /// [ScannedMedia] is a discovery, and it only becomes content once
-/// `registerMedia` accepted it and the library list came back.
+/// `registerMedia` accepted it and the library list came back. Registration is
+/// discovery (retain false): finding a file in a folder never implies Personal
+/// Library membership, which is an explicit Keep.
 ///
 /// The controller owns the lifecycle so the surface never starts work: the
 /// composition root calls [enterLibrary] when the media surface becomes
@@ -138,8 +137,8 @@ class MediaLibraryScanController extends ChangeNotifier {
   final MediaLibraryScanner scanner;
   final MediaLibraryRepository repository;
 
-  /// The folder plus what the disk currently says about it.
-  final Future<MediaLibraryFolder> Function() resolveFolder;
+  /// The store location plus what the disk currently says about it.
+  final Future<ManagedStoreLocation> Function() resolveFolder;
 
   /// Paths Core already holds, or null while that is unknown.
   final List<String>? Function() registeredPaths;
@@ -238,14 +237,15 @@ class MediaLibraryScanController extends ChangeNotifier {
       if (_stale(generation)) return;
       _folderPath = folder.path;
       switch (folder.state) {
-        case MediaLibraryFolderState.unset:
-          _reset(MediaLibraryScanStatus.folderUnset);
-          return;
-        case MediaLibraryFolderState.missing:
+        // The default app-managed store is a real, scannable location (it is
+        // created on demand by the composition root) — only a *custom*
+        // location that went off disk is a missing-folder story.
+        case ManagedStoreState.appManaged:
+        case ManagedStoreState.ready:
+          break;
+        case ManagedStoreState.missing:
           _reset(MediaLibraryScanStatus.folderMissing);
           return;
-        case MediaLibraryFolderState.ready:
-          break;
       }
       if (!repository.isAvailable) {
         // Registration is the only way a discovery becomes content, so without
@@ -319,11 +319,16 @@ class MediaLibraryScanController extends ChangeNotifier {
 
   /// Registers one discovery. A refusal is recorded and the walk continues:
   /// one unreadable file must not cost the user the other three hundred.
+  ///
+  /// Registration is discovery, not retention: finding a file in the store
+  /// must not imply Personal Library membership, so `retain` stays false here
+  /// no matter what the file is.
   Future<void> _register(ScannedMedia media) async {
     try {
       await repository.registerMedia(
         media.path,
         durationMs: media.duration?.inMilliseconds,
+        retain: false,
       );
       _stamps[media.path] = KnownMediaStamp(
         path: media.path,

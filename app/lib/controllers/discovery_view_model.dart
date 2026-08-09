@@ -700,10 +700,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
     return completer.future;
   }
 
-  void _dropAcquisitionCompleter(
-    String entryId,
-    Completer<String?> completer,
-  ) {
+  void _dropAcquisitionCompleter(String entryId, Completer<String?> completer) {
     if (identical(_acquisitionCompleters[entryId], completer)) {
       _acquisitionCompleters.remove(entryId);
     }
@@ -731,6 +728,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
       final media = await _mediaLibraryRepository.registerMedia(
         path,
         durationMs: probedDurationMs,
+        // Download adoption is acquisition, not retention: the bytes landing
+        // on disk must not silently create a Personal Library row.
+        retain: false,
       );
       if (_disposed) return;
       _localPaths[entryId] = path;
@@ -1000,6 +1000,9 @@ class _FakeMediaLibraryRepository implements MediaLibraryRepository {
     String? intent,
   ) async => throw UnimplementedError();
   @override
-  Future<MediaItem> registerMedia(String path, {int? durationMs}) async =>
-      throw UnimplementedError();
+  Future<MediaItem> registerMedia(
+    String path, {
+    int? durationMs,
+    required bool retain,
+  }) async => throw UnimplementedError();
 }

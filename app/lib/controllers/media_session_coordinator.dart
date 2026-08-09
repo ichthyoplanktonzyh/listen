@@ -4,6 +4,7 @@ import '../data/repositories/media_session_repository.dart';
 import '../data/repositories/subtitle_analysis_repository.dart';
 import '../models/timeline.dart';
 import '../player_adapter.dart';
+import '../services/managed_asset_store.dart';
 import '../services/media_import_file_service.dart';
 import 'learning_controller.dart';
 import 'player_controller.dart';
@@ -13,7 +14,8 @@ import 'speech_enhancement_workflow_controller.dart';
 import 'subtitle_controller.dart';
 
 /// Owns the media/session flows: opening media, importing subtitle and
-/// LLTimeline files, and activating a primary track. Context-free: dialogs
+/// LLTimeline files, activating a primary track, and the retention decision
+/// (Keep / reference in place / unretain). Context-free: dialogs
 /// (fingerprint-mismatch confirm) and localized status composition stay with
 /// the host and enter via [bind].
 class MediaSessionCoordinator {
@@ -27,6 +29,7 @@ class MediaSessionCoordinator {
     required this.resourceActions,
     required this.repository,
     required this.subtitleAnalysis,
+    required this.managedStore,
     this.importFiles = const LocalMediaImportFileService(),
   });
 
@@ -39,6 +42,7 @@ class MediaSessionCoordinator {
   final ResourceActionsCoordinator resourceActions;
   final MediaSessionRepository repository;
   final SubtitleAnalysisRepository subtitleAnalysis;
+  final ManagedAssetStoreService managedStore;
   final MediaImportFileService importFiles;
 
   late bool Function() isMounted;
@@ -122,7 +126,10 @@ class MediaSessionCoordinator {
     try {
       await previousProgressSave;
       if (repository.isAvailable) {
-        final media = await repository.registerMedia(path);
+        // Opening local media is Temporary Material: playable immediately, but
+        // never a Personal Library membership by itself (CONTEXT.md Retention
+        // Decision — the learner's explicit Keep adds membership later).
+        final media = await repository.registerMedia(path, retain: false);
         final id = media.id;
         final saved = await repository.readProgress(id);
         player.setMedia(
@@ -131,6 +138,7 @@ class MediaSessionCoordinator {
           title: media.title,
           fingerprint: media.fingerprint,
         );
+        player.setMediaRetained(media.retainedAtMs != null);
         if (saved != null && saved > Duration.zero) {
           await adapter.seek(saved);
           player.setPosition(saved);
@@ -180,6 +188,133 @@ class MediaSessionCoordinator {
           failure: repository.failureDetail(error),
         );
       }
+    }
+  }
+
+  // ── Retention: Keep / reference in place / unretain ──
+
+  /// The default Keep: copy the current Temporary Material into the managed
+  /// store (the original is left untouched), verify the copy byte-for-byte,
+  /// then re-register the managed path with retain true. Only after the copy
+  /// is verified and Core accepted it does the session rebind to the managed
+  /// path — media identity is fingerprint-derived, so the id, learning state
+  /// and position all survive the rebind.
+  ///
+  /// If Core registration fails after this operation created a new copy, only
+  /// that new copy is removed and the media stays Temporary. A pre-existing
+  /// deduplication target is shared and is never deleted.
+  Future<void> keepCurrentMedia() async {
+    final path = player.mediaPath;
+    final mediaId = player.mediaId;
+    if (path == null || mediaId == null) {
+      player.setStatus(text('statusOpenMediaFirst'));
+      return;
+    }
+    if (player.mediaRetained == true || player.retentionInFlight) return;
+    player.setRetentionInFlight(true);
+    try {
+      final copy = await managedStore.copyIntoStore(sourcePath: path);
+      try {
+        final media = await repository.registerMedia(
+          copy.path,
+          retain: true,
+          title: player.mediaTitle,
+          kind: copy.mediaKind,
+        );
+        player.setMedia(
+          id: media.id,
+          path: copy.path,
+          title: media.title,
+          fingerprint: media.fingerprint,
+        );
+        player.setMediaRetained(media.retainedAtMs != null);
+        settings.recordRecentMedia(
+          path: copy.path,
+          title: media.title,
+          positionMs: player.position.inMilliseconds,
+          durationMs: player.duration.inMilliseconds,
+          subtitleCount: subtitle.subtitleResources.length,
+        );
+        player.setStatus(text('statusMediaKept'), playback: true);
+      } catch (error) {
+        if (copy.createdNew) {
+          await managedStore.deleteStoreCopy(copy.path);
+        }
+        player.setStatus(
+          text('statusKeepFailed'),
+          error: true,
+          failure: repository.failureDetail(error),
+        );
+      }
+    } on ManagedStoreUnavailable {
+      player.setStatus(text('statusManagedStoreUnavailable'), error: true);
+    } on ManagedStoreCopyFailed {
+      // Local copy failures deliberately carry no raw path/OS text. The
+      // learner sees the stable failure while the current material remains
+      // playable and Temporary.
+      player.setStatus(text('statusKeepFailed'), error: true);
+    } catch (error) {
+      player.setStatus(
+        text('statusKeepFailed'),
+        error: true,
+        failure: repository.failureDetail(error),
+      );
+    } finally {
+      player.setRetentionInFlight(false);
+    }
+  }
+
+  /// The secondary Keep: retain the current media without copying it. The
+  /// original file stays exactly where it is; only Personal Library membership
+  /// changes. Never the default — a reference can disappear when its file
+  /// moves, which is why the default Keep manages a copy.
+  Future<void> referenceCurrentMediaInPlace() async {
+    final mediaId = player.mediaId;
+    if (mediaId == null) {
+      player.setStatus(text('statusOpenMediaFirst'));
+      return;
+    }
+    if (player.mediaRetained == true || player.retentionInFlight) return;
+    player.setRetentionInFlight(true);
+    try {
+      final media = await repository.retainMedia(mediaId);
+      player.setMediaRetained(media.retainedAtMs != null);
+      player.setStatus(text('statusMediaKeptInPlace'), playback: true);
+    } catch (error) {
+      player.setStatus(
+        text('statusKeepFailed'),
+        error: true,
+        failure: repository.failureDetail(error),
+      );
+    } finally {
+      player.setRetentionInFlight(false);
+    }
+  }
+
+  /// Removes the current media from the Personal Library. Membership only:
+  /// neither the original file nor a managed copy nor any learning state is
+  /// touched. Managed-file deletion is a separate action and is never coupled
+  /// to this one.
+  Future<void> unretainCurrentMedia() async {
+    final mediaId = player.mediaId;
+    if (mediaId == null) {
+      player.setStatus(text('statusOpenMediaFirst'));
+      return;
+    }
+    if (player.mediaRetained != true || player.retentionInFlight) return;
+    player.setRetentionInFlight(true);
+    try {
+      final media = await repository.unretainMedia(mediaId);
+      player.setMediaRetained(media.retainedAtMs != null);
+      player.setStatus(text('statusMediaUnkept'), playback: true);
+    } catch (error) {
+      player.setStatus(
+        text('statusUnkeepFailed'),
+        error: true,
+        failure: repository.failureDetail(error),
+      );
+    } finally {
+      player.setRetentionInFlight(false);
     }
   }
 

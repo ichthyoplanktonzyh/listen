@@ -54,7 +54,7 @@ Widget _home({
     onScanRefresh: () {},
     onScanCancel: () {},
     onRetryScanRegistrations: () {},
-    onChooseMediaLibraryFolder: onChooseFolder ?? () {},
+    onChooseManagedStoreLocation: onChooseFolder ?? () {},
     onOpenLibraryEntry: (_) {},
     onStartExtensiveEntry: (_) {},
     onStartIntensiveEntry: (_) {},
@@ -103,28 +103,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('文件夹扫描完成。'), findsOneWidget);
+      expect(find.text('素材库扫描完成。'), findsOneWidget);
       expect(find.text('打开过的媒体会出现在这里。'), findsOneWidget);
     },
   );
 
-  testWidgets('no folder and a missing folder are two different sentences', (
-    tester,
-  ) async {
+  testWidgets('a missing custom store is a different sentence from the '
+      'default store', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    var chooses = 0;
-
-    await tester.pumpWidget(
-      _home(
-        scan: MediaLibraryScanState(status: MediaLibraryScanStatus.folderUnset),
-        onChooseFolder: () => chooses++,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('选择媒体库文件夹后，你手上已有的媒体会出现在这里。'), findsOneWidget);
-    await tester.tap(find.text('选择文件夹…'));
-    expect(chooses, 1);
 
     await tester.pumpWidget(
       _home(
@@ -135,7 +122,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('选择媒体库文件夹后，你手上已有的媒体会出现在这里。'), findsNothing);
     expect(find.textContaining('这个文件夹当前不在磁盘上'), findsOneWidget);
     expect(find.text('/volumes/gone'), findsOneWidget);
     expect(find.text('更换文件夹…'), findsOneWidget);
@@ -165,7 +151,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('正在扫描媒体库文件夹…'), findsOneWidget);
+    expect(find.text('正在扫描受管素材库…'), findsOneWidget);
     expect(find.text('新增 3 · 未变化 12 · 跳过 1'), findsOneWidget);
     await tester.tap(find.text('停止'));
     expect(cancels, 1);
