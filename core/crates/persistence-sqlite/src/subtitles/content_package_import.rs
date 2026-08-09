@@ -7,8 +7,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use crate::{SqliteRepository, corpus::insert_occurrence, from_json, json, repo};
 
 use super::{
-    chunk_timelines::save_chunk_timeline_in_connection, guard_timeline_ownership,
-    lltimeline_resources::save_lltimeline_resource_in_connection,
+    guard_timeline_ownership, lltimeline_resources::save_lltimeline_resource_in_connection,
     phone_timelines::save_phone_timeline_in_connection,
     prosody::save_prosody_analysis_in_connection,
     sense_groups::save_sense_group_analysis_in_connection,
@@ -167,10 +166,6 @@ impl ContentPackageImportRepository for SqliteRepository {
                 .iter()
                 .any(|value| value.status != TimelineStatus::Candidate)
             || import
-                .chunk_timelines
-                .iter()
-                .any(|value| value.status != TimelineStatus::Candidate)
-            || import
                 .sense_group_analyses
                 .iter()
                 .any(|value| value.status != TimelineStatus::Candidate)
@@ -222,18 +217,6 @@ impl ContentPackageImportRepository for SqliteRepository {
             )?;
             if !row_exists(&tx, "phone_timeline_runs", timeline.id.as_str())? {
                 save_phone_timeline_in_connection(&tx, timeline)?;
-            }
-        }
-        for timeline in &import.chunk_timelines {
-            guard_timeline_ownership(
-                &tx,
-                "chunk_timeline_runs",
-                timeline.id.as_str(),
-                &timeline.track_id,
-                &timeline.media_id,
-            )?;
-            if !row_exists(&tx, "chunk_timeline_runs", timeline.id.as_str())? {
-                save_chunk_timeline_in_connection(&tx, timeline)?;
             }
         }
         for analysis in &import.sense_group_analyses {

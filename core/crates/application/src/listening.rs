@@ -210,10 +210,9 @@ fn listening_target_key(target: &PracticeTarget) -> String {
             .or_else(|| target.id.as_ref().map(|value| format!("sentence:{value}")))
             .unwrap_or_else(|| playback_target_key("sentence", target)),
         PracticeTargetKind::Chunk => target
-            .chunk_id
+            .id
             .as_ref()
-            .map(|value| format!("chunk:{}", value.as_str()))
-            .or_else(|| target.id.as_ref().map(|value| format!("chunk:{value}")))
+            .map(|value| format!("chunk:{value}"))
             .unwrap_or_else(|| playback_target_key("chunk", target)),
         PracticeTargetKind::Lexical => target
             .id

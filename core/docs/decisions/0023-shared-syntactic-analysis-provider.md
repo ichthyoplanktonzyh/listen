@@ -1,7 +1,9 @@
 # ADR 0023: Shared Syntactic Analysis Provider and Rebuildable Artifact Boundary
 
 - Date: 2026-07-13
-- Status: Accepted for Phase 3.9.1
+- Status: Accepted for Phase 3.9.1; the `ChunkTimeline` current-fact claims below
+  are superseded by R5 (2026-08-09), which retired the legacy `ChunkTimeline`
+  family. The syntactic-provider boundary decision itself remains current.
 - Context: ADR 0010, ADR 0011, ADR 0016, ADR 0020, and Phase 3.9.1 Slice 0
 
 ## Context

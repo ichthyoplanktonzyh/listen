@@ -1,7 +1,10 @@
 # ADR 0016: Sense Groups Are Text Annotations Separate from Prosodic Chunks
 
 - Date: 2026-07-07
-- Status: Accepted for Phase 3.4.2
+- Status: Accepted for Phase 3.4.2; the `ChunkTimeline` current-fact claims below
+  are superseded by R5 (2026-08-09), which retired the legacy `ChunkTimeline`
+  family and made `ProsodyAnalysis` the sole prosodic-chunk source. The
+  SenseGroup-independence decision itself remains current.
 - Context: Phase 3.4.x Learning Domain Model v2 shared context
 
 ## Context

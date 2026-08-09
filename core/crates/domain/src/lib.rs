@@ -28,9 +28,6 @@ pub use timeline_envelope::*;
 mod word_timing;
 pub use word_timing::*;
 
-mod chunk_timeline;
-pub use chunk_timeline::*;
-
 mod sense_group;
 pub use sense_group::*;
 
@@ -146,8 +143,6 @@ string_id!(DictionaryEntryId);
 string_id!(RecordingTranscriptionJobId);
 string_id!(TranscriptionModelId);
 string_id!(WordTimelineId);
-string_id!(ChunkTimelineId);
-string_id!(ChunkId);
 string_id!(PhoneTimelineId);
 string_id!(RhythmFrameId);
 string_id!(LLTimelineId);

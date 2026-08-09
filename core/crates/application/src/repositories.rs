@@ -1,33 +1,33 @@
 use domain::{
-    CapabilityFilter, CapabilityOverride, CapabilityProjection, ChunkTimeline, ChunkTimelineId,
-    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, DictionaryEntry,
-    HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
-    HuntingTargetStatus, JudgmentAdjudication, LLTimelineArtifact, LLTimelineMetadata,
-    LanguageCode, LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent,
-    LearningEventKind, LearningEventSubjectKind, LearningObservation, LearningStatus,
-    LexicalCapability, LexicalCapabilityHistory, LexicalCapabilityProfile, LexicalEntry,
-    LexicalEntryDetails, LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalOccurrenceId,
-    LexicalSenseFolder, LexicalSenseId, ListeningInboxItem, ListeningInboxItemId,
-    ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId, MediaAvailability, MediaId,
-    MediaItem, MediaTriageIntent, PhoneTimeline, PhoneTimelineId, PhoneticAnalysis,
-    PhoneticAnalysisId, PhoneticAnalysisJob, PhoneticAnalysisJobId,
-    PhoneticAnalysisModelDescriptor, PhoneticAnalysisModelId, PhoneticFindingFeedback,
-    PhoneticFindingId, PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId,
-    PracticeSession, PracticeSessionId, ProductionCorpusDocument, ProductionCorpusEntry,
-    ProductionCorpusHit, ProductionCorpusSummary, ProductionGapCandidateFacts, ProjectionDecision,
-    ProjectionProposal, ProjectionProposalId, ProsodyAnalysis, ProsodyAnalysisId, ReadingPosition,
-    RealtimeConversationSession, RealtimeConversationSessionId, RealtimeConversationTurn,
-    RealtimeConversationTurnId, RealtimeProviderProfile, RealtimeProviderProfileId,
-    RecognitionEvidence, RecordingAsset, RecordingAssetId, ReviewAttempt, ReviewAttemptId,
-    ReviewItem, ReviewItemId, ReviewItemStatus, ReviewSchedule, SecretRef, SemanticJudgment,
-    SemanticJudgmentId, SemanticRubric, SemanticRubricId, SemanticTaskAttempt,
-    SemanticTaskAttemptId, SemanticTaskKind, SenseGroupAnalysis, SenseGroupAnalysisId,
-    SentencePronunciation, ShadowingAnalysisRecord, SoundFitCalibration, SubtitleSentence,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
-    TranscriptionModelDescriptor, TranscriptionModelId, UpgradeSuggestion, UpgradeSuggestionId,
-    UpgradeSuggestionStatus, VocabularyAssetBundle, WordPronunciation, WordTimeline,
-    WordTimelineId, WordTiming, WritingDraft, WritingFeedbackFinding, WritingFeedbackFindingId,
-    WritingFindingDisposition, WritingFindingDispositionId,
+    CapabilityFilter, CapabilityOverride, CapabilityProjection, ContentDifficultyProfile,
+    CorpusOccurrence, CorpusOccurrenceId, DictionaryEntry, HuntingCandidate, HuntingCandidateId,
+    HuntingCandidateStatus, HuntingTarget, HuntingTargetId, HuntingTargetStatus,
+    JudgmentAdjudication, LLTimelineArtifact, LLTimelineMetadata, LanguageCode, LearnerProfile,
+    LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventKind,
+    LearningEventSubjectKind, LearningObservation, LearningStatus, LexicalCapability,
+    LexicalCapabilityHistory, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalOccurrenceId, LexicalSenseFolder,
+    LexicalSenseId, ListeningInboxItem, ListeningInboxItemId, ListeningInboxStatus,
+    LlmProviderProfile, LlmProviderProfileId, MediaAvailability, MediaId, MediaItem,
+    MediaTriageIntent, PhoneTimeline, PhoneTimelineId, PhoneticAnalysis, PhoneticAnalysisId,
+    PhoneticAnalysisJob, PhoneticAnalysisJobId, PhoneticAnalysisModelDescriptor,
+    PhoneticAnalysisModelId, PhoneticFindingFeedback, PhoneticFindingId, PracticeAttempt,
+    PracticeAttemptId, PracticeItem, PracticeItemId, PracticeSession, PracticeSessionId,
+    ProductionCorpusDocument, ProductionCorpusEntry, ProductionCorpusHit, ProductionCorpusSummary,
+    ProductionGapCandidateFacts, ProjectionDecision, ProjectionProposal, ProjectionProposalId,
+    ProsodyAnalysis, ProsodyAnalysisId, ReadingPosition, RealtimeConversationSession,
+    RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
+    RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecordingAsset,
+    RecordingAssetId, ReviewAttempt, ReviewAttemptId, ReviewItem, ReviewItemId, ReviewItemStatus,
+    ReviewSchedule, SecretRef, SemanticJudgment, SemanticJudgmentId, SemanticRubric,
+    SemanticRubricId, SemanticTaskAttempt, SemanticTaskAttemptId, SemanticTaskKind,
+    SenseGroupAnalysis, SenseGroupAnalysisId, SentencePronunciation, ShadowingAnalysisRecord,
+    SoundFitCalibration, SubtitleSentence, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackStatus, TimeMs, TranscriptionModelDescriptor, TranscriptionModelId,
+    UpgradeSuggestion, UpgradeSuggestionId, UpgradeSuggestionStatus, VocabularyAssetBundle,
+    WordPronunciation, WordTimeline, WordTimelineId, WordTiming, WritingDraft,
+    WritingFeedbackFinding, WritingFeedbackFindingId, WritingFindingDisposition,
+    WritingFindingDispositionId,
 };
 
 use crate::{ApplicationError, LexicalSourceContext};
@@ -163,44 +163,6 @@ pub trait WordTimelineRepository: Send + Sync {
     ) -> Result<WordTimeline, ApplicationError>;
     fn archive_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
     fn delete_word_timeline(&self, id: &WordTimelineId) -> Result<WordTimeline, ApplicationError>;
-}
-
-/// Chunk partitions have an independent lifecycle.
-pub trait ChunkTimelineRepository: Send + Sync {
-    fn save_chunk_timeline(
-        &self,
-        timeline: &ChunkTimeline,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn list_chunk_timelines(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Vec<ChunkTimeline>, ApplicationError>;
-    fn get_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
-    fn active_chunk_timeline(
-        &self,
-        track_id: &SubtitleTrackId,
-    ) -> Result<Option<ChunkTimeline>, ApplicationError>;
-    fn activate_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    /// Returns the track's existing active timeline, or atomically activates
-    /// `id` when the track has no active timeline.
-    fn activate_chunk_timeline_if_absent(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn archive_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
-    fn delete_chunk_timeline(
-        &self,
-        id: &ChunkTimelineId,
-    ) -> Result<ChunkTimeline, ApplicationError>;
 }
 
 /// Sense-group analyses are versioned and activated as one resource family.
@@ -347,7 +309,6 @@ pub struct LLTimelineImport {
     pub artifacts: Vec<LLTimelineArtifact>,
     pub word_timelines: Vec<WordTimeline>,
     pub phone_timelines: Vec<PhoneTimeline>,
-    pub chunk_timelines: Vec<ChunkTimeline>,
     pub sense_group_analyses: Vec<SenseGroupAnalysis>,
     pub prosody_analyses: Vec<ProsodyAnalysis>,
     pub corpus_occurrences: Vec<CorpusOccurrence>,
@@ -376,7 +337,6 @@ pub struct ContentPackageCandidateImport {
     pub artifacts: Vec<LLTimelineArtifact>,
     pub word_timelines: Vec<WordTimeline>,
     pub phone_timelines: Vec<PhoneTimeline>,
-    pub chunk_timelines: Vec<ChunkTimeline>,
     pub sense_group_analyses: Vec<SenseGroupAnalysis>,
     pub prosody_analyses: Vec<ProsodyAnalysis>,
     pub corpus_occurrences: Vec<CorpusOccurrence>,

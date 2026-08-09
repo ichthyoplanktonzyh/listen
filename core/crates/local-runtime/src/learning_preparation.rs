@@ -1002,7 +1002,7 @@ mod tests {
 
     #[tokio::test]
     async fn imported_prosody_satisfies_the_foundation_slot_without_regeneration_or_activation() {
-        use application::{ChunkTimelineRepository, ProsodyAnalysisRepository};
+        use application::ProsodyAnalysisRepository;
         let repo = Arc::new(SqliteRepository::in_memory().unwrap());
         let target = imported_prosody_track(&repo);
         let services = application::AppServices::new(
@@ -1050,13 +1050,9 @@ mod tests {
         };
         assert_eq!(artifact_ref, "prosody-imported");
         assert_eq!(reused, &true);
-        // The imported analysis satisfies the slot as a candidate: no chunk
-        // timeline was regenerated and the prosody analysis was not activated.
-        assert!(
-            repo.list_chunk_timelines(&target.subtitle_track_id)
-                .unwrap()
-                .is_empty()
-        );
+        // The imported analysis satisfies the slot as a candidate: no
+        // ChunkTimeline family exists anymore (R5 retirement) and the
+        // prosody analysis was not activated.
         let imported = repo
             .get_prosody_analysis(&ProsodyAnalysisId::parse("prosody-imported").unwrap())
             .unwrap()

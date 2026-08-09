@@ -90,7 +90,6 @@ export interface LanguageLearningProfile {
   dictionary_providers: string[];
   diagnosis_reasons: string[];
   word_timeline: CapabilitySupport;
-  chunk_timeline: CapabilitySupport;
   phone_timeline: CapabilitySupport;
 }
 
@@ -412,8 +411,6 @@ export interface LLTimelineDocument {
   active_word_timeline_id: string | null;
   phone_timelines: PhoneTimeline[];
   active_phone_timeline_id: string | null;
-  chunk_timelines: unknown[];
-  active_chunk_timeline_id: string | null;
   sense_group_analyses?: SenseGroupAnalysis[];
   active_sense_group_analysis_id?: string | null;
   prosody_analyses?: ProsodyAnalysis[];
@@ -535,7 +532,6 @@ export type PracticeAnchorKind =
   | "lexical_entry"
   | "sentence"
   | "word_timeline"
-  | "chunk_timeline"
   | "chunk"
   | "phone_timeline"
   | "phone"

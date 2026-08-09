@@ -62,30 +62,6 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     let response = app
         .clone()
         .oneshot(
-            Request::post(format!(
-                "/v1/subtitles/{}/chunk-timelines",
-                track["id"].as_str().unwrap()
-            ))
-            .header(AUTHORIZATION, "Bearer secret")
-            .header(CONTENT_TYPE, "application/json")
-            .body(Body::from(
-                serde_json::json!({"status": "active"}).to_string(),
-            ))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let chunk_timeline: serde_json::Value =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(chunk_timeline["status"], "active");
-    assert_eq!(chunk_timeline["parent_word_timeline_id"], timeline["id"]);
-    assert_eq!(chunk_timeline["precision"], "precise");
-    assert!(!chunk_timeline["chunks"].as_array().unwrap().is_empty());
-
-    let response = app
-        .clone()
-        .oneshot(
             Request::get(format!(
                 "/v1/subtitles/{}/lltimeline/export",
                 track["id"].as_str().unwrap()
@@ -125,8 +101,13 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
             .iter()
             .any(|anchor| anchor["claim_status"] == "audio_supported")
     );
-    assert_eq!(document["chunk_timelines"].as_array().unwrap().len(), 1);
-    assert_eq!(document["active_chunk_timeline_id"], chunk_timeline["id"]);
+    // The retired ChunkTimeline family no longer appears in the document.
+    assert!(
+        !document
+            .as_object()
+            .unwrap()
+            .contains_key("chunk_timelines")
+    );
     assert_eq!(document["sense_group_analyses"], serde_json::json!([]));
     assert_eq!(
         document["active_sense_group_analysis_id"],
@@ -245,25 +226,6 @@ async fn exports_lltimeline_document_with_active_word_timeline() {
     assert_eq!(summaries.as_array().unwrap().len(), 1);
     assert_eq!(summaries[0]["status"], "active");
     assert_eq!(summaries[0]["lifecycle_stage"], "algorithm_candidate");
-
-    let response = app
-        .clone()
-        .oneshot(
-            Request::get(format!(
-                "/v1/subtitles/{}/chunk-timelines/summary",
-                track["id"].as_str().unwrap()
-            ))
-            .header(AUTHORIZATION, "Bearer secret")
-            .body(Body::empty())
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let chunk_summaries: serde_json::Value =
-        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
-    assert_eq!(chunk_summaries.as_array().unwrap().len(), 1);
-    assert_eq!(chunk_summaries[0]["status"], "active");
 
     let response = app
         .clone()

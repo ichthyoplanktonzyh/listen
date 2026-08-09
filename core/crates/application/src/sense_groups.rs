@@ -327,7 +327,6 @@ impl MediaAnalysisUseCases {
                 "task_concurrency": task_concurrency,
                 "prompt_versions": prompt_versions,
                 "reported_models": reported_models,
-                "chunk_timeline_dependency": false,
                 "governor": governor_metrics,
             })
             .into(),
@@ -464,7 +463,6 @@ impl MediaAnalysisUseCases {
             "syntactic_provider": syntax.map(|analysis| &analysis.descriptor),
             "syntax_max_depth": syntax_max_depth,
             "syntax_mean_dependency_span": syntax_mean_dependency_span,
-            "chunk_timeline_dependency": false
         });
         if let Some(fingerprint) = preparation_input_fingerprint {
             metrics["preparation_input_fingerprint"] =

@@ -135,13 +135,15 @@ installs it as candidates and preserves the learner's current active choices.
   Core still needs them for learner recording, SoundLine and other media paths,
   while App also uses the ffmpeg tools. App supplies their paths to Gen only
   after the pinned Core runtime and Gen release verify; none is Gen-only today.
-- `scripts/timeline-production` and remaining legacy production overlap are R5
-  retirement targets. They are neither a foundation fallback nor a second
-  supported whole-media generation journey.
+- `scripts/timeline-production`, the legacy ChunkTimeline family and their
+  exclusive runtime/release inputs were retired in R5. They were neither a
+  foundation fallback nor a second supported whole-media generation journey;
+  Gen `0.4.0` now binds its release to a strict verifier-checked
+  runtime/toolchain identity that App records immutably.
 
-R4 is complete. R5 legacy retirement and the future Package Listing/Release
-interface remain separate owner-directed work; neither is started by this
-closeout.
+R4 is complete. R5 legacy retirement is complete across Core, Gen and App; the
+future Package Listing/Release interface remains separate owner-directed work
+and is not started by this closeout.
 
 ## Decisions Still Open
 

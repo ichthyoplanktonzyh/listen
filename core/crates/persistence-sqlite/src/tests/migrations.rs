@@ -848,3 +848,87 @@ fn v46_seeds_fsrs_without_resetting_legacy_review_progress() {
     assert!(value["stability"].as_f64().unwrap() > 0.0);
     assert!(value["difficulty"].as_f64().unwrap() > 0.0);
 }
+
+#[test]
+fn v57_drops_retired_chunk_timeline_storage_after_upgrade() {
+    // R5 retirement: a database that carries the historical 0013
+    // `chunk_timeline_runs` table (with rows) must lose that storage when it
+    // upgrades, while the rest of the schema upgrades normally. Dropping the
+    // table never cascades to learner history: it held replaceable analysis
+    // artifacts only.
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../../migrations/0010_word_timelines.sql"),
+        include_str!("../../migrations/0011_lltimeline_resources.sql"),
+        include_str!("../../migrations/0012_subtitle_resource_lifecycle.sql"),
+        include_str!("../../migrations/0013_chunk_timelines.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute(
+            "INSERT INTO media_items
+               (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms)
+             VALUES ('legacy-media','/tmp/legacy.mp4','fp','Legacy','\"video\"',NULL,1,1)",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO subtitle_tracks (id,media_id,fingerprint,language,source,status)
+             VALUES ('legacy-track','legacy-media','fp',NULL,'test','\"available\"')",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO chunk_timeline_runs
+               (id,track_id,media_id,status,timeline_json,created_at_ms,updated_at_ms)
+             VALUES ('legacy-chunk','legacy-track','legacy-media','\"active\"','{}',1,1)",
+            [],
+        )
+        .unwrap();
+    assert!(table_exists(&connection, "chunk_timeline_runs"));
+    connection.pragma_update(None, "user_version", 13).unwrap();
+
+    migrate(&connection).unwrap();
+
+    let version: u32 = connection
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, MIGRATION_VERSION);
+    assert!(!table_exists(&connection, "chunk_timeline_runs"));
+    assert!(table_exists(&connection, "subtitle_tracks"));
+    // The row is gone with its table; the track itself survives.
+    let count: u32 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM subtitle_tracks WHERE id='legacy-track'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[test]
+fn fresh_schema_never_retains_chunk_timeline_storage() {
+    // A database created from scratch applies the immutable 0013 migration
+    // (which is history) and then the forward v57 drop, so the retired table
+    // must not survive the final schema.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    let version: u32 = connection
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, MIGRATION_VERSION);
+    assert!(!table_exists(&connection, "chunk_timeline_runs"));
+}

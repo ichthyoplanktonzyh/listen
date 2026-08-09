@@ -57,8 +57,12 @@ Repository separation baseline 已建立：
    candidate-only 兼容证据，`v0.7.0-split.4` 发布 contract `2.1.0`，App PR
    [#105](https://github.com/ichthyoplanktonzyh/listen-app/pull/105) 完成精确 pin 和
    真实三仓 round trip。
-6. **R5 · Legacy retirement** — 删除 `scripts/timeline-production`、旧 Core/App
-   contracts/UI 和只服务旧生产链的 runtime/release inputs。
+6. **R5 · Legacy retirement — complete** — 已删除 `scripts/timeline-production`、
+   旧 ChunkTimeline domain/persistence/LLTimeline/OpenAPI/HTTP generation+CRUD、
+   只服务旧生产链的 exclusive runtime/release inputs 与 App 兼容解析；
+   Gen release 已绑定显式 verifier-checked runtime/toolchain identity。
+   历史 migration/ADR/CHANGELOG 保持不可变，仅以新增 forward migration
+   (v57) 与 superseded 标注记录退役。
 
 跨仓执行以 [listen-core#111](https://github.com/ichthyoplanktonzyh/listen-core/issues/111)、
 [listen-gen#4](https://github.com/ichthyoplanktonzyh/listen-gen/issues/4) 和

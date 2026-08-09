@@ -15,11 +15,10 @@ use crate::{
 /// Timeline (see [`prosody_chunk_projections`]); time semantics are not
 /// persisted on this resource.
 ///
-/// The legacy persisted `ChunkTimeline` remains readable for existing
-/// consumers, but foundation preparation never treats it as this resource or
-/// regenerates it as a fallback. R5 retires that duplicate representation.
-/// Sense Group analysis stays a separate resource family with a
-/// separate lifecycle: it is never derived from, or merged into, this type.
+/// The legacy persisted `ChunkTimeline` representation was retired in R5;
+/// foundation preparation and corpus projection read prosody through this
+/// resource only. Sense Group analysis stays a separate resource family with
+/// a separate lifecycle: it is never derived from, or merged into, this type.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProsodyAnalysis {
     pub id: ProsodyAnalysisId,

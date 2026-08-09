@@ -1,17 +1,17 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    ApplicationError, ChunkTimeline, ContentPackageCandidateImport, CreateWordTimeline,
-    LLTIMELINE_SCHEMA_V1, LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator,
-    LLTimelineImport, LLTimelineMedia, LLTimelineMetadata, LLTimelineRhythmFrame,
-    MediaAnalysisUseCases, MediaAvailability, MediaId, MediaItem, MediaKind, PhoneTimeline,
-    ProsodyAnalysis, RhythmFrameId, SenseGroupAnalysis, SentenceWordTimingDiagnostics,
-    SubtitleSentenceId, SubtitleTrack, SubtitleTrackId, SubtitleTrackStatus, TimeMs,
-    TimelineCreator, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
-    WordTimelineSummary, WordTimingBoundaryDiagnostic, build_word_timeline, detached_media_path,
-    lltimeline_segments_from_track, lltimeline_segments_to_sentences, lltimeline_track_extra,
-    lltimeline_track_fingerprint, lltimeline_track_id, mark_word_timeline_published,
-    merge_lltimeline_track_extra, now_ms, remap_lltimeline_identity, require_text,
+    ApplicationError, ContentPackageCandidateImport, CreateWordTimeline, LLTIMELINE_SCHEMA_V1,
+    LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator, LLTimelineImport, LLTimelineMedia,
+    LLTimelineMetadata, LLTimelineRhythmFrame, MediaAnalysisUseCases, MediaAvailability, MediaId,
+    MediaItem, MediaKind, PhoneTimeline, ProsodyAnalysis, RhythmFrameId, SenseGroupAnalysis,
+    SentenceWordTimingDiagnostics, SubtitleSentenceId, SubtitleTrack, SubtitleTrackId,
+    SubtitleTrackStatus, TimeMs, TimelineCreator, TimelineMetrics, TimelineStatus, WordTimeline,
+    WordTimelineId, WordTimelineSummary, WordTimingBoundaryDiagnostic, build_word_timeline,
+    detached_media_path, lltimeline_segments_from_track, lltimeline_segments_to_sentences,
+    lltimeline_track_extra, lltimeline_track_fingerprint, lltimeline_track_id,
+    mark_word_timeline_published, merge_lltimeline_track_extra, now_ms,
+    prosody_chunk_projections_from_document, remap_lltimeline_identity, require_text,
     validate_word_timeline_words, word_timeline_summary,
 };
 
@@ -284,49 +284,6 @@ fn validate_and_prepare_lltimeline_resources(
         |timeline: &PhoneTimeline| &timeline.id,
         |timeline: &mut PhoneTimeline| &mut timeline.status,
         "active_phone_timeline_id",
-    )?;
-
-    let chunk_ids = document
-        .chunk_timelines
-        .iter()
-        .map(|timeline| timeline.id.clone())
-        .collect::<HashSet<_>>();
-    if chunk_ids.len() != document.chunk_timelines.len() {
-        return Err(ApplicationError::Invalid(
-            "duplicate LLTimeline chunk timeline id".into(),
-        ));
-    }
-    for timeline in &document.chunk_timelines {
-        if timeline.media_id != track.media_id || timeline.track_id != track.id {
-            return Err(ApplicationError::Invalid(
-                "LLTimeline chunk timeline belongs to another source".into(),
-            ));
-        }
-        if timeline
-            .parent_word_timeline_id
-            .as_ref()
-            .is_some_and(|parent| !word_ids.contains(parent))
-        {
-            return Err(ApplicationError::Invalid(
-                "LLTimeline chunk timeline parent is missing".into(),
-            ));
-        }
-        if timeline
-            .chunks
-            .iter()
-            .any(|chunk| !sentence_ids.contains(&chunk.sentence_id))
-        {
-            return Err(ApplicationError::Invalid(
-                "LLTimeline chunk sentence is missing".into(),
-            ));
-        }
-    }
-    prepare_active_selection(
-        &mut document.chunk_timelines,
-        document.active_chunk_timeline_id.as_ref(),
-        |timeline: &ChunkTimeline| &timeline.id,
-        |timeline: &mut ChunkTimeline| &mut timeline.status,
-        "active_chunk_timeline_id",
     )?;
 
     let sense_group_ids = document
@@ -766,11 +723,6 @@ impl MediaAnalysisUseCases {
             .iter()
             .find(|timeline| timeline.status == TimelineStatus::Active)
             .map(|timeline| timeline.id.clone());
-        let chunk_timelines = self.chunk_timelines.list_chunk_timelines(track_id)?;
-        let active_chunk_timeline_id = chunk_timelines
-            .iter()
-            .find(|timeline| timeline.status == TimelineStatus::Active)
-            .map(|timeline| timeline.id.clone());
         let phone_timelines = self.phone_timelines.list_phone_timelines(track_id)?;
         let active_phone_timeline_id = phone_timelines
             .iter()
@@ -861,8 +813,6 @@ impl MediaAnalysisUseCases {
             phone_timelines,
             active_phone_timeline_id,
             rhythm_frames,
-            chunk_timelines,
-            active_chunk_timeline_id,
             sense_group_analyses,
             active_sense_group_analysis_id,
             prosody_analyses,
@@ -967,15 +917,10 @@ impl MediaAnalysisUseCases {
             document.active_word_timeline_id.as_ref(),
             &word_acoustic_cues,
         )?;
-        let active_chunk_timeline = document.active_chunk_timeline_id.as_ref().and_then(|id| {
-            document
-                .chunk_timelines
-                .iter()
-                .find(|timeline| &timeline.id == id)
-        });
+        let prosody_chunks = prosody_chunk_projections_from_document(&document);
         let corpus_occurrences = self.build_subtitle_corpus_occurrences_from_resources(
             &track,
-            active_chunk_timeline,
+            &prosody_chunks,
             &canonical_rhythm_frames,
         )?;
         let import = LLTimelineImport {
@@ -985,7 +930,6 @@ impl MediaAnalysisUseCases {
             artifacts: document.artifacts,
             word_timelines: document.word_timelines,
             phone_timelines: document.phone_timelines,
-            chunk_timelines: document.chunk_timelines,
             sense_group_analyses: document.sense_group_analyses,
             prosody_analyses: document.prosody_analyses,
             corpus_occurrences,
@@ -1030,7 +974,6 @@ impl MediaAnalysisUseCases {
         validate_and_prepare_lltimeline_resources(&mut document, &track)?;
         if document.active_word_timeline_id.is_some()
             || document.active_phone_timeline_id.is_some()
-            || document.active_chunk_timeline_id.is_some()
             || document.active_sense_group_analysis_id.is_some()
             || document.active_prosody_analysis_id.is_some()
             || document
@@ -1039,10 +982,6 @@ impl MediaAnalysisUseCases {
                 .any(|v| v.status != TimelineStatus::Candidate)
             || document
                 .phone_timelines
-                .iter()
-                .any(|v| v.status != TimelineStatus::Candidate)
-            || document
-                .chunk_timelines
                 .iter()
                 .any(|v| v.status != TimelineStatus::Candidate)
             || document
@@ -1059,7 +998,7 @@ impl MediaAnalysisUseCases {
             ));
         }
         let corpus_occurrences =
-            self.build_subtitle_corpus_occurrences_from_resources(&track, None, &[])?;
+            self.build_subtitle_corpus_occurrences_from_resources(&track, &[], &[])?;
         self.content_package_imports
             .import_content_package_candidates(&ContentPackageCandidateImport {
                 track: track.clone(),
@@ -1067,7 +1006,6 @@ impl MediaAnalysisUseCases {
                 artifacts: document.artifacts,
                 word_timelines: document.word_timelines,
                 phone_timelines: document.phone_timelines,
-                chunk_timelines: document.chunk_timelines,
                 sense_group_analyses: document.sense_group_analyses,
                 prosody_analyses: document.prosody_analyses,
                 corpus_occurrences,

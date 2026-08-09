@@ -54,9 +54,6 @@ fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
     for timeline in &mut document.phone_timelines {
         timeline.status = TimelineStatus::Candidate;
     }
-    for timeline in &mut document.chunk_timelines {
-        timeline.status = TimelineStatus::Candidate;
-    }
     for analysis in &mut document.sense_group_analyses {
         analysis.status = TimelineStatus::Candidate;
     }
@@ -69,7 +66,6 @@ fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
         artifacts: document.artifacts,
         word_timelines: document.word_timelines,
         phone_timelines: document.phone_timelines,
-        chunk_timelines: document.chunk_timelines,
         sense_group_analyses: document.sense_group_analyses,
         prosody_analyses: document.prosody_analyses,
         corpus_occurrences: Vec::new(),
@@ -183,7 +179,6 @@ fn content_package_cross_source_resource_conflict_rolls_back_every_write() {
         artifacts: Vec::new(),
         word_timelines: vec![conflicting],
         phone_timelines: Vec::new(),
-        chunk_timelines: Vec::new(),
         sense_group_analyses: Vec::new(),
         prosody_analyses: Vec::new(),
         corpus_occurrences: Vec::new(),
@@ -381,7 +376,6 @@ fn generated_r4_package_imports_idempotently_as_candidates_only() {
             .is_none()
     );
     assert!(repo.active_prosody_analysis(track_id).unwrap().is_none());
-    assert!(repo.list_chunk_timelines(track_id).unwrap().is_empty());
 
     let imported_kinds = first
         .receipt
@@ -600,21 +594,6 @@ fn timeline_active_uniqueness_is_schema_enforced() {
     repo.save_word_timeline(&word_active).unwrap();
     assert!(repo.save_word_timeline(&word_duplicate).is_err());
 
-    let chunk_active = chunk_timeline(
-        "chunk-active-unique-1",
-        &track,
-        &word_active,
-        TimelineStatus::Active,
-    );
-    let chunk_duplicate = chunk_timeline(
-        "chunk-active-unique-2",
-        &track,
-        &word_active,
-        TimelineStatus::Active,
-    );
-    repo.save_chunk_timeline(&chunk_active).unwrap();
-    assert!(repo.save_chunk_timeline(&chunk_duplicate).is_err());
-
     let phone_active = phone_timeline(
         "phone-active-unique-1",
         &track,
@@ -690,149 +669,6 @@ fn deleting_active_word_timeline_clears_compatibility_timings() {
     assert!(repo.get_word_timeline(&timeline.id).unwrap().is_none());
     assert!(repo.active_word_timeline(&track.id).unwrap().is_none());
     assert!(repo.get_word_timings(&sentence_id).unwrap().is_empty());
-}
-
-#[test]
-fn activating_chunk_timeline_updates_active_resource() {
-    let repo = SqliteRepository::in_memory().unwrap();
-    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
-    let track = word_timeline_track();
-    repo.save_track(&track).unwrap();
-    let parent = word_timeline(
-        "timeline-parent",
-        &track,
-        TimelineStatus::Active,
-        "mms-fa",
-        150,
-        260,
-    );
-    repo.save_word_timeline(&parent).unwrap();
-    let older = chunk_timeline("chunk-timeline-1", &track, &parent, TimelineStatus::Active);
-    let newer = chunk_timeline(
-        "chunk-timeline-2",
-        &track,
-        &parent,
-        TimelineStatus::Candidate,
-    );
-    repo.save_chunk_timeline(&older).unwrap();
-    repo.save_chunk_timeline(&newer).unwrap();
-
-    let active = repo.activate_chunk_timeline(&newer.id).unwrap();
-    assert_eq!(active.status, TimelineStatus::Active);
-    assert_eq!(
-        repo.active_chunk_timeline(&track.id).unwrap().unwrap().id,
-        newer.id
-    );
-    assert_eq!(
-        repo.get_chunk_timeline(&older.id).unwrap().unwrap().status,
-        TimelineStatus::Candidate
-    );
-    assert_eq!(repo.list_chunk_timelines(&track.id).unwrap().len(), 2);
-}
-
-#[test]
-fn activating_chunk_timeline_if_absent_activates_candidate() {
-    let repo = SqliteRepository::in_memory().unwrap();
-    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
-    let track = word_timeline_track();
-    repo.save_track(&track).unwrap();
-    let parent = word_timeline(
-        "timeline-parent-if-absent",
-        &track,
-        TimelineStatus::Active,
-        "mms-fa",
-        150,
-        260,
-    );
-    repo.save_word_timeline(&parent).unwrap();
-    let candidate = chunk_timeline(
-        "chunk-timeline-if-absent",
-        &track,
-        &parent,
-        TimelineStatus::Candidate,
-    );
-    repo.save_chunk_timeline(&candidate).unwrap();
-
-    let active = repo
-        .activate_chunk_timeline_if_absent(&candidate.id)
-        .unwrap();
-
-    assert_eq!(active.id, candidate.id);
-    assert_eq!(active.status, TimelineStatus::Active);
-}
-
-#[test]
-fn activating_chunk_timeline_if_absent_preserves_existing_active() {
-    let repo = SqliteRepository::in_memory().unwrap();
-    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
-    let track = word_timeline_track();
-    repo.save_track(&track).unwrap();
-    let parent = word_timeline(
-        "timeline-parent-preserve",
-        &track,
-        TimelineStatus::Active,
-        "mms-fa",
-        150,
-        260,
-    );
-    repo.save_word_timeline(&parent).unwrap();
-    let existing = chunk_timeline(
-        "chunk-timeline-existing-active",
-        &track,
-        &parent,
-        TimelineStatus::Active,
-    );
-    let candidate = chunk_timeline(
-        "chunk-timeline-foundation-candidate",
-        &track,
-        &parent,
-        TimelineStatus::Candidate,
-    );
-    repo.save_chunk_timeline(&existing).unwrap();
-    repo.save_chunk_timeline(&candidate).unwrap();
-
-    let active = repo
-        .activate_chunk_timeline_if_absent(&candidate.id)
-        .unwrap();
-
-    assert_eq!(active.id, existing.id);
-    assert_eq!(
-        repo.get_chunk_timeline(&candidate.id)
-            .unwrap()
-            .unwrap()
-            .status,
-        TimelineStatus::Candidate
-    );
-}
-
-#[test]
-fn archiving_and_deleting_chunk_timeline_updates_repository() {
-    let repo = SqliteRepository::in_memory().unwrap();
-    MediaRepository::upsert(&repo, &transcription_media()).unwrap();
-    let track = word_timeline_track();
-    repo.save_track(&track).unwrap();
-    let parent = word_timeline(
-        "timeline-parent-delete",
-        &track,
-        TimelineStatus::Active,
-        "mms-fa",
-        150,
-        260,
-    );
-    repo.save_word_timeline(&parent).unwrap();
-    let timeline = chunk_timeline(
-        "chunk-timeline-delete",
-        &track,
-        &parent,
-        TimelineStatus::Candidate,
-    );
-    repo.save_chunk_timeline(&timeline).unwrap();
-
-    let archived = repo.archive_chunk_timeline(&timeline.id).unwrap();
-    assert_eq!(archived.status, TimelineStatus::Archived);
-    let deleted = repo.delete_chunk_timeline(&timeline.id).unwrap();
-    assert_eq!(deleted.id, timeline.id);
-    assert!(repo.get_chunk_timeline(&timeline.id).unwrap().is_none());
 }
 
 #[test]
@@ -1310,7 +1146,6 @@ fn assert_no_lltimeline_import_rows(repo: &SqliteRepository) {
         "lltimeline_resources",
         "word_timeline_runs",
         "phone_timeline_runs",
-        "chunk_timeline_runs",
         "sense_group_analysis_runs",
         "prosody_analysis_runs",
         "corpus_occurrences",

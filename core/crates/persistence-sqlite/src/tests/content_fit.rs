@@ -610,7 +610,6 @@ fn practice_accuracy_feedback_calibrates_sound_fit() {
                     kind: PracticeTargetKind::Sentence,
                     id: Some(sentence_id.as_str().into()),
                     sentence_id: Some(sentence_id.clone()),
-                    chunk_id: None,
                     start_ms: Some(0),
                     end_ms: Some(6_000),
                 },

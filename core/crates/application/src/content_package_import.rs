@@ -703,8 +703,6 @@ pub fn prepare_content_package_document(
         phone_timelines,
         active_phone_timeline_id: None,
         rhythm_frames: Vec::new(),
-        chunk_timelines: Vec::new(),
-        active_chunk_timeline_id: None,
         sense_group_analyses,
         active_sense_group_analysis_id: None,
         prosody_analyses,

@@ -1,7 +1,9 @@
 # ADR 0018: Dual-Dimension Content Fit (Meaning Fit x Sound Fit)
 
 - Date: 2026-07-07
-- Status: Accepted for Phase 3.5
+- Status: Accepted for Phase 3.5; the `mean_chunk_length` input row that read
+  the active `ChunkTimeline` is superseded by R5 (2026-08-09), which sources
+  chunk length from the active Prosody Analysis declared token spans.
 - Context: Phase 3.5 plan (`.planning/phases/3.5-difficulty-content-triage/3.5-PLAN.md`);
   learning domain model v2 shared context §14 (complexity layering, field razor);
   ADR 0015 (four-channel capability profile); ADR 0017 (channelized observations);

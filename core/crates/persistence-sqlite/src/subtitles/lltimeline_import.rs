@@ -1,7 +1,5 @@
 use application::{ApplicationError, LLTimelineImport, LLTimelineImportRepository};
-use domain::{
-    ChunkTimeline, PhoneTimeline, ProsodyAnalysis, SenseGroupAnalysis, TimelineStatus, WordTimeline,
-};
+use domain::{PhoneTimeline, ProsodyAnalysis, SenseGroupAnalysis, TimelineStatus, WordTimeline};
 use rusqlite::{OptionalExtension, Transaction, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -12,7 +10,6 @@ use crate::{
 };
 
 use super::{
-    chunk_timelines::save_chunk_timeline_in_connection,
     lltimeline_resources::save_lltimeline_resource_in_connection,
     phone_timelines::save_phone_timeline_in_connection,
     prosody::save_prosody_analysis_in_connection,
@@ -42,20 +39,6 @@ impl StatusRecord for WordTimeline {
 }
 
 impl StatusRecord for PhoneTimeline {
-    fn status_mut(&mut self) -> &mut TimelineStatus {
-        &mut self.status
-    }
-
-    fn id(&self) -> &str {
-        self.id.as_str()
-    }
-
-    fn updated_at_ms(&self) -> u64 {
-        self.updated_at_ms
-    }
-}
-
-impl StatusRecord for ChunkTimeline {
     fn status_mut(&mut self) -> &mut TimelineStatus {
         &mut self.status
     }
@@ -187,16 +170,6 @@ impl LLTimelineImportRepository for SqliteRepository {
         )?;
         for timeline in &import.phone_timelines {
             save_phone_timeline_in_connection(&tx, timeline)?;
-        }
-
-        demote_active::<ChunkTimeline>(
-            &tx,
-            "chunk_timeline_runs",
-            "timeline_json",
-            import.track.id.as_str(),
-        )?;
-        for timeline in &import.chunk_timelines {
-            save_chunk_timeline_in_connection(&tx, timeline)?;
         }
 
         demote_active::<SenseGroupAnalysis>(

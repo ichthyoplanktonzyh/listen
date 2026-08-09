@@ -65,7 +65,6 @@ pub struct LanguageLearningProfile {
     /// extensible). The global vocabulary status enum stays language-agnostic.
     pub diagnosis_reasons: Vec<String>,
     pub word_timeline: CapabilitySupport,
-    pub chunk_timeline: CapabilitySupport,
     pub phone_timeline: CapabilitySupport,
 }
 
@@ -104,7 +103,6 @@ impl LanguageLearningProfile {
                 "reduced_form",
             ]),
             word_timeline: CapabilitySupport::Supported,
-            chunk_timeline: CapabilitySupport::Supported,
             // Phase 2.5 benchmark selected no release phone provider yet.
             phone_timeline: CapabilitySupport::Approximate,
         }
@@ -138,7 +136,6 @@ impl LanguageLearningProfile {
                 "tone_sandhi",
             ]),
             word_timeline: CapabilitySupport::Supported,
-            chunk_timeline: CapabilitySupport::Supported,
             phone_timeline: CapabilitySupport::Unsupported,
         }
     }
@@ -180,7 +177,6 @@ impl LanguageLearningProfile {
             // Non-English audio -> listening-unit production is deferred
             // (ADR 0012 Future Path); declare these unsupported, not faked.
             word_timeline: CapabilitySupport::Unsupported,
-            chunk_timeline: CapabilitySupport::Unsupported,
             phone_timeline: CapabilitySupport::Unsupported,
         }
     }
@@ -205,7 +201,6 @@ impl LanguageLearningProfile {
             dictionary_providers: Vec::new(),
             diagnosis_reasons: Vec::new(),
             word_timeline: CapabilitySupport::Unsupported,
-            chunk_timeline: CapabilitySupport::Unsupported,
             phone_timeline: CapabilitySupport::Unsupported,
         }
     }
