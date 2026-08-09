@@ -1,17 +1,17 @@
 {
   "manifest_version": 1,
   "core_repository": "ichthyoplanktonzyh/listen-core",
-  "core_git_sha": "54497e99c19ad4414c5029970211ed6af2bd2282",
+  "core_git_sha": "b0b0dc81a212ae5e5c97e2234439eb0d6a53ab5d",
   "contract": {
-    "version": "2.0.0",
-    "sha256": "cdc505c425388db6f81336d06beb84458c62cdc08075b1dfae7f62ba55a303ad",
-    "url": "https://github.com/ichthyoplanktonzyh/listen-core/releases/download/v0.7.0-split.3/listen-contracts-2.0.0.tar.gz"
+    "version": "2.1.0",
+    "sha256": "1804d9066af73d1d25b5a54dcd829ae90fe0d1cc2ec60fda5a40e99df5fea42b",
+    "url": "https://github.com/ichthyoplanktonzyh/listen-core/releases/download/v0.7.0-split.4/listen-contracts-2.1.0.tar.gz"
   },
   "runtime": {
     "version": "0.7.0",
     "platform": "macos",
     "arch": "arm64",
-    "sha256": "6e942a00254ff54e28daa97735e35018bdf27cb4cb8c92f027d2e99c3d2faaae",
-    "url": "https://github.com/ichthyoplanktonzyh/listen-core/releases/download/v0.7.0-split.3/listen-core-runtime-0.7.0-macos-arm64.tar.gz"
+    "sha256": "0de6dac66be73449ceadead6bceae888b83faaa7fe8bfc3cda5922e8de48d980",
+    "url": "https://github.com/ichthyoplanktonzyh/listen-core/releases/download/v0.7.0-split.4/listen-core-runtime-0.7.0-macos-arm64.tar.gz"
   }
 }
