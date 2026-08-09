@@ -1,8 +1,9 @@
 # listen-core Agent Guide
 
 This file is the mandatory entry point for every human or agent working in
-`listen-core`. The repository is the backend, canonical contract, production
-pipeline, and runtime-artifact authority for the listen product.
+`listen-core`. The repository is Listen's semantic runtime, canonical contract,
+and Core runtime-artifact authority. Reusable offline content production belongs
+to `listen-gen`.
 
 ## Ownership
 
@@ -20,15 +21,16 @@ pipeline, and runtime-artifact authority for the listen product.
 
 Read these files before planning or changing code:
 
-1. `CONTEXT.md`
-2. `ECOSYSTEM.md`
-3. `.planning/STATE.md`
-4. `.planning/PROJECT.md`
-5. `.planning/MAINTENANCE.md`
-6. `.planning/codebase/ARCHITECTURE.md`
-7. `.planning/codebase/STRUCTURE.md`
-8. `.planning/codebase/TESTING.md`
-9. `.planning/CROSS_REPO.md` when work can affect `listen-app`, `listen-gen`,
+1. `PRODUCT.md`
+2. `CONTEXT.md`
+3. `CONTEXT-MAP.md`
+4. `.planning/STATE.md`
+5. `.planning/PROJECT.md`
+6. `.planning/MAINTENANCE.md`
+7. `.planning/codebase/ARCHITECTURE.md`
+8. `.planning/codebase/STRUCTURE.md`
+9. `.planning/codebase/TESTING.md`
+10. `.planning/CROSS_REPO.md` when work can affect `listen-app`, `listen-gen`,
    or a future hosted catalog/registry
 
 Read only the active phase under `.planning/phases/`. Everything under
@@ -57,8 +59,8 @@ current repository truth.
 - `listen-app/backend.lock.json`;
 - reusable offline media preprocessing, model/provider execution, or native
   package generation owned by `listen-gen`;
-- hosted catalog/registry implementation, whose repository and service
-  ownership have not yet been selected.
+- required future Community And Sync implementation, whose repository and
+  service decomposition have not yet been selected.
 
 ## Architecture Rules
 
@@ -166,9 +168,18 @@ local commands and results; only the owner may authorize merge without CI.
 
 ## Planning and Documentation
 
-The live `.planning` tree describes only facts owned by this repository.
+The root semantic documents have distinct, non-overlapping authority:
 
-- `PROJECT.md`: durable backend mission and boundaries
+- `PRODUCT.md`: product purpose, principles, and non-goals;
+- `CONTEXT.md`: canonical cross-repository glossary only;
+- `CONTEXT-MAP.md`: context ownership, relationships, and stable seams;
+- `ECOSYSTEM.md`: navigation for legacy links, never a duplicate authority.
+
+The live `.planning` tree describes only implementation facts and work owned by
+this repository. It must link to the root semantic documents instead of copying
+their product definitions.
+
+- `PROJECT.md`: repository-local mission and boundaries
 - `REQUIREMENTS.md`: testable backend requirements
 - `ROADMAP.md`: backend-only phases and dependencies
 - `STATE.md`: current backend position and next actions

@@ -12,10 +12,11 @@
 | Client parsing, package choice UX and final product assembly | `listen-app` |
 | Core release artifact | `listen-core` |
 | Pinned consumer baseline | `listen-app/backend.lock.json` |
-| Hosted Catalog/Registry server | Undecided future role; do not infer an owner |
+| Community And Sync server | Required future context; implementation repository and service decomposition remain undecided |
 
-`ECOSYSTEM.md` records the shared context. Each repository's planning tree
-contains only facts and work owned by that repository.
+`PRODUCT.md`, `CONTEXT.md`, and `CONTEXT-MAP.md` are the shared semantic
+authority. Each repository's planning tree contains only facts and work owned by
+that repository.
 
 ## App To Core Contract Request
 
@@ -65,16 +66,18 @@ Until `listen-gen` has an owner-selected remote and release process, local
 checkout validation is development evidence only and is not a cross-repository
 release handoff.
 
-## Catalog And Registry Request
+## Community And Sync Request
 
-Discovery clients request Catalog Entries, Media Offers, Listings, and Releases
-from the future Hosted Catalog/Registry role. The request must keep discovery,
-playback, and lawful media acquisition distinct and must expose Publisher,
-Review, and License Status independently.
+Discovery clients request Listings, Releases, Community Corpus results, and
+update metadata from the required future Community And Sync context. Private
+state synchronization uses Core-owned identities and merge semantics but remains
+a separate data plane from public content distribution. Discovery, playback,
+and lawful media acquisition stay distinct, and Publisher, Review, and License
+Status remain independent.
 
-No current repository owns that server. Do not put registry persistence,
-moderation, federation, or hosted generation billing into Core, App, or Gen
-without a separate owner decision.
+No current repository owns that implementation. Do not put account persistence,
+sync infrastructure, registry persistence, moderation, federation, or hosted
+generation billing into Core, App, or Gen without a separate owner decision.
 
 ## Rules
 

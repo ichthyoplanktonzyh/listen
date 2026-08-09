@@ -1,136 +1,99 @@
 # listen-core
 
-Local-first production engine, Rust application services, loopback HTTP API,
-canonical contracts, and release runtime for the listen desktop application.
+`listen-core` is Listen's semantic runtime and canonical contract authority. It
+implements language-material, learning-resource, personal-state, corpus, and
+provider-neutral application behavior behind a loopback HTTP runtime.
 
-This repository is the authority for `contracts/openapi/v1.yaml`. Consumer
-repositories integrate through immutable contract and runtime archives; they
-must pin an exact core commit rather than reading this repository's moving
-`main` branch.
+Start with the semantic documents before reading implementation history:
 
-**New thread / maintainer handoff:** read
-[`docs/handoff/project-handoff-2026-06-14-m2.0-progress.md`](docs/handoff/project-handoff-2026-06-14-m2.0-progress.md).
+- [PRODUCT.md](PRODUCT.md) — what Listen is, why it exists, and its non-goals;
+- [CONTEXT.md](CONTEXT.md) — canonical cross-repository terminology;
+- [CONTEXT-MAP.md](CONTEXT-MAP.md) — authority and stable seams across App,
+  Core, Gen, and the required future Community And Sync context.
 
-**Current completed release:** Milestone 1.9, version `0.7.0`.
+[ECOSYSTEM.md](ECOSYSTEM.md) is only a compatibility navigation page for older
+links. Planning files and historical decisions do not override the semantic
+baseline above.
 
-Milestone 2.0 Phase 0 research is active. A fixed 60-slot real-speech
-evaluation catalog, provider-neutral phonetic scorer, candidate registry, and
-proposed provider-research ADR are available. Provider-neutral schema v9
-contracts, durable jobs, alignment findings, feedback, and an opt-in desktop
-surface are implemented against a deterministic research fixture. That fixture
-is disabled in normal builds and is not a release provider. No real-audio
-phonetic provider has passed the quality and licensing gates, so the product
-does not claim any real result is `detected_in_audio`. See
-[`docs/planning/milestone-2.0-phase0-research.md`](docs/planning/milestone-2.0-phase0-research.md).
-The proposed open-source/commercial and extensible-provider strategy is
-recorded in
-[`ADR 0009`](docs/decisions/0009-open-source-commercial-and-provider-ecosystem.md);
-it does not yet replace the repository's current no-license-granted state.
+## Repository Role
 
-Collaborative M1.9 functional acceptance is complete. Independent distribution
-signing and notarization are explicitly deferred from M1.9: the current Apple
-Development identity supports development launches but does not make an
-independently extracted archive distributable. When double-clicking a build is
-blocked by local signing or AMFI, use the standard
-[macOS functional testing fallback](docs/development/macos-functional-testing.md).
+This repository owns:
 
-Milestone 1.9 adds canonical pronunciation and sentence IPA, deterministic word
-timings with local current-word highlighting, and clearly labeled rule-based
-connected-speech hints. Track-wide speech enhancement jobs run in the
-background and support progress, cancellation, and retry. CMUdict remains an
-explicit optional resource and all enhancements degrade safely without
-blocking playback.
+- the Rust domain, application behavior, persistence adapters, and loopback
+  runtime;
+- canonical OpenAPI, event, timeline, and Content Package contracts under
+  `contracts/`;
+- Content Package validation and candidate installation semantics;
+- Personal Library, Personal Corpus, Learning Record, and language-capability
+  semantics;
+- immutable Core contract and runtime release artifacts.
 
-The Milestone 1 MVP targets macOS Apple Silicon and includes the core learning
-loop, dual text subtitles, drag and drop, configurable subtitle presentation,
-embedded text-subtitle extraction, and optional yt-dlp URL resolution. Windows,
-Linux, mobile, and bitmap-subtitle learning remain later work.
+It does not own Flutter experience design, reusable offline content-production
+implementations, or the future multi-tenant Community And Sync infrastructure.
+See [CONTEXT-MAP.md](CONTEXT-MAP.md) for the complete authority map.
 
-Version 0.3.0 makes vocabulary learning records durable independently of media:
-status-driven vocabulary books, status history, source sentence snapshots,
-missing-media recovery, and versioned JSON export/import are included.
+## Consumer Contract
 
-Version 0.4.0 adds responsive subtitle presets, Chinese/English UI switching,
-existing TXT/CSV vocabulary import, a unified learning panel, durable personal
-definitions and notes, and a provider-agnostic multi-dictionary query boundary.
+`listen-app` consumes versioned HTTP and resource contracts plus immutable
+runtime artifacts. It pins an exact Core commit and release; it does not depend
+on this repository's moving `main` branch or a sibling checkout in production.
 
-Version 0.4.1 adds draggable subtitle placement and independent font controls,
-while fixing the video texture black-screen regression found during validation.
+`listen-gen` consumes the canonical Content Package schema and produces
+data-only package artifacts. Core validates those artifacts without depending
+on Gen's provider implementations.
 
-Version 0.5.0 adds local whole-media ASR subtitle generation with a replaceable
-provider/model contract, durable background jobs, explicit model management,
-generated-track provenance, SRT export, and bundled macOS Apple Silicon
-whisper.cpp/FFmpeg runtimes. Models remain explicit user downloads.
+## Repository Layout
 
-## Repository layout
+- `crates/domain/` — product records, values, and invariants;
+- `crates/application/` — application behavior and repository/provider seams;
+- `crates/persistence-sqlite/` — SQLite adapters and migrations;
+- `crates/api-http/` — loopback HTTP composition and routes;
+- `crates/api-events/` — event envelopes;
+- `crates/local-runtime/` — local runtime mechanisms;
+- `crates/*-provider/` — external provider adapters;
+- `contracts/` — canonical wire and resource contracts;
+- `scripts/` — validation, packaging, release, and retained production tooling;
+- `docs/decisions/` — historical architectural decisions;
+- `.planning/` — current repository-specific status and implementation plans.
 
-- `contracts/player-adapter/`: transport-neutral player command, state, and event schemas.
-- `docs/decisions/`: architecture decision records.
-- `docs/verification/`: behavior baselines and verification results.
-- `crates/`: Rust domain, application, persistence, and HTTP API.
-- `scripts/`: contract validation, release packaging, and production tooling.
-- `testdata/`: generated, license-clear M0 media and subtitle fixtures.
+## Development
 
-## M0 quick start
+Fast Rust feedback:
 
 ```sh
-./testdata/generate.sh
-./scripts/validate-contracts.sh
+./scripts/test.sh --rust
 ```
 
-Prototype-specific commands live in each spike README.
-
-## Verification
-
-To start and manually test the complete Flutter app with either the pinned
-runtime or unreleased local core code, follow
-[`docs/development/full-app-local-testing.md`](docs/development/full-app-local-testing.md).
+Strict validation:
 
 ```sh
-# Fast local feedback for the Rust workspace
-./scripts/test.sh --rust
-
-# Complete strict Rust quality gate used by CI
 ./scripts/test.sh --rust --strict
-
-# Contract and artifact checks
 ./scripts/validate-contracts.sh
 python3 -m unittest scripts/test_release_artifacts.py
-
-# Test the testing infrastructure itself
-./scripts/test-infrastructure.sh
-
-# Historical milestone acceptance suites
-./scripts/verify-m1.sh
-./scripts/verify-m15.sh
-
-# Milestone 2.0 Phase 0 research-infrastructure checks
-./scripts/verify-m20-phase0.sh
-
-# Milestone 2.0 contracts, schema v9, and fake-provider workflow
-./scripts/verify-m20.sh
-./scripts/verify-m16.sh
-./scripts/verify-m18.sh
-./scripts/verify-m19.sh
 ```
 
-See `docs/features/testing-workflow.md` for runner modes, retained failure logs,
-coverage, benchmark compilation, fuzz smoke tests, and known limitations.
+Equivalent direct workspace checks:
 
-The local API binds only to loopback and reports its random port and bearer
-token in a structured startup handshake. See `docs/architecture/` for module,
-data, and lifecycle boundaries.
+```sh
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo fmt --all -- --check
+```
 
-Versioned consumer inputs are built with `scripts/package-contracts.sh` and
-`scripts/package-runtime-bundle.sh`. Both archives include manifests with the
-source commit, compatibility versions, and per-file SHA-256 hashes.
+Paid, ignored, credential-dependent, and live-model tests run only when
+explicitly authorized.
 
-Build and license-check the pinned ASR runtime with
-`./scripts/build-asr-runtime.sh`. The bundled `whisper-cli` is owned by
-learner-recording transcription; `ffmpeg`/`ffprobe` remain shared because
-SoundLine and other Core paths still consume them. Runtime provenance and
-redistribution notes are documented in `docs/release/asr-runtime.md`.
+## Complete App Testing
 
-No license is granted for this repository at this stage. The old LLPlayer
-repository is a behavioral reference only; source code is not copied into this
-project.
+For pinned-release startup, unreleased local-Core integration, logs, and manual
+smoke coverage, follow
+[docs/development/full-app-local-testing.md](docs/development/full-app-local-testing.md).
+
+The local API binds only to loopback and reports its address and bearer token in
+a structured startup handshake. Consumer-visible changes require contract
+validation and a coordinated immutable release handoff.
+
+## License
+
+No license is granted for this repository unless a license file explicitly says
+otherwise.
