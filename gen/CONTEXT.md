@@ -1,7 +1,8 @@
 # Listen Gen Context
 
-The canonical Listen product purpose, shared glossary, and context map live in
-`listen-core` at `PRODUCT.md`, `CONTEXT.md`, and `CONTEXT-MAP.md`.
+Canonical Listen product purpose, shared language, context ownership, learner
+journeys, development policy, and the project roadmap live in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
 `contracts.lock.json` identifies the canonical Content Package contract consumed
 by this repository.
 
@@ -18,6 +19,13 @@ _Avoid_: Learner, package publisher
 The authorized material assets and existing Learning Resources supplied to one
 generation operation.
 _Avoid_: Personal Library, provider-native request
+
+**Release Specification**:
+The caller-owned declaration of the exact Material Revision, Learning Edition,
+entrypoints, resource roles and languages, and delivery choices required to
+assemble one Package Release. Listen Gen validates this specification but does
+not infer cross-source material equivalence or Learner adoption.
+_Avoid_: Generation Recipe, Package Installation, active selection
 
 **Generation Recipe**:
 A portable declaration of requested production capabilities, selected producers,

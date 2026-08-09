@@ -1,11 +1,23 @@
 # listen-gen Agent Guide
 
+## Development roles
+
+- The owner decides product direction and scope.
+- The Supervisor owns architecture, decomposition, Worker selection, review,
+  independent validation, documentation, and authorized Git/release delivery.
+- Source, test, schema, script, and runtime-configuration changes belong to the
+  configured implementation Worker. Worker is a replaceable role; a current
+  OpenCode or model choice is execution configuration rather than project
+  semantics.
+- The cross-repository operating model is canonical in
+  `ichthyoplanktonzyh/listen/DEVELOPMENT.md`.
+
 ## First read
 
 - Read `CONTEXT.md` for content-production terminology.
-- Shared product semantics and context ownership are canonical in
-  `listen-core/PRODUCT.md`, `listen-core/CONTEXT.md`, and
-  `listen-core/CONTEXT-MAP.md`.
+- Shared product semantics, context ownership, learner journeys, development
+  policy, and the project roadmap are canonical in
+  `ichthyoplanktonzyh/listen`.
 - `contracts.lock.json` identifies the Content Package contract consumed here;
   shared schemas are never copied into this repository.
 
@@ -19,10 +31,14 @@ the owner has added an explicit license grant.
 
 ## Contract ownership
 
-- `listen-core/contracts/content-package/v1` is the only schema authority.
-- Do not copy the schema into this repository.
-- Update `contracts.lock.json` when the pinned schema identity/version changes.
-- Package output must contain only typed, allowlisted resources.
+- `listen-core/contracts/content-package/v1` and
+  `listen-core/contracts/content-package/v2` are the only schema authorities.
+- Do not copy either schema generation into this repository.
+- Update `contracts.lock.json` when a pinned schema identity/version changes.
+- V1 remains the default compatibility output. V2 is selected explicitly and
+  is assembled only from a caller-owned Release Specification.
+- Package output must contain only typed, allowlisted resources and declared
+  content-addressed blobs.
 
 ## Safety and privacy
 

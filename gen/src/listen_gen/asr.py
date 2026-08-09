@@ -29,6 +29,11 @@ from .package import (
     _envelope,
     write_package,
 )
+from .package_v2 import (
+    ReleaseSpec,
+    build_v2_carrier,
+    write_v2_package,
+)
 from .phone import PhoneAnalyzer, run_phone
 from .protocol import (
     ALIGNMENT_WARNING_MESSAGES,
@@ -319,11 +324,24 @@ def _tokens(text: str) -> list[dict[str, Any]]:
 
 
 def _fingerprint(media_path: Path) -> str:
+    digest, _size = _stream_fingerprint(media_path)
+    return digest
+
+
+def _stream_fingerprint(media_path: Path) -> tuple[str, int]:
+    """Streaming SHA-256 identity and byte count of a file.
+
+    The media is never read into memory: the digest and the observed byte
+    count come from the same bounded-chunk pass, so a declared size and its
+    identity always refer to the same observed state.
+    """
     digest = hashlib.sha256()
+    size = 0
     with media_path.open("rb") as media:
         for chunk in iter(lambda: media.read(1024 * 1024), b""):
+            size += len(chunk)
             digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}"
+    return f"sha256:{digest.hexdigest()}", size
 
 
 def _sentence_id(media_fingerprint: str, segment_index: int, segment: AsrSegment) -> str:
@@ -365,6 +383,8 @@ def package_media(
     phone_analyzer: PhoneAnalyzer | None = None,
     phone_preprocessor: AudioPreprocessor | None = None,
     phone_audio_stream_index: int | None = None,
+    package_version: int = 1,
+    release_spec: ReleaseSpec | None = None,
 ) -> dict[str, Any]:
     if not media_path.is_file():
         raise ConversionError("media input is not a regular file")
@@ -374,10 +394,23 @@ def package_media(
         raise ConversionError("media kind must be audio or video")
     _integer(duration_ms, "duration_ms", 1)
     _integer(created_at_ms, "created_at_ms")
+    if package_version not in (1, 2):
+        raise ConversionError("package version must be 1 or 2")
+    if package_version == 1 and release_spec is not None:
+        raise ConversionError("package version 1 does not accept a v2 release specification")
+    if package_version == 2 and release_spec is None:
+        raise ConversionError("package version 2 requires a release specification")
     media_fingerprint = _fingerprint(media_path)
     transcript = adapter.transcribe(media_path)
     if _fingerprint(media_path) != media_fingerprint:
         raise ConversionError("media input changed during processing")
+    if release_spec is not None and (
+        transcript.language.casefold() != release_spec.target_language.casefold()
+    ):
+        raise ConversionError(
+            f"ASR transcript language {transcript.language!r} does not agree with "
+            f"target-language {release_spec.target_language!r}"
+        )
     segments = transcript.segments
     if segments and any(bool(segment.words) for segment in segments) and not all(
         bool(segment.words) for segment in segments
@@ -646,6 +679,45 @@ def package_media(
             "required": resource.required, "size_bytes": len(resource.body),
         } for resource in resources],
     }
+    if package_version == 2:
+        assert release_spec is not None
+        if progress is not None:
+            progress("building_package")
+        media_source: Path | None = None
+        if release_spec.media_delivery == "embedded":
+            # The exact media bytes are carried as an internal file-backed
+            # entry and streamed into the archive by the writer, whose
+            # streaming digest/size validation is the final mutation check.
+            # The media is never read into memory.
+            media_size = media_path.stat().st_size
+            media_source = media_path
+        else:
+            # Referenced delivery declares the missing media identity from a
+            # final streaming pass immediately before the carrier is built, so
+            # the declared size and digest refer to the same observed pass.
+            observed_digest, media_size = _stream_fingerprint(media_path)
+            if observed_digest != media_fingerprint:
+                raise ConversionError("media input changed during processing")
+        carrier = build_v2_carrier(
+            resources=resources,
+            media_sha256=media_fingerprint,
+            media_size=media_size,
+            media_kind=media_kind,
+            media_source=media_source,
+            spec=release_spec,
+            created_at_ms=created_at_ms,
+        )
+        package_sha256 = write_v2_package(output_path, carrier)
+        return {
+            "status": "created", "output": str(output_path),
+            "media_fingerprint": media_fingerprint, "package_sha256": package_sha256,
+            "resource_count": len(resources), "warnings": warnings,
+            "alignment": alignment_outcome,
+            "rich_resources": rich_outcomes,
+            "package_version": 2,
+            "release_id": carrier["release_id"],
+            "delivery_profile": carrier["delivery"]["profile"],
+        }
     if progress is not None:
         progress("building_package")
     package_sha256 = write_package(output_path, manifest, resources)
