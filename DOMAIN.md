@@ -107,8 +107,15 @@ _Avoid_: Discovery, redistribution right, Package Installation
 
 **Personal Library**: The Learner's explicitly retained collection of Learning
 Materials. Membership is durable and synchronized; opening a Temporary Material
-does not add it.
-_Avoid_: Personal Corpus, playback history
+does not add it. Membership is independent of where a source asset is stored on
+the learner's devices.
+_Avoid_: Personal Corpus, playback history, Personal Library folder
+
+**Managed Asset Store**: Device-local storage managed by Listen for verified
+copies of source assets bound to retained Learning Materials. It supports local
+availability but does not define Personal Library membership; a retained
+material may instead reference an asset in place.
+_Avoid_: Personal Library, Personal Library folder
 
 **Personal Corpus**: A searchable view of language occurrences derived from the
 Personal Library. The view is rebuildable; the library and resources are
