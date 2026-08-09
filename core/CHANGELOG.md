@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-10 — v0.7.0-phase1.1
+
+- Releases additive contract `3.1.0` with explicit Temporary versus Personal
+  Library membership. Runtime remains `0.7.0`; SQLite schema is `v58`.
+- Media registration accepts explicit retain intent, library membership can be
+  changed idempotently without replacing media identity, and collection listing
+  excludes temporary materials while direct lookup remains available.
+- Existing media are backfilled as retained. Fingerprint re-registration and
+  managed-path rebinding preserve membership and existing learning state.
+- Device-local Managed Asset Store ownership remains in `listen-app`; Core does
+  not copy, move, or delete learner media files.
+
 ## 2026-08-09 — v0.7.0-split.4
 
 - Releases additive contract `2.1.0` with package-native Prosody Analysis and
