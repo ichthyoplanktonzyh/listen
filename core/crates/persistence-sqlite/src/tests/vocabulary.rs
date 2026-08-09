@@ -122,6 +122,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             title: "Source".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5000),
+            retain: None,
         })
         .unwrap();
     let track = services
@@ -253,6 +254,7 @@ fn vocabulary_assets_capture_history_sources_and_restore_without_media() {
             title: "Source moved".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5000),
+            retain: None,
         })
         .unwrap();
     let relinked = services

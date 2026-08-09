@@ -932,3 +932,107 @@ fn fresh_schema_never_retains_chunk_timeline_storage() {
     assert_eq!(version, MIGRATION_VERSION);
     assert!(!table_exists(&connection, "chunk_timeline_runs"));
 }
+
+#[test]
+fn v58_backfills_preexisting_media_rows_as_retained_with_creation_time() {
+    // Upgrade stability: every media row that existed before membership
+    // became explicit stays in the Personal Library after v58, with a
+    // deterministic membership time equal to its creation time. A row that
+    // is registered after the upgrade (Temporary Material) is not affected by
+    // the backfill.
+    let connection = Connection::open_in_memory().unwrap();
+    for migration in [
+        include_str!("../../migrations/0001_media.sql"),
+        include_str!("../../migrations/0002_learning.sql"),
+        include_str!("../../migrations/0003_subtitle_identity.sql"),
+        include_str!("../../migrations/0004_vocabulary_assets.sql"),
+        include_str!("../../migrations/0005_learning_experience.sql"),
+        include_str!("../../migrations/0006_transcription.sql"),
+        include_str!("../../migrations/0007_lexical_entries.sql"),
+        include_str!("../../migrations/0008_pronunciation.sql"),
+        include_str!("../../migrations/0009_phonetic_analysis.sql"),
+        include_str!("../../migrations/0010_word_timelines.sql"),
+        include_str!("../../migrations/0011_lltimeline_resources.sql"),
+        include_str!("../../migrations/0012_subtitle_resource_lifecycle.sql"),
+        include_str!("../../migrations/0013_chunk_timelines.sql"),
+    ] {
+        connection.execute_batch(migration).unwrap();
+    }
+    connection
+        .execute(
+            "INSERT INTO media_items
+               (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms)
+             VALUES
+               ('old-a','/tmp/a.mp4','fp-a','A','\"video\"',NULL,111,222),
+               ('old-b','/tmp/b.mp4','fp-b','B','\"audio\"',NULL,333,444)",
+            [],
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 13).unwrap();
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    // Every preexisting row is retained with its creation time.
+    let rows: Vec<(String, Option<u64>)> = {
+        let mut statement = connection
+            .prepare("SELECT id, retained_at_ms FROM media_items ORDER BY id")
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        rows,
+        vec![
+            ("old-a".to_owned(), Some(111)),
+            ("old-b".to_owned(), Some(333)),
+        ]
+    );
+    // Non-membership columns are untouched by the backfill.
+    let (path, created_at_ms): (String, u64) = connection
+        .query_row(
+            "SELECT path, created_at_ms FROM media_items WHERE id='old-a'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(path, "/tmp/a.mp4");
+    assert_eq!(created_at_ms, 111);
+}
+
+#[test]
+fn fresh_schema_ends_at_v58_with_nullable_membership_column() {
+    // A database created from scratch runs the forward v58 migration too:
+    // `media_items` gains the nullable `retained_at_ms` column and no rows
+    // exist to backfill.
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    assert_eq!(
+        table_column_count(&connection, "media_items", &["retained_at_ms"]),
+        1,
+        "retained_at_ms column must exist"
+    );
+    let nullable: u8 = connection
+        .query_row(
+            "SELECT \"notnull\" FROM pragma_table_info('media_items')
+             WHERE name='retained_at_ms'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(nullable, 0, "retained_at_ms must be nullable");
+}

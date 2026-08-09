@@ -337,6 +337,7 @@ fn transcription_media() -> MediaItem {
         kind: MediaKind::Video,
         duration: Some(TimeMs::new(1_000)),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     }

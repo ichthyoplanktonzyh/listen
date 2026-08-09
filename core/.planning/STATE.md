@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-08-09 CST
+> Updated: 2026-08-10 CST
 
 ## Position
 
@@ -8,12 +8,25 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `3.0.0` (R5 breaking; verified and pinned locally by App,
-  with no Core GitHub release/tag required by owner direction)
+- Contract version: `3.1.0` (additive material-retention contract; implemented
+  and locally verified, pending immutable release and App pin)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
 ## Current Work
+
+Product Alpha Phase 1, Single-user Core Loop Alpha, is active in the canonical
+project roadmap. Core's first slice is
+[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CONTEXT.md).
+The verified current App can play raw local media without a subtitle or package.
+Core contract `3.1.0` now separates Temporary Material registration from
+explicit Personal Library membership, migration v58 backfills existing rows as
+retained, and unretaining preserves every learner-owned record. The App side is
+implemented against typed fixtures with temporary open, explicit Keep and a
+Managed Asset Store. Both repositories pass local gates; immutable Core
+artifacts and the App backend pin remain before the real-media round trip.
+
+## Completed Foundation
 
 Content Package v2 is complete as a contract and producer vertical. It defines
 one immutable Package Release per Learning Edition snapshot, with separate
@@ -174,21 +187,24 @@ not code evidence.
 
 ## Next
 
-1. Retain `v0.7.0-split.4` as the immutable R4 baseline. App R5 now pins Gen
+1. Publish the verified `3.1.0` material-retention contract/runtime from a clean
+   commit, update the App backend pin, and run the temporary-open/**keep**
+   real-media journey against the exact artifacts.
+2. Retain `v0.7.0-split.4` as the immutable R4 baseline. App R5 now pins Gen
    merge `a660946a` / tool `0.4.0` and Core merge `105568ed` / contract
    `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
    exact SHA-256, while Gen `v0.4.0` is published immutably.
-2. Treat Content Package v2 as the completed release/inspection/producer seam;
+3. Treat Content Package v2 as the completed release/inspection/producer seam;
    design generic Learning Material persistence or a hosted catalog journey
    only from a subsequent product phase and learner journey.
-3. Split core issue #80 into a production-model slice followed by an
+4. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
-4. Keep immutable `v0.7.0-split.4` as the R4 consumer baseline. Contract
+5. Keep immutable `v0.7.0-split.4` as the R4 consumer baseline. Contract
    `2.1.0` preserves the R1 whole-media job deletion and additively exposes the
    R3 Prosody Analysis projection; learner-recording transcription, provider
    and model routes remain unchanged.
-5. Run the Apple Silicon short-audio cascade smoke only with explicit model
+6. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-6. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+7. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.

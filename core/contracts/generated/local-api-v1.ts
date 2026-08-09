@@ -19,6 +19,7 @@ export interface RegisterMedia {
   title: string;
   kind: MediaKind;
   duration_ms?: number | null;
+  retain?: boolean | null;
 }
 
 export interface Health {
@@ -36,6 +37,7 @@ export interface MediaItem {
   created_at_ms: number;
   updated_at_ms: number;
   availability: "available" | "missing" | "archived";
+  retained_at_ms: number | null;
 }
 
 export interface Progress {
@@ -1119,6 +1121,20 @@ export class LocalApiV1 {
 
   readMedia(mediaId: string): Promise<MediaItem> {
     return this.request(`/v1/media/${encodeURIComponent(mediaId)}`);
+  }
+
+  retainMedia(mediaId: string): Promise<MediaItem> {
+    return this.request(
+      `/v1/media/${encodeURIComponent(mediaId)}/library-membership`,
+      { method: "PUT" },
+    );
+  }
+
+  unretainMedia(mediaId: string): Promise<MediaItem> {
+    return this.request(
+      `/v1/media/${encodeURIComponent(mediaId)}/library-membership`,
+      { method: "DELETE" },
+    );
   }
 
   readProgress(mediaId: string): Promise<Progress> {

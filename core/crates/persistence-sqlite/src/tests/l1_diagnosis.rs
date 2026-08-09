@@ -27,6 +27,7 @@ fn import_english_sentence(services: &AppServices) -> SubtitleTrack {
             title: "L1 diagnosis media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     services

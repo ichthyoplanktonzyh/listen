@@ -16,8 +16,8 @@ use super::media::{
     archive_subtitle, cold_start_words, content_fit_calibration_samples, delete_subtitle,
     export_subtitle, import_content_package, import_lltimeline, import_lltimeline_for_media,
     import_subtitle, list_media_library, media_subtitles, read_media, read_subtitle,
-    register_media, restore_subtitle, set_media_triage_intent, track_content_fit,
-    update_track_language,
+    register_media, restore_subtitle, retain_media, set_media_triage_intent, track_content_fit,
+    unretain_media, update_track_language,
 };
 use super::personal_expression::{
     create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
@@ -132,6 +132,10 @@ fn media_analysis_routes() -> Router<ApiState> {
         .route(
             "/v1/media/{media_id}/triage-intent",
             put(set_media_triage_intent),
+        )
+        .route(
+            "/v1/media/{media_id}/library-membership",
+            put(retain_media).delete(unretain_media),
         )
         .route("/v1/lltimeline/import", post(import_lltimeline))
         .route("/v1/media/{media_id}", get(read_media))

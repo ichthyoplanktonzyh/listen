@@ -10,12 +10,13 @@ pub(crate) fn upsert_media_in_transaction(
 ) -> Result<(), ApplicationError> {
     tx.execute(
         "INSERT INTO media_items
-                 (id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 (id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability, retained_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                  ON CONFLICT(fingerprint) DO UPDATE SET
                    path=excluded.path, title=excluded.title, kind=excluded.kind,
                    duration_ms=excluded.duration_ms, updated_at_ms=excluded.updated_at_ms,
-                   availability=excluded.availability",
+                   availability=excluded.availability,
+                   retained_at_ms=COALESCE(media_items.retained_at_ms, excluded.retained_at_ms)",
         params![
             media.id.as_str(),
             media.path,
@@ -25,7 +26,8 @@ pub(crate) fn upsert_media_in_transaction(
             media.duration.map(TimeMs::get),
             media.created_at_ms,
             media.updated_at_ms,
-            json(&media.availability)?
+            json(&media.availability)?,
+            media.retained_at_ms,
         ],
     )
     .map_err(repo)?;
@@ -79,7 +81,7 @@ impl MediaRepository for SqliteRepository {
     fn get(&self, id: &MediaId) -> Result<Option<MediaItem>, ApplicationError> {
         let conn = self.connection.lock();
         conn.query_row(
-            "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability
+            "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability, retained_at_ms
              FROM media_items WHERE id=?1",
             [id.as_str()],
             |r| {
@@ -93,6 +95,7 @@ impl MediaRepository for SqliteRepository {
                     created_at_ms: r.get(6)?,
                     updated_at_ms: r.get(7)?,
                     availability: from_json(&r.get::<_, String>(8)?)?,
+                    retained_at_ms: r.get(9)?,
                 })
             },
         )
@@ -104,7 +107,7 @@ impl MediaRepository for SqliteRepository {
         let conn = self.connection.lock();
         let mut query = conn
             .prepare(
-                "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability
+                "SELECT id, path, fingerprint, title, kind, duration_ms, created_at_ms, updated_at_ms, availability, retained_at_ms
                  FROM media_items ORDER BY updated_at_ms DESC, id",
             )
             .map_err(repo)?;
@@ -120,6 +123,7 @@ impl MediaRepository for SqliteRepository {
                     created_at_ms: r.get(6)?,
                     updated_at_ms: r.get(7)?,
                     availability: from_json(&r.get::<_, String>(8)?)?,
+                    retained_at_ms: r.get(9)?,
                 })
             })
             .map_err(repo)?
@@ -218,6 +222,29 @@ impl MediaRepository for SqliteRepository {
         }
         tx.commit().map_err(repo)?;
         drop(conn);
+        MediaRepository::get(self, id)?.ok_or(ApplicationError::NotFound("media"))
+    }
+
+    fn set_library_membership(
+        &self,
+        id: &MediaId,
+        retained_at_ms: Option<u64>,
+        updated_at_ms: u64,
+    ) -> Result<MediaItem, ApplicationError> {
+        let conn = self.connection.lock();
+        // Membership mutation touches exactly two columns: `retained_at_ms`
+        // and `updated_at_ms`. Media identity, availability, path, progress,
+        // subtitles, resources, and every learner-owned record stay intact.
+        let changed = conn
+            .execute(
+                "UPDATE media_items SET retained_at_ms=?2, updated_at_ms=?3 WHERE id=?1",
+                params![id.as_str(), retained_at_ms, updated_at_ms],
+            )
+            .map_err(repo)?;
+        drop(conn);
+        if changed == 0 {
+            return Err(ApplicationError::NotFound("media"));
+        }
         MediaRepository::get(self, id)?.ok_or(ApplicationError::NotFound("media"))
     }
 }

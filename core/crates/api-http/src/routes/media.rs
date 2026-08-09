@@ -17,6 +17,11 @@ pub(crate) struct RegisterMediaRequest {
     title: String,
     kind: MediaKind,
     duration_ms: Option<u64>,
+    /// Personal Library membership choice. Omitted (or null) means retained,
+    /// preserving the historical behavior for old clients; explicit false
+    /// registers Temporary Material (readable by media ID but absent from the
+    /// media library); explicit true retains it.
+    retain: Option<bool>,
 }
 
 pub(crate) async fn register_media(
@@ -29,11 +34,48 @@ pub(crate) async fn register_media(
         title: request.title,
         kind: request.kind,
         duration_ms: request.duration_ms,
+        retain: request.retain,
     };
     state
         .application
         .execute("media.register", move |services| {
             services.media_analysis().register_media(input)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+/// Idempotent explicit learner intent to add an existing media item to the
+/// Personal Library. Preserves an existing membership timestamp and routes
+/// all policy through the application layer.
+pub(crate) async fn retain_media(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+) -> Result<Json<domain::MediaItem>, ApiError> {
+    let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("media.retain", move |services| {
+            services.media_analysis().retain_media(&id)
+        })
+        .await
+        .map(Json)
+        .map_err(ApiError::from)
+}
+
+/// Idempotent explicit learner intent to remove an existing media item from
+/// the Personal Library. Changes membership only; the media stays registered
+/// and readable, and every learner-owned record remains intact.
+pub(crate) async fn unretain_media(
+    State(state): State<ApiState>,
+    Path(media_id): Path<String>,
+) -> Result<Json<domain::MediaItem>, ApiError> {
+    let id = MediaId::parse(media_id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("media.unretain", move |services| {
+            services.media_analysis().unretain_media(&id)
         })
         .await
         .map(Json)

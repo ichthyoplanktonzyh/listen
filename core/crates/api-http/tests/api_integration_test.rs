@@ -122,6 +122,34 @@ async fn register_media(app: &Router, title: &str) -> Value {
     media
 }
 
+/// Register media with an explicit membership choice and return the response.
+async fn register_media_with_retain(app: &Router, title: &str, retain: Option<bool>) -> Value {
+    let mut body = json!({
+        "path": format!("/tmp/{title}.mp4"),
+        "fingerprint": format!("fp-{title}-retain"),
+        "title": title,
+        "kind": "video",
+        "duration_ms": 10_000,
+    });
+    if let Some(retain) = retain {
+        body["retain"] = json!(retain);
+    }
+    let (status, media) = send(app, post_json("/v1/media", Some(TOKEN), &body)).await;
+    assert_eq!(status, StatusCode::OK, "register media {title}: {media}");
+    media
+}
+
+async fn library_ids(app: &Router) -> Vec<String> {
+    let (status, library) = send(app, get("/v1/media", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{library}");
+    library
+        .as_array()
+        .expect("library array")
+        .iter()
+        .map(|entry| entry["media"]["id"].as_str().expect("media id").to_owned())
+        .collect()
+}
+
 /// Stage `srt` to a real temp file and import it as a subtitle track, since
 /// `import_subtitle` reads the source from disk. Returns the import response.
 async fn import_srt(app: &Router, media_id: &str, srt: &str) -> (StatusCode, Value) {
@@ -154,9 +182,10 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The R5 breaking contract is locked exactly: the handshake must report
-    // 3.0.0 (never the previously published R4 2.1.0).
-    assert_eq!(body["contract_version"], "3.0.0");
+    // The material-retention contract is locked exactly: 3.1.0 is the
+    // additive minor over the R5 breaking 3.0.0 (never the previously
+    // published R4 2.1.0).
+    assert_eq!(body["contract_version"], "3.1.0");
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }
 
@@ -616,4 +645,238 @@ async fn sense_folder_http_lifecycle_keeps_entry_occurrences_and_assigns_manuall
     assert_eq!(status, StatusCode::OK, "{deleted}");
     assert!(deleted["sense_folders"].as_array().unwrap().is_empty());
     assert_eq!(deleted["occurrences"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn temporary_registration_is_readable_but_absent_from_library() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Temporary Clip", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id");
+    assert!(media["retained_at_ms"].is_null());
+
+    // Readable by ID...
+    let (status, fetched) = send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{fetched}");
+    assert_eq!(fetched["id"], media["id"]);
+    assert!(fetched["retained_at_ms"].is_null());
+
+    // ...but absent from the Personal Library projection.
+    assert!(!library_ids(&app).await.contains(&media_id.to_owned()));
+}
+
+#[tokio::test]
+async fn omitted_retain_registration_stays_retained_for_old_clients() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Legacy Clip", None).await;
+    let media_id = media["id"].as_str().expect("media id");
+    assert!(
+        media["retained_at_ms"].is_number(),
+        "omitted retain must default to retained: {media}"
+    );
+    assert!(library_ids(&app).await.contains(&media_id.to_owned()));
+}
+
+#[tokio::test]
+async fn explicit_true_registration_retains_immediately() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Kept Clip", Some(true)).await;
+    let media_id = media["id"].as_str().expect("media id");
+    assert!(
+        media["retained_at_ms"].is_number(),
+        "explicit retain true must retain: {media}"
+    );
+    assert!(library_ids(&app).await.contains(&media_id.to_owned()));
+}
+
+#[tokio::test]
+async fn library_membership_put_delete_cycle_preserves_timestamps_and_is_idempotent() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Membership Clip", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id").to_owned();
+
+    // PUT joins the library and stamps membership once.
+    let (status, retained) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/media/{media_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{retained}");
+    let first_membership = retained["retained_at_ms"]
+        .as_u64()
+        .expect("membership time");
+    assert!(library_ids(&app).await.contains(&media_id));
+
+    // Repeated PUT preserves the original membership timestamp.
+    let (status, retained_again) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/media/{media_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{retained_again}");
+    assert_eq!(
+        retained_again["retained_at_ms"].as_u64(),
+        Some(first_membership),
+        "repeated retention must preserve the original membership time"
+    );
+
+    // DELETE leaves it readable but removes it from the library.
+    let (status, unretained) = send(
+        &app,
+        method_no_body(
+            "DELETE",
+            &format!("/v1/media/{media_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{unretained}");
+    assert!(unretained["retained_at_ms"].is_null());
+    let (status, fetched) = send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{fetched}");
+    assert!(!library_ids(&app).await.contains(&media_id));
+
+    // DELETE is idempotent.
+    let (status, unretained_again) = send(
+        &app,
+        method_no_body(
+            "DELETE",
+            &format!("/v1/media/{media_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{unretained_again}");
+    assert!(unretained_again["retained_at_ms"].is_null());
+
+    // PUT after DELETE obtains a new membership timestamp and returns to the
+    // library. The sleep guarantees the millisecond clock advances so the
+    // re-stamp is observably fresh.
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    let (status, re_retained) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/media/{media_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{re_retained}");
+    let second_membership = re_retained["retained_at_ms"]
+        .as_u64()
+        .expect("membership time");
+    assert!(
+        second_membership > first_membership,
+        "PUT after DELETE must obtain a fresh membership timestamp"
+    );
+    assert!(library_ids(&app).await.contains(&media_id));
+}
+
+#[tokio::test]
+async fn repeated_registration_never_clears_existing_membership() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Re-register Clip", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id").to_owned();
+    let fingerprint = format!("fp-{}-retain", "Re-register Clip");
+
+    // A later registration with `retain: false` over the same fingerprint
+    // must not silently unretain an already retained item.
+    let (status, retained) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/media/{media_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{retained}");
+    let membership = retained["retained_at_ms"]
+        .as_u64()
+        .expect("membership time");
+
+    let (status, re_registered) = send(
+        &app,
+        post_json(
+            "/v1/media",
+            Some(TOKEN),
+            &json!({
+                "path": "/tmp/Re-register Clip.mp4",
+                "fingerprint": fingerprint,
+                "title": "Re-register Clip",
+                "kind": "video",
+                "duration_ms": 10_000,
+                "retain": false,
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{re_registered}");
+    assert_eq!(
+        re_registered["retained_at_ms"].as_u64(),
+        Some(membership),
+        "registration with retain false must preserve existing membership"
+    );
+    assert!(library_ids(&app).await.contains(&media_id));
+}
+
+#[tokio::test]
+async fn library_membership_unknown_media_is_typed_not_found() {
+    let app = build_app();
+    let unknown = "0000000000000000000000000000000000000000000000000000000000000000";
+    let (status, body) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/media/{unknown}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+
+    let (status, body) = send(
+        &app,
+        method_no_body(
+            "DELETE",
+            &format!("/v1/media/{unknown}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+}
+
+#[tokio::test]
+async fn retained_media_states_membership_in_every_response_shape() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Shape Clip", Some(true)).await;
+    let media_id = media["id"].as_str().expect("media id");
+
+    // The MediaItem read shape always carries membership evidence.
+    let (status, fetched) = send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{fetched}");
+    assert!(fetched.get("retained_at_ms").is_some());
+
+    // The library entry embeds the same MediaItem shape.
+    let (status, library) = send(&app, get("/v1/media", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{library}");
+    let entry = library
+        .as_array()
+        .expect("library array")
+        .iter()
+        .find(|entry| entry["media"]["id"] == media_id)
+        .expect("retained media appears in the library");
+    assert!(entry["media"].get("retained_at_ms").is_some());
+    assert!(entry["media"]["retained_at_ms"].is_number());
 }

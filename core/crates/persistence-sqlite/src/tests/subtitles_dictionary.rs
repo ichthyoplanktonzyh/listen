@@ -11,6 +11,7 @@ fn subtitle_save_is_transactional_and_round_trips() {
         kind: MediaKind::Video,
         duration: None,
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };
@@ -47,6 +48,7 @@ fn subtitle_and_corpus_unit_of_work_rolls_back_on_projection_failure() {
         kind: MediaKind::Video,
         duration: None,
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };
@@ -119,6 +121,7 @@ fn retrying_existing_subtitle_repairs_a_missing_corpus_projection() {
             title: "Retry corpus".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     let input = ImportSubtitle {
@@ -182,6 +185,7 @@ fn changing_track_language_retokenizes_sentences_and_replaces_corpus_atomically(
             title: "Retokenize".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     let english_track = services
@@ -312,6 +316,7 @@ fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
             title: "Corpus media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     services
@@ -367,6 +372,7 @@ fn active_prosody_analysis_projects_chunk_occurrences_into_corpus() {
             title: "Corpus prosody media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     let track = services
@@ -472,6 +478,7 @@ fn giant_entry_search_samples_across_media() {
             title: "Sample A".into(),
             kind: MediaKind::Video,
             duration_ms: Some(60_000),
+            retain: None,
         })
         .unwrap();
     services.media_analysis().import_subtitle(ImportSubtitle {
@@ -491,6 +498,7 @@ fn giant_entry_search_samples_across_media() {
             title: "Sample B".into(),
             kind: MediaKind::Video,
             duration_ms: Some(60_000),
+            retain: None,
         })
         .unwrap();
     services
@@ -571,6 +579,7 @@ fn corpus_word_keys_and_free_text_queries_share_lemma_normalization() {
             title: "Corpus lemma media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     services
@@ -623,6 +632,7 @@ fn deleting_a_track_keeps_corpus_search_coherent() {
             title: "Corpus delete media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     let track = services
@@ -693,6 +703,7 @@ fn rebuild_corpus_index_backfills_preexisting_tracks() {
             title: "Corpus rebuild media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     let pre_projection_track = SubtitleTrack {
@@ -847,6 +858,7 @@ fn diagnosis_reads_lexical_entries_in_the_track_language() {
             title: "ZH".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5000),
+            retain: None,
         })
         .unwrap();
     let track = services
@@ -930,6 +942,7 @@ fn recognition_barrier_carries_the_language_listening_reasons() {
             title: "ZH".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5000),
+            retain: None,
         })
         .unwrap();
     let track = services

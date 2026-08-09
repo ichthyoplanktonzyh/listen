@@ -10,6 +10,7 @@ fn content_package_candidate_fixture() -> ContentPackageCandidateImport {
         kind: MediaKind::Video,
         duration: document.metadata.media.duration_ms.map(TimeMs::new),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };
@@ -81,6 +82,7 @@ fn seed_content_package_media(repo: &SqliteRepository, import: &ContentPackageCa
         kind: MediaKind::Video,
         duration: import.metadata.media.duration_ms.map(TimeMs::new),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     })
@@ -159,6 +161,7 @@ fn content_package_cross_source_resource_conflict_rolls_back_every_write() {
         kind: MediaKind::Video,
         duration: None,
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 2,
         updated_at_ms: 2,
     };
@@ -206,6 +209,7 @@ fn content_package_sentence_ownership_conflict_rolls_back_without_moving_sentenc
         kind: MediaKind::Video,
         duration: None,
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 3,
         updated_at_ms: 3,
     };
@@ -292,6 +296,7 @@ fn public_content_package_use_case_inspects_projects_and_imports_atomically() {
         kind: MediaKind::Video,
         duration: Some(TimeMs::new(2_500)),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };
@@ -334,6 +339,7 @@ fn generated_r4_package_imports_idempotently_as_candidates_only() {
         kind: MediaKind::Audio,
         duration: Some(TimeMs::new(2_200)),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };
@@ -407,6 +413,7 @@ fn public_content_package_reimport_returns_the_preserved_archived_track() {
         kind: MediaKind::Video,
         duration: Some(TimeMs::new(2_500)),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };

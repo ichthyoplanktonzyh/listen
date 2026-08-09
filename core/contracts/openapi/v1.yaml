@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 3.0.0
+  version: 3.1.0
   description: Versioned loopback-only application-service adapter. Playback control is excluded.
 servers:
   - url: http://127.0.0.1:{port}
@@ -28,10 +28,12 @@ paths:
       responses:
         "200":
           description: >
-            Media library for triage (Phase 3.5): every registered media with
+            Personal Library for triage (Phase 3.5): retained media only, with
             cached content fit, user triage intent, and familiar-material
-            mark. Queue grouping is derived client-side; nothing here gates
-            access to any media.
+            mark. Temporary Material (registered with `retain: false`, or
+            removed via the library-membership operation) stays readable
+            through `/v1/media/{media_id}` but is absent here. Queue grouping
+            is derived client-side; nothing here gates access to any media.
           content:
             application/json:
               schema:
@@ -74,6 +76,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MediaLibraryEntry"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/library-membership:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    put:
+      operationId: retainMedia
+      description: >
+        Explicit learner intent to add an existing media item to the Personal
+        Library. Idempotent: retaining an already-retained item preserves the
+        original membership timestamp (`retained_at_ms`) and changes nothing
+        else. Unknown media is a typed not-found. Media identity,
+        availability, progress, subtitles, resources, vocabulary facts,
+        Personal Expressions, attempts and other learning records are never
+        touched by this operation.
+      responses:
+        "200":
+          description: Updated media item carrying membership evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaItem"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: unretainMedia
+      description: >
+        Explicit learner intent to remove an existing media item from the
+        Personal Library. Unretaining changes membership only: the media stays
+        registered and readable by ID, and progress, subtitles, resources,
+        vocabulary facts, Personal Expressions, attempts and other learning
+        records remain intact. Unknown media is a typed not-found.
+        Unretaining an already unretained item is a no-op (idempotent).
+      responses:
+        "200":
+          description: Updated media item without membership evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaItem"
         default:
           $ref: "#/components/responses/Error"
   /v1/lltimeline/import:
@@ -3633,9 +3675,31 @@ components:
         title: { type: string }
         kind: { enum: [video, audio] }
         duration_ms: { type: [integer, "null"], minimum: 0 }
+        retain:
+          type: [boolean, "null"]
+          default: true
+          description: >
+            Personal Library membership choice. Omitted (or null) means
+            retained, preserving the historical behavior for old clients.
+            Explicit false registers Temporary Material: the media stays
+            registered and readable by ID, but is absent from the media
+            library until explicitly retained. Explicit true retains it.
+            Membership evidence is set once: re-registering an already
+            retained item (even with `retain: false`) never clears or
+            rewrites the original membership timestamp.
     MediaItem:
       type: object
-      required: [id, path, fingerprint, title, kind, duration, availability, created_at_ms, updated_at_ms]
+      required:
+        - id
+        - path
+        - fingerprint
+        - title
+        - kind
+        - duration
+        - availability
+        - retained_at_ms
+        - created_at_ms
+        - updated_at_ms
       properties:
         id: { type: string }
         path: { type: string }
@@ -3651,6 +3715,19 @@ components:
             them by registering real media and importing the LLTimeline for
             that media; changing availability alone cannot make a synthetic
             lltimeline:// source playable.
+        retained_at_ms:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            Evidence of explicit Personal Library membership; required but
+            nullable so every response states known membership. Non-null
+            means the media is a library member and carries the
+            deterministic membership time; null means Temporary Material
+            (registered and readable, but absent from the media library).
+            Availability remains a separate playback-source fact: an item
+            can be retained while its source is missing. The value is set
+            once at first retention and is never silently rewritten or
+            cleared by repeated registration or retention.
         created_at_ms: { type: integer, minimum: 0 }
         updated_at_ms: { type: integer, minimum: 0 }
     MediaLibraryEntry:

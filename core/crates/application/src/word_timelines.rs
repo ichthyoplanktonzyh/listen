@@ -861,6 +861,10 @@ impl MediaAnalysisUseCases {
                         kind: MediaKind::Video,
                         duration: document.metadata.media.duration_ms.map(TimeMs::new),
                         availability: MediaAvailability::Missing,
+                        // Importing a text/analysis resource is an explicit learner
+                        // action, so the created media joins the Personal Library
+                        // exactly as it did before membership became explicit.
+                        retained_at_ms: Some(now),
                         created_at_ms: now,
                         updated_at_ms: now,
                     };
