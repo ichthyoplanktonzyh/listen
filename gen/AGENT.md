@@ -1,10 +1,21 @@
 # listen-gen Agent Guide
 
+## First read
+
+- Read `CONTEXT.md` for content-production terminology.
+- Shared product semantics and context ownership are canonical in
+  `listen-core/PRODUCT.md`, `listen-core/CONTEXT.md`, and
+  `listen-core/CONTEXT-MAP.md`.
+- `contracts.lock.json` identifies the Content Package contract consumed here;
+  shared schemas are never copied into this repository.
+
 ## Mission
 
-Generate expensive, reusable language-learning resources and package them for
+Provide the content-production path intended to become Listen's open producer:
+generate expensive, reusable language-learning resources and package them for
 `listen-core`. Keep model/provider implementations replaceable and keep the
-exchange contract stable.
+exchange contract stable. Do not describe the repository as open source until
+the owner has added an explicit license grant.
 
 ## Contract ownership
 

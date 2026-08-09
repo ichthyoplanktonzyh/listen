@@ -1,8 +1,19 @@
 # listen-gen
 
-`listen-gen` is the heavy, replaceable production side of Listen. Its stable
-output is a content package consumed by `listen-core`; model runtimes and raw
-provider payloads are not part of that interface.
+`listen-gen` is Listen's replaceable content-production toolkit and is intended
+to become the ecosystem's open producer. Its stable output is a Content Package
+consumed by `listen-core`; model runtimes and raw provider payloads are not part
+of that interface.
+
+The repository does not yet contain an open-source license grant. Until the
+owner selects and adds one, public source availability must not be described as
+open-source permission.
+
+Shared product semantics and context ownership are canonical in
+`listen-core/PRODUCT.md`, `listen-core/CONTEXT.md`, and
+`listen-core/CONTEXT-MAP.md`. This repository's [CONTEXT.md](CONTEXT.md) defines
+only production-specific terms, while `contracts.lock.json` identifies the
+package contract it consumes.
 
 The production entry point transcribes media behind a provider-neutral ASR
 adapter. It always writes a native v1 `subtitle_text_track` resource; a
