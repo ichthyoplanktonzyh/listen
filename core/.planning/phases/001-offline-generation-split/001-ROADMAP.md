@@ -38,14 +38,14 @@ candidate installation, active selection and durable learning history.
 
 ## Current Baseline
 
-The first extraction slice is working rather than hypothetical:
+The cutover through R4 is working rather than hypothetical:
 
-- `listen-gen` merge `c3564c35` / tool `0.2.0` has native media preprocessing,
-  ASR and alignment adapters, machine events, cancellation, deterministic
-  package production and a verifiable release bundle;
+- `listen-gen` merge `42649d9f` / tool `0.3.0` has native media preprocessing,
+  ASR, alignment and rich-resource adapters, machine events, cancellation,
+  deterministic package production and a verifiable release bundle;
 - `listen-app/listen_gen.lock.json` pins that exact producer and verifies the
   release and artifact bytes before launch;
-- Core commit `54497e9` exposes bounded content-package inspection and atomic,
+- Core commit `b0b0dc81` exposes bounded content-package inspection and atomic,
   idempotent, candidate-only HTTP import;
 - the pinned three-repository fixture round trip passes:
   Gen release bundle -> native `.listenpkg` -> Core HTTP import -> candidate
@@ -53,9 +53,9 @@ The first extraction slice is working rather than hypothetical:
 - Core still contains forced alignment, content-bound
   SoundLine/phonetic/foundation producers and `scripts/timeline-production`;
   whole-media transcription jobs/routes were deleted in the R1 Core slice;
-- App merge `813c58b1` contains no reachable Core whole-media transcription job
+- App merge `1711eff5` contains no reachable Core whole-media transcription job
   client or UI and routes missing-transcript preparation through pinned Gen;
-- App pins immutable Core release `v0.7.0-split.3`, contract `2.0.0` and runtime
+- App pins immutable Core release `v0.7.0-split.4`, contract `2.1.0` and runtime
   `0.7.0`. The runtime's `whisper-cli`, `ffmpeg` and `ffprobe` are shared R1
   inputs still required by Core/App paths, not Gen-only payload.
 
@@ -211,7 +211,7 @@ App baseline stays immutable at contract `2.0.0` / `v0.7.0-split.3`. Gen's v1
 lock values are unchanged and its existing packages remain compatible, so R3
 does not create a no-op Gen/App change or start R4 producer work.
 
-### R4 — Add rich package producers
+### R4 — Add rich package producers — complete
 
 Owner: Gen; Core owns schema/projection changes.
 
@@ -232,6 +232,34 @@ abstains; it never fabricates observed speech.
 Existing Core issues [#13](https://github.com/ichthyoplanktonzyh/listen-core/issues/13),
 [#6](https://github.com/ichthyoplanktonzyh/listen-core/issues/6) and related
 algorithm backlogs remain quality work, not reasons to keep production in Core.
+
+Completed by Gen PR
+[listen-gen#6](https://github.com/ichthyoplanktonzyh/listen-gen/pull/6)
+(merge `42649d9f`). The same Gen package operation now runs the four stages in
+the declared dependency order. Package-native Prosody declares explicit token
+spans; Phone production is separately selected and audio-backed, and
+unqualified evidence abstains. The deterministic suite covers fixture,
+baseline and command seams, exact digest/provenance, mutation detection,
+cancellation, timeout/process-group reaping and redacted failures without a
+paid or live model.
+
+Core PR [#120](https://github.com/ichthyoplanktonzyh/listen-core/pull/120)
+(merge `0baff6f`) added a committed six-resource package and import integration
+test. Reimport is idempotent; Word, per-sentence Phone, Sense Group and Prosody
+remain candidates; no analysis is activated and no legacy ChunkTimeline is
+generated. Core PR [#121](https://github.com/ichthyoplanktonzyh/listen-core/pull/121)
+published contract `2.1.0` and runtime `0.7.0` as `v0.7.0-split.4` from
+`b0b0dc81`.
+
+App PR [listen-app#105](https://github.com/ichthyoplanktonzyh/listen-app/pull/105)
+(merge `1711eff5`) pins exact Core/Gen commits and artifact digests. Its
+model-free three-repository round trip uses App-owned fixtures to produce all
+six resources, verifies their producer provenance, imports them through Core
+as candidates, and confirms no active Word, Phone or legacy Chunk Timeline.
+
+Exit met: the agreed rich resources are produced through the single Gen seam
+and accepted through the producer-neutral Core inspector/import boundary. R5
+retirement work remains untouched.
 
 ### R5 — Retire the legacy production tree
 

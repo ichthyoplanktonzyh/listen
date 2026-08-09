@@ -118,13 +118,14 @@ installs it as candidates and preserves the learner's current active choices.
 ## Current Reality And Migration
 
 - Core owns content-package v1 validation, typed projection, atomic
-  candidate-only import and explicit activation. Contract `2.0.0` removes the
-  old `/v1/transcription/jobs*` surface while retaining learner-recording and
-  realtime/model APIs; immutable release `v0.7.0-split.3` is the App baseline.
-- `listen-gen` commit `41a53336` natively produces deterministic Subtitle Text
-  Track packages, plus Word Timeline when the provider supplies complete word
-  timing, behind a verified release bundle and machine protocol.
-- App merge `a3e6564` verifies and launches that pinned Gen bundle, imports its
+  candidate-only import and explicit activation. Contract `2.1.0` retains the
+  R1 removal of `/v1/transcription/jobs*` and additively projects package-native
+  Prosody Analysis; immutable release `v0.7.0-split.4` is the App baseline.
+- `listen-gen` commit `42649d9f` / tool `0.3.0` natively produces deterministic
+  Subtitle Text Track, aligned Word Timeline, Sense Group, Word Acoustics,
+  Prosody Analysis with explicit chunk spans, and optional qualified
+  audio-backed Phone Timeline resources behind one verified package operation.
+- App merge `1711eff5` verifies and launches that pinned Gen bundle, imports its
   `.listenpkg` through Core, and has no Core whole-media transcription job UI,
   DTO/event or call. Missing-transcript preparation has one Gen package journey.
 - The real pinned three-repository gate passes through Core HTTP import and
@@ -134,12 +135,13 @@ installs it as candidates and preserves the learner's current active choices.
   Core still needs them for learner recording, SoundLine and other media paths,
   while App also uses the ffmpeg tools. App supplies their paths to Gen only
   after the pinned Core runtime and Gen release verify; none is Gen-only today.
-- `scripts/timeline-production` and later rich-resource producer overlap remain
-  migration targets for R2-R5. They are not a fallback whole-media ASR journey.
+- `scripts/timeline-production` and remaining legacy production overlap are R5
+  retirement targets. They are neither a foundation fallback nor a second
+  supported whole-media generation journey.
 
-The next architecture work remains native aligned Word Timeline production and
-timeline semantic compatibility, followed by the Package Listing/Release
-interface and App journey. R2 is not started by the R1 closeout.
+R4 is complete. R5 legacy retirement and the future Package Listing/Release
+interface remain separate owner-directed work; neither is started by this
+closeout.
 
 ## Decisions Still Open
 
