@@ -62,6 +62,16 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
   static const _generatorRepository =
       'https://github.com/ichthyoplanktonzyh/listen-gen';
 
+  /// Runtime/toolchain identity the committed lock must declare (R5). The
+  /// manifest's `runtime_identity` block must match it exactly: the released
+  /// bundle binds to a declared python runtime and an external toolchain with
+  /// Gen stage-family roles, and the app records that identity immutably.
+  static const _runtimeIdentitySchema = 'listen_gen.runtime-identity.v1';
+  static const _runtimeIdentityVersion = 1;
+  static const _runtimeFamily = 'python';
+  static const _toolchainSchema = 'listen_gen.toolchain-identity.v1';
+  static const _toolchainVersion = 1;
+
   /// Compatibility identity the committed lock must declare. These are what the
   /// app is built to talk to; a lock that names a different repository, schema,
   /// protocol, or contract authority is not a newer pin but an incompatible
@@ -133,6 +143,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'machine_protocol',
       'content_package_contract',
       'runtime',
+      'runtime_identity',
       'artifact',
     });
     read.expect(read.integer(root, 'manifest_version') == 1);
@@ -193,6 +204,37 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     final pythonRequires = read.string(runtime, 'python_requires');
     read.expect(pythonRequires == _pythonRequires);
 
+    final runtimeIdentity = read.object(root['runtime_identity']);
+    read.exactKeys(
+      runtimeIdentity,
+      const {'schema', 'version', 'runtime', 'toolchain'},
+    );
+    final runtimeIdentitySchema = read.string(runtimeIdentity, 'schema');
+    read.expect(runtimeIdentitySchema == _runtimeIdentitySchema);
+    final runtimeIdentityVersion = read.integer(runtimeIdentity, 'version');
+    read.expect(runtimeIdentityVersion == _runtimeIdentityVersion);
+    final identityRuntime = read.object(runtimeIdentity['runtime']);
+    read.exactKeys(identityRuntime, const {'family', 'requires'});
+    final identityRuntimeFamily = read.string(identityRuntime, 'family');
+    read.expect(identityRuntimeFamily == _runtimeFamily);
+    final identityRuntimeRequires = read.string(identityRuntime, 'requires');
+    read.expect(identityRuntimeRequires == _pythonRequires);
+    final toolchain = read.object(runtimeIdentity['toolchain']);
+    read.exactKeys(toolchain, const {'schema', 'version', 'tools'});
+    final toolchainSchema = read.string(toolchain, 'schema');
+    read.expect(toolchainSchema == _toolchainSchema);
+    final toolchainVersion = read.integer(toolchain, 'version');
+    read.expect(toolchainVersion == _toolchainVersion);
+    final tools = read.objectList(toolchain, 'tools');
+    final toolchainTools = <String, List<String>>{};
+    for (final tool in tools) {
+      read.exactKeys(tool, const {'id', 'roles'});
+      final id = read.string(tool, 'id');
+      final roles = read.stringList(tool, 'roles');
+      toolchainTools[id] = roles;
+    }
+    read.expect(toolchainTools.isNotEmpty);
+
     final artifact = read.object(root['artifact']);
     read.exactKeys(artifact, const {
       'filename',
@@ -219,6 +261,13 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       machineVersion: machineVersion,
       contract: contractLock,
       pythonRequires: pythonRequires,
+      runtimeIdentitySchema: runtimeIdentitySchema,
+      runtimeIdentityVersion: runtimeIdentityVersion,
+      identityRuntimeFamily: identityRuntimeFamily,
+      identityRuntimeRequires: identityRuntimeRequires,
+      toolchainSchema: toolchainSchema,
+      toolchainVersion: toolchainVersion,
+      toolchainTools: toolchainTools,
       artifactFilename: artifactFilename,
       artifactFormat: artifactFormat,
       artifactEntrypoint: artifactEntrypoint,
@@ -308,6 +357,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'machine_protocol',
       'content_package_contract',
       'runtime',
+      'runtime_identity',
       'artifact',
     });
 
@@ -368,6 +418,51 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     read.exactKeys(runtime, const {'python_requires', 'provider_requirements'});
     read.expect(read.string(runtime, 'python_requires') == lock.pythonRequires);
     _validateProviderRequirements(read, runtime['provider_requirements']);
+
+    // The manifest's runtime/toolchain identity must exactly match the lock's
+    // immutable record: schema/version, python runtime, and the external
+    // toolchain (every tool id with its Gen stage-family roles).
+    final runtimeIdentity = read.object(root['runtime_identity']);
+    read.exactKeys(
+      runtimeIdentity,
+      const {'schema', 'version', 'runtime', 'toolchain'},
+    );
+    read.expect(
+      read.string(runtimeIdentity, 'schema') == lock.runtimeIdentitySchema,
+    );
+    read.expect(
+      read.integer(runtimeIdentity, 'version') ==
+          lock.runtimeIdentityVersion,
+    );
+    final identityRuntime = read.object(runtimeIdentity['runtime']);
+    read.exactKeys(identityRuntime, const {'family', 'requires'});
+    read.expect(
+      read.string(identityRuntime, 'family') == lock.identityRuntimeFamily,
+    );
+    read.expect(
+      read.string(identityRuntime, 'requires') ==
+          lock.identityRuntimeRequires,
+    );
+    final toolchain = read.object(runtimeIdentity['toolchain']);
+    read.exactKeys(toolchain, const {'schema', 'version', 'tools'});
+    read.expect(read.string(toolchain, 'schema') == lock.toolchainSchema);
+    read.expect(read.integer(toolchain, 'version') == lock.toolchainVersion);
+    final tools = read.objectList(toolchain, 'tools');
+    read.expect(tools.length == lock.toolchainTools.length);
+    for (final tool in tools) {
+      read.exactKeys(tool, const {'id', 'roles'});
+      final id = read.string(tool, 'id');
+      final roles = read.stringList(tool, 'roles');
+      read.expect(
+        roles.length == (lock.toolchainTools[id]?.length ?? -1),
+      );
+      final expected = lock.toolchainTools[id];
+      if (expected != null) {
+        for (var i = 0; i < roles.length; i++) {
+          read.expect(roles[i] == expected[i]);
+        }
+      }
+    }
 
     final artifact = read.object(root['artifact']);
     read.exactKeys(artifact, const {
@@ -484,6 +579,31 @@ final class _StrictReader {
     return value;
   }
 
+  List<Map<String, dynamic>> objectList(
+    Map<String, dynamic> map,
+    String key,
+  ) {
+    final value = map[key];
+    if (value is! List) _fail();
+    final result = <Map<String, dynamic>>[];
+    for (final item in value) {
+      if (item is! Map<String, dynamic>) _fail();
+      result.add(item);
+    }
+    return result;
+  }
+
+  List<String> stringList(Map<String, dynamic> map, String key) {
+    final value = map[key];
+    if (value is! List) _fail();
+    final result = <String>[];
+    for (final item in value) {
+      if (item is! String || item.isEmpty) _fail();
+      result.add(item);
+    }
+    return result;
+  }
+
   String sha256(Map<String, dynamic> map, String key) {
     final value = string(map, key);
     if (!_sha256Reference.hasMatch(value)) _fail();
@@ -540,6 +660,13 @@ final class _ListenGenLock {
     required this.machineVersion,
     required this.contract,
     required this.pythonRequires,
+    required this.runtimeIdentitySchema,
+    required this.runtimeIdentityVersion,
+    required this.identityRuntimeFamily,
+    required this.identityRuntimeRequires,
+    required this.toolchainSchema,
+    required this.toolchainVersion,
+    required this.toolchainTools,
     required this.artifactFilename,
     required this.artifactFormat,
     required this.artifactEntrypoint,
@@ -557,6 +684,13 @@ final class _ListenGenLock {
   final int machineVersion;
   final _ContractIdentity contract;
   final String pythonRequires;
+  final String runtimeIdentitySchema;
+  final int runtimeIdentityVersion;
+  final String identityRuntimeFamily;
+  final String identityRuntimeRequires;
+  final String toolchainSchema;
+  final int toolchainVersion;
+  final Map<String, List<String>> toolchainTools;
   final String artifactFilename;
   final String artifactFormat;
   final String artifactEntrypoint;

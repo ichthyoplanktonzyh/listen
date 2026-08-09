@@ -365,7 +365,8 @@ void main() {
         ),
         activeWordTimelineId: 'timeline-active',
         activePhoneTimelineId: null,
-        activeChunkTimelineId: null,
+        prosodyAnalyses: [],
+        activeProsodyAnalysisId: null,
         rhythmFrames: [],
         artifacts: [
           LLTimelineArtifact(kind: 'alignment_diagnostics', payload: {}),
@@ -393,7 +394,6 @@ void main() {
         ..setTimelineResource(
           summaries: summaries,
           phoneSummaries: const [],
-          chunkSummaries: const [],
           document: document,
         )
         ..setTimelineResourceError('Timeline resource refresh warning');

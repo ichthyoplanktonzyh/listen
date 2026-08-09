@@ -229,7 +229,6 @@ void main() {
       harness.subtitle.setTimelineResource(
         summaries: const [_activeTimelineSummary],
         phoneSummaries: const [],
-        chunkSummaries: const [],
         document: null,
       );
       final repository = _DelayedManualReviewRepository();

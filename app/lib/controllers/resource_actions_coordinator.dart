@@ -89,7 +89,6 @@ class ResourceActionsCoordinator {
       ExistingTimelineResourceState(
         wordSummaries: subtitle.wordTimelineSummaries,
         phoneSummaries: subtitle.phoneTimelineSummaries,
-        chunkSummaries: subtitle.chunkTimelineSummaries,
         document: subtitle.llTimelineDocument,
       );
 
@@ -101,7 +100,6 @@ class ResourceActionsCoordinator {
     subtitle.setTimelineResource(
       summaries: result.wordSummaries,
       phoneSummaries: result.phoneSummaries,
-      chunkSummaries: result.chunkSummaries,
       document: result.document,
       error: result.error,
     );
@@ -165,19 +163,15 @@ class ResourceActionsCoordinator {
           () => repository.phoneTimelineSummaries(track.id),
           failures,
         );
-        final chunkSummaries = await _loadOptionalResourceCapability(
-          () => repository.chunkTimelineSummaries(track.id),
-          failures,
-        );
         return MapEntry(
           track.id,
           SubtitleResourceCapabilities.fromCounts(
             sentenceCount: track.cues.length,
             wordTimingCount: wordTimings.length,
-            chunkCount: chunkSummaries.fold<int>(
-              0,
-              (total, summary) => total + summary.chunkCount,
-            ),
+            // R5: the persisted ChunkTimeline family was retired; the chunk
+            // capability count is derived from the active track's loaded
+            // Prosody Analysis (the sole prosodic-chunk source) by the panel.
+            chunkCount: 0,
             phoneCount: phoneSummaries.fold<int>(
               0,
               (total, summary) => total + summary.phoneCount,
@@ -392,7 +386,7 @@ class ResourceActionsCoordinator {
     }
   }
 
-  // ── Word / chunk / phone timeline lifecycle ──
+  // ── Word / phone timeline lifecycle ──
 
   Future<void> activateWordTimeline(String timelineId) async {
     await _runTimelineAction(
@@ -401,40 +395,6 @@ class ResourceActionsCoordinator {
       failurePrefix: 'WordTimeline activation failed',
       refreshResources: false,
       action: (_) => repository.activateWordTimeline(timelineId),
-    );
-  }
-
-  Future<void> generateChunkTimeline() async {
-    await _runTimelineAction(
-      workingStatus: 'Generating ChunkTimeline...',
-      doneStatus: 'ChunkTimeline generated',
-      failurePrefix: 'ChunkTimeline generation failed',
-      action: repository.generateChunkTimeline,
-    );
-  }
-
-  Future<void> activateChunkTimeline(String timelineId) async {
-    await _runTimelineAction(
-      workingStatus: 'Activating ChunkTimeline...',
-      doneStatus: 'ChunkTimeline activated',
-      failurePrefix: 'ChunkTimeline activation failed',
-      action: (_) => repository.activateChunkTimeline(timelineId),
-    );
-  }
-
-  Future<void> archiveChunkTimeline(String timelineId) async {
-    await _runTimelineAction(
-      doneStatus: 'ChunkTimeline archived',
-      failurePrefix: 'ChunkTimeline archive failed',
-      action: (_) => repository.archiveChunkTimeline(timelineId),
-    );
-  }
-
-  Future<void> deleteChunkTimeline(String timelineId) async {
-    await _runTimelineAction(
-      doneStatus: 'ChunkTimeline deleted',
-      failurePrefix: 'ChunkTimeline delete failed',
-      action: (_) => repository.deleteChunkTimeline(timelineId),
     );
   }
 

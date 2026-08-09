@@ -39,7 +39,6 @@ class SubtitleState {
         const {},
     List<WordTimelineSummary> wordTimelineSummaries = const [],
     List<PhoneTimelineSummary> phoneTimelineSummaries = const [],
-    List<ChunkTimelineSummary> chunkTimelineSummaries = const [],
     this.llTimelineDocument,
     this.timelineResourceError,
     Map<String, PhoneticAnalysis> phoneticAnalysisBySentence = const {},
@@ -61,7 +60,6 @@ class SubtitleState {
        ),
        _wordTimelineSummaries = List.unmodifiable(wordTimelineSummaries),
        _phoneTimelineSummaries = List.unmodifiable(phoneTimelineSummaries),
-       _chunkTimelineSummaries = List.unmodifiable(chunkTimelineSummaries),
        _phoneticAnalysisBySentence = Map.unmodifiable(
          phoneticAnalysisBySentence,
        );
@@ -116,9 +114,6 @@ class SubtitleState {
   final List<PhoneTimelineSummary> _phoneTimelineSummaries;
   List<PhoneTimelineSummary> get phoneTimelineSummaries =>
       List.unmodifiable(_phoneTimelineSummaries);
-  final List<ChunkTimelineSummary> _chunkTimelineSummaries;
-  List<ChunkTimelineSummary> get chunkTimelineSummaries =>
-      List.unmodifiable(_chunkTimelineSummaries);
   final LLTimelineDocument? llTimelineDocument;
   final String? timelineResourceError;
   final Map<String, PhoneticAnalysis> _phoneticAnalysisBySentence;
@@ -155,7 +150,6 @@ class SubtitleState {
     Map<String, SubtitleResourceCapabilities>? subtitleResourceCapabilities,
     List<WordTimelineSummary>? wordTimelineSummaries,
     List<PhoneTimelineSummary>? phoneTimelineSummaries,
-    List<ChunkTimelineSummary>? chunkTimelineSummaries,
     Object? llTimelineDocument = _unset,
     Object? timelineResourceError = _unset,
     Map<String, PhoneticAnalysis>? phoneticAnalysisBySentence,
@@ -205,8 +199,6 @@ class SubtitleState {
     wordTimelineSummaries: wordTimelineSummaries ?? this.wordTimelineSummaries,
     phoneTimelineSummaries:
         phoneTimelineSummaries ?? this.phoneTimelineSummaries,
-    chunkTimelineSummaries:
-        chunkTimelineSummaries ?? this.chunkTimelineSummaries,
     llTimelineDocument: identical(llTimelineDocument, _unset)
         ? this.llTimelineDocument
         : llTimelineDocument as LLTimelineDocument?,
@@ -296,8 +288,6 @@ class SubtitleController extends ChangeNotifier {
       _store.state.wordTimelineSummaries;
   List<PhoneTimelineSummary> get phoneTimelineSummaries =>
       _store.state.phoneTimelineSummaries;
-  List<ChunkTimelineSummary> get chunkTimelineSummaries =>
-      _store.state.chunkTimelineSummaries;
   LLTimelineDocument? get llTimelineDocument => _store.state.llTimelineDocument;
   String? get timelineResourceError => _store.state.timelineResourceError;
   int? get currentWordToken => _currentWordToken.value;
@@ -453,7 +443,6 @@ class SubtitleController extends ChangeNotifier {
         pronunciationProviders: const [],
         wordTimelineSummaries: const [],
         phoneTimelineSummaries: const [],
-        chunkTimelineSummaries: const [],
         llTimelineDocument: null,
         timelineResourceError: null,
         phoneticAnalysisBySentence: const {},
@@ -465,14 +454,12 @@ class SubtitleController extends ChangeNotifier {
   void setTimelineResource({
     required List<WordTimelineSummary> summaries,
     required List<PhoneTimelineSummary> phoneSummaries,
-    required List<ChunkTimelineSummary> chunkSummaries,
     required LLTimelineDocument? document,
     String? error,
   }) => _store.update(
     (s) => s.copyWith(
       wordTimelineSummaries: summaries,
       phoneTimelineSummaries: phoneSummaries,
-      chunkTimelineSummaries: chunkSummaries,
       llTimelineDocument: document,
       timelineResourceError: error,
     ),
@@ -490,7 +477,6 @@ class SubtitleController extends ChangeNotifier {
     (s) => s.copyWith(
       wordTimelineSummaries: const [],
       phoneTimelineSummaries: const [],
-      chunkTimelineSummaries: const [],
       llTimelineDocument: null,
       timelineResourceError: null,
     ),

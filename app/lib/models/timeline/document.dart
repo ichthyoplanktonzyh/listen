@@ -88,7 +88,8 @@ class LLTimelineDocument {
     required this.metadata,
     required this.activeWordTimelineId,
     required this.activePhoneTimelineId,
-    required this.activeChunkTimelineId,
+    required this.prosodyAnalyses,
+    required this.activeProsodyAnalysisId,
     required this.rhythmFrames,
     required this.artifacts,
   });
@@ -101,7 +102,15 @@ class LLTimelineDocument {
         ),
         activeWordTimelineId: json['active_word_timeline_id'] as String?,
         activePhoneTimelineId: json['active_phone_timeline_id'] as String?,
-        activeChunkTimelineId: json['active_chunk_timeline_id'] as String?,
+        prosodyAnalyses: ((json['prosody_analyses'] as List<dynamic>?) ??
+                const [])
+            .map(
+              (value) =>
+                  ProsodyAnalysis.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        activeProsodyAnalysisId:
+            json['active_prosody_analysis_id'] as String?,
         rhythmFrames: ((json['rhythm_frames'] as List<dynamic>?) ?? const [])
             .map(
               (value) =>
@@ -120,7 +129,8 @@ class LLTimelineDocument {
   final LLTimelineMetadata metadata;
   final String? activeWordTimelineId;
   final String? activePhoneTimelineId;
-  final String? activeChunkTimelineId;
+  final List<ProsodyAnalysis> prosodyAnalyses;
+  final String? activeProsodyAnalysisId;
   final List<LLTimelineRhythmFrame> rhythmFrames;
   final List<LLTimelineArtifact> artifacts;
 
@@ -129,7 +139,32 @@ class LLTimelineDocument {
     'metadata': metadata.toJson(),
     'active_word_timeline_id': activeWordTimelineId,
     'active_phone_timeline_id': activePhoneTimelineId,
-    'active_chunk_timeline_id': activeChunkTimelineId,
+    'prosody_analyses': prosodyAnalyses
+        .map(
+          (value) => {
+            'id': value.id,
+            'track_id': value.trackId,
+            'media_id': value.mediaId,
+            'parent_word_timeline_id': value.parentWordTimelineId,
+            'provider_id': value.providerId,
+            'provider_version': value.providerVersion,
+            'algorithm': value.algorithm,
+            'status': value.status,
+            'chunks': value.chunks
+                .map(
+                  (chunk) => {
+                    'sentence_id': chunk.sentenceId,
+                    'chunk_index': chunk.chunkIndex,
+                    'start_token_index': chunk.startTokenIndex,
+                    'end_token_index': chunk.endTokenIndex,
+                    'nucleus_token_index': chunk.nucleusTokenIndex,
+                  },
+                )
+                .toList(growable: false),
+          },
+        )
+        .toList(growable: false),
+    'active_prosody_analysis_id': activeProsodyAnalysisId,
     'rhythm_frames': rhythmFrames
         .map((value) => value.toJson())
         .toList(growable: false),
@@ -138,13 +173,23 @@ class LLTimelineDocument {
         .toList(growable: false),
   };
 
+  /// The active prosody analysis, when one exists. It is the sole semantic
+  /// source for the Prosodic Chunk slot (R3+); the legacy ChunkTimeline
+  /// representation was retired in R5.
+  ProsodyAnalysis? get activeProsodyAnalysis {
+    if (prosodyAnalyses.isEmpty) return null;
+    final active = prosodyAnalyses.where((analysis) => analysis.isActive);
+    if (active.isNotEmpty) return active.first;
+    return null;
+  }
+
   bool get importedResource =>
       metadata.trackSource == 'lltimeline-json-v1' ||
       artifacts.isNotEmpty ||
       rhythmFrames.isNotEmpty ||
       activeWordTimelineId != null ||
       activePhoneTimelineId != null ||
-      activeChunkTimelineId != null;
+      activeProsodyAnalysisId != null;
 
   RhythmFrame? rhythmFrameForSentence(String sentenceId) {
     for (final frame in rhythmFrames) {

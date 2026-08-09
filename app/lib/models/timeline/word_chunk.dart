@@ -83,19 +83,6 @@ class TimelineMetrics {
   Map<String, dynamic> toJson() => Map<String, dynamic>.from(fields);
 }
 
-class ChunkEvidence {
-  const ChunkEvidence(this.fields);
-  const ChunkEvidence.empty() : fields = const {};
-
-  factory ChunkEvidence.fromJson(Object? json) => json is Map
-      ? ChunkEvidence(Map<String, dynamic>.from(json))
-      : const ChunkEvidence.empty();
-
-  final Map<String, dynamic> fields;
-
-  Map<String, dynamic> toJson() => Map<String, dynamic>.from(fields);
-}
-
 class WordTimeline {
   const WordTimeline({
     required this.id,
@@ -218,86 +205,27 @@ class WordTimelineSummary {
       createdBy == 'user' || lifecycleStage == 'user_adjusted';
 }
 
-class ChunkTimelineChunk {
-  const ChunkTimelineChunk({
-    required this.id,
-    required this.sentenceId,
-    required this.chunkIndex,
-    required this.startWordIndex,
-    required this.endWordIndex,
-    required this.start,
-    required this.end,
-    required this.text,
-    required this.boundarySources,
-    required this.confidence,
-    required this.warnings,
-    required this.evidenceJson,
-  });
-
-  factory ChunkTimelineChunk.fromJson(Map<String, dynamic> json) =>
-      ChunkTimelineChunk(
-        id: json['id'] as String,
-        sentenceId: json['sentence_id'] as String,
-        chunkIndex: json['chunk_index'] as int,
-        startWordIndex: json['start_word_index'] as int,
-        endWordIndex: json['end_word_index'] as int,
-        start: Duration(milliseconds: json['start_ms'] as int),
-        end: Duration(milliseconds: json['end_ms'] as int),
-        text: json['text'] as String,
-        boundarySources:
-            ((json['boundary_sources'] as List<dynamic>?) ?? const [])
-                .cast<String>()
-                .toList(growable: false),
-        confidence: (json['confidence'] as num).toDouble(),
-        warnings: ((json['warnings'] as List<dynamic>?) ?? const [])
-            .cast<String>()
-            .toList(growable: false),
-        evidenceJson: ChunkEvidence.fromJson(json['evidence_json']),
-      );
-
-  final String id;
-  final String sentenceId;
-  final int chunkIndex;
-  final int startWordIndex;
-  final int endWordIndex;
-  final Duration start;
-  final Duration end;
-  final String text;
-  final List<String> boundarySources;
-  final double confidence;
-  final List<String> warnings;
-  final ChunkEvidence evidenceJson;
-
-  DisplayChunk toDisplayChunk({required int sentenceLocalIndex}) =>
-      DisplayChunk(
-        index: sentenceLocalIndex,
-        tokenStart: startWordIndex,
-        tokenEnd: endWordIndex,
-        text: text,
-        start: start,
-        end: end,
-      );
-}
-
-class ChunkTimeline {
-  const ChunkTimeline({
+/// Core domain projection of content-package v1 `prosody_analysis`.
+///
+/// The sole semantic source for the Prosodic Chunk slot (R3+): word-anchored
+/// prominence/stress/utterance roles plus package-declared prosodic chunk
+/// token spans. Only playback times are derived at read time through the Word
+/// Timeline; chunk boundaries come only from declared spans.
+class ProsodyAnalysis {
+  const ProsodyAnalysis({
     required this.id,
     required this.trackId,
     required this.mediaId,
     required this.providerId,
     required this.providerVersion,
     required this.algorithm,
-    required this.precision,
-    required this.createdBy,
     required this.status,
-    required this.metricsJson,
     required this.chunks,
-    required this.createdAt,
-    required this.updatedAt,
+    required this.anchorCount,
     this.parentWordTimelineId,
   });
 
-  factory ChunkTimeline.fromJson(Map<String, dynamic> json) => ChunkTimeline(
+  factory ProsodyAnalysis.fromJson(Map<String, dynamic> json) => ProsodyAnalysis(
     id: json['id'] as String,
     trackId: json['track_id'] as String,
     mediaId: json['media_id'] as String,
@@ -305,17 +233,11 @@ class ChunkTimeline {
     providerId: json['provider_id'] as String,
     providerVersion: json['provider_version'] as String,
     algorithm: json['algorithm'] as String,
-    precision: json['precision'] as String,
-    createdBy: json['created_by'] as String,
     status: json['status'] as String,
-    metricsJson: TimelineMetrics.fromJson(json['metrics_json']),
-    chunks: (json['chunks'] as List<dynamic>)
-        .map(
-          (value) => ChunkTimelineChunk.fromJson(value as Map<String, dynamic>),
-        )
+    chunks: ((json['chunks'] as List<dynamic>?) ?? const [])
+        .map((value) => ProsodicChunk.fromJson(value as Map<String, dynamic>))
         .toList(growable: false),
-    createdAt: Duration(milliseconds: json['created_at_ms'] as int),
-    updatedAt: Duration(milliseconds: json['updated_at_ms'] as int),
+    anchorCount: ((json['anchors'] as List<dynamic>?) ?? const []).length,
   );
 
   final String id;
@@ -325,78 +247,35 @@ class ChunkTimeline {
   final String providerId;
   final String providerVersion;
   final String algorithm;
-  final String precision;
-  final String createdBy;
   final String status;
-  final TimelineMetrics metricsJson;
-  final List<ChunkTimelineChunk> chunks;
-  final Duration createdAt;
-  final Duration updatedAt;
+  final List<ProsodicChunk> chunks;
+  final int anchorCount;
 
   bool get isActive => status == 'active';
 }
 
-class ChunkTimelineSummary {
-  const ChunkTimelineSummary({
-    required this.id,
-    required this.trackId,
-    required this.mediaId,
-    required this.providerId,
-    required this.providerVersion,
-    required this.algorithm,
-    required this.precision,
-    required this.createdBy,
-    required this.status,
-    required this.chunkCount,
-    required this.canActivate,
-    required this.canArchive,
-    required this.canDelete,
-    this.parentWordTimelineId,
-    this.start,
-    this.end,
-    this.averageConfidence,
+class ProsodicChunk {
+  const ProsodicChunk({
+    required this.sentenceId,
+    required this.chunkIndex,
+    required this.startTokenIndex,
+    required this.endTokenIndex,
+    this.nucleusTokenIndex,
   });
 
-  factory ChunkTimelineSummary.fromJson(Map<String, dynamic> json) =>
-      ChunkTimelineSummary(
-        id: json['id'] as String,
-        trackId: json['track_id'] as String,
-        mediaId: json['media_id'] as String,
-        parentWordTimelineId: json['parent_word_timeline_id'] as String?,
-        providerId: json['provider_id'] as String,
-        providerVersion: json['provider_version'] as String,
-        algorithm: json['algorithm'] as String,
-        precision: json['precision'] as String,
-        createdBy: json['created_by'] as String,
-        status: json['status'] as String,
-        chunkCount: json['chunk_count'] as int,
-        start: _durationFromNullableMs(json['start_ms'] as int?),
-        end: _durationFromNullableMs(json['end_ms'] as int?),
-        averageConfidence: (json['average_confidence'] as num?)?.toDouble(),
-        canActivate: json['can_activate'] as bool,
-        canArchive: json['can_archive'] as bool,
-        canDelete: json['can_delete'] as bool,
-      );
+  factory ProsodicChunk.fromJson(Map<String, dynamic> json) => ProsodicChunk(
+    sentenceId: json['sentence_id'] as String,
+    chunkIndex: json['chunk_index'] as int,
+    startTokenIndex: json['start_token_index'] as int,
+    endTokenIndex: json['end_token_index'] as int,
+    nucleusTokenIndex: json['nucleus_token_index'] as int?,
+  );
 
-  final String id;
-  final String trackId;
-  final String mediaId;
-  final String? parentWordTimelineId;
-  final String providerId;
-  final String providerVersion;
-  final String algorithm;
-  final String precision;
-  final String createdBy;
-  final String status;
-  final int chunkCount;
-  final Duration? start;
-  final Duration? end;
-  final double? averageConfidence;
-  final bool canActivate;
-  final bool canArchive;
-  final bool canDelete;
-
-  bool get isActive => status == 'active';
+  final String sentenceId;
+  final int chunkIndex;
+  final int startTokenIndex;
+  final int endTokenIndex;
+  final int? nucleusTokenIndex;
 }
 
 class SenseGroup {

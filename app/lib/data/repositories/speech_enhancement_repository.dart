@@ -10,14 +10,12 @@ abstract interface class SpeechEnhancementRepository {
 
   Future<List<WordTimelineSummary>> wordTimelineSummaries(String trackId);
   Future<List<PhoneTimelineSummary>> phoneTimelineSummaries(String trackId);
-  Future<List<ChunkTimelineSummary>> chunkTimelineSummaries(String trackId);
   Future<LLTimelineDocument> exportTimeline(String trackId);
   Future<List<WordTiming>> wordTimings(String trackId);
   Future<List<PronunciationProvider>> pronunciationProviders();
   Future<PhoneTimeline> phoneTimeline(String timelineId);
   Future<List<PhoneticAnalysis>> phoneticAnalyses(String trackId);
   Future<List<PronunciationAnalysis>> pronunciationAnalyses(String trackId);
-  Future<ChunkTimeline> chunkTimeline(String timelineId);
   Future<List<SentenceChunkPartition>> chunkPartitions(String trackId);
   Future<List<SenseGroupAnalysis>> senseGroupAnalyses(String trackId);
   Future<SenseGroupAnalysis> generateSenseGroups(String trackId);
@@ -40,12 +38,7 @@ class UnavailableSpeechEnhancementRepository
   @override
   Future<void> activateSenseGroups(String analysisId) => _unavailable();
   @override
-  Future<ChunkTimeline> chunkTimeline(String timelineId) => _unavailable();
-  @override
   Future<List<SentenceChunkPartition>> chunkPartitions(String trackId) =>
-      _unavailable();
-  @override
-  Future<List<ChunkTimelineSummary>> chunkTimelineSummaries(String trackId) =>
       _unavailable();
   @override
   Future<LLTimelineDocument> exportTimeline(String trackId) => _unavailable();
@@ -99,10 +92,6 @@ class LocalSpeechEnhancementRepository implements SpeechEnhancementRepository {
       _api.trackPhoneTimelineSummaries(trackId);
 
   @override
-  Future<List<ChunkTimelineSummary>> chunkTimelineSummaries(String trackId) =>
-      _api.trackChunkTimelineSummaries(trackId);
-
-  @override
   Future<LLTimelineDocument> exportTimeline(String trackId) =>
       _api.exportTrackLLTimeline(trackId);
 
@@ -125,10 +114,6 @@ class LocalSpeechEnhancementRepository implements SpeechEnhancementRepository {
   @override
   Future<List<PronunciationAnalysis>> pronunciationAnalyses(String trackId) =>
       _api.trackPronunciation(trackId);
-
-  @override
-  Future<ChunkTimeline> chunkTimeline(String timelineId) =>
-      _api.chunkTimeline(timelineId);
 
   @override
   Future<List<SentenceChunkPartition>> chunkPartitions(String trackId) =>

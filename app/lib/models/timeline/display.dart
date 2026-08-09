@@ -59,34 +59,6 @@ class SentenceChunkPartition {
   final String timingQuality;
 }
 
-Map<String, SentenceChunkPartition> chunkPartitionsFromTimeline(
-  ChunkTimeline timeline,
-) {
-  final grouped = <String, List<ChunkTimelineChunk>>{};
-  for (final chunk in timeline.chunks) {
-    grouped.putIfAbsent(chunk.sentenceId, () => []).add(chunk);
-  }
-  return Map<String, SentenceChunkPartition>.fromEntries(
-    grouped.entries.map((entry) {
-      final chunks = [...entry.value]
-        ..sort((a, b) => a.chunkIndex.compareTo(b.chunkIndex));
-      return MapEntry(
-        entry.key,
-        SentenceChunkPartition(
-          sentenceId: entry.key,
-          chunks: [
-            for (var index = 0; index < chunks.length; index += 1)
-              chunks[index].toDisplayChunk(sentenceLocalIndex: index),
-          ],
-          partitionerId: timeline.providerId,
-          partitionerVersion: timeline.providerVersion,
-          timingQuality: timeline.precision,
-        ),
-      );
-    }),
-  );
-}
-
 int? currentWordTokenIndex(
   List<WordTiming> timings,
   Duration mediaPosition, {

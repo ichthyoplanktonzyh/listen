@@ -94,10 +94,6 @@ void main() {
           onActivatePhoneTimeline: (_) async {},
           onArchivePhoneTimeline: (_) async {},
           onDeletePhoneTimeline: (_) async {},
-          onGenerateChunkTimeline: () async {},
-          onActivateChunkTimeline: (_) async {},
-          onArchiveChunkTimeline: (_) async {},
-          onDeleteChunkTimeline: (_) async {},
         ),
       ),
     );

@@ -235,10 +235,6 @@ Future<void> openSubtitleResourcesFlow({
         onActivatePhoneTimeline: resourceActions.activatePhoneTimeline,
         onArchivePhoneTimeline: resourceActions.archivePhoneTimeline,
         onDeletePhoneTimeline: resourceActions.deletePhoneTimeline,
-        onGenerateChunkTimeline: resourceActions.generateChunkTimeline,
-        onActivateChunkTimeline: resourceActions.activateChunkTimeline,
-        onArchiveChunkTimeline: resourceActions.archiveChunkTimeline,
-        onDeleteChunkTimeline: resourceActions.deleteChunkTimeline,
         onStartColdStart: () => openColdStartMarkingFlow(
           context: context,
           createViewModel: createColdStartViewModel,

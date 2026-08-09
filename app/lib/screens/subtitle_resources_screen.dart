@@ -29,10 +29,6 @@ class SubtitleResourcesScreen extends StatefulWidget {
     required this.onActivatePhoneTimeline,
     required this.onArchivePhoneTimeline,
     required this.onDeletePhoneTimeline,
-    required this.onGenerateChunkTimeline,
-    required this.onActivateChunkTimeline,
-    required this.onArchiveChunkTimeline,
-    required this.onDeleteChunkTimeline,
     this.onOpenContentPackages,
     this.onStartColdStart,
   });
@@ -56,10 +52,6 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(String timelineId) onActivatePhoneTimeline;
   final Future<void> Function(String timelineId) onArchivePhoneTimeline;
   final Future<void> Function(String timelineId) onDeletePhoneTimeline;
-  final Future<void> Function() onGenerateChunkTimeline;
-  final Future<void> Function(String timelineId) onActivateChunkTimeline;
-  final Future<void> Function(String timelineId) onArchiveChunkTimeline;
-  final Future<void> Function(String timelineId) onDeleteChunkTimeline;
   final VoidCallback? onStartColdStart;
   final VoidCallback? onOpenContentPackages;
 
@@ -104,8 +96,6 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         wordTimelineSummaries: widget.subtitleController.wordTimelineSummaries,
         phoneTimelineSummaries:
             widget.subtitleController.phoneTimelineSummaries,
-        chunkTimelineSummaries:
-            widget.subtitleController.chunkTimelineSummaries,
         activeWordTimingCount: _activeWordTimingCount(),
         timelineResourceError: widget.subtitleController.timelineResourceError,
         onImportSubtitle: widget.onImportSubtitle,
@@ -124,10 +114,6 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
         onActivatePhoneTimeline: widget.onActivatePhoneTimeline,
         onArchivePhoneTimeline: widget.onArchivePhoneTimeline,
         onDeletePhoneTimeline: widget.onDeletePhoneTimeline,
-        onGenerateChunkTimeline: widget.onGenerateChunkTimeline,
-        onActivateChunkTimeline: widget.onActivateChunkTimeline,
-        onArchiveChunkTimeline: widget.onArchiveChunkTimeline,
-        onDeleteChunkTimeline: widget.onDeleteChunkTimeline,
         onStartColdStart: widget.onStartColdStart,
       ),
     ),

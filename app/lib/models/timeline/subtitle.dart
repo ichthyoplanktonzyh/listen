@@ -145,6 +145,24 @@ class SubtitleResourceCapabilities {
   final int phoneCount;
   final String? error;
 
+  SubtitleResourceCapabilities copyWith({
+    int? sentenceCount,
+    int? wordTimingCount,
+    int? chunkCount,
+    int? phoneCount,
+    String? error,
+  }) => SubtitleResourceCapabilities(
+    sentenceTiming: (sentenceCount ?? this.sentenceCount) > 0,
+    wordTiming: (wordTimingCount ?? this.wordTimingCount) > 0,
+    chunkTiming: (chunkCount ?? this.chunkCount) > 0,
+    phoneTiming: (phoneCount ?? this.phoneCount) > 0,
+    sentenceCount: sentenceCount ?? this.sentenceCount,
+    wordTimingCount: wordTimingCount ?? this.wordTimingCount,
+    chunkCount: chunkCount ?? this.chunkCount,
+    phoneCount: phoneCount ?? this.phoneCount,
+    error: error ?? this.error,
+  );
+
   bool get hasAnyTiming =>
       sentenceTiming || wordTiming || chunkTiming || phoneTiming;
 }

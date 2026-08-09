@@ -51,11 +51,10 @@ void main() {
         expect(result.error, isNot(contains(leak)));
       }
       // Typed and kept, one per failed loader.
-      expect(result.failures, hasLength(4));
+      expect(result.failures, hasLength(3));
       expect(result.failures.first.correlationId, 'api-853');
       expect(result.wordSummaries, isEmpty);
       expect(result.phoneSummaries, isEmpty);
-      expect(result.chunkSummaries, isEmpty);
     });
 
     test('degrades to a warning when only some sub-resources fail', () async {
@@ -101,7 +100,8 @@ void main() {
           metadata: exportedDocument.metadata,
           activeWordTimelineId: exportedDocument.activeWordTimelineId,
           activePhoneTimelineId: exportedDocument.activePhoneTimelineId,
-          activeChunkTimelineId: exportedDocument.activeChunkTimelineId,
+          prosodyAnalyses: exportedDocument.prosodyAnalyses,
+          activeProsodyAnalysisId: exportedDocument.activeProsodyAnalysisId,
           rhythmFrames: const [],
           artifacts: const [
             LLTimelineArtifact(

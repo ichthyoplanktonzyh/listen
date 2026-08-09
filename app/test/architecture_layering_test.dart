@@ -323,11 +323,16 @@ const _modelWireCouplingBaseline = <String, int>{
   'lib/models/speech_synthesis.dart': 12,
   'lib/models/syntax_capability.dart': 4,
   'lib/models/timeline/display.dart': 6,
-  'lib/models/timeline/document.dart': 51,
+  // 53, up from 51: the LLTimeline document now also projects the active
+  // Prosody Analysis (the sole prosodic-chunk source) with its declared
+  // token spans; the legacy ChunkTimeline wire fields were removed.
+  'lib/models/timeline/document.dart': 53,
   'lib/models/timeline/rhythm.dart': 107,
   'lib/models/timeline/sound.dart': 50,
   'lib/models/timeline/subtitle.dart': 10,
-  'lib/models/timeline/word_chunk.dart': 44,
+  // 34, down from 44: the legacy ChunkTimeline model family was retired;
+  // only the ProsodyAnalysis projection remains as the chunk source.
+  'lib/models/timeline/word_chunk.dart': 34,
   'lib/models/types.dart': 1,
   'lib/models/types/diagnosis.dart': 26,
   'lib/models/types/dictionary.dart': 46,

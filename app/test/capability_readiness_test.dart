@@ -10,7 +10,7 @@ void main() {
       activeTrack: null,
       document: null,
       wordTimelineSummaries: const [],
-      chunkTimelineSummaries: const [],
+      prosodyAnalyses: const [],
       phoneTimelineSummaries: const [],
     );
 
@@ -29,7 +29,7 @@ void main() {
       activeTrack: _track,
       document: null,
       wordTimelineSummaries: const [],
-      chunkTimelineSummaries: const [],
+      prosodyAnalyses: const [],
       phoneTimelineSummaries: const [],
     );
 
@@ -49,7 +49,7 @@ void main() {
       activeTrack: _track,
       document: null,
       wordTimelineSummaries: const [],
-      chunkTimelineSummaries: const [],
+      prosodyAnalyses: const [],
       phoneTimelineSummaries: const [],
       activeWordTimingCount: 703,
     );
@@ -66,7 +66,7 @@ void main() {
       activeTrack: _track,
       document: _document(_audioRhythmFrame),
       wordTimelineSummaries: const [_audioWordSummary],
-      chunkTimelineSummaries: const [_chunkSummary],
+      prosodyAnalyses: const [_prosodyAnalysis],
       phoneTimelineSummaries: const [_phoneSummary],
     );
 
@@ -86,7 +86,7 @@ void main() {
       activeTrack: _track,
       document: _document(_predictedRhythmFrame),
       wordTimelineSummaries: const [_estimatedWordSummary],
-      chunkTimelineSummaries: const [],
+      prosodyAnalyses: const [],
       phoneTimelineSummaries: const [],
     );
 
@@ -104,7 +104,7 @@ void main() {
       activeTrack: _track,
       document: _document(_audioRhythmFrame),
       wordTimelineSummaries: const [_audioWordSummary],
-      chunkTimelineSummaries: const [_chunkSummary],
+      prosodyAnalyses: const [_prosodyAnalysis],
       phoneTimelineSummaries: const [_phoneSummary],
     );
 
@@ -269,20 +269,41 @@ const _estimatedWordSummary = WordTimelineSummary(
   canDelete: true,
 );
 
-const _chunkSummary = ChunkTimelineSummary(
-  id: 'chunk-active',
+const _prosodyAnalysis = ProsodyAnalysis(
+  id: 'prosody-active',
   trackId: 'track-1',
   mediaId: 'media-1',
-  providerId: 'partitioner',
-  providerVersion: '1.0',
-  algorithm: 'acoustic_semantic_v1',
-  precision: 'precise',
-  createdBy: 'algorithm',
+  providerId: 'listen-gen',
+  providerVersion: '0.4.0',
+  algorithm: 'prosody-v1',
   status: 'active',
-  chunkCount: 4,
-  canActivate: false,
-  canArchive: true,
-  canDelete: true,
+  chunks: [
+    ProsodicChunk(
+      sentenceId: 'sentence-1',
+      chunkIndex: 0,
+      startTokenIndex: 0,
+      endTokenIndex: 1,
+    ),
+    ProsodicChunk(
+      sentenceId: 'sentence-1',
+      chunkIndex: 1,
+      startTokenIndex: 2,
+      endTokenIndex: 3,
+    ),
+    ProsodicChunk(
+      sentenceId: 'sentence-1',
+      chunkIndex: 2,
+      startTokenIndex: 4,
+      endTokenIndex: 5,
+    ),
+    ProsodicChunk(
+      sentenceId: 'sentence-1',
+      chunkIndex: 3,
+      startTokenIndex: 6,
+      endTokenIndex: 7,
+    ),
+  ],
+  anchorCount: 8,
 );
 
 const _phoneSummary = PhoneTimelineSummary(
@@ -317,7 +338,8 @@ LLTimelineDocument _document(LLTimelineRhythmFrame rhythmFrame) =>
       ),
       activeWordTimelineId: 'word-active',
       activePhoneTimelineId: null,
-      activeChunkTimelineId: null,
+      prosodyAnalyses: const [_prosodyAnalysis],
+      activeProsodyAnalysisId: 'prosody-active',
       rhythmFrames: [rhythmFrame],
       artifacts: const [],
     );

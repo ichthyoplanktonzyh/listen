@@ -1126,46 +1126,30 @@ void main() {
     );
   });
 
-  test('parses chunk timeline resources into sentence partitions', () {
-    final timeline = ChunkTimeline.fromJson(const {
-      'id': 'chunk-timeline-1',
-      'track_id': 'track-1',
-      'media_id': 'media-1',
-      'parent_word_timeline_id': 'word-timeline-1',
-      'provider_id': 'acoustic-first-rule-partitioner',
-      'provider_version': 'v4',
-      'algorithm': 'acoustic_semantic_v1',
-      'precision': 'precise',
-      'created_by': 'algorithm',
-      'status': 'active',
-      'metrics_json': <String, dynamic>{},
+  test('parses chunk partition resources into sentence partitions', () {
+    final partition = SentenceChunkPartition.fromJson(const {
+      'sentence_id': 'sentence-1',
       'chunks': [
         {
-          'id': 'chunk-1',
-          'sentence_id': 'sentence-1',
-          'chunk_index': 0,
-          'start_word_index': 0,
-          'end_word_index': 1,
+          'index': 0,
+          'token_start': 0,
+          'token_end': 1,
+          'text': 'hello world',
           'start_ms': 100,
           'end_ms': 500,
-          'text': 'hello world',
-          'boundary_sources': ['pause'],
-          'confidence': 0.92,
-          'warnings': <dynamic>[],
-          'evidence_json': <String, dynamic>{},
         },
       ],
-      'created_at_ms': 1,
-      'updated_at_ms': 2,
+      'partitioner_id': 'acoustic-semantic-partitioner',
+      'partitioner_version': 'v4',
+      'timing_quality': 'precise',
     });
 
-    final partitions = chunkPartitionsFromTimeline(timeline);
-    expect(partitions['sentence-1']?.partitionerId, timeline.providerId);
-    expect(partitions['sentence-1']?.timingQuality, 'precise');
-    expect(partitions['sentence-1']?.chunks.single.tokenEnd, 1);
+    expect(partition.partitionerId, 'acoustic-semantic-partitioner');
+    expect(partition.timingQuality, 'precise');
+    expect(partition.chunks.single.tokenEnd, 1);
     expect(
       currentChunkAtPosition(
-        partitions['sentence-1'],
+        partition,
         const Duration(milliseconds: 200),
       ),
       0,

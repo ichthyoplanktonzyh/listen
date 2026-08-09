@@ -32,7 +32,8 @@ void main() {
             ),
             activeWordTimelineId: 'timeline-active',
             activePhoneTimelineId: 'phone-active',
-            activeChunkTimelineId: 'chunk-active',
+            prosodyAnalyses: [_prosody],
+            activeProsodyAnalysisId: 'prosody-active',
             rhythmFrames: [_activeRhythmFrame],
             artifacts: [
               LLTimelineArtifact(kind: 'production_report', payload: {}),
@@ -93,23 +94,6 @@ void main() {
               canDelete: false,
             ),
           ],
-          chunkSummaries: const [
-            ChunkTimelineSummary(
-              id: 'chunk-active',
-              trackId: 'track-1',
-              mediaId: 'media-1',
-              providerId: 'partitioner',
-              providerVersion: 'v4',
-              algorithm: 'acoustic_semantic_v1',
-              precision: 'precise',
-              createdBy: 'algorithm',
-              status: 'active',
-              chunkCount: 4,
-              canActivate: true,
-              canArchive: true,
-              canDelete: true,
-            ),
-          ],
           activeWordTimingCount: 0,
           error: null,
           onImport: () async {},
@@ -119,10 +103,6 @@ void main() {
           onActivatePhoneTimeline: (_) async {},
           onArchivePhoneTimeline: (_) async {},
           onDeletePhoneTimeline: (_) async {},
-          onGenerateChunkTimeline: () async {},
-          onActivateChunkTimeline: (_) async {},
-          onArchiveChunkTimeline: (_) async {},
-          onDeleteChunkTimeline: (_) async {},
           onExportLLTimeline: () async => exports++,
         ),
       ),
@@ -178,7 +158,7 @@ void main() {
     expect(find.textContaining('whisperx 1.0'), findsWidgets);
     expect(find.textContaining('mfa 2.0'), findsOneWidget);
     expect(find.textContaining('research-fixture'), findsWidgets);
-    expect(find.textContaining('acoustic_semantic_v1'), findsWidgets);
+    expect(find.textContaining('prosody-v1'), findsWidgets);
 
     await tester.tap(find.byIcon(Icons.rate_review_outlined));
     await tester.pump();
@@ -199,7 +179,6 @@ void main() {
   testWidgets('generated word timings keep workflow actions available', (
     tester,
   ) async {
-    var chunkGenerations = 0;
     var exports = 0;
     await tester.pumpWidget(
       _Harness(
@@ -219,13 +198,13 @@ void main() {
             ),
             activeWordTimelineId: null,
             activePhoneTimelineId: null,
-            activeChunkTimelineId: null,
+            prosodyAnalyses: [],
+            activeProsodyAnalysisId: null,
             rhythmFrames: [],
             artifacts: [],
           ),
           summaries: const [],
           phoneSummaries: const [],
-          chunkSummaries: const [],
           activeWordTimingCount: 703,
           error: null,
           onImport: () async {},
@@ -235,10 +214,6 @@ void main() {
           onActivatePhoneTimeline: (_) async {},
           onArchivePhoneTimeline: (_) async {},
           onDeletePhoneTimeline: (_) async {},
-          onGenerateChunkTimeline: () async => chunkGenerations++,
-          onActivateChunkTimeline: (_) async {},
-          onArchiveChunkTimeline: (_) async {},
-          onDeleteChunkTimeline: (_) async {},
           onExportLLTimeline: () async => exports++,
         ),
       ),
@@ -249,10 +224,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Generated word timings'), findsWidgets);
     expect(find.textContaining('703'), findsWidgets);
-
-    await tester.tap(find.text('Generate chunks'));
-    await tester.pump();
-    expect(chunkGenerations, 1);
 
     await tester.tap(find.text('Export LLTimeline JSON'));
     await tester.pump();
@@ -269,7 +240,6 @@ void main() {
           document: null,
           summaries: const [],
           phoneSummaries: const [],
-          chunkSummaries: const [],
           activeWordTimingCount: 0,
           error: null,
           onImport: () async {},
@@ -279,10 +249,6 @@ void main() {
           onActivatePhoneTimeline: (_) async {},
           onArchivePhoneTimeline: (_) async {},
           onDeletePhoneTimeline: (_) async {},
-          onGenerateChunkTimeline: () async {},
-          onActivateChunkTimeline: (_) async {},
-          onArchiveChunkTimeline: (_) async {},
-          onDeleteChunkTimeline: (_) async {},
           onExportLLTimeline: () async {},
         ),
       ),
@@ -316,6 +282,25 @@ const _track = SubtitleTrack(
       tokens: [],
     ),
   ],
+);
+
+const _prosody = ProsodyAnalysis(
+  id: 'prosody-active',
+  trackId: 'track-1',
+  mediaId: 'media-1',
+  providerId: 'listen-gen',
+  providerVersion: '0.4.0',
+  algorithm: 'prosody-v1',
+  status: 'active',
+  chunks: [
+    ProsodicChunk(
+      sentenceId: 'sentence-1',
+      chunkIndex: 0,
+      startTokenIndex: 0,
+      endTokenIndex: 1,
+    ),
+  ],
+  anchorCount: 2,
 );
 
 const _refs = RhythmFrameReferences(

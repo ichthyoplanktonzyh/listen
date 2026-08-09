@@ -757,10 +757,6 @@ final class _FakeResourceRepository implements ResourceRepository {
     String trackId,
   ) async => const [];
   @override
-  Future<List<ChunkTimelineSummary>> chunkTimelineSummaries(
-    String trackId,
-  ) async => const [];
-  @override
   Future<void> archiveSubtitle(String trackId) async =>
       throw UnimplementedError();
   @override
@@ -780,18 +776,6 @@ final class _FakeResourceRepository implements ResourceRepository {
       throw UnimplementedError();
   @override
   Future<void> activateWordTimeline(String timelineId) async =>
-      throw UnimplementedError();
-  @override
-  Future<void> generateChunkTimeline(String trackId) async =>
-      throw UnimplementedError();
-  @override
-  Future<void> activateChunkTimeline(String timelineId) async =>
-      throw UnimplementedError();
-  @override
-  Future<void> archiveChunkTimeline(String timelineId) async =>
-      throw UnimplementedError();
-  @override
-  Future<void> deleteChunkTimeline(String timelineId) async =>
       throw UnimplementedError();
   @override
   Future<void> activatePhoneTimeline(String timelineId) async =>
