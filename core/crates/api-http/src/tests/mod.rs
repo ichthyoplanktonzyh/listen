@@ -56,7 +56,8 @@ fn test_state_with_repository() -> (ApiState, Arc<SqliteRepository>) {
         .with_personal_expression_repository(repo.clone())
         .with_llm_provider_profile_repository(repo.clone())
         .with_realtime_conversation_repository(repo.clone())
-        .with_reading_position_repository(repo.clone()),
+        .with_reading_position_repository(repo.clone())
+        .with_material_repository(repo.clone()),
         repo.clone(),
         "secret",
     );
@@ -641,6 +642,7 @@ async fn wait_for_phonetic_job(app: &Router, job_id: &str, expected: &[&str]) ->
 
 mod general;
 mod llm;
+mod material;
 mod media_subtitles;
 mod openapi;
 mod phonetic_analysis;

@@ -40,6 +40,65 @@ export interface MediaItem {
   retained_at_ms: number | null;
 }
 
+export type MaterialShape = "text" | "audio" | "video" | "mixed";
+
+export interface LearningMaterial {
+  id: string;
+  current_revision_id: string;
+  retained_at_ms: number | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+// Discriminated by `asset_type`. Material assets never expose a path.
+export type MaterialAsset =
+  | {
+      asset_type: "document_text";
+      id: string;
+      text: string;
+      sha256_digest: string;
+      byte_size: number;
+      language: string | null;
+    }
+  | {
+      asset_type: "media_rendition";
+      id: string;
+      media_id: string;
+      media_kind: MediaKind;
+      fingerprint: string;
+      availability: "available" | "missing" | "archived";
+    };
+
+export interface MaterialRevision {
+  id: string;
+  material_id: string;
+  title: string;
+  assets: MaterialAsset[];
+  created_at_ms: number;
+}
+
+export interface MaterialDetails {
+  material: LearningMaterial;
+  current_revision: MaterialRevision;
+  shape: MaterialShape;
+}
+
+// Typed asset input for creating or extending a learning material.
+export type MaterialAssetInput =
+  | { asset_type: "document_text"; text: string; language?: string | null }
+  | { asset_type: "media_rendition"; media_id: string };
+
+export interface CreateLearningMaterial {
+  title: string;
+  assets: MaterialAssetInput[];
+  retain?: boolean | null;
+}
+
+export interface AppendMaterialRevision {
+  title: string;
+  assets: MaterialAssetInput[];
+}
+
 export interface Progress {
   position_ms: number | null;
 }
@@ -1135,6 +1194,58 @@ export class LocalApiV1 {
       `/v1/media/${encodeURIComponent(mediaId)}/library-membership`,
       { method: "DELETE" },
     );
+  }
+
+  listLearningMaterials(): Promise<MaterialDetails[]> {
+    return this.request("/v1/materials");
+  }
+
+  createLearningMaterial(input: CreateLearningMaterial): Promise<MaterialDetails> {
+    return this.request("/v1/materials", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  readLearningMaterial(materialId: string): Promise<MaterialDetails> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}`);
+  }
+
+  appendLearningMaterialRevision(
+    materialId: string,
+    input: AppendMaterialRevision,
+  ): Promise<MaterialDetails> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}/revisions`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  readLearningMaterialRevision(
+    materialId: string,
+    revisionId: string,
+  ): Promise<MaterialRevision> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/revisions/${encodeURIComponent(revisionId)}`,
+    );
+  }
+
+  retainLearningMaterial(materialId: string): Promise<MaterialDetails> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/library-membership`,
+      { method: "PUT" },
+    );
+  }
+
+  unretainLearningMaterial(materialId: string): Promise<MaterialDetails> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/library-membership`,
+      { method: "DELETE" },
+    );
+  }
+
+  resolveLearningMaterialForMedia(mediaId: string): Promise<MaterialDetails> {
+    return this.request(`/v1/media/${encodeURIComponent(mediaId)}/material`);
   }
 
   readProgress(mediaId: string): Promise<Progress> {

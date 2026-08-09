@@ -1,8 +1,17 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 3.1.0
-  description: Versioned loopback-only application-service adapter. Playback control is excluded.
+  version: 3.2.0
+  description: >
+    Versioned loopback-only application-service adapter. Playback control is
+    excluded. Contract `3.2.0` adds the learning-material surface as a
+    backward-compatible minor over `3.1.0` (which added media retention):
+    `/v1/materials*` operations plus the `/v1/media/{media_id}/material`
+    resolver are purely additive, every previously published endpoint stays
+    compatible, and no material, revision, or asset response ever exposes a
+    file path. Retention is logical state independent of file location:
+    Temporary Material is explicitly not a Personal Library member, though it
+    stays readable by ID and resolvable from its media.
 servers:
   - url: http://127.0.0.1:{port}
     variables:
@@ -116,6 +125,181 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MediaItem"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials:
+    get:
+      operationId: listLearningMaterials
+      description: >
+        Lists Personal Library materials only: every retained learning
+        material with its actual current revision and composition shape.
+        Temporary Material (created with `retain: false`, or removed via the
+        library-membership operation) stays readable through
+        `/v1/materials/{material_id}` and `/v1/media/{media_id}/material` but
+        is absent here. Material retention is logical state independent of any
+        file location; no material, revision, or asset response ever contains
+        a path.
+      responses:
+        "200":
+          description: Retained materials with their current revisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MaterialDetails" }
+        default:
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createLearningMaterial
+      description: >
+        Creates (or converges on) a learning material from typed assets.
+        Omitted (or null) `retain` means Personal Library member; explicit
+        `false` creates Temporary Material, which is readable by ID and
+        resolvable from media but excluded from the material library until
+        explicitly retained. `document_text` assets carry inline text plus an
+        optional nullable language; `media_rendition` assets reference an
+        already-registered media source by `media_id` and snapshot its kind,
+        fingerprint, and availability — never its path. Raw material is valid
+        without enrichment, and idempotent/convergent application semantics
+        remain authoritative: retries resolve to the same deterministic
+        material and revision.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateLearningMaterial"
+      responses:
+        "200":
+          description: Created or converged learning material with its current revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    get:
+      operationId: readLearningMaterial
+      description: >
+        Reads a learning material with its actual current revision and shape.
+        Unknown or malformed material ids are typed errors. Temporary Material
+        is readable here.
+      responses:
+        "200":
+          description: Learning material with its current revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/revisions:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    post:
+      operationId: appendLearningMaterialRevision
+      description: >
+        Appends a new immutable revision to an existing material and returns
+        the updated details. The request uses the same typed asset inputs as
+        creation. Content-idempotent retries converge on the existing
+        revision. Media renditions bound to another material are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppendMaterialRevision"
+      responses:
+        "200":
+          description: Updated learning material with the appended current revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/revisions/{revision_id}:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - $ref: "#/components/parameters/MaterialRevisionId"
+    get:
+      operationId: readLearningMaterialRevision
+      description: >
+        Reads one historical or current revision. The revision is returned
+        only when it belongs to the requested material; a revision owned by
+        another material, or an unknown material or revision, is a typed
+        not-found.
+      responses:
+        "200":
+          description: The requested historical or current revision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialRevision"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/library-membership:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    put:
+      operationId: retainLearningMaterial
+      description: >
+        Explicit learner intent to add an existing learning material to the
+        Personal Library. Idempotent: retaining an already-retained material
+        preserves the original membership timestamp (`retained_at_ms`) and
+        changes nothing else. Membership synchronizes to every media bound to
+        the material, so the legacy media projection and material retention
+        agree. Unknown material is a typed not-found. Revisions, media
+        bindings, resources, and learner state are never touched.
+      responses:
+        "200":
+          description: Updated learning material carrying membership evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: unretainLearningMaterial
+      description: >
+        Explicit learner intent to remove an existing learning material from
+        the Personal Library. Idempotent: unretaining an already-temporary
+        material is a no-op. Unretaining changes membership only — the
+        material stays readable by ID, its revisions and media bindings stay
+        intact, and resources and learner state remain untouched. Unknown
+        material is a typed not-found.
+      responses:
+        "200":
+          description: Updated learning material without membership evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/media/{media_id}/material:
+    parameters:
+      - $ref: "#/components/parameters/MediaId"
+    get:
+      operationId: resolveLearningMaterialForMedia
+      description: >
+        Resolves the learning material bound to a media source, with the
+        material's actual current revision and shape. Media registration
+        creates or resolves one deterministic material graph, so registered
+        media resolve immediately. A media source with no bound material — and
+        an unknown media id — is a typed not-found. Material assets never
+        expose a media path.
+      responses:
+        "200":
+          description: The learning material bound to the media source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialDetails"
         default:
           $ref: "#/components/responses/Error"
   /v1/lltimeline/import:
@@ -3524,6 +3708,16 @@ components:
       in: path
       required: true
       schema: { type: string }
+    MaterialId:
+      name: material_id
+      in: path
+      required: true
+      schema: { type: string }
+    MaterialRevisionId:
+      name: revision_id
+      in: path
+      required: true
+      schema: { type: string }
   responses:
     Error:
       description: Structured error
@@ -6929,3 +7123,151 @@ components:
         message: { type: string }
         correlation_id: { type: string }
         retryable: { type: boolean }
+    LearningMaterial:
+      type: object
+      required: [id, current_revision_id, retained_at_ms, created_at_ms, updated_at_ms]
+      properties:
+        id: { type: string }
+        current_revision_id: { type: string }
+        retained_at_ms:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            Evidence of explicit Personal Library membership; required but
+            nullable so every response states known membership. Non-null
+            means the material is a library member and carries the
+            deterministic membership time; null means Temporary Material
+            (readable by ID and resolvable from media, but absent from the
+            material library). The value is set once at first retention and
+            is never silently rewritten by repeated retention, registration,
+            or revision.
+        created_at_ms: { type: integer, minimum: 0 }
+        updated_at_ms: { type: integer, minimum: 0 }
+    MaterialAsset:
+      description: >
+        A typed asset inside a material revision. A union discriminated by
+        `asset_type`; the concrete member shapes are `DocumentTextAsset` and
+        `MediaRenditionAsset`. No asset response ever contains a path.
+      discriminator:
+        propertyName: asset_type
+        mapping:
+          document_text: "#/components/schemas/DocumentTextAsset"
+          media_rendition: "#/components/schemas/MediaRenditionAsset"
+      oneOf:
+        - $ref: "#/components/schemas/DocumentTextAsset"
+        - $ref: "#/components/schemas/MediaRenditionAsset"
+    DocumentTextAsset:
+      type: object
+      required: [asset_type, id, text, sha256_digest, byte_size, language]
+      properties:
+        asset_type: { const: document_text }
+        id: { type: string }
+        text: { type: string }
+        sha256_digest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: Lowercase hex SHA-256 of the exact stored UTF-8 bytes.
+        byte_size:
+          type: integer
+          minimum: 0
+          description: Size of the exact stored UTF-8 bytes.
+        language:
+          type: [string, "null"]
+          description: Normalized language tag; null means the text is untagged.
+    MediaRenditionAsset:
+      type: object
+      required: [asset_type, id, media_id, media_kind, fingerprint, availability]
+      properties:
+        asset_type: { const: media_rendition }
+        id: { type: string }
+        media_id: { type: string }
+        media_kind: { enum: [video, audio] }
+        fingerprint: { type: string }
+        availability: { enum: [available, missing, archived] }
+        # A media rendition snapshots its source kind, fingerprint, and
+        # availability only. A media path is never part of a material.
+    MaterialRevision:
+      type: object
+      required: [id, material_id, title, assets, created_at_ms]
+      properties:
+        id: { type: string }
+        material_id: { type: string }
+        title: { type: string }
+        assets:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MaterialAsset" }
+        created_at_ms: { type: integer, minimum: 0 }
+    MaterialDetails:
+      type: object
+      required: [material, current_revision, shape]
+      properties:
+        material: { $ref: "#/components/schemas/LearningMaterial" }
+        current_revision: { $ref: "#/components/schemas/MaterialRevision" }
+        shape:
+          type: string
+          enum: [text, audio, video, mixed]
+          description: >
+            Composition shape of the current revision: text-only => text;
+            exactly audio renditions => audio; exactly video renditions =>
+            video; any mixed combination => mixed.
+    MaterialAssetInput:
+      description: >
+        Typed asset input for creating or extending a learning material. A
+        union discriminated by `asset_type`; the concrete member shapes are
+        `DocumentTextAssetInput` and `MediaRenditionAssetInput`. Inputs carry
+        only the fields needed to build the asset (`document_text` text/
+        language or `media_rendition` media_id).
+      discriminator:
+        propertyName: asset_type
+        mapping:
+          document_text: "#/components/schemas/DocumentTextAssetInput"
+          media_rendition: "#/components/schemas/MediaRenditionAssetInput"
+      oneOf:
+        - $ref: "#/components/schemas/DocumentTextAssetInput"
+        - $ref: "#/components/schemas/MediaRenditionAssetInput"
+    DocumentTextAssetInput:
+      type: object
+      required: [asset_type, text]
+      properties:
+        asset_type: { const: document_text }
+        text: { type: string, minLength: 1 }
+        language:
+          type: [string, "null"]
+          description: Optional normalized language tag; omitted or null means untagged.
+    MediaRenditionAssetInput:
+      type: object
+      required: [asset_type, media_id]
+      properties:
+        asset_type: { const: media_rendition }
+        media_id:
+          type: string
+          description: Media source id of an already-registered media item.
+    CreateLearningMaterial:
+      type: object
+      required: [title, assets]
+      properties:
+        title: { type: string, minLength: 1 }
+        assets:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MaterialAssetInput" }
+        retain:
+          type: [boolean, "null"]
+          default: true
+          description: >
+            Personal Library membership choice. Omitted (or null) means
+            retained, preserving the historical behavior for old clients.
+            Explicit false creates Temporary Material: readable by ID and
+            resolvable from media, but absent from the material library until
+            explicitly retained. Membership evidence is set once; a later
+            `retain: false` never clears existing membership.
+    AppendMaterialRevision:
+      type: object
+      required: [title, assets]
+      properties:
+        title: { type: string, minLength: 1 }
+        assets:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MaterialAssetInput" }

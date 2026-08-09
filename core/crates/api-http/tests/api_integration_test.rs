@@ -33,7 +33,8 @@ fn build_app() -> Router {
         repo.clone(),
         repo.clone(),
     )
-    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone());
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_material_repository(repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 
@@ -182,10 +183,10 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The material-retention contract is locked exactly: 3.1.0 is the
-    // additive minor over the R5 breaking 3.0.0 (never the previously
-    // published R4 2.1.0).
-    assert_eq!(body["contract_version"], "3.1.0");
+    // The learning-material contract is locked exactly: 3.2.0 is the
+    // additive minor over the material-retention 3.1.0 (itself additive over
+    // the R5 breaking 3.0.0, never the previously published R4 2.1.0).
+    assert_eq!(body["contract_version"], "3.2.0");
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }
 
@@ -879,4 +880,604 @@ async fn retained_media_states_membership_in_every_response_shape() {
         .expect("retained media appears in the library");
     assert!(entry["media"].get("retained_at_ms").is_some());
     assert!(entry["media"]["retained_at_ms"].is_number());
+}
+
+// ---------------------------------------------------------------------------
+// Learning-material HTTP surface (contract 3.2.0): acceptance coverage A-G.
+// ---------------------------------------------------------------------------
+
+/// Create a learning material over HTTP and return the details response.
+async fn create_material(app: &Router, title: &str, assets: Value, retain: Option<bool>) -> Value {
+    let mut body = json!({ "title": title, "assets": assets });
+    if let Some(retain) = retain {
+        body["retain"] = json!(retain);
+    }
+    let (status, material) = send(app, post_json("/v1/materials", Some(TOKEN), &body)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "create material {title}: {material}"
+    );
+    material
+}
+
+/// Material ids present in the retained Personal Library projection.
+async fn material_library_ids(app: &Router) -> Vec<String> {
+    let (status, list) = send(app, get("/v1/materials", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    list.as_array()
+        .expect("material list array")
+        .iter()
+        .map(|entry| {
+            entry["material"]["id"]
+                .as_str()
+                .expect("material id")
+                .to_owned()
+        })
+        .collect()
+}
+
+// A. Register media with retain:false; resolve immediately; assert matching
+// media_id, temporary material, deterministic response, path-free assets, and
+// absence from the material list.
+#[tokio::test]
+async fn temporary_media_resolves_temporary_material_without_path() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Resolvable Clip", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id").to_owned();
+    assert!(media["retained_at_ms"].is_null());
+
+    // Media registration creates one deterministic material graph, so the
+    // material resolves immediately.
+    let (status, material) = send(
+        &app,
+        get(&format!("/v1/media/{media_id}/material"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{material}");
+    let material_id = material["material"]["id"]
+        .as_str()
+        .expect("material id")
+        .to_owned();
+    assert!(
+        material["material"]["retained_at_ms"].is_null(),
+        "retain:false media registers a temporary material: {material}"
+    );
+    assert_eq!(material["shape"], "video");
+    let rendition = &material["current_revision"]["assets"][0];
+    assert_eq!(rendition["asset_type"], "media_rendition");
+    assert_eq!(rendition["media_id"], media_id);
+    assert_eq!(rendition["media_kind"], "video");
+    // No material, revision, or asset response exposes a path.
+    assert!(
+        rendition.get("path").is_none(),
+        "asset leaks path: {rendition}"
+    );
+    assert!(material["current_revision"].get("path").is_none());
+    assert!(material["material"].get("path").is_none());
+
+    // Deterministic response: a second read returns the same identities.
+    let (status, again) = send(
+        &app,
+        get(&format!("/v1/media/{media_id}/material"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(again["material"]["id"], material_id);
+    assert_eq!(
+        again["current_revision"]["id"],
+        material["current_revision"]["id"]
+    );
+
+    // Temporary Material is absent from the retained material list.
+    assert!(!material_library_ids(&app).await.contains(&material_id));
+}
+
+// B. PUT membership: original material enters the list exactly once and
+// membership timestamps agree with the legacy media projection/read; a repeat
+// PUT preserves the original timestamp.
+#[tokio::test]
+async fn material_membership_put_is_idempotent_and_syncs_with_media_projection() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Material Member Clip", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id").to_owned();
+    let (_, resolved) = send(
+        &app,
+        get(&format!("/v1/media/{media_id}/material"), Some(TOKEN)),
+    )
+    .await;
+    let material_id = resolved["material"]["id"]
+        .as_str()
+        .expect("material id")
+        .to_owned();
+    assert!(resolved["material"]["retained_at_ms"].is_null());
+
+    // Legacy media projection agrees the item is temporary.
+    let (_, media_read) = send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert!(media_read["retained_at_ms"].is_null());
+
+    // PUT joins the library and stamps membership once.
+    let (status, retained) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/materials/{material_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{retained}");
+    let first_membership = retained["material"]["retained_at_ms"]
+        .as_u64()
+        .expect("membership time");
+
+    // The original material enters the retained list exactly once.
+    let (status, list) = send(&app, get("/v1/materials", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{list}");
+    let matches: Vec<_> = list
+        .as_array()
+        .expect("material list array")
+        .iter()
+        .filter(|entry| entry["material"]["id"] == material_id)
+        .collect();
+    assert_eq!(
+        matches.len(),
+        1,
+        "material must appear exactly once: {list}"
+    );
+    assert_eq!(
+        matches[0]["material"]["retained_at_ms"].as_u64(),
+        Some(first_membership)
+    );
+
+    // Membership timestamps agree with the legacy media projection/read.
+    let (status, media_read) = send(&app, get(&format!("/v1/media/{media_id}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{media_read}");
+    assert_eq!(
+        media_read["retained_at_ms"].as_u64(),
+        Some(first_membership)
+    );
+    let (status, library) = send(&app, get("/v1/media", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK, "{library}");
+    let entry = library
+        .as_array()
+        .expect("library array")
+        .iter()
+        .find(|entry| entry["media"]["id"] == media_id)
+        .expect("media enters the legacy library too");
+    assert_eq!(
+        entry["media"]["retained_at_ms"].as_u64(),
+        Some(first_membership),
+        "material membership and legacy media membership must agree"
+    );
+
+    // Repeat PUT preserves the original membership timestamp.
+    let (status, retained_again) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/materials/{material_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{retained_again}");
+    assert_eq!(
+        retained_again["material"]["retained_at_ms"].as_u64(),
+        Some(first_membership),
+        "repeated retention must preserve the original membership time"
+    );
+}
+
+// C. DELETE membership: leaves the list but stays readable/resolvable with
+// unchanged revision identity; repeated DELETE is idempotent.
+#[tokio::test]
+async fn material_membership_delete_preserves_material_and_is_idempotent() {
+    let app = build_app();
+    let media = register_media_with_retain(&app, "Material Temp Clip", Some(false)).await;
+    let media_id = media["id"].as_str().expect("media id").to_owned();
+    let (_, resolved) = send(
+        &app,
+        get(&format!("/v1/media/{media_id}/material"), Some(TOKEN)),
+    )
+    .await;
+    let material_id = resolved["material"]["id"]
+        .as_str()
+        .expect("material id")
+        .to_owned();
+    let revision_id = resolved["current_revision"]["id"]
+        .as_str()
+        .expect("revision id")
+        .to_owned();
+
+    // Retain first, then DELETE membership.
+    let (status, _) = send(
+        &app,
+        method_no_body(
+            "PUT",
+            &format!("/v1/materials/{material_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, unretained) = send(
+        &app,
+        method_no_body(
+            "DELETE",
+            &format!("/v1/materials/{material_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{unretained}");
+    assert!(unretained["material"]["retained_at_ms"].is_null());
+
+    // It leaves the retained list...
+    assert!(!material_library_ids(&app).await.contains(&material_id));
+
+    // ...but stays readable with unchanged revision identity.
+    let (status, read) = send(
+        &app,
+        get(&format!("/v1/materials/{material_id}"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(read["material"]["id"], material_id);
+    assert_eq!(read["material"]["current_revision_id"], revision_id);
+    assert_eq!(read["current_revision"]["id"], revision_id);
+
+    // ...and stays resolvable from its media.
+    let (status, resolved_again) = send(
+        &app,
+        get(&format!("/v1/media/{media_id}/material"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{resolved_again}");
+    assert_eq!(resolved_again["material"]["id"], material_id);
+
+    // DELETE is idempotent.
+    let (status, again) = send(
+        &app,
+        method_no_body(
+            "DELETE",
+            &format!("/v1/materials/{material_id}/library-membership"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert!(again["material"]["retained_at_ms"].is_null());
+}
+
+// D. Text-only material with exact multibyte/whitespace bytes and language:
+// default retained, exact text/digest/byte_size, no path; append a revision,
+// then read current and historical revisions and prove ownership and shape.
+#[tokio::test]
+async fn text_material_preserves_exact_bytes_and_revision_ownership() {
+    use sha2::{Digest, Sha256};
+
+    let app = build_app();
+    // Exact bytes are never trimmed or mutated: leading/trailing spaces, a
+    // newline, and non-ASCII characters.
+    let text = "  Hello, 世界!  \n";
+    let (status, created) = send(
+        &app,
+        post_json(
+            "/v1/materials",
+            Some(TOKEN),
+            &json!({
+                "title": "Exact Bytes",
+                "assets": [
+                    { "asset_type": "document_text", "text": text, "language": "en" },
+                ],
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let material_id = created["material"]["id"]
+        .as_str()
+        .expect("material id")
+        .to_owned();
+    let first_revision_id = created["current_revision"]["id"]
+        .as_str()
+        .expect("revision id")
+        .to_owned();
+
+    // Omitted retain defaults to retained membership.
+    assert!(
+        created["material"]["retained_at_ms"].is_number(),
+        "omitted retain must default to retained: {created}"
+    );
+    assert_eq!(created["shape"], "text");
+
+    let asset = &created["current_revision"]["assets"][0];
+    assert_eq!(asset["asset_type"], "document_text");
+    assert_eq!(asset["text"], text, "stored text must be the exact bytes");
+    assert_eq!(asset["language"], "en");
+    assert_eq!(asset["byte_size"], text.len() as u64);
+    assert_eq!(
+        asset["sha256_digest"],
+        hex::encode(Sha256::digest(text.as_bytes())),
+        "digest must be computed over the exact stored bytes"
+    );
+    assert!(asset.get("path").is_none());
+    assert!(created["current_revision"].get("path").is_none());
+    assert!(created["material"].get("path").is_none());
+
+    // The default-retained material enters the list.
+    assert!(material_library_ids(&app).await.contains(&material_id));
+
+    // Append a revision with different exact bytes and a null language.
+    let new_text = "  Second revision — 修正.  ";
+    let (status, appended) = send(
+        &app,
+        post_json(
+            &format!("/v1/materials/{material_id}/revisions"),
+            Some(TOKEN),
+            &json!({
+                "title": "Exact Bytes v2",
+                "assets": [
+                    { "asset_type": "document_text", "text": new_text, "language": null },
+                ],
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{appended}");
+    let current = &appended["current_revision"];
+    assert_eq!(current["title"], "Exact Bytes v2");
+    assert_eq!(current["assets"][0]["text"], new_text);
+    assert_eq!(current["assets"][0]["byte_size"], new_text.len() as u64);
+    assert!(
+        current["assets"][0]["language"].is_null(),
+        "null language stays null"
+    );
+    let second_revision_id = current["id"].as_str().expect("revision id").to_owned();
+    assert_ne!(first_revision_id, second_revision_id);
+    // Creation time and membership survive a revision append.
+    assert_eq!(
+        appended["material"]["created_at_ms"],
+        created["material"]["created_at_ms"]
+    );
+    assert!(appended["material"]["retained_at_ms"].is_number());
+
+    // Reading the material returns the appended revision as current.
+    let (status, read) = send(
+        &app,
+        get(&format!("/v1/materials/{material_id}"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(read["current_revision"]["id"], second_revision_id);
+    assert_eq!(read["shape"], "text");
+
+    // Historical revision read: exact original bytes, owned by the material.
+    let (status, historical) = send(
+        &app,
+        get(
+            &format!("/v1/materials/{material_id}/revisions/{first_revision_id}"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{historical}");
+    assert_eq!(historical["id"], first_revision_id);
+    assert_eq!(historical["material_id"], material_id);
+    assert_eq!(historical["title"], "Exact Bytes");
+    assert_eq!(historical["assets"][0]["text"], text);
+    assert_eq!(
+        historical["assets"][0]["sha256_digest"],
+        asset["sha256_digest"]
+    );
+    assert!(historical.get("path").is_none());
+    assert!(historical["assets"][0].get("path").is_none());
+
+    // Current revision read through the revision endpoint.
+    let (status, current_read) = send(
+        &app,
+        get(
+            &format!("/v1/materials/{material_id}/revisions/{second_revision_id}"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{current_read}");
+    assert_eq!(current_read["id"], second_revision_id);
+    assert_eq!(current_read["title"], "Exact Bytes v2");
+}
+
+// D-null. Explicit JSON `retain: null` (as opposed to omitting the field)
+// must create a retained material that appears in the retained list. Unique
+// text assets guarantee the assertion cannot pass by converging on a material
+// retained by an earlier step.
+#[tokio::test]
+async fn explicit_null_retain_creates_a_retained_material() {
+    let app = build_app();
+    let unique_text = format!("explicit-null-retain-{}", application::now_ms());
+    let (status, created) = send(
+        &app,
+        post_json(
+            "/v1/materials",
+            Some(TOKEN),
+            &json!({
+                "title": "Explicit Null Retain",
+                "assets": [
+                    { "asset_type": "document_text", "text": unique_text, "language": null },
+                ],
+                "retain": null,
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let material_id = created["material"]["id"]
+        .as_str()
+        .expect("material id")
+        .to_owned();
+    assert!(
+        created["material"]["retained_at_ms"].is_number(),
+        "explicit retain:null must default to retained membership: {created}"
+    );
+    assert!(
+        material_library_ids(&app).await.contains(&material_id),
+        "retain:null material must appear in GET /v1/materials: {created}"
+    );
+}
+
+// E. Unknown/malformed material, revision, and media ids are typed 4xx; a
+// revision owned by another material is a typed 404.
+#[tokio::test]
+async fn material_unknown_and_malformed_ids_are_typed_4xx() {
+    let app = build_app();
+    let unknown = "0".repeat(64);
+
+    // Malformed (whitespace/empty) ids are validation errors.
+    for uri in [
+        "/v1/materials/%20".to_owned(),
+        format!("/v1/materials/{unknown}/revisions/%20"),
+        "/v1/media/%20/material".to_owned(),
+    ] {
+        let (status, body) = send(&app, get(&uri, Some(TOKEN))).await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "malformed id {uri}: {body}"
+        );
+        assert_eq!(body["code"], "domain_error");
+    }
+
+    // Well-formed but unknown ids are typed not-found.
+    let (status, body) = send(&app, get(&format!("/v1/materials/{unknown}"), Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+
+    let (status, body) = send(
+        &app,
+        get(
+            &format!("/v1/materials/{unknown}/revisions/{unknown}"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+
+    let (status, body) = send(
+        &app,
+        get(&format!("/v1/media/{unknown}/material"), Some(TOKEN)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+
+    // A revision owned by another material is a typed 404.
+    let material_a = create_material(
+        &app,
+        "Owner A",
+        json!([{ "asset_type": "document_text", "text": "alpha" }]),
+        None,
+    )
+    .await;
+    let id_a = material_a["material"]["id"].as_str().expect("material id");
+    let revision_a = material_a["current_revision"]["id"]
+        .as_str()
+        .expect("revision id")
+        .to_owned();
+    let material_b = create_material(
+        &app,
+        "Owner B",
+        json!([{ "asset_type": "document_text", "text": "beta" }]),
+        None,
+    )
+    .await;
+    let id_b = material_b["material"]["id"].as_str().expect("material id");
+
+    let (status, body) = send(
+        &app,
+        get(
+            &format!("/v1/materials/{id_b}/revisions/{revision_a}"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "cross-material revision: {body}"
+    );
+    assert_eq!(body["code"], "not_found");
+    assert_eq!(body["message"], "material revision was not found");
+
+    // The owner still reads its own revision.
+    let (status, _) = send(
+        &app,
+        get(
+            &format!("/v1/materials/{id_a}/revisions/{revision_a}"),
+            Some(TOKEN),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+// F. Mixed/media conflicts and unknown media inputs prove application error
+// mapping without duplicating the application-layer test suite.
+#[tokio::test]
+async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
+    let app = build_app();
+    let media_a = register_media_with_retain(&app, "Mix A", Some(false)).await;
+    let media_b = register_media_with_retain(&app, "Mix B", Some(false)).await;
+    let id_a = media_a["id"].as_str().expect("media id");
+    let id_b = media_b["id"].as_str().expect("media id");
+
+    // Two distinct media renditions bound to different materials is an
+    // application conflict: the use case maps it to a typed 409 and keeps
+    // repository details redacted.
+    let (status, body) = send(
+        &app,
+        post_json(
+            "/v1/materials",
+            Some(TOKEN),
+            &json!({
+                "title": "Ambiguous Mix",
+                "assets": [
+                    { "asset_type": "media_rendition", "media_id": id_a },
+                    { "asset_type": "media_rendition", "media_id": id_b },
+                ],
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "asset_conflict");
+    assert!(
+        body["message"]
+            .as_str()
+            .unwrap()
+            .contains("media renditions belong to different materials"),
+        "conflict names the binding conflict: {body}"
+    );
+
+    // A well-formed media id that is not registered is a typed not-found.
+    let unknown_media = "0".repeat(64);
+    let (status, body) = send(
+        &app,
+        post_json(
+            "/v1/materials",
+            Some(TOKEN),
+            &json!({
+                "title": "Unknown Media",
+                "assets": [{ "asset_type": "media_rendition", "media_id": unknown_media }],
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+    assert!(
+        body["message"].as_str().unwrap().contains("media"),
+        "not-found names the media entity: {body}"
+    );
 }
