@@ -5,14 +5,16 @@
 ## Current position
 
 The project has an agreed semantic and architectural foundation across three
-independently versioned repositories. Content Package v2 is the active closeout
-slice, establishing a material-centered release contract, Core inspection and
-candidate installation planning, and deterministic Gen production with both
-referenced and embedded media delivery.
+independently versioned repositories. Content Package v2 is complete through
+[Core #125](https://github.com/ichthyoplanktonzyh/listen-core/pull/125),
+[Gen #8](https://github.com/ichthyoplanktonzyh/listen-gen/pull/8), and
+[App #107](https://github.com/ichthyoplanktonzyh/listen-app/pull/107). It
+establishes the material-centered release contract, bounded Core inspection and
+candidate installation planning, deterministic Gen production for embedded and
+referenced-media delivery, and explicit App non-impact for this slice.
 
-The official product-development stage is **Foundation Convergence — Closing**.
-After Content Package v2 closes, the project enters **Product Alpha**, beginning
-with the single-user material-to-learning loop.
+The official product-development stage is now **Product Alpha — Phase 1:
+Single-user Core Loop Alpha**. Foundation Convergence is complete.
 
 ## Confirmed project decisions
 
@@ -30,6 +32,6 @@ with the single-user material-to-learning loop.
 
 ## Next transition
 
-Finish Content Package v2 and its three-repository delivery. The next feature
-slice then belongs to Phase 1, Single-user Core Loop Alpha. Repository work must
-be selected from that outcome rather than from an unprioritized feature list.
+Select the first deliverable vertical slice from Phase 1, Single-user Core Loop
+Alpha. Repository work must start from the simple material-to-learning journey
+and its smallest stable boundary rather than from an unprioritized feature list.

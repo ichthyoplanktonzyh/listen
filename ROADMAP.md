@@ -10,17 +10,18 @@ The roadmap is deliberately outcome-based. A phase is complete when its exit
 conditions hold across the relevant repositories, not when a predetermined
 feature list or date is exhausted.
 
-## Current stage: Foundation Convergence — Closing
+## Completed stage: Foundation Convergence
 
 The project is no longer an exploratory prototype: its product semantics,
 bounded contexts, repository ownership, learner journeys, development model,
 and principal contracts are established. It is not yet a product Beta because
 the material-centered single-user loop has not been integrated end to end.
 
-Content Package v2 is the final active foundation slice. Its closeout must prove
-the material-centered contract, bounded Core inspection and pure Installation
-Plan, deterministic Gen production, both embedded and referenced media
-delivery, unchanged v1 behavior, and the agreed documentation authority.
+Content Package v2 completed the final foundation slice through Core #125,
+Gen #8, and App #107. It proved the material-centered contract, bounded Core
+inspection and pure Installation Plan, deterministic Gen production, embedded
+and referenced-media delivery, unchanged v1 behavior, and the agreed
+documentation authority.
 
 Exit conditions:
 
@@ -32,9 +33,9 @@ Exit conditions:
   package lifecycle;
 - the Supervisor / replaceable Worker delivery process is operational.
 
-After this phase, the project enters **Product Alpha**.
+These exit conditions are met. The project has entered **Product Alpha**.
 
-## Phase 1: Single-user Core Loop Alpha
+## Phase 1: Single-user Core Loop Alpha — active
 
 Deliver one reliable, simple, single-device journey across every material entry
 path: import or discover a material, use it immediately, enrich it when useful,
