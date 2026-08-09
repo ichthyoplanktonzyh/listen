@@ -16,6 +16,7 @@ fn register_test_media(services: &AppServices) -> domain::MediaItem {
             title: "Test Video".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .expect("register media should succeed")
 }

@@ -84,6 +84,21 @@ hybrid/embedded Gen-to-Core probes prove the contract. Generic Learning
 Material persistence and App acquisition UX remain later product work rather
 than hidden additions to this completed seam.
 
+### Product Alpha Phase 1 — active
+
+The canonical project roadmap is now in Product Alpha Phase 1, Single-user Core
+Loop Alpha. Core starts with the local media-backed material lifecycle in
+[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CONTEXT.md):
+registration needed for progress/resources becomes independent from explicit
+Personal Library membership. This slice preserves immediate raw-media use,
+migrates existing rows as retained, and never deletes learner-owned state when
+membership is removed. Core `3.1.0`, migration v58 and the App Managed Asset
+Store/explicit-Keep consumer are implemented and locally verified; immutable
+Core release artifacts, the App pin and real-media acceptance remain. Generic
+text material, Source Identity, package
+installation/adoption and RSS/Atom convergence remain subsequent Phase 1
+slices rather than hidden additions.
+
 Published contract `2.0.0` folds the additive local realtime cascade work
 (previously planned as `1.1.0`) together with the R1 whole-media ASR deletion.
 The deletion of published `/v1/transcription/jobs*` is a breaking contract

@@ -865,6 +865,7 @@ mod tests {
             kind: MediaKind::Video,
             duration: Some(TimeMs::new(2_500)),
             availability: MediaAvailability::Available,
+            retained_at_ms: None,
             created_at_ms: 1,
             updated_at_ms: 1,
         };

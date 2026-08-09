@@ -11,6 +11,7 @@ fn phonetic_models_jobs_analyses_and_feedback_round_trip() {
         kind: MediaKind::Audio,
         duration: Some(TimeMs::new(5_000)),
         availability: MediaAvailability::Available,
+        retained_at_ms: None,
         created_at_ms: 1,
         updated_at_ms: 1,
     };

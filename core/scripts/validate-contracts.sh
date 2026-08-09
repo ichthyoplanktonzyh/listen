@@ -219,7 +219,14 @@ for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id
 for (const removedWire of ["chunk_timelines:", "active_chunk_timeline_id:", "ChunkTimeline:", "ChunkTimelineSummary:", "ChunkBoundarySource:", "GenerateChunkTimeline:"]) {
   if (openapi.includes(removedWire)) throw new Error(`removed OpenAPI wire surface ${removedWire} must stay absent`);
 }
-if (!openapi.includes("version: 3.0.0")) throw new Error("OpenAPI must report the current R5 contract 3.0.0");
+if (!openapi.includes("version: 3.1.0")) throw new Error("OpenAPI must report the current material-retention contract 3.1.0");
+if (!openapi.includes("/v1/media/{media_id}/library-membership:")) throw new Error("OpenAPI library-membership path missing");
+if (!client.includes("retainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated retainMedia client method missing");
+if (!client.includes("unretainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated unretainMedia client method missing");
+if (!client.includes("retained_at_ms: number | null;")) throw new Error("generated MediaItem retained_at_ms missing");
+if (!client.includes("retain?: boolean | null;")) throw new Error("generated RegisterMedia retain missing");
+if (!openapi.includes("retained_at_ms:")) throw new Error("OpenAPI MediaItem retained_at_ms missing");
+if (!openapi.includes("retain:")) throw new Error("OpenAPI RegisterMedia retain missing");
 if (routerSource.includes("/v1/transcription/jobs")) throw new Error("removed transcription jobs route must stay absent from the router");
 const implementedPaths = [...new Set([...routerSource.matchAll(/"((?:\/v1\/)[^"]+)"/g)].map(match => match[1]))].sort();
 const documentedPaths = [...new Set([...openapi.matchAll(/^  (\/v1\/[^:]+):/gm)].map(match => match[1]))].sort();

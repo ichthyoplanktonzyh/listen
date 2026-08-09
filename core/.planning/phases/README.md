@@ -15,6 +15,9 @@ Completed phase:
   bounded Core inspection and Installation Plan, explicit Gen production, and a
   credential-free cross-repository round trip.
 
-Active phase: none. Select the next Core phase from the canonical project
-roadmap and an explicit learner journey; do not extend Content Package v2 by
-default.
+Active phase:
+
+- `003-single-user-material-retention`: first Core slice of Product Alpha Phase
+  1. It separates Temporary Material registration from explicit Personal
+  Library membership for the current media-backed journey while preserving
+  existing libraries and learner-owned records.

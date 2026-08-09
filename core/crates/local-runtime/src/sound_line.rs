@@ -806,6 +806,7 @@ mod tests {
                 title: "Sound Line Test".into(),
                 kind: MediaKind::Video,
                 duration_ms: Some(2_000),
+                retain: None,
             })
             .unwrap();
         let track = services

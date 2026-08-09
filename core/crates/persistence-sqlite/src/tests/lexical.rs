@@ -564,6 +564,7 @@ fn services_are_idempotent_and_persist_state() {
         title: "A".into(),
         kind: MediaKind::Video,
         duration_ms: Some(10_000),
+        retain: None,
     };
     let first = services
         .media_analysis()
@@ -1169,6 +1170,7 @@ fn diagnosis_uses_capability_profile_not_legacy_status() {
             title: "Cap".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5000),
+            retain: None,
         })
         .unwrap();
     let track = services
@@ -1264,6 +1266,7 @@ fn diagnosis_treats_unassessed_as_insufficient_not_barrier() {
             title: "Unass".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5000),
+            retain: None,
         })
         .unwrap();
     let track = services

@@ -187,6 +187,12 @@ pub struct RegisterMedia {
     pub title: String,
     pub kind: MediaKind,
     pub duration_ms: Option<u64>,
+    /// Personal Library membership choice. `None` means retained, preserving
+    /// the historical behavior for old clients; `Some(false)` registers
+    /// Temporary Material (readable by media ID but absent from the media
+    /// library projection); `Some(true)` retains it. Existing membership
+    /// evidence is never cleared by a later registration.
+    pub retain: Option<bool>,
 }
 
 #[derive(Debug, Clone)]

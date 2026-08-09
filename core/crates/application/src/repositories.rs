@@ -41,6 +41,16 @@ pub trait MediaRepository: Send + Sync {
         id: &MediaId,
         availability: MediaAvailability,
     ) -> Result<MediaItem, ApplicationError>;
+    /// Changes Personal Library membership for an existing media item.
+    /// Mutates only `retained_at_ms` and `updated_at_ms`; media identity,
+    /// availability, and every learner-owned or resource record stay
+    /// untouched. `None` removes membership, `Some(timestamp)` records it.
+    fn set_library_membership(
+        &self,
+        id: &MediaId,
+        retained_at_ms: Option<u64>,
+        updated_at_ms: u64,
+    ) -> Result<MediaItem, ApplicationError>;
     /// Stores the user's explicit triage judgment for one media; `None`
     /// clears it. Intent rows are durable user data, not derived state.
     fn set_triage_intent(

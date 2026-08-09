@@ -89,7 +89,18 @@ impl MediaAnalysisUseCases {
         require_text(&input.fingerprint, "fingerprint")?;
         let now = now_ms();
         let id = MediaId::from_fingerprint("media", &input.fingerprint);
-        let created_at_ms = self.media.get(&id)?.map_or(now, |m| m.created_at_ms);
+        let existing = self.media.get(&id)?;
+        let created_at_ms = existing.as_ref().map_or(now, |m| m.created_at_ms);
+        // Omitted retain means retained for old-client compatibility.
+        // Membership is set once: existing evidence always survives, and a
+        // retained registration of an unretained item records the new
+        // membership time. Explicit false never clears existing membership.
+        let retain = input.retain.unwrap_or(true);
+        let retained_at_ms = match existing.as_ref().and_then(|m| m.retained_at_ms) {
+            Some(membership) => Some(membership),
+            None if retain => Some(now),
+            None => None,
+        };
         self.media.upsert(&MediaItem {
             id,
             path: input.path,
@@ -98,6 +109,7 @@ impl MediaAnalysisUseCases {
             kind: input.kind,
             duration: input.duration_ms.map(TimeMs::new),
             availability: MediaAvailability::Available,
+            retained_at_ms,
             created_at_ms,
             updated_at_ms: now,
         })
@@ -107,11 +119,46 @@ impl MediaAnalysisUseCases {
         self.media.get(media_id)
     }
 
+    /// Explicit learner intent to add an existing media item to the Personal
+    /// Library. Idempotent: retaining an already-retained item preserves the
+    /// original membership timestamp and changes nothing else.
+    pub fn retain_media(&self, media_id: &MediaId) -> Result<MediaItem, ApplicationError> {
+        let existing = self
+            .media
+            .get(media_id)?
+            .ok_or(ApplicationError::NotFound("media"))?;
+        if existing.retained_at_ms.is_some() {
+            return Ok(existing);
+        }
+        let now = now_ms();
+        self.media.set_library_membership(media_id, Some(now), now)
+    }
+
+    /// Explicit learner intent to remove an existing media item from the
+    /// Personal Library. Unretaining changes membership only: the media stays
+    /// registered and readable, and progress, subtitles, resources,
+    /// vocabulary facts, Personal Expressions, attempts and other learning
+    /// records remain intact. Idempotent: unretaining an already unretained
+    /// item is a no-op.
+    pub fn unretain_media(&self, media_id: &MediaId) -> Result<MediaItem, ApplicationError> {
+        let existing = self
+            .media
+            .get(media_id)?
+            .ok_or(ApplicationError::NotFound("media"))?;
+        if existing.retained_at_ms.is_none() {
+            return Ok(existing);
+        }
+        let now = now_ms();
+        self.media.set_library_membership(media_id, None, now)
+    }
+
     /// Media library read model for triage (Phase 3.5 Slice 5): every
-    /// registered media with the cached content fit of its primary language
+    /// retained media with the cached content fit of its primary language
     /// track, the user's explicit triage intent, and the familiar-material
-    /// mark. Per-media fit failures degrade to `None` instead of failing the
-    /// list — triage only suggests, it never gates (P3/P5 red lines).
+    /// mark. Temporary Material (registered with `retain: false`, or
+    /// unretained) is readable through `read_media` but absent here. Per-media
+    /// fit failures degrade to `None` instead of failing the list — triage
+    /// only suggests, it never gates (P3/P5 red lines).
     pub fn list_media_library(&self) -> Result<Vec<MediaLibraryEntry>, ApplicationError> {
         let intents: HashMap<MediaId, MediaTriageIntent> =
             self.media.list_triage_intents()?.into_iter().collect();
@@ -129,6 +176,7 @@ impl MediaAnalysisUseCases {
         self.media
             .list()?
             .into_iter()
+            .filter(|media| media.retained_at_ms.is_some())
             .map(|media| {
                 let intent = intents.get(&media.id).copied();
                 let familiar_material = familiar.contains(media.id.as_str());

@@ -23,8 +23,10 @@ use super::PersistenceError;
 // candidate/active lifecycle. v57 drops the retired legacy ChunkTimeline
 // storage (`chunk_timeline_runs` and its indexes) created by immutable
 // migration 0013; it removes replaceable analysis storage only and never
-// cascades to learner history.
-pub const MIGRATION_VERSION: u32 = 57;
+// cascades to learner history. v58 adds explicit Personal Library membership
+// evidence (`retained_at_ms`) to every media item and backfills preexisting
+// rows as retained so the library projection survives the upgrade.
+pub const MIGRATION_VERSION: u32 = 58;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -491,6 +493,19 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             "../migrations/0057_drop_chunk_timeline_runs.sql"
         ))?;
         tx.pragma_update(None, "user_version", 57)?;
+        tx.commit()?;
+    }
+    if current < 58 {
+        let tx = connection.unchecked_transaction()?;
+        // Sparse historical regression fixtures (and artificial downgrade
+        // shapes that rebuild the latest schema) may lack `media_items` or
+        // already carry the column; only add and backfill when absent.
+        if table_exists(&tx, "media_items")?
+            && !table_has_column(&tx, "media_items", "retained_at_ms")?
+        {
+            tx.execute_batch(include_str!("../migrations/0058_media_retained_at.sql"))?;
+        }
+        tx.pragma_update(None, "user_version", 58)?;
         tx.commit()?;
     }
     Ok(())

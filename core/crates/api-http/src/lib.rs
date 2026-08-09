@@ -51,11 +51,17 @@ pub use secret_store_keychain::KeychainSecretStore;
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub const API_VERSION: u16 = 1;
-/// R5 breaking contract: removes the published `/v1/*chunk-timelines*`
-/// operations and the retired ChunkTimeline LLTimeline fields. The App's
-/// immutable R4 baseline pins the previously published `2.1.0` release
-/// (`v0.7.0-split.4`); `3.0.0` is the current unreleased contract.
-pub const CONTRACT_VERSION: &str = "3.0.0";
+/// Contract `3.1.0` adds the material-retention surface on top of the R5
+/// breaking `3.0.0` (which removed the published `/v1/*chunk-timelines*`
+/// operations and the retired ChunkTimeline LLTimeline fields). The minor
+/// bump is additive and backward-compatible: `RegisterMedia.retain` is
+/// optional with omitted meaning retained, `MediaItem.retained_at_ms` is
+/// required-but-nullable membership evidence, and
+/// `PUT/DELETE /v1/media/{media_id}/library-membership` retain/unretain an
+/// existing item idempotently. The App's immutable R4 baseline pins the
+/// previously published `2.1.0` release (`v0.7.0-split.4`); `3.1.0` is the
+/// current unreleased contract.
+pub const CONTRACT_VERSION: &str = "3.1.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))

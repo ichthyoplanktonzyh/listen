@@ -28,9 +28,11 @@ fn openapi_operations_match_implemented_routes() {
 fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
-    // API version snapshot — bump intentionally, never accidentally.
+    // Contract version snapshot — bump intentionally, never accidentally.
+    // 3.1.0 adds the material-retention surface on top of the R5 breaking
+    // 3.0.0 as a backward-compatible minor.
     assert!(
-        openapi.contains("version: 3.0.0"),
+        openapi.contains("version: 3.1.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 

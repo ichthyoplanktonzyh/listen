@@ -467,6 +467,7 @@ fn failed_review_records_context_evidence_and_hunting_candidate_without_status_c
             title: "Review evidence".into(),
             kind: MediaKind::Video,
             duration_ms: Some(5_000),
+            retain: None,
         })
         .unwrap();
     let track = services
@@ -705,6 +706,7 @@ fn hunting_occurrences_use_media_corpus_and_three_way_checks_keep_not_noticed_ev
             title: "Hunting media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
+            retain: None,
         })
         .unwrap();
     let track = services

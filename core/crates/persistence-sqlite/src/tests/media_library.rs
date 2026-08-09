@@ -1,4 +1,4 @@
-use application::ApplicationError;
+use application::{ApplicationError, PlaybackProgressRepository, RegisterMedia};
 
 use super::*;
 
@@ -26,6 +26,9 @@ fn media(id: &str, updated_at_ms: u64) -> MediaItem {
         kind: MediaKind::Video,
         duration: Some(TimeMs::new(1_000)),
         availability: MediaAvailability::Available,
+        // Pre-migration rows are retained with their creation time, exactly
+        // like the v58 backfill, so the library projection covers them.
+        retained_at_ms: Some(1),
         created_at_ms: 1,
         updated_at_ms,
     }
@@ -141,4 +144,356 @@ fn set_media_triage_intent_validates_media_and_returns_entry() {
         .set_media_triage_intent(&item.id, None)
         .unwrap();
     assert_eq!(cleared.triage_intent, None);
+}
+
+fn register(services: &AppServices, fingerprint: &str, retain: Option<bool>) -> MediaItem {
+    services
+        .media_analysis()
+        .register_media(RegisterMedia {
+            path: format!("/tmp/{fingerprint}.mp4"),
+            fingerprint: fingerprint.to_owned(),
+            title: fingerprint.to_owned(),
+            kind: MediaKind::Video,
+            duration_ms: Some(10_000),
+            retain,
+        })
+        .unwrap()
+}
+
+fn library_ids(services: &AppServices) -> Vec<MediaId> {
+    services
+        .media_analysis()
+        .list_media_library()
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.media.id)
+        .collect()
+}
+
+#[test]
+fn explicit_temporary_registration_is_readable_but_absent_from_library() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "temporary-media", Some(false));
+
+    // Readable by media ID, with no membership evidence...
+    let fetched = repo.get(&item.id).unwrap().expect("media exists");
+    assert_eq!(fetched.id, item.id);
+    assert_eq!(fetched.retained_at_ms, None);
+    // ...but absent from the Personal Library projection.
+    assert!(!library_ids(&services).contains(&item.id));
+    assert!(
+        services
+            .media_analysis()
+            .list_media_library()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn registration_retain_defaults_to_retained_for_old_clients() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "legacy-media", None);
+    assert!(item.retained_at_ms.is_some());
+    assert!(library_ids(&services).contains(&item.id));
+}
+
+#[test]
+fn explicit_true_registration_retains_immediately() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "kept-media", Some(true));
+    assert!(item.retained_at_ms.is_some());
+    assert!(library_ids(&services).contains(&item.id));
+}
+
+#[test]
+fn repeated_registration_never_clears_existing_membership() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "re-register-media", Some(false));
+    let retained = services.media_analysis().retain_media(&item.id).unwrap();
+    let membership = retained.retained_at_ms.expect("membership time");
+
+    // A later registration with explicit `retain: false` over the same
+    // fingerprint must not silently unretain the item.
+    let re_registered = register(&services, "re-register-media", Some(false));
+    assert_eq!(re_registered.retained_at_ms, Some(membership));
+    assert!(library_ids(&services).contains(&item.id));
+}
+
+#[test]
+fn reregistering_at_a_managed_path_preserves_identity_learning_state_and_membership() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let original = register(&services, "managed-rebind-media", Some(false));
+    PlaybackProgressRepository::save(repo.as_ref(), &original.id, TimeMs::new(4_200)).unwrap();
+
+    // Managed Asset Store rebinding presents the same fingerprint at a new
+    // path and a learner-facing title. It must update those mutable binding
+    // facts while retaining the fingerprint-derived media ID and every record
+    // owned by that ID.
+    let rebound = services
+        .media_analysis()
+        .register_media(RegisterMedia {
+            path: "/managed-assets/sha256-managed-rebind-media.mp3".into(),
+            fingerprint: "managed-rebind-media".into(),
+            title: "Original learner title".into(),
+            kind: MediaKind::Audio,
+            duration_ms: Some(10_000),
+            retain: Some(true),
+        })
+        .unwrap();
+
+    assert_eq!(rebound.id, original.id);
+    assert_eq!(
+        rebound.path,
+        "/managed-assets/sha256-managed-rebind-media.mp3"
+    );
+    assert_eq!(rebound.title, "Original learner title");
+    assert!(rebound.retained_at_ms.is_some());
+    assert_eq!(
+        services
+            .media_analysis()
+            .read_progress(&original.id)
+            .unwrap(),
+        Some(TimeMs::new(4_200)),
+        "re-registering a managed binding must not lose learning state"
+    );
+}
+
+#[test]
+fn retain_media_is_idempotent_and_preserves_original_timestamp() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "retain-twice-media", Some(false));
+    let first = services.media_analysis().retain_media(&item.id).unwrap();
+    let membership = first.retained_at_ms.expect("membership time");
+    assert!(library_ids(&services).contains(&item.id));
+
+    let second = services.media_analysis().retain_media(&item.id).unwrap();
+    assert_eq!(
+        second.retained_at_ms,
+        Some(membership),
+        "repeated retention preserves the original membership time"
+    );
+    // The library contains the item exactly once.
+    assert_eq!(
+        library_ids(&services)
+            .iter()
+            .filter(|id| **id == item.id)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn unretain_removes_membership_only_and_is_idempotent() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "unretain-media", Some(false));
+    let retained = services.media_analysis().retain_media(&item.id).unwrap();
+    let updated_at_after_retain = retained.updated_at_ms;
+
+    let unretained = services.media_analysis().unretain_media(&item.id).unwrap();
+    assert_eq!(unretained.retained_at_ms, None);
+    assert!(unretained.updated_at_ms >= updated_at_after_retain);
+    assert!(!library_ids(&services).contains(&item.id));
+    // The media itself stays registered and readable.
+    assert_eq!(repo.get(&item.id).unwrap().unwrap().id, item.id);
+
+    // Unretaining again is a no-op.
+    let again = services.media_analysis().unretain_media(&item.id).unwrap();
+    assert_eq!(again.retained_at_ms, None);
+    assert!(!library_ids(&services).contains(&item.id));
+}
+
+#[test]
+fn put_after_delete_obtains_a_new_membership_timestamp() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "cycle-media", Some(false));
+    let first = services.media_analysis().retain_media(&item.id).unwrap();
+    let first_membership = first.retained_at_ms.expect("membership time");
+
+    services.media_analysis().unretain_media(&item.id).unwrap();
+    assert!(!library_ids(&services).contains(&item.id));
+
+    // Guarantee the clock advances so the re-stamp is observably fresh.
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    let second = services.media_analysis().retain_media(&item.id).unwrap();
+    let second_membership = second.retained_at_ms.expect("membership time");
+    assert!(
+        second_membership > first_membership,
+        "PUT after DELETE must obtain a fresh membership timestamp"
+    );
+    assert!(library_ids(&services).contains(&item.id));
+}
+
+#[test]
+fn membership_operations_on_unknown_media_are_not_found() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let missing = MediaId::parse("missing-membership-media").unwrap();
+    assert!(matches!(
+        services.media_analysis().retain_media(&missing),
+        Err(ApplicationError::NotFound("media"))
+    ));
+    assert!(matches!(
+        services.media_analysis().unretain_media(&missing),
+        Err(ApplicationError::NotFound("media"))
+    ));
+}
+
+#[test]
+fn unretain_preserves_progress_subtitles_and_learner_owned_state() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let services = library_services(&repo);
+    let item = register(&services, "state-preserving-media", Some(true));
+
+    // Learner-owned state attached before unretaining: playback progress, a
+    // subtitle track (subtitle/resource representative), and a learner fact.
+    PlaybackProgressRepository::save(repo.as_ref(), &item.id, TimeMs::new(4_200)).unwrap();
+    let track = SubtitleTrack {
+        id: SubtitleTrackId::from_fingerprint("track", "state-preserving"),
+        media_id: item.id.clone(),
+        fingerprint: "state-preserving-track".into(),
+        language: Some(LanguageCode::parse("en").unwrap()),
+        source: "test".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: vec![SubtitleSentence {
+            id: SubtitleSentenceId::from_fingerprint("sentence", "state-preserving"),
+            index: 0,
+            start: TimeMs::new(0),
+            end: TimeMs::new(5_000),
+            original_text: "Hello".into(),
+            display_text: "Hello".into(),
+            tokens: vec![SubtitleToken {
+                index: 0,
+                kind: SubtitleTokenKind::Word,
+                text: "Hello".into(),
+                normalized: Some("hello".into()),
+                start_char: 0,
+                end_char: 5,
+            }],
+        }],
+    };
+    repo.save_track(&track).unwrap();
+    LearningEventRepository::append_learning_event(
+        repo.as_ref(),
+        &LearningEvent {
+            id: LearningEventId::from_fingerprint("learning-event", "state-preserving"),
+            occurred_at_ms: 42,
+            kind: LearningEventKind::FamiliarMaterialMarked,
+            subject: LearningEventSubject {
+                kind: LearningEventSubjectKind::Media,
+                id: item.id.as_str().to_owned(),
+            },
+            payload: serde_json::json!({}),
+            session_id: None,
+        },
+    )
+    .unwrap();
+
+    services.media_analysis().unretain_media(&item.id).unwrap();
+
+    // Progress survives unretaining.
+    assert_eq!(
+        services.media_analysis().read_progress(&item.id).unwrap(),
+        Some(TimeMs::new(4_200))
+    );
+    // The subtitle track representative survives and stays available.
+    assert_eq!(repo.get_track(&track.id).unwrap(), Some(track.clone()));
+    // The learner-owned fact survives.
+    assert_eq!(
+        repo.list_event_subject_ids(
+            LearningEventKind::FamiliarMaterialMarked,
+            LearningEventSubjectKind::Media,
+        )
+        .unwrap(),
+        vec![item.id.as_str().to_owned()]
+    );
+    // Media identity itself is untouched.
+    let fetched = repo.get(&item.id).unwrap().unwrap();
+    assert_eq!(fetched.id, item.id);
+    assert_eq!(fetched.path, item.path);
+    assert_eq!(fetched.availability, item.availability);
+    assert_eq!(fetched.retained_at_ms, None);
+}
+
+#[test]
+fn membership_mutation_changes_only_retained_and_updated_columns() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let item = MediaRepository::upsert(
+        repo.as_ref(),
+        &MediaItem {
+            id: MediaId::parse("column-proof-media").unwrap(),
+            path: "/tmp/column-proof.mp4".into(),
+            fingerprint: "column-proof-fp".into(),
+            title: "Column proof".into(),
+            kind: MediaKind::Audio,
+            duration: Some(TimeMs::new(9_000)),
+            availability: MediaAvailability::Available,
+            retained_at_ms: None,
+            created_at_ms: 7,
+            updated_at_ms: 8,
+        },
+    )
+    .unwrap();
+    let before = media_row(&repo, &item.id);
+    let updated =
+        MediaRepository::set_library_membership(repo.as_ref(), &item.id, Some(123_456), 9).unwrap();
+    let after = media_row(&repo, &item.id);
+
+    // Only `retained_at_ms` and `updated_at_ms` change; every other column is
+    // byte-identical before and after the membership mutation.
+    let mut expected_after = before.clone();
+    expected_after["updated_at_ms"] = serde_json::json!(9);
+    expected_after["retained_at_ms"] = serde_json::json!(123_456);
+    assert_eq!(after, expected_after);
+    assert_eq!(updated.retained_at_ms, Some(123_456));
+
+    // Clearing membership changes the same two columns only.
+    let cleared =
+        MediaRepository::set_library_membership(repo.as_ref(), &item.id, None, 10).unwrap();
+    assert_eq!(cleared.retained_at_ms, None);
+    assert_eq!(cleared.updated_at_ms, 10);
+    let row: (Option<u64>, u64) = {
+        let conn = repo.connection.lock();
+        conn.query_row(
+            "SELECT retained_at_ms, updated_at_ms FROM media_items WHERE id=?1",
+            [item.id.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap()
+    };
+    assert_eq!(row, (None, 10));
+}
+
+/// `media_items` row as a JSON object, in SELECT order. Used to prove that a
+/// membership mutation changes exactly `retained_at_ms` and `updated_at_ms`.
+fn media_row(repo: &SqliteRepository, id: &MediaId) -> serde_json::Value {
+    let conn = repo.connection.lock();
+    conn.query_row(
+        "SELECT id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,availability,retained_at_ms
+         FROM media_items WHERE id=?1",
+        [id.as_str()],
+        |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "path": row.get::<_, String>(1)?,
+                "fingerprint": row.get::<_, String>(2)?,
+                "title": row.get::<_, String>(3)?,
+                "kind": row.get::<_, String>(4)?,
+                "duration_ms": row.get::<_, Option<u64>>(5)?,
+                "created_at_ms": row.get::<_, u64>(6)?,
+                "updated_at_ms": row.get::<_, u64>(7)?,
+                "availability": row.get::<_, String>(8)?,
+                "retained_at_ms": row.get::<_, Option<u64>>(9)?,
+            }))
+        },
+    )
+    .unwrap()
 }
