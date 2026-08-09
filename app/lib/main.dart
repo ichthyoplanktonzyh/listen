@@ -455,6 +455,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     settings: settingsController,
     extensiveListening: extensiveListeningController,
     repository: coreRepositories.mediaLibrary,
+    materialRepository: coreRepositories.learningMaterial,
   );
   late final mediaLibraryScan = MediaLibraryScanController(
     scanner: MediaLibraryScanner(
