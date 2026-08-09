@@ -8,8 +8,8 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `3.0.0` (R5 breaking, unreleased; the App R4 baseline pins
-  the previously published `2.1.0` from `v0.7.0-split.4`)
+- Contract version: `3.0.0` (R5 breaking; verified and pinned locally by App,
+  with no Core GitHub release/tag required by owner direction)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
@@ -111,14 +111,16 @@ resources, checks exact producer identities, consumes Word Acoustics into the
 timeline artifact, leaves all imported analyses as candidates, and confirms no
 active Word, Phone or legacy Chunk Timeline.
 
-R5 is complete. Core PR (this branch, merge to be recorded) deleted
+R5 is complete. Core PR
+[#123](https://github.com/ichthyoplanktonzyh/listen-core/pull/123)
+(merge `105568ed`) deleted
 `scripts/timeline-production`, the legacy `ChunkTimeline` domain and
 persistence, the LLTimeline chunk fields, and the eight
 `/v1/*chunk-timelines*` HTTP operations with their OpenAPI schemas and
 generated-client identity. Removing published operations and LLTimeline
-fields is breaking, so the current contract is `3.0.0` (unreleased); the App
-R4 baseline stays pinned to the previously published `2.1.0` until the R5
-release is published. Corpus chunk occurrences now project from the
+fields is breaking, so the current contract is `3.0.0`; its locally assembled
+contract/runtime archives were hash-verified and App pins those identities
+without a Core GitHub release URL. Corpus chunk occurrences now project from the
 active Prosody Analysis (the sole prosodic-chunk semantic source); Sense Group
 stays independent; content-package import stays candidate-only and foundation
 preparation never regenerates a chunk representation. Historical migration
@@ -129,8 +131,10 @@ realtime and SoundLine paths; only inputs exclusive to the retired
 whole-media production path were removed. Gen PR
 [#7](https://github.com/ichthyoplanktonzyh/listen-gen/pull/7) (tool `0.4.0`)
 binds the release manifest to a strict verifier-checked runtime/toolchain
-identity, which the App records immutably with the pin; the real model-free
-six-resource round trip passes against the pinned stack.
+identity and published immutable `v0.4.0` from merge `a660946a`. App PR
+[listen-app#106](https://github.com/ichthyoplanktonzyh/listen-app/pull/106)
+(merge `5dcf6ae`) records the final Core/Gen identities; the real model-free
+six-resource round trip passes against that pinned stack.
 
 Execution is synchronized by Core #111, Gen #4 and App #100. Core #103 was
 closed as superseded because it kept whole-media ASR orchestration in Core.
@@ -153,10 +157,10 @@ not code evidence.
 
 ## Next
 
-1. Retain Gen `42649d9f` / tool `0.3.0` and Core `b0b0dc81` / contract `2.1.0`
-   / runtime `0.7.0` as the immutable App R4 baseline; the App R5 slice pins
-   the new Gen `0.4.0` release and the R5 Core commit with the verified
-   runtime identity.
+1. Retain `v0.7.0-split.4` as the immutable R4 baseline. App R5 now pins Gen
+   merge `a660946a` / tool `0.4.0` and Core merge `105568ed` / contract
+   `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
+   exact SHA-256, while Gen `v0.4.0` is published immutably.
 2. Define Content Edition, Media Rendition, Timeline Compatibility, and the
    Package Listing/Release interface before a hosted catalog journey.
 3. Split core issue #80 into a production-model slice followed by an
