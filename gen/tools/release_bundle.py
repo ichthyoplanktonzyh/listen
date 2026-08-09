@@ -58,6 +58,17 @@ EXPECTED_LOCK = {
     "package_schema": "listen.resource-package.v1",
     "resource_schema_id": "https://listen.dev/contracts/content-package/v1/resource.schema.json",
     "schema_version": 1,
+    "v2": {
+        "authority": {
+            "path": "contracts/content-package/v2",
+            "repository": "ichthyoplanktonzyh/listen-core",
+        },
+        "package_schema": "listen.content-package.release.v2",
+        "release_schema_id": "https://listen.dev/contracts/content-package/v2/release.schema.json",
+        "delivery_schema_id": "https://listen.dev/contracts/content-package/v2/delivery.schema.json",
+        "resource_schema_id": "https://listen.dev/contracts/content-package/v2/resource.schema.json",
+        "schema_version": 2,
+    },
 }
 
 # The release binds to an explicit runtime/toolchain identity that the

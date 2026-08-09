@@ -179,6 +179,7 @@ MACHINE_ERROR_MESSAGES: dict[str, str] = {
     "provider_timeout": "The transcription provider timed out.",
     "provider_failed": "The transcription provider failed.",
     "provider_output_invalid": "The transcription provider returned an invalid result.",
+    "language_mismatch": "The transcription result language does not agree with the requested target language.",
     "package_validation_failed": "Generated resources did not pass package validation.",
     "package_write_failed": "The learning package could not be written.",
     "internal_error": "Generation failed because of an internal error.",
@@ -247,6 +248,9 @@ class MachineEventEmitter:
         warnings: list[str],
         alignment: dict[str, object] | None = None,
         rich_resources: dict[str, object] | None = None,
+        package_version: int | None = None,
+        release_id: str | None = None,
+        delivery_profile: str | None = None,
     ) -> None:
         payload: dict[str, object] = dict(
             package_sha256=package_sha256,
@@ -258,6 +262,15 @@ class MachineEventEmitter:
             payload["alignment"] = alignment
         if rich_resources is not None:
             payload["rich_resources"] = rich_resources
+        # Additive v2 carrier facts, following the same additive-field rule as
+        # ``alignment``/``rich_resources``: consumers that do not understand
+        # them must ignore them.
+        if package_version is not None:
+            payload["package_version"] = package_version
+        if release_id is not None:
+            payload["release_id"] = release_id
+        if delivery_profile is not None:
+            payload["delivery_profile"] = delivery_profile
         self._emit("completed", **payload)
 
     def failed(self, *, code: str, message: str) -> None:
@@ -404,6 +417,10 @@ def _classify_error(error: BaseException) -> str:
         return "provider_output_invalid"
     if message.startswith("/") or "asr segment" in message:
         return "provider_output_invalid"
+    if "does not agree with target-language" in message:
+        return "language_mismatch"
+    if "does not accept v2 release specification flags" in message:
+        return "invalid_arguments"
     argument_hints = (
         "is required for the",
         "must be non-empty",

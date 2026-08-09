@@ -26,6 +26,7 @@ from .alignment import (
 )
 from .media import FfmpegAudioPreprocessor
 from .package import ConversionError, package_from_lltimeline
+from .package_v2 import ReleaseSpec, read_v2_details
 from .phone import (
     CommandPhoneAdapter,
     FixturePhoneAdapter,
@@ -292,6 +293,45 @@ def parser(
     native.add_argument("--duration-ms", required=True, type=int)
     native.add_argument("--created-at-ms", required=True, type=int)
     native.add_argument(
+        "--package-version",
+        type=int,
+        choices=[1, 2],
+        default=1,
+        help="Content Package contract version (default 1; v2 requires the release spec flags below)",
+    )
+    native.add_argument(
+        "--edition-id",
+        help="v2 caller-owned edition identifier (required with --package-version 2)",
+    )
+    native.add_argument(
+        "--material-id",
+        help="v2 caller-owned material identifier (required with --package-version 2)",
+    )
+    native.add_argument(
+        "--material-revision-id",
+        help="v2 caller-owned material revision identifier (required with --package-version 2)",
+    )
+    native.add_argument(
+        "--target-language",
+        help="v2 target language tag; must agree with the generated transcript (required with --package-version 2)",
+    )
+    native.add_argument(
+        "--support-language",
+        action="append",
+        default=[],
+        help="v2 support language tag; repeatable and empty is valid",
+    )
+    native.add_argument(
+        "--media-delivery",
+        choices=["referenced", "embedded"],
+        default=None,
+        help="v2 media carrier choice; referenced is the default (embedded includes the exact media bytes)",
+    )
+    native.add_argument(
+        "--media-type",
+        help="v2 caller-owned rendition media type, e.g. audio/wav; must agree with --media-kind (required with --package-version 2)",
+    )
+    native.add_argument(
         "--machine-events",
         action="store_true",
         help="write the machine-event protocol as NDJSON to stdout",
@@ -318,6 +358,7 @@ def _run(
             writer.phase(phase)
 
     if args.package_command == "from-media":
+        release_spec = _release_spec(args)
         if args.provider == "fixture":
             if args.fixture is None:
                 raise ConversionError("--fixture is required for the fixture provider")
@@ -390,8 +431,50 @@ def _run(
             phone_analyzer=phone_analyzer,
             phone_preprocessor=phone_preprocessor,
             phone_audio_stream_index=args.audio_stream_index,
+            package_version=args.package_version,
+            release_spec=release_spec,
         )
     return package_from_lltimeline(args.input, args.output)
+
+
+def _release_spec(args: argparse.Namespace) -> ReleaseSpec | None:
+    """Resolve the v2 release specification or reject v2 flags under v1.
+
+    ``--package-version 2`` requires the caller-owned semantic inputs; every
+    missing or malformed value raises a stable :class:`ConversionError` so the
+    machine protocol can classify it honestly. Under v1 the v2-only flags are
+    rejected instead of silently ignored.
+    """
+    if args.package_version == 2:
+        return ReleaseSpec(
+            edition_id=args.edition_id,
+            title=args.title,
+            material_id=args.material_id,
+            material_revision_id=args.material_revision_id,
+            target_language=args.target_language,
+            media_type=args.media_type,
+            support_languages=tuple(args.support_language),
+            media_delivery=args.media_delivery or "referenced",
+        )
+    used = [
+        name
+        for name, value in (
+            ("--edition-id", args.edition_id),
+            ("--material-id", args.material_id),
+            ("--material-revision-id", args.material_revision_id),
+            ("--target-language", args.target_language),
+            ("--media-delivery", args.media_delivery),
+            ("--media-type", args.media_type),
+        )
+        if value is not None
+    ]
+    if args.support_language:
+        used.append("--support-language")
+    if used:
+        raise ConversionError(
+            "package version 1 does not accept v2 release specification flags"
+        )
+    return None
 
 
 def _build_aligner(
@@ -591,13 +674,24 @@ def _build_phone(
     return adapter, preprocessor
 
 
-def _completed_details(package_path: Path) -> tuple[str, str, list[dict[str, object]]]:
-    """Read the final package for the completed event, without guessing."""
+def _completed_details(package_path: Path) -> dict[str, object]:
+    """Read the final package for the completed event, without guessing.
+
+    The v1 carrier is read from ``manifest.json``; the v2 carrier is read from
+    ``release.json`` and ``delivery.json``. In v2 the media fingerprint is the
+    rendition media blob digest (the exact original media SHA-256) and the
+    resources come from the release document in release order.
+    """
     digest = hashlib.sha256()
     with package_path.open("rb") as package:
         for chunk in iter(lambda: package.read(1024 * 1024), b""):
             digest.update(chunk)
+    package_sha256 = f"sha256:{digest.hexdigest()}"
     with zipfile.ZipFile(package_path) as archive:
+        if "release.json" in archive.namelist():
+            details = read_v2_details(package_path)
+            details["package_sha256"] = package_sha256
+            return details
         manifest = json.loads(archive.read("manifest.json"))
         resources: list[dict[str, object]] = []
         for entry in manifest["resources"]:
@@ -609,11 +703,11 @@ def _completed_details(package_path: Path) -> tuple[str, str, list[dict[str, obj
                     "review_status": document["quality"]["review_status"],
                 }
             )
-    return (
-        f"sha256:{digest.hexdigest()}",
-        manifest["content_document"]["media_fingerprint"],
-        resources,
-    )
+    return {
+        "package_sha256": package_sha256,
+        "media_fingerprint": manifest["content_document"]["media_fingerprint"],
+        "resources": resources,
+    }
 
 
 def _create_machine_staging_path(output_path: Path) -> Path:
@@ -644,9 +738,7 @@ def _main_machine(
                 machine_args = argparse.Namespace(**vars(args))
                 machine_args.output = staging_path
                 result = _run(machine_args, state, writer)
-                package_sha256, media_fingerprint, resources = _completed_details(
-                    staging_path
-                )
+                details = _completed_details(staging_path)
                 if (
                     os.environ.get("LISTEN_GEN_TEST_PAUSE_BEFORE_TERMINAL_COMMIT")
                     == "1"
@@ -663,12 +755,18 @@ def _main_machine(
                 with _terminal_commit(state):
                     os.replace(staging_path, args.output)
                     writer.completed(
-                        package_sha256=package_sha256,
-                        media_fingerprint=media_fingerprint,
-                        resources=resources,
+                        package_sha256=details["package_sha256"],
+                        media_fingerprint=details["media_fingerprint"],
+                        resources=details["resources"],
                         warnings=result["warnings"],
                         alignment=result.get("alignment"),
                         rich_resources=result.get("rich_resources"),
+                        # Only the v2 carrier adds these fields; for v1 the
+                        # missing keys resolve to None and are omitted by the
+                        # emitter, keeping the default v1 event shape intact.
+                        package_version=details.get("package_version"),
+                        release_id=details.get("release_id"),
+                        delivery_profile=details.get("delivery_profile"),
                     )
                 return 0
             finally:

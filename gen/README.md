@@ -1,8 +1,19 @@
 # listen-gen
 
-`listen-gen` is the heavy, replaceable production side of Listen. Its stable
-output is a content package consumed by `listen-core`; model runtimes and raw
-provider payloads are not part of that interface.
+`listen-gen` is Listen's replaceable content-production toolkit and is intended
+to become the ecosystem's open producer. Its stable output is a Content Package
+consumed by `listen-core`; model runtimes and raw provider payloads are not part
+of that interface.
+
+The repository does not yet contain an open-source license grant. Until the
+owner selects and adds one, public source availability must not be described as
+open-source permission.
+
+Shared product semantics, language, context ownership, learner journeys,
+development policy, and the project roadmap are canonical in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
+This repository's [CONTEXT.md](CONTEXT.md) defines only production-specific
+terms, while `contracts.lock.json` identifies the package contract it consumes.
 
 The production entry point transcribes media behind a provider-neutral ASR
 adapter. It always writes a native v1 `subtitle_text_track` resource; a
@@ -20,6 +31,37 @@ python -m listen_gen package from-media input.wav \
   --title "Lesson" --media-kind audio --duration-ms 2200 \
   --created-at-ms 1785542400000 --output lesson.listenpkg
 ```
+
+The command above keeps producing Content Package v1 by default. Select v2
+explicitly when the caller can provide the material and edition identity that
+Gen must not guess:
+
+```bash
+python -m listen_gen package from-media input.wav \
+  --provider fixture --fixture normalized-asr.json \
+  --title "Lesson" --media-kind audio --media-type audio/wav \
+  --duration-ms 2200 --created-at-ms 1785542400000 \
+  --package-version 2 \
+  --edition-id edition.lesson.en \
+  --material-id material.lesson \
+  --material-revision-id material.lesson.rev1 \
+  --target-language en-US \
+  --output lesson-v2.listenpkg
+```
+
+V2 emits one immutable Learning Edition release for one exact Material
+Revision. `--edition-id`, `--material-id`, `--material-revision-id`,
+`--target-language`, and the parameter-free `--media-type` are required;
+`--support-language` is repeatable. The transcript language must agree with
+the target language, and the media type must agree with `--media-kind`.
+
+The default v2 media delivery is `referenced`: the package contains the
+generated learning-data blobs and the exact original-media fingerprint, but
+not the media bytes. Use `--media-delivery embedded` to stream the exact media
+bytes into the carrier as well. Both forms have the same release semantics;
+the carrier's delivery profile reports whether every referenced blob is
+present. Local paths, provider output, learner state, installation state, and
+adoption state are never serialized.
 
 `normalized-asr.json` is the provider-neutral boundary: it contains timed
 segments and word character spans, plus versioned provider/model provenance.
