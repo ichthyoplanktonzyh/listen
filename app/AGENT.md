@@ -129,7 +129,10 @@ LISTEN_GEN_REPO=/absolute/path/to/listen-gen \
 
 会主动指向你的只有这几份：
 
-- `CONTEXT.md` — 领域词汇表（Content Source / Edition / Rendition 等）
+- `CONTEXT.md` — App 自己拥有的交互词汇；跨仓产品语义、共享词汇和上下文映射
+  以 `listen-core` 中 owner-approved 的 `PRODUCT.md`、`CONTEXT.md`、
+  `CONTEXT-MAP.md` 为准。`backend.lock.json` 只锁定运行时行为，不兼任产品语义版本
+- `ECOSYSTEM.md` — 只提供上述权威文档的导航，不复制产品定义
 - `docs/development/` — 实操手册
 
 `.planning/` 下的 phase、roadmap、handoff，以及 `docs/decisions/` 里的 ADR，是**历史记录**：
