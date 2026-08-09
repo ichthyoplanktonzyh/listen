@@ -2,11 +2,13 @@
 
 Formal macOS Apple Silicon desktop client using Flutter and fvp/libmdk.
 
-Listen's canonical product semantics and cross-repository context are maintained
-in `listen-core` at `PRODUCT.md`, `CONTEXT.md`, and `CONTEXT-MAP.md`. This
-repository's [CONTEXT.md](CONTEXT.md) defines only App-owned interaction terms.
-The product-semantic baseline is independent of the runtime behavior and
-compatibility pinned by `backend.lock.json`.
+Listen's canonical product semantics, shared language, context map, learner
+journeys, development policy, and project roadmap are maintained in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
+This repository's [CONTEXT.md](CONTEXT.md) defines only App-owned interaction
+terms; [JOURNEYS.md](JOURNEYS.md) is retained as a compatibility pointer.
+Project documentation is independent of the runtime behavior and compatibility
+pinned by `backend.lock.json`.
 
 The UI repository is independently versioned from `listen-core`. Its exact API
 contract and backend runtime are pinned in `backend.lock.json`; no sibling

@@ -1,9 +1,9 @@
 # Listen App Context
 
-The canonical product purpose, cross-repository glossary, and context map live
-in `listen-core` at `PRODUCT.md`, `CONTEXT.md`, and `CONTEXT-MAP.md`. Product
-semantics are an owner-approved documentation baseline; `backend.lock.json`
-independently pins runtime behavior and compatibility.
+Canonical product purpose, shared language, context ownership, and learner
+journeys live in
+[`ichthyoplanktonzyh/listen`](https://github.com/ichthyoplanktonzyh/listen).
+`backend.lock.json` independently pins runtime behavior and compatibility.
 
 This glossary adds only concepts owned by the learner-facing application.
 
@@ -41,6 +41,17 @@ _Avoid_: Download entitlement, Discovery Result
 A candidate relation between a Material Revision or Media Rendition and a
 compatible Package Release.
 _Avoid_: Package Installation, matching title
+
+**Discovery Inbox**:
+The learner-facing stream of Discovery Items collected from Content
+Subscriptions, direct imports, and future community discovery.
+_Avoid_: Personal Library, automatic retention
+
+**Start Learning Intent**:
+The Learner's explicit decision to make one Discovery Item locally usable and
+retain it for learning. The App may orchestrate Material Acquisition, Package
+Installation, and Learning Edition Adoption without exposing those steps.
+_Avoid_: Preview, Package Installation, implicit activation
 
 ## Experience And Capabilities
 
