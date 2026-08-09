@@ -27,6 +27,20 @@
 | `docs/decisions` | append-only ADRs |
 | `.planning` | current core project memory |
 
+Learning Material implementation paths:
+
+- `crates/domain/src/learning_material.rs` owns material, revision and typed
+  asset invariants plus deterministic identities and composition shape;
+- `crates/application/src/learning_material.rs` owns material use cases and the
+  repository contract;
+- `crates/persistence-sqlite/src/learning_material.rs` implements atomic
+  revision/binding/membership persistence;
+- `crates/persistence-sqlite/migrations/0059_learning_materials.sql` creates and
+  backfills the durable graph;
+- `crates/api-http/src/routes/material.rs` adapts the Core 3.2 HTTP surface;
+- `contracts/openapi/v1.yaml` and `contracts/generated/typescript/core-client.ts`
+  are the canonical wire contract and generated identity.
+
 Notable runtime seams:
 
 - `application::BackgroundJobStore` owns durable generic job lifecycle
@@ -81,6 +95,10 @@ Notable runtime seams:
   receipt, exposes validated envelope provenance/review status, represents
   opaque-resource trust facts as unknown, and maps package failures to stable
   redacted error codes.
+- `application::MaterialRepository` is the atomic boundary for Learning
+  Material creation, immutable revision append, current-pointer advancement,
+  media bindings and membership synchronization. HTTP and SQLite do not own
+  material policy.
 
 Paths under `.planning/archive/monorepo-baseline` are historical and never used
 to infer current physical structure.

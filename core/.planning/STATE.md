@@ -8,23 +8,26 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `3.1.0` (additive material-retention contract; implemented
-  and locally verified, pending immutable release and App pin)
+- Contract version: `3.2.0` (additive durable Learning Material lifecycle;
+  implemented and locally verified, pending immutable release)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
 ## Current Work
 
 Product Alpha Phase 1, Single-user Core Loop Alpha, is active in the canonical
-project roadmap. Core's first slice is
-[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CONTEXT.md).
-The verified current App can play raw local media without a subtitle or package.
-Core contract `3.1.0` now separates Temporary Material registration from
-explicit Personal Library membership, migration v58 backfills existing rows as
-retained, and unretaining preserves every learner-owned record. The App side is
-implemented against typed fixtures with temporary open, explicit Keep and a
-Managed Asset Store. Both repositories pass local gates; immutable Core
-artifacts and the App backend pin remain before the real-media round trip.
+project roadmap. Core phase
+[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CLOSEOUT.md)
+is complete and published as `v0.7.0-phase1.1` with contract `3.1.0`.
+
+The active Core slice is
+[`004-durable-learning-material`](phases/004-durable-learning-material/004-CONTEXT.md).
+Contract `3.2.0` adds path-free text, media and mixed Learning Materials,
+immutable revisions, explicit material membership, media-to-material
+resolution, and SQLite v59 backfill. Material membership synchronizes the
+legacy retained-media projection for compatibility. Domain, application,
+persistence, HTTP, OpenAPI and generated-client gates pass locally; immutable
+Core artifacts remain before consumer pinning and the next Phase 1 slice.
 
 ## Completed Foundation
 
@@ -187,16 +190,17 @@ not code evidence.
 
 ## Next
 
-1. Publish the verified `3.1.0` material-retention contract/runtime from a clean
-   commit, update the App backend pin, and run the temporary-open/**keep**
-   real-media journey against the exact artifacts.
+1. Merge the verified `3.2.0` durable Learning Material slice, publish contract
+   and runtime artifacts from a clean commit, and hand exact identities to the
+   consumer.
 2. Retain `v0.7.0-split.4` as the immutable R4 baseline. App R5 now pins Gen
    merge `a660946a` / tool `0.4.0` and Core merge `105568ed` / contract
    `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
    exact SHA-256, while Gen `v0.4.0` is published immutably.
 3. Treat Content Package v2 as the completed release/inspection/producer seam;
-   design generic Learning Material persistence or a hosted catalog journey
-   only from a subsequent product phase and learner journey.
+   durable Learning Material now exists independently, while Package
+   Installation, Learning Edition Adoption and hosted catalog behavior remain
+   later explicit slices.
 4. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.

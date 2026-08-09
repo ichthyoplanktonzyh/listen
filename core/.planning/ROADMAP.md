@@ -87,17 +87,20 @@ than hidden additions to this completed seam.
 ### Product Alpha Phase 1 — active
 
 The canonical project roadmap is now in Product Alpha Phase 1, Single-user Core
-Loop Alpha. Core starts with the local media-backed material lifecycle in
-[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CONTEXT.md):
-registration needed for progress/resources becomes independent from explicit
-Personal Library membership. This slice preserves immediate raw-media use,
-migrates existing rows as retained, and never deletes learner-owned state when
-membership is removed. Core `3.1.0`, migration v58 and the App Managed Asset
-Store/explicit-Keep consumer are implemented and locally verified; immutable
-Core release artifacts, the App pin and real-media acceptance remain. Generic
-text material, Source Identity, package
-installation/adoption and RSS/Atom convergence remain subsequent Phase 1
-slices rather than hidden additions.
+Loop Alpha. Core phase
+[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CLOSEOUT.md)
+is complete: contract `3.1.0`, SQLite v58 and immutable release
+`v0.7.0-phase1.1` separate temporary media registration from explicit Personal
+Library membership without deleting learner-owned state.
+
+The active Core phase is
+[`004-durable-learning-material`](phases/004-durable-learning-material/004-CONTEXT.md).
+It introduces the generic, path-free Learning Material aggregate for text,
+media and mixed compositions; immutable revisions; material membership; and
+media resolution. Contract `3.2.0` and SQLite v59 are implemented and locally
+verified, with immutable release and consumer pinning pending. Source Identity,
+Package Installation, Learning Edition Adoption and RSS/Atom convergence
+remain subsequent Phase 1 slices rather than hidden additions.
 
 Published contract `2.0.0` folds the additive local realtime cascade work
 (previously planned as `1.1.0`) together with the R1 whole-media ASR deletion.
