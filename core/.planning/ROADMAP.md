@@ -49,8 +49,14 @@ Repository separation baseline 已建立：
    实时派生，Sense Group 保持独立；foundation 不再生成 legacy
    `ChunkTimeline` fallback，其重复语义由 R5 退役。由 Core PR
    [#118](https://github.com/ichthyoplanktonzyh/listen-core/pull/118) 合并。
-5. **R4 · Rich resources** — 按依赖顺序生产 Sense Group、Word Acoustics、Prosody
-   Analysis 和可选 Phone Timeline。
+5. **R4 · Rich resources — complete** — Gen PR
+   [#6](https://github.com/ichthyoplanktonzyh/listen-gen/pull/6) 已按依赖顺序生产
+   Sense Group、Word Acoustics、带显式 chunk spans 的 Prosody Analysis 和可选、
+   合格的 audio-backed Phone Timeline；Core PR
+   [#120](https://github.com/ichthyoplanktonzyh/listen-core/pull/120) 完成六资源
+   candidate-only 兼容证据，`v0.7.0-split.4` 发布 contract `2.1.0`，App PR
+   [#105](https://github.com/ichthyoplanktonzyh/listen-app/pull/105) 完成精确 pin 和
+   真实三仓 round trip。
 6. **R5 · Legacy retirement** — 删除 `scripts/timeline-production`、旧 Core/App
    contracts/UI 和只服务旧生产链的 runtime/release inputs。
 
