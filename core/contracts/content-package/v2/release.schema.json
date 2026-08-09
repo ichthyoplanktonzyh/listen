@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/release.schema.json",
+  "title": "Listen Content Package v2 Release",
+  "description": "Canonical release.json identity document. Its canonical serialization is the release identity; the document never contains its own id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "created_at_ms",
+    "edition",
+    "material",
+    "entrypoints",
+    "resources"
+  ],
+  "properties": {
+    "schema": { "const": "listen.content-package.release.v2" },
+    "created_at_ms": { "type": "integer", "minimum": 0 },
+    "edition": { "$ref": "#/$defs/editionIdentity" },
+    "material": { "$ref": "#/$defs/materialIdentity" },
+    "entrypoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entrypoint" },
+      "allOf": [
+        {
+          "contains": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["resource_id"],
+                "properties": { "resource_id": { "$ref": "#/$defs/sha256" } }
+              },
+              {
+                "type": "object",
+                "required": ["rendition_id"],
+                "properties": { "rendition_id": { "$ref": "#/$defs/sha256" } }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "resources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/releaseResource" }
+    },
+    "renditions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/releaseRendition" }
+    },
+    "extensions": { "type": "object" }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+    },
+    "editionIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edition_id", "title", "target_language", "support_languages"],
+      "properties": {
+        "edition_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "target_language": { "$ref": "#/$defs/languageTag" },
+        "support_languages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/languageTag" }
+        }
+      }
+    },
+    "materialIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material_id", "material_revision_id", "title"],
+      "properties": {
+        "material_id": { "type": "string", "minLength": 1 },
+        "material_revision_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 }
+      }
+    },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entrypoint_id"],
+      "properties": {
+        "entrypoint_id": { "type": "string", "minLength": 1 },
+        "resource_id": { "$ref": "#/$defs/sha256" },
+        "rendition_id": { "$ref": "#/$defs/sha256" }
+      },
+      "oneOf": [
+        { "required": ["resource_id"], "not": { "required": ["rendition_id"] } },
+        { "required": ["rendition_id"], "not": { "required": ["resource_id"] } }
+      ]
+    },
+    "releaseResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "required", "descriptor"],
+      "properties": {
+        "resource_id": { "$ref": "#/$defs/sha256" },
+        "required": { "type": "boolean" },
+        "descriptor": { "$ref": "resource.schema.json#/$defs/resourceDescriptor" }
+      }
+    },
+    "releaseRendition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rendition_id", "descriptor"],
+      "properties": {
+        "rendition_id": { "$ref": "#/$defs/sha256" },
+        "descriptor": { "$ref": "resource.schema.json#/$defs/renditionDescriptor" }
+      }
+    }
+  }
+}

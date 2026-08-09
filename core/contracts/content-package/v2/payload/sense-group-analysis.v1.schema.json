@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/payload/sense-group-analysis.v1.schema.json",
+  "title": "Listen sense_group_analysis payload v1",
+  "description": "The v1 sense group analysis payload shape, reused verbatim in v2. References a subtitle_text_track anchor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "groups"
+  ],
+  "properties": {
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/group"
+      }
+    }
+  },
+  "$defs": {
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sentence_id",
+        "group_index",
+        "start_token_index",
+        "end_token_index_exclusive",
+        "confidence",
+        "sources"
+      ],
+      "properties": {
+        "sentence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "group_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start_token_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_token_index_exclusive": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "head_token_index": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "confidence": {
+          "$ref": "#/$defs/confidence"
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "dependency_parse",
+              "phrase_structure",
+              "language_model",
+              "punctuation",
+              "length_limit",
+              "rule",
+              "user"
+            ]
+          }
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

@@ -1,5 +1,7 @@
+mod archive;
 mod inspect;
 mod model;
+pub mod v2;
 
 pub use inspect::{
     InspectLimits, OpaqueResource, PackageError, PackageInspection, ResourceRecord,

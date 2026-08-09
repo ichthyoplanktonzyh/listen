@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://listen.dev/contracts/content-package/v2/resource.schema.json",
+  "title": "Listen Content Package v2 Resource and Rendition Descriptors",
+  "description": "Resource and rendition descriptors embedded in release.json. A descriptor is canonical JSON; resource_id / rendition_id are the SHA-256 of the descriptor's canonical serialization. The release-level `required` policy lives on the release resource entry, never inside the identity-bearing descriptor.",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$"
+    },
+    "versionedProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["created_at_ms", "tool", "input_resource_ids", "extensions"],
+      "properties": {
+        "created_at_ms": { "type": "integer", "minimum": 0 },
+        "tool": { "$ref": "#/$defs/versionedProducer" },
+        "provider": { "$ref": "#/$defs/versionedProducer" },
+        "model": { "$ref": "#/$defs/versionedProducer" },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "input_resource_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "extensions": { "type": "object" }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review_status", "warnings", "extensions"],
+      "properties": {
+        "review_status": {
+          "enum": ["unreviewed", "machine_checked", "human_reviewed"]
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "extensions": { "type": "object" }
+      }
+    },
+    "blobDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "size_bytes"],
+      "properties": {
+        "digest": { "$ref": "#/$defs/sha256" },
+        "size_bytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "resourceSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material_revision_id"],
+      "properties": {
+        "material_revision_id": { "type": "string", "minLength": 1 },
+        "rendition_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "anchor_resource_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "resourceDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id"],
+      "properties": {
+        "resource_id": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resourceDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema", "kind", "role", "subject", "provenance", "quality", "payload_blob"
+      ],
+      "properties": {
+        "schema": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "role": { "enum": ["base", "assistance"] },
+        "content_language": { "$ref": "#/$defs/languageTag" },
+        "support_languages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/languageTag" }
+        },
+        "subject": { "$ref": "#/$defs/resourceSubject" },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/resourceDependency" }
+        },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "quality": { "$ref": "#/$defs/quality" },
+        "payload_blob": { "$ref": "#/$defs/blobDescriptor" },
+        "extensions": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "role": { "const": "base" } } },
+          "then": {
+            "required": ["content_language"],
+            "properties": { "support_languages": { "maxItems": 0 } }
+          },
+          "else": {
+            "required": ["support_languages"],
+            "properties": {
+              "support_languages": { "minItems": 1 },
+              "content_language": { "not": {} }
+            }
+          }
+        }
+      ]
+    },
+    "renditionDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "kind", "media_type", "material_revision_id", "media_blob"],
+      "properties": {
+        "schema": {
+          "enum": [
+            "listen.rendition.audio.v1",
+            "listen.rendition.video.v1"
+          ]
+        },
+        "kind": { "enum": ["audio", "video"] },
+        "media_type": { "type": "string", "minLength": 1 },
+        "material_revision_id": { "type": "string", "minLength": 1 },
+        "media_blob": { "$ref": "#/$defs/blobDescriptor" },
+        "extensions": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "audio" } } },
+          "then": {
+            "properties": {
+              "schema": { "const": "listen.rendition.audio.v1" },
+              "media_type": { "pattern": "^audio/" }
+            }
+          },
+          "else": {
+            "properties": {
+              "schema": { "const": "listen.rendition.video.v1" },
+              "media_type": { "pattern": "^video/" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

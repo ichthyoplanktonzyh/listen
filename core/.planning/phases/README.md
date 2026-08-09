@@ -6,10 +6,15 @@ here. Pure frontend phases belong in `listen-app`.
 Completed pre-split phases are frozen under
 `../archive/monorepo-baseline/phases/`.
 
-Active phase:
+Completed phase:
 
-- `001-offline-generation-split`: extract the first native offline generation
-  vertical behind the content-package v1 contract, add candidate-only atomic
-  Core import, cut consumers over, migrate richer resource producers and delete
-  the legacy Core production path. Stable sequencing and ownership live in
-  `001-offline-generation-split/001-ROADMAP.md`.
+- `001-offline-generation-split`: established the content-package v1 producer,
+  candidate-only Core import, consumer cutover, rich resources, and legacy
+  production retirement.
+- `002-content-package-v2`: established the material-centered v2 Release contract,
+  bounded Core inspection and Installation Plan, explicit Gen production, and a
+  credential-free cross-repository round trip.
+
+Active phase: none. Select the next Core phase from the canonical project
+roadmap and an explicit learner journey; do not extend Content Package v2 by
+default.

@@ -74,6 +74,16 @@ Repository separation baseline 已建立：
 
 ## Product Work
 
+### Content Package v2 — complete
+
+The material-centered package generation slice tracked in
+`phases/002-content-package-v2` is complete. Core defines and inspects a single
+Edition Release with independently addressed resources and blobs; Gen produces
+it explicitly; full, detached-media and hybrid multilingual fixtures plus real
+hybrid/embedded Gen-to-Core probes prove the contract. Generic Learning
+Material persistence and App acquisition UX remain later product work rather
+than hidden additions to this completed seam.
+
 Published contract `2.0.0` folds the additive local realtime cascade work
 (previously planned as `1.1.0`) together with the R1 whole-media ASR deletion.
 The deletion of published `/v1/transcription/jobs*` is a breaking contract

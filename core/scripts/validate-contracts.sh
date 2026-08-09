@@ -7,6 +7,11 @@ trap 'rm -rf "$tmp"' EXIT
 
 python3 -m unittest "$root/scripts/test_release_artifacts.py"
 cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked
+# Content Package v2: JSON syntax over the v2 contract tree, then the v2 suite.
+while IFS= read -r -d '' v2_json; do
+  python3 -m json.tool "$v2_json" >/dev/null
+done < <(find "$root/contracts/content-package/v2" -name '*.json' -print0)
+cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked v2::
 python3 "$root/scripts/openapi_contract.py" check
 if command -v openapi-generator >/dev/null 2>&1; then
   openapi-generator validate -i "$root/contracts/openapi/v1.yaml"

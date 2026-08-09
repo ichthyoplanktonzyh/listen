@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::fs;
-use std::io::{Cursor, Read};
-use std::path::{Component, Path};
+use std::path::Path;
 
 use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 
+use crate::archive::{ArchiveError, read_package, safe_path_string};
 use crate::model::{
     KnownResource, PACKAGE_SCHEMA_V1, PHONE_TIMELINE_SCHEMA_V1, PROSODY_ANALYSIS_SCHEMA_V1,
     PackageManifest, PhoneTimeline, ProsodyAnalysis, ResourceDependency, ResourceEnvelope,
@@ -92,6 +91,20 @@ pub enum PackageError {
     Invalid { path: String, message: String },
 }
 
+impl From<ArchiveError> for PackageError {
+    fn from(error: ArchiveError) -> Self {
+        match error {
+            ArchiveError::Io(source) => Self::Io(source),
+            ArchiveError::Zip(source) => Self::Zip(source),
+            ArchiveError::Limit(message) => Self::Limit(message),
+            ArchiveError::UnsafePath(path) => Self::UnsafePath(path),
+            ArchiveError::Symlink(path) => Self::Symlink(path),
+            ArchiveError::DuplicatePath(path) => Self::DuplicatePath(path),
+            ArchiveError::Invalid { path, message } => Self::Invalid { path, message },
+        }
+    }
+}
+
 pub fn inspect_path(path: impl AsRef<Path>) -> Result<PackageInspection, PackageError> {
     inspect_path_with_limits(path, InspectLimits::default())
 }
@@ -100,148 +113,8 @@ pub fn inspect_path_with_limits(
     path: impl AsRef<Path>,
     limits: InspectLimits,
 ) -> Result<PackageInspection, PackageError> {
-    let path = path.as_ref();
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() {
-        return Err(PackageError::Symlink(path.display().to_string()));
-    }
-    let files = if metadata.is_dir() {
-        read_directory(path, limits)?
-    } else {
-        read_zip(path, limits)?
-    };
+    let files = read_package(path.as_ref(), limits, &["manifest.json"])?;
     inspect_files(files, limits)
-}
-
-fn read_directory(
-    root: &Path,
-    limits: InspectLimits,
-) -> Result<BTreeMap<String, Vec<u8>>, PackageError> {
-    let mut pending = vec![root.to_path_buf()];
-    let mut files = BTreeMap::new();
-    let mut total = 0_u64;
-    while let Some(directory) = pending.pop() {
-        for entry in fs::read_dir(&directory)? {
-            let entry = entry?;
-            let metadata = fs::symlink_metadata(entry.path())?;
-            let relative = entry
-                .path()
-                .strip_prefix(root)
-                .map_err(|_| invalid("package", "entry escaped package root"))?
-                .to_path_buf();
-            let name = safe_path_string(&relative)?;
-            if metadata.file_type().is_symlink() {
-                return Err(PackageError::Symlink(name));
-            }
-            if metadata.is_dir() {
-                pending.push(entry.path());
-                continue;
-            }
-            if !metadata.is_file() {
-                return Err(invalid(&name, "entry is not a regular file"));
-            }
-            enforce_file_limits(&name, metadata.len(), &mut total, files.len(), limits)?;
-            let bytes = fs::read(entry.path())?;
-            if files.insert(name.clone(), bytes).is_some() {
-                return Err(PackageError::DuplicatePath(name));
-            }
-        }
-    }
-    Ok(files)
-}
-
-fn read_zip(path: &Path, limits: InspectLimits) -> Result<BTreeMap<String, Vec<u8>>, PackageError> {
-    if fs::metadata(path)?.len() > limits.max_total_bytes {
-        return Err(PackageError::Limit("ZIP file size"));
-    }
-    let bytes = fs::read(path)?;
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
-    if archive.len() > limits.max_file_count {
-        return Err(PackageError::Limit("ZIP entry count"));
-    }
-    let mut files = BTreeMap::new();
-    let mut total = 0_u64;
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
-        let raw_name = entry.name().to_owned();
-        let enclosed = entry
-            .enclosed_name()
-            .ok_or_else(|| PackageError::UnsafePath(raw_name.clone()))?;
-        let name = safe_path_string(&enclosed)?;
-        if entry.is_symlink() {
-            return Err(PackageError::Symlink(name));
-        }
-        if entry.is_dir() {
-            continue;
-        }
-        enforce_file_limits(&name, entry.size(), &mut total, files.len(), limits)?;
-        let capacity =
-            usize::try_from(entry.size()).map_err(|_| PackageError::Limit("file size"))?;
-        let mut contents = Vec::with_capacity(capacity);
-        entry
-            .by_ref()
-            .take(limits.max_file_bytes.saturating_add(1))
-            .read_to_end(&mut contents)?;
-        if contents.len() as u64 != entry.size() {
-            return Err(invalid(
-                &name,
-                "ZIP entry size does not match decompressed bytes",
-            ));
-        }
-        if files.insert(name.clone(), contents).is_some() {
-            return Err(PackageError::DuplicatePath(name));
-        }
-    }
-    Ok(files)
-}
-
-fn enforce_file_limits(
-    name: &str,
-    size: u64,
-    total: &mut u64,
-    current_count: usize,
-    limits: InspectLimits,
-) -> Result<(), PackageError> {
-    if current_count >= limits.max_file_count {
-        return Err(PackageError::Limit("file count"));
-    }
-    let maximum = if name == "manifest.json" {
-        limits.max_manifest_bytes
-    } else {
-        limits.max_file_bytes
-    };
-    if size > maximum {
-        return Err(PackageError::Limit("file size"));
-    }
-    *total = total
-        .checked_add(size)
-        .ok_or(PackageError::Limit("total decompressed size"))?;
-    if *total > limits.max_total_bytes {
-        return Err(PackageError::Limit("total decompressed size"));
-    }
-    Ok(())
-}
-
-fn safe_path_string(path: &Path) -> Result<String, PackageError> {
-    if path.as_os_str().is_empty() || path.is_absolute() {
-        return Err(PackageError::UnsafePath(path.display().to_string()));
-    }
-    let mut parts = Vec::new();
-    for component in path.components() {
-        match component {
-            Component::Normal(part) => {
-                let part = part
-                    .to_str()
-                    .ok_or_else(|| PackageError::UnsafePath(path.display().to_string()))?;
-                if part.contains('\\') || part.contains(':') || part.chars().any(char::is_control) {
-                    return Err(PackageError::UnsafePath(path.display().to_string()));
-                }
-                parts.push(part);
-            }
-            _ => return Err(PackageError::UnsafePath(path.display().to_string())),
-        }
-    }
-    Ok(parts.join("/"))
 }
 
 type ResourceProbe = ResourceEnvelope<serde_json::Value>;

@@ -14,6 +14,8 @@
 
 ## 维护规则
 
+- 跨仓产品语义、统一语言、用户旅程、开发方式和项目 roadmap 由
+  `ichthyoplanktonzyh/listen` 维护；本目录不得复制。
 - 文档只陈述当前仓库可以从代码、测试、release 或 owner 决策验证的事实。
 - 不把 `listen-app` 的 UI 状态、文件路径、测试数量写成 core 当前事实。
 - 跨仓状态使用稳定标识：仓库、commit、release tag、contract/runtime version、

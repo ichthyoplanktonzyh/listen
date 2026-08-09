@@ -3,7 +3,7 @@
 | Path | Current responsibility |
 |---|---|
 | `crates/domain` | stable domain records and invariants |
-| `crates/content-package` | bounded inspection and typed decoding for `.listenpkg` exchange packages |
+| `crates/content-package` | shared safe carrier reading plus explicit v1 and v2 inspection; v2 also exposes the pure Installation Plan projection |
 | `crates/application` | use cases, repositories, provider-neutral ports |
 | `crates/api-http` | loopback composition, routes, handshake, health |
 | `crates/api-events` | event envelopes |
@@ -17,6 +17,7 @@
 | `crates/writing-feedback` | writing feedback behavior |
 | `contracts` | canonical HTTP/event/player/resource schemas |
 | `contracts/content-package/v1` | canonical `.listenpkg` v1 manifest, typed content-resource schemas, and complete example package tree |
+| `contracts/content-package/v2` | canonical material-centered release/resource/delivery and payload schemas, plus embedded, detached-media, and hybrid multilingual golden carriers |
 | `scripts/` | evaluation/research tooling; reusable offline production lives in `listen-gen` |
 | `scripts/forced-align` | alignment research tooling |
 | `scripts/syntactic-analysis` | syntax capability tooling |
@@ -66,7 +67,12 @@ Notable runtime seams:
   validated LLTimeline snapshot; resource families keep their independent
   lifecycle repositories after import.
 - `application::prepare_content_package_document` converts a verified package
-  into candidate-only Core projections and an explicit per-resource receipt.
+  v1 into candidate-only Core projections and an explicit per-resource receipt.
+- `content_package::v2::inspect_v2_path` is the persistence-free v2 verification
+  seam. `content_package::v2::installation_plan` is a pure projection that
+  reports candidate/opaque/missing resources and rendition/blob availability;
+  neither operation performs acquisition, installation, adoption, or active
+  selection.
 - `ContentPackageImportRepository` is the dedicated atomic persistence seam for
   those projections. It is idempotent, never selects an active analysis, and
   does not call the legacy LLTimeline import operation.

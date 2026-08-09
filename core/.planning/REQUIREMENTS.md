@@ -9,6 +9,18 @@
 - CORE-CONTRACT-005: breaking contract change 必须显式升级 major 并提供迁移决策。
 - CORE-CONTRACT-006: content package 导入必须在持久化前完成验包，并以独立事务
   幂等附加候选；包不得创建、替换或降级 active 选择。
+- CORE-CONTRACT-007: Content Package v2 必须让一个不可变 Package Release
+  精确对应一个 Learning Edition 和一个 Material Revision，同时保持 Release、
+  Resource、Blob、Media Rendition 与 Delivery 身份独立。
+- CORE-CONTRACT-008: Content Package v2 必须同等表示 text、audio、video 与
+  mixed material，不得把媒体、时长或字幕作为通用准入条件。
+- CORE-CONTRACT-009: v2 检查必须在任何持久化或网络获取前完成 archive、canonical
+  identity、hash、dependency、language-role、compatibility 与 size-limit 验证。
+- CORE-CONTRACT-010: v2 Installation Plan 只能产生 candidate、opaque 或 missing
+  disposition，不得携带或产生 active selection 与 Learner state。
+- CORE-CONTRACT-011: Package Installation 与 Learning Edition Adoption 必须是
+  独立语义操作；App 可以由一个明确 Learner intent 编排两者，但 package data
+  不得声明本地采用或 active 状态。
 
 ## Runtime and Releases
 
@@ -32,6 +44,10 @@
   选择、学习记录和消费体验。
 - CORE-ARCH-008: learner recording、realtime conversation 和 learner-dependent
   LLM 能力保留在 Core，不得随离线生成管线迁出。
+- CORE-ARCH-009: v2 的 Base Resource 运行时依赖不得要求 Assistance Resource；
+  Assistance 可依赖 Base，生产输入关系只进入 Resource Provenance。
+- CORE-ARCH-010: Core 的 material/package interface 必须返回可理解的能力、缺失
+  条件与计划，不得要求 App 解析 Resource DAG 或推导 package policy。
 
 ## Quality
 
