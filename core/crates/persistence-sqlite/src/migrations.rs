@@ -6,6 +6,7 @@ use domain::{
 use rusqlite::{Connection, params};
 
 use super::PersistenceError;
+use super::learning_material::backfill_legacy_media_materials;
 
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
@@ -515,6 +516,7 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     if current < 59 {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0059_learning_materials.sql"))?;
+        backfill_legacy_media_materials(&tx)?;
         tx.pragma_update(None, "user_version", 59)?;
         tx.commit()?;
     }
@@ -540,7 +542,7 @@ fn role_reply_recording_paths(connection: &Connection) -> Result<Vec<String>, Pe
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-fn table_exists(connection: &Connection, table: &str) -> Result<bool, PersistenceError> {
+pub(crate) fn table_exists(connection: &Connection, table: &str) -> Result<bool, PersistenceError> {
     Ok(connection.query_row(
         "SELECT EXISTS(
            SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1
