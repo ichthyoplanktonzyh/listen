@@ -17,8 +17,8 @@
 #
 set -euo pipefail
 
-readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-b0b0dc81a212ae5e5c97e2234439eb0d6a53ab5d}"
-readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-24e07d37da07dc9be88b5e8d514b2d298579d9a6}"
+readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-105568ed790fe9a328bfe82fce7c19d2fcb1f420}"
+readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-a660946a4410c6c6b6e720ecdd02e7a88d16e5dc}"
 readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
 
 # Tests prove the gate defaults stay in lockstep with backend.lock.json /

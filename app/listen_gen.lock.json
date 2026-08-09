@@ -1,11 +1,11 @@
 {
   "manifest_version": 1,
   "repository": "ichthyoplanktonzyh/listen-gen",
-  "source_git_sha": "24e07d37da07dc9be88b5e8d514b2d298579d9a6",
+  "source_git_sha": "a660946a4410c6c6b6e720ecdd02e7a88d16e5dc",
   "release_manifest": {
     "schema": "listen_gen.release-bundle.v1",
     "filename": "listen-gen-0.4.0.release.json",
-    "sha256": "sha256:a2cf56bd8b431af7ee79d8a6ecebe07bde93d5b00c4a4e74e5de8c64c6625d44"
+    "sha256": "sha256:ba82adce3004918d3e5b10975c47b51c35ba89ee6770460a6f296ebe68a59c7f"
   },
   "tool": {
     "id": "listen-gen",
