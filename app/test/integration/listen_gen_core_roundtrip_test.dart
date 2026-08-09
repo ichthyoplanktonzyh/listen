@@ -59,10 +59,10 @@ void main() {
         reason: 'LISTEN_GEN_RELEASE_MANIFEST must point at the pinned manifest',
       );
       final verified = await release.verify();
-      expect(verified.toolVersion, '0.2.0');
+      expect(verified.toolVersion, '0.3.0');
       expect(
         verified.artifactSha256,
-        'sha256:1130342a2d3455a7d9e4772cd7d4cf8608da93f12551f56a9b2e0bb00ddd611a',
+        'sha256:08a64fac7ace6a4e6a1de0030e931977923363abe5339f945196fb9ca8b4dc55',
       );
 
       final generator = LocalListenGenProcessService(releaseService: release);
@@ -135,7 +135,36 @@ void main() {
         };
         expect(
           byKind.keys,
-          containsAll(const ['subtitle_text_track', 'word_timeline']),
+          containsAll(const [
+            'subtitle_text_track',
+            'word_timeline',
+            'phone_timeline',
+            'sense_group_analysis',
+            'word_acoustics',
+            'prosody_analysis',
+          ]),
+        );
+        expect(byKind, hasLength(6));
+        for (final resource in byKind.values) {
+          expect(resource.outcome, 'consumed');
+        }
+        for (final kind in const [
+          'subtitle_text_track',
+          'word_timeline',
+          'phone_timeline',
+          'sense_group_analysis',
+          'prosody_analysis',
+        ]) {
+          expect(
+            byKind[kind]!.localIds,
+            isNotEmpty,
+            reason: '$kind should be consumed as a candidate',
+          );
+        }
+        expect(
+          byKind['word_acoustics']!.localIds,
+          isEmpty,
+          reason: 'word acoustics is consumed into the LLTimeline artifact',
         );
 
         // The pinned Core stamps the specific producing component at the
@@ -149,7 +178,7 @@ void main() {
           reason: 'subtitle_text_track should be consumed as a candidate',
         );
         expect(subtitle.provenance?.tool.id, 'listen-gen.asr-package');
-        expect(subtitle.provenance?.tool.version, '0.2.0');
+        expect(subtitle.provenance?.tool.version, '0.3.0');
 
         final wordTimeline = byKind['word_timeline']!;
         expect(
@@ -164,7 +193,32 @@ void main() {
               'word_timeline must be produced by the alignment stage, not '
               'the ASR-supplied word timing',
         );
-        expect(wordTimeline.provenance?.tool.version, '0.2.0');
+        expect(wordTimeline.provenance?.tool.version, '0.3.0');
+
+        expect(
+          byKind['phone_timeline']!.provenance?.tool.id,
+          'listen-gen.phone',
+        );
+        expect(
+          byKind['sense_group_analysis']!.provenance?.tool.id,
+          'listen-gen.sense-groups',
+        );
+        expect(
+          byKind['word_acoustics']!.provenance?.tool.id,
+          'listen-gen.acoustics',
+        );
+        expect(
+          byKind['prosody_analysis']!.provenance?.tool.id,
+          'listen-gen.prosody',
+        );
+        for (final kind in const [
+          'phone_timeline',
+          'sense_group_analysis',
+          'word_acoustics',
+          'prosody_analysis',
+        ]) {
+          expect(byKind[kind]!.provenance?.tool.version, '0.3.0');
+        }
 
         final exportedTimeline = await api.exportTrackLLTimeline(
           receipt.track.id,
@@ -173,9 +227,9 @@ void main() {
         expect(exportedTimeline.activePhoneTimelineId, isNull);
         expect(exportedTimeline.activeChunkTimelineId, isNull);
 
-        // Candidate-only: this test never selects a subtitle, activates the
-        // word timeline, or mutates any active resource. The receipt is left
-        // as the `available` candidate Core returned.
+        // Candidate-only: this test never selects a subtitle or activates any
+        // imported analysis. In particular, rich prosody does not synthesize
+        // or activate the legacy ChunkTimeline foundation slot.
 
         await run.cleanUp();
         run = null;
