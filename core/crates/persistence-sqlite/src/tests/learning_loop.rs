@@ -27,7 +27,6 @@ fn learning_loop_practice_review_and_events_round_trip() {
             kind: PracticeTargetKind::Chunk,
             id: Some("chunk-1".into()),
             sentence_id: Some(SubtitleSentenceId::parse("sentence-1").unwrap()),
-            chunk_id: Some(ChunkId::parse("chunk-1").unwrap()),
             start_ms: Some(100),
             end_ms: Some(900),
         },
@@ -270,7 +269,6 @@ fn shadowing_completion_persists_recording_without_creating_capability_evidence(
         kind: PracticeTargetKind::Chunk,
         id: Some("chunk-1".into()),
         sentence_id: Some(SubtitleSentenceId::parse("sentence-1").unwrap()),
-        chunk_id: Some(ChunkId::parse("chunk-1").unwrap()),
         start_ms: Some(100),
         end_ms: Some(900),
     };
@@ -821,7 +819,6 @@ fn practice_attempts_append_channelized_observations_for_success_and_failure() {
         kind: PracticeTargetKind::Lexical,
         id: Some(lexical.entry.id.as_str().into()),
         sentence_id: None,
-        chunk_id: None,
         start_ms: None,
         end_ms: None,
     };
@@ -1373,7 +1370,6 @@ fn listening_inbox_capture_process_review_and_micro_intensive_round_trip() {
         kind: PracticeTargetKind::Sentence,
         id: Some(sentence_id.as_str().into()),
         sentence_id: Some(sentence_id.clone()),
-        chunk_id: None,
         start_ms: Some(1_000),
         end_ms: Some(2_400),
     };

@@ -342,7 +342,11 @@ fn imported_subtitles_rebuild_local_corpus_words_and_phrases() {
 }
 
 #[test]
-fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
+fn active_prosody_analysis_projects_chunk_occurrences_into_corpus() {
+    // R5: the corpus chunk projection is sourced from the active Prosody
+    // Analysis (the sole prosodic-chunk semantic source) instead of the
+    // retired ChunkTimeline. Activating projects chunk rows; archiving
+    // removes them.
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
         repo.clone(),
@@ -358,9 +362,9 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
     let media = services
         .media_analysis()
         .register_media(RegisterMedia {
-            path: "/tmp/corpus-chunk.mp4".into(),
-            fingerprint: "corpus-chunk-media".into(),
-            title: "Corpus chunk media".into(),
+            path: "/tmp/corpus-prosody.mp4".into(),
+            fingerprint: "corpus-prosody-media".into(),
+            title: "Corpus prosody media".into(),
             kind: MediaKind::Video,
             duration_ms: Some(10_000),
         })
@@ -369,45 +373,52 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
         .media_analysis()
         .import_subtitle(ImportSubtitle {
             media_id: media.id,
-            source_name: "corpus-chunk.srt".into(),
+            source_name: "corpus-prosody.srt".into(),
             content: b"1\n00:00:01,000 --> 00:00:03,000\nTake care of yourself.\n".to_vec(),
             language: Some("en".into()),
             identity_salt: None,
         })
         .unwrap();
-    let timeline = ChunkTimeline {
-        id: ChunkTimelineId::parse("corpus-chunk-timeline").unwrap(),
+    let analysis = ProsodyAnalysis {
+        id: ProsodyAnalysisId::parse("corpus-prosody-analysis").unwrap(),
         track_id: track.id.clone(),
         media_id: track.media_id.clone(),
         parent_word_timeline_id: None,
-        provider_id: "test".into(),
-        provider_version: "v1".into(),
-        algorithm: "test".into(),
-        precision: ChunkTimelinePrecision::Precise,
-        created_by: TimelineCreator::Algorithm,
+        provider_id: "listen-gen".into(),
+        provider_version: "0.1.0".into(),
+        algorithm: "prosody-v1".into(),
         status: TimelineStatus::Candidate,
+        created_by: TimelineCreator::Algorithm,
         metrics_json: serde_json::json!({}).into(),
-        chunks: vec![ChunkTimelineChunk {
-            id: ChunkId::parse("corpus-chunk-1").unwrap(),
+        chunks: vec![domain::ProsodicChunk {
             sentence_id: track.sentences[0].id.clone(),
             chunk_index: 0,
-            start_word_index: 0,
-            end_word_index: 1,
-            start_ms: 1200,
-            end_ms: 1800,
-            text: "Take care".into(),
-            boundary_sources: Vec::new(),
+            start_token_index: 0,
+            // Tokens are (0, Word "Take"), (1, Whitespace), (2, Word "care");
+            // the word-anchored span 0..2 projects the phrase "Take care".
+            end_token_index: 2,
+            nucleus_token_index: Some(0),
             confidence: 0.9,
-            warnings: Vec::new(),
-            evidence_json: serde_json::json!({}).into(),
+        }],
+        anchors: vec![ProsodyAnchor {
+            word_ref: ProsodyWordRef {
+                sentence_id: track.sentences[0].id.clone(),
+                token_index: 0,
+            },
+            syllable_index: None,
+            lexical_stress: LexicalStress::Primary,
+            realized_prominence: 0.8,
+            utterance_role: UtteranceRole::Nucleus,
+            evidence: vec![ProsodyEvidence::Energy, ProsodyEvidence::Pitch],
+            confidence: 0.9,
         }],
         created_at_ms: 1,
         updated_at_ms: 1,
     };
-    repo.save_chunk_timeline(&timeline).unwrap();
+    repo.save_prosody_analysis(&analysis).unwrap();
     services
         .media_analysis()
-        .activate_chunk_timeline(&timeline.id)
+        .activate_prosody_analysis(&analysis.id)
         .unwrap();
 
     let hits = services
@@ -419,8 +430,6 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
         .filter(|hit| hit.kind == CorpusOccurrenceKind::Chunk)
         .collect();
     assert_eq!(chunks.len(), 1);
-    assert_eq!(chunks[0].start_ms, 1200);
-    assert_eq!(chunks[0].end_ms, 1800);
     assert_eq!(chunks[0].source_snapshot, "Take care");
     assert!(
         hits.iter()
@@ -429,7 +438,7 @@ fn active_chunk_timeline_rows_follow_chunk_lifecycle() {
 
     services
         .media_analysis()
-        .archive_chunk_timeline(&timeline.id)
+        .archive_prosody_analysis(&analysis.id)
         .unwrap();
     let hits = services
         .media_analysis()

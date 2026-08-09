@@ -30,9 +30,25 @@ fn openapi_version_snapshot_and_path_count() {
 
     // API version snapshot — bump intentionally, never accidentally.
     assert!(
-        openapi.contains("version: 2.1.0"),
+        openapi.contains("version: 3.0.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
+
+    // R5 breaking removal: the retired ChunkTimeline wire surface must stay
+    // absent from the contract.
+    for removed in [
+        "chunk_timelines:",
+        "active_chunk_timeline_id:",
+        "ChunkTimeline:",
+        "ChunkTimelineSummary:",
+        "ChunkBoundarySource:",
+        "chunk-timelines:",
+    ] {
+        assert!(
+            !openapi.contains(removed),
+            "removed OpenAPI wire surface {removed} must stay absent"
+        );
+    }
 
     // OpenAPI specification version.
     assert!(

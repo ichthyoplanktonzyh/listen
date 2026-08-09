@@ -51,7 +51,11 @@ pub use secret_store_keychain::KeychainSecretStore;
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub const API_VERSION: u16 = 1;
-pub const CONTRACT_VERSION: &str = "2.1.0";
+/// R5 breaking contract: removes the published `/v1/*chunk-timelines*`
+/// operations and the retired ChunkTimeline LLTimeline fields. The App's
+/// immutable R4 baseline pins the previously published `2.1.0` release
+/// (`v0.7.0-split.4`); `3.0.0` is the current unreleased contract.
+pub const CONTRACT_VERSION: &str = "3.0.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))

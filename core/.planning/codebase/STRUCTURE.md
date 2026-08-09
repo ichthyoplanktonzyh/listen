@@ -17,7 +17,7 @@
 | `crates/writing-feedback` | writing feedback behavior |
 | `contracts` | canonical HTTP/event/player/resource schemas |
 | `contracts/content-package/v1` | canonical `.listenpkg` v1 manifest, typed content-resource schemas, and complete example package tree |
-| `scripts/timeline-production` | production pipeline |
+| `scripts/` | evaluation/research tooling; reusable offline production lives in `listen-gen` |
 | `scripts/forced-align` | alignment research tooling |
 | `scripts/syntactic-analysis` | syntax capability tooling |
 | `scripts/release_artifacts.py` | deterministic release packaging/verification |

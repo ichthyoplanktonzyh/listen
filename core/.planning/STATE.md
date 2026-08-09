@@ -8,7 +8,8 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `2.1.0` (published and pinned by the App)
+- Contract version: `3.0.0` (R5 breaking, unreleased; the App R4 baseline pins
+  the previously published `2.1.0` from `v0.7.0-split.4`)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
@@ -86,7 +87,7 @@ equivalent resource and without activating it. Playback times are derived
 through the Word Timeline (no persisted time duplication). Chunk spans are
 package-declared rather than inferred from word roles. Sense Group analysis stays a separate resource family with a
 separate lifecycle. Foundation no longer generates legacy `ChunkTimeline` as a
-fallback; that readable legacy family is an R5 retirement target. The new
+fallback; R5 retired that duplicate family. The new
 resource family is exposed additively through
 the LLTimeline document (`prosody_analyses` / `active_prosody_analysis_id`).
 
@@ -104,14 +105,32 @@ published contract `2.1.0` and runtime `0.7.0` as immutable release
 `v0.7.0-split.4` from `b0b0dc81`.
 
 App PR [listen-app#105](https://github.com/ichthyoplanktonzyh/listen-app/pull/105)
-(merge `1711eff5`) pins that Core release and Gen `0.3.0`. Its credential-free,
-model-free three-repository gate generates and imports all six resources,
-checks exact producer identities, consumes Word Acoustics into the timeline
-artifact, leaves all imported analyses as candidates, and confirms no active
-Word, Phone or legacy Chunk Timeline.
+(merge `1711eff5`) pins that Core release and Gen `0.3.0`. Its
+credential-free, model-free three-repository gate generates and imports all six
+resources, checks exact producer identities, consumes Word Acoustics into the
+timeline artifact, leaves all imported analyses as candidates, and confirms no
+active Word, Phone or legacy Chunk Timeline.
 
-The legacy `scripts/timeline-production` tree and runtime/release inputs
-exclusive to later retired production paths remain deletion targets for R5.
+R5 is complete. Core PR (this branch, merge to be recorded) deleted
+`scripts/timeline-production`, the legacy `ChunkTimeline` domain and
+persistence, the LLTimeline chunk fields, and the eight
+`/v1/*chunk-timelines*` HTTP operations with their OpenAPI schemas and
+generated-client identity. Removing published operations and LLTimeline
+fields is breaking, so the current contract is `3.0.0` (unreleased); the App
+R4 baseline stays pinned to the previously published `2.1.0` until the R5
+release is published. Corpus chunk occurrences now project from the
+active Prosody Analysis (the sole prosodic-chunk semantic source); Sense Group
+stays independent; content-package import stays candidate-only and foundation
+preparation never regenerates a chunk representation. Historical migration
+0013 stays immutable and a new forward migration v57 drops the retired
+`chunk_timeline_runs` storage from upgraded databases. Shared
+`whisper-cli`/`ffmpeg`/`ffprobe` remain for learner-recording transcription,
+realtime and SoundLine paths; only inputs exclusive to the retired
+whole-media production path were removed. Gen PR
+[#7](https://github.com/ichthyoplanktonzyh/listen-gen/pull/7) (tool `0.4.0`)
+binds the release manifest to a strict verifier-checked runtime/toolchain
+identity, which the App records immutably with the pin; the real model-free
+six-resource round trip passes against the pinned stack.
 
 Execution is synchronized by Core #111, Gen #4 and App #100. Core #103 was
 closed as superseded because it kept whole-media ASR orchestration in Core.
@@ -135,20 +154,19 @@ not code evidence.
 ## Next
 
 1. Retain Gen `42649d9f` / tool `0.3.0` and Core `b0b0dc81` / contract `2.1.0`
-   / runtime `0.7.0` as the immutable App R4 baseline.
-2. R5 legacy retirement is the next cutover phase but has not started. Do not
-   delete `scripts/timeline-production`, legacy contracts/UI or exclusive
-   runtime/release inputs without a separate owner direction.
-3. Define Content Edition, Media Rendition, Timeline Compatibility, and the
+   / runtime `0.7.0` as the immutable App R4 baseline; the App R5 slice pins
+   the new Gen `0.4.0` release and the R5 Core commit with the verified
+   runtime identity.
+2. Define Content Edition, Media Rendition, Timeline Compatibility, and the
    Package Listing/Release interface before a hosted catalog journey.
-4. Split core issue #80 into a production-model slice followed by an
+3. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.
-5. Keep immutable `v0.7.0-split.4` as the R4 consumer baseline. Contract
+4. Keep immutable `v0.7.0-split.4` as the R4 consumer baseline. Contract
    `2.1.0` preserves the R1 whole-media job deletion and additively exposes the
    R3 Prosody Analysis projection; learner-recording transcription, provider
    and model routes remain unchanged.
-6. Run the Apple Silicon short-audio cascade smoke only with explicit model
+5. Run the Apple Silicon short-audio cascade smoke only with explicit model
    download/live-inference authorization.
-7. Remove the exact `local-runtime` HTTP route debt allowlist one route module
+6. Remove the exact `local-runtime` HTTP route debt allowlist one route module
    at a time.

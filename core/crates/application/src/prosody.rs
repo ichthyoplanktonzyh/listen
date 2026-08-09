@@ -30,21 +30,27 @@ impl MediaAnalysisUseCases {
         &self,
         id: &ProsodyAnalysisId,
     ) -> Result<ProsodyAnalysis, ApplicationError> {
-        self.prosody.activate_prosody_analysis(id)
+        let analysis = self.prosody.activate_prosody_analysis(id)?;
+        self.reindex_track_corpus(&analysis.track_id)?;
+        Ok(analysis)
     }
 
     pub fn archive_prosody_analysis(
         &self,
         id: &ProsodyAnalysisId,
     ) -> Result<ProsodyAnalysis, ApplicationError> {
-        self.prosody.archive_prosody_analysis(id)
+        let analysis = self.prosody.archive_prosody_analysis(id)?;
+        self.reindex_track_corpus(&analysis.track_id)?;
+        Ok(analysis)
     }
 
     pub fn delete_prosody_analysis(
         &self,
         id: &ProsodyAnalysisId,
     ) -> Result<ProsodyAnalysis, ApplicationError> {
-        self.prosody.delete_prosody_analysis(id)
+        let analysis = self.prosody.delete_prosody_analysis(id)?;
+        self.reindex_track_corpus(&analysis.track_id)?;
+        Ok(analysis)
     }
 
     /// Derived playback projection: prosodic chunks over one prosody analysis,

@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CapabilityAssessment, ChunkId, HuntingCandidateId, HuntingTargetId, LanguageCode,
-    LearningStatus, LexicalCapability, LexicalEntryId, LexicalObservationId, ListeningInboxItemId,
-    MediaId, PracticeAttemptId, PracticeItemId, PracticeSessionId, RecognitionEvidenceId,
-    RecordingAssetId, ReviewAttemptId, ReviewItemId, ShadowingAnalysisId, SubtitleSentenceId,
-    SubtitleTrackId, UpgradeSuggestionId,
+    CapabilityAssessment, HuntingCandidateId, HuntingTargetId, LanguageCode, LearningStatus,
+    LexicalCapability, LexicalEntryId, LexicalObservationId, ListeningInboxItemId, MediaId,
+    PracticeAttemptId, PracticeItemId, PracticeSessionId, RecognitionEvidenceId, RecordingAssetId,
+    ReviewAttemptId, ReviewItemId, ShadowingAnalysisId, SubtitleSentenceId, SubtitleTrackId,
+    UpgradeSuggestionId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,7 +42,6 @@ pub enum PracticeAnchorKind {
     LexicalEntry,
     Sentence,
     WordTimeline,
-    ChunkTimeline,
     Chunk,
     PhoneTimeline,
     Phone,
@@ -260,7 +259,6 @@ pub struct PracticeTarget {
     pub kind: PracticeTargetKind,
     pub id: Option<String>,
     pub sentence_id: Option<SubtitleSentenceId>,
-    pub chunk_id: Option<ChunkId>,
     pub start_ms: Option<u64>,
     pub end_ms: Option<u64>,
 }

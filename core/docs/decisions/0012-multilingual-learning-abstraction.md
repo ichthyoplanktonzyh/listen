@@ -7,6 +7,10 @@ Accepted. Validated in
 to be implemented in
 [`2.6-multilingual-learning-foundation`](../../.planning/phases/2.6-multilingual-learning-foundation/2.6-PLAN.md).
 
+> R5 superseded note (2026-08-09): the `ChunkTimeline` reference in the
+> timeline-family list below is historical; the legacy ChunkTimeline family
+> was retired in R5.
+
 This ADR records the architecture decision that turns LLPlayerNext from an
 English-first listening learner into a language-pluggable one. It supersedes the
 implicit English assumptions behind `TXT-001` (English tokenization),

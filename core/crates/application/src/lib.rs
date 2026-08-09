@@ -5,31 +5,29 @@ use crate::coach_dashboard::DisabledCoachDashboardRepository;
 use domain::{
     CapabilityAssessment, CapabilityConclusion, CapabilityFilter, CapabilityOverride,
     CapabilityOverrideSource, CapabilityProjection, CapabilityProjectionSource, CapabilitySupport,
-    ChunkBoundarySource, ChunkId, ChunkTimeline, ChunkTimelineChunk, ChunkTimelineId,
-    ChunkTimelinePrecision, ChunkTimelineSummary, ContentDifficultyProfile, CorpusOccurrence,
-    CorpusOccurrenceId, CorpusOccurrenceKind, DetectedPhone, DiagnosisKind, DictionaryEntry,
-    DictionaryEntryId, DictionaryLookupBundle, DictionaryProviderResult, ExternalVocabularyImport,
-    ExternalVocabularyImportSummary, HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus,
-    HuntingTarget, HuntingTargetId, HuntingTargetStatus, JudgmentAdjudication, L1DiagnosisContext,
-    L1DiagnosisHint, L1DiagnosisSpan, L1DiagnosisSupport, LISTENING_CONFIDENCE_TASK,
-    LLTIMELINE_SCHEMA_V1, LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator,
-    LLTimelineId, LLTimelineMedia, LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment,
-    LLTimelineToken, LanguageCode, LearnerProfile, LearnerProfileId, LearningChangeSource,
-    LearningEvent, LearningEventId, LearningEventKind, LearningEventSubject,
-    LearningEventSubjectKind, LearningObservation, LearningStatus, LexicalCapability,
-    LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails, LexicalEntryId, LexicalEntryKind,
-    LexicalObservation, LexicalObservationId, LexicalOccurrenceId, LexicalSenseFolder,
-    LexicalSenseId, LexicalUnit, ListeningComprehensionReport, ListeningInboxItem,
-    ListeningInboxItemId, ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile,
-    LlmProviderProfileId, MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent,
-    ObservationOrigin, ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId,
-    PhoneTimelinePrecision, PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId,
-    PhoneticAnalysisJob, PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind,
-    PracticeAttempt, PracticeAttemptId, PracticeItem, PracticeItemId, PracticeKind, PracticeMode,
-    PracticeResult, PracticeSession, PracticeSessionId, PracticeTarget, PracticeTargetKind,
-    ProductionCorpusDocument, ProductionCorpusEntry, ProductionCorpusHit,
-    PronunciationProviderInfo, ProsodicChunkProjection, ProsodyAnalysis, ProsodyAnalysisId,
-    ProsodyAnalysisSummary, ReadingPosition,
+    ContentDifficultyProfile, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
+    DetectedPhone, DiagnosisKind, DictionaryEntry, DictionaryEntryId, DictionaryLookupBundle,
+    DictionaryProviderResult, ExternalVocabularyImport, ExternalVocabularyImportSummary,
+    HuntingCandidate, HuntingCandidateId, HuntingCandidateStatus, HuntingTarget, HuntingTargetId,
+    HuntingTargetStatus, JudgmentAdjudication, L1DiagnosisContext, L1DiagnosisHint,
+    L1DiagnosisSpan, L1DiagnosisSupport, LISTENING_CONFIDENCE_TASK, LLTIMELINE_SCHEMA_V1,
+    LLTimelineArtifact, LLTimelineDocument, LLTimelineGenerator, LLTimelineId, LLTimelineMedia,
+    LLTimelineMetadata, LLTimelineRhythmFrame, LLTimelineSegment, LLTimelineToken, LanguageCode,
+    LearnerProfile, LearnerProfileId, LearningChangeSource, LearningEvent, LearningEventId,
+    LearningEventKind, LearningEventSubject, LearningEventSubjectKind, LearningObservation,
+    LearningStatus, LexicalCapability, LexicalCapabilityProfile, LexicalEntry, LexicalEntryDetails,
+    LexicalEntryId, LexicalEntryKind, LexicalObservation, LexicalObservationId,
+    LexicalOccurrenceId, LexicalSenseFolder, LexicalSenseId, LexicalUnit,
+    ListeningComprehensionReport, ListeningInboxItem, ListeningInboxItemId,
+    ListeningInboxResolution, ListeningInboxStatus, LlmProviderProfile, LlmProviderProfileId,
+    MediaAvailability, MediaId, MediaItem, MediaKind, MediaTriageIntent, ObservationOrigin,
+    ObservationResult, ObservationSpec, PhoneTimeline, PhoneTimelineId, PhoneTimelinePrecision,
+    PhoneTimelineSummary, PhoneticAnalysis, PhoneticAnalysisId, PhoneticAnalysisJob,
+    PhoneticFindingStatus, PhraseCandidate, PracticeAnchorKind, PracticeAttempt, PracticeAttemptId,
+    PracticeItem, PracticeItemId, PracticeKind, PracticeMode, PracticeResult, PracticeSession,
+    PracticeSessionId, PracticeTarget, PracticeTargetKind, ProductionCorpusDocument,
+    ProductionCorpusEntry, ProductionCorpusHit, PronunciationProviderInfo, ProsodicChunkProjection,
+    ProsodyAnalysis, ProsodyAnalysisId, ProsodyAnalysisSummary, ReadingPosition,
     RealtimeConversationSession as DomainRealtimeConversationSession,
     RealtimeConversationSessionId, RealtimeConversationTurn, RealtimeConversationTurnId,
     RealtimeProviderProfile, RealtimeProviderProfileId, RecognitionEvidence, RecognitionEvidenceId,
@@ -111,6 +109,7 @@ pub use content_package_import::{
     ResourceImportDisposition, ResourceImportOutcome, ResourceImportProducer,
     ResourceImportProvenance, ResourceImportReviewStatus, prepare_content_package_document,
 };
+pub(crate) use corpus::prosody_chunk_projections_from_document;
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;
 pub use error::ApplicationError;
@@ -152,7 +151,6 @@ pub struct AppServices {
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
     pub(crate) word_timelines: Arc<dyn WordTimelineRepository>,
-    pub(crate) chunk_timelines: Arc<dyn ChunkTimelineRepository>,
     pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
     pub(crate) prosody: Arc<dyn ProsodyAnalysisRepository>,
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
@@ -277,7 +275,6 @@ impl AppServices {
     ) -> Self
     where
         R: WordTimelineRepository
-            + ChunkTimelineRepository
             + SenseGroupRepository
             + ProsodyAnalysisRepository
             + PhoneTimelineRepository
@@ -297,7 +294,6 @@ impl AppServices {
             subtitle_tracks,
             pronunciations,
             word_timelines: timelines.clone(),
-            chunk_timelines: timelines.clone(),
             sense_groups: timelines.clone(),
             prosody: timelines.clone(),
             phone_timelines: timelines.clone(),
@@ -1537,7 +1533,7 @@ pub(crate) fn lltimeline_track_fingerprint(document: &LLTimelineDocument) -> Str
 
 /// Remap every embedded identity in an imported LLTimeline document onto the
 /// destination track/media: segment/sentence ids, word/chunk/phone timeline
-/// ids (including active/parent references), rhythm frame ids, chunk ids,
+/// ids (including active/parent references), rhythm frame ids,
 /// artifact payload references, and the `track_id`/`media_id` carried on each
 /// resource. This function is the single owner of import identity rewriting:
 /// any new ID-bearing field added to `LLTimelineDocument` must be remapped
@@ -1549,10 +1545,6 @@ pub(crate) fn remap_lltimeline_identity(
     media_id: &MediaId,
 ) {
     for timeline in &mut document.word_timelines {
-        timeline.media_id = media_id.clone();
-        timeline.track_id = track_id.clone();
-    }
-    for timeline in &mut document.chunk_timelines {
         timeline.media_id = media_id.clone();
         timeline.track_id = track_id.clone();
     }
@@ -1586,13 +1578,6 @@ pub(crate) fn remap_lltimeline_identity(
         for word in &mut timeline.words {
             if let Some(sentence_id) = sentence_ids.get(&word.sentence_id) {
                 word.sentence_id = sentence_id.clone();
-            }
-        }
-    }
-    for chunk_timeline in &mut document.chunk_timelines {
-        for chunk in &mut chunk_timeline.chunks {
-            if let Some(sentence_id) = sentence_ids.get(&chunk.sentence_id) {
-                chunk.sentence_id = sentence_id.clone();
             }
         }
     }
@@ -1633,13 +1618,6 @@ pub(crate) fn remap_lltimeline_identity(
         }
     }
     remap_lltimeline_artifact_refs(document, &sentence_ids, &word_timeline_ids);
-    for chunk_timeline in &mut document.chunk_timelines {
-        if let Some(word_timeline_id) = chunk_timeline.parent_word_timeline_id.as_mut()
-            && let Some(remapped) = word_timeline_ids.get(word_timeline_id)
-        {
-            *word_timeline_id = remapped.clone();
-        }
-    }
     for frame in &mut document.rhythm_frames {
         if let Some(sentence_id) = sentence_ids.get(&frame.sentence_id) {
             frame.sentence_id = sentence_id.clone();
@@ -1680,32 +1658,6 @@ pub(crate) fn remap_lltimeline_identity(
     }
     if let Some(active_id) = document.active_phone_timeline_id.as_mut()
         && let Some(remapped) = phone_timeline_ids.get(active_id)
-    {
-        *active_id = remapped.clone();
-    }
-    let mut chunk_timeline_ids = HashMap::new();
-    for timeline in &mut document.chunk_timelines {
-        let original = timeline.id.clone();
-        let remapped = ChunkTimelineId::from_fingerprint(
-            "chunk-timeline",
-            &format!("{}:{}", track_id.as_str(), original.as_str()),
-        );
-        timeline.id = remapped.clone();
-        chunk_timeline_ids.insert(original, remapped.clone());
-        for chunk in &mut timeline.chunks {
-            chunk.id = ChunkId::from_fingerprint(
-                "chunk",
-                &format!(
-                    "{}:{}:{}",
-                    remapped.as_str(),
-                    chunk.sentence_id.as_str(),
-                    chunk.chunk_index
-                ),
-            );
-        }
-    }
-    if let Some(active_id) = document.active_chunk_timeline_id.as_mut()
-        && let Some(remapped) = chunk_timeline_ids.get(active_id)
     {
         *active_id = remapped.clone();
     }

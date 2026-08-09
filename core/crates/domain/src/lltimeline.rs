@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkTimeline, ChunkTimelineChunk, ChunkTimelineId, LanguageCode, MediaId, PhoneTimeline,
-    PhoneTimelineId, ProsodyAnalysis, ProsodyAnalysisId, RhythmFrame, RhythmFrameId,
-    SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleSentenceId, SubtitleTokenKind,
-    SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimeline, WordTimelineId,
+    LanguageCode, MediaId, PhoneTimeline, PhoneTimelineId, ProsodyAnalysis, ProsodyAnalysisId,
+    RhythmFrame, RhythmFrameId, SenseGroupAnalysis, SenseGroupAnalysisId, SubtitleSentenceId,
+    SubtitleTokenKind, SubtitleTrackId, TimelineMetrics, TimelineStatus, WordTimeline,
+    WordTimelineId,
 };
 
 pub const LLTIMELINE_SCHEMA_V1: &str = "llplayer.timeline.v1";
@@ -22,9 +22,6 @@ pub struct LLTimelineDocument {
     pub active_phone_timeline_id: Option<PhoneTimelineId>,
     #[serde(default)]
     pub rhythm_frames: Vec<LLTimelineRhythmFrame>,
-    #[serde(default)]
-    pub chunk_timelines: Vec<ChunkTimeline>,
-    pub active_chunk_timeline_id: Option<ChunkTimelineId>,
     #[serde(default)]
     pub sense_group_analyses: Vec<SenseGroupAnalysis>,
     #[serde(default)]
@@ -85,8 +82,6 @@ pub struct LLTimelineToken {
     pub end_char: u32,
 }
 
-pub type LLTimelineChunkTimeline = ChunkTimeline;
-pub type LLTimelineChunk = ChunkTimelineChunk;
 pub type LLTimelinePhoneTimeline = PhoneTimeline;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

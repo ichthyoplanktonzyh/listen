@@ -52,7 +52,7 @@ Key invariants:
   or readiness. Prosodic chunk spans are declared by the resource; only their
   playback times are derived through the parent Word Timeline. Sense Group
   analysis is a separate resource family with a separate lifecycle. Legacy
-  `ChunkTimeline` remains readable but is not a foundation fallback;
+  `ChunkTimeline` was retired in R5; corpus chunk projections come from the active Prosody Analysis;
 - destructive migration or cascade behavior requires explicit requirement,
   tests, and release/migration notes.
 

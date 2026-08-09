@@ -261,7 +261,7 @@ Exit met: the agreed rich resources are produced through the single Gen seam
 and accepted through the producer-neutral Core inspector/import boundary. R5
 retirement work remains untouched.
 
-### R5 — Retire the legacy production tree
+### R5 — Retire the legacy production tree — complete
 
 Owners: Core, App and release assembly.
 
@@ -273,6 +273,28 @@ Owners: Core, App and release assembly.
   and playback helpers also consume them.
 - Update current architecture/planning facts and leave historical decisions as
   superseded records.
+
+Completed:
+
+- Core PR #124 (merge to be recorded) deleted `scripts/timeline-production`,
+  the legacy `ChunkTimeline` domain/persistence, LLTimeline chunk fields, the
+  eight `/v1/*chunk-timelines*` HTTP operations, their OpenAPI schemas and the
+  generated client identity. Removing the published operations and LLTimeline
+  fields is breaking, so the current contract is `3.0.0` (unreleased); the
+  App R4 baseline stays pinned to the previously published `2.1.0` until the
+  R5 release is published. Corpus chunk occurrences now project from the
+  active Prosody Analysis; foundation/content-fit read prosody as the sole
+  prosodic-chunk source; Sense Group stays independent; the content-package
+  import stays candidate-only. Migration 0013 (immutable history) is retained
+  and a new forward migration v57 drops the retired `chunk_timeline_runs`
+  storage. Shared `whisper-cli`, `ffmpeg` and `ffprobe` remain for learner
+  recording, realtime and SoundLine paths.
+- Gen PR #7 (tool `0.4.0`) binds the release manifest to a strict
+  verifier-checked `runtime_identity` (runtime + canonical external
+  toolchain with Gen stage-family roles); consumers record it immutably.
+- App PR (to be recorded) removed legacy ChunkTimeline parsing/models/
+  repository/controllers/UI and pins the Gen `0.4.0` runtime identity.
+- Real model-free six-resource round trip passes against the pinned stack.
 
 Exit: deleting Gen would make reusable whole-media generation disappear rather
 than reappear across Core and App; deleting the Core consumer would not remove

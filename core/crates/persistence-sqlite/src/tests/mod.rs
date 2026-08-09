@@ -1,13 +1,13 @@
 use super::*;
 use application::{
-    AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
-    ContentPackageCandidateImport, ContentPackageImportRepository, DictionaryProvider,
-    DictionaryProviderError, ImportSubtitle, LLTimelineResourceRepository, LearningEventRepository,
-    LearningObservationRepository, LexicalCapabilityRepository, LexicalEntryRepository,
-    ListeningInboxRepository, MediaRepository, PhoneTimelineRepository, PhoneticAnalysisRepository,
-    PracticeRepository, PronunciationRepository, ProsodyAnalysisRepository,
-    RecognitionUpgradeRepository, RegisterMedia, ReviewQueueRepository, SenseGroupRepository,
-    SubtitleTrackRepository, UpsertLexicalEntry, VocabularyAssetRepository, WordTimelineRepository,
+    AppServices, ApplicationError, CoachDashboardRepository, ContentPackageCandidateImport,
+    ContentPackageImportRepository, DictionaryProvider, DictionaryProviderError, ImportSubtitle,
+    LLTimelineResourceRepository, LearningEventRepository, LearningObservationRepository,
+    LexicalCapabilityRepository, LexicalEntryRepository, ListeningInboxRepository, MediaRepository,
+    PhoneTimelineRepository, PhoneticAnalysisRepository, PracticeRepository,
+    PronunciationRepository, ProsodyAnalysisRepository, RecognitionUpgradeRepository,
+    RegisterMedia, ReviewQueueRepository, SenseGroupRepository, SubtitleTrackRepository,
+    UpsertLexicalEntry, VocabularyAssetRepository, WordTimelineRepository,
 };
 
 #[test]
@@ -403,43 +403,6 @@ fn word_timeline(
         }],
         created_at_ms: start_ms,
         updated_at_ms: start_ms,
-    }
-}
-
-fn chunk_timeline(
-    id: &str,
-    track: &SubtitleTrack,
-    parent: &WordTimeline,
-    status: TimelineStatus,
-) -> ChunkTimeline {
-    ChunkTimeline {
-        id: ChunkTimelineId::parse(id).unwrap(),
-        track_id: track.id.clone(),
-        media_id: track.media_id.clone(),
-        parent_word_timeline_id: Some(parent.id.clone()),
-        provider_id: "acoustic-first-rule-partitioner".into(),
-        provider_version: "v4".into(),
-        algorithm: "acoustic_semantic_v1".into(),
-        precision: ChunkTimelinePrecision::Precise,
-        created_by: TimelineCreator::Algorithm,
-        status,
-        metrics_json: serde_json::json!({}).into(),
-        chunks: vec![ChunkTimelineChunk {
-            id: ChunkId::parse(format!("{id}-chunk-1")).unwrap(),
-            sentence_id: track.sentences[0].id.clone(),
-            chunk_index: 0,
-            start_word_index: 0,
-            end_word_index: 0,
-            start_ms: 150,
-            end_ms: 260,
-            text: "hello".into(),
-            boundary_sources: vec![ChunkBoundarySource::Pause],
-            confidence: 0.9,
-            warnings: Vec::new(),
-            evidence_json: serde_json::json!({}).into(),
-        }],
-        created_at_ms: 1,
-        updated_at_ms: 1,
     }
 }
 

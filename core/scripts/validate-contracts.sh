@@ -31,15 +31,7 @@ PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m py_compile \
   "$root/scripts/syntactic-analysis/test_syntax_sidecar_contract.py" \
   "$root/scripts/validate-syntactic-fixtures.py" \
   "$root/scripts/validate-syntactic-fixtures-v2.py" \
-  "$root/scripts/timeline-production/production_pipeline.py" \
-  "$root/scripts/timeline-production/production_pipeline_acoustics.py" \
-  "$root/scripts/timeline-production/production_pipeline_alignment.py" \
-  "$root/scripts/timeline-production/production_pipeline_audio.py" \
-  "$root/scripts/timeline-production/production_pipeline_common.py" \
-  "$root/scripts/timeline-production/production_pipeline_conversion.py" \
-  "$root/scripts/timeline-production/production_pipeline_orchestration.py" \
-  "$root/scripts/timeline-production/production_pipeline_report.py" \
-  "$root/scripts/timeline-production/whisperx-align-request.py"
+  "$root/scripts/lltimeline-resource.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 "$root/scripts/check-architecture-coupling.py"
 PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m unittest \
   "$root/scripts/test_architecture_coupling.py"
@@ -142,74 +134,7 @@ timit_candidate_evaluation="$(
     --baseline-timeline @active \
     --candidate-timeline timit-smoke-candidate
 )"
-production_output="$tmp/whisperx-sample.lltimeline.json"
-media_input="$tmp/input.wav"
-media_out="$tmp/media"
-ffmpeg -hide_banner -loglevel error -y \
-  -f lavfi -i sine=frequency=440:duration=0.25 \
-  -ac 1 -ar 16000 -sample_fmt s16 "$media_input"
-prepare_report="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" prepare-media \
-    --input "$media_input" \
-    --output-dir "$media_out"
-)"
-whisperx_dry_run="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" run-whisperx \
-    --input "$media_out/audio-16k-mono.wav" \
-    --output-dir "$tmp/whisperx" \
-    --whisperx-command 'whisperx {input} --model {model} --output_dir {output_dir} --output_format json --language {language}' \
-    --dry-run
-)"
-produce_dry_run="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" produce-whisperx \
-    --input "$media_input" \
-    --output-dir "$tmp/produce" \
-    --media-fingerprint "timeline-production-smoke" \
-    --media-title "Timeline Production Smoke" \
-    --whisperx-command 'whisperx {input} --model {model} --output_dir {output_dir} --output_format json --language {language}' \
-    --dry-run
-)"
-produce_mfa_dry_run="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" produce-whisperx \
-    --input "$media_input" \
-    --output-dir "$tmp/produce-mfa" \
-    --media-fingerprint "timeline-production-smoke" \
-    --media-title "Timeline Production Smoke" \
-    --whisperx-command 'whisperx {input} --model {model} --output_dir {output_dir} --output_format json --language {language}' \
-    --post-aligner mfa \
-    --dry-run
-)"
-apply_mfa_dry_run="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" apply-mfa-alignment \
-    --input "$production_output" \
-    --audio "$media_out/audio-16k-mono.wav" \
-    --output-dir "$tmp/apply-mfa" \
-    --dry-run
-)"
-apply_mms_fa_dry_run="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" apply-mms-fa-alignment \
-    --input "$production_output" \
-    --audio "$media_out/audio-16k-mono.wav" \
-    --output-dir "$tmp/apply-mms-fa" \
-    --dry-run
-)"
-production_report="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" from-whisperx-json \
-    --input "$root/testdata/timeline-production/whisperx-sample.json" \
-    --output "$production_output" \
-    --media-fingerprint "timeline-production-smoke" \
-    --media-title "Timeline Production Smoke" \
-    --preprocessing-artifacts "$media_out/preprocessing-artifacts.json"
-)"
-production_validation="$(
-  python3 "$root/scripts/lltimeline-resource.py" validate "$production_output"
-)"
-production_quality_report="$tmp/production-report.json"
-production_quality="$(
-  python3 "$root/scripts/timeline-production/production_pipeline.py" report \
-    --input "$production_output" \
-    --output "$production_quality_report"
-)"
+
 node -e '
 const fs = require("fs");
 const report = JSON.parse(process.argv[1]);
@@ -267,46 +192,6 @@ if (timitCandidateEvaluation.weak_metrics.offsets.start_offset_ms.mean_abs !== 0
 
 node -e '
 const fs = require("fs");
-const prepare = JSON.parse(process.argv[1]);
-const whisperx = JSON.parse(process.argv[2]);
-const produce = JSON.parse(process.argv[3]);
-const produceMfa = JSON.parse(process.argv[4]);
-const applyMfa = JSON.parse(process.argv[5]);
-const applyMmsFa = JSON.parse(process.argv[6]);
-const production = JSON.parse(process.argv[7]);
-const validation = JSON.parse(process.argv[8]);
-const quality = JSON.parse(process.argv[9]);
-const qualityFile = JSON.parse(fs.readFileSync(process.argv[10], "utf8"));
-if (!prepare.artifacts_path.endsWith("preprocessing-artifacts.json")) throw new Error("prepare-media artifact missing");
-if (prepare.vocal_isolation !== false) throw new Error("prepare-media vocal isolation default failed");
-if (!whisperx.command.includes("whisperx")) throw new Error("run-whisperx dry run command missing");
-if (!whisperx.command.includes("--output_format json")) throw new Error("run-whisperx output format missing");
-if (!produce.run_whisperx.command.includes("whisperx")) throw new Error("produce-whisperx dry run command missing");
-if (produce.convert.media_fingerprint !== "timeline-production-smoke") throw new Error("produce-whisperx convert plan failed");
-if (produceMfa.post_align.policy !== "ordered-fallback") throw new Error("produce-whisperx MFA fallback policy missing");
-if (produceMfa.post_align.chain.join(",") !== "mfa,mms-fa") throw new Error("produce-whisperx MFA fallback chain failed");
-if (!produceMfa.post_align.plans[0].command.includes("mfa-align-cli.py")) throw new Error("produce-whisperx MFA dry run command missing");
-if (!produceMfa.post_align.plans[0].command.includes("--strategy align")) throw new Error("produce-whisperx MFA strategy missing");
-if (!produceMfa.post_align.plans[1].command.includes("align-cli.py")) throw new Error("produce-whisperx MMS_FA fallback command missing");
-if (!applyMfa.command.includes("mfa-align-cli.py")) throw new Error("apply-mfa dry run command missing");
-if (!applyMfa.command.includes("english_us_arpa")) throw new Error("apply-mfa default ARPA model missing");
-if (!applyMmsFa.command.includes("align-cli.py")) throw new Error("apply-mms-fa dry run command missing");
-if (production.segments !== 2) throw new Error("production converter segment count failed");
-if (production.words !== 5) throw new Error("production converter word count failed");
-if (validation.schema !== "llplayer.timeline.v1") throw new Error("production LLTimeline schema failed");
-if (validation.segments !== 2) throw new Error("production LLTimeline validation segments failed");
-if (validation.word_timelines !== 1) throw new Error("production LLTimeline validation timelines failed");
-if (!quality.output.endsWith("production-report.json")) throw new Error("production quality output missing");
-if (quality.segments !== 2) throw new Error("production quality segment count failed");
-if (quality.words !== 5) throw new Error("production quality word count failed");
-if (quality.ready_for_manual_review !== true) throw new Error("production quality readiness failed");
-if (qualityFile.report_version !== 1) throw new Error("production quality report version failed");
-if (qualityFile.word_coverage !== 1) throw new Error("production quality coverage failed");
-if (qualityFile.quality.valid !== true) throw new Error("production quality validity failed");
-' "$prepare_report" "$whisperx_dry_run" "$produce_dry_run" "$produce_mfa_dry_run" "$apply_mfa_dry_run" "$apply_mms_fa_dry_run" "$production_report" "$production_validation" "$production_quality" "$production_quality_report"
-
-node -e '
-const fs = require("fs");
 const schema = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 const examples = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const events = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
@@ -323,9 +208,13 @@ if (events.properties.version.const !== 1) throw new Error("event schema version
 for (const path of ["/v1/health", "/v1/media", "/v1/lltimeline/import", "/v1/media/{media_id}/lltimeline/import", "/v1/media/{media_id}/progress", "/v1/media/{media_id}/subtitles", "/v1/subtitles/{track_id}", "/v1/subtitles/{track_id}/archive", "/v1/subtitles/{track_id}/restore", "/v1/subtitles/{track_id}/language", "/v1/subtitles/{track_id}/export", "/v1/pronunciation/providers", "/v1/pronunciation/lookup", "/v1/pronunciation/analyze-sentence", "/v1/pronunciation/rules", "/v1/subtitles/{track_id}/pronunciation", "/v1/subtitles/{track_id}/pronunciation-analysis", "/v1/subtitles/{track_id}/word-timings", "/v1/subtitles/{track_id}/word-timelines", "/v1/subtitles/{track_id}/word-timelines/summary", "/v1/subtitles/{track_id}/lltimeline/export", "/v1/word-timelines/{timeline_id}", "/v1/word-timelines/{timeline_id}/activate", "/v1/word-timelines/{timeline_id}/publish", "/v1/word-timelines/{timeline_id}/archive", "/v1/word-timelines/{timeline_id}/export", "/v1/subtitles/{track_id}/phone-timelines", "/v1/subtitles/{track_id}/phone-timelines/summary", "/v1/phone-timelines/{timeline_id}", "/v1/phone-timelines/{timeline_id}/activate", "/v1/phone-timelines/{timeline_id}/archive", "/v1/phone-timelines/{timeline_id}/export", "/v1/speech/jobs", "/v1/speech/jobs/{job_id}", "/v1/speech/jobs/{job_id}/cancel", "/v1/speech/jobs/{job_id}/retry", "/v1/lexical-entries/batch", "/v1/lexical-entries", "/v1/lexical-entries/{id}", "/v1/lexical-entries/{id}/learning-content", "/v1/lexical-observations", "/v1/lexical-normalization", "/v1/sentences/{sentence_id}/phrase-candidates", "/v1/practice/sessions", "/v1/practice/items", "/v1/practice/attempts", "/v1/practice/attempts/{id}", "/v1/listening/sessions/{id}/complete", "/v1/review/items", "/v1/review/items/{id}", "/v1/review/attempts", "/v1/learning-resources", "/v1/subtitle-search", "/v1/vocabulary", "/v1/vocabulary/export", "/v1/vocabulary/import", "/v1/vocabulary/import-external", "/v1/media/{media_id}/availability", "/v1/events", "/v1/dictionary", "/v1/languages", "/v1/languages/{code}/profile", "/v1/sentences/{sentence_id}/diagnosis", "/v1/transcription/providers", "/v1/transcription/models", "/v1/recording-transcriptions", "/v1/recording-transcriptions/{job_id}", "/v1/recording-transcriptions/{job_id}/cancel", "/v1/phonetic-analysis/providers", "/v1/phonetic-analysis/models", "/v1/phonetic-analysis/jobs", "/v1/phonetic-analysis/jobs/clear", "/v1/subtitles/{track_id}/phonetic-analyses", "/v1/phonetic-analysis/{analysis_id}/findings", "/v1/phonetic-analysis/findings/{finding_id}/feedback"]) {
   if (!openapi.includes(path + ":")) throw new Error(`OpenAPI missing ${path}`);
 }
-for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id}", "/v1/transcription/jobs/{job_id}/cancel", "/v1/transcription/jobs/{job_id}/retry", "/v1/transcription/jobs/{job_id}/archive"]) {
+for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id}", "/v1/transcription/jobs/{job_id}/cancel", "/v1/transcription/jobs/{job_id}/retry", "/v1/transcription/jobs/{job_id}/archive", "/v1/subtitles/{track_id}/chunk-timelines", "/v1/subtitles/{track_id}/chunk-timelines/summary", "/v1/chunk-timelines/{timeline_id}", "/v1/chunk-timelines/{timeline_id}/activate", "/v1/chunk-timelines/{timeline_id}/archive", "/v1/chunk-timelines/{timeline_id}/export"]) {
   if (openapi.includes(removed + ":")) throw new Error(`removed OpenAPI path ${removed} must stay absent`);
 }
+for (const removedWire of ["chunk_timelines:", "active_chunk_timeline_id:", "ChunkTimeline:", "ChunkTimelineSummary:", "ChunkBoundarySource:", "GenerateChunkTimeline:"]) {
+  if (openapi.includes(removedWire)) throw new Error(`removed OpenAPI wire surface ${removedWire} must stay absent`);
+}
+if (!openapi.includes("version: 3.0.0")) throw new Error("OpenAPI must report the current R5 contract 3.0.0");
 if (routerSource.includes("/v1/transcription/jobs")) throw new Error("removed transcription jobs route must stay absent from the router");
 const implementedPaths = [...new Set([...routerSource.matchAll(/"((?:\/v1\/)[^"]+)"/g)].map(match => match[1]))].sort();
 const documentedPaths = [...new Set([...openapi.matchAll(/^  (\/v1\/[^:]+):/gm)].map(match => match[1]))].sort();
@@ -337,7 +226,7 @@ if (undocumented.length || unimplemented.length) {
 for (const operation of ["health()", "registerMedia(", "importLLTimeline(", "importLLTimelineForMedia(", "updateProgress(", "importSubtitle(", "mediaSubtitles(", "readSubtitle(", "archiveSubtitle(", "restoreSubtitle(", "updateTrackLanguage(", "deleteSubtitle(", "exportSubtitle(", "pronunciationProviders(", "pronunciationLookup(", "analyzeSentencePronunciation(", "pronunciationRules(", "trackPronunciation(", "generateTrackPronunciation(", "trackWordTimings(", "generateTrackWordTimings(", "trackWordTimelines(", "trackWordTimelineSummaries(", "createTrackWordTimeline(", "exportTrackLLTimeline(", "wordTimeline(", "activateWordTimeline(", "publishWordTimeline(", "archiveWordTimeline(", "exportWordTimeline(", "deleteWordTimeline(", "trackPhoneTimelines(", "trackPhoneTimelineSummaries(", "phoneTimeline(", "activatePhoneTimeline(", "archivePhoneTimeline(", "exportPhoneTimeline(", "deletePhoneTimeline(", "speechBatchJobs(", "createSpeechBatchJob(", "speechBatchJob(", "cancelSpeechBatchJob(", "retrySpeechBatchJob(", "listLexicalEntries(", "upsertLexicalEntry(", "normalizeLexical(", "correctLemma(", "phraseCandidates(", "createPracticeSession(", "createPracticeItem(", "submitPracticeAttempt(", "practiceAttempt(", "completeListeningSession(", "createReviewItem(", "listDueReviewItems(", "submitReviewAttempt(", "listUpgradeSuggestions(", "upgradeSuggestionHistory(", "confirmUpgradeSuggestion(", "rejectUpgradeSuggestion(", "reviewItem(", "learningResources(", "installLearningResource(", "removeLearningResource(", "searchSubtitles(", "downloadSubtitle(", "transcriptionProviders(", "transcriptionModels(", "installTranscriptionModel(", "registerCustomTranscriptionModel(", "phoneticAnalysisProviders(", "phoneticAnalysisModels(", "installPhoneticAnalysisModel(", "registerCustomPhoneticAnalysisModel(", "cancelPhoneticAnalysisModelInstall(", "deletePhoneticAnalysisModel(", "phoneticAnalysisJobs(", "createPhoneticAnalysisJob(", "clearTerminalPhoneticAnalysisJobs(", "phoneticAnalysisJob(", "cancelPhoneticAnalysisJob(", "retryPhoneticAnalysisJob(", "trackPhoneticAnalyses(", "phoneticAnalysisFindings(", "updatePhoneticFindingFeedback(", "readLexicalEntries(", "lexicalEntryDetails(", "updateLexicalLearningContent(", "createLexicalObservation(", "listVocabulary(", "exportVocabulary(", "importVocabulary(", "importExternalVocabulary(", "updateMediaAvailability(", "dictionaryLookup(", "listLanguages(", "languageProfile(", "diagnoseSentence("]) {
   if (!client.includes(operation)) throw new Error(`client experiment missing ${operation}`);
 }
-for (const operation of ["transcriptionJobs(", "createTranscriptionJob(", "transcriptionJob(", "cancelTranscriptionJob(", "retryTranscriptionJob(", "archiveTranscriptionJob("]) {
+for (const operation of ["transcriptionJobs(", "createTranscriptionJob(", "transcriptionJob(", "cancelTranscriptionJob(", "retryTranscriptionJob(", "archiveTranscriptionJob(", "trackChunkTimelines(", "generateChunkTimeline(", "trackChunkTimelineSummaries(", "chunkTimeline(", "activateChunkTimeline(", "archiveChunkTimeline(", "exportChunkTimeline(", "deleteChunkTimeline("]) {
   if (client.includes(operation)) throw new Error(`removed client operation ${operation} must stay absent`);
 }
 for (const schema of ["WordTiming", "WordTimeline", "WordTimelineSummary", "CreateWordTimeline", "LLTimelineDocument", "PhoneTimeline", "PhoneTimelineSummary", "DetectedPhone", "PhoneAlignment", "PhoneticFinding", "LexicalEntry", "LexicalEntryDetails", "LexicalNormalization", "ReviewSchedule", "ReviewAttempt", "ReviewCardKind", "ReviewCard", "ReviewQueueEntry", "ReviewSubmission", "UpgradeSuggestionStatus", "UpgradeSuggestion", "LearningResource", "SubtitleSearchRequest", "SubtitleSearchResult"]) {
@@ -349,6 +238,8 @@ if (!openapi.includes("audio_url: { type: [string, \"null\"] }")) throw new Erro
 if (!client.includes("sense_group_analyses?: SenseGroupAnalysis[];")) throw new Error("generated LLTimeline sense-group analyses missing");
 if (!client.includes("active_sense_group_analysis_id?: string | null;")) throw new Error("generated LLTimeline active sense-group id missing");
 if (!client.includes("chunks: ProsodicChunk[];")) throw new Error("generated Prosody declared chunks missing");
+if (client.includes("chunk_timelines")) throw new Error("generated retired chunk timeline fields must stay absent");
+if (client.includes("chunk_timeline")) throw new Error("generated retired chunk timeline identity must stay absent");
 for (const item of examples) {
   if (item.version !== 1 || (!item.command && !item.event)) throw new Error("invalid example");
 }

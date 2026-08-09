@@ -20,8 +20,11 @@ use super::PersistenceError;
 // typed learning-preparation run store and its active-target single-flight
 // authority. v56 adds the prosody analysis resource family (the R3 single
 // semantic source for the Prosodic Chunk foundation slot) with its own
-// candidate/active lifecycle.
-pub const MIGRATION_VERSION: u32 = 56;
+// candidate/active lifecycle. v57 drops the retired legacy ChunkTimeline
+// storage (`chunk_timeline_runs` and its indexes) created by immutable
+// migration 0013; it removes replaceable analysis storage only and never
+// cascades to learner history.
+pub const MIGRATION_VERSION: u32 = 57;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -480,6 +483,14 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             tx.execute_batch(include_str!("../migrations/0056_prosody_analysis_runs.sql"))?;
         }
         tx.pragma_update(None, "user_version", 56)?;
+        tx.commit()?;
+    }
+    if current < 57 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!(
+            "../migrations/0057_drop_chunk_timeline_runs.sql"
+        ))?;
+        tx.pragma_update(None, "user_version", 57)?;
         tx.commit()?;
     }
     Ok(())

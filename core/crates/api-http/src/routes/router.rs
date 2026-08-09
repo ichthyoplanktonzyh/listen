@@ -91,18 +91,15 @@ use super::syntax::{
     update_syntax_capability, validate_syntax_capability,
 };
 use super::timelines::{
-    activate_chunk_timeline, activate_phone_timeline, activate_sense_group_analysis,
-    activate_word_timeline, archive_chunk_timeline, archive_phone_timeline,
-    archive_sense_group_analysis, archive_word_timeline, chunk_providers, chunk_timeline,
-    create_track_word_timeline, delete_chunk_timeline, delete_phone_timeline,
-    delete_sense_group_analysis, delete_word_timeline, export_chunk_timeline,
-    export_phone_timeline, export_track_lltimeline, export_word_timeline, generate_chunk_timeline,
+    activate_phone_timeline, activate_sense_group_analysis, activate_word_timeline,
+    archive_phone_timeline, archive_sense_group_analysis, archive_word_timeline, chunk_providers,
+    create_track_word_timeline, delete_phone_timeline, delete_sense_group_analysis,
+    delete_word_timeline, export_phone_timeline, export_track_lltimeline, export_word_timeline,
     generate_sense_group_analysis, generate_track_word_timings, phone_timeline,
     publish_word_timeline, sense_group_analysis, track_chunk_diagnostics, track_chunk_partitions,
-    track_chunk_timeline_summaries, track_chunk_timelines, track_phone_timeline_summaries,
-    track_phone_timelines, track_sense_group_analyses, track_sense_group_analysis_summaries,
-    track_word_timeline_summaries, track_word_timelines, track_word_timing_diagnostics,
-    track_word_timings, word_timeline,
+    track_phone_timeline_summaries, track_phone_timelines, track_sense_group_analyses,
+    track_sense_group_analysis_summaries, track_word_timeline_summaries, track_word_timelines,
+    track_word_timing_diagnostics, track_word_timings, word_timeline,
 };
 use super::transcription::{
     cancel_recording_transcription, cancel_transcription_model_install,
@@ -237,30 +234,6 @@ fn media_analysis_routes() -> Router<ApiState> {
             get(track_chunk_diagnostics),
         )
         .route("/v1/chunk/providers", get(chunk_providers))
-        .route(
-            "/v1/subtitles/{track_id}/chunk-timelines",
-            get(track_chunk_timelines).post(generate_chunk_timeline),
-        )
-        .route(
-            "/v1/subtitles/{track_id}/chunk-timelines/summary",
-            get(track_chunk_timeline_summaries),
-        )
-        .route(
-            "/v1/chunk-timelines/{timeline_id}",
-            get(chunk_timeline).delete(delete_chunk_timeline),
-        )
-        .route(
-            "/v1/chunk-timelines/{timeline_id}/activate",
-            post(activate_chunk_timeline),
-        )
-        .route(
-            "/v1/chunk-timelines/{timeline_id}/archive",
-            post(archive_chunk_timeline),
-        )
-        .route(
-            "/v1/chunk-timelines/{timeline_id}/export",
-            get(export_chunk_timeline),
-        )
         .route(
             "/v1/subtitles/{track_id}/sense-group-analyses",
             get(track_sense_group_analyses).post(generate_sense_group_analysis),

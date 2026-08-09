@@ -13,11 +13,11 @@ contracts / HTTP / events
           |              |
  persistence-sqlite   *-provider adapters
 
-legacy scripts/timeline-production               listen-gen
-          |                                       |
- versioned LLTimeline --migration--> deterministic .listenpkg
-                                                   |
-                                      bounded Core import
+                  listen-gen
+                    |
+        deterministic .listenpkg
+                    |
+       bounded Core import (candidate-only)
 ```
 
 `domain` owns stable concepts. `application` owns use cases and ports.
@@ -66,8 +66,9 @@ through ASR Subtitle Text Track and Word Timeline to a native `.listenpkg`.
 Provider/model execution, media preprocessing, and batch generation belong on
 the external producer side of that boundary. Core's whole-media transcription
 job runtime, routes, DTOs/events and SQLite CAS job store were deleted in the R1
-Core slice; `scripts/timeline-production` remains a legacy migration path until
-R5 retires it. Neither is the target interface for new generation work.
+Core slice, and `scripts/timeline-production` plus the legacy ChunkTimeline
+family were retired in R5. Neither is the target interface for new generation
+work.
 Learner-recording transcription, realtime conversation, and learner-dependent
 or genuinely realtime LLM behavior remain Core responsibilities.
 
@@ -109,8 +110,8 @@ semantic source for the Prosody slot is a Prosody Analysis resource (the
 package-native `prosody_analysis` projection); an imported analysis whose
 parent WordTimeline matches the selected timeline satisfies the slot as a
 candidate without Core regenerating an equivalent resource, and it is never
-activated by readiness. Foundation does not regenerate the legacy persisted
-ChunkTimeline as a fallback. Prosodic chunk spans are declared by Prosody;
+activated by readiness. The legacy persisted ChunkTimeline family was retired
+in R5. Prosodic chunk spans are declared by Prosody;
 only playback times are derived at read time through the Word Timeline. Dedicated SQLite runs use revision
 compare-and-swap and an active-target partial unique index for durable
 single-flight; startup recovery, cancellation, retry, plan/input fingerprints,

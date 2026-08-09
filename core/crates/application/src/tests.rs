@@ -1,7 +1,7 @@
 use super::*;
 use domain::{
-    ChunkEvidence, LexicalEntryKind, ProsodyAnchor, ProsodyWordRef, SubtitleSentence,
-    SubtitleSentenceId, SubtitleToken, SubtitleTokenKind, TimeMs, TimingSource,
+    LexicalEntryKind, ProsodyAnchor, ProsodyWordRef, SubtitleSentence, SubtitleSentenceId,
+    SubtitleToken, SubtitleTokenKind, TimeMs, TimingSource,
 };
 
 // ── require_text ────────────────────────────────────────────────────────
@@ -302,8 +302,6 @@ fn remap_lltimeline_ids_rewrites_rhythm_word_acoustic_cues_artifact() {
         phone_timelines: Vec::new(),
         active_phone_timeline_id: None,
         rhythm_frames: Vec::new(),
-        chunk_timelines: Vec::new(),
-        active_chunk_timeline_id: None,
         sense_group_analyses: Vec::new(),
         active_sense_group_analysis_id: None,
         prosody_analyses: Vec::new(),
@@ -372,36 +370,6 @@ fn remap_lltimeline_identity_leaves_no_original_ids() {
     derived_timeline.id = WordTimelineId::parse("OLD-DERIVED-WORD-TIMELINE").unwrap();
     derived_timeline.parent_timeline_id = Some(base_timeline.id.clone());
     document.word_timelines.push(derived_timeline);
-    document.chunk_timelines.push(ChunkTimeline {
-        id: ChunkTimelineId::parse("OLD-CHUNK-TIMELINE").unwrap(),
-        track_id: base_timeline.track_id.clone(),
-        media_id: base_timeline.media_id.clone(),
-        parent_word_timeline_id: Some(base_timeline.id.clone()),
-        provider_id: "fixture".into(),
-        provider_version: "v1".into(),
-        algorithm: "fixture".into(),
-        precision: ChunkTimelinePrecision::Approximate,
-        created_by: TimelineCreator::Algorithm,
-        status: TimelineStatus::Candidate,
-        metrics_json: TimelineMetrics::empty(),
-        chunks: vec![ChunkTimelineChunk {
-            id: ChunkId::parse("OLD-CHUNK").unwrap(),
-            sentence_id: old_sentence_id.clone(),
-            chunk_index: 0,
-            start_word_index: 0,
-            end_word_index: 1,
-            start_ms: 0,
-            end_ms: 500,
-            text: "chunk".into(),
-            boundary_sources: Vec::new(),
-            confidence: 1.0,
-            warnings: Vec::new(),
-            evidence_json: ChunkEvidence::empty(),
-        }],
-        created_at_ms: 1,
-        updated_at_ms: 1,
-    });
-    document.active_chunk_timeline_id = Some(ChunkTimelineId::parse("OLD-CHUNK-TIMELINE").unwrap());
     document.phone_timelines.push(PhoneTimeline {
         id: PhoneTimelineId::parse("OLD-PHONE-TIMELINE").unwrap(),
         track_id: base_timeline.track_id.clone(),
@@ -478,12 +446,6 @@ fn remap_lltimeline_identity_leaves_no_original_ids() {
         original_ids.push(timeline.id.as_str().to_owned());
         original_ids.push(timeline.track_id.as_str().to_owned());
         original_ids.push(timeline.media_id.as_str().to_owned());
-    }
-    for timeline in &document.chunk_timelines {
-        original_ids.push(timeline.id.as_str().to_owned());
-        for chunk in &timeline.chunks {
-            original_ids.push(chunk.id.as_str().to_owned());
-        }
     }
     for timeline in &document.phone_timelines {
         original_ids.push(timeline.id.as_str().to_owned());

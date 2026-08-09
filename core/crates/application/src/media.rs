@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    AppServices, ApplicationError, ChunkTimelineRepository, CoachDashboardRepository,
-    ContentPackageImportRepository, CorpusIndexRepository, DifficultyRepository,
-    LLTimelineImportRepository, LLTimelineResourceRepository, LearnerProfileUseCases,
-    LearningEventKind, LearningEventRepository, LearningEventSubjectKind, LexicalEntryRepository,
+    AppServices, ApplicationError, CoachDashboardRepository, ContentPackageImportRepository,
+    CorpusIndexRepository, DifficultyRepository, LLTimelineImportRepository,
+    LLTimelineResourceRepository, LearnerProfileUseCases, LearningEventKind,
+    LearningEventRepository, LearningEventSubjectKind, LexicalEntryRepository,
     LexicalLearningUseCases, MediaAvailability, MediaId, MediaItem, MediaLibraryEntry,
     MediaRepository, MediaTriageIntent, PhoneTimelineRepository, PlaybackProgressRepository,
     PronunciationProvider, PronunciationRepository, PronunciationUseCases,
@@ -24,7 +24,6 @@ pub struct MediaAnalysisUseCases {
     pub(crate) subtitle_tracks: Arc<dyn SubtitleTrackRepository>,
     pub(crate) pronunciations: Arc<dyn PronunciationRepository>,
     pub(crate) word_timelines: Arc<dyn WordTimelineRepository>,
-    pub(crate) chunk_timelines: Arc<dyn ChunkTimelineRepository>,
     pub(crate) sense_groups: Arc<dyn SenseGroupRepository>,
     pub(crate) prosody: Arc<dyn ProsodyAnalysisRepository>,
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
@@ -49,7 +48,6 @@ impl MediaAnalysisUseCases {
             subtitle_tracks: services.subtitle_tracks.clone(),
             pronunciations: services.pronunciations.clone(),
             word_timelines: services.word_timelines.clone(),
-            chunk_timelines: services.chunk_timelines.clone(),
             sense_groups: services.sense_groups.clone(),
             prosody: services.prosody.clone(),
             phone_timelines: services.phone_timelines.clone(),

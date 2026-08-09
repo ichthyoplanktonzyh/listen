@@ -27,8 +27,8 @@ python3 -m unittest scripts/test_release_artifacts.py
   restart/retry preservation, derived A/B readiness, invalid-artifact rebuild,
   and stable plan identity after artifacts appear;
 - timeline persistence tests cover atomic activate-if-absent for WordTimeline,
-  ChunkTimeline, and SenseGroup, including preservation of an existing active
-  user selection and the WordTimeline legacy-timing invariant;
+  PhoneTimeline, SenseGroup, and Prosody, including preservation of an existing
+  active user selection and the WordTimeline legacy-timing invariant;
 - local realtime contract fixtures for snapshot transcripts, chunk merging,
   loopback/keyless policy, plus sidecar pool-readiness and process reaping;
 - OpenAPI method+path parity and structural validation;

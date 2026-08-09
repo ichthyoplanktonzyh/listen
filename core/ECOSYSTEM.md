@@ -118,9 +118,13 @@ installs it as candidates and preserves the learner's current active choices.
 ## Current Reality And Migration
 
 - Core owns content-package v1 validation, typed projection, atomic
-  candidate-only import and explicit activation. Contract `2.1.0` retains the
-  R1 removal of `/v1/transcription/jobs*` and additively projects package-native
-  Prosody Analysis; immutable release `v0.7.0-split.4` is the App baseline.
+  candidate-only import and explicit activation. The current R5 contract is
+  `3.0.0` (breaking, unreleased): it retains the R1 removal of
+  `/v1/transcription/jobs*` and the R3 Prosody Analysis projection, and
+  additionally removes the retired ChunkTimeline wire surface. The App R4
+  baseline pins the previously published `2.1.0` from immutable release
+  `v0.7.0-split.4`; re-pinning to `3.0.0` happens when the R5 release is
+  published.
 - `listen-gen` commit `42649d9f` / tool `0.3.0` natively produces deterministic
   Subtitle Text Track, aligned Word Timeline, Sense Group, Word Acoustics,
   Prosody Analysis with explicit chunk spans, and optional qualified
@@ -135,13 +139,15 @@ installs it as candidates and preserves the learner's current active choices.
   Core still needs them for learner recording, SoundLine and other media paths,
   while App also uses the ffmpeg tools. App supplies their paths to Gen only
   after the pinned Core runtime and Gen release verify; none is Gen-only today.
-- `scripts/timeline-production` and remaining legacy production overlap are R5
-  retirement targets. They are neither a foundation fallback nor a second
-  supported whole-media generation journey.
+- `scripts/timeline-production`, the legacy ChunkTimeline family and their
+  exclusive runtime/release inputs were retired in R5. They were neither a
+  foundation fallback nor a second supported whole-media generation journey;
+  Gen `0.4.0` now binds its release to a strict verifier-checked
+  runtime/toolchain identity that App records immutably.
 
-R4 is complete. R5 legacy retirement and the future Package Listing/Release
-interface remain separate owner-directed work; neither is started by this
-closeout.
+R4 is complete. R5 legacy retirement is complete across Core, Gen and App; the
+future Package Listing/Release interface remains separate owner-directed work
+and is not started by this closeout.
 
 ## Decisions Still Open
 

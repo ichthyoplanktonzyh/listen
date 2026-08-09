@@ -53,7 +53,7 @@ impl MediaAnalysisUseCases {
     }
 
     /// Canonical input identity for cache invalidation: algorithm version,
-    /// track content, active word/chunk timeline identities, and the
+    /// track content, active word timeline, active prosody analysis, and the
     /// language-wide vocabulary watermark. Must stay the single composition
     /// point shared by the cached and compute paths.
     fn content_fit_input_fingerprint(
@@ -63,7 +63,7 @@ impl MediaAnalysisUseCases {
         language: &LanguageCode,
     ) -> Result<String, ApplicationError> {
         let word_timeline = self.word_timelines.active_word_timeline(track_id)?;
-        let chunk_timeline = self.chunk_timelines.active_chunk_timeline(track_id)?;
+        let prosody_analysis = self.prosody.active_prosody_analysis(track_id)?;
         let sense_groups = self.sense_groups.active_sense_group_analysis(track_id)?;
         let (vocab_count, vocab_watermark_ms) = self
             .lexical_entries
@@ -77,17 +77,20 @@ impl MediaAnalysisUseCases {
             .map(|calibration| calibration.updated_at_ms)
             .unwrap_or(0);
         let canonical_input = format!(
-            "{}|lang:{}|track:{}:{}|wt:{}:{}|ct:{}:{}|sg:{}:{}|vocab:{}:{}|cal:{}",
+            "{}|lang:{}|track:{}:{}|wt:{}:{}|pa:{}:{}|sg:{}:{}|vocab:{}:{}|cal:{}",
             CONTENT_FIT_ALGORITHM_VERSION,
             language.as_str(),
             track.id.as_str(),
             track.fingerprint,
             word_timeline.as_ref().map(|t| t.id.as_str()).unwrap_or(""),
             word_timeline.as_ref().map(|t| t.updated_at_ms).unwrap_or(0),
-            chunk_timeline.as_ref().map(|t| t.id.as_str()).unwrap_or(""),
-            chunk_timeline
+            prosody_analysis
                 .as_ref()
-                .map(|t| t.updated_at_ms)
+                .map(|a| a.id.as_str())
+                .unwrap_or(""),
+            prosody_analysis
+                .as_ref()
+                .map(|a| a.updated_at_ms)
                 .unwrap_or(0),
             sense_groups.as_ref().map(|a| a.id.as_str()).unwrap_or(""),
             sense_groups.as_ref().map(|a| a.updated_at_ms).unwrap_or(0),
@@ -212,20 +215,25 @@ impl MediaAnalysisUseCases {
             )
         };
 
-        let active_chunk_timeline = document
-            .active_chunk_timeline_id
+        let active_prosody = document
+            .active_prosody_analysis_id
             .as_ref()
-            .and_then(|id| document.chunk_timelines.iter().find(|t| &t.id == id));
-        let mean_chunk_length = active_chunk_timeline.and_then(|timeline| {
-            if timeline.chunks.is_empty() {
+            .and_then(|id| document.prosody_analyses.iter().find(|a| &a.id == id));
+        let mean_chunk_length = active_prosody.and_then(|analysis| {
+            if analysis.chunks.is_empty() {
                 return None;
             }
-            let words: u32 = timeline
+            let words: u32 = analysis
                 .chunks
                 .iter()
-                .map(|chunk| chunk.end_word_index.saturating_sub(chunk.start_word_index) + 1)
+                .map(|chunk| {
+                    chunk
+                        .end_token_index
+                        .saturating_sub(chunk.start_token_index)
+                        + 1
+                })
                 .sum();
-            Some(words as f32 / timeline.chunks.len() as f32)
+            Some(words as f32 / analysis.chunks.len() as f32)
         });
 
         // -- v3 sense-group features (Issue #94) --

@@ -211,8 +211,6 @@ def baseline_document(
         "active_word_timeline_id": None,
         "phone_timelines": [],
         "active_phone_timeline_id": None,
-        "chunk_timelines": [],
-        "active_chunk_timeline_id": None,
         "artifacts": [
             {
                 "kind": "helsinki_prosody_source",

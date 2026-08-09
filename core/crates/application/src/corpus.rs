@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 
 use crate::{
-    ApplicationError, ChunkTimeline, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
+    ApplicationError, CorpusOccurrence, CorpusOccurrenceId, CorpusOccurrenceKind,
     L1SpecialtyOccurrences, LLTimelineRhythmFrame, LanguageCode, MediaAnalysisUseCases,
-    SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, clean_required, normalize_phrase,
+    ProsodicChunkProjection, SubtitleTokenKind, SubtitleTrack, SubtitleTrackId, clean_required,
+    normalize_phrase,
 };
 
 impl MediaAnalysisUseCases {
     /// Rebuild the local corpus projection for one subtitle track. The Slice 3
     /// shape indexes lemma-keyed word forms, sentence-level text for confirmed
-    /// phrase lookup, and — when an active chunk timeline exists — precise
-    /// chunk spans; connected-speech kinds can join this same projection when
-    /// their providers become queryable.
+    /// phrase lookup, and — when an active Prosody Analysis exists — precise
+    /// prosodic chunk spans (the R5 successor of the retired ChunkTimeline
+    /// chunk projection); connected-speech kinds can join this same projection
+    /// when their providers become queryable.
     ///
     /// Word keys go through [`Self::normalize_lexical_form`] (user override →
     /// provider lemma → baseline), the same path lexical entries use, so an
@@ -21,14 +23,14 @@ impl MediaAnalysisUseCases {
         &self,
         track: &SubtitleTrack,
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
-        let active_chunk_timeline = self.chunk_timelines.active_chunk_timeline(&track.id)?;
         let rhythm_frames = self
             .export_lltimeline_document(&track.id)
             .map(|document| document.rhythm_frames)
             .unwrap_or_default();
+        let prosody_chunks = self.prosody_chunk_projections_for_track(&track.id)?;
         self.build_subtitle_corpus_occurrences_from_resources(
             track,
-            active_chunk_timeline.as_ref(),
+            &prosody_chunks,
             &rhythm_frames,
         )
     }
@@ -41,7 +43,7 @@ impl MediaAnalysisUseCases {
     pub(crate) fn build_subtitle_corpus_occurrences_from_resources(
         &self,
         track: &SubtitleTrack,
-        active_chunk_timeline: Option<&ChunkTimeline>,
+        prosody_chunks: &[ProsodicChunkProjection],
         rhythm_frames: &[LLTimelineRhythmFrame],
     ) -> Result<Vec<CorpusOccurrence>, ApplicationError> {
         let language = track.language.clone().unwrap_or(LanguageCode::parse("en")?);
@@ -105,25 +107,34 @@ impl MediaAnalysisUseCases {
                 });
             }
         }
-        if let Some(timeline) = active_chunk_timeline {
-            for chunk in &timeline.chunks {
-                occurrences.push(CorpusOccurrence {
-                    id: CorpusOccurrenceId::from_fingerprint(
-                        "corpus-occurrence",
-                        &format!("{}:chunk:{}", chunk.sentence_id.as_str(), chunk.chunk_index),
-                    ),
-                    language: language.clone(),
-                    kind: CorpusOccurrenceKind::Chunk,
-                    normalized_key: Some(normalize_phrase(&chunk.text)),
-                    display_text: chunk.text.clone(),
-                    media_id: Some(track.media_id.clone()),
-                    track_id: Some(track.id.clone()),
-                    sentence_id: Some(chunk.sentence_id.clone()),
-                    start_ms: chunk.start_ms,
-                    end_ms: chunk.end_ms,
-                    source_snapshot: chunk.text.clone(),
-                });
+        for chunk in prosody_chunks {
+            let Some(sentence) = track
+                .sentences
+                .iter()
+                .find(|sentence| sentence.id == chunk.sentence_id)
+            else {
+                continue;
+            };
+            let text = chunk_text_from_projection(sentence, chunk);
+            if text.is_empty() {
+                continue;
             }
+            occurrences.push(CorpusOccurrence {
+                id: CorpusOccurrenceId::from_fingerprint(
+                    "corpus-occurrence",
+                    &format!("{}:chunk:{}", chunk.sentence_id.as_str(), chunk.chunk_index),
+                ),
+                language: language.clone(),
+                kind: CorpusOccurrenceKind::Chunk,
+                normalized_key: Some(normalize_phrase(&text)),
+                display_text: text.clone(),
+                media_id: Some(track.media_id.clone()),
+                track_id: Some(track.id.clone()),
+                sentence_id: Some(chunk.sentence_id.clone()),
+                start_ms: chunk.start_ms.unwrap_or_else(|| sentence.start.get()),
+                end_ms: chunk.end_ms.unwrap_or_else(|| sentence.end.get()),
+                source_snapshot: text,
+            });
         }
         self.append_family_occurrences(track, &language, rhythm_frames, &mut occurrences);
         Ok(occurrences)
@@ -195,8 +206,8 @@ impl MediaAnalysisUseCases {
         }
     }
 
-    /// Reindex after a lifecycle change that only knows the track id (chunk
-    /// timeline activation/retirement). A missing track is not an error: the
+    /// Reindex after a lifecycle change that only knows the track id (prosody
+    /// analysis activation/retirement). A missing track is not an error: the
     /// projection is rebuildable and the cascade already dropped its rows.
     pub(crate) fn reindex_track_corpus(
         &self,
@@ -334,4 +345,77 @@ impl MediaAnalysisUseCases {
         self.corpus
             .search_corpus_occurrences(&language, &query, limit.clamp(1, 100), offset)
     }
+}
+
+/// Derives the playback-oriented prosodic chunk projections for the *active*
+/// prosody analysis inside an imported LLTimeline document, without touching
+/// committed resources. Used by the interchange import path so the corpus
+/// chunk rows can join the import transaction. The candidate-only package
+/// import passes no active analysis and therefore contributes no chunk rows.
+pub(crate) fn prosody_chunk_projections_from_document(
+    document: &domain::LLTimelineDocument,
+) -> Vec<ProsodicChunkProjection> {
+    let Some(active_id) = document.active_prosody_analysis_id.as_ref() else {
+        return Vec::new();
+    };
+    let Some(analysis) = document
+        .prosody_analyses
+        .iter()
+        .find(|analysis| &analysis.id == active_id)
+    else {
+        return Vec::new();
+    };
+    let timings = match analysis.parent_word_timeline_id.as_ref() {
+        Some(parent_id) => document
+            .word_timelines
+            .iter()
+            .find(|timeline| &timeline.id == parent_id)
+            .map(|timeline| timeline.words.to_vec())
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    domain::prosody_chunk_projections(analysis, &timings)
+}
+
+/// Chunk display text for one prosodic chunk projection, mirroring the chunk
+/// partitioner's text rule: word-kind tokens in the declared span joined by a
+/// space, or with no separator when every token is CJK.
+fn chunk_text_from_projection(
+    sentence: &domain::SubtitleSentence,
+    chunk: &ProsodicChunkProjection,
+) -> String {
+    let words = sentence
+        .tokens
+        .iter()
+        .filter(|token| {
+            token.kind == SubtitleTokenKind::Word
+                && token.index >= chunk.start_token_index
+                && token.index <= chunk.end_token_index
+        })
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        return String::new();
+    }
+    let all_cjk = words
+        .iter()
+        .all(|token| token.text.chars().all(is_cjk_char));
+    let separator = if all_cjk { "" } else { " " };
+    words
+        .iter()
+        .map(|token| token.text.as_str())
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
+fn is_cjk_char(ch: char) -> bool {
+    matches!(ch,
+        '\u{4E00}'..='\u{9FFF}'
+        | '\u{3400}'..='\u{4DBF}'
+        | '\u{20000}'..='\u{2A6DF}'
+        | '\u{F900}'..='\u{FAFF}'
+        | '\u{3040}'..='\u{309F}'
+        | '\u{30A0}'..='\u{30FF}'
+        | '\u{31F0}'..='\u{31FF}'
+        | '\u{FF66}'..='\u{FF9D}'
+    )
 }

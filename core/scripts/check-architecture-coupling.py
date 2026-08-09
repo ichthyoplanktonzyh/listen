@@ -344,16 +344,6 @@ def guard_descriptive_module_names() -> None:
         fail(f"milestone-coded module names remain: {existing}")
 
 
-def guard_pipeline_entrypoint() -> None:
-    path = ROOT / "scripts/timeline-production/production_pipeline.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    allowed = {"add_mfa_options", "add_mms_fa_options", "list_aligners", "doctor", "parser", "main"}
-    functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
-    unexpected = sorted(functions - allowed)
-    if unexpected:
-        fail(f"production_pipeline.py owns non-entrypoint functions: {unexpected}")
-
-
 def main() -> int:
     guard_dependency_direction()
     guard_http_adapter_boundaries()
@@ -364,7 +354,6 @@ def main() -> int:
     guard_event_stream_semantics()
     guard_http_composition_root()
     guard_descriptive_module_names()
-    guard_pipeline_entrypoint()
     print("Architecture coupling guards passed.")
     return 0
 
