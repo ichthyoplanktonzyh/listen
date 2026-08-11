@@ -563,6 +563,7 @@ mod lexical;
 mod llm_provider;
 mod media_library;
 mod migrations;
+mod package_lifecycle;
 mod personal_expression;
 mod phonetic_analysis;
 mod production_corpus;
