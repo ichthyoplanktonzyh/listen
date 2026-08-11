@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/media_library_scan_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
-import 'package:llplayer_next/widgets/home/media_library_section.dart';
+import 'package:llplayer_next/widgets/home/personal_library_section.dart';
 
 MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
   media: MediaItem(
@@ -27,6 +29,37 @@ MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
   familiarMaterial: false,
 );
 
+/// A media-only library row bound to [entry] — the shape [ListeningHome] and
+/// the Personal Library section render now.
+PersonalLibraryEntry _row(MediaLibraryEntry entry) => PersonalLibraryEntry(
+  details: MaterialDetails(
+    material: LearningMaterial(
+      id: 'material-${entry.media.id}',
+      currentRevisionId: 'revision-1',
+      retainedAtMs: 42,
+      createdAtMs: 1,
+      updatedAtMs: 1,
+    ),
+    currentRevision: MaterialRevision(
+      id: 'revision-1',
+      materialId: 'material-${entry.media.id}',
+      title: 'Talk',
+      assets: [
+        MediaRenditionMaterialAsset(
+          id: 'asset-1',
+          mediaId: entry.media.id,
+          mediaKind: MediaRenditionKind.video,
+          fingerprint: 'fp',
+          availability: MediaRenditionAvailability.available,
+        ),
+      ],
+      createdAtMs: 1,
+    ),
+    shape: MaterialShape.video,
+  ),
+  mediaEntries: [entry],
+);
+
 Widget _wrap(Widget child) => MaterialApp(
   theme: ListenTheme.light(),
   locale: const Locale('zh'),
@@ -42,20 +75,21 @@ Widget _wrap(Widget child) => MaterialApp(
 
 Widget _home({
   required MediaLibraryScanState scan,
-  List<MediaLibraryEntry>? library,
+  List<PersonalLibraryEntry>? library,
   VoidCallback? onChooseFolder,
 }) => _wrap(
   ListeningHome(
     onOpenMedia: () {},
     onOpenOnline: () {},
-    mediaLibrary: library,
+    personalLibrary: library,
     offlineEntries: library,
     scan: scan,
     onScanRefresh: () {},
     onScanCancel: () {},
     onRetryScanRegistrations: () {},
     onChooseManagedStoreLocation: onChooseFolder ?? () {},
-    onOpenLibraryEntry: (_) {},
+    onOpenLibraryDocument: (_) {},
+    onOpenLibraryMedia: (_) {},
     onStartExtensiveEntry: (_) {},
     onStartIntensiveEntry: (_) {},
     onSetLibraryIntent: (_, _) {},
@@ -98,13 +132,13 @@ void main() {
             status: MediaLibraryScanStatus.completed,
             folderPath: '/media',
           ),
-          library: const <MediaLibraryEntry>[],
+          library: const <PersonalLibraryEntry>[],
         ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('素材库扫描完成。'), findsOneWidget);
-      expect(find.text('打开过的媒体会出现在这里。'), findsOneWidget);
+      expect(find.text('保留的学习材料会出现在这里。'), findsOneWidget);
     },
   );
 
@@ -203,7 +237,10 @@ void main() {
           folderPath: '/media',
           sidecarSubtitlePaths: const {'/media/talk.mp4'},
         ),
-        library: [_entry('/media/talk.mp4'), _entry('/media/other.mp4')],
+        library: [
+          _row(_entry('/media/talk.mp4')),
+          _row(_entry('/media/other.mp4')),
+        ],
       ),
     );
     await tester.pumpAndSettle();

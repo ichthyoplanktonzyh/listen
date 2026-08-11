@@ -9,6 +9,7 @@ import 'controllers/backend_event_coordinator.dart';
 import 'controllers/content_channel_coordinator.dart';
 import 'controllers/content_package_journey_view_model.dart';
 import 'controllers/discovery_view_model.dart';
+import 'controllers/document_session_controller.dart';
 import 'controllers/core_session_controller.dart';
 import 'controllers/download_controller.dart';
 import 'controllers/extensive_listening_controller.dart';
@@ -80,6 +81,7 @@ import 'models/content_channel.dart';
 import 'models/workbench_study_mode.dart';
 import 'models/personal_expression.dart';
 import 'models/practice.dart';
+import 'models/personal_library.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
 import 'models/types.dart';
@@ -98,6 +100,7 @@ import 'services/subscription_store.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
 import 'services/managed_asset_store.dart';
+import 'services/document_intake_service.dart';
 import 'services/platform_capabilities.dart';
 import 'services/smoke_launch_configuration_service.dart';
 import 'settings.dart';
@@ -112,6 +115,7 @@ import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
 import 'widgets/common/listen_loading.dart';
 import 'widgets/flows/content_speaking_activity_dialog.dart';
+import 'widgets/flows/document_flows.dart';
 import 'widgets/flows/learning_flows.dart';
 import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
@@ -1105,6 +1109,28 @@ class _PlayerScreenState extends State<PlayerScreen>
       _workbenchAnimController.forward();
     },
   );
+
+  /// Opens the direct document session, optionally on a retained library
+  /// entry. Pausing is the flow's job: a document must not play unrelated
+  /// media behind itself, and nothing about the media is deleted or moved.
+  Future<void> _openDocumentSession([PersonalLibraryEntry? entry]) async {
+    final controller = DocumentSessionController(
+      materialRepository: coreRepositories.learningMaterial,
+      fileService: const LocalDocumentIntakeFileService(),
+      codec: const LocalDocumentIntakeCodec(),
+      refreshLibrary: mediaLibraryActions.loadMediaLibrary,
+    );
+    if (entry != null) controller.openLibraryEntry(entry);
+    try {
+      await openDocumentSessionFlow(
+        context: context,
+        controller: controller,
+        pausePlayback: adapter.pause,
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
 
   Future<void> _importEmbeddedSubtitle() => importEmbeddedSubtitleFlow(
     context: context,
@@ -2365,7 +2391,8 @@ class _PlayerScreenState extends State<PlayerScreen>
           builder: (context) => ListeningHome(
             onOpenMedia: mediaSession.openMedia,
             onOpenOnline: _openOnline,
-            mediaLibrary: mediaLibraryActions.mediaLibrary,
+            onOpenDocument: () => unawaited(_openDocumentSession()),
+            personalLibrary: mediaLibraryActions.personalLibrary,
             offlineEntries: mediaLibraryActions.offlineLibrary,
             familiarSupplyEnabled:
                 settingsController.familiarMaterialSuggestions,
@@ -2376,7 +2403,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 unawaited(mediaLibraryScan.retryFailedRegistrations()),
             onChooseManagedStoreLocation: () =>
                 unawaited(_chooseManagedStoreLocation()),
-            onOpenLibraryEntry: (entry) =>
+            onOpenLibraryDocument: (entry) =>
+                unawaited(_openDocumentSession(entry)),
+            onOpenLibraryMedia: (entry) =>
                 unawaited(mediaLibraryActions.openLibraryEntry(entry)),
             onStartExtensiveEntry: (entry) =>
                 unawaited(mediaLibraryActions.startExtensiveFromLibrary(entry)),

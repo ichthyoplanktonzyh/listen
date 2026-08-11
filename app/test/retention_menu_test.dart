@@ -63,7 +63,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Keep a copy'), findsOneWidget);
     expect(find.text('Keep as reference'), findsOneWidget);
-    expect(find.text('Remove from library'), findsNothing);
+    expect(find.text('Remove from Personal Library'), findsNothing);
 
     // Copy is the default action; the reference is explicitly secondary.
     await tester.tap(find.text('Keep a copy'));
@@ -123,16 +123,16 @@ void main() {
     player.setMediaRetained(true);
     await tester.pumpAndSettle();
 
-    expect(find.text('In your library'), findsOneWidget);
+    expect(find.text('In your Personal Library'), findsOneWidget);
     expect(find.text('Keep'), findsNothing);
 
     await tester.tap(find.byKey(const Key('retention-menu')));
     await tester.pumpAndSettle();
-    expect(find.text('Remove from library'), findsOneWidget);
+    expect(find.text('Remove from Personal Library'), findsOneWidget);
     expect(find.text('Keep a copy'), findsNothing);
     expect(find.text('Keep as reference'), findsNothing);
 
-    await tester.tap(find.text('Remove from library'));
+    await tester.tap(find.text('Remove from Personal Library'));
     await tester.pumpAndSettle();
     expect(unkept, 1);
   });

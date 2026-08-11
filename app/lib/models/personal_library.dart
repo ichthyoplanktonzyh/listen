@@ -70,6 +70,18 @@ class PersonalLibraryEntry {
   bool get isGoldenTarget => primaryMedia?.isGoldenTarget ?? false;
   ContentDifficultyProfile? get fit => primaryMedia?.fit;
 
+  /// Whether this material offers a Read capability: at least one document
+  /// asset on the current revision.
+  bool get canRead => documentAssets.isNotEmpty;
+
+  /// Whether this material offers Listen/Watch: a usable primary media.
+  bool get canListenOrWatch => primaryMedia != null;
+
+  /// Queue grouping facts, delegated to the primary media. Text-only rows
+  /// have none: they carry no media to triage, so they land unsorted.
+  String? triageQueue({bool familiarSupply = true}) =>
+      primaryMedia?.triageQueue(familiarSupply: familiarSupply);
+
   /// A copy of this row with [entry] swapped in for the joined row carrying
   /// the same media id. Returns the same row when no joined row matches.
   PersonalLibraryEntry withMediaEntry(MediaLibraryEntry entry) {

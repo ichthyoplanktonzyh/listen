@@ -50,8 +50,10 @@ class MediaLibraryCoordinator {
   List<MediaLibraryEntry>? mediaLibrary;
 
   /// The authoritative library: retained materials joined with their media
-  /// rows, in material-listing order. [mediaLibrary] stays as the raw
-  /// registered-media snapshot the current UI renders from.
+  /// rows, in material-listing order. The UI renders this and nothing else.
+  /// [mediaLibrary] stays as the raw registered-media snapshot the
+  /// coordinator keeps internally for media join, scanning, and path
+  /// resolution — it is not a library authority for the UI.
   List<PersonalLibraryEntry>? personalLibrary;
 
   void bind({
@@ -182,37 +184,49 @@ class MediaLibraryCoordinator {
   List<String>? get registeredMediaPaths =>
       mediaLibrary?.map((entry) => entry.media.path).toList(growable: false);
 
-  /// Subset of [mediaLibrary] whose local media file still exists on disk.
-  List<MediaLibraryEntry>? get offlineLibrary {
-    final library = mediaLibrary;
+  /// Subset of [personalLibrary] that is usable offline: a row is offline
+  /// when its inline document text is present, or when its primary media's
+  /// local file still exists. Mixed rows need just one working capability.
+  List<PersonalLibraryEntry>? get offlineLibrary {
+    final library = personalLibrary;
     if (library == null) return null;
     return library
-        .where((entry) => fileService.exists(entry.media.path))
+        .where(
+          (entry) =>
+              entry.canRead ||
+              (entry.primaryMedia != null &&
+                  fileService.exists(entry.primaryMedia!.media.path)),
+        )
         .toList(growable: false);
   }
 
-  /// Opens a library row like any other media — triage never changes what
-  /// opening a file does.
-  Future<void> openLibraryEntry(MediaLibraryEntry entry) async {
-    if (!fileService.exists(entry.media.path)) {
+  /// Opens a library row's primary media like any other media — triage never
+  /// changes what opening a file does. Rows without usable media report the
+  /// missing file instead of silently doing nothing.
+  Future<void> openLibraryEntry(PersonalLibraryEntry entry) async {
+    final media = entry.primaryMedia;
+    if (media == null) return;
+    if (!fileService.exists(media.media.path)) {
       player.setStatus(text('mediaFileMissing'));
       return;
     }
-    await openMediaPath(entry.media.path);
+    await openMediaPath(media.media.path);
   }
 
-  /// One-click extensive listening: open the media, then start the ambient
-  /// session with the loaded primary track.
-  Future<void> startExtensiveFromLibrary(MediaLibraryEntry entry) async {
-    if (!fileService.exists(entry.media.path)) {
+  /// One-click extensive listening: open the row's primary media, then start
+  /// the ambient session with the loaded primary track.
+  Future<void> startExtensiveFromLibrary(PersonalLibraryEntry entry) async {
+    final media = entry.primaryMedia;
+    if (media == null) return;
+    if (!fileService.exists(media.media.path)) {
       player.setStatus(text('mediaFileMissing'));
       return;
     }
-    await openMediaPath(entry.media.path);
+    await openMediaPath(media.media.path);
     if (!isMounted() || extensiveListening.active) return;
     final started = await extensiveListening.startSession(
       mediaId: player.mediaId,
-      trackId: subtitle.primaryTrack?.id ?? entry.primaryTrackId,
+      trackId: subtitle.primaryTrack?.id ?? media.primaryTrackId,
     );
     if (started && isMounted()) {
       player.setStatus(text('statusExtensiveListeningStarted'));
@@ -221,19 +235,25 @@ class MediaLibraryCoordinator {
 
   /// One-click intensive listening opens the material; a concrete current
   /// sentence is still required before the user chooses a practice type.
-  Future<void> startIntensiveFromLibrary(MediaLibraryEntry entry) async {
-    if (!fileService.exists(entry.media.path)) {
+  Future<void> startIntensiveFromLibrary(PersonalLibraryEntry entry) async {
+    final media = entry.primaryMedia;
+    if (media == null) return;
+    if (!fileService.exists(media.media.path)) {
       player.setStatus(text('mediaFileMissing'));
       return;
     }
-    await openMediaPath(entry.media.path);
+    await openMediaPath(media.media.path);
     if (isMounted()) learning.selectTab(SidePanelTab.transcript);
   }
 
+  /// Media triage applies to the row's primary media only; text-only rows
+  /// have nothing to triage and are a no-op here.
   Future<void> setLibraryTriageIntent(
-    MediaLibraryEntry entry,
+    PersonalLibraryEntry entry,
     String? intent,
   ) async {
+    final media = entry.primaryMedia;
+    if (media == null) return;
     if (!repository.isAvailable) {
       // Unavailable State (CONTEXT.md): triage is a direct click on a library
       // row, so report the missing core instead of silently doing nothing.
@@ -241,7 +261,7 @@ class MediaLibraryCoordinator {
       return;
     }
     try {
-      final updated = await repository.setTriageIntent(entry.media.id, intent);
+      final updated = await repository.setTriageIntent(media.media.id, intent);
       if (!isMounted()) return;
       final library = mediaLibrary;
       if (library != null) {

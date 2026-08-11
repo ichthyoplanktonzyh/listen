@@ -2,22 +2,28 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
-import '../../models/types.dart';
+import '../../models/personal_library.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
-import 'media_library_section.dart';
+import 'personal_library_section.dart';
 
 /// How the media library is ordered.
 ///
 /// [recent] is what the history destination used to be: the same rows, sorted
-/// by `updatedAtMs`. [queue] is the triage grouping the library section does
-/// on its own.
+/// by `updatedAtMs` on the retained material. [queue] is the triage grouping
+/// the library section does on its own.
 enum LibrarySort { queue, recent }
 
-/// The media library: what is already here, and how to add more. One segment
-/// of the "listen" destination — discovery is the other, and both end in this
-/// same library.
+/// The capability view over the Personal Library.
+///
+/// Read and Listen/Watch are capabilities of the same retained materials —
+/// filtering is a view, never a copy and never a separate library object.
+enum LibraryCapabilityFilter { all, read, listenWatch }
+
+/// The Personal Library: what is already here, and how to add more. One
+/// segment of the "listen" destination — discovery is the other, and both end
+/// in this same library.
 ///
 /// It no longer answers "what should I do now". The continue card and the
 /// status strip that used to sit on top moved to the today pane, because a
@@ -28,7 +34,8 @@ class ListeningHome extends StatefulWidget {
     super.key,
     required this.onOpenMedia,
     required this.onOpenOnline,
-    this.mediaLibrary,
+    this.onOpenDocument,
+    this.personalLibrary,
     this.offlineEntries,
     this.familiarSupplyEnabled = true,
     this.scan,
@@ -36,7 +43,8 @@ class ListeningHome extends StatefulWidget {
     this.onScanCancel,
     this.onRetryScanRegistrations,
     this.onChooseManagedStoreLocation,
-    this.onOpenLibraryEntry,
+    this.onOpenLibraryDocument,
+    this.onOpenLibraryMedia,
     this.onStartExtensiveEntry,
     this.onStartIntensiveEntry,
     this.onSetLibraryIntent,
@@ -45,26 +53,34 @@ class ListeningHome extends StatefulWidget {
 
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
-  final List<MediaLibraryEntry>? mediaLibrary;
 
-  /// The offline subset of [mediaLibrary] (rows whose local file still
-  /// exists). Offline used to be its own sidebar destination; it is a filter
-  /// on the library now.
-  final List<MediaLibraryEntry>? offlineEntries;
+  /// The primary "Open document" action, opening the direct document session.
+  final VoidCallback? onOpenDocument;
+
+  /// The authoritative library: retained materials projected with their media
+  /// rows. Membership, order, and titles come from here; the raw media
+  /// snapshot is not a library authority for the UI.
+  final List<PersonalLibraryEntry>? personalLibrary;
+
+  /// The offline subset of [personalLibrary] (rows whose inline text or local
+  /// media file is available). Offline used to be its own sidebar destination;
+  /// it is a filter on the library now.
+  final List<PersonalLibraryEntry>? offlineEntries;
   final bool familiarSupplyEnabled;
 
   /// Folder-scan state, or null on a surface that has no scan wired. The scan
   /// is the only thing that can tell an empty library apart from a library
-  /// nobody could read, so it renders even when [mediaLibrary] is unknown.
+  /// nobody could read, so it renders even when [personalLibrary] is unknown.
   final MediaLibraryScanState? scan;
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
   final VoidCallback? onRetryScanRegistrations;
   final VoidCallback? onChooseManagedStoreLocation;
-  final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
-  final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
-  final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
-  final void Function(MediaLibraryEntry entry, String? intent)?
+  final void Function(PersonalLibraryEntry entry)? onOpenLibraryDocument;
+  final void Function(PersonalLibraryEntry entry)? onOpenLibraryMedia;
+  final void Function(PersonalLibraryEntry entry)? onStartExtensiveEntry;
+  final void Function(PersonalLibraryEntry entry)? onStartIntensiveEntry;
+  final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
   final void Function(bool enabled)? onToggleFamiliarSupply;
 
@@ -75,15 +91,34 @@ class ListeningHome extends StatefulWidget {
 class _ListeningHomeState extends State<ListeningHome> {
   var _offlineOnly = false;
   var _sort = LibrarySort.queue;
+  var _capability = LibraryCapabilityFilter.all;
 
   /// History used to be its own sidebar destination whose entire body was
   /// this list sorted by `updatedAtMs` — one data source, two rooms, one
   /// `sort` apart. It is an ordering on the library now, next to the offline
-  /// filter that was demoted for the same reason.
-  List<MediaLibraryEntry>? _ordered(List<MediaLibraryEntry>? entries) {
+  /// filter that was demoted for the same reason. The timestamp is the
+  /// retained material's: membership, ordering, and titles all come from the
+  /// Personal Library projection.
+  List<PersonalLibraryEntry>? _ordered(List<PersonalLibraryEntry>? entries) {
     if (entries == null || _sort == LibrarySort.queue) return entries;
-    return [...entries]
-      ..sort((a, b) => b.media.updatedAtMs.compareTo(a.media.updatedAtMs));
+    return [...entries]..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+  }
+
+  /// Applies the capability view. A filter never changes membership — the
+  /// same rows reappear when it is cleared.
+  List<PersonalLibraryEntry>? _capabilityFiltered(
+    List<PersonalLibraryEntry>? entries,
+  ) {
+    if (entries == null || _capability == LibraryCapabilityFilter.all) {
+      return entries;
+    }
+    return entries
+        .where(
+          _capability == LibraryCapabilityFilter.read
+              ? (entry) => entry.canRead
+              : (entry) => entry.canListenOrWatch,
+        )
+        .toList(growable: false);
   }
 
   @override
@@ -96,12 +131,17 @@ class _ListeningHomeState extends State<ListeningHome> {
           compact: compact,
           onOpenMedia: widget.onOpenMedia,
           onOpenOnline: widget.onOpenOnline,
+          onOpenDocument: widget.onOpenDocument,
           offlineOnly: _offlineOnly,
           onOfflineOnlyChanged: (value) => setState(() => _offlineOnly = value),
           sort: _sort,
           onSortChanged: (value) => setState(() => _sort = value),
-          mediaLibrary: _ordered(
-            _offlineOnly ? widget.offlineEntries : widget.mediaLibrary,
+          capability: _capability,
+          onCapabilityChanged: (value) => setState(() => _capability = value),
+          personalLibrary: _ordered(
+            _capabilityFiltered(
+              _offlineOnly ? widget.offlineEntries : widget.personalLibrary,
+            ),
           ),
           familiarSupplyEnabled: widget.familiarSupplyEnabled,
           scan: widget.scan,
@@ -109,7 +149,8 @@ class _ListeningHomeState extends State<ListeningHome> {
           onScanCancel: widget.onScanCancel,
           onRetryScanRegistrations: widget.onRetryScanRegistrations,
           onChooseManagedStoreLocation: widget.onChooseManagedStoreLocation,
-          onOpenLibraryEntry: widget.onOpenLibraryEntry,
+          onOpenLibraryDocument: widget.onOpenLibraryDocument,
+          onOpenLibraryMedia: widget.onOpenLibraryMedia,
           onStartExtensiveEntry: widget.onStartExtensiveEntry,
           onStartIntensiveEntry: widget.onStartIntensiveEntry,
           onSetLibraryIntent: widget.onSetLibraryIntent,
@@ -125,18 +166,22 @@ class _HomeContent extends StatelessWidget {
     required this.compact,
     required this.onOpenMedia,
     required this.onOpenOnline,
+    required this.onOpenDocument,
     required this.offlineOnly,
     required this.onOfflineOnlyChanged,
     required this.sort,
     required this.onSortChanged,
-    required this.mediaLibrary,
+    required this.capability,
+    required this.onCapabilityChanged,
+    required this.personalLibrary,
     required this.familiarSupplyEnabled,
     required this.scan,
     required this.onScanRefresh,
     required this.onScanCancel,
     required this.onRetryScanRegistrations,
     required this.onChooseManagedStoreLocation,
-    required this.onOpenLibraryEntry,
+    required this.onOpenLibraryDocument,
+    required this.onOpenLibraryMedia,
     required this.onStartExtensiveEntry,
     required this.onStartIntensiveEntry,
     required this.onSetLibraryIntent,
@@ -146,6 +191,7 @@ class _HomeContent extends StatelessWidget {
   final bool compact;
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+  final VoidCallback? onOpenDocument;
 
   /// The library's offline filter: offline used to be a sidebar destination
   /// sharing one data source with this section, so it reads as a view on the
@@ -158,17 +204,22 @@ class _HomeContent extends StatelessWidget {
   final LibrarySort sort;
   final ValueChanged<LibrarySort> onSortChanged;
 
-  final List<MediaLibraryEntry>? mediaLibrary;
+  /// The capability view: All / Read / Listen-Watch.
+  final LibraryCapabilityFilter capability;
+  final ValueChanged<LibraryCapabilityFilter> onCapabilityChanged;
+
+  final List<PersonalLibraryEntry>? personalLibrary;
   final bool familiarSupplyEnabled;
   final MediaLibraryScanState? scan;
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
   final VoidCallback? onRetryScanRegistrations;
   final VoidCallback? onChooseManagedStoreLocation;
-  final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
-  final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
-  final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
-  final void Function(MediaLibraryEntry entry, String? intent)?
+  final void Function(PersonalLibraryEntry entry)? onOpenLibraryDocument;
+  final void Function(PersonalLibraryEntry entry)? onOpenLibraryMedia;
+  final void Function(PersonalLibraryEntry entry)? onStartExtensiveEntry;
+  final void Function(PersonalLibraryEntry entry)? onStartIntensiveEntry;
+  final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
   final void Function(bool enabled)? onToggleFamiliarSupply;
 
@@ -209,12 +260,19 @@ class _HomeContent extends StatelessWidget {
               _ResponsiveActionGrid(
                 compact: compact,
                 children: [
+                  if (onOpenDocument != null)
+                    _SourceAction(
+                      icon: Icons.description_outlined,
+                      label: l.text('openDocument'),
+                      sourceLabel: l.text('documentSource'),
+                      onTap: onOpenDocument!,
+                      primary: true,
+                    ),
                   _SourceAction(
                     icon: Icons.folder_open_outlined,
                     label: l.text('openVideoAudio'),
                     sourceLabel: l.text('localSource'),
                     onTap: onOpenMedia,
-                    primary: true,
                   ),
                   _SourceAction(
                     icon: Icons.link_outlined,
@@ -238,8 +296,9 @@ class _HomeContent extends StatelessWidget {
                   onChooseFolder: onChooseManagedStoreLocation!,
                 ),
               ],
-              if (mediaLibrary != null &&
-                  onOpenLibraryEntry != null &&
+              if (personalLibrary != null &&
+                  onOpenLibraryDocument != null &&
+                  onOpenLibraryMedia != null &&
                   onStartExtensiveEntry != null &&
                   onStartIntensiveEntry != null &&
                   onSetLibraryIntent != null &&
@@ -254,6 +313,26 @@ class _HomeContent extends StatelessWidget {
                   runSpacing: ListenSpacing.gap8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    ChoiceChip(
+                      label: Text(l.text('libraryFilterAll')),
+                      selected: capability == LibraryCapabilityFilter.all,
+                      onSelected: (_) =>
+                          onCapabilityChanged(LibraryCapabilityFilter.all),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryFilterRead')),
+                      selected: capability == LibraryCapabilityFilter.read,
+                      onSelected: (_) =>
+                          onCapabilityChanged(LibraryCapabilityFilter.read),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryFilterListenWatch')),
+                      selected:
+                          capability == LibraryCapabilityFilter.listenWatch,
+                      onSelected: (_) => onCapabilityChanged(
+                        LibraryCapabilityFilter.listenWatch,
+                      ),
+                    ),
                     FilterChip(
                       // Offline used to occupy its own sidebar slot with the
                       // same data source; as a filter it stays one view on
@@ -277,12 +356,13 @@ class _HomeContent extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: ListenSpacing.gap12),
-                MediaLibrarySection(
-                  entries: mediaLibrary,
+                PersonalLibrarySection(
+                  entries: personalLibrary,
                   familiarSupplyEnabled: familiarSupplyEnabled,
                   sidecarSubtitlePaths:
                       scan?.sidecarSubtitlePaths ?? const <String>{},
-                  onOpen: onOpenLibraryEntry!,
+                  onOpenDocument: onOpenLibraryDocument!,
+                  onOpenMedia: onOpenLibraryMedia!,
                   onStartExtensive: onStartExtensiveEntry!,
                   onStartIntensive: onStartIntensiveEntry!,
                   onSetIntent: onSetLibraryIntent!,

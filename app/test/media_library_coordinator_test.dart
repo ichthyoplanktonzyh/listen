@@ -106,6 +106,24 @@ MaterialDetails _materialDetails({
   shape: MaterialShape.mixed,
 );
 
+/// A [PersonalLibraryEntry] whose revision binds [mediaEntry] as an available
+/// audio rendition — the row shape the coordinator's own entry methods take.
+PersonalLibraryEntry _personalEntry(MediaLibraryEntry mediaEntry) =>
+    PersonalLibraryEntry(
+      details: _materialDetails(
+        assets: [
+          MediaRenditionMaterialAsset(
+            id: 'asset-1',
+            mediaId: mediaEntry.media.id,
+            mediaKind: MediaRenditionKind.audio,
+            fingerprint: 'fp',
+            availability: MediaRenditionAvailability.available,
+          ),
+        ],
+      ),
+      mediaEntries: [mediaEntry],
+    );
+
 LocalApi _fakeApi(
   ({int statusCode, String body}) Function(String, String, String?) handler,
 ) => LocalApi.withTransport(
@@ -792,6 +810,78 @@ void main() {
     },
   );
 
+  test('offlineLibrary keeps inline-text rows offline without any media', () {
+    final w = _wire(() => null);
+    final textOnly = PersonalLibraryEntry(
+      details: _materialDetails(
+        assets: [
+          DocumentTextMaterialAsset(
+            id: 'text-1',
+            text: 'Hello',
+            sha256Digest: 'x',
+            byteSize: 5,
+            language: null,
+          ),
+        ],
+      ),
+      mediaEntries: const [],
+    );
+    w.coordinator.personalLibrary = [textOnly];
+
+    // Inline document_text is offline by itself: no file exists to check.
+    expect(w.coordinator.offlineLibrary, hasLength(1));
+  });
+
+  test('offlineLibrary keeps media rows only when the local file exists', () {
+    final file = File(
+      '${Directory.systemTemp.createTempSync('mlc').path}/m.mp4',
+    )..writeAsStringSync('x');
+    addTearDown(() => file.parent.deleteSync(recursive: true));
+    final w = _wire(() => null);
+    final present = _personalEntry(_libraryEntry(path: file.path));
+    final missing = _personalEntry(_libraryEntry(id: 'media-2'));
+    w.coordinator.personalLibrary = [present, missing];
+
+    expect(w.coordinator.offlineLibrary, hasLength(1));
+    expect(
+      w.coordinator.offlineLibrary!.single.primaryMedia?.media.path,
+      file.path,
+    );
+  });
+
+  test(
+    'offlineLibrary keeps a mixed row with only its inline text available',
+    () {
+      final w = _wire(() => null);
+      final mixed = PersonalLibraryEntry(
+        details: _materialDetails(
+          assets: [
+            DocumentTextMaterialAsset(
+              id: 'text-1',
+              text: 'Hello',
+              sha256Digest: 'x',
+              byteSize: 5,
+              language: null,
+            ),
+            MediaRenditionMaterialAsset(
+              id: 'asset-1',
+              mediaId: 'media-gone',
+              mediaKind: MediaRenditionKind.audio,
+              fingerprint: 'fp',
+              availability: MediaRenditionAvailability.available,
+            ),
+          ],
+        ),
+        mediaEntries: [_libraryEntry(id: 'media-gone')],
+      );
+      w.coordinator.personalLibrary = [mixed];
+
+      // The media file is gone but the inline text is present: mixed rows need
+      // just one working capability to be offline.
+      expect(w.coordinator.offlineLibrary, hasLength(1));
+    },
+  );
+
   test('setLibraryTriageIntent keeps the authoritative list in sync', () async {
     final api = _fakeApi((method, path, body) {
       if (method == 'GET' && path == '/v1/materials') {
@@ -821,7 +911,7 @@ void main() {
     expect(w.coordinator.personalLibrary!.single.triageIntent, isNull);
 
     await w.coordinator.setLibraryTriageIntent(
-      w.coordinator.mediaLibrary!.first,
+      w.coordinator.personalLibrary!.single,
       'pin_intensive',
     );
 
@@ -833,7 +923,7 @@ void main() {
   test('openLibraryEntry guards a missing media file', () async {
     final w = _wire(() => null);
 
-    await w.coordinator.openLibraryEntry(_libraryEntry());
+    await w.coordinator.openLibraryEntry(_personalEntry(_libraryEntry()));
 
     expect(w.player.status, 'mediaFileMissing');
     expect(w.openedPaths, isEmpty);
@@ -846,15 +936,42 @@ void main() {
     addTearDown(() => file.parent.deleteSync(recursive: true));
     final w = _wire(() => null);
 
-    await w.coordinator.openLibraryEntry(_libraryEntry(path: file.path));
+    await w.coordinator.openLibraryEntry(
+      _personalEntry(_libraryEntry(path: file.path)),
+    );
 
     expect(w.openedPaths, [file.path]);
+  });
+
+  test('openLibraryEntry ignores a text-only row', () async {
+    final w = _wire(() => null);
+    final textOnly = PersonalLibraryEntry(
+      details: _materialDetails(
+        assets: [
+          DocumentTextMaterialAsset(
+            id: 'text-1',
+            text: 'Hello',
+            sha256Digest: 'x',
+            byteSize: 5,
+            language: null,
+          ),
+        ],
+      ),
+      mediaEntries: const [],
+    );
+
+    await w.coordinator.openLibraryEntry(textOnly);
+
+    expect(w.openedPaths, isEmpty);
+    expect(w.player.status, isNot('mediaFileMissing'));
   });
 
   test('startIntensiveFromLibrary guards a missing media file', () async {
     final w = _wire(() => null);
 
-    await w.coordinator.startIntensiveFromLibrary(_libraryEntry());
+    await w.coordinator.startIntensiveFromLibrary(
+      _personalEntry(_libraryEntry()),
+    );
 
     expect(w.player.status, 'mediaFileMissing');
     expect(w.openedPaths, isEmpty);
@@ -874,7 +991,7 @@ void main() {
     w.coordinator.mediaLibrary = [_libraryEntry()];
 
     await w.coordinator.setLibraryTriageIntent(
-      _libraryEntry(),
+      _personalEntry(_libraryEntry()),
       'pin_intensive',
     );
 
@@ -882,10 +999,40 @@ void main() {
     expect(w.rebuilds, isNotEmpty);
   });
 
+  test('setLibraryTriageIntent ignores a text-only row', () async {
+    final w = _wire(() => null);
+    final textOnly = PersonalLibraryEntry(
+      details: _materialDetails(
+        assets: [
+          DocumentTextMaterialAsset(
+            id: 'text-1',
+            text: 'Hello',
+            sha256Digest: 'x',
+            byteSize: 5,
+            language: null,
+          ),
+        ],
+      ),
+      mediaEntries: const [],
+    );
+
+    await w.coordinator.setLibraryTriageIntent(textOnly, 'defer');
+
+    // Text materials have no media to triage: the status line stays untouched
+    // (no core-unavailable complaint), no rebuild, and the media library stays
+    // as it was.
+    expect(w.player.status, 'Starting local core...');
+    expect(w.rebuilds, isEmpty);
+    expect(w.coordinator.mediaLibrary, isNull);
+  });
+
   test('setLibraryTriageIntent without a core reports it', () async {
     final w = _wire(() => null);
 
-    await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
+    await w.coordinator.setLibraryTriageIntent(
+      _personalEntry(_libraryEntry()),
+      'defer',
+    );
 
     expect(w.player.status, 'statusConnectLocalCoreFirst');
     expect(w.rebuilds, isEmpty);
@@ -897,7 +1044,10 @@ void main() {
     );
     final w = _wire(() => api);
 
-    await w.coordinator.setLibraryTriageIntent(_libraryEntry(), 'defer');
+    await w.coordinator.setLibraryTriageIntent(
+      _personalEntry(_libraryEntry()),
+      'defer',
+    );
 
     // The named state is the whole message (#62). What the backend answered
     // with lives on the typed detail instead of being appended to the line.

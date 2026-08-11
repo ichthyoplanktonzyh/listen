@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
+import '../../models/personal_library.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
@@ -10,21 +11,22 @@ import '../../utils/format_duration.dart';
 import '../common/api_failure_disclosure.dart';
 import '../common/listen_loading.dart';
 
-/// Home media library grouped by triage queue (Phase 3.5 Slice 5).
+/// Home Personal Library grouped by triage queue.
 ///
-/// Queues are pure suggestions derived from [MediaLibraryEntry.triageQueue]:
-/// golden targets float to the top of the intensive group, familiar material
-/// feeds the extensive group when the supply toggle is on, and explicit user
-/// pins/defers always win. Ignoring the grouping changes nothing — every row
-/// opens and plays exactly like any other media (P3/P5 red lines), and copy
-/// stays expectation management, never a verdict.
-class MediaLibrarySection extends StatelessWidget {
-  const MediaLibrarySection({
+/// One list renders text-only, media-only, and mixed materials together: Read
+/// and Listen/Watch are capabilities of the same retained material, not
+/// separate library objects. Queue grouping is a pure suggestion derived from
+/// the row's primary media; text-only rows carry no media facts and land
+/// unsorted. Every row states its capabilities explicitly — a mixed row shows
+/// both Read and Listen/Watch and never guesses intent from a bare tap.
+class PersonalLibrarySection extends StatelessWidget {
+  const PersonalLibrarySection({
     super.key,
     required this.entries,
     required this.familiarSupplyEnabled,
     this.sidecarSubtitlePaths = const <String>{},
-    required this.onOpen,
+    required this.onOpenDocument,
+    required this.onOpenMedia,
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
@@ -32,17 +34,18 @@ class MediaLibrarySection extends StatelessWidget {
   });
 
   /// Null while the first load is in flight; empty when the library is empty.
-  final List<MediaLibraryEntry>? entries;
+  final List<PersonalLibraryEntry>? entries;
   final bool familiarSupplyEnabled;
 
   /// Library paths the last folder scan saw next to a subtitle file. Reported
   /// as a fact about the folder — pairing them into a learnable resource is a
   /// separate step, so no row promises anything because of it.
   final Set<String> sidecarSubtitlePaths;
-  final void Function(MediaLibraryEntry entry) onOpen;
-  final void Function(MediaLibraryEntry entry) onStartExtensive;
-  final void Function(MediaLibraryEntry entry) onStartIntensive;
-  final void Function(MediaLibraryEntry entry, String? intent) onSetIntent;
+  final void Function(PersonalLibraryEntry entry) onOpenDocument;
+  final void Function(PersonalLibraryEntry entry) onOpenMedia;
+  final void Function(PersonalLibraryEntry entry) onStartExtensive;
+  final void Function(PersonalLibraryEntry entry) onStartIntensive;
+  final void Function(PersonalLibraryEntry entry, String? intent) onSetIntent;
   final void Function(bool enabled) onToggleFamiliarSupply;
 
   @override
@@ -58,7 +61,7 @@ class MediaLibrarySection extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                l.text('mediaLibrary'),
+                l.text('personalLibrary'),
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
@@ -89,7 +92,7 @@ class MediaLibrarySection extends StatelessWidget {
         const SizedBox(height: ListenSpacing.gap8),
         if (loaded.isEmpty)
           Text(
-            l.text('mediaLibraryEmpty'),
+            l.text('personalLibraryEmpty'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -99,13 +102,16 @@ class MediaLibrarySection extends StatelessWidget {
             _QueueHeader(queue: group.queue, count: group.entries.length),
             const SizedBox(height: ListenSpacing.gap6),
             for (final entry in group.entries) ...[
-              _MediaRow(
+              _LibraryRow(
                 entry: entry,
                 familiarSupplyEnabled: familiarSupplyEnabled,
-                hasSidecarSubtitle: sidecarSubtitlePaths.contains(
-                  entry.media.path,
-                ),
-                onOpen: () => onOpen(entry),
+                hasSidecarSubtitle:
+                    entry.primaryMedia != null &&
+                    sidecarSubtitlePaths.contains(
+                      entry.primaryMedia!.media.path,
+                    ),
+                onOpenDocument: () => onOpenDocument(entry),
+                onOpenMedia: () => onOpenMedia(entry),
                 onStartExtensive: () => onStartExtensive(entry),
                 onStartIntensive: () => onStartIntensive(entry),
                 onSetIntent: (intent) => onSetIntent(entry, intent),
@@ -121,8 +127,8 @@ class MediaLibrarySection extends StatelessWidget {
   /// Groups by derived queue, ordered intensive → extensive → deferred →
   /// unsorted, with golden targets pinned to the top of their group. Empty
   /// groups are omitted entirely.
-  List<_QueueGroup> _groupEntries(List<MediaLibraryEntry> loaded) {
-    final byQueue = <String?, List<MediaLibraryEntry>>{};
+  List<_QueueGroup> _groupEntries(List<PersonalLibraryEntry> loaded) {
+    final byQueue = <String?, List<PersonalLibraryEntry>>{};
     for (final entry in loaded) {
       byQueue
           .putIfAbsent(
@@ -141,7 +147,7 @@ class MediaLibrarySection extends StatelessWidget {
     ]) {
       final members = byQueue[queue];
       if (members == null || members.isEmpty) continue;
-      // Stable sort: golden targets first, server order (recency) otherwise.
+      // Stable sort: golden targets first, material-listing order otherwise.
       final golden = members.where((entry) => entry.isGoldenTarget).toList();
       final rest = members.where((entry) => !entry.isGoldenTarget).toList();
       groups.add(_QueueGroup(queue: queue, entries: [...golden, ...rest]));
@@ -154,7 +160,7 @@ class _QueueGroup {
   const _QueueGroup({required this.queue, required this.entries});
 
   final String? queue;
-  final List<MediaLibraryEntry> entries;
+  final List<PersonalLibraryEntry> entries;
 }
 
 class _QueueHeader extends StatelessWidget {
@@ -206,21 +212,23 @@ class _QueueHeader extends StatelessWidget {
   }
 }
 
-class _MediaRow extends StatelessWidget {
-  const _MediaRow({
+class _LibraryRow extends StatelessWidget {
+  const _LibraryRow({
     required this.entry,
     required this.familiarSupplyEnabled,
     required this.hasSidecarSubtitle,
-    required this.onOpen,
+    required this.onOpenDocument,
+    required this.onOpenMedia,
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
   });
 
-  final MediaLibraryEntry entry;
+  final PersonalLibraryEntry entry;
   final bool familiarSupplyEnabled;
   final bool hasSidecarSubtitle;
-  final VoidCallback onOpen;
+  final VoidCallback onOpenDocument;
+  final VoidCallback onOpenMedia;
   final VoidCallback onStartExtensive;
   final VoidCallback onStartIntensive;
   final void Function(String? intent) onSetIntent;
@@ -229,8 +237,18 @@ class _MediaRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
+    final primaryMedia = entry.primaryMedia;
     final fit = entry.fit;
-    final duration = entry.media.durationMs;
+    final duration = primaryMedia?.media.durationMs;
+    // A mixed row never guesses from a bare tap: its capabilities are the
+    // explicit buttons. Single-capability rows keep the row tap as a shortcut.
+    final VoidCallback? onRowTap = entry.canRead && entry.canListenOrWatch
+        ? null
+        : entry.canRead
+        ? onOpenDocument
+        : entry.canListenOrWatch
+        ? onOpenMedia
+        : null;
     return Material(
       color: colors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(
@@ -239,13 +257,16 @@ class _MediaRow extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onOpen,
+        onTap: onRowTap,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
-                entry.media.kind == 'audio'
+                entry.canRead
+                    ? Icons.description_outlined
+                    : primaryMedia?.media.kind == 'audio'
                     ? Icons.audiotrack_outlined
                     : Icons.movie_outlined,
                 size: ListenIconSize.control,
@@ -257,7 +278,7 @@ class _MediaRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      entry.media.title,
+                      entry.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -295,6 +316,12 @@ class _MediaRow extends StatelessWidget {
                             label: l.text('sidecarSubtitleBadge'),
                             color: colors.onSurfaceVariant,
                           ),
+                        if (entry.canRead)
+                          _Badge(
+                            icon: Icons.description_outlined,
+                            label: l.text('documentReadCapability'),
+                            color: colors.primary,
+                          ),
                         if (entry.isGoldenTarget)
                           _Badge(
                             icon: Icons.headphones_outlined,
@@ -313,44 +340,65 @@ class _MediaRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: ListenSpacing.gap6),
-              TextButton(
-                onPressed: onStartExtensive,
-                child: Text(l.text('startExtensiveAction')),
-              ),
-              TextButton(
-                onPressed: onStartIntensive,
-                child: Text(l.text('startIntensiveAction')),
-              ),
-              PopupMenuButton<String>(
-                tooltip: l.text('moreActions'),
-                icon: Icon(
-                  Icons.more_vert,
-                  size: ListenIconSize.control,
-                  color: colors.onSurfaceVariant,
-                ),
-                onSelected: (value) =>
-                    onSetIntent(value == 'clear' ? null : value),
-                itemBuilder: (context) => [
-                  CheckedPopupMenuItem(
-                    value: 'pin_extensive',
-                    checked: entry.triageIntent == 'pin_extensive',
-                    child: Text(l.text('pinExtensiveAction')),
-                  ),
-                  CheckedPopupMenuItem(
-                    value: 'pin_intensive',
-                    checked: entry.triageIntent == 'pin_intensive',
-                    child: Text(l.text('pinIntensiveAction')),
-                  ),
-                  CheckedPopupMenuItem(
-                    value: 'defer',
-                    checked: entry.triageIntent == 'defer',
-                    child: Text(l.text('deferMediaAction')),
-                  ),
-                  if (entry.triageIntent != null)
-                    PopupMenuItem(
-                      value: 'clear',
-                      child: Text(l.text('clearTriageAction')),
+              // Explicit capability buttons: Read and Listen/Watch are stated,
+              // never guessed. Media triage only exists for the primary media;
+              // text-only rows get no triage menu.
+              Wrap(
+                spacing: ListenSpacing.gap6,
+                runSpacing: ListenSpacing.gap4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (entry.canRead)
+                    TextButton(
+                      onPressed: onOpenDocument,
+                      child: Text(l.text('documentReadAction')),
                     ),
+                  if (entry.canListenOrWatch) ...[
+                    TextButton(
+                      onPressed: onOpenMedia,
+                      child: Text(l.text('mediaOpenAction')),
+                    ),
+                    TextButton(
+                      onPressed: onStartExtensive,
+                      child: Text(l.text('startExtensiveAction')),
+                    ),
+                    TextButton(
+                      onPressed: onStartIntensive,
+                      child: Text(l.text('startIntensiveAction')),
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: l.text('moreActions'),
+                      icon: Icon(
+                        Icons.more_vert,
+                        size: ListenIconSize.control,
+                        color: colors.onSurfaceVariant,
+                      ),
+                      onSelected: (value) =>
+                          onSetIntent(value == 'clear' ? null : value),
+                      itemBuilder: (context) => [
+                        CheckedPopupMenuItem(
+                          value: 'pin_extensive',
+                          checked: entry.triageIntent == 'pin_extensive',
+                          child: Text(l.text('pinExtensiveAction')),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'pin_intensive',
+                          checked: entry.triageIntent == 'pin_intensive',
+                          child: Text(l.text('pinIntensiveAction')),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'defer',
+                          checked: entry.triageIntent == 'defer',
+                          child: Text(l.text('deferMediaAction')),
+                        ),
+                        if (entry.triageIntent != null)
+                          PopupMenuItem(
+                            value: 'clear',
+                            child: Text(l.text('clearTriageAction')),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -381,21 +429,29 @@ class _MiniFitChip extends StatelessWidget {
       ),
       child: Padding(
         padding: ListenPadding.tight,
+        // Flexible children let a chip ellipsize instead of overflowing when
+        // the row is narrow: the chip is a label, not a hard minimum.
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
             ),
             const SizedBox(width: ListenSpacing.gap4),
-            Text(
-              l.text('fit_$fit'),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: colors.onSecondaryContainer,
+            Flexible(
+              child: Text(
+                l.text('fit_$fit'),
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: colors.onSecondaryContainer,
+                ),
               ),
             ),
           ],
@@ -596,11 +652,16 @@ class _Badge extends StatelessWidget {
     children: [
       Icon(icon, size: ListenIconSize.inline, color: color),
       const SizedBox(width: ListenSpacing.gap2),
-      Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
+      // A badge is a label: on a narrow column it ellipsizes instead of
+      // overflowing the row.
+      Flexible(
+        child: Text(
+          label,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     ],
