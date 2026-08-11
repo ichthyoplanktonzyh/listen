@@ -30,8 +30,12 @@ use super::learning_material::backfill_legacy_media_materials;
 // the durable learning-material schema: materials, immutable content
 // revisions, typed assets, and media bindings. Its material/revision
 // reference is circular, so `current_revision_id` is a deferred foreign key,
-// and the media binding deliberately carries no FK to `media_items`.
-pub const MIGRATION_VERSION: u32 = 59;
+// and the media binding deliberately carries no FK to `media_items`. v60 adds
+// the durable package lifecycle schema: installation facts with exact payload
+// BLOB bodies and the current adoption with its full selection plan, all
+// referencing the learning-material graph with RESTRICT so deletion never
+// cascades into durable package state.
+pub const MIGRATION_VERSION: u32 = 60;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -518,6 +522,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         tx.execute_batch(include_str!("../migrations/0059_learning_materials.sql"))?;
         backfill_legacy_media_materials(&tx)?;
         tx.pragma_update(None, "user_version", 59)?;
+        tx.commit()?;
+    }
+    if current < 60 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0060_package_lifecycle.sql"))?;
+        tx.pragma_update(None, "user_version", 60)?;
         tx.commit()?;
     }
     Ok(())

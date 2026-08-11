@@ -1324,6 +1324,60 @@ fn drop_v59_learning_material_tables(connection: &Connection) {
         .unwrap();
 }
 
+/// Rebuilds the historical v59 fixture shape inside an already-migrated
+/// database: the full latest schema minus the v60 package-lifecycle tables.
+fn drop_v60_package_lifecycle_tables(connection: &Connection) {
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE package_adoptions;
+             DROP TABLE package_resource_payloads;
+             DROP TABLE package_installations;
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+}
+
+/// One complete v60 package-lifecycle fixture: a material graph row plus an
+/// installation with one payload and an adoption referencing it.
+fn seed_v60_package_lifecycle_rows(connection: &Connection) {
+    let tx = connection.unchecked_transaction().unwrap();
+    tx.execute_batch(
+        r#"
+        INSERT INTO learning_materials
+          (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+        VALUES ('package-material','package-revision',NULL,100,100);
+        INSERT INTO material_revisions
+          (id,material_id,title,created_at_ms)
+        VALUES ('package-revision','package-material','Package material',100);
+        INSERT INTO material_assets
+          (revision_id,ordinal,asset_id,asset_kind,asset_json)
+        VALUES ('package-revision',0,'asset-package','document_text','{"text":"package"}');
+        INSERT INTO package_installations
+          (material_id,release_id,material_revision_id,release_created_at_ms,
+           edition_json,resources_json,renditions_json,installed_at_ms)
+        VALUES ('package-material','sha256:release-package','package-revision',1,
+                '{"edition_id":"edition-package","title":"Package","target_language":"en","support_languages":[]}',
+                '[]','[]',10);
+        INSERT INTO package_resource_payloads
+          (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+        VALUES ('package-material','sha256:release-package','resource-package',
+                'document_text','listen.payload.document-text.v1','sha256:abcdef',3,x'010203');
+        INSERT INTO package_adoptions
+          (material_id,release_id,material_revision_id,edition_json,
+           selected_resource_ids_json,exclusive_selections_json,
+           selected_rendition_ids_json,adopted_at_ms)
+        VALUES ('package-material','sha256:release-package','package-revision',
+                '{"edition_id":"edition-package","title":"Package","target_language":"en","support_languages":[]}',
+                '["resource-package"]',
+                '[{"family":"exclusive:document_text","resource_id":"resource-package"}]',
+                '[]',20);
+        "#,
+    )
+    .unwrap();
+    tx.commit().unwrap();
+}
+
 /// One legacy media row fixture and the deterministic material/revision the
 /// v59 backfill must derive from it, through the same domain constructors the
 /// backfill uses.
@@ -1706,5 +1760,562 @@ fn v59_backfill_rejects_invalid_legacy_media_rows_without_partial_persistence() 
             })
             .unwrap(),
         2
+    );
+}
+
+#[test]
+fn fresh_schema_ends_at_v60_with_package_lifecycle_tables_and_columns() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    assert_eq!(repo.schema_version().unwrap(), MIGRATION_VERSION);
+    let connection = repo.connection.lock();
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "package_installations",
+            &[
+                "material_id",
+                "release_id",
+                "material_revision_id",
+                "release_created_at_ms",
+                "edition_json",
+                "resources_json",
+                "renditions_json",
+                "installed_at_ms",
+            ],
+        ),
+        8
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "package_resource_payloads",
+            &[
+                "material_id",
+                "release_id",
+                "resource_id",
+                "kind",
+                "schema",
+                "digest",
+                "size_bytes",
+                "body",
+            ],
+        ),
+        8
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "package_adoptions",
+            &[
+                "material_id",
+                "release_id",
+                "material_revision_id",
+                "edition_json",
+                "selected_resource_ids_json",
+                "exclusive_selections_json",
+                "selected_rendition_ids_json",
+                "adopted_at_ms",
+            ],
+        ),
+        8
+    );
+    // A PRIMARY KEY on a SQLite rowid table does not imply NOT NULL, so the
+    // identifier columns must declare it explicitly.
+    for (table, column) in [
+        ("package_installations", "material_id"),
+        ("package_installations", "release_id"),
+        ("package_installations", "material_revision_id"),
+        ("package_resource_payloads", "resource_id"),
+        ("package_adoptions", "material_id"),
+    ] {
+        let notnull: u8 = connection
+            .query_row(
+                &format!(
+                    "SELECT \"notnull\" FROM pragma_table_info('{table}')
+                     WHERE name='{column}'"
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(notnull, 1, "{table}.{column} must be NOT NULL");
+    }
+    // The payload/adoption tables carry a composite FK to the installation
+    // identity, and every parent reference is RESTRICT.
+    let payload_fks: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare(
+                "SELECT \"table\", \"from\" FROM pragma_foreign_key_list('package_resource_payloads')",
+            )
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        payload_fks,
+        vec![
+            ("package_installations".to_owned(), "material_id".to_owned()),
+            ("package_installations".to_owned(), "release_id".to_owned()),
+            ("learning_materials".to_owned(), "material_id".to_owned()),
+        ]
+    );
+    let adoption_fks: Vec<(String, String)> = {
+        let mut statement = connection
+            .prepare("SELECT \"table\", \"from\" FROM pragma_foreign_key_list('package_adoptions')")
+            .unwrap();
+        statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    };
+    assert_eq!(
+        adoption_fks,
+        vec![
+            ("package_installations".to_owned(), "material_id".to_owned()),
+            ("package_installations".to_owned(), "release_id".to_owned()),
+            (
+                "material_revisions".to_owned(),
+                "material_revision_id".to_owned()
+            ),
+            ("learning_materials".to_owned(), "material_id".to_owned()),
+        ]
+    );
+    // The delete behavior of every FK edge is RESTRICT, never CASCADE or
+    // SET NULL, so durable package facts cannot be deleted by accident.
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        let behaviors: Vec<String> = {
+            let mut statement = connection
+                .prepare(&format!(
+                    "SELECT \"on_delete\" FROM pragma_foreign_key_list('{table}')"
+                ))
+                .unwrap();
+            statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        for behavior in behaviors {
+            assert_eq!(behavior, "RESTRICT", "{table} must RESTRICT deletes");
+        }
+    }
+}
+
+#[test]
+fn v59_database_upgrades_to_v60_preserving_material_rows_byte_for_byte() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    let material_before: (String, String, Option<u64>, u64, u64) = connection
+        .query_row(
+            "SELECT id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms
+             FROM learning_materials WHERE id='package-material'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .unwrap();
+    let revision_before: (String, String, String, u64) = connection
+        .query_row(
+            "SELECT id,material_id,title,created_at_ms
+             FROM material_revisions WHERE id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .unwrap();
+    let asset_before: (String, String, String) = connection
+        .query_row(
+            "SELECT asset_id,asset_kind,asset_json
+             FROM material_assets WHERE revision_id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+
+    drop_v60_package_lifecycle_tables(&connection);
+    connection.pragma_update(None, "user_version", 59).unwrap();
+    assert!(!table_exists(&connection, "package_installations"));
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        assert!(table_exists(&connection, table), "{table} must exist");
+    }
+    // The pre-upgrade material graph is preserved byte for byte: no
+    // fictional package/adoption backfill and no rewrite of existing rows.
+    let material_after: (String, String, Option<u64>, u64, u64) = connection
+        .query_row(
+            "SELECT id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms
+             FROM learning_materials WHERE id='package-material'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .unwrap();
+    let revision_after: (String, String, String, u64) = connection
+        .query_row(
+            "SELECT id,material_id,title,created_at_ms
+             FROM material_revisions WHERE id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .unwrap();
+    let asset_after: (String, String, String) = connection
+        .query_row(
+            "SELECT asset_id,asset_kind,asset_json
+             FROM material_assets WHERE revision_id='package-revision'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(material_after, material_before);
+    assert_eq!(revision_after, revision_before);
+    assert_eq!(asset_after, asset_before);
+    // The v59 graph rows and legacy learner state stay untouched by v60.
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_materials", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1
+    );
+    // No fictional package rows were backfilled for existing materials.
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM package_installations", [], |row| row
+                .get::<_, u32>(
+                0
+            ),)
+            .unwrap(),
+        0
+    );
+}
+
+#[test]
+fn v60_migration_retry_is_idempotent() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    drop_v60_package_lifecycle_tables(&connection);
+    connection.pragma_update(None, "user_version", 59).unwrap();
+    migrate(&connection).unwrap();
+    // A retry after a downgrade/upgrade cycle rebuilds the empty schema and
+    // leaves the material graph rows (and the fixture's package rows, which
+    // were dropped with their tables) converging on the deterministic shape.
+    migrate(&connection).unwrap();
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+    for table in [
+        "package_installations",
+        "package_resource_payloads",
+        "package_adoptions",
+    ] {
+        assert_eq!(
+            connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get::<_, u32>(0)
+                })
+                .unwrap(),
+            0,
+            "{table} must be idempotent across retries"
+        );
+    }
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_materials", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn v60_migration_failure_rolls_back_schema_and_version_atomically() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    // A colliding `package_installations` table without the referenced
+    // columns makes the payloads table creation fail inside the v60
+    // transaction.
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys=OFF;
+             DROP TABLE package_adoptions;
+             DROP TABLE package_resource_payloads;
+             DROP TABLE package_installations;
+             CREATE TABLE package_installations (collision TEXT NOT NULL);
+             PRAGMA foreign_keys=ON;",
+        )
+        .unwrap();
+    connection.pragma_update(None, "user_version", 59).unwrap();
+
+    assert!(migrate(&connection).is_err());
+
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        59,
+        "a failed v60 migration must not advance user_version"
+    );
+    assert!(
+        table_exists(&connection, "package_installations"),
+        "the colliding table survives"
+    );
+    assert!(
+        !table_exists(&connection, "package_resource_payloads"),
+        "the payload table must not survive the rolled-back migration"
+    );
+    assert!(
+        !table_exists(&connection, "package_adoptions"),
+        "the adoption table must not survive the rolled-back migration"
+    );
+}
+
+#[test]
+fn package_lifecycle_schema_constraints_reject_invalid_rows() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    let valid_edition =
+        r#"{"edition_id":"edition-x","title":"X","target_language":"en","support_languages":[]}"#;
+    for (label, sql) in [
+        (
+            "NULL installation identifier",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES (NULL,'sha256:r',NULL,1,'{}','[]','[]',1)",
+        ),
+        (
+            "negative installation timestamp",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:neg',NULL,1,'{}','[]','[]',-1)",
+        ),
+        (
+            "malformed edition_json",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:bad-json',NULL,1,'{not json}','[]','[]',1)",
+        ),
+        (
+            "missing revision FK",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:missing-rev','no-such-revision',1,'{}','[]','[]',1)",
+        ),
+        (
+            "missing material FK",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('no-such-material','sha256:missing-mat',NULL,1,'{}','[]','[]',1)",
+        ),
+        (
+            "duplicate installation identity",
+            "INSERT INTO package_installations
+               (material_id,release_id,material_revision_id,release_created_at_ms,
+                edition_json,resources_json,renditions_json,installed_at_ms)
+             VALUES ('package-material','sha256:release-package','package-revision',1,'{}','[]','[]',1)",
+        ),
+        (
+            "NULL payload resource identifier",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:release-package',NULL,'k','s','d',1,x'01')",
+        ),
+        (
+            "negative payload size",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:release-package','r2','k','s','d',-1,x'01')",
+        ),
+        (
+            "payload without installation",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:no-install','r3','k','s','d',1,x'01')",
+        ),
+        (
+            "duplicate payload resource",
+            "INSERT INTO package_resource_payloads
+               (material_id,release_id,resource_id,kind,schema,digest,size_bytes,body)
+             VALUES ('package-material','sha256:release-package','resource-package','k','s','d',1,x'01')",
+        ),
+        (
+            "malformed adoption selection JSON",
+            "INSERT INTO package_adoptions
+               (material_id,release_id,material_revision_id,edition_json,
+                selected_resource_ids_json,exclusive_selections_json,
+                selected_rendition_ids_json,adopted_at_ms)
+             VALUES ('package-material','sha256:release-package','package-revision',?1,
+                     '{bad','[]','[]',1)",
+        ),
+        (
+            "adoption for a material without an installation",
+            "INSERT INTO package_adoptions
+               (material_id,release_id,material_revision_id,edition_json,
+                selected_resource_ids_json,exclusive_selections_json,
+                selected_rendition_ids_json,adopted_at_ms)
+             VALUES ('package-material','sha256:never-installed','package-revision',?1,
+                     '[]','[]','[]',1)",
+        ),
+    ] {
+        let rejected = if sql.contains("?1") {
+            connection.execute(sql, params![valid_edition]).is_err()
+        } else {
+            connection.execute(sql, []).is_err()
+        };
+        assert!(rejected, "{label} must be rejected");
+    }
+    // A negative adoption timestamp is rejected too.
+    assert!(
+        connection
+            .execute(
+                "INSERT INTO package_adoptions
+                   (material_id,release_id,material_revision_id,edition_json,
+                    selected_resource_ids_json,exclusive_selections_json,
+                    selected_rendition_ids_json,adopted_at_ms)
+                 VALUES ('package-material','sha256:release-package','package-revision',?1,
+                         '[]','[]','[]',-1)",
+                params![valid_edition],
+            )
+            .is_err(),
+        "negative adoption timestamp must be rejected"
+    );
+}
+
+#[test]
+fn deleting_material_or_revision_referenced_by_package_state_is_rejected() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+    seed_v60_package_lifecycle_rows(&connection);
+    // Installation, payload, and adoption all reference the material graph
+    // with RESTRICT: deleting the material, the revision, or the installation
+    // that package state references must never succeed or cascade.
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM learning_materials WHERE id='package-material'",
+                []
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM material_revisions WHERE id='package-revision'",
+                []
+            )
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "DELETE FROM package_installations WHERE material_id='package-material'",
+                []
+            )
+            .is_err()
+    );
+    // All rows survive the rejected deletes.
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM package_installations", [], |row| row
+                .get::<_, u32>(
+                0
+            ),)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM package_resource_payloads",
+                [],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM package_adoptions", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1
+    );
+    // Deleting the adoption and payload first, then the installation, is the
+    // only way to remove package state; it still never touches the material.
+    connection
+        .execute(
+            "DELETE FROM package_adoptions WHERE material_id='package-material'",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "DELETE FROM package_resource_payloads WHERE material_id='package-material'",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "DELETE FROM package_installations WHERE material_id='package-material'",
+            [],
+        )
+        .unwrap();
+    assert_eq!(
+        connection
+            .query_row("SELECT COUNT(*) FROM learning_materials", [], |row| row
+                .get::<_, u32>(0),)
+            .unwrap(),
+        1,
+        "package state removal must never cascade into the material graph"
     );
 }

@@ -13,6 +13,7 @@ mod lexical;
 mod llm_provider;
 mod media;
 mod migrations;
+mod package_lifecycle;
 mod personal_expression;
 mod phonetic_analysis;
 mod production_corpus;
