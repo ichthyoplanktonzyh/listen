@@ -1,17 +1,25 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 3.2.0
+  version: 3.3.0
   description: >
     Versioned loopback-only application-service adapter. Playback control is
-    excluded. Contract `3.2.0` adds the learning-material surface as a
-    backward-compatible minor over `3.1.0` (which added media retention):
-    `/v1/materials*` operations plus the `/v1/media/{media_id}/material`
-    resolver are purely additive, every previously published endpoint stays
-    compatible, and no material, revision, or asset response ever exposes a
-    file path. Retention is logical state independent of file location:
-    Temporary Material is explicitly not a Personal Library member, though it
-    stays readable by ID and resolvable from its media.
+    excluded. Contract `3.3.0` adds the durable package lifecycle surface as a
+    backward-compatible minor over `3.2.0` (which added the learning-material
+    surface over `3.1.0`): Package Installation
+    (`/v1/materials/{material_id}/package-installations`, candidate-only,
+    never auto-adopting), Edition Listing
+    (`/v1/materials/{material_id}/editions`, installed Editions of the
+    Material's actual current revision), and explicit, idempotent Learning
+    Edition Adoption (`/v1/materials/{material_id}/edition-adoption`,
+    preserving the original adoption timestamp) are purely additive, every
+    previously published endpoint stays compatible, and no package lifecycle
+    response ever exposes a package or media path, manifest or release JSON,
+    payload bytes, blob path, schema, digest, size, dependency edges, internal
+    persistence facts, or provider/model raw output. Retention is logical
+    state independent of file location: Temporary Material is explicitly not
+    a Personal Library member, though it stays readable by ID and resolvable
+    from its media.
 servers:
   - url: http://127.0.0.1:{port}
     variables:
@@ -279,6 +287,229 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/package-installations:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    post:
+      operationId: installMaterialPackage
+      description: >
+        Installs one local Content Package v2 release for the Material's
+        actual current revision as candidate Learning Resources. Candidate
+        only: the release is validated against the Material and current
+        revision, prepared, and durably persisted together with every
+        verified resource payload; it never adopts an Edition or changes any
+        active selection, and an equal retry is idempotent (same release,
+        original installation time preserved). The request carries only a
+        local `package_path`; no response ever exposes a package or media
+        path, manifest or release JSON, payload bytes, blob path, schema,
+        digest, size, dependency edges, internal persistence facts, or
+        provider/model raw output. A blank path, unreadable or malformed
+        carrier, incompatibility, or Material/Revision mismatch is a typed
+        422; unknown material is a typed 404; repository/internal failure is
+        a typed 500.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstallMaterialPackageRequest"
+      responses:
+        "200":
+          description: Installed Learning Edition candidate with adoption evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningEditionDetails"
+        "404":
+          description: >
+            Typed not-found: unknown material. `code` is `not_found`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notFound:
+                  summary: Unknown material
+                  value:
+                    code: not_found
+                    message: material was not found
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "422":
+          description: >
+            Typed invalid installation: an unreadable or malformed carrier, an
+            incompatible release, a Material/Revision mismatch, or a missing
+            required dependency closure. `code` is
+            `package_installation_invalid`, the public message is `package
+            release is invalid or incompatible`, and `retryable` is `false`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                invalidInstallation:
+                  summary: Invalid or incompatible package release
+                  value:
+                    code: package_installation_invalid
+                    message: package release is invalid or incompatible
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "500":
+          description: >
+            Typed repository/internal failure. `code` is
+            `package_lifecycle_failed`, the public message is `local package
+            lifecycle operation failed`, and `retryable` is `true`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                lifecycleFailed:
+                  summary: Local package lifecycle failure
+                  value:
+                    code: package_lifecycle_failed
+                    message: local package lifecycle operation failed
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: true
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/editions:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    get:
+      operationId: listLearningEditions
+      description: >
+        Lists every installed Learning Edition of the Material's actual
+        current revision with current-adoption evidence, ordered by release
+        id. Installations of any other revision are never shown. Unknown
+        material is a typed 404.
+      responses:
+        "200":
+          description: Installed Learning Editions of the current revision
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LearningEditionDetails" }
+        "404":
+          description: >
+            Typed not-found: unknown material. `code` is `not_found`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notFound:
+                  summary: Unknown material
+                  value:
+                    code: not_found
+                    message: material was not found
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "500":
+          description: >
+            Typed repository/internal failure. `code` is
+            `package_lifecycle_failed`, the public message is `local package
+            lifecycle operation failed`, and `retryable` is `true`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                lifecycleFailed:
+                  summary: Local package lifecycle failure
+                  value:
+                    code: package_lifecycle_failed
+                    message: local package lifecycle operation failed
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: true
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/edition-adoption:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    put:
+      operationId: adoptLearningEdition
+      description: >
+        Explicitly adopts one installed Package Release for the Material's
+        actual current revision: the use case resolves one coherent,
+        dependency-closed selection from the immutable installed facts and
+        commits the adoption atomically. Idempotent: re-adopting the current
+        release preserves the original `adopted_at_ms` and changes nothing
+        else. A release installed for a stale revision, a missing required
+        resource, a broken dependency closure, or an exclusive-resource
+        ambiguity is a typed 409 and never exposes resource ids or the
+        internal selection plan; an unknown material or a release that is not
+        installed is a typed 404; repository/internal failure is a typed 500.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdoptLearningEditionRequest"
+      responses:
+        "200":
+          description: The adopted Learning Edition with adoption evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningEditionDetails"
+        "404":
+          description: >
+            Typed not-found: unknown material, or the release was never
+            installed for this material. `code` is `not_found`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notFound:
+                  summary: Unknown material or absent installation
+                  value:
+                    code: not_found
+                    message: package release installation was not found
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "409":
+          description: >
+            Typed adoption conflict: the release is installed for a stale
+            revision, a required resource is missing, a dependency closure is
+            broken, or an exclusive resource family is ambiguous. `code` is
+            `edition_adoption_conflict`, the public message is `learning
+            edition cannot be adopted`, and `retryable` is `false`; resource
+            ids and the internal selection plan are never exposed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                adoptionConflict:
+                  summary: Learning edition cannot be adopted
+                  value:
+                    code: edition_adoption_conflict
+                    message: learning edition cannot be adopted
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "500":
+          description: >
+            Typed repository/internal failure, including a stored adoption row
+            that no longer matches the deterministic plan. `code` is
+            `package_lifecycle_failed`, the public message is `local package
+            lifecycle operation failed`, and `retryable` is `true`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                lifecycleFailed:
+                  summary: Local package lifecycle failure
+                  value:
+                    code: package_lifecycle_failed
+                    message: local package lifecycle operation failed
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: true
         default:
           $ref: "#/components/responses/Error"
   /v1/media/{media_id}/material:
@@ -7271,3 +7502,90 @@ components:
           type: array
           minItems: 1
           items: { $ref: "#/components/schemas/MaterialAssetInput" }
+    InstallMaterialPackageRequest:
+      type: object
+      required: [package_path]
+      properties:
+        package_path:
+          type: string
+          minLength: 1
+          description: >
+            Local path to a Content Package v2 carrier. The path is a write-only
+            input: it never appears in any response or public error text.
+    AdoptLearningEditionRequest:
+      type: object
+      required: [release_id]
+      properties:
+        release_id:
+          type: string
+          description: The immutable `sha256:` Package Release identity to adopt.
+    LearningEditionDetails:
+      type: object
+      required:
+        - material_id
+        - material_revision_id
+        - edition_id
+        - release_id
+        - title
+        - target_language
+        - support_languages
+        - installed_at_ms
+        - adopted_at_ms
+        - adopted
+        - resources
+        - renditions
+      properties:
+        material_id: { type: string }
+        material_revision_id: { type: string }
+        edition_id: { type: string }
+        release_id: { type: string }
+        title: { type: string }
+        target_language: { type: string }
+        support_languages:
+          type: array
+          items: { type: string }
+        installed_at_ms: { type: integer, minimum: 0 }
+        adopted_at_ms:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            Required but nullable adoption evidence: the original adoption
+            time when this release is currently adopted, null otherwise.
+        adopted: { type: boolean }
+        resources:
+          type: array
+          items: { $ref: "#/components/schemas/LearningEditionResource" }
+        renditions:
+          type: array
+          items: { $ref: "#/components/schemas/LearningEditionRendition" }
+    LearningEditionResource:
+      type: object
+      required:
+        - resource_id
+        - kind
+        - role
+        - required
+        - availability
+        - review_status
+        - content_language
+        - support_languages
+      properties:
+        resource_id: { type: string }
+        kind: { type: string }
+        role: { enum: [base, assistance] }
+        required: { type: boolean }
+        availability: { enum: [available, missing, opaque] }
+        review_status: { enum: [unreviewed, machine_checked, human_reviewed] }
+        content_language:
+          type: [string, "null"]
+          description: Required but nullable content-language tag.
+        support_languages:
+          type: array
+          items: { type: string }
+    LearningEditionRendition:
+      type: object
+      required: [rendition_id, kind, available]
+      properties:
+        rendition_id: { type: string }
+        kind: { type: string }
+        available: { type: boolean }

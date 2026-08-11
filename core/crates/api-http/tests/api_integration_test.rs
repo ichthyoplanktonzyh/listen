@@ -34,7 +34,8 @@ fn build_app() -> Router {
         repo.clone(),
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
-    .with_material_repository(repo.clone());
+    .with_material_repository(repo.clone())
+    .with_package_lifecycle_repository(repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 
@@ -183,10 +184,10 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The learning-material contract is locked exactly: 3.2.0 is the
-    // additive minor over the material-retention 3.1.0 (itself additive over
-    // the R5 breaking 3.0.0, never the previously published R4 2.1.0).
-    assert_eq!(body["contract_version"], "3.2.0");
+    // The package-lifecycle contract is locked exactly: 3.3.0 is the
+    // additive minor over the learning-material 3.2.0 (itself additive over
+    // the material-retention 3.1.0, never the previously published R4 2.1.0).
+    assert_eq!(body["contract_version"], "3.3.0");
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }
 

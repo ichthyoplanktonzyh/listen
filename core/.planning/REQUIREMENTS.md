@@ -30,6 +30,23 @@
 - CORE-CONTRACT-014: Personal Library membership 以 Learning Material 为权威；
   retained list 只返回有 membership evidence 的 material，membership mutation
   不得删除 revision、binding、resource 或 learner state。
+- CORE-CONTRACT-015: HTTP 层必须通过 `AppServices::package_lifecycle()`
+  暴露三个固定意图——candidate-only Package Installation、Edition Listing 与
+  显式幂等 Learning Edition Adoption；installation 绝不自动 adoption，
+  handler 不得直接调用 inspector、读写 repository、解释 manifest 或选择
+  active resources。
+- CORE-CONTRACT-016: `InstallMaterialPackageRequest.package_path` 是必要的
+  write-only 输入：请求携带本地 package 位置，但该位置绝不进入任何响应、
+  公共错误或日志。`LearningEditionDetails`、`LearningEditionResource`、
+  `LearningEditionRendition` 等响应 DTO、公共错误与日志不得包含 package/media
+  path、manifest/release JSON、payload bytes、blob path、schema、digest、size、
+  dependency DAG、内部 persistence facts 或 provider/model 原始输出；error
+  response 与日志不得泄漏 package_path、payload、manifest 或资源 id。
+- CORE-CONTRACT-017: material/release 不存在为 404 `not_found`；无效或
+  不兼容安装为 422 `package_installation_invalid`；不可采用状态（stale
+  revision、缺 required resource、broken closure、exclusive ambiguity）为
+  409 `edition_adoption_conflict`；repository/internal failure 为 500
+  `package_lifecycle_failed`（可 retryable）。
 
 ## Runtime and Releases
 

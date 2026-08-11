@@ -7,6 +7,7 @@ pub(crate) mod lexical_entries;
 pub(crate) mod llm;
 pub(crate) mod material;
 pub(crate) mod media;
+pub(crate) mod package_lifecycle;
 pub(crate) mod personal_expression;
 pub(crate) mod phonetic_analysis;
 pub(crate) mod practice;

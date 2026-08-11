@@ -99,9 +99,19 @@ is complete. It introduces the generic, path-free Learning Material aggregate
 for text, media and mixed compositions; immutable revisions; material
 membership; and media resolution. Contract `3.2.0`, SQLite v59 and runtime
 `0.7.0` are published immutably in `v0.7.0-phase1.2`; consumer pinning remains.
-Source Identity,
-Package Installation, Learning Edition Adoption and RSS/Atom convergence
-remain subsequent Phase 1 slices rather than hidden additions.
+Source Identity, hosted catalog behavior and RSS/Atom convergence remain
+subsequent Phase 1 slices rather than hidden additions.
+
+Core phase
+[`005-durable-package-lifecycle`](phases/005-durable-package-lifecycle/005-CONTEXT.md)
+is active. The application/domain lifecycle (`PackageLifecycleUseCases`) landed
+via `db53cdf` and the SQLite v60 adapter via PR #131 (merge `d435606`); the
+current slice is the HTTP/OpenAPI/runtime composition: candidate-only Package
+Installation, Edition Listing, and explicit idempotent Learning Edition
+Adoption through three fixed routes, with the additive contract `3.3.0`.
+Contract `3.3.0` is not yet published; App pin, App client/UI, real
+three-repository acceptance and release/closeout remain subsequent slices, and
+no `005-CLOSEOUT.md` exists.
 
 Published contract `2.0.0` folds the additive local realtime cascade work
 (previously planned as `1.1.0`) together with the R1 whole-media ASR deletion.

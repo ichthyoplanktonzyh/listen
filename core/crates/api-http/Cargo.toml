@@ -47,4 +47,7 @@ libc.workspace = true
 libc.workspace = true
 
 [dev-dependencies]
+content-package = { path = "../content-package" }
+rusqlite.workspace = true
+tempfile = "3"
 tower = { workspace = true, features = ["util"] }

@@ -99,6 +99,59 @@ export interface AppendMaterialRevision {
   assets: MaterialAssetInput[];
 }
 
+// Package lifecycle (contract 3.3.0): candidate-only Package Installation,
+// Edition Listing, and explicit Learning Edition Adoption. Responses never
+// expose paths, manifests, payloads, blobs, digests, sizes, dependency edges,
+// or producer raw output.
+export interface InstallMaterialPackageRequest {
+  package_path: string;
+}
+
+export interface AdoptLearningEditionRequest {
+  release_id: string;
+}
+
+export type LearningEditionResourceRole = "base" | "assistance";
+
+export type LearningEditionResourceAvailability = "available" | "missing" | "opaque";
+
+export type LearningEditionReviewStatus =
+  | "unreviewed"
+  | "machine_checked"
+  | "human_reviewed";
+
+export interface LearningEditionResource {
+  resource_id: string;
+  kind: string;
+  role: LearningEditionResourceRole;
+  required: boolean;
+  availability: LearningEditionResourceAvailability;
+  review_status: LearningEditionReviewStatus;
+  content_language: string | null;
+  support_languages: string[];
+}
+
+export interface LearningEditionRendition {
+  rendition_id: string;
+  kind: string;
+  available: boolean;
+}
+
+export interface LearningEditionDetails {
+  material_id: string;
+  material_revision_id: string;
+  edition_id: string;
+  release_id: string;
+  title: string;
+  target_language: string;
+  support_languages: string[];
+  installed_at_ms: number;
+  adopted_at_ms: number | null;
+  adopted: boolean;
+  resources: LearningEditionResource[];
+  renditions: LearningEditionRendition[];
+}
+
 export interface Progress {
   position_ms: number | null;
 }
@@ -1246,6 +1299,36 @@ export class LocalApiV1 {
 
   resolveLearningMaterialForMedia(mediaId: string): Promise<MaterialDetails> {
     return this.request(`/v1/media/${encodeURIComponent(mediaId)}/material`);
+  }
+
+  installMaterialPackage(
+    materialId: string,
+    input: InstallMaterialPackageRequest,
+  ): Promise<LearningEditionDetails> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/package-installations`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  }
+
+  listLearningEditions(materialId: string): Promise<LearningEditionDetails[]> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}/editions`);
+  }
+
+  adoptLearningEdition(
+    materialId: string,
+    input: AdoptLearningEditionRequest,
+  ): Promise<LearningEditionDetails> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/edition-adoption`,
+      {
+        method: "PUT",
+        body: JSON.stringify(input),
+      },
+    );
   }
 
   readProgress(mediaId: string): Promise<Progress> {

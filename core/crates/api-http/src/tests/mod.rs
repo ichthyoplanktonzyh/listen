@@ -57,7 +57,8 @@ fn test_state_with_repository() -> (ApiState, Arc<SqliteRepository>) {
         .with_llm_provider_profile_repository(repo.clone())
         .with_realtime_conversation_repository(repo.clone())
         .with_reading_position_repository(repo.clone())
-        .with_material_repository(repo.clone()),
+        .with_material_repository(repo.clone())
+        .with_package_lifecycle_repository(repo.clone()),
         repo.clone(),
         "secret",
     );
@@ -645,6 +646,7 @@ mod llm;
 mod material;
 mod media_subtitles;
 mod openapi;
+mod package_lifecycle;
 mod phonetic_analysis;
 mod practice;
 mod reading;

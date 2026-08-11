@@ -25,6 +25,10 @@ Completed phase:
 
 Active phase:
 
-- No Core implementation phase is active. The next transition is consumer
-  pinning and cross-repository acceptance against `v0.7.0-phase1.2`; later Core
-  work starts from the next explicit Phase 1 contract request.
+- `005-durable-package-lifecycle` (active): application/domain lifecycle
+  landed via `db53cdf` and the SQLite v60 adapter via PR #131 (merge
+  `d435606`); the current slice wires the fixed Package Installation / Edition
+  Listing / Learning Edition Adoption HTTP surface and the additive OpenAPI
+  `3.3.0` contract into the real runtime. Contract `3.3.0` is not yet
+  published; App pinning, App client/UI, real three-repository acceptance and
+  release/closeout remain subsequent slices, so no `005-CLOSEOUT.md` exists.

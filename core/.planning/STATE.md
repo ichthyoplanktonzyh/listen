@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-08-10 CST
+> Updated: 2026-08-11 CST
 
 ## Position
 
@@ -8,8 +8,9 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `3.2.0` (additive durable Learning Material lifecycle;
-  published in `v0.7.0-phase1.2`)
+- Contract version: `3.3.0` (additive package lifecycle HTTP surface; **not
+  yet published** — `3.2.0` remains the published learning-material contract
+  from `v0.7.0-phase1.2`)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
@@ -26,10 +27,24 @@ is complete and published as `v0.7.0-phase1.2`. Contract `3.2.0` adds path-free
 text, media and mixed Learning Materials, immutable revisions, explicit
 material membership, media-to-material
 resolution, and SQLite v59 backfill. Material membership synchronizes the
-legacy retained-media projection for compatibility. The clean tagged runtime
-passed archive verification, startup handshake, health and graceful-shutdown
-smoke outside the source tree. Consumer pinning and cross-repository acceptance
-are the next transition; no new Core implementation phase is active.
+legacy retained-media projection for compatibility. Consumer pinning and
+cross-repository acceptance remain the next transition.
+
+Core phase
+[`005-durable-package-lifecycle`](phases/005-durable-package-lifecycle/005-CONTEXT.md)
+is active. The application/domain package lifecycle
+(`PackageLifecycleUseCases`: candidate-only Package Installation, Edition
+Listing, explicit idempotent Learning Edition Adoption) landed via commit
+`db53cdf`; the SQLite v60 adapter landed via PR #131 (merge `d435606`). The
+current slice composes the real SQLite repository into `api-http` and publishes
+the fixed HTTP surface — `POST /v1/materials/{material_id}/package-installations`,
+`GET /v1/materials/{material_id}/editions`,
+`PUT /v1/materials/{material_id}/edition-adoption` — plus the additive OpenAPI
+`3.3.0` contract (operationIds `installMaterialPackage`, `listLearningEditions`,
+`adoptLearningEdition`) with typed 404/422/409/500 error semantics and
+path/payload/manifest-free DTOs. Contract `3.3.0` is not yet published; App
+pinning, App client/UI, real three-repository acceptance and release/closeout
+remain subsequent slices, so no `005-CLOSEOUT.md` is written.
 
 ## Completed Foundation
 
@@ -199,9 +214,10 @@ not code evidence.
    `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
    exact SHA-256, while Gen `v0.4.0` is published immutably.
 3. Treat Content Package v2 as the completed release/inspection/producer seam;
-   durable Learning Material now exists independently, while Package
-   Installation, Learning Edition Adoption and hosted catalog behavior remain
-   later explicit slices.
+   durable Learning Material exists independently, Package Installation and
+   Learning Edition Adoption are implemented (application/domain `db53cdf`,
+   SQLite v60 `d435606`) and exposed over HTTP with the unpublished contract
+   `3.3.0`; hosted catalog behavior remains a later explicit slice.
 4. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.

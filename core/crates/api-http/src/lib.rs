@@ -51,17 +51,23 @@ pub use secret_store_keychain::KeychainSecretStore;
 static ERROR_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub const API_VERSION: u16 = 1;
-/// Contract `3.2.0` adds the learning-material surface on top of the
-/// material-retention `3.1.0` (itself an additive minor over the R5 breaking
-/// `3.0.0`, which removed the published `/v1/*chunk-timelines*` operations
-/// and the retired ChunkTimeline LLTimeline fields). The minor bump is purely
-/// additive and backward-compatible: `/v1/materials*` exposes durable
-/// learning material (list/create/read/append-revision/read-revision/
-/// retain/unretain) and `/v1/media/{media_id}/material` resolves the material
-/// bound to a media source, while every previously published endpoint stays
-/// compatible. API generation stays `1` and the runtime/workspace version
-/// stays `0.7.0`; `3.2.0` is the current unreleased contract.
-pub const CONTRACT_VERSION: &str = "3.2.0";
+/// Contract `3.3.0` adds the durable package lifecycle HTTP surface on top of
+/// the learning-material `3.2.0` (itself an additive minor over the
+/// material-retention `3.1.0`, which was an additive minor over the R5
+/// breaking `3.0.0`, which removed the published `/v1/*chunk-timelines*`
+/// operations and the retired ChunkTimeline LLTimeline fields). The minor
+/// bump is purely additive and backward-compatible: the fixed
+/// `/v1/materials/{material_id}/package-installations`,
+/// `/v1/materials/{material_id}/editions`, and
+/// `/v1/materials/{material_id}/edition-adoption` operations expose the
+/// application-owned Package Installation (candidate-only), Edition Listing,
+/// and Learning Edition Adoption (explicit, idempotent) intents behind
+/// path-free, privacy-redacted DTOs, while every previously published
+/// endpoint stays compatible. API generation stays `1`, the runtime/workspace
+/// version stays `0.7.0`, the SQLite schema stays v60 with no new migration,
+/// and the Content Package v1/v2 schema versions are unchanged; `3.3.0` is
+/// the current unreleased contract.
+pub const CONTRACT_VERSION: &str = "3.3.0";
 
 fn next_correlation_id() -> String {
     format!("api-{}", ERROR_SEQUENCE.fetch_add(1, Ordering::Relaxed))

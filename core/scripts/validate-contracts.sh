@@ -210,7 +210,7 @@ if (schema.$defs.command.properties.version.const !== 1) throw new Error("comman
 if (schema.$defs.event.properties.version.const !== 1) throw new Error("event version missing");
 if (!Array.isArray(examples) || examples.length === 0) throw new Error("examples missing");
 if (events.properties.version.const !== 1) throw new Error("event schema version missing");
-for (const path of ["/v1/health", "/v1/media", "/v1/lltimeline/import", "/v1/media/{media_id}/lltimeline/import", "/v1/media/{media_id}/progress", "/v1/media/{media_id}/subtitles", "/v1/subtitles/{track_id}", "/v1/subtitles/{track_id}/archive", "/v1/subtitles/{track_id}/restore", "/v1/subtitles/{track_id}/language", "/v1/subtitles/{track_id}/export", "/v1/pronunciation/providers", "/v1/pronunciation/lookup", "/v1/pronunciation/analyze-sentence", "/v1/pronunciation/rules", "/v1/subtitles/{track_id}/pronunciation", "/v1/subtitles/{track_id}/pronunciation-analysis", "/v1/subtitles/{track_id}/word-timings", "/v1/subtitles/{track_id}/word-timelines", "/v1/subtitles/{track_id}/word-timelines/summary", "/v1/subtitles/{track_id}/lltimeline/export", "/v1/word-timelines/{timeline_id}", "/v1/word-timelines/{timeline_id}/activate", "/v1/word-timelines/{timeline_id}/publish", "/v1/word-timelines/{timeline_id}/archive", "/v1/word-timelines/{timeline_id}/export", "/v1/subtitles/{track_id}/phone-timelines", "/v1/subtitles/{track_id}/phone-timelines/summary", "/v1/phone-timelines/{timeline_id}", "/v1/phone-timelines/{timeline_id}/activate", "/v1/phone-timelines/{timeline_id}/archive", "/v1/phone-timelines/{timeline_id}/export", "/v1/speech/jobs", "/v1/speech/jobs/{job_id}", "/v1/speech/jobs/{job_id}/cancel", "/v1/speech/jobs/{job_id}/retry", "/v1/lexical-entries/batch", "/v1/lexical-entries", "/v1/lexical-entries/{id}", "/v1/lexical-entries/{id}/learning-content", "/v1/lexical-observations", "/v1/lexical-normalization", "/v1/sentences/{sentence_id}/phrase-candidates", "/v1/practice/sessions", "/v1/practice/items", "/v1/practice/attempts", "/v1/practice/attempts/{id}", "/v1/listening/sessions/{id}/complete", "/v1/review/items", "/v1/review/items/{id}", "/v1/review/attempts", "/v1/learning-resources", "/v1/subtitle-search", "/v1/vocabulary", "/v1/vocabulary/export", "/v1/vocabulary/import", "/v1/vocabulary/import-external", "/v1/media/{media_id}/availability", "/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/media/{media_id}/material", "/v1/events", "/v1/dictionary", "/v1/languages", "/v1/languages/{code}/profile", "/v1/sentences/{sentence_id}/diagnosis", "/v1/transcription/providers", "/v1/transcription/models", "/v1/recording-transcriptions", "/v1/recording-transcriptions/{job_id}", "/v1/recording-transcriptions/{job_id}/cancel", "/v1/phonetic-analysis/providers", "/v1/phonetic-analysis/models", "/v1/phonetic-analysis/jobs", "/v1/phonetic-analysis/jobs/clear", "/v1/subtitles/{track_id}/phonetic-analyses", "/v1/phonetic-analysis/{analysis_id}/findings", "/v1/phonetic-analysis/findings/{finding_id}/feedback"]) {
+for (const path of ["/v1/health", "/v1/media", "/v1/lltimeline/import", "/v1/media/{media_id}/lltimeline/import", "/v1/media/{media_id}/progress", "/v1/media/{media_id}/subtitles", "/v1/subtitles/{track_id}", "/v1/subtitles/{track_id}/archive", "/v1/subtitles/{track_id}/restore", "/v1/subtitles/{track_id}/language", "/v1/subtitles/{track_id}/export", "/v1/pronunciation/providers", "/v1/pronunciation/lookup", "/v1/pronunciation/analyze-sentence", "/v1/pronunciation/rules", "/v1/subtitles/{track_id}/pronunciation", "/v1/subtitles/{track_id}/pronunciation-analysis", "/v1/subtitles/{track_id}/word-timings", "/v1/subtitles/{track_id}/word-timelines", "/v1/subtitles/{track_id}/word-timelines/summary", "/v1/subtitles/{track_id}/lltimeline/export", "/v1/word-timelines/{timeline_id}", "/v1/word-timelines/{timeline_id}/activate", "/v1/word-timelines/{timeline_id}/publish", "/v1/word-timelines/{timeline_id}/archive", "/v1/word-timelines/{timeline_id}/export", "/v1/subtitles/{track_id}/phone-timelines", "/v1/subtitles/{track_id}/phone-timelines/summary", "/v1/phone-timelines/{timeline_id}", "/v1/phone-timelines/{timeline_id}/activate", "/v1/phone-timelines/{timeline_id}/archive", "/v1/phone-timelines/{timeline_id}/export", "/v1/speech/jobs", "/v1/speech/jobs/{job_id}", "/v1/speech/jobs/{job_id}/cancel", "/v1/speech/jobs/{job_id}/retry", "/v1/lexical-entries/batch", "/v1/lexical-entries", "/v1/lexical-entries/{id}", "/v1/lexical-entries/{id}/learning-content", "/v1/lexical-observations", "/v1/lexical-normalization", "/v1/sentences/{sentence_id}/phrase-candidates", "/v1/practice/sessions", "/v1/practice/items", "/v1/practice/attempts", "/v1/practice/attempts/{id}", "/v1/listening/sessions/{id}/complete", "/v1/review/items", "/v1/review/items/{id}", "/v1/review/attempts", "/v1/learning-resources", "/v1/subtitle-search", "/v1/vocabulary", "/v1/vocabulary/export", "/v1/vocabulary/import", "/v1/vocabulary/import-external", "/v1/media/{media_id}/availability", "/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/materials/{material_id}/package-installations", "/v1/materials/{material_id}/editions", "/v1/materials/{material_id}/edition-adoption", "/v1/media/{media_id}/material", "/v1/events", "/v1/dictionary", "/v1/languages", "/v1/languages/{code}/profile", "/v1/sentences/{sentence_id}/diagnosis", "/v1/transcription/providers", "/v1/transcription/models", "/v1/recording-transcriptions", "/v1/recording-transcriptions/{job_id}", "/v1/recording-transcriptions/{job_id}/cancel", "/v1/phonetic-analysis/providers", "/v1/phonetic-analysis/models", "/v1/phonetic-analysis/jobs", "/v1/phonetic-analysis/jobs/clear", "/v1/subtitles/{track_id}/phonetic-analyses", "/v1/phonetic-analysis/{analysis_id}/findings", "/v1/phonetic-analysis/findings/{finding_id}/feedback"]) {
   if (!openapi.includes(path + ":")) throw new Error(`OpenAPI missing ${path}`);
 }
 for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id}", "/v1/transcription/jobs/{job_id}/cancel", "/v1/transcription/jobs/{job_id}/retry", "/v1/transcription/jobs/{job_id}/archive", "/v1/subtitles/{track_id}/chunk-timelines", "/v1/subtitles/{track_id}/chunk-timelines/summary", "/v1/chunk-timelines/{timeline_id}", "/v1/chunk-timelines/{timeline_id}/activate", "/v1/chunk-timelines/{timeline_id}/archive", "/v1/chunk-timelines/{timeline_id}/export"]) {
@@ -219,7 +219,7 @@ for (const removed of ["/v1/transcription/jobs", "/v1/transcription/jobs/{job_id
 for (const removedWire of ["chunk_timelines:", "active_chunk_timeline_id:", "ChunkTimeline:", "ChunkTimelineSummary:", "ChunkBoundarySource:", "GenerateChunkTimeline:"]) {
   if (openapi.includes(removedWire)) throw new Error(`removed OpenAPI wire surface ${removedWire} must stay absent`);
 }
-if (!openapi.includes("version: 3.2.0")) throw new Error("OpenAPI must report the current learning-material contract 3.2.0");
+if (!openapi.includes("version: 3.3.0")) throw new Error("OpenAPI must report the current package-lifecycle contract 3.3.0");
 if (!openapi.includes("openapi: 3.1.0")) throw new Error("OpenAPI specification line must stay 3.1.0");
 if (!openapi.includes("/v1/media/{media_id}/library-membership:")) throw new Error("OpenAPI library-membership path missing");
 if (!client.includes("retainMedia(mediaId: string): Promise<MediaItem>")) throw new Error("generated retainMedia client method missing");
@@ -234,6 +234,57 @@ if (!openapi.includes("retain:")) throw new Error("OpenAPI RegisterMedia retain 
 for (const materialPath of ["/v1/materials", "/v1/materials/{material_id}", "/v1/materials/{material_id}/revisions", "/v1/materials/{material_id}/revisions/{revision_id}", "/v1/materials/{material_id}/library-membership", "/v1/media/{media_id}/material"]) {
   if (!openapi.includes(materialPath + ":")) throw new Error(`OpenAPI missing material path ${materialPath}`);
 }
+// Package lifecycle surface (3.3.0): three fixed operations with the exact
+// operationIds, matching request/response DTOs, and enum strings.
+for (const packagePath of ["/v1/materials/{material_id}/package-installations", "/v1/materials/{material_id}/editions", "/v1/materials/{material_id}/edition-adoption"]) {
+  if (!openapi.includes(packagePath + ":")) throw new Error(`OpenAPI missing package lifecycle path ${packagePath}`);
+}
+for (const packageOperation of ["installMaterialPackage", "listLearningEditions", "adoptLearningEdition"]) {
+  if (!openapi.includes(`operationId: ${packageOperation}`)) throw new Error(`OpenAPI missing package lifecycle operationId ${packageOperation}`);
+}
+if (!client.includes("installMaterialPackage(\n    materialId: string,\n    input: InstallMaterialPackageRequest,\n  ): Promise<LearningEditionDetails>")) throw new Error("generated installMaterialPackage signature missing");
+if (!client.includes("listLearningEditions(materialId: string): Promise<LearningEditionDetails[]>")) throw new Error("generated listLearningEditions signature missing");
+if (!client.includes("adoptLearningEdition(\n    materialId: string,\n    input: AdoptLearningEditionRequest,\n  ): Promise<LearningEditionDetails>")) throw new Error("generated adoptLearningEdition signature missing");
+for (const packageSchema of ["InstallMaterialPackageRequest", "AdoptLearningEditionRequest", "LearningEditionDetails", "LearningEditionResource", "LearningEditionRendition"]) {
+  if (!openapi.includes(`    ${packageSchema}:`)) throw new Error(`missing OpenAPI package lifecycle schema ${packageSchema}`);
+}
+for (const enumLine of ["role: { enum: [base, assistance] }", "availability: { enum: [available, missing, opaque] }", "review_status: { enum: [unreviewed, machine_checked, human_reviewed] }"]) {
+  if (!openapi.includes(enumLine)) throw new Error(`missing OpenAPI package lifecycle enum ${enumLine}`);
+}
+// Package lifecycle error contract (3.3.0): every typed error code must be
+// recorded in the canonical OpenAPI, the fixed public messages and retryable
+// flags must be present, and each operation must formally declare its exact
+// error responses.
+for (const code of ["not_found", "package_installation_invalid", "edition_adoption_conflict", "package_lifecycle_failed"]) {
+  if (!openapi.includes(`code: ${code}`)) throw new Error(`missing OpenAPI package lifecycle error code ${code}`);
+}
+for (const message of ["package release is invalid or incompatible", "learning edition cannot be adopted", "local package lifecycle operation failed"]) {
+  if (!openapi.includes(message)) throw new Error(`missing OpenAPI package lifecycle error message ${message}`);
+}
+const installBlock = openapi.slice(openapi.indexOf("operationId: installMaterialPackage"), openapi.indexOf("/v1/materials/{material_id}/editions:"));
+const editionsBlock = openapi.slice(openapi.indexOf("operationId: listLearningEditions"), openapi.indexOf("/v1/materials/{material_id}/edition-adoption:"));
+const adoptionBlock = openapi.slice(openapi.indexOf("operationId: adoptLearningEdition"), openapi.indexOf("/v1/media/{media_id}/material:"));
+for (const status of ['"404"', '"422"', '"500"']) {
+  if (!installBlock.includes(status)) throw new Error(`installMaterialPackage must declare ${status} responses`);
+}
+for (const status of ['"404"', '"500"']) {
+  if (!editionsBlock.includes(status)) throw new Error(`listLearningEditions must declare ${status} responses`);
+}
+for (const status of ['"404"', '"409"', '"500"']) {
+  if (!adoptionBlock.includes(status)) throw new Error(`adoptLearningEdition must declare ${status} responses`);
+}
+// Package lifecycle privacy contract (3.3.0): the local package location is a
+// necessary write-only request input. It must exist on
+// InstallMaterialPackageRequest, but no package lifecycle response DTO may
+// declare it or any other private fact.
+if (!client.includes("export interface InstallMaterialPackageRequest {\n  package_path: string;")) throw new Error("InstallMaterialPackageRequest must carry the write-only package_path input");
+// Privacy inspection covers only the package lifecycle response DTO section
+// (LearningEditionDetails, LearningEditionResource, LearningEditionRendition):
+// paths, manifests/release JSON, payloads/bytes/blobs, schemas, digests,
+// sizes, dependency edges, and internal persistence/provenance facts are
+// forbidden there. The request DTOs are exempt by design.
+const packageResponseDtos = client.slice(client.indexOf("export interface LearningEditionResource"), client.indexOf("export interface Progress"));
+if (/^\s*(package_path|media_path|file_path|local_path|manifest|release_json|payload|payload_bytes|payload_blob|bytes|blob|blob_path|schema|digest|size|size_bytes|dependency|dependencies|provenance|tool_id|model_id|provider_id):/m.test(packageResponseDtos)) throw new Error("package lifecycle response DTOs must not declare path/manifest/payload/blob/schema/digest/size/dependency/internal-fact fields");
 for (const materialOperation of ["listLearningMaterials(", "createLearningMaterial(", "readLearningMaterial(", "appendLearningMaterialRevision(", "readLearningMaterialRevision(", "retainLearningMaterial(", "unretainLearningMaterial(", "resolveLearningMaterialForMedia("]) {
   if (!client.includes(materialOperation)) throw new Error(`generated client material operation missing ${materialOperation}`);
 }

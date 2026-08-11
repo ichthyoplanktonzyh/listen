@@ -77,6 +77,37 @@ derived shape, and no response contains a file location. Creation defaults to
 retained when `retain` is omitted or null; explicit false creates a Temporary
 Material that remains readable by id and resolvable from media.
 
+Durable package lifecycle (Core 3.3) is a distinct, learner-intent surface on
+top of the same material authority. `application::PackageLifecycleUseCases`
+owns candidate-only Package Installation, Edition Listing and explicit
+idempotent Learning Edition Adoption; it validates v2 carriers through
+`content_package::v2::inspect_v2_path` / `installation_plan`, binds the release
+to the Material's actual current revision, prepares path-free immutable
+installation facts plus the exact verified payload bytes, and persists them
+atomically through `PackageLifecycleRepository`. The SQLite v60 adapter stores
+the facts and payload rows as one atomic unit, stamps `installed_at_ms` at
+first persist, returns equal retries idempotently, and commits the adoption
+atomically while preserving the original `adopted_at_ms` on same-release
+readopt.
+
+The HTTP adapter exposes this seam through `routes/package_lifecycle.rs`
+behind exactly three fixed Bearer-protected operations —
+`POST /v1/materials/{material_id}/package-installations` (candidate-only,
+fresh install and equal retry both 200),
+`GET /v1/materials/{material_id}/editions` (current revision only,
+release-id order), and
+`PUT /v1/materials/{material_id}/edition-adoption` (explicit, idempotent).
+Handlers delegate every policy decision to `AppServices::package_lifecycle()`
+through the blocking application executor and never inspect carriers, read
+repositories, build adoption plans, select resources, or change Material
+membership. Wire DTOs (`LearningEditionDetails`/`LearningEditionResource`/
+`LearningEditionRendition`) carry only learner-facing facts and enum strings;
+responses and public errors never expose package/media paths, manifests,
+payloads, blob paths, schemas, digests, sizes, dependency edges, internal
+persistence facts, or provider/model raw output. Failures map to typed
+404 `not_found`, 422 `package_installation_invalid`, 409
+`edition_adoption_conflict`, and 500 `package_lifecycle_failed`.
+
 The existing v1 application adapter projects supported package resources into
 candidate-only Core records and reports unsupported-but-preserved resources
 explicitly. A dedicated

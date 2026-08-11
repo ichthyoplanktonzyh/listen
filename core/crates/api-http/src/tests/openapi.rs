@@ -29,10 +29,11 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 3.2.0 adds the learning-material surface on top of the material
-    // retention 3.1.0 (itself an additive minor over the R5 breaking 3.0.0).
+    // 3.3.0 adds the package lifecycle surface (candidate-only Package
+    // Installation, Edition Listing, explicit Learning Edition Adoption) as
+    // an additive minor over the learning-material 3.2.0.
     assert!(
-        openapi.contains("version: 3.2.0"),
+        openapi.contains("version: 3.3.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -112,12 +113,87 @@ fn openapi_version_snapshot_and_path_count() {
         "MaterialDetails:",
         "CreateLearningMaterial:",
         "AppendMaterialRevision:",
+        "InstallMaterialPackageRequest:",
+        "AdoptLearningEditionRequest:",
+        "LearningEditionDetails:",
+        "LearningEditionResource:",
+        "LearningEditionRendition:",
     ] {
         assert!(
             openapi.contains(&format!("    {schema}")),
             "OpenAPI schema missing: {schema}"
         );
     }
+}
+
+#[test]
+fn package_lifecycle_error_contract_is_recorded_in_openapi() {
+    let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
+
+    // Every typed error code must exist in the canonical OpenAPI.
+    for code in [
+        "not_found",
+        "package_installation_invalid",
+        "edition_adoption_conflict",
+        "package_lifecycle_failed",
+    ] {
+        assert!(
+            openapi.contains(&format!("code: {code}")),
+            "OpenAPI must record the typed package lifecycle error code {code}"
+        );
+    }
+
+    // The fixed public messages and retryable flags are part of the contract.
+    for message in [
+        "package release is invalid or incompatible",
+        "learning edition cannot be adopted",
+        "local package lifecycle operation failed",
+    ] {
+        assert!(
+            openapi.contains(message),
+            "OpenAPI must record the package lifecycle public message {message:?}"
+        );
+    }
+
+    // Each operation must formally declare its exact error responses.
+    let install = operation_response_block(openapi, "installMaterialPackage");
+    let editions = operation_response_block(openapi, "listLearningEditions");
+    let adoption = operation_response_block(openapi, "adoptLearningEdition");
+    for status in ["\"404\"", "\"422\"", "\"500\""] {
+        assert!(
+            install.contains(status),
+            "installMaterialPackage must declare {status} responses"
+        );
+    }
+    for status in ["\"404\"", "\"500\""] {
+        assert!(
+            editions.contains(status),
+            "listLearningEditions must declare {status} responses"
+        );
+    }
+    for status in ["\"404\"", "\"409\"", "\"500\""] {
+        assert!(
+            adoption.contains(status),
+            "adoptLearningEdition must declare {status} responses"
+        );
+    }
+}
+
+/// The OpenAPI section from one `operationId` line up to the next top-level
+/// path heading, used to assert per-operation response declarations.
+pub(crate) fn operation_response_block(openapi: &str, operation_id: &str) -> String {
+    let start = openapi
+        .find(&format!("operationId: {operation_id}"))
+        .unwrap_or_else(|| panic!("OpenAPI operation {operation_id} missing"));
+    let rest = &openapi[start..];
+    let end = rest
+        .lines()
+        .enumerate()
+        .skip(1)
+        .find(|(_, line)| line.starts_with("  /v1/"))
+        .map(|(index, _)| index)
+        .unwrap_or(rest.lines().count());
+    rest.lines().take(end).collect::<Vec<_>>().join("\n")
 }
 
 #[test]
@@ -243,7 +319,7 @@ fn practice_token_result_openapi_values_match_domain() {
     assert_eq!(documented, format!("enum: [{values}]"));
 }
 
-fn openapi_v1_operations(openapi: &str) -> BTreeSet<(String, String)> {
+pub(crate) fn openapi_v1_operations(openapi: &str) -> BTreeSet<(String, String)> {
     let methods = ["get", "post", "put", "patch", "delete"];
     let mut path = None;
     let mut operations = BTreeSet::new();
@@ -280,7 +356,7 @@ fn implemented_v1_paths(router_source: &str) -> BTreeSet<String> {
         .collect()
 }
 
-fn implemented_v1_operations(router_source: &str) -> BTreeSet<(String, String)> {
+pub(crate) fn implemented_v1_operations(router_source: &str) -> BTreeSet<(String, String)> {
     let methods = ["get", "post", "put", "patch", "delete"];
     let mut operations = BTreeSet::new();
     let mut offset = 0;

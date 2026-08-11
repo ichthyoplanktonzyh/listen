@@ -24,6 +24,9 @@ use super::media::{
     register_media, restore_subtitle, retain_media, set_media_triage_intent, track_content_fit,
     unretain_media, update_track_language,
 };
+use super::package_lifecycle::{
+    adopt_learning_edition, install_material_package, list_learning_editions,
+};
 use super::personal_expression::{
     create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
     list_pattern_versions, list_patterns, record_pattern_attempt, revise_pattern,
@@ -152,6 +155,18 @@ fn material_routes() -> Router<ApiState> {
         .route(
             "/v1/materials/{material_id}/library-membership",
             put(retain_learning_material).delete(unretain_learning_material),
+        )
+        .route(
+            "/v1/materials/{material_id}/package-installations",
+            post(install_material_package),
+        )
+        .route(
+            "/v1/materials/{material_id}/editions",
+            get(list_learning_editions),
+        )
+        .route(
+            "/v1/materials/{material_id}/edition-adoption",
+            put(adopt_learning_edition),
         )
         .route(
             "/v1/media/{media_id}/material",

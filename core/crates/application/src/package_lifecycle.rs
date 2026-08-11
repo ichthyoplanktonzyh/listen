@@ -123,8 +123,20 @@ pub trait PackageLifecycleRepository: Send + Sync {
     ) -> Result<Option<AdoptionCommitPlan>, ApplicationError>;
 
     /// Atomically commits the adoption and all supported active-selection
-    /// changes carried by the plan, replacing any previous adoption. A
-    /// returned `Err` guarantees the previous adoption and selections are
+    /// changes carried by the plan.
+    ///
+    /// A first adoption writes the plan as one atomic unit. A switch to
+    /// another installed release atomically replaces any previous adoption
+    /// with the new plan. A same-release re-adopt must compare the complete
+    /// stored [`AdoptionCommitPlan`] against the candidate, ignoring only the
+    /// `adopted_at_ms` on both sides: when the stored plan is equal, the
+    /// existing adoption is returned unchanged — the original
+    /// `adopted_at_ms` is preserved and nothing is rewritten — and when any
+    /// fact other than `adopted_at_ms` differs, the commit fails closed,
+    /// preserving the previous adoption and selections without repairing the
+    /// stored row.
+    ///
+    /// A returned `Err` guarantees the previous adoption and selections are
     /// preserved.
     ///
     /// Every selected `Available` resource may be assumed to have durable
@@ -327,10 +339,12 @@ impl PackageLifecycleUseCases {
     /// fails closed without touching the adoption, and the release must be
     /// installed for the verified revision. Adoption resolves one coherent,
     /// dependency-closed commit plan from the immutable installed facts and
-    /// commits the adoption and all supported active-selection changes as one
-    /// atomic replacement. Re-adopting the current release is idempotent and
-    /// preserves its original adoption timestamp; a failed switch leaves the
-    /// previous adoption intact.
+    /// always commits it through the repository seam; the seam owns the
+    /// idempotent retry (an equal same-release re-adopt returns the existing
+    /// adoption and preserves its original timestamp) and the atomic
+    /// replacement on a release switch, so a stored row that no longer
+    /// matches the deterministic plan fails closed instead of being silently
+    /// repaired. A failed commit leaves the previous adoption intact.
     pub fn adopt_for_material(
         &self,
         material_id: &LearningMaterialId,
@@ -351,14 +365,7 @@ impl PackageLifecycleUseCases {
             ));
         }
         let plan = adoption_commit_plan(&installation, now_ms())?;
-        let committed = match self.package_lifecycle.get_adoption(material_id)? {
-            Some(previous) if previous.release_id == plan.release_id => {
-                // Re-adopting the current release is idempotent: keep the
-                // original adoption timestamp and skip the commit.
-                previous
-            }
-            _ => self.package_lifecycle.commit_adoption(&plan)?,
-        };
+        let committed = self.package_lifecycle.commit_adoption(&plan)?;
         Ok(edition_view(installation, Some(&committed)))
     }
 
@@ -1077,6 +1084,16 @@ mod tests {
             self.state.lock().unwrap().adoptions.len()
         }
 
+        /// Test-only corruption: replaces the stored adoption plan of one
+        /// material with another plan, simulating a tampered adoption row.
+        fn tamper_adoption(&self, material_id: &LearningMaterialId, plan: AdoptionCommitPlan) {
+            self.state
+                .lock()
+                .unwrap()
+                .adoptions
+                .insert(material_id.as_str().to_owned(), plan);
+        }
+
         /// The durable payload bodies stored for one installation, sorted by
         /// resource id, or `None` when the installation is absent.
         fn stored_payloads(
@@ -1227,6 +1244,26 @@ mod tests {
                 return Err(ApplicationError::Repository(
                     "package release selected resources lack durable payload backing".into(),
                 ));
+            }
+            // Same-release re-adopt: the seam compares the complete stored
+            // plan with the candidate, ignoring adopted_at_ms on both sides.
+            // An equal retry returns the existing adoption and preserves the
+            // original timestamp; a stored row that differs in any other fact
+            // is corruption and fails closed without overwriting or repairing
+            // it. A different release replaces the adoption atomically.
+            if let Some(existing) = state.adoptions.get(commit.material_id.as_str())
+                && existing.release_id == commit.release_id
+            {
+                let mut stored_plan = existing.clone();
+                stored_plan.adopted_at_ms = 0;
+                let mut candidate = commit.clone();
+                candidate.adopted_at_ms = 0;
+                if stored_plan != candidate {
+                    return Err(ApplicationError::Repository(
+                        "package adoption plan conflicts with the stored adoption row".into(),
+                    ));
+                }
+                return Ok(existing.clone());
             }
             state
                 .adoptions
@@ -3252,10 +3289,78 @@ mod tests {
         assert_eq!(second.adopted_at_ms, first.adopted_at_ms);
         assert_eq!(
             setup.package_lifecycle.commit_calls(),
-            1,
-            "re-adopting the current release never commits again"
+            2,
+            "the idempotent re-adoption must still reach the repository commit"
         );
         assert_eq!(setup.package_lifecycle.adoption_count(), 1);
+    }
+
+    #[test]
+    fn adopt_fails_closed_when_the_stored_adoption_row_was_tampered() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, blobs) = text_only_release(&ids, "edition-1");
+        let installed = install_ok(&setup, &material.id, &blobs);
+
+        setup
+            .use_cases
+            .adopt_for_material(&material.id, &installed.release_id)
+            .expect("first adoption");
+        let original = setup
+            .package_lifecycle
+            .get_adoption(&material.id)
+            .unwrap()
+            .expect("adoption exists");
+
+        // Another valid-looking but unequal plan for the same release: the
+        // seam must fail closed on the equal same-release retry instead of
+        // returning the stored row, rewriting it, or repairing it.
+        let mut tampered = original.clone();
+        tampered.selected_resource_ids = vec!["resource-forged".into()];
+        tampered.exclusive_selections = Vec::new();
+        assert_ne!(tampered, original);
+        setup
+            .package_lifecycle
+            .tamper_adoption(&material.id, tampered.clone());
+
+        let error = setup
+            .use_cases
+            .adopt_for_material(&material.id, &installed.release_id)
+            .expect_err("tampered stored adoption must fail closed");
+        assert_eq!(
+            setup.package_lifecycle.commit_calls(),
+            2,
+            "the same-release retry must reach the repository commit"
+        );
+        assert!(matches!(
+            &error,
+            ApplicationError::Repository(message)
+                if message == "package adoption plan conflicts with the stored adoption row"
+        ));
+        let error_text = error.to_string();
+        assert!(
+            !error_text.contains("resource-forged"),
+            "the error must not leak selection content: {error_text}"
+        );
+        assert!(
+            !error_text.contains(installed.release_id.as_str()),
+            "the error must not leak release identities: {error_text}"
+        );
+
+        let stored = setup
+            .package_lifecycle
+            .get_adoption(&material.id)
+            .unwrap()
+            .expect("stored adoption still present");
+        assert_eq!(
+            stored, tampered,
+            "the tampered row is never overwritten or repaired"
+        );
+        assert_eq!(
+            stored.adopted_at_ms, original.adopted_at_ms,
+            "the original adoption timestamp is preserved"
+        );
     }
 
     #[test]
