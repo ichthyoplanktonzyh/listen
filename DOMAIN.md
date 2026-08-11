@@ -67,6 +67,32 @@ Material Revision. Two renditions may represent the same revision without
 identical bytes.
 _Avoid_: Material Revision, Source Identity
 
+**Source Rendition**: A Document or Media Rendition realized directly by a
+Learner-authorized Source Asset without generative transformation.
+_Avoid_: Source Asset, Derived Rendition, publisher guarantee
+
+**Derived Rendition**: A Document or Media Rendition produced from exact input
+Renditions or Learning Resources rather than acquired directly as a Source
+Asset. It realizes the same Material Revision only when its meaning and any
+required alignment remain compatible.
+_Avoid_: Source Rendition, Learning Resource, automatic replacement
+
+**Material Capability**: A learner-facing ability that a compatible composition
+of Renditions and Learning Resources can offer, such as Read, Listen, Watch, or
+synchronized Read-and-Listen. Its current availability is a projection, not
+Material identity or a universal measure of quality.
+_Avoid_: Learning Activity, Material Shape, completion score
+
+**Capability Gap**: A Material Capability requested by the Learner but not
+currently available. It may be derivable and does not make the Material invalid
+or incomplete by itself.
+_Avoid_: Broken Material, missing source asset, mandatory generation
+
+**Capability Completion**: The material-centered process of resolving existing
+or deriving missing Renditions and Learning Resources needed to satisfy one
+Capability Gap.
+_Avoid_: Universal completeness, automatic generation, provider job
+
 **Timeline Compatibility**: Verified evidence that timed Learning Resources can
 be applied to a Media Rendition without changing their meaning or alignment.
 _Avoid_: Matching Source Identity, approximate similarity
@@ -100,13 +126,19 @@ _Avoid_: Document Rendition, extracted-text cache, reading UI state
 such as a translation, explanation, hint, or level-specific annotation.
 _Avoid_: Base Resource, Learning Fact
 
-**Content Enrichment**: The optional process of deriving new Learning Resources
-from existing material and resources.
+**Content Enrichment**: The optional process of deriving new Renditions or
+Learning Resources from exact existing inputs to offer another Material
+Capability or improve an available one.
 _Avoid_: Required import step, Learning Activity
 
 **Resource Provenance**: The origin, inputs, producer, model, configuration, and
 transformation history needed to explain a Learning Resource.
 _Avoid_: Quality guarantee, provider log
+
+**Rendition Provenance**: The origin, exact inputs, producer, model,
+configuration, and transformation history needed to explain a Derived
+Rendition.
+_Avoid_: Source Identity, quality guarantee, provider log
 
 **Reading Anchor**: A stable identity for a logical block or span within one
 exact Base Resource. Reading positions, annotations, corpus occurrences, and
@@ -219,9 +251,10 @@ _Avoid_: Database export, model bundle, learner backup
 externally referenced, or a mixture.
 _Avoid_: Separate package format
 
-**Learning Edition**: One producer's pedagogical treatment of a Material
-Revision for a declared audience, Target Language, and optional Support
-Languages.
+**Learning Edition**: One producer's coherent pedagogical composition of
+compatible Renditions and Learning Resources for a Material Revision, declared
+audience, Target Language, and optional Support Languages. It may offer one or
+multiple Material Capabilities.
 _Avoid_: Material Revision, Package Release
 
 **Package Release**: An immutable, content-addressed publication of one Learning
@@ -233,13 +266,13 @@ carrying discovery, ranking, moderation, and update information.
 _Avoid_: Content Package, immutable release
 
 **Package Installation**: The local record that a Package Release was validated
-and made available as candidate Learning Resources. It neither adopts the
-edition nor silently activates resources.
+and made available as candidate Renditions and Learning Resources. It neither
+adopts the edition nor silently activates candidates.
 _Avoid_: Download, Package Release, Learning Edition Adoption
 
 **Learning Edition Adoption**: The Learner's explicit decision to use a
-coherent selection from an installed Learning Edition for one Learning
-Material.
+coherent selection of compatible Renditions and Learning Resources from an
+installed Learning Edition for one Learning Material.
 _Avoid_: Package Installation, package-declared active state
 
 **Publisher Status**: The declared or verified identity class of a publisher,

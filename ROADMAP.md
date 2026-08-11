@@ -1,6 +1,6 @@
 # Listen Roadmap
 
-> Status: accepted by the owner on 2026-08-09.
+> Status: accepted by the owner, revised 2026-08-11.
 
 This is the only cross-repository roadmap. It describes product outcomes,
 dependencies, and exit conditions. Repository tasks and temporary sequencing
@@ -55,9 +55,18 @@ Exit conditions:
   pasted text;
 - direct document viewing, structured reading, extraction or OCR, and
   Assistance Resources expose independent availability and failure states;
+- Material Capability presentation distinguishes available, derivable,
+  generating, unavailable, and an explicit failed attempt without treating a
+  valid single-modality Material as broken;
 - an existing package can be resolved, or Gen production can run in the
   background with explicit progress, cancellation, retry, and failure states;
-- installed resources remain candidates until an explicit adoption intent;
+- the same Capability Completion path proves a document-only Material can gain
+  a TTS-derived audio Rendition plus text-to-time alignment, and a media-only
+  Material can gain structured reading, without changing Material identity;
+- generated Renditions and Resources retain exact provenance and compatibility,
+  and never overwrite Source Renditions merely because they are newer;
+- installed Renditions and Resources remain candidates until an explicit
+  adoption intent;
 - adopted editions, learner records, and current activity state survive restart;
 - v1 compatibility remains explicit and no existing learning activity is
   silently redefined.
@@ -146,8 +155,8 @@ Exit conditions:
 
 Add optional capabilities only after the core product and ecosystem semantics
 are stable. Candidates include learning suggestions, external contextual search
-such as YouGlish integration, TTS-derived renditions, additional activities, and
-deeper language-specific capabilities.
+such as YouGlish integration, advanced synthetic-speech variants, additional
+activities, and deeper language-specific capabilities.
 
 These are opportunity directions rather than committed features. Suggestions
 remain candidates rather than commands, and every addition must preserve the
@@ -163,5 +172,5 @@ learner's freedom to choose how to use their corpus.
   cross-repository outcome is not complete until consumer and producer evidence
   agrees on exact versions.
 - New learning activities, hosted community infrastructure, recommendations,
-  TTS, and external context providers do not block the earlier product phases
-  unless the owner changes this roadmap explicitly.
+  advanced provider breadth, and external context providers do not block the
+  earlier product phases unless the owner changes this roadmap explicitly.

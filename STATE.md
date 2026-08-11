@@ -27,10 +27,18 @@ Single-user Core Loop Alpha**. Foundation Convergence is complete.
 - repository-local, contract-evolution, and cross-repository work modes;
 - this repository as the single project-level documentation authority;
 - the ordered outcome roadmap in `ROADMAP.md`;
-- Document Renditions as first-class source representations, with typed or
-  pasted text only one plain-text intake adapter;
+- Document Renditions as first-class Material representations, with source
+  inputs preserved instead of flattened and typed or pasted text only one
+  plain-text intake adapter;
 - Structured Reading Resources as separate, versioned Base Resources whose
   Reading Anchors support durable reading and learning-resource alignment;
+- a valid Material may offer any supported subset of modalities; an absent
+  modality is a Capability Gap only when the Learner requests it;
+- TTS audio as a provenance-bearing Derived Media Rendition, with synchronized
+  reading supplied by a separate text-to-time alignment Base Resource;
+- Learning Materials as the active learner-facing composition, Learning
+  Editions as coherent reusable multimodal compositions, and Gen as a
+  Capability Completion producer rather than a mandatory normalization gate;
 - a dedicated Learning Experience Review & Optimization phase after Personal
   Corpus and before Multi-device Sync, without redefining accepted learning
   activity semantics or forcing a fixed learning sequence.
@@ -42,4 +50,6 @@ Rendition intake, honest direct-view versus structured-reading capabilities,
 and Personal Library Read, Listen, and Watch views over the same Material. The
 first supported formats and exact executable contract remain repository-level
 implementation decisions and must preserve the boundary recorded in
-`decisions/0001-document-renditions-and-structured-reading.md`.
+`decisions/0001-document-renditions-and-structured-reading.md`. The following
+Capability Completion slice must preserve the composition and Gen seam recorded
+in `decisions/0002-material-capabilities-and-derived-renditions.md`.

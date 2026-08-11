@@ -1,6 +1,6 @@
 # Listen Product Semantics
 
-> Status: owner-approved semantic baseline, revision 3, 2026-08-11.
+> Status: owner-approved semantic baseline, revision 4, 2026-08-11.
 
 This document defines what Listen is, why it exists, and the durable principles
 that shape the product. It does not describe current implementation status,
@@ -68,6 +68,28 @@ and dependent Learning Resources. Missing or failed extraction, including OCR
 for a scanned document, is reported honestly without invalidating a viewable
 rendition.
 
+### Multimodal by composition
+
+A Material is valid with any supported set of modalities. A text-only Material
+is not a broken multimodal object: it offers Read while Listen may be derivable,
+generating, or unavailable. A failed enrichment attempt is reported separately
+and may remain retryable. Capability presentation answers what the Learner can
+do now or request next; it does not redefine Material identity or rank one
+modality as universally complete.
+
+The active learner-facing composition belongs to the Learning Material. A
+producer publishes a coherent reusable composition as a Learning Edition.
+Individual artifacts remain independently identified and replaceable. A richer
+composition may combine a Document Rendition, audio or video Renditions,
+Structured Reading and timed-text Base Resources, alignment, and Assistance
+Resources without collapsing them into one monolithic resource.
+
+Text-to-speech adds a provenance-bearing Derived Media Rendition; it does not
+replace or mutate the source document. Synchronized Read-and-Listen additionally
+requires an exact mapping between Reading Anchors and media-time Rendition
+Locators. A translation, abridgement, or other semantic rewrite cannot silently
+claim to be a faithful rendition of the same Material Revision.
+
 ### Self-directed learning
 
 The Learner chooses how to use a material. Listen exposes capabilities and
@@ -97,6 +119,12 @@ Listen Gen lets producers choose models and tools suited to their hardware,
 budget, language, and privacy needs. Consumers reuse the resulting package
 without needing the producer's models. The project intends an open production
 ecosystem; repository licensing remains an explicit, separate decision.
+
+Capability Completion begins with a Material Capability, not a provider
+workflow. Given the exact current Renditions and Resources, Listen first reuses
+a compatible installed or community result; when production is needed, Gen
+derives only the missing artifacts, records provenance and compatibility, and
+returns a reusable Content Package.
 
 ### Public content, private learning
 
@@ -129,7 +157,7 @@ learning.
 ```text
 import or discover material
   -> read, listen, or watch it immediately
-  -> enrich it when useful
+  -> add a capability or assistance when useful
   -> retain it intentionally
   -> rediscover its contexts through the corpus
 ```
@@ -166,6 +194,10 @@ mechanism, not the product's central learning object or a prerequisite.
   and Learning Edition Adoption without exposing the technical steps.
 - Listen prefers compatible community resources; local production is a fallback
   or explicit alternative, not mandatory duplicate work.
+- A modality is presented as available, derivable, generating, or unavailable
+  according to evidence; a failed attempt is explicit and may remain retryable.
+  None is collapsed into a generic missing flag or automatic generation
+  command.
 - Missing enrichment degrades honestly while usable source assets remain usable.
 
 ## Corpus search
@@ -180,10 +212,14 @@ ephemeral references but do not silently enter a Listen corpus.
 ## Content Package ecosystem
 
 - One Language Material can have multiple Material Revisions.
-- One Material Revision can have multiple Document and Media Renditions. Read,
-  Listen, and Watch are capabilities of one material rather than separate
-  ownership objects.
+- One Material Revision can have multiple Source and Derived Document or Media
+  Renditions. Read, Listen, Watch, and synchronized Read-and-Listen are
+  capabilities of one material rather than separate ownership objects.
 - One Material Revision can have multiple Learning Editions.
+- A Learning Edition is a coherent reusable composition for one or multiple
+  modalities; the Learning Material owns the active learner-facing composition,
+  and no single Rendition or Learning Resource represents universal
+  completeness.
 - One Learning Edition can have multiple immutable Package Releases.
 - Base Resources can be reused across Support Languages; Assistance Resources
   may target a support language or audience.
@@ -210,6 +246,8 @@ Listen does not currently aim to:
 
 - prescribe a universal curriculum or mandatory learning sequence;
 - require generation or a Content Package before basic learning;
+- force every Material to become multimodal or treat an absent modality as a
+  defect;
 - enumerate every future Learning Activity;
 - model every language with English-specific concepts;
 - bind production to one provider or model generation;

@@ -22,19 +22,21 @@ semantics, or community registry truth.
 
 Owns executable contracts and semantics for Learning Materials, Learning
 Resources, Document and Media Renditions, Structured Reading Resources, Reading
-Anchors, Content Package validation, Personal Library state, Personal Corpus
-occurrences, Package Installation, Learning Edition Adoption, Learning Records,
-language capabilities, persistence, and synchronization merge semantics.
+Anchors, Material Capabilities and compatibility, Content Package validation,
+Personal Library state, Personal Corpus occurrences, Package Installation,
+Learning Edition Adoption, Learning Records, language capabilities,
+persistence, and synchronization merge semantics.
 
 It does not own learner-facing journeys, content-production implementations, or
 multi-tenant community infrastructure.
 
 ### Content Production — `listen-gen`
 
-Owns replaceable production of reusable Learning Resources and Content Packages:
-media preprocessing, optional document extraction and OCR, provider execution,
-generation recipes, qualification, provenance, deterministic packaging, and
-honest degradation.
+Owns replaceable production of reusable Derived Renditions, Learning Resources,
+and Content Packages: derivation planning for requested Capability Completion,
+media preprocessing, optional document extraction and OCR, TTS and
+transcription, alignment, provider execution, generation recipes,
+qualification, provenance, deterministic packaging, and honest degradation.
 
 It does not own Learner state, package activation, learning journeys, community
 ranking, or canonical package schemas.
@@ -97,9 +99,11 @@ sibling checkout or moving branch.
 | Safe document rendering and basic supported-format decoding | `listen-app` |
 | Canonical Learning Record and material state | `listen-core` |
 | Rendition, Structured Reading Resource, and Reading Anchor semantics | `listen-core` |
+| Material Capability, compatibility, and candidate/adoption semantics | `listen-core` |
 | Runtime and Content Package contracts | `listen-core` |
 | Package validation, installation, and adoption semantics | `listen-core` |
 | Resource recipes and provider execution | `listen-gen` |
+| Derivation planning and Derived Rendition production | `listen-gen` |
 | Optional expensive or reusable extraction and OCR production | `listen-gen` |
 | Generation-provider selection | Producer through `listen-gen` |
 | Package discovery, distribution, and Community Corpus | Community And Sync |
@@ -118,15 +122,19 @@ layout, and provider configuration are not shared semantics.
 
 ### Gen to Core
 
-The seam is the versioned, data-only Content Package. Gen does not write Core
-storage or emit Core lifecycle state; Core does not expose generation-provider
-details through validation.
+The seam is the versioned, data-only Content Package carrying exact Derived
+Renditions, Learning Resources, provenance, dependencies, and compatibility.
+Gen does not write Core storage or emit Core lifecycle state; Core does not
+expose generation-provider details through validation.
 
 ### App to Gen
 
-The seam is one bounded generation request with capabilities, progress,
-cancellation, warnings, provenance, and an output artifact. App owns the
-experience; Gen owns production semantics.
+The seam is one bounded production request within Capability Completion, naming
+the exact Material Revision, available Renditions and Resources, and requested
+Material Capability. Gen owns the derivation graph and provider execution; it
+returns progress, cancellation, warnings, provenance, and an immutable output
+artifact. App owns the learner experience and never prescribes the provider
+workflow.
 
 ### Document processing
 
@@ -151,8 +159,16 @@ and learner-owned.
 ## Architectural invariants
 
 - Raw material is usable before enrichment.
-- Document and Media Renditions are source representations; Structured Reading
-  and Assistance Resources are separate, versioned capabilities.
+- Source Assets preserve Learner-authorized source evidence. Document and Media
+  Renditions may be Source or Derived Renditions, and every Derived Rendition
+  retains provenance and compatibility evidence.
+- A Material is valid with any supported set of modalities. An absent modality
+  becomes a Capability Gap only for a requested experience.
+- A Learning Material owns the active learner-facing composition. A Learning
+  Edition provides one coherent reusable composition of compatible Renditions
+  and Learning Resources; neither is one monolithic resource.
+- TTS produces a Derived Media Rendition; text-to-time alignment remains a
+  separate Base Resource, and neither replaces the source document.
 - One material may expose Read, Listen, and Watch without being split into
   modality-specific library objects.
 - A Reading Anchor is stable within an exact Base Resource. Cross-resource or
