@@ -1,6 +1,6 @@
 # Listen Product Semantics
 
-> Status: owner-approved semantic baseline, revision 2, 2026-08-09.
+> Status: owner-approved semantic baseline, revision 3, 2026-08-11.
 
 This document defines what Listen is, why it exists, and the durable principles
 that shape the product. It does not describe current implementation status,
@@ -13,13 +13,13 @@ they genuinely want to understand and reuse.
 
 Its primary interaction is listening, but it also supports reading and leaves
 speaking, writing, and future learning experiences open. Audio is not required:
-a Learner can open an article immediately and later enrich it with speech or
+a Learner can open a document immediately and later enrich it with speech or
 other resources.
 
 ## Product statement
 
 Listen is a multilingual, material-centered, self-directed language-learning
-ecosystem. Learners can study their own articles, audio, and video immediately,
+ecosystem. Learners can study their own documents, audio, and video immediately,
 or use reusable Content Packages produced by other people. As retained
 materials accumulate, Listen turns them into a searchable Personal Corpus in
 which real language contexts can be rediscovered and learned repeatedly.
@@ -46,9 +46,27 @@ materials and resources.
 
 ### Immediate use, optional enrichment
 
-A raw article, audio file, or video is usable before generation. Transcription,
-alignment, translation, explanation, pronunciation analysis, text-to-speech,
-and future resources are independent enrichments rather than admission gates.
+A supported Document or Media Rendition is usable before generation.
+Structured extraction, transcription, alignment, translation, explanation,
+pronunciation analysis, text-to-speech, and future resources are independent
+capabilities rather than admission gates.
+
+### Documents are first-class renditions
+
+Text is a content modality; plain text, Markdown, HTML, EPUB, and PDF are
+document formats. Each supported input is preserved or bound as a Document
+Rendition instead of being silently flattened into one string. Typing or
+pasting text is a convenience intake adapter that creates a plain-text
+Document Rendition, not a separate product category or the boundary of Listen's
+document model.
+
+Direct document viewing and structured reading are distinct capabilities. A
+renderer may show an original rendition before Listen has chapter, paragraph,
+language, or text-span structure. A Structured Reading Resource provides that
+logical structure and stable Reading Anchors for resume, annotation, corpus,
+and dependent Learning Resources. Missing or failed extraction, including OCR
+for a scanned document, is reported honestly without invalidating a viewable
+rendition.
 
 ### Self-directed learning
 
@@ -110,20 +128,23 @@ learning.
 
 ```text
 import or discover material
-  -> use it immediately
+  -> read, listen, or watch it immediately
   -> enrich it when useful
   -> retain it intentionally
   -> rediscover its contexts through the corpus
 ```
 
 Acquisition, package matching, local generation, validation, installation, and
-edition adoption may run behind one learner intent. Basic reading or playback
-starts as soon as the required source asset is available.
+edition adoption may run behind one learner intent. Direct document viewing or
+media playback starts as soon as a supported source asset is available;
+structured reading starts when a compatible Structured Reading Resource is
+available.
 
 ## Material entry paths
 
-1. Open raw text, audio, or video; use it immediately; optionally enrich or
-   retain it.
+1. Open a supported document, audio, or video; use its available capabilities
+   immediately; optionally enrich or retain it. Typing or pasting creates one
+   plain-text Document Rendition through the same path.
 2. Discover a community Learning Edition; resolve its source assets; install a
    compatible Package Release.
 3. Subscribe to a Content Source such as a blog, podcast, or channel; choose a
@@ -150,14 +171,18 @@ mechanism, not the product's central learning object or a prerequisite.
 ## Corpus search
 
 Listen uses one Corpus Occurrence model across Current Material, Personal
-Corpus, and Community Corpus. Text occurrences anchor to text spans; timed
-occurrences may also anchor to media ranges. External context providers such as
-YouGlish may supplement these scopes with attributed, ephemeral references but
-do not silently enter a Listen corpus.
+Corpus, and Community Corpus. Text occurrences anchor to Reading Anchors and
+text spans in an exact Base Resource; they may also map to Rendition Locators.
+Timed occurrences may additionally anchor to media ranges. External context
+providers such as YouGlish may supplement these scopes with attributed,
+ephemeral references but do not silently enter a Listen corpus.
 
 ## Content Package ecosystem
 
 - One Language Material can have multiple Material Revisions.
+- One Material Revision can have multiple Document and Media Renditions. Read,
+  Listen, and Watch are capabilities of one material rather than separate
+  ownership objects.
 - One Material Revision can have multiple Learning Editions.
 - One Learning Edition can have multiple immutable Package Releases.
 - Base Resources can be reused across Support Languages; Assistance Resources

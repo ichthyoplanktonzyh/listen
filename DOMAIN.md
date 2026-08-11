@@ -50,8 +50,21 @@ Material. A changed cut, dub, inserted segment, or text revision may create
 another revision.
 _Avoid_: Media Rendition, Package Release
 
-**Media Rendition**: A concrete encoding or realization of a Material Revision.
-Two renditions may represent the same revision without identical bytes.
+**Source Asset**: A concrete, Learner-authorized content object acquired or
+bound for a Material Revision. It may be copied into a Managed Asset Store or
+referenced in place; storage location and current availability are not its
+semantic identity.
+_Avoid_: Learning Resource, Managed Asset Store, Content Source
+
+**Document Rendition**: A concrete document-format realization of a Material
+Revision, such as plain text, Markdown, HTML, EPUB, or PDF. It preserves the
+source representation and may be directly viewable without a Structured
+Reading Resource. Multiple Document Renditions may realize the same revision.
+_Avoid_: Structured Reading Resource, pasted-text form, Material Revision
+
+**Media Rendition**: A concrete playable audio or video realization of a
+Material Revision. Two renditions may represent the same revision without
+identical bytes.
 _Avoid_: Material Revision, Source Identity
 
 **Timeline Compatibility**: Verified evidence that timed Learning Resources can
@@ -63,8 +76,8 @@ being retained in the Personal Library.
 _Avoid_: Learning Material, installed content
 
 **Learning Material**: A Language Material as available inside Listen, composed
-from source assets and whatever Learning Resources are currently available. It
-is valid without generated enrichment.
+from Document Renditions, Media Renditions, and whatever Learning Resources are
+currently available. It is valid without generated enrichment.
 _Avoid_: Content Package, Catalog Entry
 
 **Learning Resource**: A portable, provenance-bearing resource that makes a
@@ -72,8 +85,16 @@ Learning Material more usable for learning.
 _Avoid_: Learner state, cache, model response
 
 **Base Resource**: A Learning Resource that describes the material itself in its
-Content Language, such as source text, transcription, segmentation, or timing.
+Content Language, such as structured reading content, transcription,
+segmentation, or timing.
 _Avoid_: Translation, learner-specific explanation
+
+**Structured Reading Resource**: A versioned, format-neutral Base Resource that
+represents exact logical reading content as ordered hierarchy, blocks, and text
+spans with Content Language metadata and stable Reading Anchors. It may map
+those anchors back to one or more Document Renditions, but it is neither an
+original document nor a rendered screen.
+_Avoid_: Document Rendition, extracted-text cache, reading UI state
 
 **Assistance Resource**: A Learning Resource that helps a particular audience,
 such as a translation, explanation, hint, or level-specific annotation.
@@ -86,6 +107,18 @@ _Avoid_: Required import step, Learning Activity
 **Resource Provenance**: The origin, inputs, producer, model, configuration, and
 transformation history needed to explain a Learning Resource.
 _Avoid_: Quality guarantee, provider log
+
+**Reading Anchor**: A stable identity for a logical block or span within one
+exact Base Resource. Reading positions, annotations, corpus occurrences, and
+dependent resources may use it; continuity across another resource or Material
+Revision requires an explicit mapping.
+_Avoid_: Paragraph index, file path, universal cross-version identity
+
+**Rendition Locator**: A format-specific location inside one exact Document or
+Media Rendition, such as a PDF page region, EPUB fragment, source character
+range, or media-time range. It can connect a Reading Anchor to source
+presentation but is not durable learner-state identity by itself.
+_Avoid_: Reading Anchor, Material Revision, screen coordinate
 
 ## Discovery and acquisition
 
@@ -177,9 +210,9 @@ _Avoid_: Mandatory assignment, Learning Fact
 
 ## Distribution and community
 
-**Content Package**: A portable, data-only bundle of material descriptors and
-Learning Resources. It contains neither executable providers nor personal
-Learning Records.
+**Content Package**: A portable, data-only bundle of material descriptors,
+Renditions, and Learning Resources. It contains neither executable providers nor
+personal Learning Records.
 _Avoid_: Database export, model bundle, learner backup
 
 **Delivery Profile**: How a Content Package supplies its blobs: embedded,

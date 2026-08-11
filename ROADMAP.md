@@ -50,7 +50,11 @@ ordinary learner journey.
 Exit conditions:
 
 - direct import and RSS/Atom discovery converge on the same material lifecycle;
-- raw text or media remains immediately readable or playable without a package;
+- supported Document or Media Renditions remain immediately viewable or
+  playable without a package, and document intake is not limited to typed or
+  pasted text;
+- direct document viewing, structured reading, extraction or OCR, and
+  Assistance Resources expose independent availability and failure states;
 - an existing package can be resolved, or Gen production can run in the
   background with explicit progress, cancellation, retry, and failure states;
 - installed resources remain candidates until an explicit adoption intent;

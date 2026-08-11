@@ -6,7 +6,7 @@ material-centered journey:
 
 ```text
 find or bring a material
-  -> start reading or listening
+  -> start reading, listening, or watching
   -> add help when useful
   -> keep it intentionally
   -> find its language again through the corpus
@@ -17,11 +17,17 @@ remain the authority for what a current build already supports.
 
 ## Start from local material
 
-1. Drop text, audio, or video into Listen.
-2. Open available text or media immediately; optional learning data does not
-   block reading or playback.
+1. Choose or drop a supported document, audio, or video into Listen. Document
+   inputs may include formats such as plain text, Markdown, HTML, EPUB, or PDF;
+   typing or pasting is an optional adapter that creates a plain-text Document
+   Rendition through the same intake path.
+2. Open the available rendition immediately. A document may initially offer
+   source-layout viewing only; when a compatible Structured Reading Resource is
+   available it also offers structured reading, stable resume, and span-based
+   learning capabilities. A scanned PDF remains viewable while OCR is absent,
+   running, failed, or declined.
 3. Resolve compatible installed or community capabilities in the background.
-4. Generate missing learning data locally when useful.
+4. Derive missing structure or generate other learning data when useful.
 5. Explicitly keep the material when it should enter the Personal Library;
    temporary preview remains possible. By default, Listen verifies a copy in
    its Managed Asset Store and leaves the original untouched; the learner may
@@ -31,6 +37,8 @@ Personal Library membership does not depend on a file's storage location.
 Keeping a material, copying or moving its asset, and deleting a managed copy are
 separate actions. If the Managed Asset Store is unavailable, the material stays
 in the Personal Library while its local asset is reported as unavailable.
+Document, audio, and video filters or Read, Listen, and Watch switches are views
+over the same retained materials; they do not create separate library objects.
 
 ## Start from community content
 
@@ -69,7 +77,14 @@ results but do not replace the Learner's corpus or become its authority.
 
 - Learners see materials and capabilities, not manifests, blobs, dependency
   graphs, or installation plans.
-- Reading or playback begins as soon as the required source asset is usable.
+- Direct document viewing or media playback begins as soon as a supported
+  source asset is usable. Structured reading and Assistance Resources degrade
+  independently.
+- A Document Rendition remains the source representation; a Structured Reading
+  Resource never silently replaces it.
+- Reading positions and dependent resources use Reading Anchors in an exact
+  Base Resource. Page numbers, paragraph indexes, file paths, and screen
+  coordinates are locators or projections, not durable learner-state identity.
 - Preview, subscription, acquisition, retention, installation, and adoption are
   distinct facts even when one action coordinates them.
 - Generation is optional enrichment; failure does not make usable material
