@@ -106,42 +106,69 @@ class MediaLibraryCoordinator {
     }
   }
 
+  /// Generation of the most recently started [loadMediaLibrary]. Every call
+  /// immediately bumps it — even a call that exits early because the material
+  /// repository is unavailable — so an earlier in-flight load can never
+  /// publish after a newer one has started.
+  int _libraryLoadGeneration = 0;
+
   /// Media library facts for the home triage list. Failures leave the
   /// section on its previous state: the library is a suggestion surface,
   /// never a gate on playback or learning.
+  ///
+  /// Latest-request-wins: query results stay in locals until the whole load
+  /// is known to be the newest generation, then both lists flip together in
+  /// one atomic publish. A superseded request never writes state or rebuilds,
+  /// regardless of whether it later succeeds or fails.
   Future<void> loadMediaLibrary() async {
     // Background summary refresh; a missing core keeps the previous list,
     // matching the failure policy documented above. Membership and ordering
     // come from the material repository, so it alone gates the load: the
     // registered-media query is only a best-effort join/path snapshot on top
     // of it.
+    final generation = ++_libraryLoadGeneration;
     if (!materialRepository.isAvailable) return;
     try {
       final materials = await materialRepository.listLearningMaterials();
+      // A newer load started while the material query was in flight: this
+      // request is already superseded, before it even touches the media
+      // snapshot.
+      if (generation != _libraryLoadGeneration || !isMounted()) return;
       // Best-effort raw media snapshot. A skipped or failed media query keeps
       // whatever snapshot the section already had: the material rows still
       // publish, joined against that previous snapshot (or unresolved when
       // there is none yet).
-      List<MediaLibraryEntry>? snapshot = mediaLibrary;
+      var snapshot = mediaLibrary;
+      var refreshed = false;
       if (repository.isAvailable) {
         try {
           final entries = await repository.listMediaLibrary();
           snapshot = entries;
-          if (isMounted()) {
-            mediaLibrary = List.unmodifiable(entries);
-          }
+          refreshed = true;
         } catch (_) {
           // Keep whatever raw snapshot the section had.
         }
       }
-      if (!isMounted()) return;
-      personalLibrary = List.unmodifiable([
+      // Atomic publish: both next states are fully constructed in locals
+      // before any field is written, so a projection failure can never leave
+      // a "new mediaLibrary + old personalLibrary" partial state behind. Only
+      // then do the fields flip, when this call is still the newest and the
+      // surface is still mounted.
+      if (generation != _libraryLoadGeneration || !isMounted()) return;
+      final List<MediaLibraryEntry>? nextMediaLibrary = refreshed
+          ? List.unmodifiable(snapshot!)
+          : null;
+      final List<PersonalLibraryEntry> nextPersonalLibrary = List.unmodifiable([
         for (final details in materials)
           PersonalLibraryEntry(
             details: details,
             mediaEntries: snapshot ?? const [],
           ),
       ]);
+      if (nextMediaLibrary != null) {
+        mediaLibrary = nextMediaLibrary;
+      }
+      personalLibrary = nextPersonalLibrary;
       requestRebuild();
     } catch (_) {
       // Material listing failed: keep the previous personalLibrary and
