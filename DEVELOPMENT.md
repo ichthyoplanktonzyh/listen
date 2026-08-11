@@ -64,9 +64,11 @@ requires no new backend data.
 
 ### Contract-evolution slice
 
-An authority repository publishes a versioned, preferably backward-compatible
-boundary. Consumers adopt it asynchronously through exact versions and
-immutable artifacts. Repositories do not need synchronized merges.
+An authority repository publishes a versioned boundary. Before the first
+maintained product baseline, it may make a coordinated breaking cutover under
+the policy below. After that baseline, compatibility and migration are explicit
+release decisions. Consumers always adopt exact versions and immutable
+artifacts; repositories do not consume moving branches in production.
 
 ### Cross-repository vertical slice
 
@@ -77,6 +79,38 @@ closes with a real cross-repository round trip.
 
 A vertical slice does not mean all three repositories must change. It means the
 smallest complete outcome determines the coordination scope.
+
+## Pre-Phase-1 evolution and compatibility
+
+Listen currently has no external users and no maintained public compatibility
+baseline. Until the Phase 1 stack release is accepted, internal App interfaces,
+Core APIs and persistence for unfinished Phase 1 concepts, Gen protocols, test
+fixtures, and development data may be replaced directly when the replacement
+better expresses the accepted product model.
+
+Do not add compatibility adapters, dual reads or writes, deprecated paths,
+feature flags, or migrations solely to preserve pre-Phase-1 behavior. Prefer
+one coordinated cutover and remove the displaced path. Local test and
+development data may be reset unless the owner explicitly identifies a data set
+that must survive; such a data set receives one bounded migration rather than a
+permanent compatibility layer.
+
+This freedom does not relax contract or release discipline:
+
+- all affected repositories must agree on the exact new contract and prove a
+  real round trip before the cutover is accepted;
+- already published tags, schemas, packages, and binary artifacts remain
+  immutable, even when the active stack no longer supports them;
+- a changed wire or package meaning receives a new version or schema identity
+  rather than silently reinterpreting a published identity;
+- external format and protocol standards, source fidelity, provenance, learner
+  data ownership, and security invariants still apply;
+- unrelated learner behavior is not changed merely because compatibility is
+  inexpensive.
+
+The accepted Phase 1 stack release becomes Listen's first maintained
+compatibility baseline. Any later breaking change must state its supported
+upgrade path, data migration, and consumer impact explicitly.
 
 ## Worker assignment contract
 

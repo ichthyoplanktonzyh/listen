@@ -1,6 +1,6 @@
 # Separate Document Renditions from Structured Reading Resources
 
-> Status: accepted, 2026-08-11.
+> Status: accepted and revised, 2026-08-11.
 
 Documents such as plain text, Markdown, HTML, EPUB, text-layer PDF, and scanned
 PDF combine source bytes, authored layout, and logical reading content in
@@ -29,8 +29,9 @@ rebound or deleted.
 
 This rejects flattening every document into one string, treating extraction as
 a mandatory import gate, and storing learner state against file paths, page
-numbers, or paragraph indexes. Existing contracts are not silently
-reinterpreted: the current inline material `document_text` asset remains a
-plain-text compatibility obligation, while Content Package v2 `document_text`
-remains a Base Resource rather than becoming a Document Rendition. Future
-executable contract evolution must map both explicitly to this boundary.
+numbers, or paragraph indexes. A published contract identity is never silently
+reinterpreted. During the pre-Phase-1 coordinated cutover, however, the current
+inline material `document_text` representation and active Content Package v2
+path may be replaced rather than preserved behind adapters. Historical
+artifacts remain immutable; the new executable contract receives a new identity
+and becomes the sole active Phase 1 path.

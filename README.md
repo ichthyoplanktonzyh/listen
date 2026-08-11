@@ -28,6 +28,7 @@ The concise learner promise is:
 | [ROADMAP.md](ROADMAP.md) | Cross-repository outcome stages and exit conditions |
 | [STATE.md](STATE.md) | Current project position and next decision |
 | [decisions/](decisions/) | Durable cross-repository decisions |
+| [plans/phase-1-completion.md](plans/phase-1-completion.md) | Active Supervisor execution plan for the remaining Phase 1 work |
 
 Each fact has one authority. Other repositories link here rather than copying
 these documents.

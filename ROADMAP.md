@@ -68,8 +68,12 @@ Exit conditions:
 - installed Renditions and Resources remain candidates until an explicit
   adoption intent;
 - adopted editions, learner records, and current activity state survive restart;
-- v1 compatibility remains explicit and no existing learning activity is
-  silently redefined.
+- the active App, Core, and Gen stack contains no compatibility path maintained
+  solely for a displaced pre-Phase-1 contract; published historical artifacts
+  remain immutable, and the accepted Phase 1 release establishes the first
+  maintained compatibility baseline;
+- existing learning activities consume the adopted Material composition
+  without package lifecycle owning or erasing their learner state.
 
 ## Phase 2: Personal Corpus Alpha/Beta
 
@@ -171,6 +175,9 @@ learner's freedom to choose how to use their corpus.
 - Code repositories may develop independently behind stable contracts, but a
   cross-repository outcome is not complete until consumer and producer evidence
   agrees on exact versions.
+- Before the Phase 1 release, coordinated breaking replacement follows
+  [DEVELOPMENT.md](DEVELOPMENT.md#pre-phase-1-evolution-and-compatibility);
+  compatibility scaffolding is not itself a roadmap outcome.
 - New learning activities, hosted community infrastructure, recommendations,
   advanced provider breadth, and external context providers do not block the
   earlier product phases unless the owner changes this roadmap explicitly.
