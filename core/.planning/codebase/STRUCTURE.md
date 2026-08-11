@@ -38,8 +38,20 @@ Learning Material implementation paths:
 - `crates/persistence-sqlite/migrations/0059_learning_materials.sql` creates and
   backfills the durable graph;
 - `crates/api-http/src/routes/material.rs` adapts the Core 3.2 HTTP surface;
-- `contracts/openapi/v1.yaml` and `contracts/generated/typescript/core-client.ts`
-  are the canonical wire contract and generated identity.
+- `crates/domain/src/package_lifecycle.rs` owns the installed-release facts and
+  the pure deterministic adoption rule;
+- `crates/application/src/package_lifecycle.rs` owns
+  `PackageLifecycleUseCases` (candidate-only installation, edition listing,
+  explicit idempotent adoption) and the `PackageLifecycleRepository` seam;
+- `crates/persistence-sqlite/src/package_lifecycle.rs` plus
+  `crates/persistence-sqlite/migrations/0060_package_lifecycle.sql` implement
+  atomic fact+payload persistence and adoption commits (SQLite v60);
+- `crates/api-http/src/routes/package_lifecycle.rs` adapts the Core 3.3 HTTP
+  surface: `POST /v1/materials/{material_id}/package-installations`,
+  `GET /v1/materials/{material_id}/editions`,
+  `PUT /v1/materials/{material_id}/edition-adoption`;
+- `contracts/openapi/v1.yaml` and `contracts/generated/local-api-v1.ts`
+  are the canonical wire contract and generated client identity.
 
 Notable runtime seams:
 
