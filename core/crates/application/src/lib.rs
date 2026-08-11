@@ -70,6 +70,7 @@ mod lexical;
 mod listening;
 mod llm_provider;
 mod media;
+mod package_lifecycle;
 mod personal_expression;
 mod phones;
 mod phonetic_fixture;
@@ -121,6 +122,7 @@ pub use learning_preparation::*;
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
 pub use media::MediaAnalysisUseCases;
+pub use package_lifecycle::*;
 pub use personal_expression::PersonalExpressionUseCases;
 pub use practice::PracticeUseCases;
 pub use production_corpus::ProductionCorpusUseCases;
@@ -160,6 +162,7 @@ pub struct AppServices {
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
     pub(crate) content_package_imports: Arc<dyn ContentPackageImportRepository>,
+    pub(crate) package_lifecycle: Arc<dyn PackageLifecycleRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
     pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -200,6 +203,10 @@ impl AppServices {
 
     pub fn materials(&self) -> MaterialUseCases {
         MaterialUseCases::new(self.materials.clone(), self.media.clone())
+    }
+
+    pub fn package_lifecycle(&self) -> PackageLifecycleUseCases {
+        PackageLifecycleUseCases::new(self.materials.clone(), self.package_lifecycle.clone())
     }
 
     pub fn lexical_learning(&self) -> LexicalLearningUseCases {
@@ -308,6 +315,7 @@ impl AppServices {
             lltimeline_resources,
             lltimeline_imports: timelines.clone(),
             content_package_imports: timelines,
+            package_lifecycle: Arc::new(DisabledPackageLifecycleRepository),
             dictionary,
             lexical_capabilities: learning_assets.clone(),
             lexical_entries: learning_assets.clone(),
@@ -348,6 +356,14 @@ impl AppServices {
 
     pub fn with_material_repository(mut self, materials: Arc<dyn MaterialRepository>) -> Self {
         self.materials = materials;
+        self
+    }
+
+    pub fn with_package_lifecycle_repository(
+        mut self,
+        package_lifecycle: Arc<dyn PackageLifecycleRepository>,
+    ) -> Self {
+        self.package_lifecycle = package_lifecycle;
         self
     }
 

@@ -3,6 +3,7 @@
 //! Public surface:
 //! - `inspect_v2_path` / `inspect_v2_path_with_limits`
 //! - `installation_plan` (pure; no persistence or activation)
+//! - `serialize_canonical` (pure canonical JSON helper for identities/fixtures)
 
 mod canonical;
 mod inspect;
@@ -14,6 +15,7 @@ mod validate;
 #[cfg(test)]
 mod tests;
 
+pub use canonical::{CanonicalError, serialize_canonical};
 pub use inspect::{
     BlobRecord, MissingBlob, OpaqueResourceRecord, RenditionRecord, ResourceRecord, V2Error,
     V2Inspection, inspect_v2_path, inspect_v2_path_with_limits,

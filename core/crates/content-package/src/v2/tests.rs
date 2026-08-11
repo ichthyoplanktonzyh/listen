@@ -1129,6 +1129,114 @@ fn optional_unknown_stays_opaque_and_required_unknown_is_incompatible() {
 }
 
 #[test]
+fn payload_blobs_expose_exact_bytes_for_known_and_present_opaque_payloads_only() {
+    // Known and present opaque payload blobs are retained and exposed with
+    // their exact verified bytes keyed by digest; rendition media is streamed
+    // and never appears in payload_blobs.
+    let text = "Base payload.";
+    let (_, base_bytes, base_digest) = document_payload(text, &[text.chars().count() as u32]);
+    let (_, opaque_bytes, opaque_digest) = document_payload("Opaque payload.", &[15]);
+    let base = base_descriptor(
+        "document_text",
+        DOCUMENT_TEXT_SCHEMA_V1,
+        "en",
+        &[],
+        &base_digest,
+        base_bytes.len() as u64,
+    );
+    let opaque = base_descriptor(
+        UNKNOWN_KIND,
+        UNKNOWN_SCHEMA,
+        "en",
+        &[],
+        &opaque_digest,
+        opaque_bytes.len() as u64,
+    );
+    let base_id = sha256_id(&canonical_bytes(&base));
+    let media = vec![0xAB; 64 * 1024];
+    let media_digest = sha256_id(&media);
+    let media_descriptor = json!({
+        "schema": RENDITION_AUDIO_SCHEMA_V1,
+        "kind": "audio",
+        "media_type": "audio/mpeg",
+        "material_revision_id": MATERIAL_REVISION,
+        "media_blob": {"digest": media_digest, "size_bytes": media.len() as u64},
+        "extensions": {},
+    });
+    let rendition_id = sha256_id(&canonical_bytes(&media_descriptor));
+    let rendition = json!({"rendition_id": rendition_id, "descriptor": media_descriptor});
+    let release = release_value(
+        &[],
+        entrypoint(&base_id),
+        vec![resource_entry(&base, true), resource_entry(&opaque, false)],
+        vec![rendition],
+    );
+    let files = carrier(
+        &release,
+        None,
+        &[
+            (blob_path(&base_digest), base_bytes.clone()),
+            (blob_path(&opaque_digest), opaque_bytes.clone()),
+            (blob_path(&media_digest), media),
+        ],
+    );
+    let inspection = inspect_carrier_with_limits(&files, false, streaming_limits()).unwrap();
+    assert_eq!(
+        inspection.payload_blobs.len(),
+        2,
+        "only the known and the present opaque payload are exposed"
+    );
+    assert_eq!(
+        inspection
+            .payload_blobs
+            .get(&base_digest)
+            .expect("known bytes"),
+        &base_bytes
+    );
+    assert_eq!(
+        inspection
+            .payload_blobs
+            .get(&opaque_digest)
+            .expect("opaque bytes"),
+        &opaque_bytes
+    );
+    assert!(
+        !inspection.payload_blobs.contains_key(&media_digest),
+        "rendition media is streamed and never retained"
+    );
+
+    // A present opaque payload is now retained like a known payload, so it is
+    // bounded by max_file_bytes instead of being streamed.
+    let oversized_opaque = vec![0xCD; 2048];
+    let oversized_digest = sha256_id(&oversized_opaque);
+    let oversized_descriptor = base_descriptor(
+        UNKNOWN_KIND,
+        UNKNOWN_SCHEMA,
+        "en",
+        &[],
+        &oversized_digest,
+        oversized_opaque.len() as u64,
+    );
+    let oversized_id = sha256_id(&canonical_bytes(&oversized_descriptor));
+    let release = release_value(
+        &[],
+        entrypoint(&oversized_id),
+        vec![resource_entry(&oversized_descriptor, false)],
+        vec![],
+    );
+    let files = carrier(
+        &release,
+        None,
+        &[(blob_path(&oversized_digest), oversized_opaque)],
+    );
+    let error = inspect_carrier_with_limits(&files, false, streaming_limits()).unwrap_err();
+    assert!(
+        matches!(error, V2Error::Limit("file size")),
+        "oversized opaque payloads fail the file-size limit: {error}"
+    );
+}
+
+#[test]
 fn required_resource_reaching_unknown_optional_is_incompatible() {
     let text = "Required base.";
     let (_, base_bytes, base_digest) = document_payload(text, &[text.chars().count() as u32]);
@@ -1874,8 +1982,8 @@ fn streamed_media_wrong_declared_size_fails_size_validation() {
 
 #[test]
 fn known_payload_larger_than_max_file_bytes_still_fails_file_limit() {
-    // Known typed payloads are retained and bounded by max_file_bytes; only
-    // rendition media and opaque payloads are streamed.
+    // Known and opaque payloads are retained and bounded by max_file_bytes;
+    // only rendition media is streamed.
     let text = "x".repeat(4096);
     let (_, payload_bytes, digest) = document_payload(&text, &[text.chars().count() as u32]);
     assert!(payload_bytes.len() as u64 > 1024);

@@ -3,10 +3,13 @@
 //! `inspect_v2_path` / `inspect_v2_path_with_limits` perform bounded,
 //! persistence-free inspection of a v2 carrier (directory or deterministic
 //! ZIP). A catalog pass reads only the control documents and catalogs every
-//! entry without opening bodies; a selective pass retains known payload blobs
-//! (bounded by `max_file_bytes`) while streaming rendition media and present
-//! opaque payload blobs to their size and SHA-256 facts, so embedded media
-//! can exceed `max_file_bytes` without being retained in memory. Inspection
+//! entry without opening bodies; a selective pass retains known and present
+//! opaque payload blobs (bounded by `max_file_bytes`) while streaming
+//! rendition media to its size and SHA-256 facts, so embedded media can
+//! exceed `max_file_bytes` without being retained in memory. The exact,
+//! size- and digest-verified payload bytes are exposed on
+//! [`V2Inspection::payload_blobs`] keyed by blob digest (never by path) so
+//! durable persistence can back every present resource payload. Inspection
 //! covers canonical identity verification, blob size/hash verification,
 //! provenance/quality checks, dependency/subject/entrypoint invariants
 //! (including transitive closure rules), known payload decoding and
@@ -114,6 +117,12 @@ pub struct V2Inspection {
     pub renditions: Vec<RenditionRecord>,
     /// digest -> blob record for every blob referenced by the release.
     pub blobs: BTreeMap<String, BlobRecord>,
+    /// Exact raw bytes of every present, size- and digest-verified payload
+    /// blob: known resource payloads and present opaque payloads. Keyed by
+    /// `sha256:<hex>` digest, never by carrier path, so durable persistence
+    /// can store and later verify every present payload body. Rendition
+    /// media is never retained and never appears here.
+    pub payload_blobs: BTreeMap<String, Vec<u8>>,
     pub missing_blobs: Vec<MissingBlob>,
     pub delivery_profile: DeliveryProfile,
     pub warnings: Vec<String>,
@@ -223,10 +232,10 @@ fn inspect_v2_catalog(
     // their bodies.
     verify_catalog_inventory(&entries, &expected, delivery_bytes.is_some())?;
 
-    // Second, selective pass: known payload blobs stay retained and bounded
-    // by max_file_bytes; rendition media and present opaque payload blobs are
-    // streamed so their bodies never occupy memory.
-    let streamed_paths = streamed_blob_paths(&release, &entries);
+    // Second, selective pass: known and present opaque payload blobs stay
+    // retained and bounded by max_file_bytes; only rendition media is
+    // streamed so its body never occupies memory.
+    let streamed_paths = streamed_blob_paths(&release);
     let streamed_refs: Vec<&str> = streamed_paths.iter().map(String::as_str).collect();
     let selective = read_package_selective(
         path,
@@ -428,6 +437,22 @@ fn inspect_v2_catalog(
         });
     }
 
+    // Exact verified bytes of every present payload blob, keyed by digest.
+    // Known payloads were decoded from the retained bodies above; present
+    // opaque bodies were retained by the same selective pass. Every key is a
+    // digest, never a carrier path, and rendition media never appears.
+    let mut payload_blobs = BTreeMap::<String, Vec<u8>>::new();
+    for record in &resources {
+        let digest = &record.entry.descriptor.payload_blob.digest;
+        payload_blobs.insert(digest.clone(), retained[&blob_path(digest)].clone());
+    }
+    for record in &opaque_resources {
+        if record.payload_present {
+            let digest = &record.entry.descriptor.payload_blob.digest;
+            payload_blobs.insert(digest.clone(), retained[&blob_path(digest)].clone());
+        }
+    }
+
     // total_bytes counts every carrier entry exactly once and comes from the
     // selective pass, which observed retained and streamed bodies alike; the
     // consistency check above guarantees it equals the catalog-pass total.
@@ -452,6 +477,7 @@ fn inspect_v2_catalog(
         opaque_resources,
         renditions,
         blobs,
+        payload_blobs,
         missing_blobs,
         delivery_profile,
         warnings,
@@ -1363,35 +1389,21 @@ fn carrier_changed(name: &str) -> V2Error {
 }
 
 /// Every carrier blob path whose body must be streamed rather than retained:
-/// rendition media blobs and present optional opaque payload blobs, excluding
-/// any path whose digest is already retained as a known payload. Known-payload
-/// retention takes precedence so a shared digest stays decodable and bounded
-/// by `max_file_bytes`.
-fn streamed_blob_paths(release: &PackageRelease, entries: &[CatalogEntry]) -> Vec<String> {
-    let known_paths: HashSet<String> = release
+/// rendition media blobs only, excluding any path whose digest is already
+/// retained as a known or opaque payload. Known and present opaque payload
+/// blobs are always retained so their exact verified bytes are available to
+/// durable persistence; every retained body is bounded by `max_file_bytes`.
+fn streamed_blob_paths(release: &PackageRelease) -> Vec<String> {
+    let retained_paths: HashSet<String> = release
         .resources
         .iter()
-        .filter(|resource| {
-            payload::is_known(&resource.descriptor.kind, &resource.descriptor.schema)
-        })
         .map(|resource| blob_path(&resource.descriptor.payload_blob.digest))
         .collect();
-    let present: HashSet<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
     let mut streamed = Vec::new();
     let mut seen = HashSet::new();
     for rendition in &release.renditions {
         let path = blob_path(&rendition.descriptor.media_blob.digest);
-        if !known_paths.contains(&path) && seen.insert(path.clone()) {
-            streamed.push(path);
-        }
-    }
-    for resource in &release.resources {
-        let path = blob_path(&resource.descriptor.payload_blob.digest);
-        if !resource.required
-            && !known_paths.contains(&path)
-            && present.contains(path.as_str())
-            && seen.insert(path.clone())
-        {
+        if !retained_paths.contains(&path) && seen.insert(path.clone()) {
             streamed.push(path);
         }
     }

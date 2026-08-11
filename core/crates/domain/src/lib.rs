@@ -19,6 +19,9 @@ pub use media::*;
 mod learning_material;
 pub use learning_material::*;
 
+mod package_lifecycle;
+pub use package_lifecycle::*;
+
 mod subtitle;
 pub use subtitle::*;
 
@@ -204,6 +207,8 @@ string_id!(ShadowingAnalysisId);
 string_id!(LearningMaterialId);
 string_id!(MaterialRevisionId);
 string_id!(MaterialAssetId);
+string_id!(LearningEditionId);
+string_id!(PackageReleaseId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]

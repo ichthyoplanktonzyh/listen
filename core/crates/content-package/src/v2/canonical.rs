@@ -12,7 +12,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub(crate) enum CanonicalError {
+pub enum CanonicalError {
     #[error("non-canonical JSON at byte {0}: {1}")]
     NotCanonical(usize, &'static str),
     #[error("identity numbers must be integers: {0}")]
@@ -328,7 +328,11 @@ fn push_scalar(output: &mut Vec<u8>, scalar: u32) {
 /// Serializes `value` back into canonical JSON bytes (sorted keys, compact
 /// separators, no BOM or trailing whitespace). The input must already be a
 /// canonical parse result; numbers are emitted as stored.
-pub(crate) fn serialize_canonical(value: &Value) -> Result<Vec<u8>, CanonicalError> {
+///
+/// Exposed as a reusable pure helper so carriers and identity documents can
+/// be produced programmatically (for example by fixture builders in other
+/// crates) with the exact canonical profile the inspector verifies.
+pub fn serialize_canonical(value: &Value) -> Result<Vec<u8>, CanonicalError> {
     let mut output = Vec::new();
     write_value(value, &mut output)?;
     Ok(output)
