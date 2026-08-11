@@ -121,6 +121,11 @@ class MediaImportFlowController extends ChangeNotifier {
       if (_stale(generation, _onlineGeneration)) {
         return const MediaImportCancelled();
       }
+      // The online clear is an external media switch: the session's material
+      // leaves synchronously and every in-flight material resolve or retention
+      // result from the previous session is invalidated before the player is
+      // cleared.
+      _mediaSession.beginExternalMediaSwitch();
       _player.clearMedia();
       _player.setMediaPath(pageUrl);
       _subtitle.setPrimaryTrack(null);

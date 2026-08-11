@@ -35,7 +35,7 @@ class ListeningHome extends StatefulWidget {
     this.onScanRefresh,
     this.onScanCancel,
     this.onRetryScanRegistrations,
-    this.onChooseMediaLibraryFolder,
+    this.onChooseManagedStoreLocation,
     this.onOpenLibraryEntry,
     this.onStartExtensiveEntry,
     this.onStartIntensiveEntry,
@@ -60,7 +60,7 @@ class ListeningHome extends StatefulWidget {
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
   final VoidCallback? onRetryScanRegistrations;
-  final VoidCallback? onChooseMediaLibraryFolder;
+  final VoidCallback? onChooseManagedStoreLocation;
   final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
   final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
   final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
@@ -108,7 +108,7 @@ class _ListeningHomeState extends State<ListeningHome> {
           onScanRefresh: widget.onScanRefresh,
           onScanCancel: widget.onScanCancel,
           onRetryScanRegistrations: widget.onRetryScanRegistrations,
-          onChooseMediaLibraryFolder: widget.onChooseMediaLibraryFolder,
+          onChooseManagedStoreLocation: widget.onChooseManagedStoreLocation,
           onOpenLibraryEntry: widget.onOpenLibraryEntry,
           onStartExtensiveEntry: widget.onStartExtensiveEntry,
           onStartIntensiveEntry: widget.onStartIntensiveEntry,
@@ -135,7 +135,7 @@ class _HomeContent extends StatelessWidget {
     required this.onScanRefresh,
     required this.onScanCancel,
     required this.onRetryScanRegistrations,
-    required this.onChooseMediaLibraryFolder,
+    required this.onChooseManagedStoreLocation,
     required this.onOpenLibraryEntry,
     required this.onStartExtensiveEntry,
     required this.onStartIntensiveEntry,
@@ -164,7 +164,7 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback? onScanRefresh;
   final VoidCallback? onScanCancel;
   final VoidCallback? onRetryScanRegistrations;
-  final VoidCallback? onChooseMediaLibraryFolder;
+  final VoidCallback? onChooseManagedStoreLocation;
   final void Function(MediaLibraryEntry entry)? onOpenLibraryEntry;
   final void Function(MediaLibraryEntry entry)? onStartExtensiveEntry;
   final void Function(MediaLibraryEntry entry)? onStartIntensiveEntry;
@@ -228,14 +228,14 @@ class _HomeContent extends StatelessWidget {
                   onScanRefresh != null &&
                   onScanCancel != null &&
                   onRetryScanRegistrations != null &&
-                  onChooseMediaLibraryFolder != null) ...[
+                  onChooseManagedStoreLocation != null) ...[
                 const SizedBox(height: ListenSpacing.gap32),
                 MediaLibraryScanCard(
                   state: scan!,
                   onRefresh: onScanRefresh!,
                   onCancel: onScanCancel!,
                   onRetryFailures: onRetryScanRegistrations!,
-                  onChooseFolder: onChooseMediaLibraryFolder!,
+                  onChooseFolder: onChooseManagedStoreLocation!,
                 ),
               ],
               if (mediaLibrary != null &&

@@ -26,6 +26,7 @@ class MediaWorkbench extends StatefulWidget {
     this.onShadow,
     this.canShadow = false,
     this.onOpenSettings,
+    this.retentionMenu,
   });
 
   final String mediaTitle;
@@ -76,6 +77,10 @@ class MediaWorkbench extends StatefulWidget {
   /// Windows. It belongs on the surface that is actually on screen.
   final VoidCallback? onOpenSettings;
 
+  /// The retention affordance (Keep / reference in place / unretain) for the
+  /// current media. Null on surfaces that have none wired.
+  final Widget? retentionMenu;
+
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
 }
@@ -121,6 +126,7 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
         onShadow: widget.onShadow,
         canShadow: widget.canShadow,
         onOpenSettings: widget.onOpenSettings,
+        retentionMenu: widget.retentionMenu,
       ),
       Expanded(
         // Channel surfaces settle in (#46): switching channels fades the new
@@ -235,6 +241,7 @@ class _SessionHeader extends StatelessWidget {
     required this.onShadow,
     required this.canShadow,
     required this.onOpenSettings,
+    required this.retentionMenu,
   });
 
   /// The media on the workbench, for the breadcrumb. It reads the title, not
@@ -264,6 +271,12 @@ class _SessionHeader extends StatelessWidget {
 
   /// App settings. The rail that used to carry this is behind the workbench.
   final VoidCallback? onOpenSettings;
+
+  /// Retention for the current media (Keep / unretain). Shown in the
+  /// take-away band: moving material in or out of the Personal Library is a
+  /// keep-or-release decision, the same class as the export/share chrome
+  /// beside it.
+  final Widget? retentionMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +322,7 @@ class _SessionHeader extends StatelessWidget {
             if (translationMenu != null) ...[_gap, translationMenu!],
             if (studyMenu != null) ...[_gap, studyMenu!],
             if (subtitleMenu != null) ...[_gap, subtitleMenu!],
+            if (retentionMenu != null) ...[_gap, retentionMenu!],
             _gap,
             IconButton(
               key: const Key('workbench-export'),

@@ -4,19 +4,56 @@ part of '../api_service.dart';
 // Split out of api_service.dart (mechanical decomposition).
 
 extension MediaApi on LocalApi {
-  Future<MediaItem> registerMedia(String path, {int? durationMs}) async {
+  /// Registers (or re-registers, by fingerprint identity) one media path.
+  ///
+  /// [retain] is the Core 3.1 library-membership flag: `true` is an explicit
+  /// Keep (Personal Library), `false` is Temporary Material — opening a file,
+  /// scanning a folder, or adopting a download, none of which imply Personal
+  /// Library membership on their own.
+  ///
+  /// [title] overrides the default (derived from the file name). A managed
+  /// store keeps content-addressed file names (a SHA-256 digest), which would
+  /// make a poor library title, so the Keep flow passes the original title.
+  Future<MediaItem> registerMedia(
+    String path, {
+    int? durationMs,
+    required bool retain,
+    String? title,
+    String? kind,
+  }) async {
     final fingerprint = await fingerprintFile(path);
     return MediaItem.fromJson(
       (await _request('POST', '/v1/media', {
             'path': path,
             'fingerprint': fingerprint.toString(),
-            'title': path.split(Platform.pathSeparator).last,
-            'kind': LocalApi._isAudio(path) ? 'audio' : 'video',
+            'title': title ?? path.split(Platform.pathSeparator).last,
+            'kind': kind ?? (LocalApi._isAudio(path) ? 'audio' : 'video'),
             'duration_ms': ?durationMs,
+            'retain': retain,
           }))
           as Map<String, dynamic>,
     );
   }
+
+  /// Adds one media to the Personal Library without changing its path (Core
+  /// 3.1 library-membership). The media must already be registered.
+  Future<MediaItem> retainMedia(String mediaId) async => MediaItem.fromJson(
+    (await _request(
+          'PUT',
+          '/v1/media/${Uri.encodeComponent(mediaId)}/library-membership',
+        ))
+        as Map<String, dynamic>,
+  );
+
+  /// Removes one media from the Personal Library. Membership only: the media
+  /// record, its files, and learning state are untouched.
+  Future<MediaItem> unretainMedia(String mediaId) async => MediaItem.fromJson(
+    (await _request(
+          'DELETE',
+          '/v1/media/${Uri.encodeComponent(mediaId)}/library-membership',
+        ))
+        as Map<String, dynamic>,
+  );
 
   Future<String> fingerprintFile(String path) async =>
       (await sha256.bind(File(path).openRead()).first).toString();

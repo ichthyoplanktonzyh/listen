@@ -22,8 +22,8 @@ enum ContentGeneratorState {
 /// Everything needed to launch a generation, resolved together.
 ///
 /// The paths and the verdict travel as one value so no surface can pair a
-/// fresh verdict with a stale path — the same reason [MediaLibraryFolder] is
-/// shaped this way in `settings.dart`.
+/// fresh verdict with a stale path — the same reason
+/// [ManagedStoreLocation] is shaped this way in `settings.dart`.
 typedef ContentGeneratorSetup = ({
   String generatorPath,
   String modelPath,

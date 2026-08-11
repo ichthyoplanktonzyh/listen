@@ -7,7 +7,14 @@ abstract interface class MediaSessionRepository {
   bool get isAvailable;
   ApiFailure failureDetail(Object error);
   Future<void> saveProgress(String mediaId, Duration position);
-  Future<MediaItem> registerMedia(String path);
+  Future<MediaItem> registerMedia(
+    String path, {
+    required bool retain,
+    String? title,
+    String? kind,
+  });
+  Future<MediaItem> retainMedia(String mediaId);
+  Future<MediaItem> unretainMedia(String mediaId);
   Future<Duration?> readProgress(String mediaId);
   Future<SubtitleTrack> importSubtitle(String mediaId, String path);
   Future<SubtitleTrack> importTimeline({
@@ -30,7 +37,17 @@ class LocalMediaSessionRepository implements MediaSessionRepository {
   Future<void> saveProgress(String mediaId, Duration position) =>
       _api.saveProgress(mediaId, position);
   @override
-  Future<MediaItem> registerMedia(String path) => _api.registerMedia(path);
+  Future<MediaItem> registerMedia(
+    String path, {
+    required bool retain,
+    String? title,
+    String? kind,
+  }) => _api.registerMedia(path, retain: retain, title: title, kind: kind);
+  @override
+  Future<MediaItem> retainMedia(String mediaId) => _api.retainMedia(mediaId);
+  @override
+  Future<MediaItem> unretainMedia(String mediaId) =>
+      _api.unretainMedia(mediaId);
   @override
   Future<Duration?> readProgress(String mediaId) => _api.readProgress(mediaId);
   @override

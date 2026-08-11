@@ -162,11 +162,11 @@ Future<void> _pumpSettingsDialog(
         transcriptWidth: 360,
         primaryColor: Colors.white,
         secondaryColor: Colors.grey,
-        mediaLibraryFolder: (path: '', state: MediaLibraryFolderState.unset),
-        onChooseMediaLibraryFolder: () async =>
-            (path: '', state: MediaLibraryFolderState.unset),
-        onClearMediaLibraryFolder: () async =>
-            (path: '', state: MediaLibraryFolderState.unset),
+        managedStoreLocation: (path: '', state: ManagedStoreState.appManaged),
+        onChooseManagedStoreLocation: () async =>
+            (path: '', state: ManagedStoreState.appManaged),
+        onClearManagedStoreLocation: () async =>
+            (path: '', state: ManagedStoreState.appManaged),
         ffmpegPath: '',
         ffprobePath: '',
         ytDlpPath: '',

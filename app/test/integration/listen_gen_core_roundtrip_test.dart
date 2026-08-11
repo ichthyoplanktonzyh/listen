@@ -76,7 +76,8 @@ void main() {
       final api = await LocalApi.connect();
       ListenGenProcessRun? run;
       try {
-        final media = await api.registerMedia(mediaPath);
+        // The round trip exercises package import, not a learner Keep.
+        final media = await api.registerMedia(mediaPath, retain: false);
 
         run = await generator.start(
           ContentPackageGenerationRequest(

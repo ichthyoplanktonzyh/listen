@@ -283,7 +283,11 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   ) async => throw UnimplementedError();
 
   @override
-  Future<MediaItem> registerMedia(String path, {int? durationMs}) async {
+  Future<MediaItem> registerMedia(
+    String path, {
+    int? durationMs,
+    required bool retain,
+  }) async {
     if (failRegister) throw StateError('register failed');
     final regExp = RegExp(r'\[([^\]]+)\]');
     final match = regExp.firstMatch(path);

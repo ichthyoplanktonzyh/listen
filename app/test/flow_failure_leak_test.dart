@@ -14,6 +14,7 @@ import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/data/repositories/speech_enhancement_repository.dart';
+import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/manual_review_repository.dart';
@@ -22,10 +23,12 @@ import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dar
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/media_download.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/external_tools.dart';
+import 'package:llplayer_next/services/managed_asset_store.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
 import 'package:llplayer_next/widgets/flows/manual_review_flow.dart';
 import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
@@ -484,6 +487,8 @@ _harness(LocalApi service) {
         resourceActions: resourceActions,
         repository: LocalMediaSessionRepository(() => service),
         subtitleAnalysis: LocalSubtitleAnalysisRepository(() => service),
+        managedStore: _UnavailableManagedStore(),
+        materialRepository: _NoopLearningMaterialRepository(),
       )..bind(
         isMounted: () => true,
         text: (key) => const AppLocalizations(Locale('en')).text(key),
@@ -504,4 +509,62 @@ _harness(LocalApi service) {
     resourceActions: resourceActions,
     mediaSession: mediaSession,
   );
+}
+
+/// A store that can never be reached — this suite drives real failures at the
+/// transport level, so the store stays a wall rather than a promise.
+final class _UnavailableManagedStore implements ManagedAssetStoreService {
+  @override
+  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) =>
+      throw const ManagedStoreUnavailable();
+  @override
+  Future<void> deleteStoreCopy(String path) async {}
+}
+
+/// The leak suite never reaches the learning-material boundary; this wall
+/// keeps the coordinator constructible and provably inert.
+final class _NoopLearningMaterialRepository
+    implements LearningMaterialRepository {
+  @override
+  bool get isAvailable => false;
+
+  @override
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '$error');
+
+  @override
+  Future<List<MaterialDetails>> listLearningMaterials() async => const [];
+
+  @override
+  Future<MaterialDetails> createLearningMaterial(
+    CreateLearningMaterialInput input, {
+    MaterialRetainDirective retain = const MaterialRetainOmitted(),
+  }) => throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> readLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> appendMaterialRevision(
+    String materialId,
+    AppendMaterialRevisionInput input,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MaterialRevision> readMaterialRevision(
+    String materialId,
+    String revisionId,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> retainLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> unretainLearningMaterial(String materialId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
+      throw UnimplementedError();
 }

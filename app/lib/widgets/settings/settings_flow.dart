@@ -31,9 +31,9 @@ Future<void> showAppSettings({
   // Best-effort read: with no sidecar the field shows unset and stays inert.
   await learnerViewModel?.load();
   final l1Language = learnerViewModel?.state.l1Language ?? '';
-  // The folder may have been deleted or unmounted since the last check, so the
+  // The store may have been deleted or unmounted since the last check, so the
   // dialog opens on a fresh verdict rather than on a remembered one.
-  await settingsController.refreshMediaLibraryFolderState();
+  await settingsController.refreshManagedStoreState();
   if (!context.mounted) {
     return;
   }
@@ -57,12 +57,12 @@ Future<void> showAppSettings({
       transcriptWidth: settingsController.transcriptWidth,
       primaryColor: settingsController.primaryColor,
       secondaryColor: settingsController.secondaryColor,
-      mediaLibraryFolder: settingsController.mediaLibraryFolder,
-      onChooseMediaLibraryFolder: () =>
-          settingsController.chooseMediaLibraryFolder(
-            confirmButtonText: l.text('mediaLibraryPickerConfirm'),
+      managedStoreLocation: settingsController.managedStoreLocation,
+      onChooseManagedStoreLocation: () =>
+          settingsController.chooseManagedStoreLocation(
+            confirmButtonText: l.text('managedStorePickerConfirm'),
           ),
-      onClearMediaLibraryFolder: settingsController.clearMediaLibraryFolder,
+      onClearManagedStoreLocation: settingsController.clearManagedStoreLocation,
       ffmpegPath: settingsController.ffmpegPath,
       ffprobePath: settingsController.ffprobePath,
       ytDlpPath: settingsController.ytDlpPath,

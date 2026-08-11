@@ -244,6 +244,7 @@ class MediaItem {
     required this.availability,
     required this.createdAtMs,
     required this.updatedAtMs,
+    this.retainedAtMs,
   });
 
   factory MediaItem.fromJson(Map<String, dynamic> json) => MediaItem(
@@ -256,6 +257,9 @@ class MediaItem {
     availability: json['availability'] as String,
     createdAtMs: json['created_at_ms'] as int,
     updatedAtMs: json['updated_at_ms'] as int,
+    // Core 3.1: only rows in the Personal Library carry a retention timestamp;
+    // Temporary Material has none.
+    retainedAtMs: json['retained_at_ms'] as int?,
   );
 
   final String id;
@@ -268,6 +272,14 @@ class MediaItem {
   final int createdAtMs;
   final int updatedAtMs;
 
+  /// When this media entered the Personal Library (Core 3.1 library
+  /// membership). Null means the media is Temporary Material — open or
+  /// scanned, but not explicitly kept.
+  final int? retainedAtMs;
+
+  /// Whether this media is currently in the Personal Library.
+  bool get isRetained => retainedAtMs != null;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'path': path,
@@ -276,6 +288,7 @@ class MediaItem {
     'kind': kind,
     'duration': durationMs,
     'availability': availability,
+    'retained_at_ms': retainedAtMs,
     'created_at_ms': createdAtMs,
     'updated_at_ms': updatedAtMs,
   };

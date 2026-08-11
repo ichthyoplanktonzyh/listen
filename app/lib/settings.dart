@@ -5,19 +5,25 @@ import 'utils/transcript_translation.dart';
 
 const _appSupportDirectoryName = 'listen';
 const _legacyAppSupportDirectoryName = 'LLPlayerNext';
+const _defaultManagedStoreDirectoryName = 'managed-assets';
 
-/// How the persisted media library folder relates to the disk right now.
+/// How the persisted managed asset store location relates to the disk right
+/// now.
 ///
-/// `missing` exists because the path outlives the directory: an external disk
-/// gets unmounted, a folder gets renamed. Folding that back into `unset` would
-/// tell the user they never chose a folder, which is a different — and false —
-/// story than "the folder you chose is not there".
-enum MediaLibraryFolderState { unset, ready, missing }
+/// `appManaged` means the user has never chosen a custom location, so the app
+/// manages its own store under macOS Application Support (that store exists
+/// on demand — this state never reads as "no store"). `missing` exists
+/// because a custom path outlives the directory: an external disk gets
+/// unmounted, a folder gets renamed. Folding that back into `appManaged`
+/// would tell the user they never chose a location, which is a different — and
+/// false — story than "the folder you chose is not there".
+enum ManagedStoreState { appManaged, ready, missing }
 
-/// The media library folder as the UI needs it: the path and the verdict about
-/// it always travel together, so no surface can pair a fresh path with a stale
-/// verdict.
-typedef MediaLibraryFolder = ({String path, MediaLibraryFolderState state});
+/// The managed asset store location as the UI needs it: the path and the
+/// verdict about it always travel together, so no surface can pair a fresh
+/// path with a stale verdict. In the `appManaged` state the path is the
+/// resolved app-managed store, so every state carries something real to show.
+typedef ManagedStoreLocation = ({String path, ManagedStoreState state});
 
 class AppSettings {
   const AppSettings({
@@ -242,10 +248,11 @@ class AppSettings {
   final int lastMediaDurationMs;
   final int lastMediaSubtitleCount;
 
-  /// The folder the user picked as their media library: downloads land here and
-  /// "my media" reads from here. Empty means the user has not chosen one yet.
-  /// The app runs unsandboxed, so a plain path survives a restart — no
-  /// security-scoped bookmark is involved.
+  /// The folder the user chose as their managed asset store location:
+  /// kept material is copied here and "my media" reads from here. Empty means
+  /// the app uses its own default store under Application Support (see
+  /// [defaultManagedStorePath]). The app runs unsandboxed, so a plain path
+  /// survives a restart — no security-scoped bookmark is involved.
   final String mediaLibraryPath;
   final String ffmpegPath;
   final String ffprobePath;
@@ -319,6 +326,12 @@ class AppSettings {
     '$_home/Library/Application Support/$_legacyAppSupportDirectoryName',
   );
 
+  /// The app-managed default store: a folder the app itself owns under its
+  /// macOS Application Support directory. Kept material lands here unless the
+  /// user chose a custom managed-store location.
+  static String get defaultManagedStorePath =>
+      '${_supportDirectory.path}/$_defaultManagedStoreDirectoryName';
+
   static File get file => File('${_supportDirectory.path}/settings-v8.json');
 
   static Future<AppSettings> load() async {
@@ -341,13 +354,18 @@ class AppSettings {
     return const AppSettings();
   }
 
-  /// What the disk says about [mediaLibraryPath] right now. Lives beside the
-  /// file's other I/O rather than in the controller, which owns no filesystem.
-  Future<MediaLibraryFolderState> resolveMediaLibraryFolderState() async {
-    if (mediaLibraryPath.isEmpty) return MediaLibraryFolderState.unset;
+  /// What the disk says about the managed asset store location right now.
+  /// Lives beside the file's other I/O rather than in the controller, which
+  /// owns no filesystem.
+  ///
+  /// No custom path means the app-managed default store, which is a real
+  /// location even before it exists on disk — the `appManaged` state always
+  /// carries the resolved path.
+  Future<ManagedStoreState> resolveManagedStoreState() async {
+    if (mediaLibraryPath.isEmpty) return ManagedStoreState.appManaged;
     return await Directory(mediaLibraryPath).exists()
-        ? MediaLibraryFolderState.ready
-        : MediaLibraryFolderState.missing;
+        ? ManagedStoreState.ready
+        : ManagedStoreState.missing;
   }
 
   Future<void> save() async {

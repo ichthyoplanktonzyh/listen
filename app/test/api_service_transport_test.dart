@@ -590,5 +590,133 @@ void main() {
         expect(socket.toString(), isNot(contains('write-only-secret')));
       },
     );
+
+    group('Core 3.1 retention contract', () {
+      late Directory temp;
+      late String mediaPath;
+
+      setUp(() {
+        temp = Directory.systemTemp.createTempSync('retention-contract');
+        final file = File('${temp.path}/talk.mp3')
+          ..writeAsBytesSync([1, 2, 3, 4, 5]);
+        mediaPath = file.path;
+      });
+
+      tearDown(() => temp.deleteSync(recursive: true));
+
+      test(
+        'opening-style registration is Temporary Material (retain false)',
+        () async {
+          Map<String, dynamic>? request;
+          final api = LocalApi.withTransport(
+            baseUrl: 'http://test',
+            token: 'tok',
+            transport: (method, path, body) async {
+              expect(method, 'POST');
+              expect(path, '/v1/media');
+              request = jsonDecode(body!) as Map<String, dynamic>;
+              return (
+                statusCode: 200,
+                body:
+                    '{"id":"media-1","path":"$mediaPath","fingerprint":"fp",'
+                    '"title":"talk.mp3","kind":"audio","duration":null,'
+                    '"availability":"available","created_at_ms":1,'
+                    '"updated_at_ms":2}',
+              );
+            },
+          );
+
+          final media = await api.registerMedia(mediaPath, retain: false);
+
+          expect(request!['path'], mediaPath);
+          expect(request!['retain'], isFalse);
+          expect(media.isRetained, isFalse);
+        },
+      );
+
+      test(
+        'Keep registration sends retain true and the managed title',
+        () async {
+          Map<String, dynamic>? request;
+          final api = LocalApi.withTransport(
+            baseUrl: 'http://test',
+            token: 'tok',
+            transport: (method, path, body) async {
+              request = jsonDecode(body!) as Map<String, dynamic>;
+              return (
+                statusCode: 200,
+                body:
+                    '{"id":"media-1","path":"$mediaPath","fingerprint":"fp",'
+                    '"title":"Original","kind":"audio","duration":null,'
+                    '"availability":"available","created_at_ms":1,'
+                    '"updated_at_ms":2,"retained_at_ms":42}',
+              );
+            },
+          );
+
+          final media = await api.registerMedia(
+            mediaPath,
+            retain: true,
+            title: 'Original',
+          );
+
+          expect(request!['retain'], isTrue);
+          expect(request!['title'], 'Original');
+          expect(media.retainedAtMs, 42);
+          expect(media.isRetained, isTrue);
+        },
+      );
+
+      test(
+        'retain and unretain parse the library-membership response',
+        () async {
+          final seen = <String>[];
+          final api = LocalApi.withTransport(
+            baseUrl: 'http://test',
+            token: 'tok',
+            transport: (method, path, body) async {
+              seen.add('$method $path');
+              return (
+                statusCode: 200,
+                body:
+                    '{"id":"media-1","path":"$mediaPath","fingerprint":"fp",'
+                    '"title":"talk.mp3","kind":"audio","duration":null,'
+                    '"availability":"available","created_at_ms":1,'
+                    '"updated_at_ms":2,"retained_at_ms":'
+                    '${method == 'PUT' ? '42' : 'null'}}',
+              );
+            },
+          );
+
+          final retained = await api.retainMedia('media/1');
+          final unretained = await api.unretainMedia('media/1');
+
+          expect(seen[0], 'PUT /v1/media/media%2F1/library-membership');
+          expect(seen[1], 'DELETE /v1/media/media%2F1/library-membership');
+          expect(retained.retainedAtMs, 42);
+          expect(unretained.retainedAtMs, isNull);
+        },
+      );
+
+      test('MediaItem tolerates an absent retained_at_ms', () async {
+        final api = LocalApi.withTransport(
+          baseUrl: 'http://test',
+          token: 'tok',
+          transport: (method, path, body) async => (
+            statusCode: 200,
+            body:
+                '{"id":"media-1","path":"/t.mp3","fingerprint":"fp",'
+                '"title":"T","kind":"audio","duration":null,'
+                '"availability":"available","created_at_ms":1,'
+                '"updated_at_ms":2}',
+          ),
+        );
+
+        final media = await api.readMedia('media-1');
+
+        expect(media.retainedAtMs, isNull);
+        expect(media.isRetained, isFalse);
+      });
+    });
   });
 }

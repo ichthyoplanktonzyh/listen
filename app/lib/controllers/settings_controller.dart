@@ -38,7 +38,6 @@ class SettingsController extends ChangeNotifier {
   int get lastMediaPositionMs => _settings.lastMediaPositionMs;
   int get lastMediaDurationMs => _settings.lastMediaDurationMs;
   int get lastMediaSubtitleCount => _settings.lastMediaSubtitleCount;
-  String get mediaLibraryPath => _settings.mediaLibraryPath;
   double get volume => _settings.volume;
   double get rate => _settings.rate;
   bool get subtitlesVisible => _settings.subtitlesVisible;
@@ -104,56 +103,68 @@ class SettingsController extends ChangeNotifier {
 
   Color get secondaryColor => Color(_settings.secondaryColor);
 
-  // ── Media library folder ──
+  // ── Managed asset store location ──
 
-  MediaLibraryFolderState _mediaLibraryFolderState =
-      MediaLibraryFolderState.unset;
+  ManagedStoreState _managedStoreState = ManagedStoreState.appManaged;
 
   /// The persisted path together with what the disk says about it. Resolved
   /// when the path changes and on demand, never on every read: this is disk
   /// I/O, and a getter that touched the filesystem would run inside `build`.
-  MediaLibraryFolder get mediaLibraryFolder =>
-      (path: _settings.mediaLibraryPath, state: _mediaLibraryFolderState);
+  ///
+  /// When no custom location is stored the pair carries the app-managed
+  /// default store ([AppSettings.defaultManagedStorePath]) with the `default`
+  /// verdict, so every state shows a real location.
+  ManagedStoreLocation get managedStoreLocation => (
+    path: _settings.mediaLibraryPath.isEmpty
+        ? AppSettings.defaultManagedStorePath
+        : _settings.mediaLibraryPath,
+    state: _managedStoreState,
+  );
 
-  /// Opens the folder chooser and adopts the result. A cancelled picker returns
-  /// the folder unchanged — cancelling must never clear what the user had.
-  Future<MediaLibraryFolder> chooseMediaLibraryFolder({
+  /// The stored custom managed-store path (empty when the default applies).
+  String get managedStorePath => _settings.mediaLibraryPath;
+
+  /// Opens the folder chooser and adopts the result. A cancelled picker
+  /// returns the location unchanged — cancelling must never clear what the
+  /// user had.
+  Future<ManagedStoreLocation> chooseManagedStoreLocation({
     required String confirmButtonText,
   }) async {
     final picked = await files.pickDownloadDirectory(
       confirmButtonText: confirmButtonText,
     );
-    if (picked == null || picked.isEmpty) return mediaLibraryFolder;
-    return setMediaLibraryPath(picked);
+    if (picked == null || picked.isEmpty) return managedStoreLocation;
+    return setManagedStorePath(picked);
   }
 
   /// Records the folder the user picked. Its state is resolved before the
   /// notification so listeners never see a new path next to the old verdict.
-  Future<MediaLibraryFolder> setMediaLibraryPath(String path) async {
+  Future<ManagedStoreLocation> setManagedStorePath(String path) async {
     _settings = _settings.copyWith(mediaLibraryPath: path);
-    _mediaLibraryFolderState = await _settings.resolveMediaLibraryFolderState();
+    _managedStoreState = await _settings.resolveManagedStoreState();
     notifyListeners();
     await save();
-    return mediaLibraryFolder;
+    return managedStoreLocation;
   }
 
-  /// Forgets the folder. Distinct from a folder that went missing — this is the
-  /// user saying they no longer have one.
-  Future<MediaLibraryFolder> clearMediaLibraryFolder() =>
-      setMediaLibraryPath('');
+  /// Forgets the custom location, returning the store to the app-managed
+  /// default. Distinct from a location that went missing — this is the user
+  /// saying they no longer have one.
+  Future<ManagedStoreLocation> clearManagedStoreLocation() =>
+      setManagedStorePath('');
 
   /// Re-checks the disk, e.g. after an unmounted volume came back.
-  Future<void> refreshMediaLibraryFolderState() async {
-    final next = await _settings.resolveMediaLibraryFolderState();
-    if (next == _mediaLibraryFolderState) return;
-    _mediaLibraryFolderState = next;
+  Future<void> refreshManagedStoreState() async {
+    final next = await _settings.resolveManagedStoreState();
+    if (next == _managedStoreState) return;
+    _managedStoreState = next;
     notifyListeners();
   }
 
   /// Load settings from disk and notify listeners.
   Future<void> load() async {
     _settings = await AppSettings.load();
-    _mediaLibraryFolderState = await _settings.resolveMediaLibraryFolderState();
+    _managedStoreState = await _settings.resolveManagedStoreState();
     notifyListeners();
   }
 

@@ -15,6 +15,8 @@ class PlayerState {
     this.mediaPath,
     this.mediaTitle,
     this.mediaFingerprint,
+    this.mediaRetained,
+    this.retentionInFlight = false,
     this.status = 'Starting local core...',
     this.statusIsError = false,
     this.statusIsPlayback = false,
@@ -38,6 +40,14 @@ class PlayerState {
   final String? mediaPath;
   final String? mediaTitle;
   final String? mediaFingerprint;
+
+  /// Whether the current media is in the Personal Library. Null before the
+  /// media has been registered with Core, or when Core is unreachable.
+  final bool? mediaRetained;
+
+  /// A Keep / unretain / reference operation is running right now. The
+  /// affordance uses it for in-flight feedback and to refuse re-entry.
+  final bool retentionInFlight;
   final String status;
 
   /// Whether [status] describes a failure. Error statuses get error styling
@@ -81,6 +91,8 @@ class PlayerState {
     Object? mediaPath = _unset,
     Object? mediaTitle = _unset,
     Object? mediaFingerprint = _unset,
+    Object? mediaRetained = _unset,
+    bool? retentionInFlight,
     String? status,
     bool? statusIsError,
     bool? statusIsPlayback,
@@ -108,6 +120,10 @@ class PlayerState {
     mediaFingerprint: identical(mediaFingerprint, _unset)
         ? this.mediaFingerprint
         : mediaFingerprint as String?,
+    mediaRetained: identical(mediaRetained, _unset)
+        ? this.mediaRetained
+        : mediaRetained as bool?,
+    retentionInFlight: retentionInFlight ?? this.retentionInFlight,
     status: status ?? this.status,
     statusIsError: statusIsError ?? this.statusIsError,
     statusIsPlayback: statusIsPlayback ?? this.statusIsPlayback,
@@ -170,6 +186,8 @@ class PlayerController extends ChangeNotifier {
   String? get mediaPath => _store.state.mediaPath;
   String? get mediaTitle => _store.state.mediaTitle;
   String? get mediaFingerprint => _store.state.mediaFingerprint;
+  bool? get mediaRetained => _store.state.mediaRetained;
+  bool get retentionInFlight => _store.state.retentionInFlight;
   String get status => _store.state.status;
   bool get statusIsError => _store.state.statusIsError;
   bool get statusIsPlayback => _store.state.statusIsPlayback;
@@ -229,8 +247,19 @@ class PlayerController extends ChangeNotifier {
       mediaPath: null,
       mediaTitle: null,
       mediaFingerprint: null,
+      mediaRetained: null,
     ),
   );
+
+  /// Records whether the current media is in the Personal Library. Set after
+  /// registration, Keep, reference-in-place, and unretain — never guessed.
+  void setMediaRetained(bool? retained) =>
+      _store.update((s) => s.copyWith(mediaRetained: retained));
+
+  /// Marks a retention operation as running. Guards the affordance against
+  /// re-entry and drives its in-flight presentation.
+  void setRetentionInFlight(bool inFlight) =>
+      _store.update((s) => s.copyWith(retentionInFlight: inFlight));
 
   void setMuted(bool muted) => _store.update((s) => s.copyWith(muted: muted));
 

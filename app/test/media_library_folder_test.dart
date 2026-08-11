@@ -8,13 +8,14 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
 import 'package:llplayer_next/settings.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
-import 'package:llplayer_next/widgets/settings/media_library_settings.dart';
+import 'package:llplayer_next/widgets/settings/managed_store_settings.dart';
 
-/// A settings folder that was chosen and then vanished (renamed, deleted, or
-/// sitting on a disk that is no longer mounted) must read as *missing*, not as
-/// *never chosen* — the two send the user to two different remedies.
+/// The managed asset store location: no custom path is the app-managed
+/// *default* under Application Support, a chosen location that vanished is
+/// *missing* (never "you never chose one"), and clearing returns to the
+/// default. The two send the user to two different remedies.
 void main() {
-  test('the media library path survives the persisted shape', () {
+  test('the managed store path survives the persisted shape', () {
     const settings = AppSettings(mediaLibraryPath: '/Volumes/Study/media');
 
     // Round-tripped through the map `save` writes, so a key typo in either
@@ -22,119 +23,128 @@ void main() {
     final reloaded = AppSettings.fromJson(settings.toJson());
 
     expect(reloaded.mediaLibraryPath, '/Volumes/Study/media');
-    // A settings file written before this setting existed has no folder.
+    // A settings file written before this setting existed has no custom path.
     expect(AppSettings.fromJson({'version': 8}).mediaLibraryPath, isEmpty);
     expect(const AppSettings().mediaLibraryPath, isEmpty);
   });
 
-  test('setting, reading back and clearing the folder', () async {
-    final directory = await Directory.systemTemp.createTemp('media-library');
+  test('the app-managed default store lives under Application Support', () {
+    final home = Platform.environment['HOME'];
+    expect(
+      AppSettings.defaultManagedStorePath,
+      '$home/Library/Application Support/listen/managed-assets',
+    );
+  });
+
+  test('setting, reading back and clearing the custom location', () async {
+    final directory = await Directory.systemTemp.createTemp('managed-store');
     addTearDown(() => directory.delete(recursive: true));
     final controller = _InMemorySettingsController();
     addTearDown(controller.dispose);
 
-    expect(controller.mediaLibraryFolder, (
-      path: '',
-      state: MediaLibraryFolderState.unset,
+    // No custom path: the default store, which is a real location.
+    expect(controller.managedStoreLocation, (
+      path: AppSettings.defaultManagedStorePath,
+      state: ManagedStoreState.appManaged,
     ));
 
-    await controller.setMediaLibraryPath(directory.path);
-    expect(controller.mediaLibraryFolder, (
+    await controller.setManagedStorePath(directory.path);
+    expect(controller.managedStoreLocation, (
       path: directory.path,
-      state: MediaLibraryFolderState.ready,
+      state: ManagedStoreState.ready,
     ));
     expect(controller.settings.mediaLibraryPath, directory.path);
     expect(controller.saves, 1);
 
-    await controller.clearMediaLibraryFolder();
-    expect(controller.mediaLibraryFolder, (
-      path: '',
-      state: MediaLibraryFolderState.unset,
+    await controller.clearManagedStoreLocation();
+    expect(controller.managedStoreLocation, (
+      path: AppSettings.defaultManagedStorePath,
+      state: ManagedStoreState.appManaged,
     ));
+    expect(controller.settings.mediaLibraryPath, isEmpty);
     expect(controller.saves, 2);
   });
 
-  test('a folder that is gone reads as missing, not as unset', () async {
-    final directory = await Directory.systemTemp.createTemp('media-library');
-    final controller = _InMemorySettingsController();
-    addTearDown(controller.dispose);
-    await controller.setMediaLibraryPath(directory.path);
+  test(
+    'a custom location that is gone reads as missing, not as default',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('managed-store');
+      final controller = _InMemorySettingsController();
+      addTearDown(controller.dispose);
+      await controller.setManagedStorePath(directory.path);
 
-    await directory.delete(recursive: true);
-    await controller.refreshMediaLibraryFolderState();
+      await directory.delete(recursive: true);
+      await controller.refreshManagedStoreState();
 
-    expect(controller.mediaLibraryFolder, (
-      path: directory.path,
-      state: MediaLibraryFolderState.missing,
-    ));
-    // The path is kept: the user chose it, and the drive may come back.
-    expect(controller.settings.mediaLibraryPath, directory.path);
-  });
+      expect(controller.managedStoreLocation, (
+        path: directory.path,
+        state: ManagedStoreState.missing,
+      ));
+      // The path is kept: the user chose it, and the drive may come back.
+      expect(controller.settings.mediaLibraryPath, directory.path);
+    },
+  );
 
-  test('a cancelled picker leaves the chosen folder alone', () async {
-    final directory = await Directory.systemTemp.createTemp('media-library');
+  test('a cancelled picker leaves the chosen location alone', () async {
+    final directory = await Directory.systemTemp.createTemp('managed-store');
     addTearDown(() => directory.delete(recursive: true));
     final picker = _FakeFolderPicker();
     final controller = _InMemorySettingsController(files: picker);
     addTearDown(controller.dispose);
 
     picker.next = directory.path;
-    final chosen = await controller.chooseMediaLibraryFolder(
+    final chosen = await controller.chooseManagedStoreLocation(
       confirmButtonText: 'Use this folder',
     );
-    expect(chosen, (
-      path: directory.path,
-      state: MediaLibraryFolderState.ready,
-    ));
+    expect(chosen, (path: directory.path, state: ManagedStoreState.ready));
     expect(picker.confirmButtonTexts, ['Use this folder']);
 
     picker.next = null;
-    final afterCancel = await controller.chooseMediaLibraryFolder(
+    final afterCancel = await controller.chooseManagedStoreLocation(
       confirmButtonText: 'Use this folder',
     );
-    expect(afterCancel, (
-      path: directory.path,
-      state: MediaLibraryFolderState.ready,
-    ));
+    expect(afterCancel, (path: directory.path, state: ManagedStoreState.ready));
     expect(controller.saves, 1);
   });
 
-  testWidgets('the unset folder offers a choice and nothing to clear', (
-    tester,
-  ) async {
-    await _pump(tester, (path: '', state: MediaLibraryFolderState.unset));
+  testWidgets('the default store offers a choice and no clear', (tester) async {
+    await _pump(tester, (
+      path: AppSettings.defaultManagedStorePath,
+      state: ManagedStoreState.appManaged,
+    ));
 
-    expect(find.text('No folder chosen yet'), findsOneWidget);
+    expect(find.text('Default app-managed folder'), findsOneWidget);
+    expect(find.text(AppSettings.defaultManagedStorePath), findsOneWidget);
     expect(find.text('Choose folder…'), findsOneWidget);
-    expect(find.text('Clear'), findsNothing);
+    expect(find.text('Back to default'), findsNothing);
   });
 
-  testWidgets('a missing folder shows the path and says why it is not there', (
+  testWidgets('a missing custom location shows the path and says why', (
     tester,
   ) async {
     await _pump(tester, (
       path: '/Volumes/Study/media',
-      state: MediaLibraryFolderState.missing,
+      state: ManagedStoreState.missing,
     ));
 
     expect(find.text('/Volumes/Study/media'), findsOneWidget);
     expect(find.textContaining('not on disk right now'), findsOneWidget);
-    // Never the unset copy: the user did choose a folder.
-    expect(find.text('No folder chosen yet'), findsNothing);
+    // Never the default copy: the user did choose a location.
+    expect(find.text('Default app-managed folder'), findsNothing);
     expect(find.text('Change folder…'), findsOneWidget);
-    expect(find.text('Clear'), findsOneWidget);
+    expect(find.text('Back to default'), findsOneWidget);
 
-    final context = tester.element(find.byType(MediaLibrarySettings));
+    final context = tester.element(find.byType(ManagedStoreSettings));
     final icon = tester.widget<Icon>(find.byIcon(Icons.warning_amber_outlined));
     expect(icon.color, Theme.of(context).colorScheme.error);
   });
 
-  testWidgets('a folder that is present renders without a warning', (
+  testWidgets('a custom location that is present renders without a warning', (
     tester,
   ) async {
     await _pump(tester, (
       path: '/Volumes/Study/media',
-      state: MediaLibraryFolderState.ready,
+      state: ManagedStoreState.ready,
     ));
 
     expect(find.text('/Volumes/Study/media'), findsOneWidget);
@@ -146,7 +156,7 @@ void main() {
   });
 }
 
-Future<void> _pump(WidgetTester tester, MediaLibraryFolder folder) async {
+Future<void> _pump(WidgetTester tester, ManagedStoreLocation location) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: ListenTheme.dark(),
@@ -159,8 +169,8 @@ Future<void> _pump(WidgetTester tester, MediaLibraryFolder folder) async {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: Scaffold(
-        body: MediaLibrarySettings(
-          folder: folder,
+        body: ManagedStoreSettings(
+          location: location,
           onChoose: () {},
           onClear: () {},
         ),

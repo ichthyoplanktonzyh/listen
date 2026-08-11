@@ -136,9 +136,10 @@ class LexicalRepository implements OccurrenceMediaRepository {
   Future<String> fingerprintFile(String path) => _api.fingerprintFile(path);
 
   @override
-  Future<void> registerMedia(String path) async {
-    await _api.registerMedia(path);
-  }
+  /// A lexical occurrence relink is temporary until the learner explicitly
+  /// keeps that material.
+  Future<void> registerMedia(String path) async =>
+      _api.registerMedia(path, retain: false);
 
   // ── The local corpus ──
 

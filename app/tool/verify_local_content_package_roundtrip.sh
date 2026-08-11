@@ -17,7 +17,7 @@
 #
 set -euo pipefail
 
-readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-105568ed790fe9a328bfe82fce7c19d2fcb1f420}"
+readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-5a65b2735325aac18f1eacb736b8d9676adf59a9}"
 readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-a660946a4410c6c6b6e720ecdd02e7a88d16e5dc}"
 readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
 
