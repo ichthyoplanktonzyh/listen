@@ -8,8 +8,8 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 /// The shebang the verifier requires as the artifact's first bytes.
 final _validArtifact = utf8.encode('#!/usr/bin/env python3\nPKbody');
-const _manifestName = 'listen-gen-0.2.0.release.json';
-const _artifactName = 'listen-gen-0.2.0.pyz';
+const _manifestName = 'listen-gen-0.5.0.release.json';
+const _artifactName = 'listen-gen-0.5.0.pyz';
 const _genCommit = 'c3564c357ecd46c3a52326f1362b78874379a56f';
 const _otherCommit = 'b980a20666f746685db1fd06bfa425d762d7a678';
 const _contractSha =
@@ -38,20 +38,17 @@ Map<String, dynamic> _manifestTemplate() => {
     'commit': _genCommit,
     'repository': 'https://github.com/ichthyoplanktonzyh/listen-gen',
   },
-  'tool': {'id': 'listen-gen', 'version': '0.2.0'},
-  'machine_protocol': {'schema': 'listen_gen.machine-event.v1', 'version': 1},
+  'tool': {'id': 'listen-gen', 'version': '0.5.0'},
+  'machine_protocol': {'schema': 'listen_gen.machine-event.v2', 'version': 2},
   'content_package_contract': {
     'authority': {
       'repository': 'ichthyoplanktonzyh/listen-core',
-      'path': 'contracts/content-package/v1',
+      'path': 'contracts/content-package/v3',
     },
     'canonical_sha256': _contractSha,
-    'manifest_schema_id':
-        'https://listen.dev/contracts/content-package/v1/manifest.schema.json',
-    'package_schema': 'listen.resource-package.v1',
-    'resource_schema_id':
-        'https://listen.dev/contracts/content-package/v1/resource.schema.json',
-    'schema_version': 1,
+    'package_schema': 'listen.content-package.release.v3',
+    'release_schema_id': 'listen.content-package.release.v3',
+    'schema_version': 3,
   },
   'runtime': {
     'provider_requirements': {
@@ -80,19 +77,16 @@ Map<String, dynamic> _lockTemplate() => {
     'filename': _manifestName,
     'sha256': 'sha256:${'0' * 64}',
   },
-  'tool': {'id': 'listen-gen', 'version': '0.2.0'},
-  'machine_protocol': {'schema': 'listen_gen.machine-event.v1', 'version': 1},
+  'tool': {'id': 'listen-gen', 'version': '0.5.0'},
+  'machine_protocol': {'schema': 'listen_gen.machine-event.v2', 'version': 2},
   'content_package_contract': {
     'authority': {
       'repository': 'ichthyoplanktonzyh/listen-core',
-      'path': 'contracts/content-package/v1',
+      'path': 'contracts/content-package/v3',
     },
-    'manifest_schema_id':
-        'https://listen.dev/contracts/content-package/v1/manifest.schema.json',
-    'resource_schema_id':
-        'https://listen.dev/contracts/content-package/v1/resource.schema.json',
-    'package_schema': 'listen.resource-package.v1',
-    'schema_version': 1,
+    'package_schema': 'listen.content-package.release.v3',
+    'release_schema_id': 'listen.content-package.release.v3',
+    'schema_version': 3,
     'canonical_sha256': _contractSha,
   },
   'runtime': {'python_requires': '>=3.11'},
@@ -209,7 +203,7 @@ void main() {
     final built = await _build(await _tempDir());
     final verified = await built.service.verify();
 
-    expect(verified.toolVersion, '0.2.0');
+    expect(verified.toolVersion, '0.5.0');
     expect(verified.sourceCommit, _genCommit);
     expect(verified.artifactPath, built.artifactPath);
     expect(verified.artifactSha256, _sha(_validArtifact));
@@ -274,7 +268,7 @@ void main() {
     final built = await _build(
       await _tempDir(),
       mutateManifest: (manifest) =>
-          (manifest['machine_protocol'] as Map)['version'] = 2,
+          (manifest['machine_protocol'] as Map)['version'] = 1,
     );
     await expectLater(
       built.service.verify(),
@@ -436,7 +430,7 @@ void main() {
       'machine schema': (lock) =>
           (lock['machine_protocol'] as Map)['schema'] = 'other.event.v1',
       'machine version': (lock) =>
-          (lock['machine_protocol'] as Map)['version'] = 2,
+          (lock['machine_protocol'] as Map)['version'] = 1,
       'authority repository': (lock) =>
           ((lock['content_package_contract'] as Map)['authority']
                   as Map)['repository'] =

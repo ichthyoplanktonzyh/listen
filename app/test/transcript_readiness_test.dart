@@ -1,9 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/controllers/content_package_journey_view_model.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
+import 'package:llplayer_next/controllers/material_capability_coordinator.dart';
 import 'package:llplayer_next/controllers/media_session_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/resource_actions_coordinator.dart';
@@ -11,20 +11,24 @@ import 'package:llplayer_next/controllers/settings_controller.dart';
 import 'package:llplayer_next/controllers/speech_enhancement_workflow_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/controllers/transcript_readiness_view_model.dart';
-import 'package:llplayer_next/data/repositories/content_package_repository.dart';
+import 'package:llplayer_next/data/repositories/capability_repository.dart';
 import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/models/api_failure.dart';
-import 'package:llplayer_next/models/content_package.dart';
+import 'package:llplayer_next/models/gen_machine_event.dart';
+import 'package:llplayer_next/services/capability_generation_request.dart';
+import 'package:llplayer_next/models/learning_edition.dart';
 import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
-import 'package:llplayer_next/services/managed_asset_store.dart';
-import 'package:llplayer_next/player_adapter.dart';
+import 'package:llplayer_next/services/composition_store.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
+import 'package:llplayer_next/services/managed_asset_store.dart';
+import 'package:llplayer_next/player_adapter.dart';
 
 void main() {
   group('MediaSessionCoordinator transcript reconciliation', () {
@@ -78,8 +82,6 @@ void main() {
     });
 
     test('archived tracks never count as candidates', () async {
-      // One archived track with sentences and one available track: only the
-      // available one may be auto-selected.
       final harness = _coordinatorHarness(const [
         _archivedTrack,
         _usableTrackA,
@@ -100,7 +102,6 @@ void main() {
       final subject = _readinessViewModel(
         tracks: const [],
         canAutoPrepare: true,
-        repository: _FakePackageRepository(),
       );
       addTearDown(subject.vm.dispose);
 
@@ -111,7 +112,6 @@ void main() {
       final subject = _readinessViewModel(
         tracks: const [],
         canAutoPrepare: false,
-        repository: _FakePackageRepository(),
       );
       addTearDown(subject.vm.dispose);
 
@@ -119,11 +119,9 @@ void main() {
     });
 
     test('several usable tracks show the chooser and select on tap', () async {
-      var generationStarts = 0;
       final subject = _readinessViewModel(
         tracks: const [_usableTrackA, _usableTrackB],
         canAutoPrepare: true,
-        repository: _FakePackageRepository(onStart: () => generationStarts++),
       );
       addTearDown(subject.vm.dispose);
 
@@ -139,356 +137,170 @@ void main() {
 
       expect(subject.subtitle.primaryTrack?.id, _usableTrackB.id);
       expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-      expect(generationStarts, 0);
     });
 
     test(
-      'prepare runs generate → import → auto-select without a second tap',
+      'prepare runs resolve → generate → install → adopt to ready',
       () async {
-        final receipt = _receipt(
-          track: _usableTrackA,
-          includeWordTimeline: false,
-        );
-        final repository = _FakePackageRepository(
-          receipt: receipt,
-          runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-        );
         final subject = _readinessViewModel(
           tracks: const [],
           canAutoPrepare: true,
-          repository: repository,
         );
         addTearDown(subject.vm.dispose);
 
-        await _runGeneration(subject.vm, repository);
+        final request = subject.vm.prepareLearningTranscript();
+        await _settle();
 
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.preparing);
+
+        final generator = subject.repository.genService;
+        final run = generator.lastRun!;
+        expect(run.cancelled, isFalse);
+        expect(subject.vm.state.canCancel, isTrue);
+
+        // The run's protocol asks for a staged transcript.
+        expect(run.eventsClosed, isFalse, reason: 'stream must be open');
+        run.emitProtocol();
+        await Future<void>.delayed(Duration.zero);
+        run.emitAccepted(attemptId: run.attemptId);
+        await Future<void>.delayed(Duration.zero);
+        run.emitRunning('transcribing media');
+        await Future<void>.delayed(Duration.zero);
+        run.emitCompleted();
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        expect(
+          subject.repository.genService.lastRun!.packagePathCompleted,
+          isTrue,
+          reason: 'packagePath must be completed by emitCompleted',
+        );
+
+        await request;
+
+        final view = subject.coordinator.runViewFor(
+          'material-1',
+          MaterialCapability.read,
+        );
+        expect(view?.phase, CapabilityRunPhase.completed,
+            reason: 'failure=${view?.failureCode}');
         expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-        expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
+        expect(subject.repository.finalizedSucceeded, 1);
+        expect(subject.repository.adoptedReleases, [_edition.releaseId]);
         expect(subject.vm.state.failure, isNull);
-        expect(repository.activatedTimelines, isEmpty);
       },
     );
 
-    test(
-      'preparation stages map machine phases to user-facing labels',
-      () async {
-        final importGate = Completer<ContentPackageImportReceipt>();
-        final repository = _FakePackageRepository(
-          receipt: _receipt(track: _usableTrackA),
-          runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-          importGate: importGate,
-        );
-        final subject = _readinessViewModel(
-          tracks: const [],
-          canAutoPrepare: true,
-          repository: repository,
-        );
-        addTearDown(subject.vm.dispose);
-
-        final future = subject.vm.prepareLearningTranscript();
-        await _settle();
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.preparing);
-        final run = repository.runs.single;
-        run.eventsController.add(
-          ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
-        );
-        run.eventsController.add(
-          ListenGenMachineEvent(sequence: 1, kind: ListenGenEventKind.started),
-        );
-        await _settle();
-        run.eventsController.add(
-          ListenGenMachineEvent(
-            sequence: 2,
-            kind: ListenGenEventKind.phase,
-            phase: 'validating',
-          ),
-        );
-        await _settle();
-        expect(
-          subject.vm.state.preparationStage,
-          TranscriptPreparationStage.checkingMedia,
-        );
-        run.eventsController.add(
-          ListenGenMachineEvent(
-            sequence: 3,
-            kind: ListenGenEventKind.phase,
-            phase: 'transcribing',
-          ),
-        );
-        await _settle();
-        expect(
-          subject.vm.state.preparationStage,
-          TranscriptPreparationStage.transcribing,
-        );
-        run.eventsController.add(
-          ListenGenMachineEvent(
-            sequence: 4,
-            kind: ListenGenEventKind.completed,
-          ),
-        );
-        await _settle();
-        run.packageCompleter.complete('/tmp/generated.listenpkg');
-        await _settle();
-        // The import is gated, so the surface sits on its importing stage
-        // until the core finishes with the package.
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.preparing);
-        expect(
-          subject.vm.state.preparationStage,
-          TranscriptPreparationStage.importing,
-        );
-        importGate.complete(_receipt(track: _usableTrackA));
-        await future;
-        await _settle();
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-      },
-    );
-
-    test(
-      'a transcript-only package is still ready (no WordTimeline)',
-      () async {
-        final receipt = _receipt(
-          track: _usableTrackA,
-          includeWordTimeline: false,
-        );
-        final repository = _FakePackageRepository(
-          receipt: receipt,
-          runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-        );
-        final subject = _readinessViewModel(
-          tracks: const [],
-          canAutoPrepare: true,
-          repository: repository,
-        );
-        addTearDown(subject.vm.dispose);
-
-        await _runGeneration(subject.vm, repository);
-
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-        expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
-        expect(receipt.resources.map((resource) => resource.kind), [
-          'subtitle_text_track',
-        ]);
-      },
-    );
-
-    test('cancel stops the run and returns to the missing surface', () async {
-      final repository = _FakePackageRepository(
-        runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-      );
+    test('a failed run shows failed and retry recovers', () async {
       final subject = _readinessViewModel(
         tracks: const [],
         canAutoPrepare: true,
-        repository: repository,
       );
       addTearDown(subject.vm.dispose);
 
-      final future = subject.vm.prepareLearningTranscript();
-      await _settle();
-      final run = repository.runs.single;
-      run.eventsController.add(
-        ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
-      );
-      run.eventsController.add(
-        ListenGenMachineEvent(sequence: 1, kind: ListenGenEventKind.started),
-      );
-      await _settle();
-      expect(subject.vm.state.canCancel, isTrue);
-
-      subject.vm.cancel();
-      run.packageCompleter.completeError(
-        const ListenGenProcessFailure('cancelled'),
-      );
-      await future;
-      await _settle();
-
-      expect(run.cancelled, isTrue);
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
-      expect(subject.subtitle.primaryTrack, isNull);
-    });
-
-    test('a retryable generation failure offers retry and recovers', () async {
-      final repository = _FakePackageRepository(
-        receipt: _receipt(track: _usableTrackA),
-        runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-      );
-      final subject = _readinessViewModel(
-        tracks: const [],
-        canAutoPrepare: true,
-        repository: repository,
-      );
-      addTearDown(subject.vm.dispose);
-
-      await _runGeneration(subject.vm, repository, fail: true);
+      var request = subject.vm.prepareLearningTranscript();
+      await _waitForRun(subject.coordinator, subject.repository.genService);
+      final run = subject.repository.genService.lastRun!;
+      run.emitProtocol();
+      run.emitAccepted(attemptId: run.attemptId);
+      run.emitFailed(code: 'generation_failed');
+      await request;
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.failed);
-      expect(subject.vm.state.fingerprintMismatch, isFalse);
       expect(subject.vm.state.canRetry, isTrue);
-      expect(subject.subtitle.primaryTrack, isNull);
+      expect(subject.repository.finalizedFailures, ['generation_failed']);
 
-      final retryFuture = subject.vm.retry();
+      request = subject.vm.retry();
       await _settle();
-      await _runGeneration(subject.vm, repository, pending: retryFuture);
+      final retryRun = subject.repository.genService.lastRun!;
+      retryRun.emitProtocol();
+      retryRun.emitAccepted(attemptId: retryRun.attemptId);
+      retryRun.emitRunning('transcribing media');
+      retryRun.emitCompleted();
+      await request;
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-      expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
+      expect(subject.repository.finalizedSucceeded, 1);
     });
 
-    test('fingerprint mismatch stays an explicit failure', () async {
-      final repository = _FakePackageRepository(
-        importFailure: const ApiFailure(
-          raw: '',
-          code: 'content_package_media_mismatch',
-        ),
-        runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-      );
+    test('cancel stops the run and returns to the missing surface', () async {
       final subject = _readinessViewModel(
         tracks: const [],
         canAutoPrepare: true,
-        repository: repository,
       );
       addTearDown(subject.vm.dispose);
 
-      await _runGeneration(subject.vm, repository);
+      final request = subject.vm.prepareLearningTranscript();
+      await _waitForRun(subject.coordinator, subject.repository.genService);
+      final run = subject.repository.genService.lastRun!;
 
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.failed);
-      expect(subject.vm.state.fingerprintMismatch, isTrue);
-      expect(subject.subtitle.primaryTrack, isNull);
+      subject.vm.cancel();
+      await _settle();
+      await request;
+
+      expect(run.cancelled, isTrue);
+      expect(
+        subject.repository.finalizedFailures,
+        contains('cancelled'),
+      );
+      expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
     });
 
-    test(
-      'a failed preparation never changes the selected transcript',
-      () async {
-        final repository = _FakePackageRepository(
-          importFailure: const ApiFailure(raw: '', code: 'temporary'),
-          runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-        );
-        final subject = _readinessViewModel(
-          tracks: const [_usableTrackA],
-          canAutoPrepare: true,
-          repository: repository,
-        );
-        addTearDown(subject.vm.dispose);
-
-        await subject.vm.selectTrack(_usableTrackA);
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-
-        await _runGeneration(subject.vm, repository);
-
-        expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
-        // The existing selection keeps the ready surface even when a later
-        // preparation attempt fails.
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-      },
-    );
-
-    test('generator unavailable does not start a run', () async {
-      var starts = 0;
-      final repository = _FakePackageRepository(
-        runForAttempt: (attempt) => _FakeRun(attempt: attempt),
-        onStart: () => starts++,
-      );
+    test('an already-completed capability run reads as ready', () async {
       final subject = _readinessViewModel(
         tracks: const [],
-        canAutoPrepare: false,
-        repository: repository,
+        canAutoPrepare: true,
       );
       addTearDown(subject.vm.dispose);
+      subject.repository.capabilities = [_projectionDerivableRead];
 
-      await subject.vm.prepareLearningTranscript();
+      // Complete the read capability directly through the coordinator.
+      final request = subject.coordinator.requestCapability(
+        _mediaOnlyMaterial,
+        MaterialCapability.read,
+      );
+      await _waitForRun(subject.coordinator, subject.repository.genService);
+      final run = subject.repository.genService.lastRun!;
+      run.emitProtocol();
+      run.emitAccepted(attemptId: run.attemptId);
+      run.emitRunning('transcribing media');
+      run.emitCompleted();
+      await request;
+      await _settle();
 
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.unavailable);
-      expect(starts, 0);
-      expect(subject.subtitle.primaryTrack, isNull);
+      expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
     });
-
-    test(
-      'readiness flips unavailable → missing when the readiness input arrives',
-      () {
-        var autoPrepare = false;
-        final trigger = ValueNotifier<int>(0);
-        final subject = _readinessViewModel(
-          tracks: const [],
-          canAutoPrepare: autoPrepare,
-          canAutoPrepareOverride: () => autoPrepare,
-          refreshTrigger: trigger,
-          repository: _FakePackageRepository(),
-        );
-        addTearDown(subject.vm.dispose);
-
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.unavailable);
-
-        // The predicate changed, but the projection must not recompute until
-        // the invalidation seam actually fires — no polling of the predicate.
-        autoPrepare = true;
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.unavailable);
-
-        trigger.value++;
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
-      },
-    );
-
-    test(
-      'readiness flips missing → unavailable when the readiness input leaves',
-      () {
-        var autoPrepare = true;
-        final trigger = ValueNotifier<int>(0);
-        final subject = _readinessViewModel(
-          tracks: const [],
-          canAutoPrepare: autoPrepare,
-          canAutoPrepareOverride: () => autoPrepare,
-          refreshTrigger: trigger,
-          repository: _FakePackageRepository(),
-        );
-        addTearDown(subject.vm.dispose);
-
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
-
-        autoPrepare = false;
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
-
-        trigger.value++;
-        expect(subject.vm.state.phase, TranscriptReadinessPhase.unavailable);
-      },
-    );
   });
 }
 
-/// Drives one generation attempt to its terminal state through the real
-/// journey orchestration. [fail] completes the run with a failed machine
-/// event; otherwise it completes normally and imports. [pending] carries an
-/// already-started run's future (e.g. a retry) instead of starting a new one.
-Future<void> _runGeneration(
-  TranscriptReadinessViewModel vm,
-  _FakePackageRepository repository, {
-  bool fail = false,
-  Future<void>? pending,
-}) async {
-  final future = pending ?? vm.prepareLearningTranscript();
-  await _settle();
-  final run = repository.runs.last;
-  run.eventsController.add(
-    ListenGenMachineEvent(sequence: 0, kind: ListenGenEventKind.protocol),
+({TranscriptReadinessViewModel vm, SubtitleController subtitle, MaterialCapabilityCoordinator coordinator, _FakeCapabilityRepository repository})
+_readinessViewModel({
+  required List<SubtitleTrack> tracks,
+  required bool canAutoPrepare,
+}) {
+  final harness = _coordinatorHarness(tracks);
+  harness.subtitle.setSubtitleResources(tracks);
+  final repository = _FakeCapabilityRepository();
+  final generator = repository.genService;
+  final coordinator = MaterialCapabilityCoordinator(
+    repository: repository,
+    generator: generator,
+    targetLanguage: () => 'en',
+    compositionStore: CompositionStore(
+      root: Directory.systemTemp.createTempSync('readiness-store-').path,
+    ),
   );
-  run.eventsController.add(
-    ListenGenMachineEvent(sequence: 1, kind: ListenGenEventKind.started),
+  final vm = TranscriptReadinessViewModel(
+    subtitle: harness.subtitle,
+    mediaSession: harness.mediaSession,
+    canAutoPrepare: () => canAutoPrepare,
+    coordinator: coordinator,
+    currentMaterial: () => _mediaOnlyMaterial,
+  )..bind(text: (key) => key);
+  return (
+    vm: vm,
+    subtitle: harness.subtitle,
+    coordinator: coordinator,
+    repository: repository,
   );
-  run.eventsController.add(
-    fail
-        ? ListenGenMachineEvent(
-            sequence: 2,
-            kind: ListenGenEventKind.failed,
-            code: 'generator_failed',
-            message: 'temporary problem',
-          )
-        : ListenGenMachineEvent(
-            sequence: 2,
-            kind: ListenGenEventKind.completed,
-          ),
-  );
-  await _settle();
-  run.packageCompleter.complete('/tmp/generated.listenpkg');
-  await future;
-  await _settle();
 }
 
 Future<void> _settle() async {
@@ -496,43 +308,21 @@ Future<void> _settle() async {
   await Future<void>.delayed(Duration.zero);
 }
 
-({TranscriptReadinessViewModel vm, SubtitleController subtitle})
-_readinessViewModel({
-  required List<SubtitleTrack> tracks,
-  required bool canAutoPrepare,
-  required _FakePackageRepository repository,
-  bool Function()? canAutoPrepareOverride,
-  Listenable? refreshTrigger,
-}) {
-  final harness = _coordinatorHarness(tracks);
-  harness.subtitle.setSubtitleResources(tracks);
-  final vm = TranscriptReadinessViewModel(
-    subtitle: harness.subtitle,
-    mediaSession: harness.mediaSession,
-    canAutoPrepare: canAutoPrepareOverride ?? () => canAutoPrepare,
-    createJourney: () => ContentPackageJourneyViewModel(
-      repository,
-      (track) async {
-        await harness.mediaSession.usePrimarySubtitleTrack(
-          track,
-          nextStatus: 'selected',
-        );
-        await harness.mediaSession.resourceActions.loadSubtitleResources(
-          updateStatus: false,
-        );
-      },
-      (timelineId) async {
-        repository.activatedTimelines.add(timelineId);
-      },
-      mediaId: 'media-1',
-      mediaPath: '/tmp/media.wav',
-      mediaTitle: 'Lesson',
-      mediaKind: 'audio',
-      durationMs: 2200,
-    ),
-    refreshTrigger: refreshTrigger,
-  )..bind(text: (key) => key);
-  return (vm: vm, subtitle: harness.subtitle);
+/// Waits until the production run is generating (the coordinator has
+/// resolved editions and capabilities, started the run, and attached the
+/// event listener — so emitted events cannot be lost).
+Future<void> _waitForRun(
+  MaterialCapabilityCoordinator coordinator,
+  _FakeGenService service,
+) async {
+  for (var attempt = 0; attempt < 200; attempt++) {
+    final view = coordinator.runViewFor(
+      'material-1',
+      MaterialCapability.read,
+    );
+    if (view?.phase == CapabilityRunPhase.generating) return;
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
 }
 
 ({SubtitleController subtitle, MediaSessionCoordinator mediaSession})
@@ -580,30 +370,275 @@ _coordinatorHarness(List<SubtitleTrack> tracks) {
   return (subtitle: subtitle, mediaSession: mediaSession);
 }
 
-ContentPackageImportReceipt _receipt({
-  required SubtitleTrack track,
-  bool includeWordTimeline = true,
-}) => ContentPackageImportReceipt(
-  manifestSha256:
-      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  track: track,
-  resources: [
-    ContentPackageResourceDisposition(
-      resourceId:
-          'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      kind: 'subtitle_text_track',
-      outcome: 'consumed',
-      localIds: const ['track-a'],
+/// A fake generator service with a scriptable run.
+final class _FakeGenService implements ListenGenProcessService {
+  _FakeGenService();
+
+  _FakeGenRun? lastRun;
+
+  @override
+  bool get isConfigured => true;
+
+  @override
+  ContentGeneratorState get state => ContentGeneratorState.ready;
+
+  @override
+  Future<ListenGenProcessRun> start(
+    CapabilityGenerationRequest request,
+  ) async {
+    final run = _FakeGenRun(request);
+    lastRun = run;
+    return run;
+  }
+}
+
+final class _FakeGenRun implements ListenGenProcessRun {
+  _FakeGenRun(this.request);
+
+  final CapabilityGenerationRequest request;
+  final StreamController<GenMachineEvent> _events =
+      StreamController<GenMachineEvent>();
+  final Completer<String> _packagePath = Completer<String>();
+  bool cancelled = false;
+  bool packagePathCompleted = false;
+  int _sequence = 0;
+  final String attemptId = 'attempt-1';
+
+  @override
+  Stream<GenMachineEvent> get events => _events.stream;
+
+  @override
+  Future<String> get packagePath => _packagePath.future;
+
+  bool get eventsClosed => _events.isClosed;
+
+  @override
+  void cancel() {
+    cancelled = true;
+    // Mirrors the real process service: cancellation terminates the run and
+    // its artifact handoff fails with the `cancelled` code.
+    if (!_packagePath.isCompleted) {
+      _packagePath.completeError(_FakeGenFailure('cancelled'));
+    }
+  }
+
+  @override
+  Future<void> cleanUp() async {
+    if (!_events.isClosed) await _events.close();
+  }
+
+  void emitProtocol() => _events.add(
+    GenMachineEvent(
+      sequence: _sequence++,
+      kind: GenEventKind.protocol,
     ),
-    if (includeWordTimeline)
-      ContentPackageResourceDisposition(
-        resourceId:
-            'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-        kind: 'word_timeline',
-        outcome: 'consumed',
-        localIds: const ['word-1'],
+  );
+
+  void emitAccepted({required String attemptId}) => _events.add(
+    GenMachineEvent(
+      sequence: _sequence++,
+      kind: GenEventKind.accepted,
+      attemptId: attemptId,
+    ),
+  );
+
+  void emitRunning(String stage) => _events.add(
+    GenMachineEvent(
+      sequence: _sequence++,
+      kind: GenEventKind.running,
+      stage: stage,
+    ),
+  );
+
+  void emitCompleted() {
+    _events.add(
+      GenMachineEvent(
+        sequence: _sequence++,
+        kind: GenEventKind.completed,
+        packageSha256: _packageSha,
       ),
+    );
+    _packagePath.complete('/tmp/generated.content-package.zip');
+    packagePathCompleted = true;
+  }
+
+  void emitCompletedWithoutSha() {
+    _events.add(
+      GenMachineEvent(
+        sequence: _sequence++,
+        kind: GenEventKind.completed,
+      ),
+    );
+  }
+
+  void emitFailed({required String code}) {
+    _events.add(
+      GenMachineEvent(
+        sequence: _sequence++,
+        kind: GenEventKind.failed,
+        code: code,
+        message: code,
+      ),
+    );
+    _packagePath.completeError(_FakeGenFailure(code));
+  }
+
+  String get _packageSha =>
+      'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+}
+
+final class _FakeGenFailure implements Exception {
+  const _FakeGenFailure(this.code);
+  final String code;
+}
+
+/// The scriptable capability + package-lifecycle repository the coordinator
+/// drives.
+final class _FakeCapabilityRepository implements CapabilityRepository {
+  _FakeCapabilityRepository();
+
+  final _FakeGenService genService = _FakeGenService();
+  List<MaterialCapabilityProjection> capabilities = [_projectionDerivableRead];
+  List<LearningEdition> editions = [];
+  int finalizedSucceeded = 0;
+  final List<String> finalizedFailures = [];
+  final List<String> adoptedReleases = [];
+
+  @override
+  ApiFailure failureDetail(Object error) =>
+      ApiFailure(raw: '', code: '$error');
+
+  @override
+  Future<MaterialDetails> readMaterial(String materialId) async =>
+      _mediaOnlyMaterial;
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listCapabilities(
+    String materialId,
+  ) async => capabilities;
+
+  @override
+  Future<CapabilityAttempt> startAttempt(
+    String materialId,
+    String capability,
+  ) async => CapabilityAttempt(
+    attemptId: 'attempt-1',
+    status: 'running',
+    startedAtMs: 1,
+    finishedAtMs: null,
+    failureReason: null,
+    producerToolId: null,
+    producerToolVersion: null,
+  );
+
+  @override
+  Future<CapabilityAttempt> finalizeAttempt({
+    required String materialId,
+    required String attemptId,
+    required bool succeeded,
+    String? failureReason,
+    String? toolId,
+    String? toolVersion,
+  }) async {
+    if (succeeded) {
+      finalizedSucceeded++;
+    } else {
+      finalizedFailures.add(failureReason ?? 'unknown');
+    }
+    return CapabilityAttempt(
+      attemptId: attemptId,
+      status: succeeded ? 'succeeded' : 'failed',
+      startedAtMs: 1,
+      finishedAtMs: 2,
+      failureReason: failureReason,
+      producerToolId: toolId,
+      producerToolVersion: toolVersion,
+    );
+  }
+
+  @override
+  Future<LearningEdition> installPackage(
+    String materialId,
+    String packagePath,
+  ) async => _edition;
+
+  @override
+  Future<List<LearningEdition>> listEditions(String materialId) async =>
+      editions;
+
+  @override
+  Future<LearningEdition> adoptEdition(
+    String materialId,
+    String releaseId,
+  ) async {
+    adoptedReleases.add(releaseId);
+    return _edition;
+  }
+}
+
+const _projectionDerivableRead = MaterialCapabilityProjection(
+  capability: MaterialCapability.read,
+  status: MaterialCapabilityStatus.derivable,
+  latestAttempt: null,
+);
+
+final _edition = LearningEdition(
+  materialId: 'material-1',
+  materialRevisionId: 'revision-1',
+  editionId: 'edition:material-1',
+  releaseId: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  title: 'Lesson',
+  targetLanguage: 'en',
+  supportLanguages: [],
+  installedAtMs: 1,
+  adoptedAtMs: 2,
+  adopted: true,
+  resources: [
+    LearningEditionResource(
+      resourceId:
+          'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      kind: 'structured_reading',
+      role: 'base',
+      required: true,
+      availability: 'available',
+      reviewStatus: 'machine_checked',
+      contentLanguage: 'en',
+      supportLanguages: [],
+    ),
   ],
+  renditions: [],
+);
+
+final _mediaOnlyMaterial = MaterialDetails(
+  material: const LearningMaterial(
+    id: 'material-1',
+    currentRevisionId: 'revision-1',
+    retainedAtMs: 1,
+    createdAtMs: 0,
+    updatedAtMs: 0,
+  ),
+  currentRevision: MaterialRevision(
+    id: 'revision-1',
+    materialId: 'material-1',
+    title: 'Lesson',
+    sourceAssets: const [],
+    documentRenditions: const [],
+    mediaRenditions: const [
+      MediaRendition(
+        id: 'media-rendition-1',
+        origin: RenditionOrigin.source,
+        kind: MediaRenditionKind.audio,
+        mediaType: 'audio/wav',
+        fingerprint: 'fingerprint',
+        availability: MediaRenditionAvailability.available,
+        mediaId: 'media-1',
+        mediaSha256: null,
+        mediaByteSize: null,
+      ),
+    ],
+    createdAtMs: 0,
+  ),
+  shape: MaterialShape.audio,
 );
 
 const _usableTrackA = SubtitleTrack(
@@ -669,77 +704,6 @@ const _archivedTrack = SubtitleTrack(
     ),
   ],
 );
-
-final class _FakePackageRepository implements ContentPackageRepository {
-  _FakePackageRepository({
-    this.receipt,
-    this.importFailure,
-    this.runForAttempt,
-    this.onStart,
-    this.importGate,
-  });
-
-  final ContentPackageImportReceipt? receipt;
-  final ApiFailure? importFailure;
-  final _FakeRun Function(int attempt)? runForAttempt;
-  final void Function()? onStart;
-  final Completer<ContentPackageImportReceipt>? importGate;
-  final List<_FakeRun> runs = [];
-  final List<String> activatedTimelines = [];
-  int _attempt = 0;
-
-  @override
-  bool get coreAvailable => true;
-  @override
-  bool get generatorConfigured => true;
-  @override
-  ContentGeneratorState get generatorState => ContentGeneratorState.ready;
-  @override
-  ApiFailure failureDetail(Object error) =>
-      error is ApiFailure ? error : ApiFailure(raw: '', code: '$error');
-  @override
-  Future<String?> pickPackage() async => null;
-  @override
-  Future<ContentPackageImportReceipt> importPackage({
-    required String mediaId,
-    required String packagePath,
-  }) async {
-    if (importFailure != null) throw importFailure!;
-    if (importGate != null) return importGate!.future;
-    return receipt!;
-  }
-
-  @override
-  Future<ListenGenProcessRun> startGeneration(
-    ContentPackageGenerationRequest request,
-  ) async {
-    onStart?.call();
-    final attempt = ++_attempt;
-    final run = runForAttempt?.call(attempt) ?? _FakeRun(attempt: attempt);
-    runs.add(run);
-    return run;
-  }
-}
-
-final class _FakeRun implements ListenGenProcessRun {
-  _FakeRun({required int attempt}) : packageSha = 'run-$attempt';
-
-  final String packageSha;
-  final eventsController = StreamController<ListenGenMachineEvent>();
-  final packageCompleter = Completer<String>();
-  bool cancelled = false;
-
-  @override
-  Stream<ListenGenMachineEvent> get events => eventsController.stream;
-  @override
-  Future<String> get packagePath => packageCompleter.future;
-  @override
-  void cancel() => cancelled = true;
-  @override
-  Future<void> cleanUp() async {
-    await eventsController.close();
-  }
-}
 
 final class _FakeResourceRepository implements ResourceRepository {
   _FakeResourceRepository(this.tracks);

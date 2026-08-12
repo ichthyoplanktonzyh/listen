@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/material_capability_coordinator.dart';
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
+import '../../models/learning_material.dart';
+import '../../models/material_capability.dart';
 import '../../models/personal_library.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
@@ -31,6 +34,10 @@ class PersonalLibrarySection extends StatelessWidget {
     required this.onStartIntensive,
     required this.onSetIntent,
     required this.onToggleFamiliarSupply,
+    this.capabilityCoordinator,
+    this.onRequestCapability,
+    this.onCancelCapability,
+    this.onOpenComposition,
   });
 
   /// Null while the first load is in flight; empty when the library is empty.
@@ -48,12 +55,30 @@ class PersonalLibrarySection extends StatelessWidget {
   final void Function(PersonalLibraryEntry entry, String? intent) onSetIntent;
   final void Function(bool enabled) onToggleFamiliarSupply;
 
+  /// When present, rows surface the capability completion states (derivable,
+  /// generating with progress, failed attempt) and their request/retry/
+  /// cancel actions.
+  final MaterialCapabilityCoordinator? capabilityCoordinator;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )? onRequestCapability;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )? onCancelCapability;
+  final void Function(PersonalLibraryEntry entry)? onOpenComposition;
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final loaded = entries;
     if (loaded == null) return const SizedBox.shrink();
     final groups = _groupEntries(loaded);
+    final requestCapability = onRequestCapability;
+    final cancelCapability = onCancelCapability;
+    final openComposition = onOpenComposition;
+    final coordinator = capabilityCoordinator;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -115,6 +140,23 @@ class PersonalLibrarySection extends StatelessWidget {
                 onStartExtensive: () => onStartExtensive(entry),
                 onStartIntensive: () => onStartIntensive(entry),
                 onSetIntent: (intent) => onSetIntent(entry, intent),
+                readRun: coordinator?.runViewFor(
+                  entry.materialId,
+                  MaterialCapability.read,
+                ),
+                listenRun: coordinator?.runViewFor(
+                  entry.materialId,
+                  MaterialCapability.listen,
+                ),
+                onRequestCapability: requestCapability == null
+                    ? null
+                    : (capability) => requestCapability(entry, capability),
+                onCancelCapability: cancelCapability == null
+                    ? null
+                    : (capability) => cancelCapability(entry, capability),
+                onOpenComposition: openComposition == null
+                    ? null
+                    : () => openComposition(entry),
               ),
               const SizedBox(height: ListenSpacing.gap6),
             ],
@@ -222,6 +264,11 @@ class _LibraryRow extends StatelessWidget {
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
+    this.readRun,
+    this.listenRun,
+    this.onRequestCapability,
+    this.onCancelCapability,
+    this.onOpenComposition,
   });
 
   final PersonalLibraryEntry entry;
@@ -232,6 +279,11 @@ class _LibraryRow extends StatelessWidget {
   final VoidCallback onStartExtensive;
   final VoidCallback onStartIntensive;
   final void Function(String? intent) onSetIntent;
+  final CapabilityRunView? readRun;
+  final CapabilityRunView? listenRun;
+  final void Function(MaterialCapability capability)? onRequestCapability;
+  final void Function(MaterialCapability capability)? onCancelCapability;
+  final VoidCallback? onOpenComposition;
 
   @override
   Widget build(BuildContext context) {
@@ -240,6 +292,9 @@ class _LibraryRow extends StatelessWidget {
     final primaryMedia = entry.primaryMedia;
     final fit = entry.fit;
     final duration = primaryMedia?.media.durationMs;
+    final requestCapability = onRequestCapability;
+    final cancelCapability = onCancelCapability;
+    final openComposition = onOpenComposition;
     // A mixed row never guesses from a bare tap: its capabilities are the
     // explicit buttons. Single-capability rows keep the row tap as a shortcut.
     final VoidCallback? onRowTap = entry.canRead && entry.canListenOrWatch
@@ -399,6 +454,35 @@ class _LibraryRow extends StatelessWidget {
                       ],
                     ),
                   ],
+                  if (requestCapability != null &&
+                      !entry.canRead &&
+                      entry.canListenOrWatch)
+                    _CapabilityAction(
+                      run: readRun,
+                      requestLabel: l.text('capabilityRequestRead'),
+                      onRequest: () => requestCapability(MaterialCapability.read),
+                      onCancel: cancelCapability == null
+                          ? null
+                          : () => cancelCapability(MaterialCapability.read),
+                      onRetry: () => requestCapability(MaterialCapability.read),
+                      onOpen: openComposition,
+                    ),
+                  if (requestCapability != null &&
+                      !entry.canListen &&
+                      entry.canRead)
+                    _CapabilityAction(
+                      run: listenRun,
+                      requestLabel: l.text('capabilityRequestListen'),
+                      onRequest: () =>
+                          requestCapability(MaterialCapability.listen),
+                      onCancel: cancelCapability == null
+                          ? null
+                          : () =>
+                                cancelCapability(MaterialCapability.listen),
+                      onRetry: () =>
+                          requestCapability(MaterialCapability.listen),
+                      onOpen: openComposition,
+                    ),
                 ],
               ),
             ],
@@ -406,6 +490,92 @@ class _LibraryRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// One capability completion action on a library row: request when derivable,
+/// progress + cancel while generating, retry after a failed attempt, open the
+/// adopted composition when complete. Rendered only for derivable directions
+/// (a media-only row's Read, a document-only row's Listen).
+class _CapabilityAction extends StatelessWidget {
+  const _CapabilityAction({
+    required this.run,
+    required this.requestLabel,
+    required this.onRequest,
+    this.onCancel,
+    this.onRetry,
+    this.onOpen,
+  });
+
+  final CapabilityRunView? run;
+  final String requestLabel;
+  final VoidCallback onRequest;
+  final VoidCallback? onCancel;
+  final VoidCallback? onRetry;
+  final VoidCallback? onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final run = this.run;
+    if (run == null || run.phase == CapabilityRunPhase.idle) {
+      return TextButton(
+        key: const Key('capability-request'),
+        onPressed: onRequest,
+        child: Text(requestLabel),
+      );
+    }
+    switch (run.phase) {
+      case CapabilityRunPhase.resolving ||
+            CapabilityRunPhase.generating ||
+            CapabilityRunPhase.installing ||
+            CapabilityRunPhase.adopting:
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              run.stage ?? l.text('capabilityInProgress'),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (onCancel != null) ...[
+              const SizedBox(width: ListenSpacing.gap4),
+              IconButton(
+                key: const Key('capability-cancel'),
+                tooltip: l.text('cancel'),
+                visualDensity: VisualDensity.compact,
+                iconSize: ListenIconSize.control,
+                onPressed: onCancel,
+                icon: Icon(
+                  Icons.close,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        );
+      case CapabilityRunPhase.failed:
+        return TextButton(
+          key: const Key('capability-retry'),
+          onPressed: onRetry ?? onRequest,
+          child: Text(l.text('retry')),
+        );
+      case CapabilityRunPhase.completed:
+        if (onOpen == null) return const SizedBox.shrink();
+        return TextButton(
+          key: const Key('capability-open-composition'),
+          onPressed: onOpen,
+          child: Text(l.text('capabilityOpenComposition')),
+        );
+      case CapabilityRunPhase.cancelled:
+      case CapabilityRunPhase.idle:
+        return TextButton(
+          key: const Key('capability-request'),
+          onPressed: onRequest,
+          child: Text(requestLabel),
+        );
+    }
   }
 }
 

@@ -6,14 +6,20 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/models/content_package.dart';
+import 'package:llplayer_next/controllers/material_capability_coordinator.dart';
+import 'package:llplayer_next/data/repositories/capability_repository.dart';
+import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/services/composition_store.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 /// Real three-repository round trip: the pinned listen-gen release bundle
-/// produces a `.listenpkg` from the App's own fixtures, and the pinned Core
-/// imports it as a candidate-only receipt.
+/// produces a Content Package v3 from a capability request, and the pinned
+/// Core installs it as a candidate and then adopts it as the Learning Edition.
+/// The coordinator drives the whole product path: resolution, durable attempt,
+/// production, candidate installation, adoption, and attempt finalize.
 ///
 /// This exercises live subprocesses (the verified `.pyz` and the Core
 /// `api-http` binary), so it is skipped unless `LISTEN_PACKAGE_E2E=1`. Drive it
@@ -25,7 +31,8 @@ void main() {
   final runE2e = Platform.environment['LISTEN_PACKAGE_E2E'] == '1';
 
   test(
-    'pinned Gen bundle to Core import round trips as a candidate',
+    'pinned Gen 0.5.0 bundle to Core 4.0 round trips through capability '
+    'production, installation, and adoption',
     () async {
       // TestWidgetsFlutterBinding installs an HttpOverrides that stubs every
       // request to status 400. This test talks to a real Core sidecar, so drop
@@ -59,10 +66,10 @@ void main() {
         reason: 'LISTEN_GEN_RELEASE_MANIFEST must point at the pinned manifest',
       );
       final verified = await release.verify();
-      expect(verified.toolVersion, '0.4.0');
+      expect(verified.toolVersion, '0.5.0');
       expect(
         verified.artifactSha256,
-        'sha256:47cef5bb9c1711432db1bcd285c1f0e4f637842d1ef199e13abeef83ca46cf63',
+        'sha256:946c0b40a2d4d4ccd32915b5f54ac58644755b24a127af637f8a460819cb7ef5',
       );
 
       final generator = LocalListenGenProcessService(releaseService: release);
@@ -70,181 +77,190 @@ void main() {
         generator.isConfigured,
         isTrue,
         reason:
-            'LISTEN_GEN_PROVIDER_ARGUMENTS must carry the fixture provider argv',
+            'LISTEN_GEN_RELEASE_MANIFEST must be configured for this round trip',
       );
 
-      final api = await LocalApi.connect();
-      ListenGenProcessRun? run;
-      try {
-        // The round trip exercises package import, not a learner Keep.
-        final media = await api.registerMedia(mediaPath, retain: false);
+      // Provider argv comes from the gate script (fixture ASR against the
+      // pinned sample.asr.json); a local fallback keeps the test self-contained.
+      final providerArguments = Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS'] == null
+          ? [
+              '--provider',
+              'fixture',
+              '--fixture',
+              '$fixtureRoot/sample.asr.json',
+            ]
+          : (jsonDecode(
+                  Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS']!) as List<dynamic>)
+              .cast<String>();
 
-        run = await generator.start(
-          ContentPackageGenerationRequest(
-            mediaPath: mediaPath,
-            title: 'Round trip lesson',
-            mediaKind: 'audio',
-            durationMs: 2200,
-            createdAtMs: 1785542400000,
+      final api = await LocalApi.connect();
+      try {
+        // Register the fixture media, then resolve the material Core bound to
+        // it. The material id and current revision anchor the round trip.
+        final media = await api.registerMedia(mediaPath, retain: false);
+        final material = await api.resolveMaterialForMedia(media.id);
+
+        final coordinator = MaterialCapabilityCoordinator(
+          repository: LocalCapabilityRepository(() => api),
+          generator: generator,
+          targetLanguage: () => 'en-US',
+          mediaFilePath: (rendition) =>
+              rendition.mediaId == media.id ? mediaPath : null,
+          providerArguments: providerArguments,
+        );
+
+        // The fresh material has no adopted composition and no derivable
+        // projection yet: the coordinator must resolve through production.
+        final outcome = await coordinator.requestCapability(
+          material,
+          MaterialCapability.read,
+        );
+        if (outcome is CapabilityFailed) {
+          final error = outcome.error;
+          if (error is ListenGenProcessFailure) {
+            fail('coordinator failed: ${error.code} ${error.message}');
+          }
+          fail('coordinator failed: $error');
+        }
+        expect(outcome, isA<CapabilityAvailable>());
+
+        final edition = (outcome as CapabilityAvailable).edition!;
+
+        // ── Edition assertions ──
+        expect(edition.materialId, material.material.id);
+        expect(edition.adopted, isTrue);
+        expect(edition.adoptedAtMs, isNotNull);
+
+        // The read derivation produced a playable media rendition plus the
+        // document text, structured reading, and time alignment resources.
+        expect(edition.providesRead, isTrue);
+        expect(
+          edition.renditions.map((rendition) => rendition.kind),
+          contains('media'),
+        );
+        final resourceKinds =
+            edition.resources.map((resource) => resource.kind).toSet();
+        expect(
+          resourceKinds,
+          containsAll(const [
+            'document_text',
+            'structured_reading',
+            'anchor_time_alignment',
+          ]),
+        );
+
+        // ── Durable attempt assertions ──
+        final projections = await api.listMaterialCapabilities(
+          material.material.id,
+        );
+        final read = projections.singleWhere(
+          (projection) => projection.capability == MaterialCapability.read,
+        );
+        expect(read.status, MaterialCapabilityStatus.available);
+        expect(read.latestAttempt?.status, 'succeeded');
+        expect(read.latestAttempt?.producerToolId, 'listen-gen');
+        expect(read.latestAttempt?.producerToolVersion, '0.5.0');
+
+        // Re-requesting resolves through the adopted composition: no new
+        // attempt is opened and the same edition comes back.
+        final replay = await coordinator.requestCapability(
+          material,
+          MaterialCapability.read,
+        );
+        expect(replay, isA<CapabilityAvailable>());
+        expect(
+          (replay as CapabilityAvailable).edition!.releaseId,
+          edition.releaseId,
+        );
+        coordinator.dispose();
+      } finally {
+        await api.close();
+      }
+    },
+    skip: runE2e
+        ? false
+        : 'Set LISTEN_PACKAGE_E2E=1 for the real three-repository round trip',
+  );
+
+  test(
+    'a document material produces listen through the fake TTS provider and '
+    'its derived audio resolves from the retained carrier',
+    () async {
+      HttpOverrides.global = null;
+
+      final release = LocalListenGenReleaseService();
+      final verified = await release.verify();
+      expect(verified.toolVersion, '0.5.0');
+
+      final generator = LocalListenGenProcessService(releaseService: release);
+      final api = await LocalApi.connect();
+      final storeRoot = Directory.systemTemp.createTempSync('e2e-store-');
+      final coordinator = MaterialCapabilityCoordinator(
+        repository: LocalCapabilityRepository(() => api),
+        generator: generator,
+        targetLanguage: () => 'en-US',
+        providerArguments: const ['--tts-provider', 'fake'],
+        compositionStore: CompositionStore(root: storeRoot.path),
+      );
+      try {
+        final created = await api.createLearningMaterial(
+          CreateLearningMaterialInput(
+            title: 'Document listen lesson',
+            sourceAssets: const [],
+            documentRenditions: [
+              DocumentRenditionInput(
+                mediaType: 'text/plain',
+                text: 'Listen, carefully! Words matter.',
+                language: 'en',
+              ),
+            ],
+            mediaRenditions: const [],
           ),
         );
 
-        final eventsFuture = run.events.toList();
-        final packagePath = await run.packagePath;
-        final events = await eventsFuture;
-
-        // ── Gen protocol assertions ──
-        expect(events.first.kind, ListenGenEventKind.protocol);
-        final terminals = events
-            .where(
-              (event) =>
-                  event.kind == ListenGenEventKind.completed ||
-                  event.kind == ListenGenEventKind.failed ||
-                  event.kind == ListenGenEventKind.cancelled,
-            )
-            .toList(growable: false);
-        expect(terminals, hasLength(1));
-        expect(terminals.single.kind, ListenGenEventKind.completed);
-        expect(events.last.kind, ListenGenEventKind.completed);
-
-        final packageBytes = await File(packagePath).readAsBytes();
-        expect(packageBytes, isNotEmpty);
-        expect(
-          'sha256:${sha256.convert(packageBytes)}',
-          events.last.packageSha256,
+        final outcome = await coordinator.requestCapability(
+          created,
+          MaterialCapability.listen,
         );
-
-        // ── Core import assertions (candidate-only) ──
-        final receipt = await api.importContentPackage(media.id, packagePath);
-        expect(
-          RegExp(r'^sha256:[0-9a-f]{64}$').hasMatch(receipt.manifestSha256),
-          isTrue,
-        );
-        expect(receipt.track.mediaId, media.id);
-        // The pinned Core labels a package-imported track with the resource
-        // package schema it came from, not a generic "content-package".
-        expect(receipt.track.source, 'listen-resource-package-v1');
-        expect(receipt.track.status, 'available');
-
-        expect(
-          receipt.track.cues.map((cue) => cue.text),
-          containsAllInOrder(const ['Listen, carefully!', 'Words matter.']),
-        );
-
-        final byKind = {
-          for (final resource in receipt.resources) resource.kind: resource,
-        };
-        expect(
-          byKind.keys,
-          containsAll(const [
-            'subtitle_text_track',
-            'word_timeline',
-            'phone_timeline',
-            'sense_group_analysis',
-            'word_acoustics',
-            'prosody_analysis',
-          ]),
-        );
-        expect(byKind, hasLength(6));
-        for (final resource in byKind.values) {
-          expect(resource.outcome, 'consumed');
+        if (outcome is CapabilityFailed) {
+          final error = outcome.error;
+          if (error is ListenGenProcessFailure) {
+            fail('listen failed: ${error.code} ${error.message}');
+          }
+          fail('listen failed: $error');
         }
-        for (final kind in const [
-          'subtitle_text_track',
-          'word_timeline',
-          'phone_timeline',
-          'sense_group_analysis',
-          'prosody_analysis',
-        ]) {
-          expect(
-            byKind[kind]!.localIds,
-            isNotEmpty,
-            reason: '$kind should be consumed as a candidate',
-          );
-        }
+        expect(outcome, isA<CapabilityAvailable>());
+        final edition = (outcome as CapabilityAvailable).edition!;
+        expect(edition.adopted, isTrue);
+
+        // The fake TTS derivation produced a playable media rendition and the
+        // synchronized alignment resources.
+        expect(edition.hasAvailableMediaRendition, isTrue);
+        expect(edition.providesSynchronizedReadListen, isTrue);
         expect(
-          byKind['word_acoustics']!.localIds,
-          isEmpty,
-          reason: 'word acoustics is consumed into the LLTimeline artifact',
+          edition.resources.map((resource) => resource.kind),
+          containsAll(const ['document_text', 'anchor_time_alignment']),
         );
 
-        // The pinned Core stamps the specific producing component at the
-        // pinned tool version. The word timeline must come from the
-        // alignment stage (`listen-gen.alignment`), not from the ASR-supplied
-        // timing — the aligned package is what this round trip proves.
-        final subtitle = byKind['subtitle_text_track']!;
-        expect(
-          subtitle.localIds,
-          isNotEmpty,
-          reason: 'subtitle_text_track should be consumed as a candidate',
+        // The retained carrier resolves the produced audio for the player.
+        final store = CompositionStore(root: storeRoot.path);
+        final composition = await store.resolve(
+          materialId: created.material.id,
+          releaseId: edition.releaseId,
         );
-        expect(subtitle.provenance?.tool.id, 'listen-gen.asr-package');
-        expect(subtitle.provenance?.tool.version, '0.4.0');
+        expect(composition, isNotNull);
+        expect(composition!.derivedMediaPath, isNotNull);
+        expect(
+          await File(composition.derivedMediaPath!).length(),
+          greaterThan(0),
+        );
+        expect(composition.alignments, isNotEmpty);
+        expect(composition.sentences, isNotEmpty);
 
-        final wordTimeline = byKind['word_timeline']!;
-        expect(
-          wordTimeline.localIds,
-          isNotEmpty,
-          reason: 'word_timeline should be consumed as a candidate',
-        );
-        expect(
-          wordTimeline.provenance?.tool.id,
-          'listen-gen.alignment',
-          reason:
-              'word_timeline must be produced by the alignment stage, not '
-              'the ASR-supplied word timing',
-        );
-        expect(wordTimeline.provenance?.tool.version, '0.4.0');
-
-        expect(
-          byKind['phone_timeline']!.provenance?.tool.id,
-          'listen-gen.phone',
-        );
-        expect(
-          byKind['sense_group_analysis']!.provenance?.tool.id,
-          'listen-gen.sense-groups',
-        );
-        expect(
-          byKind['word_acoustics']!.provenance?.tool.id,
-          'listen-gen.acoustics',
-        );
-        expect(
-          byKind['prosody_analysis']!.provenance?.tool.id,
-          'listen-gen.prosody',
-        );
-        for (final kind in const [
-          'phone_timeline',
-          'sense_group_analysis',
-          'word_acoustics',
-          'prosody_analysis',
-        ]) {
-          expect(byKind[kind]!.provenance?.tool.version, '0.4.0');
-        }
-
-        final exportedTimeline = await api.exportTrackLLTimeline(
-          receipt.track.id,
-        );
-        expect(exportedTimeline.activeWordTimelineId, isNull);
-        expect(exportedTimeline.activePhoneTimelineId, isNull);
-        // The imported prosody analysis is exported as a candidate: it is the
-        // sole prosodic-chunk source but stays unactivated.
-        expect(exportedTimeline.prosodyAnalyses, isNotEmpty);
-        expect(exportedTimeline.activeProsodyAnalysisId, isNull);
-
-        // Candidate-only: this test never selects a subtitle or activates any
-        // imported analysis. Rich prosody stays a candidate and the retired
-        // legacy ChunkTimeline family is absent entirely.
-
-        await run.cleanUp();
-        run = null;
-        expect(
-          await File(packagePath).exists(),
-          isFalse,
-          reason: 'cleanUp must remove the temporary .listenpkg',
-        );
+        coordinator.dispose();
       } finally {
-        await run?.cleanUp();
         await api.close();
+        storeRoot.deleteSync(recursive: true);
       }
     },
     skip: runE2e

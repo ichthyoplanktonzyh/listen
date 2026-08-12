@@ -18,8 +18,8 @@
 set -euo pipefail
 
 readonly CORE_PIN="${VERIFY_ROUNDTRIP_CORE_PIN:-5a65b2735325aac18f1eacb736b8d9676adf59a9}"
-readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-a660946a4410c6c6b6e720ecdd02e7a88d16e5dc}"
-readonly EXPECTED_TEST="pinned Gen bundle to Core import round trips as a candidate"
+readonly GEN_PIN="${VERIFY_ROUNDTRIP_GEN_PIN:-80edcbd7057d4b2e1a7edb8ed9966cd4ecd82e5d}"
+readonly EXPECTED_TEST="pinned Gen 0.5.0 bundle to Core 4.0 round trips through capability production, installation, and adoption"
 
 # Tests prove the gate defaults stay in lockstep with backend.lock.json /
 # listen_gen.lock.json by parsing this script's text
@@ -112,8 +112,8 @@ echo "verify-roundtrip: running focused integration test"
     HOME="$tmp/home" \
     PUB_CACHE="$pub_cache" \
     LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
-    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.4.0/listen-gen-0.4.0.release.json" \
-    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\",\"--aligner\",\"fixture\",\"--alignment-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/alignment-result.json\",\"--sense-groups\",\"fixture\",\"--sense-groups-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sense-group-result.json\",\"--acoustics\",\"fixture\",\"--acoustics-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/acoustics-result.json\",\"--prosody\",\"fixture\",\"--prosody-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/prosody-result.json\",\"--phone\",\"fixture\",\"--phone-fixture\",\"$app_root/test/fixtures/content-package-roundtrip/phone-result.json\"]" \
+    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.5.0/listen-gen-0.5.0.release.json" \
+    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\"]" \
     LISTEN_PACKAGE_E2E=1 \
     flutter test test/integration/listen_gen_core_roundtrip_test.dart \
       --reporter expanded \

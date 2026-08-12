@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/api_failure.dart';
+import '../models/learning_material.dart';
+import '../models/material_capability.dart';
 import '../models/timeline.dart';
-import 'content_package_journey_view_model.dart';
+import 'material_capability_coordinator.dart';
 import 'media_session_coordinator.dart';
 import 'subtitle_controller.dart';
 
@@ -12,7 +14,7 @@ import 'subtitle_controller.dart';
 ///
 /// These are product states, not package-lifecycle states: a user who just
 /// opened a media file should never have to know that behind the scenes a
-/// content package was generated, imported and reconciled.
+/// package was generated, installed and adopted.
 enum TranscriptReadinessPhase {
   /// A learning transcript is selected and the normal transcript UI is up.
   ready,
@@ -23,7 +25,7 @@ enum TranscriptReadinessPhase {
   /// No usable transcript exists; offer to prepare one (or import a file).
   missing,
 
-  /// A preparation run (generate → import → select) is in flight.
+  /// A preparation run (request → generate → install → adopt) is in flight.
   preparing,
 
   /// The last preparation run failed. The failure is typed and retryable per
@@ -35,9 +37,8 @@ enum TranscriptReadinessPhase {
   unavailable,
 }
 
-/// User-facing stage of an in-flight preparation, derived from the generator
-/// machine's phase events. Kept product-shaped: the UI never sees phase
-/// identifiers like `normalizing_audio`.
+/// User-facing stage of an in-flight preparation, derived from the coordinator
+/// run stage. Kept product-shaped: the UI never sees stage identifiers.
 enum TranscriptPreparationStage {
   starting,
   checkingMedia,
@@ -81,18 +82,16 @@ class TranscriptReadinessState {
 /// App-layer projection that owns "the current media's learning transcript"
 /// as a product journey.
 ///
-/// It reuses [ContentPackageJourneyViewModel] for every piece of package
-/// orchestration (process run management, machine events, cancel/retry/
-/// cleanup, import, fingerprint handling) and only projects its lifecycle
-/// onto readiness states. On a successful import it auto-selects the returned
-/// track through the existing primary-track selection, so the user's single
-/// "prepare" intent runs to completion without a second "select subtitle" tap.
+/// It reuses [MaterialCapabilityCoordinator] for the whole completion flow
+/// (resolution, generation through the pinned bundle, installation and
+/// adoption) and projects its run onto readiness states.
 class TranscriptReadinessViewModel extends ChangeNotifier {
   TranscriptReadinessViewModel({
     required this.subtitle,
     required this.mediaSession,
     required this.canAutoPrepare,
-    required this.createJourney,
+    required this.coordinator,
+    required this.currentMaterial,
     Listenable? refreshTrigger,
   })
     // The public seam stays an explicit `refreshTrigger` parameter rather than
@@ -101,6 +100,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     // ignore: prefer_initializing_formals
     : _refreshTrigger = refreshTrigger {
     subtitle.store.addListener(_recompute);
+    coordinator.addListener(_recompute);
     _refreshTrigger?.addListener(_recompute);
     _recompute();
   }
@@ -112,15 +112,14 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   /// configured and the current media is registered with the core.
   final bool Function() canAutoPrepare;
 
-  /// Creates the package journey for the *current* media, or null when the
-  /// media is not ready (no media id/path/duration). Called lazily on the
-  /// first prepare so a media session that never prepares pays no cost.
-  final ContentPackageJourneyViewModel? Function() createJourney;
+  /// The deep completion coordinator.
+  final MaterialCapabilityCoordinator coordinator;
+
+  /// The current media's material, when one is registered.
+  final MaterialDetails? Function() currentMaterial;
   final Listenable? _refreshTrigger;
 
   late String Function(String key) text;
-  ContentPackageJourneyViewModel? _journey;
-  bool _autoSelecting = false;
   bool _disposed = false;
 
   TranscriptReadinessState _state = TranscriptReadinessState();
@@ -158,77 +157,44 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
 
   Future<void> prepareLearningTranscript() async {
     if (!canAutoPrepare()) return;
-    final journey = _ensureJourney();
-    if (journey == null) return;
-    await journey.generateAndImport();
+    final material = currentMaterial();
+    if (material == null) return;
+    await coordinator.requestCapability(material, MaterialCapability.read);
     _recompute();
   }
 
   void cancel() {
-    _journey?.cancel();
+    final material = currentMaterial();
+    if (material == null) return;
+    unawaited(coordinator.cancel(material.material.id, MaterialCapability.read));
     _recompute();
   }
 
   Future<void> retry() async {
-    final journey = _journey;
-    if (journey == null || !journey.canRetry) return;
-    await journey.retry();
+    final material = currentMaterial();
+    if (material == null) return;
+    await coordinator.requestCapability(material, MaterialCapability.read);
     _recompute();
   }
 
   Future<void> importSubtitle() =>
       mediaSession.openSubtitle(secondary: false);
 
-  ContentPackageJourneyViewModel? _ensureJourney() {
-    final existing = _journey;
-    if (existing != null) return existing;
-    final created = createJourney();
-    if (created == null) return null;
-    _journey = created;
-    _journey!.addListener(_onJourneyChanged);
-    return created;
-  }
-
-  void _onJourneyChanged() {
-    final journey = _journey;
-    // The user's intent was "give this media a learning transcript": once the
-    // import lands, its track becomes the selected learning transcript without
-    // a second tap. Core import semantics are untouched — this is the app
-    // composing generate → import → select from one explicit intent.
-    if (!_autoSelecting &&
-        journey != null &&
-        journey.state.phase == ContentPackageJourneyPhase.candidateReady &&
-        journey.state.receipt?.track != null &&
-        journey.state.selectedTrackId == null) {
-      _autoSelecting = true;
-      unawaited(_autoSelectImportedTrack(journey));
-    }
-    _recompute();
-  }
-
-  Future<void> _autoSelectImportedTrack(
-    ContentPackageJourneyViewModel journey,
-  ) async {
-    try {
-      await journey.selectImportedSubtitle();
-    } finally {
-      _autoSelecting = false;
-      _recompute();
-    }
-  }
-
   void _recompute() {
     if (_disposed) return;
-    final journey = _journey;
-    final journeyState = journey?.state;
-    final failure = journeyState?.failure;
+    final material = currentMaterial();
+    final run = material == null
+        ? null
+        : coordinator.runViewFor(material.material.id, MaterialCapability.read);
+    final runFailure = run?.failureCode;
     final phase = switch (subtitle.primaryTrack) {
       != null => TranscriptReadinessPhase.ready,
-      _ when journeyState?.busy ?? false =>
-        TranscriptReadinessPhase.preparing,
-      _ when journeyState?.phase == ContentPackageJourneyPhase.failed ||
-          journeyState?.phase ==
-              ContentPackageJourneyPhase.fingerprintMismatch =>
+      // A completed production run leaves the transcript available as the
+      // adopted composition, even before any subtitle track selection.
+      _ when run?.phase == CapabilityRunPhase.completed =>
+        TranscriptReadinessPhase.ready,
+      _ when run?.busy ?? false => TranscriptReadinessPhase.preparing,
+      _ when run?.phase == CapabilityRunPhase.failed =>
         TranscriptReadinessPhase.failed,
       _ when _usableTracks.isNotEmpty => TranscriptReadinessPhase.choosing,
       _ when canAutoPrepare() => TranscriptReadinessPhase.missing,
@@ -237,13 +203,12 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     final next = TranscriptReadinessState(
       phase: phase,
       preparationStage: phase == TranscriptReadinessPhase.preparing
-          ? _preparationStageOf(journeyState)
+          ? _preparationStageOf(run?.stage)
           : null,
-      failure: failure,
-      fingerprintMismatch:
-          journeyState?.phase == ContentPackageJourneyPhase.fingerprintMismatch,
-      canCancel: journey?.canCancel ?? false,
-      canRetry: journey?.canRetry ?? false,
+      failure: runFailure == null ? null : ApiFailure(raw: runFailure),
+      fingerprintMismatch: false,
+      canCancel: run?.busy ?? false,
+      canRetry: run?.phase == CapabilityRunPhase.failed,
       usableTracks: _usableTracks,
     );
     if (identical(next, _state) ||
@@ -252,7 +217,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
             next.fingerprintMismatch == _state.fingerprintMismatch &&
             next.canCancel == _state.canCancel &&
             next.canRetry == _state.canRetry &&
-            next.failure == _state.failure &&
+            next.failure?.raw == _state.failure?.raw &&
             _sameTracks(next.usableTracks, _state.usableTracks))) {
       return;
     }
@@ -260,33 +225,28 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  TranscriptPreparationStage? _preparationStageOf(
-    ContentPackageJourneyState? journeyState,
-  ) {
-    if (journeyState == null) return null;
-    switch (journeyState.phase) {
-      case ContentPackageJourneyPhase.importing:
-        return TranscriptPreparationStage.importing;
-      case ContentPackageJourneyPhase.generating:
-        switch (journeyState.generatorPhase) {
-          case 'validating':
-            return TranscriptPreparationStage.checkingMedia;
-          case 'probing_media':
-            return TranscriptPreparationStage.readingMedia;
-          case 'normalizing_audio':
-            return TranscriptPreparationStage.preparingAudio;
-          case 'transcribing':
-            return TranscriptPreparationStage.transcribing;
-          case 'building_package':
-            return TranscriptPreparationStage.organizing;
-        }
-        return TranscriptPreparationStage.starting;
-      case ContentPackageJourneyPhase.preparing:
-      case ContentPackageJourneyPhase.retrying:
-        return TranscriptPreparationStage.starting;
-      default:
-        return null;
+  TranscriptPreparationStage? _preparationStageOf(String? stage) {
+    if (stage == null) return TranscriptPreparationStage.starting;
+    final lower = stage.toLowerCase();
+    if (lower.contains('transcrib')) return TranscriptPreparationStage.transcribing;
+    if (lower.contains('decoding') || lower.contains('read')) {
+      return TranscriptPreparationStage.readingMedia;
     }
+    if (lower.contains('normaliz') ||
+        lower.contains('tts') ||
+        lower.contains('synthesi')) {
+      return TranscriptPreparationStage.preparingAudio;
+    }
+    if (lower.contains('validat') || lower.contains('prob')) {
+      return TranscriptPreparationStage.checkingMedia;
+    }
+    if (lower.contains('build') || lower.contains('qualify')) {
+      return TranscriptPreparationStage.organizing;
+    }
+    if (lower.contains('install') || lower.contains('adopt')) {
+      return TranscriptPreparationStage.importing;
+    }
+    return TranscriptPreparationStage.starting;
   }
 
   bool _sameTracks(List<SubtitleTrack> a, List<SubtitleTrack> b) {
@@ -301,12 +261,8 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     subtitle.store.removeListener(_recompute);
+    coordinator.removeListener(_recompute);
     _refreshTrigger?.removeListener(_recompute);
-    final journey = _journey;
-    if (journey != null) {
-      journey.removeListener(_onJourneyChanged);
-      journey.dispose();
-    }
     super.dispose();
   }
 }

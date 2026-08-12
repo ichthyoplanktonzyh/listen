@@ -80,12 +80,12 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
   static const _lockRepository = 'ichthyoplanktonzyh/listen-gen';
   static const _releaseBundleSchema = 'listen_gen.release-bundle.v1';
   static const _toolId = 'listen-gen';
-  static const _machineSchema = 'listen_gen.machine-event.v1';
-  static const _machineVersion = 1;
+  static const _machineSchema = 'listen_gen.machine-event.v2';
+  static const _machineVersion = 2;
   static const _authorityRepository = 'ichthyoplanktonzyh/listen-core';
-  static const _authorityPath = 'contracts/content-package/v1';
-  static const _packageSchema = 'listen.resource-package.v1';
-  static const _contractSchemaVersion = 1;
+  static const _authorityPath = 'contracts/content-package/v3';
+  static const _packageSchema = 'listen.content-package.release.v3';
+  static const _contractSchemaVersion = 3;
   static const _pythonRequires = '>=3.11';
 
   /// The shebang the zipapp must begin with. Binding it means a swapped file
@@ -173,8 +173,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     final contract = read.object(root['content_package_contract']);
     read.exactKeys(contract, const {
       'authority',
-      'manifest_schema_id',
-      'resource_schema_id',
+      'release_schema_id',
       'package_schema',
       'schema_version',
       'canonical_sha256',
@@ -192,8 +191,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     final contractLock = _ContractIdentity(
       authorityRepository: authorityRepository,
       authorityPath: authorityPath,
-      manifestSchemaId: read.string(contract, 'manifest_schema_id'),
-      resourceSchemaId: read.string(contract, 'resource_schema_id'),
+      releaseSchemaId: read.string(contract, 'release_schema_id'),
       packageSchema: packageSchema,
       schemaVersion: contractSchemaVersion,
       canonicalSha256: read.sha256(contract, 'canonical_sha256'),
@@ -383,8 +381,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     final contract = read.object(root['content_package_contract']);
     read.exactKeys(contract, const {
       'authority',
-      'manifest_schema_id',
-      'resource_schema_id',
+      'release_schema_id',
       'package_schema',
       'schema_version',
       'canonical_sha256',
@@ -396,12 +393,8 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     );
     read.expect(read.string(authority, 'path') == lock.contract.authorityPath);
     read.expect(
-      read.string(contract, 'manifest_schema_id') ==
-          lock.contract.manifestSchemaId,
-    );
-    read.expect(
-      read.string(contract, 'resource_schema_id') ==
-          lock.contract.resourceSchemaId,
+      read.string(contract, 'release_schema_id') ==
+          lock.contract.releaseSchemaId,
     );
     read.expect(
       read.string(contract, 'package_schema') == lock.contract.packageSchema,
@@ -632,8 +625,7 @@ final class _ContractIdentity {
   const _ContractIdentity({
     required this.authorityRepository,
     required this.authorityPath,
-    required this.manifestSchemaId,
-    required this.resourceSchemaId,
+    required this.releaseSchemaId,
     required this.packageSchema,
     required this.schemaVersion,
     required this.canonicalSha256,
@@ -641,8 +633,7 @@ final class _ContractIdentity {
 
   final String authorityRepository;
   final String authorityPath;
-  final String manifestSchemaId;
-  final String resourceSchemaId;
+  final String releaseSchemaId;
   final String packageSchema;
   final int schemaVersion;
   final String canonicalSha256;

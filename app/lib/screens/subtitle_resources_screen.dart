@@ -29,7 +29,6 @@ class SubtitleResourcesScreen extends StatefulWidget {
     required this.onActivatePhoneTimeline,
     required this.onArchivePhoneTimeline,
     required this.onDeletePhoneTimeline,
-    this.onOpenContentPackages,
     this.onStartColdStart,
   });
 
@@ -53,7 +52,6 @@ class SubtitleResourcesScreen extends StatefulWidget {
   final Future<void> Function(String timelineId) onArchivePhoneTimeline;
   final Future<void> Function(String timelineId) onDeletePhoneTimeline;
   final VoidCallback? onStartColdStart;
-  final VoidCallback? onOpenContentPackages;
 
   @override
   State<SubtitleResourcesScreen> createState() =>
@@ -76,15 +74,7 @@ class _SubtitleResourcesScreenState extends State<SubtitleResourcesScreen> {
     builder: (context, _) => Scaffold(
       appBar: AppBar(
         title: Text(AppLocalizations.of(context).text('subtitleResources')),
-        actions: [
-          if (widget.onOpenContentPackages != null)
-            IconButton(
-              key: const Key('open-content-packages'),
-              tooltip: AppLocalizations.of(context).text('contentPackageTitle'),
-              onPressed: widget.onOpenContentPackages,
-              icon: const Icon(Icons.inventory_2_outlined),
-            ),
-        ],
+        actions: const [],
       ),
       body: SubtitleResourceManagerPanel(
         mediaId: widget.playerController.mediaId,

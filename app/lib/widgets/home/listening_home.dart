@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/material_capability_coordinator.dart';
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
+import '../../models/learning_material.dart';
 import '../../models/personal_library.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/radii.dart';
@@ -49,6 +51,10 @@ class ListeningHome extends StatefulWidget {
     this.onStartIntensiveEntry,
     this.onSetLibraryIntent,
     this.onToggleFamiliarSupply,
+    this.capabilityCoordinator,
+    this.onRequestCapability,
+    this.onCancelCapability,
+    this.onOpenComposition,
   });
 
   final VoidCallback onOpenMedia;
@@ -83,6 +89,19 @@ class ListeningHome extends StatefulWidget {
   final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
   final void Function(bool enabled)? onToggleFamiliarSupply;
+
+  /// Capability completion wiring for library rows (optional: without it rows
+  /// render today's actions only).
+  final MaterialCapabilityCoordinator? capabilityCoordinator;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )? onRequestCapability;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )? onCancelCapability;
+  final void Function(PersonalLibraryEntry entry)? onOpenComposition;
 
   @override
   State<ListeningHome> createState() => _ListeningHomeState();
@@ -157,6 +176,10 @@ class _ListeningHomeState extends State<ListeningHome> {
           onStartIntensiveEntry: widget.onStartIntensiveEntry,
           onSetLibraryIntent: widget.onSetLibraryIntent,
           onToggleFamiliarSupply: widget.onToggleFamiliarSupply,
+          capabilityCoordinator: widget.capabilityCoordinator,
+          onRequestCapability: widget.onRequestCapability,
+          onCancelCapability: widget.onCancelCapability,
+          onOpenComposition: widget.onOpenComposition,
         ),
       );
     },
@@ -188,6 +211,10 @@ class _HomeContent extends StatelessWidget {
     required this.onStartIntensiveEntry,
     required this.onSetLibraryIntent,
     required this.onToggleFamiliarSupply,
+    this.capabilityCoordinator,
+    this.onRequestCapability,
+    this.onCancelCapability,
+    this.onOpenComposition,
   });
 
   final bool compact;
@@ -224,6 +251,16 @@ class _HomeContent extends StatelessWidget {
   final void Function(PersonalLibraryEntry entry, String? intent)?
   onSetLibraryIntent;
   final void Function(bool enabled)? onToggleFamiliarSupply;
+  final MaterialCapabilityCoordinator? capabilityCoordinator;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )? onRequestCapability;
+  final void Function(
+    PersonalLibraryEntry entry,
+    MaterialCapability capability,
+  )? onCancelCapability;
+  final void Function(PersonalLibraryEntry entry)? onOpenComposition;
 
   @override
   Widget build(BuildContext context) {
@@ -373,6 +410,10 @@ class _HomeContent extends StatelessWidget {
                   onStartIntensive: onStartIntensiveEntry!,
                   onSetIntent: onSetLibraryIntent!,
                   onToggleFamiliarSupply: onToggleFamiliarSupply!,
+                  capabilityCoordinator: capabilityCoordinator,
+                  onRequestCapability: onRequestCapability,
+                  onCancelCapability: onCancelCapability,
+                  onOpenComposition: onOpenComposition,
                 ),
               ],
             ],

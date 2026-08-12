@@ -71,13 +71,14 @@ void main() {
     }
   });
 
-  test('missing-transcript actions open the listen-gen package journey', () {
+  test('missing-transcript actions open the transcript readiness surface', () {
     final main = File('lib/main.dart').readAsStringSync();
-    // The workbench's generate action opens the pinned listen-gen path and
+    // The workbench's generate action opens the readiness surface (which
+    // drives the capability coordinator through resolution/production) and
     // its selection always activates the primary track, so the menu has no
     // secondary whole-media generate entry.
-    expect(main, contains('openContentPackageJourneyFlow'));
-    expect(main, contains('_createContentPackageJourney'));
+    expect(main, contains('_generateSubtitles'));
+    expect(main, contains('prepareLearningTranscript'));
 
     // No whole-media generate/regenerate flow remains to route to a Core job.
     expect(main, isNot(contains('generateSubtitlesFlow')));

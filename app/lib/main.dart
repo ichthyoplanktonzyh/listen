@@ -7,7 +7,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'controllers/auxiliary_audio_controller.dart';
 import 'controllers/backend_event_coordinator.dart';
 import 'controllers/content_channel_coordinator.dart';
-import 'controllers/content_package_journey_view_model.dart';
 import 'controllers/discovery_view_model.dart';
 import 'controllers/document_session_controller.dart';
 import 'controllers/core_session_controller.dart';
@@ -60,11 +59,16 @@ import 'controllers/vocabulary_view_model.dart';
 import 'controllers/cold_start_marking_view_model.dart';
 import 'controllers/writing_channel_coordinator.dart';
 import 'controllers/writing_task_controller.dart';
+import 'controllers/material_capability_coordinator.dart';
 import 'data/repositories/core_repositories.dart';
 import 'data/repositories/composite_discovery_repository.dart';
 import 'data/repositories/discovery_repository.dart';
 import 'data/repositories/podcast_discovery_repository.dart';
+import 'screens/composition_session_screen.dart';
 import 'screens/discovery_home_screen.dart';
+import 'services/listen_gen_process_service.dart';
+import 'services/composition_session_service.dart';
+import 'services/listen_gen_release_service.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
 import 'widgets/navigation/shell_tools_menu.dart';
@@ -310,6 +314,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);
   late final coreRepositories = LocalCoreRepositories(coreTransport);
+
+  /// Resolves adopted composition content for the composition session surface.
+  late final compositionSessionService = CompositionSessionService(
+    repository: coreRepositories.capability,
+  );
   late final coreSessionController = CoreSessionController(
     repository: coreSessionRepository,
     currentMediaId: () => playerController.mediaId,
@@ -463,6 +472,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     extensiveListening: extensiveListeningController,
     repository: coreRepositories.mediaLibrary,
     materialRepository: coreRepositories.learningMaterial,
+  );
+  late final capabilityCoordinator = MaterialCapabilityCoordinator(
+    repository: coreRepositories.capability,
+    generator: LocalListenGenProcessService(
+      releaseService: LocalListenGenReleaseService(),
+    ),
+    // Phase 1 target language: the learning edition's content language
+    // defaults to the app's English learner surface; document renditions
+    // carry their own language in the request.
+    targetLanguage: () => 'en',
+    mediaFilePath: (rendition) {
+      for (final entry
+          in mediaLibraryActions.mediaLibrary ?? const <MediaLibraryEntry>[]) {
+        if (entry.media.id == rendition.mediaId) return entry.media.path;
+      }
+      return null;
+    },
+    providerArguments: const ['--tts-provider', 'say'],
   );
   late final mediaLibraryScan = MediaLibraryScanController(
     scanner: MediaLibraryScanner(
@@ -1071,26 +1098,22 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   /// The workbench's "generate subtitles" action. Whole-media transcription
-  /// jobs are gone; this opens the same pinned listen-gen package journey the
-  /// workbench's missing-transcript surface uses, so generation, import and
-  /// selection run through [ContentPackageJourneyViewModel] with its honest
-  /// prerequisite/error/cancel/retry states. Selecting a generated subtitle
-  /// in the journey always activates it as the primary track — there is no
-  /// secondary whole-media generate entry (secondary manual import and search
-  /// remain, and they are the only secondary sourcing paths).
+  /// jobs and the v1 package journey are gone; this requests the Read
+  /// capability for the current media's material through the deep completion
+  /// coordinator (resolve → derive through the pinned listen-gen bundle →
+  /// install → adopt), and the readiness surface reflects the run.
   Future<void> _generateSubtitles() async {
-    final viewModel = _createContentPackageJourney();
-    if (viewModel == null) {
-      // Unavailable State (CONTEXT.md): a journey needs a media session with
-      // id, path and duration; report the missing prerequisite instead of
-      // swallowing the click.
+    final readiness = _readinessViewModel;
+    if (!readiness.state.canRetry &&
+        !readiness.state.canCancel &&
+        !readiness.canAutoPrepare()) {
+      // Unavailable State (CONTEXT.md): a preparation needs a connected core
+      // with a registered media session; report the missing prerequisite
+      // instead of swallowing the click.
       playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
       return;
     }
-    await openContentPackageJourneyFlow(
-      context: context,
-      createViewModel: () => viewModel,
-    );
+    await readiness.prepareLearningTranscript();
   }
 
   Future<void> _openPhoneticAnalysisCenter() => openPhoneticAnalysisCenterFlow(
@@ -1910,16 +1933,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
 
   Future<void> _openSubtitleResources() {
-    final mediaId = playerController.mediaId;
-    final mediaPath = playerController.mediaPath;
-    final durationMs = playerController.duration.inMilliseconds;
-    final canUseContentPackages =
-        mediaId != null &&
-        mediaPath != null &&
-        mediaPath.isNotEmpty &&
-        durationMs > 0;
-    final ContentPackageJourneyViewModelFactory? packageFactory =
-        canUseContentPackages ? () => _createContentPackageJourney()! : null;
     return openSubtitleResourcesFlow(
       context: context,
       backendAvailable: coreSessionController.state.isConnected,
@@ -1937,49 +1950,26 @@ class _PlayerScreenState extends State<PlayerScreen>
       resourceActions: resourceActions,
       mediaSession: mediaSession,
       onManualReviewTimeline: _openManualReviewTimeline,
-      createContentPackageViewModel: packageFactory,
     );
   }
 
-  /// Builds the package journey for the *current* media. Shared by the legacy
-  /// package screen and the workbench's transcript-preparation flow, so both
-  /// run the exact same generation/import/cancel/retry orchestration.
-  ContentPackageJourneyViewModel? _createContentPackageJourney() {
-    final mediaId = playerController.mediaId;
-    final mediaPath = playerController.mediaPath;
-    final durationMs = playerController.duration.inMilliseconds;
-    if (mediaId == null ||
-        mediaPath == null ||
-        mediaPath.isEmpty ||
-        durationMs <= 0) {
-      return null;
+  /// Opens the adopted composition view of a library material: the produced
+  /// reading structure with derived audio and alignment.
+  Future<void> _openComposition(PersonalLibraryEntry entry) async {
+    if (!coreSessionController.state.isConnected) {
+      playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
+      return;
     }
-    return ContentPackageJourneyViewModel(
-      coreRepositories.contentPackage,
-      (track) async {
-        await mediaSession.usePrimarySubtitleTrack(
-          track,
-          nextStatus: l.text('contentPackageSelected'),
-        );
-        await resourceActions.loadSubtitleResources(updateStatus: false);
-      },
-      (timelineId) async {
-        await coreRepositories.resource.activateWordTimeline(timelineId);
-        final trackId = subtitleController.primaryTrack?.id;
-        if (trackId != null) {
-          try {
-            await resourceActions.loadTimelineResource(trackId);
-          } catch (_) {
-            // Activation is durable Core state. A follow-up refresh is
-            // best-effort and must not report that activation failed.
-          }
-        }
-      },
-      mediaId: mediaId,
-      mediaPath: mediaPath,
-      mediaTitle: widget.pathHelper.basename(mediaPath),
-      mediaKind: _contentPackageMediaKind(mediaPath),
-      durationMs: durationMs,
+    if (!context.mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CompositionSessionScreen(
+          materialId: entry.materialId,
+          materialTitle: entry.title,
+          session: compositionSessionService,
+          coordinator: capabilityCoordinator,
+        ),
+      ),
     );
   }
 
@@ -1989,11 +1979,12 @@ class _PlayerScreenState extends State<PlayerScreen>
         mediaSession: mediaSession,
         canAutoPrepare: () =>
             coreSessionController.state.isConnected &&
-            coreRepositories.contentPackage.generatorConfigured &&
+            capabilityCoordinator.isConfigured &&
             playerController.mediaId != null &&
             (playerController.mediaPath?.isNotEmpty ?? false) &&
             playerController.duration.inMilliseconds > 0,
-        createJourney: _createContentPackageJourney,
+        coordinator: capabilityCoordinator,
+        currentMaterial: () => mediaSession.currentMaterial,
         // The predicate reads core connectivity *and* live player readiness
         // (media id/path/duration). Both can arrive after the workbench first
         // builds — a core reconnect, or duration landing after open — so the
@@ -2003,19 +1994,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           playerController,
         ]),
       )..bind(text: (key) => l.text(key));
-
-  String _contentPackageMediaKind(String? path) {
-    final normalized = path?.toLowerCase() ?? '';
-    return normalized.endsWith('.mp3') ||
-            normalized.endsWith('.wav') ||
-            normalized.endsWith('.m4a') ||
-            normalized.endsWith('.flac') ||
-            normalized.endsWith('.aac') ||
-            normalized.endsWith('.ogg') ||
-            normalized.endsWith('.opus')
-        ? 'audio'
-        : 'video';
-  }
 
   void _openColdStartMarking() => openColdStartMarkingFlow(
     context: context,
@@ -2436,6 +2414,14 @@ class _PlayerScreenState extends State<PlayerScreen>
             ),
             onToggleFamiliarSupply: (enabled) =>
                 unawaited(mediaLibraryActions.toggleFamiliarSupply(enabled)),
+            capabilityCoordinator: capabilityCoordinator,
+            onRequestCapability: (entry, capability) => unawaited(
+              capabilityCoordinator.requestCapability(entry.details, capability),
+            ),
+            onCancelCapability: (entry, capability) => unawaited(
+              capabilityCoordinator.cancel(entry.materialId, capability),
+            ),
+            onOpenComposition: (entry) => unawaited(_openComposition(entry)),
           ),
         ),
         PaneSegment(

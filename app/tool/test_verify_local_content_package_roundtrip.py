@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("verify_local_content_package_roundtrip.sh")
-NAME = "pinned Gen bundle to Core import round trips as a candidate"
+NAME = "pinned Gen 0.5.0 bundle to Core 4.0 round trips through capability production, installation, and adoption"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../controllers/learning_controller.dart';
-import '../../controllers/content_package_journey_view_model.dart';
 import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/cold_start_marking_view_model.dart';
 import '../../controllers/phonetic_analysis_view_model.dart';
@@ -14,14 +13,13 @@ import '../../localization.dart';
 import '../../models/timeline.dart';
 import '../../phonetic_analysis_ui.dart';
 import '../../screens/subtitle_resources_screen.dart';
-import '../../screens/content_package_journey_screen.dart';
 import '../panels/cold_start_marking_sheet.dart';
 
 /// Dialog-driven subtitle-resource flows extracted from the composition root:
 /// delete/export confirmation, the phonetic-analysis center, the resources
-/// screen, cold-start marking, and the content-package journey. Whole-media
-/// subtitle generation is gone: that action opens the content-package journey
-/// (the pinned listen-gen release path) instead of a Core transcription job.
+/// screen, and cold-start marking. Whole-media subtitle generation through
+/// content packages is gone: transcript preparation runs through the material
+/// capability completion flow in the workbench.
 /// Parameter names mirror the host's controller fields.
 
 typedef ColdStartMarkingViewModelFactory =
@@ -29,8 +27,6 @@ typedef ColdStartMarkingViewModelFactory =
       required String trackId,
       required String language,
     });
-typedef ContentPackageJourneyViewModelFactory =
-    ContentPackageJourneyViewModel Function();
 
 class _OwnedNotifierRoute extends StatefulWidget {
   const _OwnedNotifierRoute({required this.notifier, required this.child});
@@ -193,7 +189,6 @@ Future<void> openSubtitleResourcesFlow({
   required ResourceActionsCoordinator resourceActions,
   required MediaSessionCoordinator mediaSession,
   required Future<void> Function() onManualReviewTimeline,
-  ContentPackageJourneyViewModelFactory? createContentPackageViewModel,
 }) async {
   if (!backendAvailable) {
     // Unavailable State (CONTEXT.md): the resources screen is a user
@@ -242,33 +237,6 @@ Future<void> openSubtitleResourcesFlow({
           subtitleController: subtitleController,
           resourceActions: resourceActions,
         ),
-        onOpenContentPackages: createContentPackageViewModel == null
-            ? null
-            : () => unawaited(
-                openContentPackageJourneyFlow(
-                  context: context,
-                  createViewModel: createContentPackageViewModel,
-                ).whenComplete(
-                  () => resourceActions.loadSubtitleResources(
-                    updateStatus: false,
-                  ),
-                ),
-              ),
-      ),
-    ),
-  );
-}
-
-Future<void> openContentPackageJourneyFlow({
-  required BuildContext context,
-  required ContentPackageJourneyViewModelFactory createViewModel,
-}) async {
-  final viewModel = createViewModel();
-  await Navigator.of(context).push<void>(
-    MaterialPageRoute(
-      builder: (_) => _OwnedNotifierRoute(
-        notifier: viewModel,
-        child: ContentPackageJourneyScreen(viewModel: viewModel),
       ),
     ),
   );

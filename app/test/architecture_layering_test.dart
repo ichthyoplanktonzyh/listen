@@ -95,6 +95,10 @@ void main() {
       'lib/widgets/vocabulary/dictionary_inline_clip_player.dart': {
         "import 'package:video_player/video_player.dart';",
       },
+      'lib/widgets/composition/composition_audio_player.dart': {
+        "import 'dart:io';",
+        "import 'package:video_player/video_player.dart';",
+      },
     };
     final offenders = _presentationFiles()
         .expand((file) {
@@ -105,11 +109,11 @@ void main() {
             final isRenderingAdapter =
                 renderingAdapterImports[file.path]?.contains(line) ?? false;
             if (line.contains('/data/repositories/') ||
-                line == "import 'dart:io';" ||
                 line.contains('services/api_service.dart') ||
                 line.contains('package:file_selector/file_selector.dart') ||
                 (!isRenderingAdapter &&
-                    (line.contains('package:desktop_drop/desktop_drop.dart') ||
+                    (line == "import 'dart:io';" ||
+                        line.contains('package:desktop_drop/desktop_drop.dart') ||
                         line.contains(
                           'package:video_player/video_player.dart',
                         )))) {
