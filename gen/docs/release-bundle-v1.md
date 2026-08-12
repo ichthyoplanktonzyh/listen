@@ -102,9 +102,9 @@ python tools/release_bundle.py build \
 Output layout:
 
 ```text
-dist/listen-gen-0.4.0/
-├── listen-gen-0.4.0.pyz
-└── listen-gen-0.4.0.release.json
+dist/listen-gen-0.5.0/
+├── listen-gen-0.5.0.pyz
+└── listen-gen-0.5.0.release.json
 ```
 
 The build is deterministic: identical source, version, and generation rules
@@ -120,7 +120,7 @@ Run the verifier before publishing:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.4.0/listen-gen-0.4.0.release.json
+  dist/listen-gen-0.5.0/listen-gen-0.5.0.release.json
 ```
 
 The verifier strictly parses the manifest — including the complete
@@ -138,8 +138,8 @@ with the bundle pin.
 ## Fixture smoke
 
 ```bash
-python dist/listen-gen-0.4.0/listen-gen-0.4.0.pyz --help
-python dist/listen-gen-0.4.0/listen-gen-0.4.0.pyz package from-media \
+python dist/listen-gen-0.5.0/listen-gen-0.5.0.pyz --help
+python dist/listen-gen-0.5.0/listen-gen-0.5.0.pyz package from-media \
   tests/fixtures/sample-media.wav \
   --provider fixture --fixture tests/fixtures/sample.asr.json \
   --title "Smoke" --media-kind audio --duration-ms 2200 \
