@@ -7,6 +7,8 @@ import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/theme/icon_size.dart';
 import 'package:llplayer_next/widgets/home/personal_library_section.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 MediaLibraryEntry _entry({
   String id = 'media-1',
   String title = 'Media 1',
@@ -52,59 +54,32 @@ PersonalLibraryEntry _mediaRow(
   MediaLibraryEntry entry, {
   String materialId = 'material-1',
 }) => PersonalLibraryEntry(
-  details: MaterialDetails(
-    material: LearningMaterial(
-      id: materialId,
-      currentRevisionId: 'revision-1',
-      retainedAtMs: 42,
-      createdAtMs: 1,
-      updatedAtMs: 2,
-    ),
-    currentRevision: MaterialRevision(
-      id: 'revision-1',
-      materialId: materialId,
-      title: entry.media.title,
-      assets: [
-        MediaRenditionMaterialAsset(
-          id: 'asset-1',
-          mediaId: entry.media.id,
-          mediaKind: MediaRenditionKind.video,
-          fingerprint: 'fp',
-          availability: MediaRenditionAvailability.available,
-        ),
-      ],
-      createdAtMs: 1,
-    ),
+  details: materialDetails(
+    materialId: materialId,
+    title: entry.media.title,
+    documentRenditions: const [],
+    mediaRenditions: [
+      mediaRendition(
+        id: 'asset-1',
+        mediaId: entry.media.id,
+        kind: MediaRenditionKind.video,
+        fingerprint: 'fp',
+      ),
+    ],
     shape: MaterialShape.video,
   ),
   mediaEntries: [entry],
 );
 
-/// A text-only library row: inline document_text, no media at all.
+/// A text-only library row: inline document rendition, no media at all.
 PersonalLibraryEntry _textRow(String id, String title) => PersonalLibraryEntry(
-  details: MaterialDetails(
-    material: LearningMaterial(
-      id: id,
-      currentRevisionId: 'revision-$id',
-      retainedAtMs: 42,
-      createdAtMs: 1,
-      updatedAtMs: 2,
-    ),
-    currentRevision: MaterialRevision(
-      id: 'revision-$id',
-      materialId: id,
-      title: title,
-      assets: [
-        DocumentTextMaterialAsset(
-          id: 'text-$id',
-          text: 'A readable document.',
-          sha256Digest: 'x',
-          byteSize: 22,
-          language: null,
-        ),
-      ],
-      createdAtMs: 1,
-    ),
+  details: materialDetails(
+    materialId: id,
+    revisionId: 'revision-$id',
+    title: title,
+    documentRenditions: [
+      documentRendition(id: 'text-$id', text: 'A readable document.'),
+    ],
     shape: MaterialShape.text,
   ),
   mediaEntries: const [],
@@ -116,36 +91,21 @@ PersonalLibraryEntry _mixedRow(
   String id, {
   String title = 'Mixed',
 }) => PersonalLibraryEntry(
-  details: MaterialDetails(
-    material: LearningMaterial(
-      id: id,
-      currentRevisionId: 'revision-$id',
-      retainedAtMs: 42,
-      createdAtMs: 1,
-      updatedAtMs: 2,
-    ),
-    currentRevision: MaterialRevision(
-      id: 'revision-$id',
-      materialId: id,
-      title: title,
-      assets: [
-        DocumentTextMaterialAsset(
-          id: 'text-$id',
-          text: 'A readable document.',
-          sha256Digest: 'x',
-          byteSize: 22,
-          language: null,
-        ),
-        MediaRenditionMaterialAsset(
-          id: 'asset-$id',
-          mediaId: entry.media.id,
-          mediaKind: MediaRenditionKind.video,
-          fingerprint: 'fp',
-          availability: MediaRenditionAvailability.available,
-        ),
-      ],
-      createdAtMs: 1,
-    ),
+  details: materialDetails(
+    materialId: id,
+    revisionId: 'revision-$id',
+    title: title,
+    documentRenditions: [
+      documentRendition(id: 'text-$id', text: 'A readable document.'),
+    ],
+    mediaRenditions: [
+      mediaRendition(
+        id: 'asset-$id',
+        mediaId: entry.media.id,
+        kind: MediaRenditionKind.video,
+        fingerprint: 'fp',
+      ),
+    ],
     shape: MaterialShape.mixed,
   ),
   mediaEntries: [entry],

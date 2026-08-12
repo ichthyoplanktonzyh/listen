@@ -7,31 +7,50 @@ import '../data/repositories/learning_material_repository.dart';
 import '../models/document_session.dart';
 import '../models/learning_material.dart';
 import '../models/personal_library.dart';
+import '../services/document_decoding/document_format.dart';
 import '../services/document_intake_service.dart';
-import '../services/document_text_projection.dart';
+import '../services/document_reference_store.dart';
+import '../services/document_source_resolver.dart';
+import '../services/managed_asset_store.dart';
 
-/// Owns one direct document session (Stage B): intake (file or pasted text),
-/// material creation through Core 3.2, opening retained library entries, and
-/// Keep/Unkeep membership operations.
+/// Owns one direct document session (Slice 2): intake (file or pasted text),
+/// material creation through the Core 4.0 Source Asset / Document Rendition
+/// boundary, opening retained library entries, Keep/Unkeep membership, and the
+/// exact-byte resolution backing the direct view.
 ///
 /// The controller holds no transport, file-system, or picker implementation:
-/// [DocumentIntakeFileService] and [LearningMaterialRepository] are injected
-/// boundaries. Everything here is latest-request-wins: every open intent and
-/// [close] bumps a session generation, and an async result that arrives late —
-/// after a newer intent, after [close], or after [dispose] — never writes
-/// state.
+/// [DocumentIntakeFileService], [LearningMaterialRepository], the managed
+/// asset store, and the reference map are injected boundaries. Everything here
+/// is latest-request-wins: every open intent and [close] bumps a session
+/// generation, and an async result that arrives late — after a newer intent,
+/// after [close], or after [dispose] — never writes state.
 class DocumentSessionController extends ChangeNotifier {
   DocumentSessionController({
     required this.materialRepository,
     required this.fileService,
     required this.codec,
+    required this.store,
+    required this.referenceStore,
+    required this.sourceResolver,
     this.refreshLibrary,
+    this.referenceInPlace = false,
   });
 
   final LearningMaterialRepository materialRepository;
   final DocumentIntakeFileService fileService;
   final DocumentIntakeCodec codec;
+  final ManagedAssetStoreService store;
+  final DocumentReferenceStore referenceStore;
+
+  /// Resolves a Source Asset's exact bytes for the direct view.
+  final DocumentSourceResolver sourceResolver;
+
   final Future<void> Function()? refreshLibrary;
+
+  /// Whether intake references the picked file in place instead of copying
+  /// into the managed store. Explicit only: never auto-selected, and the
+  /// direct view then depends on the original location.
+  bool referenceInPlace;
 
   DocumentSessionState _state = const DocumentSessionIdle();
   int _generation = 0;
@@ -63,7 +82,7 @@ class DocumentSessionController extends ChangeNotifier {
     // exception is deliberately not stored anywhere the UI can print it.
     final DocumentFileRead read;
     try {
-      read = await fileService.pickAndReadTextFile();
+      read = await fileService.pickAndReadDocumentFile();
     } on Exception {
       if (_stale(generation)) return;
       _setState(
@@ -85,11 +104,22 @@ class DocumentSessionController extends ChangeNotifier {
           ),
         );
       case DocumentFileData(:final path, :final bytes):
+        final format = formatForPath(path);
+        if (format == null) {
+          // The picker only offers supported extensions, but a renamed or
+          // otherwise unsupported file must still fail honestly.
+          _setState(
+            DocumentSessionFailed(
+              DocumentSessionFailure(DocumentSessionFailureKind.unsupported),
+            ),
+          );
+          return;
+        }
         final title = titleFromFileName(fileService.basename(path));
         if (title.trim().isEmpty) {
-          // A basename of ".txt" (or only whitespace around it) leaves no
-          // title. Never invent "Untitled" and never send an empty title to
-          // Core: fail as missingTitle without a create call.
+          // A basename like ".txt" leaves no title. Never invent "Untitled"
+          // and never send an empty title to Core: fail as missingTitle
+          // without a create call.
           _setState(
             DocumentSessionFailed(
               DocumentSessionFailure(DocumentSessionFailureKind.missingTitle),
@@ -101,6 +131,8 @@ class DocumentSessionController extends ChangeNotifier {
           generation: generation,
           title: title,
           bytes: bytes,
+          format: format,
+          sourcePath: path,
         );
       default:
         throw StateError('unexpected DocumentFileRead: $read');
@@ -136,46 +168,72 @@ class DocumentSessionController extends ChangeNotifier {
       generation: generation,
       title: title.trim(),
       bytes: bytes,
+      format: DocumentFormat.plainText,
     );
   }
 
   /// Opens a Personal Library entry for reading. Entries without document
-  /// assets carry no Read intent and are ignored; exactly one asset opens
-  /// directly, several require an explicit choice.
+  /// renditions carry no Read intent and are ignored; exactly one rendition
+  /// opens directly, several require an explicit choice.
   void openLibraryEntry(PersonalLibraryEntry entry) {
-    final assets = entry.documentAssets;
-    if (assets.isEmpty) return;
+    final renditions = entry.documentRenditions;
+    if (renditions.isEmpty) return;
     ++_generation;
-    if (assets.length == 1) {
-      _setState(
-        DocumentSessionReady(
-          details: entry.details,
-          documentAsset: assets.single,
-        ),
+    if (renditions.length == 1) {
+      final rendition = renditions.single;
+      _enterReady(
+        details: entry.details,
+        rendition: rendition,
+        sourceAsset: _sourceAssetFor(entry.details, rendition),
       );
     } else {
       _setState(
         DocumentSessionChoosingAsset(
           details: entry.details,
-          documentAssets: assets,
+          documentRenditions: renditions,
         ),
       );
     }
   }
 
   /// Completes a multi-document library entry: the learner explicitly picks
-  /// one asset; nothing is ever selected silently.
+  /// one rendition; nothing is ever selected silently.
   void chooseDocumentAsset(String assetId) {
     final current = _state;
     if (current is! DocumentSessionChoosingAsset) return;
-    for (final asset in current.documentAssets) {
-      if (asset.id == assetId) {
-        _setState(
-          DocumentSessionReady(details: current.details, documentAsset: asset),
+    for (final rendition in current.documentRenditions) {
+      if (rendition.id == assetId) {
+        _enterReady(
+          details: current.details,
+          rendition: rendition,
+          sourceAsset: _sourceAssetFor(current.details, rendition),
         );
         return;
       }
     }
+  }
+
+  /// The Source Asset bound to [rendition], or the sole Source Asset of the
+  /// revision when the rendition names none.
+  static SourceAsset? _sourceAssetFor(
+    MaterialDetails details,
+    DocumentRendition rendition,
+  ) {
+    final assets = details.currentRevision.sourceAssets;
+    if (assets.isEmpty) return null;
+    final bound = rendition.sourceAssetId;
+    if (bound != null) {
+      for (final asset in assets) {
+        if (asset.id == bound) return asset;
+      }
+    }
+    return assets.length == 1 ? assets.single : null;
+  }
+
+  /// The sole Source Asset of the revision, or null when ambiguous.
+  static SourceAsset? _firstSourceAsset(MaterialDetails details) {
+    final assets = details.currentRevision.sourceAssets;
+    return assets.length == 1 ? assets.single : null;
   }
 
   /// Retries the last failed intent: a failed file open re-picks, a failed
@@ -215,7 +273,8 @@ class DocumentSessionController extends ChangeNotifier {
     _setState(
       DocumentSessionReady(
         details: current.details,
-        documentAsset: current.documentAsset,
+        documentRendition: current.documentRendition,
+        sourceAsset: current.sourceAsset,
         retentionInFlight: true,
       ),
     );
@@ -227,12 +286,13 @@ class DocumentSessionController extends ChangeNotifier {
       if (_state is! DocumentSessionReady) return;
       final ready = _state as DocumentSessionReady;
       if (ready.details.material.id != materialId) return;
-      // Keep the chosen asset: membership changes do not touch revisions, and
-      // the text on screen must not flicker.
+      // Keep the chosen rendition: membership changes do not touch revisions,
+      // and the text on screen must not flicker.
       _setState(
         DocumentSessionReady(
           details: details,
-          documentAsset: ready.documentAsset,
+          documentRendition: ready.documentRendition,
+          sourceAsset: ready.sourceAsset,
         ),
       );
       await refreshLibrary?.call();
@@ -245,7 +305,8 @@ class DocumentSessionController extends ChangeNotifier {
       _setState(
         DocumentSessionReady(
           details: ready.details,
-          documentAsset: ready.documentAsset,
+          documentRendition: ready.documentRendition,
+          sourceAsset: ready.sourceAsset,
           retentionFailure: materialRepository.failureDetail(error),
         ),
       );
@@ -255,6 +316,58 @@ class DocumentSessionController extends ChangeNotifier {
   /// Whether [generation] can still publish: false after [dispose], after
   /// [close], or once a newer intent has started.
   bool _stale(int generation) => _disposed || generation != _generation;
+
+  /// Resolves the exact bytes backing the open document for direct rendering.
+  /// A missing referenced location reports unavailable — it is never a crash
+  /// and never a reason to remove the Material.
+  Future<DocumentSourceBytes> resolveSourceBytes(SourceAsset asset) =>
+      sourceResolver.bytesFor(asset);
+
+  /// Loads the material's capability projection and attaches it to the ready
+  /// state. Latest-request-wins: a stale arrival after [close], a newer open,
+  /// or a newer material is dropped. A failed projection is not a failure of
+  /// the document — the ready state simply stays without it.
+  Future<void> _loadCapabilities(int generation, String materialId) async {
+    try {
+      final projections = await materialRepository.listMaterialCapabilities(
+        materialId,
+      );
+      if (_stale(generation)) return;
+      final current = _state;
+      if (current is! DocumentSessionReady) return;
+      if (current.details.material.id != materialId) return;
+      _setState(
+        DocumentSessionReady(
+          details: current.details,
+          documentRendition: current.documentRendition,
+          sourceAsset: current.sourceAsset,
+          capabilities: projections,
+          retentionInFlight: current.retentionInFlight,
+          retentionFailure: current.retentionFailure,
+        ),
+      );
+    } catch (_) {
+      // The projection is progressive detail; its absence never breaks the
+      // direct view. A failed read stays silent.
+    }
+  }
+
+  /// Enters the ready state and starts the capability load.
+  void _enterReady({
+    required MaterialDetails details,
+    required DocumentRendition? rendition,
+    required SourceAsset? sourceAsset,
+  }) {
+    final generation = _generation;
+    _setState(
+      DocumentSessionReady(
+        details: details,
+        documentRendition: rendition,
+        sourceAsset: sourceAsset,
+      ),
+    );
+    unawaited(_loadCapabilities(generation, details.material.id));
+  }
 
   int _beginOpen() {
     final generation = ++_generation;
@@ -266,10 +379,16 @@ class DocumentSessionController extends ChangeNotifier {
     required int generation,
     required String title,
     required List<int> bytes,
+    required DocumentFormat format,
+    String? sourcePath,
   }) async {
     DocumentIntakeInput input;
     try {
-      input = codec.decodeDocumentText(bytes: bytes, title: title);
+      input = await codec.decodeDocument(
+        bytes: bytes,
+        title: title,
+        format: format,
+      );
     } on DocumentIntakeFailure catch (failure) {
       if (_stale(generation)) return;
       _setState(
@@ -279,24 +398,92 @@ class DocumentSessionController extends ChangeNotifier {
       );
       return;
     }
+
+    // Binding decision: the default Keep copies the exact bytes into the
+    // managed store (verified before the create); Reference in Place records
+    // the original location and binds by the app-owned reference key.
+    var binding = const SourceAssetBinding(
+      type: SourceAssetBindingType.managed,
+    );
+    String? createdStoreCopy;
+    try {
+      if (referenceInPlace && sourcePath != null) {
+        await referenceStore.save(input.sha256Digest, sourcePath);
+        binding = SourceAssetBinding(
+          type: SourceAssetBindingType.referenced,
+          reference: input.sha256Digest,
+        );
+      } else {
+        // Pasted text (or a file with no location) is always copied: there is
+        // no original location to reference.
+        referenceInPlace = false;
+        final copy = await store.copyBytesIntoStore(
+          bytes: bytes,
+          mediaKind: 'document',
+        );
+        createdStoreCopy = copy.createdNew ? copy.path : null;
+      }
+    } on Exception catch (error) {
+      if (_stale(generation)) return;
+      // The store or reference map is unavailable: the document must not
+      // appear to have been kept. The typed failure is honest and the raw
+      // error stays behind the disclosure.
+      _setState(
+        DocumentSessionFailed(
+          DocumentSessionFailure(
+            DocumentSessionFailureKind.apiFailure,
+            apiFailure: materialRepository.failureDetail(error),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final text = input.text;
     try {
       final details = await materialRepository.createLearningMaterial(
         CreateLearningMaterialInput(
           title: input.title,
-          assets: [
-            // Core 3.2 plain-text compatibility projection (the current
-            // executable adapter, not a full Document Rendition schema);
-            // Slice 2 replaces it with the canonical intake path.
-            documentTextAssetInput(input.text),
+          sourceAssets: [
+            SourceAssetInput(
+              mediaType: input.mediaType,
+              byteLength: input.byteLength,
+              sha256Digest: input.sha256Digest,
+              // The binding is an app-owned fact, never a file location the
+              // wire may dereference.
+              binding: binding,
+            ),
           ],
+          documentRenditions: [
+            if (text != null)
+              DocumentRenditionInput(
+                mediaType: input.mediaType,
+                text: text,
+                sourceAssetIndex: 0,
+              ),
+          ],
+          mediaRenditions: const [],
         ),
         retain: const MaterialRetainExplicit(false),
       );
       if (_stale(generation)) return;
-      final asset = matchingDocumentTextAsset(details, input.text);
-      if (asset == null) {
-        // The response holds no document asset whose text matches the
-        // submitted text. Refuse to guess: showing another asset's body as
+      // The create succeeded; a fresh store copy is now owned by the material
+      // and must not be rolled back.
+      createdStoreCopy = null;
+      if (text == null) {
+        // No text layer (e.g. scanned PDF): the Source Asset alone is the
+        // material; direct view renders the bytes, never a fabricated text.
+        _enterReady(
+          details: details,
+          rendition: null,
+          sourceAsset: _firstSourceAsset(details),
+        );
+        return;
+      }
+      final rendition = matchingDocumentRendition(details, text);
+      if (rendition == null) {
+        // The response holds no document rendition whose text matches the
+        // submitted text. Refuse to guess: showing another rendition's body as
         // the picked document breaks direct-view integrity. The diagnostic
         // travels only inside the typed ApiFailure, behind the explicit
         // disclosure; ordinary prose stays localized and stable.
@@ -306,7 +493,7 @@ class DocumentSessionController extends ChangeNotifier {
               DocumentSessionFailureKind.apiFailure,
               apiFailure: materialRepository.failureDetail(
                 StateError(
-                  'create response has no document_text asset matching the '
+                  'create response has no document rendition matching the '
                   'submitted text',
                 ),
               ),
@@ -315,8 +502,30 @@ class DocumentSessionController extends ChangeNotifier {
         );
         return;
       }
-      _setState(DocumentSessionReady(details: details, documentAsset: asset));
+      _enterReady(
+        details: details,
+        rendition: rendition,
+        sourceAsset: _sourceAssetFor(details, rendition),
+      );
     } catch (error) {
+      // The create failed: roll back the store copy only when this call
+      // created it (a deduplicated pre-existing target is shared and stays),
+      // and drop the reference mapping for a failed referenced create.
+      final copy = createdStoreCopy;
+      if (copy != null) {
+        try {
+          await store.deleteStoreCopy(copy);
+        } on Exception {
+          // Rollback is best effort; the failure surface stays typed.
+        }
+      }
+      if (binding.type == SourceAssetBindingType.referenced) {
+        try {
+          await referenceStore.remove(input.sha256Digest);
+        } on Exception {
+          // Best effort.
+        }
+      }
       if (_stale(generation)) return;
       _setState(
         DocumentSessionFailed(
@@ -339,7 +548,30 @@ class DocumentSessionController extends ChangeNotifier {
       DocumentSessionFailureKind.emptyDocument,
     DocumentIntakeFailureKind.unreadable =>
       DocumentSessionFailureKind.unreadable,
+    DocumentIntakeFailureKind.unsupported =>
+      DocumentSessionFailureKind.unsupported,
+    DocumentIntakeFailureKind.corrupt => DocumentSessionFailureKind.corrupt,
+    DocumentIntakeFailureKind.encrypted =>
+      DocumentSessionFailureKind.encrypted,
   };
+
+  /// The created material's source document rendition whose text is
+  /// byte-for-byte the submitted text, or null when no rendition matches.
+  ///
+  /// Core 4.0 may converge an equal-content create onto an already retained
+  /// material; its persisted revision then holds the same text, so an exact
+  /// match still exists. A response without an exact match must be refused by
+  /// the caller, never guessed.
+  static DocumentRendition? matchingDocumentRendition(
+    MaterialDetails details,
+    String text,
+  ) {
+    for (final rendition in details.currentRevision.documentRenditions) {
+      if (rendition.origin != RenditionOrigin.source) continue;
+      if (rendition.text == text) return rendition;
+    }
+    return null;
+  }
 
   void _setState(DocumentSessionState next) {
     if (_disposed) return;

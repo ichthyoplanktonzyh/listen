@@ -3,6 +3,8 @@ import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 /// [PersonalLibraryEntry]: a pure immutable projection of a retained material
 /// over its current revision, joined with the registered-media rows whose ids
 /// the revision mentions.
@@ -10,7 +12,10 @@ void main() {
   test('joins only the media rows whose ids occur in the current revision', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [_rendition('r1', 'media-1'), _rendition('r2', 'media-2')],
+        mediaRenditions: [
+          _rendition('r1', 'media-1'),
+          _rendition('r2', 'media-2'),
+        ],
       ),
       mediaEntries: [
         _mediaEntry('media-1'),
@@ -26,7 +31,10 @@ void main() {
   test('orders joined rows by first appearance in the revision', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [_rendition('r1', 'media-2'), _rendition('r2', 'media-1')],
+        mediaRenditions: [
+          _rendition('r1', 'media-2'),
+          _rendition('r2', 'media-1'),
+        ],
       ),
       mediaEntries: [_mediaEntry('media-1'), _mediaEntry('media-2')],
     );
@@ -39,7 +47,7 @@ void main() {
       details: _details(
         title: 'Reading text',
         shape: MaterialShape.text,
-        assets: [_textAsset('Hello')],
+        documentRenditions: [_textAsset('Hello')],
       ),
       mediaEntries: [_mediaEntry('media-1')],
     );
@@ -48,7 +56,7 @@ void main() {
     expect(entry.shape, MaterialShape.text);
     expect(entry.mediaEntries, isEmpty);
     expect(entry.primaryMedia, isNull);
-    expect(entry.documentAssets.single.text, 'Hello');
+    expect(entry.documentRenditions.single.text, 'Hello');
   });
 
   test('projects title, shape, updated time and document assets', () {
@@ -56,7 +64,7 @@ void main() {
       details: _details(
         title: 'Episode 5',
         updatedAtMs: 4242,
-        assets: [_textAsset('A'), _textAsset('B')],
+        documentRenditions: [_textAsset('A'), _textAsset('B')],
       ),
       mediaEntries: const [],
     );
@@ -67,13 +75,13 @@ void main() {
     expect(entry.shape, MaterialShape.mixed);
     expect(entry.updatedAtMs, 4242);
     expect(entry.isRetained, isTrue);
-    expect(entry.documentAssets.map((asset) => asset.text), ['A', 'B']);
+    expect(entry.documentRenditions.map((asset) => asset.text), ['A', 'B']);
   });
 
   test('chooses the first usable rendition in revision order', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [
+        mediaRenditions: [
           _rendition(
             'r1',
             'media-1',
@@ -96,7 +104,7 @@ void main() {
   test('skips renditions that have no joined registered-media row', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [
+        mediaRenditions: [
           _rendition('r1', 'media-unlisted'),
           _rendition('r2', 'media-2'),
         ],
@@ -110,7 +118,10 @@ void main() {
   test('advances past joined rows whose media availability is missing', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [_rendition('r1', 'media-1'), _rendition('r2', 'media-2')],
+        mediaRenditions: [
+          _rendition('r1', 'media-1'),
+          _rendition('r2', 'media-2'),
+        ],
       ),
       mediaEntries: [
         _mediaEntry('media-1', availability: 'missing'),
@@ -124,7 +135,7 @@ void main() {
   test('has no primary media when every rendition is unusable', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [
+        mediaRenditions: [
           _rendition(
             'r1',
             'media-1',
@@ -147,7 +158,7 @@ void main() {
 
   test('delegates triage facts to the primary media', () {
     final entry = PersonalLibraryEntry(
-      details: _details(assets: [_rendition('r1', 'media-1')]),
+      details: _details(mediaRenditions: [_rendition('r1', 'media-1')]),
       mediaEntries: [_mediaEntry('media-1', triageIntent: 'pin_intensive')],
     );
 
@@ -159,7 +170,8 @@ void main() {
   test('exposes unmodifiable collections', () {
     final entry = PersonalLibraryEntry(
       details: _details(
-        assets: [_rendition('r1', 'media-1'), _textAsset('Hello')],
+        mediaRenditions: [_rendition('r1', 'media-1')],
+        documentRenditions: [_textAsset('Hello')],
       ),
       mediaEntries: [_mediaEntry('media-1')],
     );
@@ -173,13 +185,13 @@ void main() {
       () => entry.mediaEntries[0] = _mediaEntry('media-9'),
       throwsUnsupportedError,
     );
-    expect(entry.documentAssets.clear, throwsUnsupportedError);
+    expect(entry.documentRenditions.clear, throwsUnsupportedError);
     expect(
-      () => entry.documentAssets.add(_textAsset('More')),
+      () => entry.documentRenditions.add(_textAsset('More')),
       throwsUnsupportedError,
     );
     expect(
-      () => entry.documentAssets[0] = _textAsset('Other'),
+      () => entry.documentRenditions[0] = _textAsset('Other'),
       throwsUnsupportedError,
     );
     expect(
@@ -191,7 +203,7 @@ void main() {
   test('defensively copies constructor collections', () {
     final rows = [_mediaEntry('media-1')];
     final entry = PersonalLibraryEntry(
-      details: _details(assets: [_rendition('r1', 'media-1')]),
+      details: _details(mediaRenditions: [_rendition('r1', 'media-1')]),
       mediaEntries: rows,
     );
 
@@ -202,7 +214,7 @@ void main() {
 
   test('withMediaEntry replaces the matching joined row immutably', () {
     final entry = PersonalLibraryEntry(
-      details: _details(assets: [_rendition('r1', 'media-1')]),
+      details: _details(mediaRenditions: [_rendition('r1', 'media-1')]),
       mediaEntries: [_mediaEntry('media-1')],
     );
 
@@ -218,7 +230,7 @@ void main() {
 
   test('withMediaEntry returns the same row when nothing matches', () {
     final entry = PersonalLibraryEntry(
-      details: _details(assets: [_rendition('r1', 'media-1')]),
+      details: _details(mediaRenditions: [_rendition('r1', 'media-1')]),
       mediaEntries: [_mediaEntry('media-1')],
     );
 
@@ -252,26 +264,22 @@ MediaLibraryEntry _mediaEntry(
   familiarMaterial: familiarMaterial,
 );
 
-MediaRenditionMaterialAsset _rendition(
+MediaRendition _rendition(
   String id,
   String mediaId, {
   MediaRenditionAvailability availability =
       MediaRenditionAvailability.available,
-}) => MediaRenditionMaterialAsset(
+}) => mediaRendition(
   id: id,
   mediaId: mediaId,
-  mediaKind: MediaRenditionKind.audio,
+  kind: MediaRenditionKind.audio,
   fingerprint: 'fp',
   availability: availability,
 );
 
-DocumentTextMaterialAsset _textAsset(String text) => DocumentTextMaterialAsset(
+DocumentRendition _textAsset(String text) => documentRendition(
   id: 'text-$text',
   text: text,
-  sha256Digest:
-      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  byteSize: text.length,
-  language: null,
 );
 
 MaterialDetails _details({
@@ -279,7 +287,9 @@ MaterialDetails _details({
   String title = 'Sample',
   int updatedAtMs = 100,
   MaterialShape shape = MaterialShape.mixed,
-  List<MaterialAsset> assets = const [],
+  List<SourceAsset> sourceAssets = const [],
+  List<DocumentRendition> documentRenditions = const [],
+  List<MediaRendition> mediaRenditions = const [],
 }) => MaterialDetails(
   material: LearningMaterial(
     id: materialId,
@@ -292,7 +302,9 @@ MaterialDetails _details({
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    assets: assets,
+    sourceAssets: sourceAssets,
+    documentRenditions: documentRenditions,
+    mediaRenditions: mediaRenditions,
     createdAtMs: 1,
   ),
   shape: shape,

@@ -96,11 +96,14 @@ import 'services/external_tools.dart';
 import 'services/file_transfer_service.dart';
 import 'services/fullscreen_window.dart';
 import 'services/acquisition_ledger.dart';
+import 'services/document_intake_service.dart';
+import 'services/document_reference_store.dart';
+import 'services/document_source_resolver.dart';
+import 'services/pdf_text_extractor.dart';
 import 'services/subscription_store.dart';
 import 'services/media_import_file_service.dart';
 import 'services/media_library_scanner.dart';
 import 'services/managed_asset_store.dart';
-import 'services/document_intake_service.dart';
 import 'services/platform_capabilities.dart';
 import 'services/smoke_launch_configuration_service.dart';
 import 'settings.dart';
@@ -1117,7 +1120,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     final controller = DocumentSessionController(
       materialRepository: coreRepositories.learningMaterial,
       fileService: const LocalDocumentIntakeFileService(),
-      codec: const LocalDocumentIntakeCodec(),
+      codec: LocalDocumentIntakeCodec(
+        pdfTextExtractor: PdfRxPdfTextExtractor(),
+      ),
+      store: managedAssetStore,
+      referenceStore: DocumentReferenceStore(
+        file: DocumentReferenceStore.fileFor(
+          settingsController.settings.supportDirectory,
+        ),
+      ),
+      sourceResolver: LocalDocumentSourceResolver(
+        store: managedAssetStore,
+        referenceStore: DocumentReferenceStore(
+          file: DocumentReferenceStore.fileFor(
+            settingsController.settings.supportDirectory,
+          ),
+        ),
+        resolveStoreRoot: managedAssetStore.resolveRoot,
+      ),
       refreshLibrary: mediaLibraryActions.loadMediaLibrary,
     );
     if (entry != null) controller.openLibraryEntry(entry);

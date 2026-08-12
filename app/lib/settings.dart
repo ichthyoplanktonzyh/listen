@@ -322,6 +322,10 @@ class AppSettings {
   static Directory get _supportDirectory =>
       Directory('$_home/Library/Application Support/$_appSupportDirectoryName');
 
+  /// The macOS Application Support directory this app owns. App-side side
+  /// tables (settings, document references) live here.
+  String get supportDirectory => _supportDirectory.path;
+
   static Directory get _legacySupportDirectory => Directory(
     '$_home/Library/Application Support/$_legacyAppSupportDirectoryName',
   );

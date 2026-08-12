@@ -16,12 +16,20 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/common/api_failure_disclosure.dart';
 
 import 'support/document_session_test_fakes.dart';
+import 'support/learning_material_fixtures.dart';
 
-const codec = LocalDocumentIntakeCodec();
+final codec = LocalDocumentIntakeCodec(
+  pdfTextExtractor: _FakePdfTextExtractor(),
+);
+
+class _FakePdfTextExtractor implements PdfTextExtractor {
+  @override
+  Future<String?> extractText(List<int> bytes) async => null;
+}
 
 MaterialDetails _detailsFor(
   String title, {
-  List<MaterialAsset> assets = const [],
+  List<DocumentRendition> documentRenditions = const [],
   int? retainedAtMs,
   String materialId = 'material-1',
 }) => MaterialDetails(
@@ -36,10 +44,12 @@ MaterialDetails _detailsFor(
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    assets: assets,
+    sourceAssets: const [],
+    documentRenditions: documentRenditions,
+    mediaRenditions: const [],
     createdAtMs: 1,
   ),
-  shape: assets.isEmpty ? MaterialShape.text : MaterialShape.mixed,
+  shape: documentRenditions.isEmpty ? MaterialShape.text : MaterialShape.mixed,
 );
 
 Widget _screen(DocumentSessionController controller) => MaterialApp(
@@ -64,6 +74,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -91,6 +104,9 @@ void main() {
       materialRepository: repo,
       fileService: files,
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -114,6 +130,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -131,14 +150,8 @@ void main() {
     repo.createGate!.complete(
       _detailsFor(
         'a',
-        assets: [
-          DocumentTextMaterialAsset(
-            id: 'a1',
-            text: 'Body',
-            sha256Digest: 'x',
-            byteSize: 4,
-            language: null,
-          ),
+        documentRenditions: [
+          documentRendition(id: 'a1', text: 'Body'),
         ],
       ),
     );
@@ -159,6 +172,9 @@ void main() {
         ),
       ]),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -187,6 +203,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -211,6 +230,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -247,6 +269,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -273,21 +298,13 @@ void main() {
     final entry = PersonalLibraryEntry(
       details: _detailsFor(
         'Multi document',
-        assets: [
-          DocumentTextMaterialAsset(
+        documentRenditions: [
+          documentRendition(
             id: 'a1',
             text: 'English document body',
-            sha256Digest: 'x',
-            byteSize: 22,
             language: 'en',
           ),
-          DocumentTextMaterialAsset(
-            id: 'a2',
-            text: '中文文档正文',
-            sha256Digest: 'y',
-            byteSize: 18,
-            language: 'zh',
-          ),
+          documentRendition(id: 'a2', text: '中文文档正文', language: 'zh'),
         ],
       ),
       mediaEntries: const [],
@@ -296,6 +313,9 @@ void main() {
       materialRepository: FakeLearningMaterialRepository(),
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     controller.openLibraryEntry(entry);
@@ -333,6 +353,9 @@ void main() {
           ),
         ]),
         codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_screen(controller));
@@ -354,6 +377,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -372,5 +398,42 @@ void main() {
 
     // Ready keeps named actions (Keep here) — nothing reachable by icon alone.
     expect(find.text('保留'), findsOneWidget);
+  });
+
+  testWidgets('ready shows capability status chips from the projection', (
+    tester,
+  ) async {
+    final repo = FakeLearningMaterialRepository()
+      ..onListCapabilities = (materialId) async => [
+        const MaterialCapabilityProjection(
+          capability: MaterialCapability.read,
+          status: MaterialCapabilityStatus.available,
+          latestAttempt: null,
+        ),
+        const MaterialCapabilityProjection(
+          capability: MaterialCapability.listen,
+          status: MaterialCapabilityStatus.failedAttempt,
+          latestAttempt: null,
+        ),
+      ];
+    final controller = DocumentSessionController(
+      materialRepository: repo,
+      fileService: FakeDocumentIntakeFileService([
+        DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
+      ]),
+      codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(_screen(controller));
+
+    await tester.tap(find.text('选择纯文本文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('阅读 · 可用'), findsOneWidget);
+    expect(find.text('聆听 · 上次尝试失败'), findsOneWidget);
+    expect(find.text('Body'), findsOneWidget);
   });
 }

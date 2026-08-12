@@ -7,42 +7,37 @@ import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/document_session.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
+import 'package:llplayer_next/services/document_decoding/document_format.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 
 import 'support/document_session_test_fakes.dart';
+import 'support/learning_material_fixtures.dart';
 
-const codec = LocalDocumentIntakeCodec();
+final codec = LocalDocumentIntakeCodec(
+  pdfTextExtractor: _FakePdfTextExtractor(),
+);
 
-DocumentTextMaterialAsset _textAsset(String id, String text) =>
-    DocumentTextMaterialAsset(
-      id: id,
-      text: text,
-      sha256Digest: 'x',
-      byteSize: text.length,
-      language: null,
-    );
+class _FakePdfTextExtractor implements PdfTextExtractor {
+  @override
+  Future<String?> extractText(List<int> bytes) async => null;
+}
+
+DocumentRendition _textAsset(String id, String text) => documentRendition(
+  id: id,
+  text: text,
+);
 
 PersonalLibraryEntry _libraryEntry({
   required String materialId,
-  required List<DocumentTextMaterialAsset> assets,
+  required List<DocumentRendition> documentRenditions,
   bool retained = true,
   String title = 'Library document',
 }) => PersonalLibraryEntry(
-  details: MaterialDetails(
-    material: LearningMaterial(
-      id: materialId,
-      currentRevisionId: 'revision-1',
-      retainedAtMs: retained ? 42 : null,
-      createdAtMs: 1,
-      updatedAtMs: 1,
-    ),
-    currentRevision: MaterialRevision(
-      id: 'revision-1',
-      materialId: materialId,
-      title: title,
-      assets: assets,
-      createdAtMs: 1,
-    ),
+  details: materialDetails(
+    materialId: materialId,
+    title: title,
+    documentRenditions: documentRenditions,
+    retainedAtMs: retained ? 42 : null,
     shape: MaterialShape.text,
   ),
   mediaEntries: const [],
@@ -62,6 +57,9 @@ void main() {
           ),
         ]),
         codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
 
@@ -70,10 +68,10 @@ void main() {
       expect(repo.createCalls, 1);
       final input = repo.lastCreateInput!;
       expect(input.title, 'notes');
-      expect(input.assets, hasLength(1));
-      final asset = input.assets.single as DocumentTextMaterialAssetInput;
-      expect(asset.text, 'First line\nSecond line');
-      expect(asset.language, isNull);
+      expect(input.documentRenditions, hasLength(1));
+      final rendition = input.documentRenditions.single;
+      expect(rendition.text, 'First line\nSecond line');
+      expect(rendition.language, isNull);
       expect(repo.lastRetainDirective, const MaterialRetainExplicit(false));
       expect(
         controller.state,
@@ -94,6 +92,9 @@ void main() {
         materialRepository: repo,
         fileService: FakeDocumentIntakeFileService(),
         codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
 
@@ -105,9 +106,9 @@ void main() {
       expect(repo.createCalls, 1);
       final input = repo.lastCreateInput!;
       expect(input.title, 'Pasted notes');
-      expect(input.assets.single, isA<DocumentTextMaterialAssetInput>());
+      expect(input.documentRenditions.single, isA<DocumentRenditionInput>());
       expect(
-        (input.assets.single as DocumentTextMaterialAssetInput).text,
+        input.documentRenditions.single.text,
         'Body  with  spacing\nkept.',
       );
       expect(repo.lastRetainDirective, const MaterialRetainExplicit(false));
@@ -121,6 +122,9 @@ void main() {
       materialRepository: repo,
       fileService: files,
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -144,6 +148,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -166,6 +173,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -188,6 +198,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -210,12 +223,15 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
     await controller.openPastedText(
       title: 't',
-      body: 'x' * (maxDocumentBytes + 1),
+      body: 'x' * (maxTextDocumentBytes + 1),
     );
 
     expect(
@@ -244,6 +260,9 @@ void main() {
           DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
         ]),
         codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
 
@@ -271,14 +290,16 @@ void main() {
           id: 'revision-1',
           materialId: 'existing-material',
           title: 'Converged title',
-          assets: [
+          sourceAssets: const [],
+          documentRenditions: [
             _textAsset(
               'asset-9',
-              input.assets.firstOrNull is DocumentTextMaterialAssetInput
-                  ? (input.assets.first as DocumentTextMaterialAssetInput).text
+              input.documentRenditions.firstOrNull is DocumentRenditionInput
+                  ? input.documentRenditions.first.text
                   : 'x',
             ),
           ],
+          mediaRenditions: const [],
           createdAtMs: 1,
         ),
         shape: MaterialShape.text,
@@ -289,6 +310,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -296,7 +320,7 @@ void main() {
 
     final ready = controller.state as DocumentSessionReady;
     expect(ready.details.material.id, 'existing-material');
-    expect(ready.documentAsset.text, 'Body');
+    expect(ready.documentRendition!.text, 'Body');
   });
 
   test('a throwing file service is a typed unreadable failure', () async {
@@ -307,6 +331,9 @@ void main() {
       materialRepository: repo,
       fileService: files,
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -329,6 +356,9 @@ void main() {
       materialRepository: repo,
       fileService: files,
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
 
     final open = controller.openFile();
@@ -346,6 +376,9 @@ void main() {
         DocumentFileData(path: '/tmp/.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -364,6 +397,9 @@ void main() {
         DocumentFileData(path: '/tmp/   .txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -385,6 +421,9 @@ void main() {
         ),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -395,7 +434,7 @@ void main() {
     // The full path never becomes the title.
     expect(repo.lastCreateInput?.title, isNot(contains('/tmp')));
     final ready = controller.state as DocumentSessionReady;
-    expect(ready.documentAsset.text, 'Body');
+    expect(ready.documentRendition!.text, 'Body');
   });
 
   test(
@@ -414,7 +453,11 @@ void main() {
             id: 'revision-1',
             materialId: 'm',
             title: 'Different text',
-            assets: [_textAsset('other', 'Some other document body')],
+            sourceAssets: const [],
+            documentRenditions: [
+              _textAsset('other', 'Some other document body'),
+            ],
+            mediaRenditions: const [],
             createdAtMs: 1,
           ),
           shape: MaterialShape.text,
@@ -425,6 +468,9 @@ void main() {
           DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
         ]),
         codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
 
@@ -453,7 +499,9 @@ void main() {
           id: 'revision-1',
           materialId: 'm',
           title: 'No documents',
-          assets: const [],
+          sourceAssets: const [],
+          documentRenditions: const [],
+          mediaRenditions: const [],
           createdAtMs: 1,
         ),
         shape: MaterialShape.text,
@@ -464,6 +512,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -484,6 +535,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       refreshLibrary: () async => refreshes += 1,
     );
     addTearDown(controller.dispose);
@@ -495,7 +549,7 @@ void main() {
     expect(repo.lastRetainedMaterialId, 'material-1');
     final ready = controller.state as DocumentSessionReady;
     expect(ready.isRetained, isTrue);
-    expect(ready.documentAsset.text, 'Body');
+    expect(ready.documentRendition!.text, 'Body');
     expect(refreshes, 1);
   });
 
@@ -508,6 +562,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       refreshLibrary: () async => refreshes += 1,
     );
     addTearDown(controller.dispose);
@@ -520,7 +577,7 @@ void main() {
     expect(repo.unretainCalls, 1);
     final ready = controller.state as DocumentSessionReady;
     expect(ready.isRetained, isFalse);
-    expect(ready.documentAsset.text, 'Body');
+    expect(ready.documentRendition!.text, 'Body');
     expect(refreshes, 2);
   });
 
@@ -539,6 +596,9 @@ void main() {
           DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
         ]),
         codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
       await controller.openFile();
@@ -548,7 +608,7 @@ void main() {
       final ready = controller.state as DocumentSessionReady;
       // The document is still fully readable and still Temporary.
       expect(ready.isRetained, isFalse);
-      expect(ready.documentAsset.text, 'Body');
+      expect(ready.documentRendition!.text, 'Body');
       expect(ready.retentionFailure?.correlationId, 'api-2');
       // Ordinary state text never carries the raw transport text.
       expect(ready.retentionFailure?.raw, contains('nope'));
@@ -567,6 +627,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -576,7 +639,7 @@ void main() {
 
     final ready = controller.state as DocumentSessionReady;
     expect(ready.isRetained, isTrue);
-    expect(ready.documentAsset.text, 'Body');
+    expect(ready.documentRendition!.text, 'Body');
     expect(ready.retentionFailure, isNotNull);
   });
 
@@ -589,6 +652,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -615,6 +681,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -642,6 +711,9 @@ void main() {
         DocumentFileData(path: '/tmp/old.txt', bytes: utf8.encode('Old body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -673,7 +745,9 @@ void main() {
           id: 'revision-1',
           materialId: 'old',
           title: 'Old',
-          assets: [_textAsset('a', 'Old body')],
+          sourceAssets: const [],
+          documentRenditions: [_textAsset('a', 'Old body')],
+          mediaRenditions: const [],
           createdAtMs: 1,
         ),
         shape: MaterialShape.text,
@@ -695,6 +769,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService([gated]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -724,6 +801,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -744,7 +824,9 @@ void main() {
           id: 'revision-1',
           materialId: 'late',
           title: 'Late',
-          assets: [_textAsset('a', 'Body')],
+          sourceAssets: const [],
+          documentRenditions: [_textAsset('a', 'Body')],
+          mediaRenditions: const [],
           createdAtMs: 1,
         ),
         shape: MaterialShape.text,
@@ -764,6 +846,9 @@ void main() {
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
 
     final open = controller.openFile();
@@ -782,7 +867,9 @@ void main() {
           id: 'revision-1',
           materialId: 'late',
           title: 'Late',
-          assets: [_textAsset('a', 'Body')],
+          sourceAssets: const [],
+          documentRenditions: [_textAsset('a', 'Body')],
+          mediaRenditions: const [],
           createdAtMs: 1,
         ),
         shape: MaterialShape.text,
@@ -806,6 +893,9 @@ void main() {
       materialRepository: repo,
       fileService: files,
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -825,6 +915,9 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -836,7 +929,7 @@ void main() {
 
     expect(repo.createCalls, 2);
     final ready = controller.state as DocumentSessionReady;
-    expect(ready.documentAsset.text, 'Body');
+    expect(ready.documentRendition!.text, 'Body');
     expect(repo.lastCreateInput?.title, 't');
   });
 
@@ -846,11 +939,14 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
     controller.openLibraryEntry(
-      _libraryEntry(materialId: 'm', assets: const []),
+      _libraryEntry(materialId: 'm', documentRenditions: const []),
     );
 
     expect(controller.state, isA<DocumentSessionIdle>());
@@ -862,16 +958,22 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
     controller.openLibraryEntry(
-      _libraryEntry(materialId: 'm', assets: [_textAsset('a1', 'Solo')]),
+      _libraryEntry(
+        materialId: 'm',
+        documentRenditions: [_textAsset('a1', 'Solo')],
+      ),
     );
 
     final ready = controller.state as DocumentSessionReady;
     expect(ready.details.material.id, 'm');
-    expect(ready.documentAsset.id, 'a1');
+    expect(ready.documentRendition!.id, 'a1');
     expect(ready.isRetained, isTrue);
   });
 
@@ -883,13 +985,19 @@ void main() {
         materialRepository: repo,
         fileService: FakeDocumentIntakeFileService(),
         codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
 
       controller.openLibraryEntry(
         _libraryEntry(
           materialId: 'm',
-          assets: [_textAsset('a1', 'First'), _textAsset('a2', 'Second')],
+          documentRenditions: [
+            _textAsset('a1', 'First'),
+            _textAsset('a2', 'Second'),
+          ],
         ),
       );
 
@@ -898,8 +1006,8 @@ void main() {
       controller.chooseDocumentAsset('a2');
 
       final ready = controller.state as DocumentSessionReady;
-      expect(ready.documentAsset.id, 'a2');
-      expect(ready.documentAsset.text, 'Second');
+      expect(ready.documentRendition!.id, 'a2');
+      expect(ready.documentRendition!.text, 'Second');
     },
   );
 
@@ -909,13 +1017,19 @@ void main() {
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
       codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+        sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
     controller.openLibraryEntry(
       _libraryEntry(
         materialId: 'm',
-        assets: [_textAsset('a1', 'First'), _textAsset('a2', 'Second')],
+        documentRenditions: [
+          _textAsset('a1', 'First'),
+          _textAsset('a2', 'Second'),
+        ],
       ),
     );
 
@@ -923,4 +1037,102 @@ void main() {
 
     expect(controller.state, isA<DocumentSessionChoosingAsset>());
   });
+
+  test('the ready state loads the capability projection from Core', () async {
+    final repo = FakeLearningMaterialRepository()
+      ..onListCapabilities = (materialId) async => [
+        const MaterialCapabilityProjection(
+          capability: MaterialCapability.read,
+          status: MaterialCapabilityStatus.available,
+          latestAttempt: null,
+        ),
+        const MaterialCapabilityProjection(
+          capability: MaterialCapability.listen,
+          status: MaterialCapabilityStatus.derivable,
+          latestAttempt: null,
+        ),
+      ];
+    final controller = DocumentSessionController(
+      materialRepository: repo,
+      fileService: FakeDocumentIntakeFileService(),
+      codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
+    );
+    addTearDown(controller.dispose);
+
+    controller.openLibraryEntry(
+      _libraryEntry(materialId: 'm1', documentRenditions: [_textAsset('a1', 'Hi')]),
+    );
+    await _settle();
+
+    final ready = controller.state as DocumentSessionReady;
+    expect(ready.capabilities, isNotNull);
+    expect(ready.capabilities, hasLength(2));
+    final read = ready.capabilities!
+        .firstWhere((p) => p.capability == MaterialCapability.read);
+    expect(read.status, MaterialCapabilityStatus.available);
+  });
+
+  test('a stale capability load never lands on a newer session', () async {
+    final gate = Completer<List<MaterialCapabilityProjection>>();
+    final repo = FakeLearningMaterialRepository()
+      ..onListCapabilities = (materialId) => gate.future;
+    final controller = DocumentSessionController(
+      materialRepository: repo,
+      fileService: FakeDocumentIntakeFileService(),
+      codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
+    );
+    addTearDown(controller.dispose);
+
+    controller.openLibraryEntry(
+      _libraryEntry(materialId: 'm1', documentRenditions: [_textAsset('a1', 'Hi')]),
+    );
+    await _settle();
+    // A newer intent closes the session before the capability load lands.
+    controller.close();
+    gate.complete(const [
+      MaterialCapabilityProjection(
+        capability: MaterialCapability.read,
+        status: MaterialCapabilityStatus.available,
+        latestAttempt: null,
+      ),
+    ]);
+    await _settle();
+
+    expect(controller.state, isA<DocumentSessionIdle>());
+  });
+
+  test('a failed capability load leaves the ready document untouched',
+      () async {
+    final repo = FakeLearningMaterialRepository()
+      ..onListCapabilities = (materialId) async => throw StateError('boom');
+    final controller = DocumentSessionController(
+      materialRepository: repo,
+      fileService: FakeDocumentIntakeFileService(),
+      codec: codec,
+      store: FakeManagedAssetStoreService(),
+      referenceStore: FakeDocumentReferenceStore(),
+      sourceResolver: FakeDocumentSourceResolver(),
+    );
+    addTearDown(controller.dispose);
+
+    controller.openLibraryEntry(
+      _libraryEntry(materialId: 'm1', documentRenditions: [_textAsset('a1', 'Hi')]),
+    );
+    await _settle();
+
+    final ready = controller.state as DocumentSessionReady;
+    expect(ready.documentRendition?.text, 'Hi');
+    expect(ready.capabilities, isNull);
+  });
+}
+
+Future<void> _settle() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
 }

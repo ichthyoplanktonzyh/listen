@@ -19,7 +19,7 @@ enum LibrarySort { queue, recent }
 ///
 /// Read and Listen/Watch are capabilities of the same retained materials —
 /// filtering is a view, never a copy and never a separate library object.
-enum LibraryCapabilityFilter { all, read, listenWatch }
+enum LibraryCapabilityFilter { all, read, listen, watch }
 
 /// The Personal Library: what is already here, and how to add more. One
 /// segment of the "listen" destination — discovery is the other, and both end
@@ -112,13 +112,15 @@ class _ListeningHomeState extends State<ListeningHome> {
     if (entries == null || _capability == LibraryCapabilityFilter.all) {
       return entries;
     }
-    return entries
-        .where(
-          _capability == LibraryCapabilityFilter.read
-              ? (entry) => entry.canRead
-              : (entry) => entry.canListenOrWatch,
-        )
-        .toList(growable: false);
+    return switch (_capability) {
+      LibraryCapabilityFilter.read =>
+        entries.where((entry) => entry.canRead).toList(growable: false),
+      LibraryCapabilityFilter.listen =>
+        entries.where((entry) => entry.canListen).toList(growable: false),
+      LibraryCapabilityFilter.watch =>
+        entries.where((entry) => entry.canWatch).toList(growable: false),
+      LibraryCapabilityFilter.all => entries,
+    };
   }
 
   @override
@@ -326,12 +328,16 @@ class _HomeContent extends StatelessWidget {
                           onCapabilityChanged(LibraryCapabilityFilter.read),
                     ),
                     ChoiceChip(
-                      label: Text(l.text('libraryFilterListenWatch')),
-                      selected:
-                          capability == LibraryCapabilityFilter.listenWatch,
-                      onSelected: (_) => onCapabilityChanged(
-                        LibraryCapabilityFilter.listenWatch,
-                      ),
+                      label: Text(l.text('libraryFilterListen')),
+                      selected: capability == LibraryCapabilityFilter.listen,
+                      onSelected: (_) =>
+                          onCapabilityChanged(LibraryCapabilityFilter.listen),
+                    ),
+                    ChoiceChip(
+                      label: Text(l.text('libraryFilterWatch')),
+                      selected: capability == LibraryCapabilityFilter.watch,
+                      onSelected: (_) =>
+                          onCapabilityChanged(LibraryCapabilityFilter.watch),
                     ),
                     FilterChip(
                       // Offline used to occupy its own sidebar slot with the

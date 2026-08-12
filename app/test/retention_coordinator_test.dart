@@ -29,6 +29,8 @@ import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 /// Retention end to end through the session coordinator: opening local media
 /// is Temporary Material (retain false) and keeps playing when Core fails;
 /// opening resolves the media's learning material and makes material retention
@@ -1043,30 +1045,10 @@ String _en(String key) => const AppLocalizations(Locale('en')).text(key);
 MaterialDetails _materialDetails({
   String materialId = 'material-1',
   bool retained = true,
-}) => MaterialDetails(
-  material: LearningMaterial(
-    id: materialId,
-    currentRevisionId: 'revision-1',
-    retainedAtMs: retained ? 42 : null,
-    createdAtMs: 1,
-    updatedAtMs: 2,
-  ),
-  currentRevision: MaterialRevision(
-    id: 'revision-1',
-    materialId: materialId,
-    title: 'T',
-    assets: const [
-      DocumentTextMaterialAsset(
-        id: 'asset-1',
-        text: 'Hello',
-        sha256Digest:
-            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-        byteSize: 5,
-        language: null,
-      ),
-    ],
-    createdAtMs: 1,
-  ),
+}) => materialDetails(
+  materialId: materialId,
+  retainedAtMs: retained ? 42 : null,
+  documentRenditions: [documentRendition(text: 'Hello')],
   shape: MaterialShape.audio,
 );
 
@@ -1332,6 +1314,18 @@ class _FakeMaterialRepository implements LearningMaterialRepository {
     }
     return value;
   }
+
+  @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
+    String materialId,
+  ) async => throw UnimplementedError();
 }
 
 /// Resolve is gated by a Completer so a test can complete an in-flight
@@ -1386,6 +1380,18 @@ class _GatedMaterialRepository implements LearningMaterialRepository {
     gates.add(gate);
     return gate.future;
   }
+
+  @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) async => throw UnimplementedError();
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
+    String materialId,
+  ) async => throw UnimplementedError();
 }
 
 /// Resolves any page URL to itself so the online-import flow can be driven
@@ -1457,7 +1463,10 @@ class _FakeManagedStore implements ManagedAssetStoreService {
   final deleted = <String>[];
 
   @override
-  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) async {
+  Future<ManagedAssetCopy> copyIntoStore({
+    required String sourcePath,
+    String? mediaKind,
+  }) async {
     final gate = copyGate;
     if (gate != null) await gate.future;
     if (unavailable) throw const ManagedStoreUnavailable();
@@ -1466,9 +1475,18 @@ class _FakeManagedStore implements ManagedAssetStoreService {
     return ManagedAssetCopy(
       path: copyPath,
       createdNew: createdNew,
-      mediaKind: 'audio',
+      mediaKind: mediaKind ?? 'audio',
     );
   }
+
+  @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) async => throw UnimplementedError();
+
+  @override
+  Future<List<int>?> readBytes(String path) async => null;
 
   @override
   Future<void> deleteStoreCopy(String path) async {

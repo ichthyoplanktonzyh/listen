@@ -10,32 +10,40 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/theme/spacing.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
 
-MediaItem _media(String id, String title, int updatedAtMs) => MediaItem(
+import 'support/learning_material_fixtures.dart';
+
+MediaItem _media(String id, String title, int updatedAtMs, {String kind = 'video'}) => MediaItem(
   id: id,
   path: '/media/$id.mp4',
   fingerprint: 'fp-$id',
   title: title,
-  kind: 'video',
+  kind: kind,
   durationMs: 60000,
   availability: 'available',
   createdAtMs: 1,
   updatedAtMs: updatedAtMs,
 );
 
-MediaLibraryEntry _entry(String id, String title, {int updatedAtMs = 1}) =>
-    MediaLibraryEntry(
-      media: _media(id, title, updatedAtMs),
-      primaryTrackId: null,
-      fit: null,
-      triageIntent: null,
-      familiarMaterial: false,
-    );
+MediaLibraryEntry _entry(
+  String id,
+  String title, {
+  int updatedAtMs = 1,
+  String kind = 'video',
+}) => MediaLibraryEntry(
+  media: _media(id, title, updatedAtMs, kind: kind),
+  primaryTrackId: null,
+  fit: null,
+  triageIntent: null,
+  familiarMaterial: false,
+);
 
 MaterialDetails _details(
   String id,
   String title, {
   int updatedAtMs = 1,
-  List<MaterialAsset> assets = const [],
+  List<SourceAsset> sourceAssets = const [],
+  List<DocumentRendition> documentRenditions = const [],
+  List<MediaRendition> mediaRenditions = const [],
   MaterialShape shape = MaterialShape.text,
 }) => MaterialDetails(
   material: LearningMaterial(
@@ -49,28 +57,25 @@ MaterialDetails _details(
     id: 'revision-$id',
     materialId: id,
     title: title,
-    assets: assets,
+    sourceAssets: sourceAssets,
+    documentRenditions: documentRenditions,
+    mediaRenditions: mediaRenditions,
     createdAtMs: 1,
   ),
   shape: shape,
 );
 
-DocumentTextMaterialAsset _textAsset(String id) => DocumentTextMaterialAsset(
+DocumentRendition _textAsset(String id) => documentRendition(
   id: '$id-text',
   text: 'Readable text',
-  sha256Digest: 'x',
-  byteSize: 13,
-  language: null,
 );
 
-MediaRenditionMaterialAsset _mediaAsset(String id) =>
-    MediaRenditionMaterialAsset(
-      id: '$id-media',
-      mediaId: 'media-$id',
-      mediaKind: MediaRenditionKind.audio,
-      fingerprint: 'fp',
-      availability: MediaRenditionAvailability.available,
-    );
+MediaRendition _mediaAsset(String id) => mediaRendition(
+  id: '$id-media',
+  mediaId: 'media-$id',
+  kind: MediaRenditionKind.audio,
+  fingerprint: 'fp',
+);
 
 /// A text-only library row.
 PersonalLibraryEntry _textEntry(
@@ -82,7 +87,7 @@ PersonalLibraryEntry _textEntry(
     id,
     title,
     updatedAtMs: updatedAtMs,
-    assets: [_textAsset(id)],
+    documentRenditions: [_textAsset(id)],
   ),
   mediaEntries: const [],
 );
@@ -97,10 +102,12 @@ PersonalLibraryEntry _mediaEntry(
     id,
     title,
     updatedAtMs: updatedAtMs,
-    assets: [_mediaAsset(id)],
+    mediaRenditions: [_mediaAsset(id)],
     shape: MaterialShape.audio,
   ),
-  mediaEntries: [_entry('media-$id', title, updatedAtMs: updatedAtMs)],
+  mediaEntries: [
+    _entry('media-$id', title, updatedAtMs: updatedAtMs, kind: 'audio'),
+  ],
 );
 
 /// A mixed row: both Read and Listen/Watch.
@@ -113,10 +120,13 @@ PersonalLibraryEntry _mixedEntry(
     id,
     title,
     updatedAtMs: updatedAtMs,
-    assets: [_textAsset(id), _mediaAsset(id)],
+    documentRenditions: [_textAsset(id)],
+    mediaRenditions: [_mediaAsset(id)],
     shape: MaterialShape.mixed,
   ),
-  mediaEntries: [_entry('media-$id', title, updatedAtMs: updatedAtMs)],
+  mediaEntries: [
+    _entry('media-$id', title, updatedAtMs: updatedAtMs, kind: 'audio'),
+  ],
 );
 
 void main() {
@@ -365,12 +375,20 @@ void main() {
     expect(find.text('A Mixed Material'), findsOneWidget);
     expect(find.text('A Media File'), findsNothing);
 
-    // Listen/Watch keeps media and mixed; text-only disappears.
-    await tester.tap(find.widgetWithText(ChoiceChip, '听/看'));
+    // Listen keeps audio media and mixed; text-only disappears.
+    await tester.tap(find.widgetWithText(ChoiceChip, '听'));
     await tester.pumpAndSettle();
 
     expect(find.text('A Media File'), findsOneWidget);
     expect(find.text('A Mixed Material'), findsOneWidget);
+    expect(find.text('A Text Document'), findsNothing);
+
+    // Watch keeps only materials with a usable video media.
+    await tester.tap(find.widgetWithText(ChoiceChip, '看'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A Media File'), findsNothing);
+    expect(find.text('A Mixed Material'), findsNothing);
     expect(find.text('A Text Document'), findsNothing);
 
     // Clearing the view restores the full library.

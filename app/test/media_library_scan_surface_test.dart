@@ -11,6 +11,8 @@ import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/home/listening_home.dart';
 import 'package:llplayer_next/widgets/home/personal_library_section.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
   media: MediaItem(
     id: 'id-$path',
@@ -32,29 +34,18 @@ MediaLibraryEntry _entry(String path) => MediaLibraryEntry(
 /// A media-only library row bound to [entry] — the shape [ListeningHome] and
 /// the Personal Library section render now.
 PersonalLibraryEntry _row(MediaLibraryEntry entry) => PersonalLibraryEntry(
-  details: MaterialDetails(
-    material: LearningMaterial(
-      id: 'material-${entry.media.id}',
-      currentRevisionId: 'revision-1',
-      retainedAtMs: 42,
-      createdAtMs: 1,
-      updatedAtMs: 1,
-    ),
-    currentRevision: MaterialRevision(
-      id: 'revision-1',
-      materialId: 'material-${entry.media.id}',
-      title: 'Talk',
-      assets: [
-        MediaRenditionMaterialAsset(
-          id: 'asset-1',
-          mediaId: entry.media.id,
-          mediaKind: MediaRenditionKind.video,
-          fingerprint: 'fp',
-          availability: MediaRenditionAvailability.available,
-        ),
-      ],
-      createdAtMs: 1,
-    ),
+  details: materialDetails(
+    materialId: 'material-${entry.media.id}',
+    title: 'Talk',
+    documentRenditions: const [],
+    mediaRenditions: [
+      mediaRendition(
+        id: 'asset-1',
+        mediaId: entry.media.id,
+        kind: MediaRenditionKind.video,
+        fingerprint: 'fp',
+      ),
+    ],
     shape: MaterialShape.video,
   ),
   mediaEntries: [entry],

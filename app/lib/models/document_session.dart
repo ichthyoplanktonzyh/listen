@@ -1,20 +1,20 @@
 import 'api_failure.dart';
 import 'learning_material.dart';
+import 'document_format.dart';
 
-/// The direct document session state machine (Stage B).
+/// The direct document session state machine (Stage B / Phase 1 Slice 2).
 ///
-/// Pure and immutable. The session is a *direct view* of one plain-text
-/// document asset (Core 3.2's plain-text compatibility representation, the
-/// first adapter — not a full Document Rendition schema): it never fabricates
-/// paragraphs, cues, anchors, or structured-reading structure, and it never
-/// carries a file location. Direct viewing is deliberately not Structured
-/// Reading.
+/// Pure and immutable. The session is a *direct view* of one document
+/// rendition (Core 4.0 `DocumentRendition`) backed by its exact Source Asset
+/// bytes: it never fabricates paragraphs, cues, anchors, or structured-reading
+/// structure, and it never carries a file location. Direct viewing is
+/// deliberately not Structured Reading.
 sealed class DocumentSessionState {
   const DocumentSessionState();
 }
 
-/// Nothing is open. The pane offers the primary "choose a text file" action
-/// and the secondary paste entry.
+/// Nothing is open. The pane offers the primary "choose a document file"
+/// action and the secondary paste entry.
 final class DocumentSessionIdle extends DocumentSessionState {
   const DocumentSessionIdle();
 }
@@ -27,32 +27,54 @@ final class DocumentSessionOpening extends DocumentSessionState {
   const DocumentSessionOpening();
 }
 
-/// A library entry has several document assets; the learner must choose one
-/// explicitly. Never silently selects the first.
+/// A library entry has several document renditions; the learner must choose
+/// one explicitly. Never silently selects the first.
 final class DocumentSessionChoosingAsset extends DocumentSessionState {
   DocumentSessionChoosingAsset({
     required this.details,
-    required List<DocumentTextMaterialAsset> documentAssets,
-  }) : documentAssets = List.unmodifiable(documentAssets);
+    required List<DocumentRendition> documentRenditions,
+  }) : documentRenditions = List.unmodifiable(documentRenditions);
 
   final MaterialDetails details;
-  final List<DocumentTextMaterialAsset> documentAssets;
+  final List<DocumentRendition> documentRenditions;
 }
 
-/// A document is open and readable. The chosen asset's exact text is the
-/// document; retention is membership state, never a copy or a move.
+/// A document is open and readable. The chosen rendition's exact text (when a
+/// text layer exists) is the document; the Source Asset's exact bytes back the
+/// renderer for container formats. Retention is membership state, never a copy
+/// or a move.
 final class DocumentSessionReady extends DocumentSessionState {
   const DocumentSessionReady({
     required this.details,
-    required this.documentAsset,
+    required this.documentRendition,
+    required this.sourceAsset,
+    this.capabilities,
     this.retentionFailure,
     this.retentionInFlight = false,
   });
 
   final MaterialDetails details;
 
-  /// The explicitly chosen document-text asset of the current revision.
-  final DocumentTextMaterialAsset documentAsset;
+  /// The explicitly chosen document rendition of the current revision, or
+  /// null when the source carries no text layer (e.g. a scanned PDF).
+  final DocumentRendition? documentRendition;
+
+  /// The Source Asset backing the direct view. Present for documents created
+  /// in this session; library entries opened from Core always carry it.
+  final SourceAsset? sourceAsset;
+
+  /// The durable capability projection for the open material, once loaded.
+  /// Null while loading or when the projection is unavailable. A failed
+  /// attempt is honest evidence — it never invalidates the direct view.
+  final List<MaterialCapabilityProjection>? capabilities;
+
+  /// The format of the open document, for renderer dispatch. Media types
+  /// outside the supported family degrade to plain text rendering.
+  DocumentFormat get format =>
+      formatFromMediaType(
+        documentRendition?.mediaType ?? sourceAsset?.mediaType ?? 'text/plain',
+      ) ??
+      DocumentFormat.plainText;
 
   /// A failed Keep/Unkeep left the document fully readable; the typed failure
   /// is only for the explicit disclosure component.
@@ -84,6 +106,9 @@ enum DocumentSessionFailureKind {
   invalidUtf8,
   emptyDocument,
   unreadable,
+  unsupported,
+  corrupt,
+  encrypted,
   missingTitle,
   apiFailure,
 }

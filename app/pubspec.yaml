@@ -44,6 +44,9 @@ dependencies:
   fvp:
     path: third_party/fvp
   xml: ^7.0.1
+  archive: ^4.0.9
+  pdfrx: ^2.4.7
+  html: ^0.15.6
 
 dev_dependencies:
   flutter_test:

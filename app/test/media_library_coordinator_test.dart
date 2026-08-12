@@ -16,6 +16,8 @@ import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/models/types.dart';
 import 'package:llplayer_next/services/api_service.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 Map<String, dynamic> _libraryEntryJson({
   String id = 'media-1',
   String path = '/nonexistent/media.mp4',
@@ -43,15 +45,15 @@ MediaLibraryEntry _libraryEntry({
   String path = '/nonexistent/media.mp4',
 }) => MediaLibraryEntry.fromJson(_libraryEntryJson(id: id, path: path));
 
-/// A Core 3.2 `/v1/materials` row: one retained learning material with its
-/// current revision. Defaults to a mixed-shape material with no assets.
+/// A Core 4.0 `/v1/materials` row: one retained learning material with its
+/// current revision. Defaults to a mixed-shape material with no renditions.
 Map<String, dynamic> _materialDetailsJson({
   String materialId = 'material-1',
   String revisionId = 'revision-1',
   String title = 'Sample material',
   String shape = 'mixed',
   int updatedAtMs = 100,
-  List<Map<String, dynamic>> assets = const [],
+  List<Map<String, dynamic>> mediaRenditions = const [],
 }) => {
   'material': {
     'id': materialId,
@@ -64,7 +66,9 @@ Map<String, dynamic> _materialDetailsJson({
     'id': revisionId,
     'material_id': materialId,
     'title': title,
-    'assets': assets,
+    'source_assets': <Map<String, dynamic>>[],
+    'document_renditions': <Map<String, dynamic>>[],
+    'media_renditions': mediaRenditions,
     'created_at_ms': 0,
   },
   'shape': shape,
@@ -74,12 +78,15 @@ Map<String, dynamic> _mediaRenditionJson({
   required String id,
   required String mediaId,
 }) => {
-  'asset_type': 'media_rendition',
   'id': id,
-  'media_id': mediaId,
-  'media_kind': 'audio',
+  'origin': 'source',
+  'kind': 'audio',
+  'media_type': 'audio/mpeg',
   'fingerprint': 'fp',
   'availability': 'available',
+  'media_id': mediaId,
+  'media_sha256': null,
+  'media_byte_size': null,
 };
 
 /// Directly constructed [MaterialDetails] for seeding previous state without
@@ -87,7 +94,9 @@ Map<String, dynamic> _mediaRenditionJson({
 MaterialDetails _materialDetails({
   String materialId = 'material-1',
   String title = 'Sample material',
-  List<MaterialAsset> assets = const [],
+  List<SourceAsset> sourceAssets = const [],
+  List<DocumentRendition> documentRenditions = const [],
+  List<MediaRendition> mediaRenditions = const [],
 }) => MaterialDetails(
   material: LearningMaterial(
     id: materialId,
@@ -100,7 +109,9 @@ MaterialDetails _materialDetails({
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    assets: assets,
+    sourceAssets: sourceAssets,
+    documentRenditions: documentRenditions,
+    mediaRenditions: mediaRenditions,
     createdAtMs: 0,
   ),
   shape: MaterialShape.mixed,
@@ -111,13 +122,12 @@ MaterialDetails _materialDetails({
 PersonalLibraryEntry _personalEntry(MediaLibraryEntry mediaEntry) =>
     PersonalLibraryEntry(
       details: _materialDetails(
-        assets: [
-          MediaRenditionMaterialAsset(
+        mediaRenditions: [
+          mediaRendition(
             id: 'asset-1',
             mediaId: mediaEntry.media.id,
-            mediaKind: MediaRenditionKind.audio,
+            kind: MediaRenditionKind.audio,
             fingerprint: 'fp',
-            availability: MediaRenditionAvailability.available,
           ),
         ],
       ),
@@ -242,7 +252,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [
+                mediaRenditions: [
                   _mediaRenditionJson(id: 'asset-1', mediaId: 'media-1'),
                 ],
               ),
@@ -297,13 +307,12 @@ void main() {
       w.coordinator.personalLibrary = [
         PersonalLibraryEntry(
           details: _materialDetails(
-            assets: [
-              MediaRenditionMaterialAsset(
+            mediaRenditions: [
+              mediaRendition(
                 id: 'asset-1',
                 mediaId: 'media-1',
-                mediaKind: MediaRenditionKind.audio,
+                kind: MediaRenditionKind.audio,
                 fingerprint: 'fp',
-                availability: MediaRenditionAvailability.available,
               ),
             ],
           ),
@@ -339,7 +348,7 @@ void main() {
           statusCode: 200,
           body: jsonEncode([
             _materialDetailsJson(
-              assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+              mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
             ),
           ]),
         );
@@ -367,7 +376,7 @@ void main() {
           materialId: 'material-new',
           revisionId: 'revision-new',
           title: 'New',
-          assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
+          mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
         ),
       ]);
       final newMedia = jsonEncode([_libraryEntryJson(id: 'media-new')]);
@@ -398,7 +407,7 @@ void main() {
             materialId: 'material-old',
             revisionId: 'revision-old',
             title: 'Old',
-            assets: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
+            mediaRenditions: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
           ),
         ]),
       );
@@ -418,7 +427,7 @@ void main() {
         materialId: 'material-old',
         revisionId: 'revision-old',
         title: 'Old',
-        assets: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
+        mediaRenditions: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
       ),
     ]);
     final oldMediaBody = jsonEncode([_libraryEntryJson(id: 'media-old')]);
@@ -427,7 +436,7 @@ void main() {
         materialId: 'material-new',
         revisionId: 'revision-new',
         title: 'New',
-        assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
+        mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
       ),
     ]);
     final newMedia = jsonEncode([_libraryEntryJson(id: 'media-new')]);
@@ -583,7 +592,7 @@ void main() {
           materialId: 'material-old',
           revisionId: 'revision-old',
           title: 'Old',
-          assets: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
+          mediaRenditions: [_mediaRenditionJson(id: 'a2', mediaId: 'media-old')],
         ),
       ]);
       final newMaterials = jsonEncode([
@@ -591,7 +600,7 @@ void main() {
           materialId: 'material-new',
           revisionId: 'revision-new',
           title: 'New',
-          assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
+          mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-new')],
         ),
       ]);
       final newMediaBody = jsonEncode([_libraryEntryJson(id: 'media-new')]);
@@ -645,7 +654,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+                mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
               ),
             ]),
           );
@@ -684,7 +693,7 @@ void main() {
                 materialId: 'material-1',
                 revisionId: 'revision-1',
                 title: 'First',
-                assets: [
+                mediaRenditions: [
                   _mediaRenditionJson(id: 'a1', mediaId: 'media-1'),
                   _mediaRenditionJson(id: 'a2', mediaId: 'media-2'),
                 ],
@@ -693,7 +702,7 @@ void main() {
                 materialId: 'material-2',
                 revisionId: 'revision-2',
                 title: 'Second',
-                assets: [_mediaRenditionJson(id: 'a3', mediaId: 'media-3')],
+                mediaRenditions: [_mediaRenditionJson(id: 'a3', mediaId: 'media-3')],
               ),
             ]),
           );
@@ -742,7 +751,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+                mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
               ),
               _materialDetailsJson(
                 materialId: 'material-text',
@@ -784,7 +793,7 @@ void main() {
             statusCode: 200,
             body: jsonEncode([
               _materialDetailsJson(
-                assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+                mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
               ),
             ]),
           );
@@ -814,14 +823,8 @@ void main() {
     final w = _wire(() => null);
     final textOnly = PersonalLibraryEntry(
       details: _materialDetails(
-        assets: [
-          DocumentTextMaterialAsset(
-            id: 'text-1',
-            text: 'Hello',
-            sha256Digest: 'x',
-            byteSize: 5,
-            language: null,
-          ),
+        documentRenditions: [
+          documentRendition(id: 'text-1', text: 'Hello'),
         ],
       ),
       mediaEntries: const [],
@@ -855,20 +858,15 @@ void main() {
       final w = _wire(() => null);
       final mixed = PersonalLibraryEntry(
         details: _materialDetails(
-          assets: [
-            DocumentTextMaterialAsset(
-              id: 'text-1',
-              text: 'Hello',
-              sha256Digest: 'x',
-              byteSize: 5,
-              language: null,
-            ),
-            MediaRenditionMaterialAsset(
+          documentRenditions: [
+            documentRendition(id: 'text-1', text: 'Hello'),
+          ],
+          mediaRenditions: [
+            mediaRendition(
               id: 'asset-1',
               mediaId: 'media-gone',
-              mediaKind: MediaRenditionKind.audio,
+              kind: MediaRenditionKind.audio,
               fingerprint: 'fp',
-              availability: MediaRenditionAvailability.available,
             ),
           ],
         ),
@@ -889,7 +887,7 @@ void main() {
           statusCode: 200,
           body: jsonEncode([
             _materialDetailsJson(
-              assets: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
+              mediaRenditions: [_mediaRenditionJson(id: 'a1', mediaId: 'media-1')],
             ),
           ]),
         );
@@ -947,14 +945,8 @@ void main() {
     final w = _wire(() => null);
     final textOnly = PersonalLibraryEntry(
       details: _materialDetails(
-        assets: [
-          DocumentTextMaterialAsset(
-            id: 'text-1',
-            text: 'Hello',
-            sha256Digest: 'x',
-            byteSize: 5,
-            language: null,
-          ),
+        documentRenditions: [
+          documentRendition(id: 'text-1', text: 'Hello'),
         ],
       ),
       mediaEntries: const [],
@@ -1003,14 +995,8 @@ void main() {
     final w = _wire(() => null);
     final textOnly = PersonalLibraryEntry(
       details: _materialDetails(
-        assets: [
-          DocumentTextMaterialAsset(
-            id: 'text-1',
-            text: 'Hello',
-            sha256Digest: 'x',
-            byteSize: 5,
-            language: null,
-          ),
+        documentRenditions: [
+          documentRendition(id: 'text-1', text: 'Hello'),
         ],
       ),
       mediaEntries: const [],

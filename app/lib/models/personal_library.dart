@@ -30,15 +30,17 @@ class PersonalLibraryEntry {
   int get updatedAtMs => details.material.updatedAtMs;
   bool get isRetained => details.isRetained;
 
-  /// Document-text assets of the current revision, in revision order.
-  /// Immutable.
-  List<DocumentTextMaterialAsset> get documentAssets => List.unmodifiable(
-    details.currentRevision.assets.whereType<DocumentTextMaterialAsset>(),
+  /// Source-rendition document renditions of the current revision, in
+  /// revision order. Immutable.
+  List<DocumentRendition> get documentRenditions => List.unmodifiable(
+    details.currentRevision.documentRenditions.where(
+      (rendition) => rendition.origin == RenditionOrigin.source,
+    ),
   );
 
   /// The current revision's media renditions, in revision order. Immutable.
-  List<MediaRenditionMaterialAsset> get mediaRenditions => List.unmodifiable(
-    details.currentRevision.assets.whereType<MediaRenditionMaterialAsset>(),
+  List<MediaRendition> get mediaRenditions => List.unmodifiable(
+    details.currentRevision.mediaRenditions,
   );
 
   /// The deterministic primary media: the first usable media rendition in
@@ -51,8 +53,10 @@ class PersonalLibraryEntry {
       if (rendition.availability != MediaRenditionAvailability.available) {
         continue;
       }
+      final mediaId = rendition.mediaId;
+      if (mediaId == null) continue;
       for (final entry in mediaEntries) {
-        if (entry.media.id == rendition.mediaId &&
+        if (entry.media.id == mediaId &&
             entry.media.availability == 'available') {
           return entry;
         }
@@ -70,11 +74,17 @@ class PersonalLibraryEntry {
   bool get isGoldenTarget => primaryMedia?.isGoldenTarget ?? false;
   ContentDifficultyProfile? get fit => primaryMedia?.fit;
 
-  /// Whether this material offers a Read capability: at least one document
-  /// asset on the current revision.
-  bool get canRead => documentAssets.isNotEmpty;
+  /// Whether this material offers a Read capability: at least one source
+  /// document rendition on the current revision.
+  bool get canRead => documentRenditions.isNotEmpty;
 
-  /// Whether this material offers Listen/Watch: a usable primary media.
+  /// Whether this material offers Listen: a usable primary audio media.
+  bool get canListen => primaryMedia?.media.kind == 'audio';
+
+  /// Whether this material offers Watch: a usable primary video media.
+  bool get canWatch => primaryMedia?.media.kind == 'video';
+
+  /// Whether this material offers Listen or Watch: a usable primary media.
   bool get canListenOrWatch => primaryMedia != null;
 
   /// Queue grouping facts, delegated to the primary media. Text-only rows
@@ -107,10 +117,11 @@ class PersonalLibraryEntry {
     }
     final joined = <MediaLibraryEntry>[];
     final seen = <String>{};
-    for (final asset in details.currentRevision.assets) {
-      if (asset is! MediaRenditionMaterialAsset) continue;
-      if (!seen.add(asset.mediaId)) continue;
-      final entry = byMediaId[asset.mediaId];
+    for (final rendition in details.currentRevision.mediaRenditions) {
+      final mediaId = rendition.mediaId;
+      if (mediaId == null) continue;
+      if (!seen.add(mediaId)) continue;
+      final entry = byMediaId[mediaId];
       if (entry != null) joined.add(entry);
     }
     return List.unmodifiable(joined);

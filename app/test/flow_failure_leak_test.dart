@@ -515,8 +515,17 @@ _harness(LocalApi service) {
 /// transport level, so the store stays a wall rather than a promise.
 final class _UnavailableManagedStore implements ManagedAssetStoreService {
   @override
-  Future<ManagedAssetCopy> copyIntoStore({required String sourcePath}) =>
-      throw const ManagedStoreUnavailable();
+  Future<ManagedAssetCopy> copyIntoStore({
+    required String sourcePath,
+    String? mediaKind,
+  }) => throw const ManagedStoreUnavailable();
+  @override
+  Future<ManagedAssetCopy> copyBytesIntoStore({
+    required List<int> bytes,
+    required String mediaKind,
+  }) => throw const ManagedStoreUnavailable();
+  @override
+  Future<List<int>?> readBytes(String path) async => null;
   @override
   Future<void> deleteStoreCopy(String path) async {}
 }
@@ -567,4 +576,16 @@ final class _NoopLearningMaterialRepository
   @override
   Future<MaterialDetails> resolveMaterialForMedia(String mediaId) =>
       throw UnimplementedError();
+
+  @override
+  Future<MaterialRevision> updateSourceAssetAvailability(
+    String materialId,
+    String sourceAssetId,
+    SourceAssetAvailability availability,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
+    String materialId,
+  ) => throw UnimplementedError();
 }

@@ -296,14 +296,15 @@ class LocalApi {
 }
 
 const supportedApiVersion = 1;
-// R5 removes the published legacy ChunkTimeline HTTP/LLTimeline surface, so
-// the pinned Core contract is 3.x. The API generation remains 1.
-const supportedContractMajor = 3;
-// The App consumes the Core 3.2 learning-material surface, so a sidecar must
-// present contract >= 3.2.0 within the supported major. 3.0/3.1 sidecars are
+// Phase 1 Slice 1 establishes the canonical Core contract 4.0.0, which the
+// App consumes (Source Assets, typed Document/Media Renditions, capabilities,
+// package lifecycle). The API generation remains 1.
+const supportedContractMajor = 4;
+// The App consumes the Core 4.0 learning-material surface, so a sidecar must
+// present contract >= 4.0.0 within the supported major. Older sidecars are
 // rejected here instead of connecting and then failing on the first material
 // call.
-const supportedContractMinor = 2;
+const supportedContractMinor = 0;
 
 void validateSidecarHandshake(Map<String, dynamic> handshake) {
   if (handshake['event'] != 'api.started' ||
