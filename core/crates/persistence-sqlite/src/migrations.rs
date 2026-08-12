@@ -537,6 +537,9 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     if current < 61 {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0061_canonical_materials.sql"))?;
+        if table_exists(&tx, "material_assets")? {
+            tx.execute_batch(include_str!("../migrations/0061_convert_legacy_assets.sql"))?;
+        }
         tx.pragma_update(None, "user_version", 61)?;
         tx.commit()?;
     }

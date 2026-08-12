@@ -380,7 +380,7 @@ fn legacy_unretain_clears_material_and_media_membership_together() {
     let graph_before = (
         count_rows(&repo, "learning_materials"),
         count_rows(&repo, "material_revisions"),
-        count_rows(&repo, "material_assets"),
+        count_rows(&repo, "material_media_renditions"),
         count_rows(&repo, "material_media_bindings"),
     );
 
@@ -402,7 +402,7 @@ fn legacy_unretain_clears_material_and_media_membership_together() {
         (
             count_rows(&repo, "learning_materials"),
             count_rows(&repo, "material_revisions"),
-            count_rows(&repo, "material_assets"),
+            count_rows(&repo, "material_media_renditions"),
             count_rows(&repo, "material_media_bindings"),
         ),
         graph_before

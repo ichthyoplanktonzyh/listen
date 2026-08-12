@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use domain::{LearningMaterialId, MaterialRevisionId, SourceIdentityMapping, SourceItemIdentity};
+use domain::{LearningMaterialId, SourceIdentityMapping, SourceItemIdentity};
 
 use crate::{ApplicationError, MaterialRepository};
 

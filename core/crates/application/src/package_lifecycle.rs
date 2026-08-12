@@ -35,6 +35,10 @@ use content_package::v2::{
     InstallationPlan, KnownPayload, PlanRendition, PlanResource, ResourceDisposition, ResourceRole,
     ReviewStatus, V2Error, V2Inspection, inspect_v2_path, installation_plan,
 };
+use content_package::v3::{
+    PlanDocumentRendition, PlanMediaRendition, ProbeError, ReleaseSchema, V3Error, V3Inspection,
+    V3InstallationPlan, inspect_v3_path, installation_plan_v3, probe_release_schema,
+};
 use domain::{
     AdoptionCommitPlan, DocumentRendition, LanguageCode, LearningEdition, LearningMaterial,
     LearningMaterialId, MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId,
@@ -260,16 +264,17 @@ impl PackageLifecycleUseCases {
         }
     }
 
-    /// Installs one local Content Package v2 release for an existing Learning
-    /// Material.
+    /// Installs one local Content Package release for an existing Learning
+    /// Material. Both the v2 and the v3 release schema are supported; the
+    /// declared schema of the carrier selects the inspection.
     ///
-    /// The carrier must be a v2 release whose `material_id` and
-    /// `material_revision_id` equal the Material's identity and current
-    /// revision exactly. Declared media renditions must match a bound
-    /// Material media asset by kind and normalized SHA-256 fingerprint, a
-    /// document-text base resource must agree with the matching Material text
-    /// asset, and every required known resource payload and its dependency
-    /// closure must be available. Ambiguous bindings fail rather than guess.
+    /// The carrier's `material_id` and `material_revision_id` must equal the
+    /// Material's identity and current revision exactly. Declared media
+    /// renditions must match a bound Material media asset by kind and
+    /// normalized SHA-256 fingerprint, a document-text base resource must
+    /// agree with the matching Material text asset, and every required known
+    /// resource payload and its dependency closure must be available.
+    /// Ambiguous bindings fail rather than guess.
     ///
     /// Installation is candidate-only: the Material's membership, revision,
     /// adoption, and active selections are never changed. The exact validated
@@ -290,10 +295,19 @@ impl PackageLifecycleUseCases {
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
         let current_revision = self.current_revision(&material)?;
-        let inspection = inspect_v2_path(package_path).map_err(map_inspection_error)?;
-        let plan = installation_plan(&inspection);
-        let prepared =
-            self.prepare_installation(&material, &current_revision, &inspection, &plan)?;
+        let schema = probe_release_schema(package_path).map_err(map_probe_error)?;
+        let prepared = match schema {
+            ReleaseSchema::V2 => {
+                let inspection = inspect_v2_path(package_path).map_err(map_inspection_error)?;
+                let plan = installation_plan(&inspection);
+                self.prepare_installation(&material, &current_revision, &inspection, &plan)?
+            }
+            ReleaseSchema::V3 => {
+                let inspection = inspect_v3_path(package_path).map_err(map_v3_inspection_error)?;
+                let plan = installation_plan_v3(&inspection);
+                self.prepare_v3_installation(&material, &current_revision, &inspection, &plan)?
+            }
+        };
         let persisted = self.package_lifecycle.save_installation(&prepared)?;
         let adoption = self.package_lifecycle.get_adoption(material_id)?;
         let adopted = adoption
@@ -390,7 +404,524 @@ impl PackageLifecycleUseCases {
         Ok(revision)
     }
 
-    /// Validates the inspected release against the Material and projects it
+    /// Validates the inspected v3 release against the Material and projects it
+    /// into the prepared installation. Source renditions must match the
+    /// Material's own renditions; Derived renditions carry producer facts
+    /// (already enforced by the v3 inspection) and are available only when
+    /// their declared blob is present in the carrier.
+    fn prepare_v3_installation(
+        &self,
+        material: &LearningMaterial,
+        current_revision: &MaterialRevision,
+        inspection: &V3Inspection,
+        plan: &V3InstallationPlan,
+    ) -> Result<PreparedPackageInstallation, ApplicationError> {
+        if plan.material_id != material.id.as_str() {
+            return Err(ApplicationError::Invalid(
+                "content package v3 material id does not match the target material".into(),
+            ));
+        }
+        if plan.material_revision_id != current_revision.id.as_str() {
+            return Err(ApplicationError::Invalid(
+                "content package v3 material revision does not match the material's current revision"
+                    .into(),
+            ));
+        }
+        let document_availability = validate_v3_document_sources(current_revision, inspection)?;
+        let media_availability = validate_v3_media_sources(current_revision, inspection)?;
+        verify_v3_required_closure(plan, inspection)?;
+        let edition = LearningEdition {
+            edition_id: domain::LearningEditionId::parse(&plan.edition_id)?,
+            title: inspection.release.edition.title.clone(),
+            target_language: LanguageCode::parse(&inspection.release.edition.target_language)?,
+            support_languages: inspection
+                .release
+                .edition
+                .support_languages
+                .iter()
+                .map(LanguageCode::parse)
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        let resources = plan
+            .resources
+            .iter()
+            .map(|resource| resource_fact_v3(resource, inspection))
+            .collect::<Result<Vec<_>, _>>()?;
+        let renditions = v3_rendition_facts(plan, &document_availability, &media_availability)?;
+        let payloads = collect_prepared_payloads_v3(plan, inspection)?;
+        Ok(PreparedPackageInstallation {
+            installation: PackageInstallation {
+                release_id: PackageReleaseId::parse(&plan.release_id)?,
+                release_created_at_ms: inspection.release.created_at_ms,
+                material_id: material.id.clone(),
+                material_revision_id: current_revision.id.clone(),
+                edition,
+                resources,
+                renditions,
+                installed_at_ms: now_ms(),
+            },
+            payloads,
+        })
+    }
+}
+
+/// Validates every declared v3 Document Rendition against the bound Material
+/// document renditions. A Source rendition must agree with exactly one
+/// Material document rendition by exact text digest and must not contradict
+/// its declared language; a Derived rendition is available when its declared
+/// text blob is present in the carrier. Returns the per-rendition
+/// availability fact.
+fn validate_v3_document_sources(
+    current_revision: &MaterialRevision,
+    inspection: &V3Inspection,
+) -> Result<HashMap<String, bool>, ApplicationError> {
+    let mut availability = HashMap::with_capacity(inspection.document_renditions.len());
+    for record in &inspection.document_renditions {
+        let entry = &record.entry;
+        let available = match entry.origin {
+            content_package::v3::RenditionOrigin::Source => {
+                let digest_hex = entry.text_blob.digest.trim_start_matches("sha256:");
+                let matches: Vec<&DocumentRendition> = current_revision
+                    .renditions
+                    .iter()
+                    .filter_map(|component| match component {
+                        Rendition::Document(rendition) if rendition.text_sha256 == digest_hex => {
+                            Some(rendition)
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                if matches.is_empty() {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition does not match a bound material document rendition"
+                            .into(),
+                    ));
+                }
+                if matches.len() > 1 {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition binding is ambiguous".into(),
+                    ));
+                }
+                if let (Some(declared), Some(stored)) = (&entry.language, &matches[0].language)
+                    && declared != stored.as_str()
+                {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 source document rendition contradicts the material's declared language"
+                            .into(),
+                    ));
+                }
+                true
+            }
+            content_package::v3::RenditionOrigin::Derived => {
+                debug_assert!(
+                    entry.producer.is_some(),
+                    "derived renditions carry producer facts by inspection"
+                );
+                record.text_present
+            }
+        };
+        availability.insert(entry.rendition_id.clone(), available);
+    }
+    Ok(availability)
+}
+
+/// Validates every declared v3 Media Rendition against the bound Material
+/// media renditions. A Source rendition must match exactly one bound asset by
+/// kind and fingerprint; a Derived rendition records its own producer facts
+/// and is available when its declared media blob is present in the carrier.
+/// Returns the per-rendition availability fact.
+fn validate_v3_media_sources(
+    current_revision: &MaterialRevision,
+    inspection: &V3Inspection,
+) -> Result<HashMap<String, (bool, Option<MediaId>)>, ApplicationError> {
+    let mut availability = HashMap::with_capacity(inspection.media_renditions.len());
+    for record in &inspection.media_renditions {
+        let entry = &record.entry;
+        let fact = match entry.origin {
+            content_package::v3::RenditionOrigin::Source => {
+                let matches: Vec<&MediaRendition> = current_revision
+                    .renditions
+                    .iter()
+                    .filter_map(|component| {
+                        let Rendition::Media(media) = component else {
+                            return None;
+                        };
+                        let kind_matches = match media.kind {
+                            MediaKind::Audio => entry.kind == "audio",
+                            MediaKind::Video => entry.kind == "video",
+                        };
+                        (kind_matches
+                            && media_fingerprint_equals(&media.fingerprint, &entry.fingerprint))
+                        .then_some(media)
+                    })
+                    .collect();
+                if matches.is_empty() {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 media rendition does not match a bound material media rendition"
+                            .into(),
+                    ));
+                }
+                if matches.len() > 1 {
+                    return Err(ApplicationError::Invalid(
+                        "content package v3 media rendition binding is ambiguous".into(),
+                    ));
+                }
+                (
+                    matches[0].availability == MediaAvailability::Available,
+                    matches[0].media_id.clone(),
+                )
+            }
+            content_package::v3::RenditionOrigin::Derived => {
+                debug_assert!(
+                    entry.producer.is_some(),
+                    "derived renditions carry producer facts by inspection"
+                );
+                (record.media_present, None)
+            }
+        };
+        availability.insert(entry.rendition_id.clone(), fact);
+    }
+    Ok(availability)
+}
+
+/// Whether the Material's stored media fingerprint equals the declared v3
+/// rendition fingerprint. Equal strings match; a `sha256:` prefix difference
+/// over an otherwise equal 64-hex digest matches; anything else never
+/// matches, so no cross-source equivalence is inferred.
+fn media_fingerprint_equals(stored: &str, declared: &str) -> bool {
+    if stored == declared {
+        return true;
+    }
+    let stored_hex = stored.strip_prefix("sha256:").unwrap_or(stored);
+    let declared_hex = declared.strip_prefix("sha256:").unwrap_or(declared);
+    stored_hex == declared_hex && stored_hex.len() == 64
+}
+
+/// Every required known resource payload and its transitive dependency
+/// closure must be available and verified; optional missing resources remain
+/// explicit unavailable facts.
+fn verify_v3_required_closure(
+    plan: &V3InstallationPlan,
+    inspection: &V3Inspection,
+) -> Result<(), ApplicationError> {
+    let dispositions: HashMap<&str, &PlanResource> = plan
+        .resources
+        .iter()
+        .map(|resource| (resource.resource_id.as_str(), resource))
+        .collect();
+    let edges: HashMap<&str, Vec<&str>> = inspection
+        .release
+        .resources
+        .iter()
+        .map(|entry| {
+            (
+                entry.resource_id.as_str(),
+                entry
+                    .descriptor
+                    .dependencies
+                    .iter()
+                    .map(|dependency| dependency.resource_id.as_str())
+                    .collect(),
+            )
+        })
+        .collect();
+    for resource in plan.resources.iter().filter(|resource| resource.required) {
+        if resource.disposition != ResourceDisposition::Candidate {
+            return Err(ApplicationError::Invalid(
+                "content package v3 required resource payload is unavailable".into(),
+            ));
+        }
+        let mut pending = vec![resource.resource_id.as_str()];
+        let mut seen = HashSet::new();
+        while let Some(next) = pending.pop() {
+            if !seen.insert(next) {
+                continue;
+            }
+            let Some(dependencies) = edges.get(next) else {
+                return Err(v3_closure_unavailable());
+            };
+            for dependency in dependencies {
+                let available = dispositions
+                    .get(dependency)
+                    .is_some_and(|entry| entry.disposition == ResourceDisposition::Candidate);
+                if !available {
+                    return Err(v3_closure_unavailable());
+                }
+                pending.push(dependency);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn v3_closure_unavailable() -> ApplicationError {
+    ApplicationError::Invalid(
+        "content package v3 required resource dependency closure is unavailable".into(),
+    )
+}
+
+/// Collects the exact validated bytes of every present resource payload from
+/// the v3 inspection: candidate payloads must be present, present opaque
+/// payloads are preserved with their bytes, and missing resources contribute
+/// no body.
+fn collect_prepared_payloads_v3(
+    plan: &V3InstallationPlan,
+    inspection: &V3Inspection,
+) -> Result<Vec<PreparedResourcePayload>, ApplicationError> {
+    let mut payloads = Vec::new();
+    for resource in &plan.resources {
+        let present = inspection
+            .payload_blobs
+            .get(&resource.payload_digest)
+            .map(|bytes| (bytes.len() as u64, bytes.clone()));
+        match resource.disposition {
+            ResourceDisposition::Candidate => {
+                let (size_bytes, bytes) = present.ok_or_else(|| {
+                    ApplicationError::Repository(
+                        "package release candidate payload bytes are missing".into(),
+                    )
+                })?;
+                payloads.push(PreparedResourcePayload {
+                    resource_id: resource.resource_id.clone(),
+                    kind: resource.kind.clone(),
+                    schema: resource.schema.clone(),
+                    digest: resource.payload_digest.clone(),
+                    size_bytes,
+                    bytes,
+                });
+            }
+            ResourceDisposition::Opaque => {
+                if let Some((size_bytes, bytes)) = present {
+                    payloads.push(PreparedResourcePayload {
+                        resource_id: resource.resource_id.clone(),
+                        kind: resource.kind.clone(),
+                        schema: resource.schema.clone(),
+                        digest: resource.payload_digest.clone(),
+                        size_bytes,
+                        bytes,
+                    });
+                }
+            }
+            ResourceDisposition::Missing => {}
+        }
+    }
+    payloads.sort_by(|a, b| a.resource_id.cmp(&b.resource_id));
+    Ok(payloads)
+}
+
+/// Projects one v3 plan resource into the immutable domain fact, joining the
+/// descriptor facts from the inspected release.
+fn resource_fact_v3(
+    plan_resource: &PlanResource,
+    inspection: &V3Inspection,
+) -> Result<PackageResourceFact, ApplicationError> {
+    let entry = inspection
+        .release
+        .resources
+        .iter()
+        .find(|entry| entry.resource_id == plan_resource.resource_id)
+        .ok_or_else(|| {
+            ApplicationError::Repository("package release resource is missing".into())
+        })?;
+    let descriptor = &entry.descriptor;
+    Ok(PackageResourceFact {
+        resource_id: plan_resource.resource_id.clone(),
+        kind: plan_resource.kind.clone(),
+        schema: plan_resource.schema.clone(),
+        role: match plan_resource.role {
+            ResourceRole::Base => PackageResourceRole::Base,
+            ResourceRole::Assistance => PackageResourceRole::Assistance,
+        },
+        required: plan_resource.required,
+        availability: match plan_resource.disposition {
+            ResourceDisposition::Candidate => PackageResourceAvailability::Available,
+            ResourceDisposition::Opaque => PackageResourceAvailability::Opaque,
+            ResourceDisposition::Missing => PackageResourceAvailability::Missing,
+        },
+        content_language: descriptor
+            .content_language
+            .as_deref()
+            .map(LanguageCode::parse)
+            .transpose()?,
+        support_languages: descriptor
+            .support_languages
+            .iter()
+            .map(LanguageCode::parse)
+            .collect::<Result<Vec<_>, _>>()?,
+        dependencies: descriptor
+            .dependencies
+            .iter()
+            .map(|dependency| dependency.resource_id.clone())
+            .collect(),
+        payload_digest: descriptor.payload_blob.digest.clone(),
+        payload_size_bytes: descriptor.payload_blob.size_bytes,
+        provenance: PackageResourceProvenance {
+            created_at_ms: descriptor.provenance.created_at_ms,
+            tool_id: descriptor.provenance.tool.id.clone(),
+            tool_version: descriptor.provenance.tool.version.clone(),
+            provider_id: descriptor
+                .provenance
+                .provider
+                .as_ref()
+                .map(|producer| producer.id.clone()),
+            provider_version: descriptor
+                .provenance
+                .provider
+                .as_ref()
+                .map(|producer| producer.version.clone()),
+            model_id: descriptor
+                .provenance
+                .model
+                .as_ref()
+                .map(|producer| producer.id.clone()),
+            model_version: descriptor
+                .provenance
+                .model
+                .as_ref()
+                .map(|producer| producer.version.clone()),
+            config_sha256: descriptor.provenance.config_sha256.clone(),
+        },
+        review_status: match descriptor.quality.review_status {
+            ReviewStatus::Unreviewed => PackageReviewStatus::Unreviewed,
+            ReviewStatus::MachineChecked => PackageReviewStatus::MachineChecked,
+            ReviewStatus::HumanReviewed => PackageReviewStatus::HumanReviewed,
+        },
+        quality_warnings: descriptor.quality.warnings.clone(),
+    })
+}
+
+/// Projects every v3 rendition into the immutable domain facts: document
+/// renditions carry kind `document` and media renditions kind `media`, both
+/// with their exact origin, availability, digest, and size snapshot.
+fn v3_rendition_facts(
+    plan: &V3InstallationPlan,
+    document_availability: &HashMap<String, bool>,
+    media_availability: &HashMap<String, (bool, Option<MediaId>)>,
+) -> Result<Vec<PackageRenditionFact>, ApplicationError> {
+    let mut facts =
+        Vec::with_capacity(plan.document_renditions.len() + plan.media_renditions.len());
+    for rendition in &plan.document_renditions {
+        facts.push(document_rendition_fact(rendition, document_availability)?);
+    }
+    for rendition in &plan.media_renditions {
+        facts.push(media_rendition_fact(rendition, media_availability)?);
+    }
+    Ok(facts)
+}
+
+fn document_rendition_fact(
+    plan_rendition: &PlanDocumentRendition,
+    availability: &HashMap<String, bool>,
+) -> Result<PackageRenditionFact, ApplicationError> {
+    let available = availability
+        .get(&plan_rendition.rendition_id)
+        .copied()
+        .ok_or_else(|| {
+            ApplicationError::Repository("package release document rendition is missing".into())
+        })?;
+    Ok(PackageRenditionFact {
+        rendition_id: plan_rendition.rendition_id.clone(),
+        kind: "document".to_owned(),
+        origin: match plan_rendition.origin {
+            content_package::v3::RenditionOrigin::Source => RenditionOrigin::Source,
+            content_package::v3::RenditionOrigin::Derived => RenditionOrigin::Derived,
+        },
+        media_type: plan_rendition.media_type.clone(),
+        available,
+        media_digest: plan_rendition.text_digest.clone(),
+        media_size_bytes: plan_rendition.text_size_bytes,
+        media_id: None,
+        producer: plan_rendition
+            .producer
+            .as_ref()
+            .map(|producer| PackageResourceProvenance {
+                created_at_ms: producer.created_at_ms,
+                tool_id: producer.tool_id.clone(),
+                tool_version: producer.tool_version.clone(),
+                provider_id: producer.provider_id.clone(),
+                provider_version: producer.provider_version.clone(),
+                model_id: producer.model_id.clone(),
+                model_version: producer.model_version.clone(),
+                config_sha256: producer.config_sha256.clone(),
+            }),
+    })
+}
+
+fn media_rendition_fact(
+    plan_rendition: &PlanMediaRendition,
+    availability: &HashMap<String, (bool, Option<MediaId>)>,
+) -> Result<PackageRenditionFact, ApplicationError> {
+    let (available, media_id) = availability
+        .get(&plan_rendition.rendition_id)
+        .cloned()
+        .ok_or_else(|| {
+            ApplicationError::Repository("package release media rendition is missing".into())
+        })?;
+    Ok(PackageRenditionFact {
+        rendition_id: plan_rendition.rendition_id.clone(),
+        kind: "media".to_owned(),
+        origin: match plan_rendition.origin {
+            content_package::v3::RenditionOrigin::Source => RenditionOrigin::Source,
+            content_package::v3::RenditionOrigin::Derived => RenditionOrigin::Derived,
+        },
+        media_type: plan_rendition.media_type.clone(),
+        available,
+        media_digest: plan_rendition.media_digest.clone(),
+        media_size_bytes: plan_rendition.media_size_bytes,
+        media_id,
+        producer: plan_rendition
+            .producer
+            .as_ref()
+            .map(|producer| PackageResourceProvenance {
+                created_at_ms: producer.created_at_ms,
+                tool_id: producer.tool_id.clone(),
+                tool_version: producer.tool_version.clone(),
+                provider_id: producer.provider_id.clone(),
+                provider_version: producer.provider_version.clone(),
+                model_id: producer.model_id.clone(),
+                model_version: producer.model_version.clone(),
+                config_sha256: producer.config_sha256.clone(),
+            }),
+    })
+}
+
+/// Maps bounded v3 inspection failures into stable application errors. Local
+/// package paths, payloads, and raw validation text never leak into the
+/// error surface.
+fn map_v3_inspection_error(error: V3Error) -> ApplicationError {
+    let message = match error {
+        V3Error::Io(_) | V3Error::Zip(_) => "content package v3 could not be read",
+        V3Error::Limit(_) => "content package v3 exceeds inspection limits",
+        V3Error::UnsafePath(_) => "content package v3 contains an unsafe entry path",
+        V3Error::Symlink(_) => "content package v3 contains a symbolic link",
+        V3Error::DuplicatePath(_) => "content package v3 contains duplicate entries",
+        V3Error::MissingRelease => "content package v3 is missing release.json",
+        V3Error::ReleaseJson(_) => "content package v3 release.json is not valid JSON",
+        V3Error::PayloadJson { .. } => "content package v3 resource payload is not valid JSON",
+        V3Error::Invalid { .. } => "content package v3 carrier is invalid",
+        V3Error::Incompatible { .. } => "content package v3 release is incompatible",
+    };
+    ApplicationError::Invalid(message.into())
+}
+
+/// Maps bounded release-schema probe failures into stable application errors.
+fn map_probe_error(error: ProbeError) -> ApplicationError {
+    let message = match error {
+        ProbeError::Io(_) | ProbeError::Zip(_) => "content package could not be read",
+        ProbeError::Limit(_) => "content package exceeds inspection limits",
+        ProbeError::UnsafePath(_) => "content package contains an unsafe entry path",
+        ProbeError::Symlink(_) => "content package contains a symbolic link",
+        ProbeError::DuplicatePath(_) => "content package contains duplicate entries",
+        ProbeError::MissingRelease => "content package is missing release.json",
+        ProbeError::ReleaseJson(_) => "content package release.json is not valid JSON",
+        ProbeError::UnsupportedSchema(_) => "content package release schema is unsupported",
+        ProbeError::Invalid { .. } => "content package carrier is invalid",
+    };
+    ApplicationError::Invalid(message.into())
+}
+
+impl PackageLifecycleUseCases {
+    /// Validates the inspected v2 release against the Material and projects it
     /// into the prepared installation: the immutable facts plus the exact
     /// validated bytes of every present resource payload. The bytes exist
     /// only in the prepared input, which the repository persists durably with
@@ -890,6 +1421,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use content_package::v2::{RELEASE_SCHEMA_V2, serialize_canonical};
+    use content_package::v3::RELEASE_SCHEMA_V3;
     use domain::{LearningMaterial, MaterialRevision, MediaId, initial_material_id};
     use serde_json::{Value, json};
     use sha2::{Digest as _, Sha256};
@@ -1088,6 +1620,24 @@ mod tests {
 
         fn installation_count(&self) -> usize {
             self.state.lock().unwrap().installations.len()
+        }
+
+        /// Every stored installation for one material, in insertion order.
+        fn stored_installations(
+            &self,
+            material_id: &LearningMaterialId,
+        ) -> Vec<PackageInstallation> {
+            let mut stored: Vec<PackageInstallation> = self
+                .state
+                .lock()
+                .unwrap()
+                .installations
+                .values()
+                .filter(|entry| entry.installation.material_id == *material_id)
+                .map(|entry| entry.installation.clone())
+                .collect();
+            stored.sort_by(|a, b| a.release_id.as_str().cmp(b.release_id.as_str()));
+            stored
         }
 
         fn set_fail_commit_adoption(&self, fail: bool) {
@@ -2134,6 +2684,483 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
+    // v3 release fixtures
+    // ---------------------------------------------------------------------
+
+    fn v3_blob_declaration(digest: &str, size: u64, embedded: bool) -> Value {
+        json!({"digest": digest, "size_bytes": size, "embedded": embedded})
+    }
+
+    /// A v3 Document Rendition with the identity derived from the canonical
+    /// `{media_type, language, text_blob}` descriptor.
+    fn v3_document_rendition(
+        origin: &str,
+        media_type: &str,
+        language: Option<&str>,
+        text_blob: &Value,
+        source_asset_id: Option<&str>,
+        producer: Option<&Value>,
+        compatibility: Option<&Value>,
+    ) -> Value {
+        let identity = json!({
+            "media_type": media_type,
+            "language": language,
+            "text_blob": text_blob,
+        });
+        let rendition_id = sha256_id(&canonical_bytes(&identity));
+        json!({
+            "rendition_id": rendition_id,
+            "origin": origin,
+            "media_type": media_type,
+            "language": language,
+            "text_blob": text_blob.clone(),
+            "source_asset_id": source_asset_id,
+            "producer": producer,
+            "compatibility": compatibility,
+            "extensions": {},
+        })
+    }
+
+    /// A v3 Media Rendition with the identity derived from the canonical
+    /// `{kind, media_type, media_blob, media_id, fingerprint}` descriptor.
+    #[allow(clippy::too_many_arguments)]
+    fn v3_media_rendition(
+        origin: &str,
+        kind: &str,
+        media_type: &str,
+        media_blob: &Value,
+        media_id: Option<&str>,
+        fingerprint: &str,
+        producer: Option<&Value>,
+        compatibility: Option<&Value>,
+    ) -> Value {
+        let identity = json!({
+            "kind": kind,
+            "media_type": media_type,
+            "media_blob": media_blob,
+            "media_id": media_id,
+            "fingerprint": fingerprint,
+        });
+        let rendition_id = sha256_id(&canonical_bytes(&identity));
+        json!({
+            "rendition_id": rendition_id,
+            "origin": origin,
+            "kind": kind,
+            "media_type": media_type,
+            "media_blob": media_blob.clone(),
+            "media_id": media_id,
+            "fingerprint": fingerprint,
+            "producer": producer,
+            "compatibility": compatibility,
+            "extensions": {},
+        })
+    }
+
+    fn v3_producer() -> Value {
+        json!({
+            "created_at_ms": 1,
+            "tool": {"id": "listen-gen", "version": "0.4.0"},
+            "provider": null,
+            "model": null,
+            "config_sha256": null,
+        })
+    }
+
+    fn v3_compatibility() -> Value {
+        json!({
+            "verified_inputs": [],
+            "checks": ["exact_text_match"],
+        })
+    }
+
+    fn v3_base_descriptor(
+        kind: &str,
+        schema: &str,
+        language: &str,
+        dependencies: &[&str],
+        digest: &str,
+        size: u64,
+        revision_id: &str,
+    ) -> Value {
+        json!({
+            "schema": schema,
+            "kind": kind,
+            "role": "base",
+            "content_language": language,
+            "support_languages": [],
+            "subject": {"material_revision_id": revision_id, "rendition_ids": [], "anchor_resource_ids": []},
+            "dependencies": dependencies.iter().map(|dep| json!({"resource_id": dep})).collect::<Vec<_>>(),
+            "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
+            "quality": {"review_status": "human_reviewed", "warnings": [], "extensions": {}},
+            "payload_blob": v3_blob_declaration(digest, size, true),
+            "extensions": {},
+        })
+    }
+
+    fn v3_release(
+        ids: &FixtureIds,
+        edition_id: &str,
+        document_renditions: Vec<Value>,
+        media_renditions: Vec<Value>,
+        resources: Vec<Value>,
+    ) -> Value {
+        json!({
+            "schema": RELEASE_SCHEMA_V3,
+            "created_at_ms": 1u64,
+            "edition": {
+                "edition_id": edition_id,
+                "title": EDITION_TITLE,
+                "target_language": "en",
+                "support_languages": ["zh-Hans"],
+            },
+            "material": {
+                "material_id": ids.material_id,
+                "material_revision_id": ids.revision_id,
+                "title": "Fixture Material",
+            },
+            "document_renditions": document_renditions,
+            "media_renditions": media_renditions,
+            "resources": resources,
+            "extensions": {},
+        })
+    }
+
+    /// A v3 release with one source Document Rendition matching the fixture
+    /// text and one embedded base document_text resource.
+    fn v3_text_release(ids: &FixtureIds, edition_id: &str) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let text_bytes = TEXT.as_bytes().to_vec();
+        let text_digest = sha256_id(&text_bytes);
+        let text_blob = v3_blob_declaration(&text_digest, text_bytes.len() as u64, true);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("en"),
+            &text_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let (_, payload_bytes) = document_payload(TEXT, "en");
+        let payload_digest = sha256_id(&payload_bytes);
+        let descriptor = v3_base_descriptor(
+            "document_text",
+            "listen.payload.document-text.v1",
+            "en",
+            &[],
+            &payload_digest,
+            payload_bytes.len() as u64,
+            &ids.revision_id,
+        );
+        let resource = resource_entry(&descriptor, true);
+        let release = v3_release(ids, edition_id, vec![document], vec![], vec![resource]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&text_digest), text_bytes);
+        blobs.insert(blob_path(&payload_digest), payload_bytes);
+        let files = carrier_with_release(&release, blobs);
+        (release, files)
+    }
+
+    /// A composed v3 release: source Document Rendition, source Media
+    /// Rendition bound to the fixture media, and an embedded derived Media
+    /// Rendition, plus the base document_text resource.
+    fn v3_composed_release(
+        ids: &FixtureIds,
+        edition_id: &str,
+    ) -> (Value, BTreeMap<String, Vec<u8>>) {
+        let (release, mut files) = v3_text_release(ids, edition_id);
+
+        let media_digest = format!("sha256:{}", media_hex());
+        let source_media_blob = v3_blob_declaration(&media_digest, MEDIA_BYTES.len() as u64, false);
+        let source_media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &source_media_blob,
+            Some("media-1"),
+            &media_hex(),
+            None,
+            None,
+        );
+
+        let derived_bytes = b"listen fixture derived media".to_vec();
+        let derived_digest = sha256_id(&derived_bytes);
+        let derived_blob = v3_blob_declaration(&derived_digest, derived_bytes.len() as u64, true);
+        let derived_media = v3_media_rendition(
+            "derived",
+            "audio",
+            "audio/mpeg",
+            &derived_blob,
+            None,
+            "fp-derived",
+            Some(&v3_producer()),
+            Some(&v3_compatibility()),
+        );
+
+        let mut release = release;
+        release["media_renditions"] = json!([source_media, derived_media]);
+        files.insert(blob_path(&derived_digest), derived_bytes);
+        let files = carrier_with_release(&release, {
+            files.remove("release.json");
+            files
+        });
+        (release, files)
+    }
+
+    // ---------------------------------------------------------------------
+    // v3 installation
+    // ---------------------------------------------------------------------
+
+    #[test]
+    fn v3_install_prepares_candidate_only_edition() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, files) = v3_text_release(&ids, "edition-v3-text");
+
+        let view = install_ok(&setup, &material.id, &files);
+        assert_eq!(view.release_id.as_str().len(), 71);
+        assert_eq!(view.edition_id.as_str(), "edition-v3-text");
+        assert!(!view.adopted);
+        assert_eq!(view.resources.len(), 1);
+        assert_eq!(
+            view.resources[0].availability,
+            PackageResourceAvailability::Available
+        );
+        assert_eq!(view.renditions.len(), 1);
+        assert_eq!(view.renditions[0].kind, "document");
+        assert!(view.renditions[0].available);
+        assert_eq!(setup.package_lifecycle.installation_count(), 1);
+        // Candidate-only: membership is never touched.
+        assert_eq!(setup.materials.membership_calls(), 0);
+    }
+
+    #[test]
+    fn v3_install_supports_source_and_derived_renditions() {
+        let setup = setup();
+        let (material, revision) = seed_mixed_media_material(
+            &setup,
+            &format!("sha256:{}", media_hex()),
+            MediaAvailability::Available,
+        );
+        let ids = ids_of(&material, &revision);
+        let (release, files) = v3_composed_release(&ids, "edition-v3-composed");
+
+        let view = install_ok(&setup, &material.id, &files);
+        assert_eq!(view.renditions.len(), 3);
+        let document = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.kind == "document")
+            .expect("document rendition");
+        assert!(document.available);
+        // The source media blob is referenced, not embedded: availability
+        // comes from the bound Material media asset, which is available.
+        let source_media_id = release["media_renditions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["origin"] == "source")
+            .unwrap()["rendition_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let source_media = view
+            .renditions
+            .iter()
+            .find(|rendition| rendition.rendition_id.as_str() == source_media_id)
+            .expect("source media rendition");
+        assert!(source_media.available);
+        // The installed facts keep the origin and producer snapshot.
+        let stored = setup
+            .package_lifecycle
+            .stored_installations(&material.id)
+            .pop()
+            .expect("stored installation");
+        let derived = stored
+            .renditions
+            .iter()
+            .find(|rendition| rendition.origin == RenditionOrigin::Derived)
+            .expect("derived rendition fact");
+        assert_eq!(derived.kind, "media");
+        assert_eq!(
+            derived.producer.as_ref().expect("producer").tool_id,
+            "listen-gen"
+        );
+        let source = stored
+            .renditions
+            .iter()
+            .find(|rendition| {
+                rendition.origin == RenditionOrigin::Source && rendition.kind == "media"
+            })
+            .expect("source media rendition fact");
+        assert_eq!(
+            source.media_id.as_ref().expect("media id").as_str(),
+            "media-1"
+        );
+    }
+
+    #[test]
+    fn v3_install_rejects_unmatched_source_document_rendition() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, files) = v3_text_release(&ids, "edition-v3-text");
+        // Swap in a document rendition that does not match the Material text.
+        // The blob is referenced (not embedded) so inspection passes and the
+        // install-time binding check is the one that rejects the release.
+        let other_bytes = b"unrelated text".to_vec();
+        let other_digest = sha256_id(&other_bytes);
+        let other_blob = v3_blob_declaration(&other_digest, other_bytes.len() as u64, false);
+        let document = v3_document_rendition(
+            "source",
+            "text/plain",
+            Some("en"),
+            &other_blob,
+            Some("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+            None,
+            None,
+        );
+        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
+        release["document_renditions"] = json!([document]);
+        // The original text blob is no longer referenced by any rendition or
+        // resource; drop it so the carrier inventory stays exact.
+        let mut files = files;
+        files.remove(&blob_path(&sha256_id(TEXT.as_bytes())));
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
+
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 source document rendition does not match a bound material document rendition"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_source_document_language_contradiction() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = ids_of(&material, &revision);
+        let (_, mut files) = v3_text_release(&ids, "edition-v3-text");
+        let mut release: Value = serde_json::from_slice(&files["release.json"]).unwrap();
+        let entry = release["document_renditions"][0].clone();
+        let identity = json!({
+            "media_type": entry["media_type"],
+            "language": "zh-Hans",
+            "text_blob": entry["text_blob"],
+        });
+        release["document_renditions"][0]["language"] = json!("zh-Hans");
+        release["document_renditions"][0]["rendition_id"] =
+            json!(sha256_id(&canonical_bytes(&identity)));
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
+
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 source document rendition contradicts the material's declared language"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_unmatched_source_media_rendition() {
+        let setup = setup();
+        let (material, revision) =
+            seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
+        let ids = ids_of(&material, &revision);
+        let (release, mut files) = v3_text_release(&ids, "edition-v3-text");
+        let mut release = release;
+        let media_blob = v3_blob_declaration(&format!("sha256:{}", "c".repeat(64)), 100, false);
+        let media = v3_media_rendition(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &media_blob,
+            Some("media-1"),
+            "unrelated-fingerprint",
+            None,
+            None,
+        );
+        release["media_renditions"] = json!([media]);
+        files.insert("release.json".to_owned(), canonical_bytes(&release));
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 media rendition does not match a bound material media rendition"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_derived_media_without_producer_facts() {
+        let setup = setup();
+        let (material, revision) =
+            seed_mixed_media_material(&setup, &media_hex(), MediaAvailability::Available);
+        let ids = ids_of(&material, &revision);
+        let (release, _) = v3_text_release(&ids, "edition-v3-text");
+        let mut release = release;
+        let derived_bytes = b"listen fixture derived media".to_vec();
+        let derived_digest = sha256_id(&derived_bytes);
+        let derived_blob = v3_blob_declaration(&derived_digest, derived_bytes.len() as u64, true);
+        let derived = v3_media_rendition(
+            "derived",
+            "audio",
+            "audio/mpeg",
+            &derived_blob,
+            None,
+            "fp-derived",
+            None,
+            None,
+        );
+        release["media_renditions"] = json!([derived]);
+        let mut blobs = BTreeMap::new();
+        blobs.insert(blob_path(&derived_digest), derived_bytes);
+        let files = carrier_with_release(&release, blobs);
+
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 carrier is invalid"
+        ));
+    }
+
+    #[test]
+    fn v3_install_rejects_stale_material_revision() {
+        let setup = setup();
+        let (material, revision) = seed_text_material(&setup, false);
+        let ids = FixtureIds {
+            material_id: material.id.as_str().to_owned(),
+            revision_id: revision.id.as_str().to_owned(),
+        };
+        let (_, files) = v3_text_release(&ids, "edition-v3-text");
+        // Append a newer revision to the same Material so the package binds
+        // the stale revision.
+        let second = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                "Second revision text.",
+                None,
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
+        );
+        let appended =
+            MaterialRevision::new(material.id.clone(), "Material", Vec::new(), vec![second], 2)
+                .expect("valid revision");
+        setup.materials.append_revision_fake(appended, 2);
+        let error = install_err(&setup, &material.id, &files);
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message)
+                if message == "content package v3 material revision does not match the material's current revision"
+        ));
+    }
+
+    // ---------------------------------------------------------------------
     // Installation tests
     // ---------------------------------------------------------------------
 
@@ -2878,7 +3905,28 @@ mod tests {
         );
         assert!(matches!(
             error,
-            ApplicationError::Invalid(message) if message == "content package v2 is missing release.json"
+            ApplicationError::Invalid(message) if message == "content package is missing release.json"
+        ));
+    }
+
+    #[test]
+    fn install_unsupported_release_schema_is_a_stable_error() {
+        let setup = setup();
+        let (material, _) = seed_text_material(&setup, false);
+        let directory = TestDirectory::new();
+        fs::write(
+            directory.path().join("release.json"),
+            r#"{"schema":"listen.content-package.release.v99","resources":[]}"#,
+        )
+        .unwrap();
+
+        let error = setup
+            .use_cases
+            .install_for_material(&material.id, directory.path())
+            .expect_err("unsupported schema fails");
+        assert!(matches!(
+            error,
+            ApplicationError::Invalid(message) if message == "content package release schema is unsupported"
         ));
     }
 

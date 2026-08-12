@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use api_http::{ApiState, router};
+use api_http::{ApiState, CONTRACT_VERSION, router};
 use application::AppServices;
 use axum::Router;
 use axum::body::Body;
@@ -186,10 +186,10 @@ async fn health_endpoint_is_unprotected() {
     assert_eq!(body["status"], "ok");
     assert_eq!(body["api_version"], 1);
     assert_eq!(body["contract_version"], api_http::CONTRACT_VERSION);
-    // The package-lifecycle contract is locked exactly: 3.3.0 is the
-    // additive minor over the learning-material 3.2.0 (itself additive over
-    // the material-retention 3.1.0, never the previously published R4 2.1.0).
-    assert_eq!(body["contract_version"], "3.3.0");
+    // The Phase 1 canonical contract is locked exactly: 4.0.0 is the contract
+    // that rebuilds the learning-material surface on source assets and typed
+    // document/media renditions.
+    assert_eq!(body["contract_version"], CONTRACT_VERSION);
     assert_eq!(body["runtime_version"], env!("CARGO_PKG_VERSION"));
 }
 
@@ -890,8 +890,19 @@ async fn retained_media_states_membership_in_every_response_shape() {
 // ---------------------------------------------------------------------------
 
 /// Create a learning material over HTTP and return the details response.
-async fn create_material(app: &Router, title: &str, assets: Value, retain: Option<bool>) -> Value {
-    let mut body = json!({ "title": title, "assets": assets });
+async fn create_material(
+    app: &Router,
+    title: &str,
+    document_renditions: Value,
+    media_renditions: Value,
+    retain: Option<bool>,
+) -> Value {
+    let mut body = json!({
+        "title": title,
+        "source_assets": [],
+        "document_renditions": document_renditions,
+        "media_renditions": media_renditions,
+    });
     if let Some(retain) = retain {
         body["retain"] = json!(retain);
     }
@@ -947,14 +958,13 @@ async fn temporary_media_resolves_temporary_material_without_path() {
         "retain:false media registers a temporary material: {material}"
     );
     assert_eq!(material["shape"], "video");
-    let rendition = &material["current_revision"]["assets"][0];
-    assert_eq!(rendition["asset_type"], "media_rendition");
+    let rendition = &material["current_revision"]["media_renditions"][0];
     assert_eq!(rendition["media_id"], media_id);
-    assert_eq!(rendition["media_kind"], "video");
-    // No material, revision, or asset response exposes a path.
+    assert_eq!(rendition["kind"], "video");
+    // No material, revision, or rendition response exposes a path.
     assert!(
         rendition.get("path").is_none(),
-        "asset leaks path: {rendition}"
+        "rendition leaks path: {rendition}"
     );
     assert!(material["current_revision"].get("path").is_none());
     assert!(material["material"].get("path").is_none());
@@ -1171,9 +1181,11 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
             Some(TOKEN),
             &json!({
                 "title": "Exact Bytes",
-                "assets": [
-                    { "asset_type": "document_text", "text": text, "language": "en" },
+                "source_assets": [],
+                "document_renditions": [
+                    { "media_type": "text/plain", "language": "en", "text": text, "source_asset_index": null },
                 ],
+                "media_renditions": [],
             }),
         ),
     )
@@ -1195,17 +1207,19 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     );
     assert_eq!(created["shape"], "text");
 
-    let asset = &created["current_revision"]["assets"][0];
-    assert_eq!(asset["asset_type"], "document_text");
-    assert_eq!(asset["text"], text, "stored text must be the exact bytes");
-    assert_eq!(asset["language"], "en");
-    assert_eq!(asset["byte_size"], text.len() as u64);
+    let rendition = &created["current_revision"]["document_renditions"][0];
     assert_eq!(
-        asset["sha256_digest"],
+        rendition["text"], text,
+        "stored text must be the exact bytes"
+    );
+    assert_eq!(rendition["language"], "en");
+    assert_eq!(rendition["text_byte_size"], text.len() as u64);
+    assert_eq!(
+        rendition["text_sha256"],
         hex::encode(Sha256::digest(text.as_bytes())),
         "digest must be computed over the exact stored bytes"
     );
-    assert!(asset.get("path").is_none());
+    assert!(rendition.get("path").is_none());
     assert!(created["current_revision"].get("path").is_none());
     assert!(created["material"].get("path").is_none());
 
@@ -1221,9 +1235,11 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
             Some(TOKEN),
             &json!({
                 "title": "Exact Bytes v2",
-                "assets": [
-                    { "asset_type": "document_text", "text": new_text, "language": null },
+                "source_assets": [],
+                "document_renditions": [
+                    { "media_type": "text/plain", "language": null, "text": new_text, "source_asset_index": null },
                 ],
+                "media_renditions": [],
             }),
         ),
     )
@@ -1231,10 +1247,13 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     assert_eq!(status, StatusCode::OK, "{appended}");
     let current = &appended["current_revision"];
     assert_eq!(current["title"], "Exact Bytes v2");
-    assert_eq!(current["assets"][0]["text"], new_text);
-    assert_eq!(current["assets"][0]["byte_size"], new_text.len() as u64);
+    assert_eq!(current["document_renditions"][0]["text"], new_text);
+    assert_eq!(
+        current["document_renditions"][0]["text_byte_size"],
+        new_text.len() as u64
+    );
     assert!(
-        current["assets"][0]["language"].is_null(),
+        current["document_renditions"][0]["language"].is_null(),
         "null language stays null"
     );
     let second_revision_id = current["id"].as_str().expect("revision id").to_owned();
@@ -1269,13 +1288,13 @@ async fn text_material_preserves_exact_bytes_and_revision_ownership() {
     assert_eq!(historical["id"], first_revision_id);
     assert_eq!(historical["material_id"], material_id);
     assert_eq!(historical["title"], "Exact Bytes");
-    assert_eq!(historical["assets"][0]["text"], text);
+    assert_eq!(historical["document_renditions"][0]["text"], text);
     assert_eq!(
-        historical["assets"][0]["sha256_digest"],
-        asset["sha256_digest"]
+        historical["document_renditions"][0]["text_sha256"],
+        rendition["text_sha256"]
     );
     assert!(historical.get("path").is_none());
-    assert!(historical["assets"][0].get("path").is_none());
+    assert!(historical["document_renditions"][0].get("path").is_none());
 
     // Current revision read through the revision endpoint.
     let (status, current_read) = send(
@@ -1306,9 +1325,11 @@ async fn explicit_null_retain_creates_a_retained_material() {
             Some(TOKEN),
             &json!({
                 "title": "Explicit Null Retain",
-                "assets": [
-                    { "asset_type": "document_text", "text": unique_text, "language": null },
+                "source_assets": [],
+                "document_renditions": [
+                    { "media_type": "text/plain", "language": null, "text": unique_text, "source_asset_index": null },
                 ],
+                "media_renditions": [],
                 "retain": null,
             }),
         ),
@@ -1379,7 +1400,8 @@ async fn material_unknown_and_malformed_ids_are_typed_4xx() {
     let material_a = create_material(
         &app,
         "Owner A",
-        json!([{ "asset_type": "document_text", "text": "alpha" }]),
+        json!([{ "media_type": "text/plain", "language": null, "text": "alpha", "source_asset_index": null }]),
+        json!([]),
         None,
     )
     .await;
@@ -1391,7 +1413,8 @@ async fn material_unknown_and_malformed_ids_are_typed_4xx() {
     let material_b = create_material(
         &app,
         "Owner B",
-        json!([{ "asset_type": "document_text", "text": "beta" }]),
+        json!([{ "media_type": "text/plain", "language": null, "text": "beta", "source_asset_index": null }]),
+        json!([]),
         None,
     )
     .await;
@@ -1445,9 +1468,11 @@ async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
             Some(TOKEN),
             &json!({
                 "title": "Ambiguous Mix",
-                "assets": [
-                    { "asset_type": "media_rendition", "media_id": id_a },
-                    { "asset_type": "media_rendition", "media_id": id_b },
+                "source_assets": [],
+                "document_renditions": [],
+                "media_renditions": [
+                    { "media_id": id_a },
+                    { "media_id": id_b },
                 ],
             }),
         ),
@@ -1472,7 +1497,9 @@ async fn mixed_and_unknown_media_inputs_map_through_application_errors() {
             Some(TOKEN),
             &json!({
                 "title": "Unknown Media",
-                "assets": [{ "asset_type": "media_rendition", "media_id": unknown_media }],
+                "source_assets": [],
+                "document_renditions": [],
+                "media_renditions": [{ "media_id": unknown_media }],
             }),
         ),
     )

@@ -188,7 +188,14 @@ async fn create_text_material(app: &Router, text: &str) -> Value {
                 .body(Body::from(
                     json!({
                         "title": "Wire Fixture",
-                        "assets": [{"asset_type": "document_text", "text": text, "language": "en"}],
+                        "source_assets": [],
+                        "document_renditions": [{
+                            "media_type": "text/plain",
+                            "language": "en",
+                            "text": text,
+                            "source_asset_index": null,
+                        }],
+                        "media_renditions": [],
                     })
                     .to_string(),
                 ))
@@ -1004,7 +1011,14 @@ async fn stale_revision_adoption_is_409_and_never_exposes_plan_details() {
                 .body(Body::from(
                     json!({
                         "title": "Stale adoption v2",
-                        "assets": [{"asset_type": "document_text", "text": "New revision text.", "language": null}],
+                        "source_assets": [],
+                        "document_renditions": [{
+                            "media_type": "text/plain",
+                            "language": null,
+                            "text": "New revision text.",
+                            "source_asset_index": null,
+                        }],
+                        "media_renditions": [],
                     })
                     .to_string(),
                 ))

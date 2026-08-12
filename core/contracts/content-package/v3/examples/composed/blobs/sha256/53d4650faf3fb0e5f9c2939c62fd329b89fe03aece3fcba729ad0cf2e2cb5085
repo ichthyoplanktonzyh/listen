@@ -1,0 +1,42 @@
+{
+  "anchors": [
+    {
+      "anchor_id": "anchor-1",
+      "end_offset": 20,
+      "kind": "block",
+      "start_offset": 0
+    },
+    {
+      "anchor_id": "anchor-2",
+      "end_offset": 43,
+      "kind": "sentence",
+      "start_offset": 21
+    }
+  ],
+  "blocks": [
+    {
+      "block_id": "block-1",
+      "parent_block_id": null,
+      "span_anchor_ids": [
+        "anchor-1",
+        "anchor-2"
+      ]
+    }
+  ],
+  "document_mappings": [
+    {
+      "anchor_id": "anchor-1",
+      "locator": "loc-1",
+      "rendition_id": "sha256:f25c0575eb7f6223dba9f7dcd16824df9688583e186b2969561ba90431d8824a"
+    }
+  ],
+  "extensions": {},
+  "language": "en",
+  "spans": [
+    {
+      "anchor_id": "anchor-2",
+      "parent_anchor_id": null,
+      "span_id": "span-1"
+    }
+  ]
+}

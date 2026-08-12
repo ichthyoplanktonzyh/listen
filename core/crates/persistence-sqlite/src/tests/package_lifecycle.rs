@@ -14,11 +14,11 @@ use application::{
     PreparedPackageInstallation, PreparedResourcePayload,
 };
 use domain::{
-    AdoptionCommitPlan, DocumentTextAsset, ExclusiveSelection, LanguageCode, LearningEdition,
-    LearningMaterial, LearningMaterialId, MaterialAsset, MaterialRevision, MaterialRevisionId,
+    AdoptionCommitPlan, DocumentRendition, ExclusiveSelection, LanguageCode, LearningEdition,
+    LearningMaterial, LearningMaterialId, MaterialRevision, MaterialRevisionId,
     PackageInstallation, PackageReleaseId, PackageRenditionFact, PackageResourceAvailability,
     PackageResourceFact, PackageResourceProvenance, PackageResourceRole, PackageReviewStatus,
-    adoption_commit_plan, initial_material_id,
+    Rendition, RenditionOrigin, adoption_commit_plan, initial_material_id,
 };
 
 use super::*;
@@ -84,10 +84,13 @@ fn rendition_fact(rendition_id: &str, kind: &str, available: bool) -> PackageRen
     PackageRenditionFact {
         rendition_id: rendition_id.to_owned(),
         kind: kind.to_owned(),
+        origin: RenditionOrigin::Source,
         media_type: format!("audio/{kind}"),
         available,
         media_digest: format!("sha256:{}", "a".repeat(64)),
         media_size_bytes: 100,
+        media_id: None,
+        producer: None,
     }
 }
 
@@ -152,13 +155,45 @@ fn text_prepared(
 }
 
 fn seed_material(repo: &Arc<SqliteRepository>, text: &str) -> (LearningMaterial, MaterialRevision) {
-    let asset =
-        MaterialAsset::DocumentText(DocumentTextAsset::new(text, Some(language("en"))).unwrap());
-    let material_id = initial_material_id(std::slice::from_ref(&asset)).unwrap();
-    let revision = MaterialRevision::new(material_id.clone(), "Material", vec![asset], 1).unwrap();
+    let rendition = Rendition::Document(
+        DocumentRendition::new(
+            RenditionOrigin::Source,
+            "text/plain",
+            Some(language("en")),
+            text,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
+    let revision = MaterialRevision::new(
+        material_id.clone(),
+        "Material",
+        Vec::new(),
+        vec![rendition],
+        1,
+    )
+    .unwrap();
     let material = LearningMaterial::new(&revision, None, 1, 1).unwrap();
     MaterialRepository::create_material(repo.as_ref(), &material, &revision).unwrap();
     (material, revision)
+}
+
+fn document_rendition(text: &str) -> Rendition {
+    Rendition::Document(
+        DocumentRendition::new(
+            RenditionOrigin::Source,
+            "text/plain",
+            Some(language("en")),
+            text,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
+    )
 }
 
 fn count(repo: &SqliteRepository, table: &str) -> u32 {
@@ -760,11 +795,14 @@ fn stale_or_foreign_revision_is_rejected_inside_the_adapter_transaction() {
 
     // A newer revision becomes current; installing for the stale v1 must be
     // rejected by the adapter transaction with zero writes.
-    let text_asset = MaterialAsset::DocumentText(
-        DocumentTextAsset::new("second text", Some(language("en"))).unwrap(),
-    );
-    let v2 =
-        MaterialRevision::new(material.id.clone(), "Material v2", vec![text_asset], 2).unwrap();
+    let v2 = MaterialRevision::new(
+        material.id.clone(),
+        "Material v2",
+        Vec::new(),
+        vec![document_rendition("second text")],
+        2,
+    )
+    .unwrap();
     MaterialRepository::append_revision(repo.as_ref(), &material.id, &v2, 2).unwrap();
 
     let stale = text_prepared(&material, &v1, "sha256:release-stale", "edition-stale");
@@ -826,11 +864,14 @@ fn list_installations_is_deterministic_and_includes_historical_revisions() {
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_a).unwrap();
 
     // v2 becomes current; the v1 installation stays listed for its revision.
-    let text_asset = MaterialAsset::DocumentText(
-        DocumentTextAsset::new("second text", Some(language("en"))).unwrap(),
-    );
-    let v2 =
-        MaterialRevision::new(material.id.clone(), "Material v2", vec![text_asset], 2).unwrap();
+    let v2 = MaterialRevision::new(
+        material.id.clone(),
+        "Material v2",
+        Vec::new(),
+        vec![document_rendition("second text")],
+        2,
+    )
+    .unwrap();
     MaterialRepository::append_revision(repo.as_ref(), &material.id, &v2, 2).unwrap();
     let release_b = text_prepared(&material, &v2, "sha256:release-zzz", "edition-b");
     PackageLifecycleRepository::save_installation(repo.as_ref(), &release_b).unwrap();
@@ -1323,11 +1364,14 @@ fn a_stale_current_revision_switch_fails_and_preserves_the_previous_adoption() {
     let plan_a = text_adoption(&repo, &material, "sha256:release-stale-a");
     PackageLifecycleRepository::commit_adoption(repo.as_ref(), &plan_a).unwrap();
 
-    let text_asset = MaterialAsset::DocumentText(
-        DocumentTextAsset::new("second text", Some(language("en"))).unwrap(),
-    );
-    let v2 =
-        MaterialRevision::new(material.id.clone(), "Material v2", vec![text_asset], 2).unwrap();
+    let v2 = MaterialRevision::new(
+        material.id.clone(),
+        "Material v2",
+        Vec::new(),
+        vec![document_rendition("second text")],
+        2,
+    )
+    .unwrap();
     MaterialRepository::append_revision(repo.as_ref(), &material.id, &v2, 2).unwrap();
 
     // A commit plan for the now-stale v1 must be rejected inside the adapter

@@ -7,9 +7,11 @@ use domain::{
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{SqliteRepository, domain_sql, from_json, repo};
+use super::{SqliteRepository, domain_sql, repo};
 
-/// Serializes one typed attempt into its storage row columns.
+/// Serializes one typed attempt into its storage row columns. Latest-request
+/// wins: retrying an attempt rewrites that attempt's facts in place rather
+/// than failing on the composite key.
 pub(crate) fn insert_attempt(
     connection: &Connection,
     attempt: &CapabilityAttempt,
@@ -19,7 +21,15 @@ pub(crate) fn insert_attempt(
             "INSERT INTO capability_attempts
                (material_id, attempt_id, capability, status, started_at_ms,
                 finished_at_ms, failure_reason, producer_tool_id, producer_tool_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+             ON CONFLICT(material_id, attempt_id) DO UPDATE SET
+               capability=excluded.capability,
+               status=excluded.status,
+               started_at_ms=excluded.started_at_ms,
+               finished_at_ms=excluded.finished_at_ms,
+               failure_reason=excluded.failure_reason,
+               producer_tool_id=excluded.producer_tool_id,
+               producer_tool_version=excluded.producer_tool_version",
             params![
                 attempt.material_id.as_str(),
                 attempt.attempt_id.as_str(),
@@ -32,16 +42,7 @@ pub(crate) fn insert_attempt(
                 attempt.producer_tool_version,
             ],
         )
-        .map_err(|error| {
-            if error
-                .sqlite_error_code()
-                .is_some_and(|code| code == rusqlite::ErrorCode::ConstraintViolation)
-            {
-                ApplicationError::Conflict("capability attempt already exists")
-            } else {
-                repo(error)
-            }
-        })?;
+        .map_err(repo)?;
     Ok(())
 }
 
@@ -158,20 +159,55 @@ impl CapabilityAttemptRepository for SqliteRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use application::MaterialRepository;
+    use domain::{
+        DocumentRendition, LearningMaterial, MaterialRevision, Rendition, RenditionOrigin,
+        initial_material_id,
+    };
 
-    fn repository() -> SqliteRepository {
-        let connection = rusqlite::Connection::open_in_memory().expect("in-memory database");
-        super::super::migrate(&connection).expect("migrations run");
-        SqliteRepository {
-            connection: std::sync::Mutex::new(connection),
-            _database_lock: None,
-        }
+    /// A file-backed repository used to prove attempts survive a real close
+    /// and reopen; the `TempDir` is returned so the database file stays alive
+    /// for the duration of the test.
+    fn file_repository() -> (SqliteRepository, tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("temp directory");
+        let path = dir.path().join("capability-attempts.db");
+        let repo = SqliteRepository::open(&path).expect("file repository");
+        (repo, dir, path)
+    }
+
+    /// Creates one real material the attempts can reference through the
+    /// foreign key.
+    fn ensure_material(store: &SqliteRepository) -> LearningMaterialId {
+        let rendition = Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                None,
+                "capability attempt material",
+                None,
+                None,
+                None,
+            )
+            .unwrap(),
+        );
+        let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            "Capability material",
+            Vec::new(),
+            vec![rendition],
+            1,
+        )
+        .unwrap();
+        let material = LearningMaterial::new(&revision, None, 1, 1).unwrap();
+        MaterialRepository::create_material(store, &material, &revision).unwrap();
+        material_id
     }
 
     #[test]
     fn attempts_persist_across_reopen_and_keep_old_facts() {
-        let first = repository();
-        let material_id = LearningMaterialId::parse("material-1").expect("valid material id");
+        let (first, _dir, database_path) = file_repository();
+        let material_id = ensure_material(&first);
         let mut attempt =
             CapabilityAttempt::start(material_id.clone(), MaterialCapability::Listen, 5);
         attempt
@@ -182,7 +218,10 @@ mod tests {
         let retry = CapabilityAttempt::start(material_id.clone(), MaterialCapability::Listen, 11);
         first.save_attempt(&retry).expect("saved retry");
 
-        let reopened = repository();
+        // Reopening keeps the attempts: close the first repository (releasing
+        // its exclusive database lock) and open the file again.
+        drop(first);
+        let reopened = SqliteRepository::open(&database_path).expect("reopened repository");
         let attempts = reopened.list_attempts(&material_id).expect("listed");
         assert_eq!(attempts.len(), 2);
         assert_eq!(attempts[0].attempt_id, attempt.attempt_id);
@@ -221,15 +260,11 @@ mod tests {
 
     #[test]
     fn unknown_capability_storage_is_rejected() {
-        let connection = rusqlite::Connection::open_in_memory().expect("in-memory database");
-        super::super::migrate(&connection).expect("migrations run");
-        let store = SqliteRepository {
-            connection: std::sync::Mutex::new(connection),
-            _database_lock: None,
-        };
-        let material_id = LearningMaterialId::parse("material-1").expect("valid material id");
+        let store = SqliteRepository::in_memory().expect("in-memory repository");
+        let material_id = ensure_material(&store);
         let attempt = CapabilityAttempt::start(material_id, MaterialCapability::Listen, 1);
-        // Directly forge an unknown capability row; the typed read must fail.
+        // The schema rejects an unknown capability outright; the typed read
+        // path can only ever see the known set.
         store
             .connection
             .lock()
@@ -239,8 +274,8 @@ mod tests {
                  VALUES (?1,?2,'futuristic', 'running', 1)",
                 params![attempt.material_id.as_str(), attempt.attempt_id.as_str()],
             )
-            .expect("forged row");
+            .expect_err("unknown capability is rejected by the schema");
         let result = store.list_attempts(&attempt.material_id);
-        assert!(result.is_err(), "unknown capability is corruption");
+        assert!(result.is_ok(), "rejected writes leave the store readable");
     }
 }

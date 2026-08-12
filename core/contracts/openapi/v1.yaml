@@ -1,24 +1,28 @@
 openapi: 3.1.0
 info:
   title: LLPlayerNext Local API
-  version: 3.3.0
+  version: 4.0.0
   description: >
     Versioned loopback-only application-service adapter. Playback control is
-    excluded. Contract `3.3.0` adds the durable package lifecycle surface as a
-    backward-compatible minor over `3.2.0` (which added the learning-material
-    surface over `3.1.0`): Package Installation
-    (`/v1/materials/{material_id}/package-installations`, candidate-only,
-    never auto-adopting), Edition Listing
-    (`/v1/materials/{material_id}/editions`, installed Editions of the
-    Material's actual current revision), and explicit, idempotent Learning
-    Edition Adoption (`/v1/materials/{material_id}/edition-adoption`,
-    preserving the original adoption timestamp) are purely additive, every
-    previously published endpoint stays compatible, and no package lifecycle
-    response ever exposes a package or media path, manifest or release JSON,
-    payload bytes, blob path, schema, digest, size, dependency edges, internal
-    persistence facts, or provider/model raw output. Retention is logical
-    state independent of file location: Temporary Material is explicitly not
-    a Personal Library member, though it stays readable by ID and resolvable
+    excluded. Contract `4.0.0` rebuilds the learning-material surface on the
+    canonical Phase 1 model: a Material Revision is composed of Source Assets
+    (exact learner-authorized byte facts), Document Renditions, and Media
+    Renditions, where every rendition states whether it is Source or Derived
+    and every response stays path-free. It adds the Material Capability
+    surface (the five-state projection
+    `/v1/materials/{material_id}/capabilities`, durable production attempts
+    via `/v1/materials/{material_id}/capability-attempts`), Source Asset
+    availability facts
+    (`/v1/materials/{material_id}/source-assets/{source_asset_id}/availability`),
+    and the Source Identity surface
+    (`/v1/source-identities/mappings`, `/v1/source-identities/resolve`,
+    `/v1/source-identities/{source_id}/items/{item_id}`) that maps a
+    discovered item's source-scoped canonical key to an exact Material
+    Revision. The package lifecycle surface (`3.3.0`) and the media library
+    remain; no material, revision, rendition, source asset, or package
+    lifecycle response ever exposes a path. Retention is logical state
+    independent of file location: Temporary Material is explicitly not a
+    Personal Library member, though it stays readable by ID and resolvable
     from its media.
 servers:
   - url: http://127.0.0.1:{port}
@@ -160,17 +164,18 @@ paths:
     post:
       operationId: createLearningMaterial
       description: >
-        Creates (or converges on) a learning material from typed assets.
-        Omitted (or null) `retain` means Personal Library member; explicit
-        `false` creates Temporary Material, which is readable by ID and
-        resolvable from media but excluded from the material library until
-        explicitly retained. `document_text` assets carry inline text plus an
-        optional nullable language; `media_rendition` assets reference an
-        already-registered media source by `media_id` and snapshot its kind,
-        fingerprint, and availability — never its path. Raw material is valid
-        without enrichment, and idempotent/convergent application semantics
-        remain authoritative: retries resolve to the same deterministic
-        material and revision.
+        Creates (or converges on) a learning material from Source Assets and
+        typed Document/Media Renditions. Omitted (or null) `retain` means
+        Personal Library member; explicit `false` creates Temporary Material,
+        which is readable by ID and resolvable from media but excluded from
+        the material library until explicitly retained. Document renditions
+        carry inline text plus an optional nullable language and may bind a
+        Source Asset by index; media renditions reference an already-registered
+        media source by `media_id` and snapshot its kind, fingerprint, and
+        availability — never its path. Raw material is valid without
+        enrichment, and idempotent/convergent application semantics remain
+        authoritative: retries resolve to the same deterministic material and
+        revision.
       requestBody:
         required: true
         content:
@@ -287,6 +292,115 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/source-assets/{source_asset_id}/availability:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - in: path
+        name: source_asset_id
+        required: true
+        schema: { type: string }
+    put:
+      operationId: updateSourceAssetAvailability
+      description: >
+        Updates the local availability fact of one Source Asset of the
+        Material's current revision. Availability is a runtime fact about the
+        exact bytes, never a change to identity or membership: the Source
+        Asset, its revision, and every binding survive, and no new revision is
+        appended. A missing referenced asset becomes an unavailable fact; it is
+        never a reason to delete the Material or its membership. Unknown
+        material or source asset is a typed not-found.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SourceAssetAvailabilityInput"
+      responses:
+        "200":
+          description: The Material's current revision with the updated availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialRevision"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/capabilities:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    get:
+      operationId: listMaterialCapabilities
+      description: >
+        Projects the Material's capability state for every capability:
+        `available`, `derivable`, `generating`, `unavailable`, or
+        `failed_attempt`, each with the latest durable attempt (when any).
+        Attempts are the unit of `generating` / `failed_attempt` evidence; a
+        failed attempt never invalidates an otherwise usable Material. Unknown
+        material is a typed not-found.
+      responses:
+        "200":
+          description: The five-state capability projection per capability
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MaterialCapabilityProjection" }
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/capability-attempts:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+    post:
+      operationId: startMaterialCapabilityAttempt
+      description: >
+        Starts a durable production attempt for one capability. Retrying
+        creates a new attempt and never rewrites an earlier attempt's facts.
+        Unknown material is a typed not-found; an unknown capability is a
+        typed invalid-input.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartCapabilityAttemptRequest"
+      responses:
+        "200":
+          description: The running attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilityAttempt"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/capability-attempts/{attempt_id}:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - in: path
+        name: attempt_id
+        required: true
+        schema: { type: string }
+    put:
+      operationId: finalizeMaterialCapabilityAttempt
+      description: >
+        Finalizes a running attempt as succeeded (with the producing tool) or
+        failed (with a public reason). Only that attempt's facts are
+        rewritten; other attempts stay untouched. Unknown material or attempt
+        is a typed not-found; finalizing a non-running attempt is a typed
+        conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FinalizeCapabilityAttemptRequest"
+      responses:
+        "200":
+          description: The finalized attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilityAttempt"
         default:
           $ref: "#/components/responses/Error"
   /v1/materials/{material_id}/package-installations:
@@ -531,6 +645,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MaterialDetails"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/source-identities/mappings:
+    post:
+      operationId: registerSourceIdentityMapping
+      description: >
+        Records (or updates) the mapping of a discovered item's source-scoped
+        canonical key to an exact Material Revision. Feed GUIDs, URLs, enclosure
+        URLs, file hashes, and titles are typed evidence fields; the canonical
+        `source_id` + `item_id` key is the only match identity. The referenced
+        material and revision must exist. No response exposes a path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterSourceIdentityMappingRequest"
+      responses:
+        "200":
+          description: The recorded mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceIdentityMapping"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/source-identities/resolve:
+    get:
+      operationId: resolveSourceIdentity
+      description: >
+        Resolves a discovered item's canonical key to its recorded mapping, or
+        a typed not-found. Query parameters: `source_id`, `item_id`.
+      parameters:
+        - in: query
+          name: source_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: item_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The recorded mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceIdentityMapping"
+        default:
+          $ref: "#/components/responses/Error"
+  /v1/source-identities/{source_id}/items/{item_id}:
+    parameters:
+      - in: path
+        name: source_id
+        required: true
+        schema: { type: string }
+      - in: path
+        name: item_id
+        required: true
+        schema: { type: string }
+    get:
+      operationId: resolveSourceIdentityPath
+      description: >
+        Path form of the canonical-key resolution, kept for typed resource
+        navigation. A missing mapping is a typed not-found.
+      responses:
+        "200":
+          description: The recorded mapping
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceIdentityMapping"
         default:
           $ref: "#/components/responses/Error"
   /v1/lltimeline/import:
@@ -7374,61 +7560,123 @@ components:
             or revision.
         created_at_ms: { type: integer, minimum: 0 }
         updated_at_ms: { type: integer, minimum: 0 }
-    MaterialAsset:
-      description: >
-        A typed asset inside a material revision. A union discriminated by
-        `asset_type`; the concrete member shapes are `DocumentTextAsset` and
-        `MediaRenditionAsset`. No asset response ever contains a path.
-      discriminator:
-        propertyName: asset_type
-        mapping:
-          document_text: "#/components/schemas/DocumentTextAsset"
-          media_rendition: "#/components/schemas/MediaRenditionAsset"
-      oneOf:
-        - $ref: "#/components/schemas/DocumentTextAsset"
-        - $ref: "#/components/schemas/MediaRenditionAsset"
-    DocumentTextAsset:
-      type: object
-      required: [asset_type, id, text, sha256_digest, byte_size, language]
-      properties:
-        asset_type: { const: document_text }
-        id: { type: string }
-        text: { type: string }
-        sha256_digest:
-          type: string
-          pattern: '^[a-f0-9]{64}$'
-          description: Lowercase hex SHA-256 of the exact stored UTF-8 bytes.
-        byte_size:
-          type: integer
-          minimum: 0
-          description: Size of the exact stored UTF-8 bytes.
-        language:
-          type: [string, "null"]
-          description: Normalized language tag; null means the text is untagged.
-    MediaRenditionAsset:
-      type: object
-      required: [asset_type, id, media_id, media_kind, fingerprint, availability]
-      properties:
-        asset_type: { const: media_rendition }
-        id: { type: string }
-        media_id: { type: string }
-        media_kind: { enum: [video, audio] }
-        fingerprint: { type: string }
-        availability: { enum: [available, missing, archived] }
-        # A media rendition snapshots its source kind, fingerprint, and
-        # availability only. A media path is never part of a material.
     MaterialRevision:
       type: object
-      required: [id, material_id, title, assets, created_at_ms]
+      required:
+        - id
+        - material_id
+        - title
+        - source_assets
+        - document_renditions
+        - media_renditions
+        - created_at_ms
       properties:
         id: { type: string }
         material_id: { type: string }
         title: { type: string }
-        assets:
+        source_assets:
           type: array
-          minItems: 1
-          items: { $ref: "#/components/schemas/MaterialAsset" }
+          items: { $ref: "#/components/schemas/SourceAsset" }
+        document_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentRendition" }
+        media_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/MediaRendition" }
         created_at_ms: { type: integer, minimum: 0 }
+    SourceAsset:
+      type: object
+      required: [id, media_type, byte_length, sha256_digest, binding, availability, created_at_ms]
+      properties:
+        id: { type: string }
+        media_type: { type: string }
+        byte_length: { type: integer, minimum: 0 }
+        sha256_digest:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: Lowercase hex SHA-256 of the exact source bytes.
+        binding:
+          $ref: "#/components/schemas/SourceAssetBinding"
+        availability:
+          $ref: "#/components/schemas/SourceAssetAvailability"
+        created_at_ms: { type: integer, minimum: 0 }
+      description: >
+        A learner-authorized source evidence fact: the exact bytes of the
+        original source, described without any path.
+    SourceAssetBinding:
+      type: object
+      required: [type]
+      properties:
+        type: { enum: [managed, referenced] }
+        reference:
+          type: [string, "null"]
+          description: >
+            Opaque app-owned reference for a `referenced` binding. It is a fact
+            about binding, never a path to dereference here.
+    SourceAssetAvailability:
+      type: object
+      required: [state]
+      properties:
+        state: { enum: [available, unavailable] }
+        reason:
+          type: [string, "null"]
+          enum: [file_missing, integrity_mismatch]
+          description: Required when `state` is `unavailable`.
+    SourceAssetAvailabilityInput:
+      type: object
+      required: [availability]
+      properties:
+        availability:
+          $ref: "#/components/schemas/SourceAssetAvailability"
+    DocumentRendition:
+      type: object
+      required: [id, origin, media_type, language, text, text_sha256, text_byte_size, source_asset_id]
+      properties:
+        id: { type: string }
+        origin: { enum: [source, derived] }
+        media_type: { type: string }
+        language:
+          type: [string, "null"]
+          description: Normalized language tag; null means the text is untagged.
+        text: { type: string }
+        text_sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: Lowercase hex SHA-256 of the exact stored UTF-8 bytes.
+        text_byte_size:
+          type: integer
+          minimum: 0
+          description: Size of the exact stored UTF-8 bytes.
+        source_asset_id:
+          type: [string, "null"]
+          description: >
+            The bound Source Asset for a Source rendition, when known. Required
+            and non-null for a Source rendition.
+      description: >
+        The readable representation of the material revision for one document,
+        with its exact text bytes verified. Derived renditions record exact
+        producer facts and inputs, never exposed here.
+    MediaRendition:
+      type: object
+      required: [id, origin, kind, media_type, fingerprint, availability, media_id, media_sha256, media_byte_size]
+      properties:
+        id: { type: string }
+        origin: { enum: [source, derived] }
+        kind: { enum: [video, audio] }
+        media_type: { type: string }
+        fingerprint: { type: string }
+        availability: { enum: [available, missing, archived] }
+        media_id:
+          type: [string, "null"]
+          description: >
+            The bound media source for a Source rendition. A media path is
+            never part of a material.
+        media_sha256:
+          type: [string, "null"]
+          description: Required for a Derived rendition.
+        media_byte_size:
+          type: [integer, "null"]
+          minimum: 0
     MaterialDetails:
       type: object
       required: [material, current_revision, shape]
@@ -7442,47 +7690,60 @@ components:
             Composition shape of the current revision: text-only => text;
             exactly audio renditions => audio; exactly video renditions =>
             video; any mixed combination => mixed.
-    MaterialAssetInput:
-      description: >
-        Typed asset input for creating or extending a learning material. A
-        union discriminated by `asset_type`; the concrete member shapes are
-        `DocumentTextAssetInput` and `MediaRenditionAssetInput`. Inputs carry
-        only the fields needed to build the asset (`document_text` text/
-        language or `media_rendition` media_id).
-      discriminator:
-        propertyName: asset_type
-        mapping:
-          document_text: "#/components/schemas/DocumentTextAssetInput"
-          media_rendition: "#/components/schemas/MediaRenditionAssetInput"
-      oneOf:
-        - $ref: "#/components/schemas/DocumentTextAssetInput"
-        - $ref: "#/components/schemas/MediaRenditionAssetInput"
-    DocumentTextAssetInput:
+    SourceAssetInput:
       type: object
-      required: [asset_type, text]
+      required: [media_type, byte_length, sha256_digest, binding]
       properties:
-        asset_type: { const: document_text }
-        text: { type: string, minLength: 1 }
+        media_type: { type: string, minLength: 1 }
+        byte_length: { type: integer, minimum: 0 }
+        sha256_digest: { type: string, minLength: 1 }
+        binding:
+          type: object
+          required: [type]
+          properties:
+            type: { enum: [managed, referenced] }
+            reference: { type: [string, "null"] }
+      description: >
+        Source Asset input: the exact byte facts. Availability is a stored
+        fact that starts as available and is updated through the
+        source-assets availability operation.
+    DocumentRenditionInput:
+      type: object
+      required: [media_type, text]
+      properties:
+        media_type: { type: string, minLength: 1 }
         language:
           type: [string, "null"]
           description: Optional normalized language tag; omitted or null means untagged.
-    MediaRenditionAssetInput:
+        text: { type: string, minLength: 1 }
+        source_asset_index:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            Index of a Source Asset in the same request to bind as this
+            Source rendition's exact bytes; null (or omitted) means no Source
+            Asset binding.
+    MediaRenditionInput:
       type: object
-      required: [asset_type, media_id]
+      required: [media_id]
       properties:
-        asset_type: { const: media_rendition }
         media_id:
           type: string
           description: Media source id of an already-registered media item.
     CreateLearningMaterial:
       type: object
-      required: [title, assets]
+      required: [title, source_assets, document_renditions, media_renditions]
       properties:
         title: { type: string, minLength: 1 }
-        assets:
+        source_assets:
           type: array
-          minItems: 1
-          items: { $ref: "#/components/schemas/MaterialAssetInput" }
+          items: { $ref: "#/components/schemas/SourceAssetInput" }
+        document_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentRenditionInput" }
+        media_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/MediaRenditionInput" }
         retain:
           type: [boolean, "null"]
           default: true
@@ -7495,13 +7756,112 @@ components:
             `retain: false` never clears existing membership.
     AppendMaterialRevision:
       type: object
-      required: [title, assets]
+      required: [title, source_assets, document_renditions, media_renditions]
       properties:
         title: { type: string, minLength: 1 }
-        assets:
+        source_assets:
           type: array
-          minItems: 1
-          items: { $ref: "#/components/schemas/MaterialAssetInput" }
+          items: { $ref: "#/components/schemas/SourceAssetInput" }
+        document_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentRenditionInput" }
+        media_renditions:
+          type: array
+          items: { $ref: "#/components/schemas/MediaRenditionInput" }
+    MaterialCapabilityProjection:
+      type: object
+      required: [capability, status, latest_attempt]
+      properties:
+        capability: { enum: [read, listen, watch, synchronized_read_listen] }
+        status:
+          enum: [available, derivable, generating, unavailable, failed_attempt]
+        latest_attempt:
+          type: [object, "null"]
+          $ref: "#/components/schemas/CapabilityAttempt"
+    CapabilityAttempt:
+      type: object
+      required:
+        - attempt_id
+        - material_id
+        - capability
+        - status
+        - started_at_ms
+        - finished_at_ms
+        - failure_reason
+        - producer_tool_id
+        - producer_tool_version
+      properties:
+        attempt_id: { type: string }
+        material_id: { type: string }
+        capability: { enum: [read, listen, watch, synchronized_read_listen] }
+        status: { enum: [running, succeeded, failed] }
+        started_at_ms: { type: integer, minimum: 0 }
+        finished_at_ms: { type: [integer, "null"], minimum: 0 }
+        failure_reason: { type: [string, "null"] }
+        producer_tool_id: { type: [string, "null"] }
+        producer_tool_version: { type: [string, "null"] }
+    StartCapabilityAttemptRequest:
+      type: object
+      required: [capability]
+      properties:
+        capability: { enum: [read, listen, watch, synchronized_read_listen] }
+    FinalizeCapabilityAttemptRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { enum: [succeeded, failed] }
+        tool_id:
+          type: [string, "null"]
+          description: Required when `status` is `succeeded`.
+        tool_version:
+          type: [string, "null"]
+          description: Required when `status` is `succeeded`.
+        reason:
+          type: [string, "null"]
+          description: Required when `status` is `failed`.
+    SourceIdentityMapping:
+      type: object
+      required:
+        - source_id
+        - item_id
+        - evidence
+        - material_id
+        - material_revision_id
+        - mapped_at_ms
+      properties:
+        source_id: { type: string }
+        item_id: { type: string }
+        evidence: { $ref: "#/components/schemas/SourceItemEvidence" }
+        material_id: { type: string }
+        material_revision_id: { type: string }
+        mapped_at_ms: { type: integer, minimum: 0 }
+    SourceItemEvidence:
+      type: object
+      required: [enclosure_urls]
+      properties:
+        feed_item_id: { type: [string, "null"] }
+        entry_url: { type: [string, "null"] }
+        enclosure_urls:
+          type: array
+          items: { type: string }
+        file_sha256: { type: [string, "null"] }
+        title: { type: [string, "null"] }
+    RegisterSourceIdentityMappingRequest:
+      type: object
+      required:
+        - source_id
+        - item_id
+        - evidence
+        - material_id
+        - material_revision_id
+        - mapped_at_ms
+      properties:
+        source_id: { type: string }
+        item_id: { type: string }
+        evidence: { $ref: "#/components/schemas/SourceItemEvidence" }
+        material_id: { type: string }
+        material_revision_id: { type: string }
+        mapped_at_ms: { type: integer, minimum: 0 }
     InstallMaterialPackageRequest:
       type: object
       required: [package_path]

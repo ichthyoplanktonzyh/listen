@@ -337,6 +337,7 @@ fn media_availability_string(availability: domain::MediaAvailability) -> &'stati
 /// Converts wire component inputs into typed application inputs, parsing
 /// every language tag, media id, and binding into its domain value.
 /// Validation and all policy stay in the application layer.
+#[allow(clippy::type_complexity)]
 fn component_inputs(
     source_assets: Vec<SourceAssetInputRequest>,
     document_renditions: Vec<DocumentRenditionInputRequest>,

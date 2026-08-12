@@ -184,10 +184,7 @@ pub fn adopted_composition_provides(
         .iter()
         .any(|rendition| matches!(rendition.kind.as_str(), "document"));
     let has_audio = adopted.renditions.iter().any(|rendition| {
-        matches!(rendition.kind.as_str(), "media") && {
-            let is_audio = rendition.media_type.starts_with("audio/");
-            is_audio
-        }
+        matches!(rendition.kind.as_str(), "media") && rendition.media_type.starts_with("audio/")
     });
     let has_video = adopted.renditions.iter().any(|rendition| {
         matches!(rendition.kind.as_str(), "media") && { rendition.media_type.starts_with("video/") }
@@ -264,10 +261,7 @@ pub fn adopted_has_derived_rendition(adopted: Option<&PackageInstallation>) -> b
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        DocumentRendition, LearningMaterialId, PackageReleaseId,
-        learning_material::MaterialRevision as _,
-    };
+    use crate::{DocumentRendition, LearningMaterialId, PackageReleaseId};
 
     fn language(code: &str) -> crate::LanguageCode {
         crate::LanguageCode::parse(code).expect("valid language code")

@@ -1,6 +1,6 @@
 # State
 
-> Updated: 2026-08-11 CST
+> Updated: 2026-08-12 CST
 
 ## Position
 
@@ -8,43 +8,52 @@
 - Default implementation owner: Codex
 - Consumer: `ichthyoplanktonzyh/listen-app`
 - API generation: `1`
-- Contract version: `3.3.0` (additive package lifecycle HTTP surface; **not
-  yet published** — `3.2.0` remains the published learning-material contract
-  from `v0.7.0-phase1.2`)
+- Contract version: `4.0.0` (canonical Phase 1 contract; **not yet published**
+  — `3.3.0` remains the last published wire contract)
 - Runtime/workspace version: `0.7.0`
 - Published split baseline: `v0.7.0-split.4`
 
 ## Current Work
 
-Product Alpha Phase 1, Single-user Core Loop Alpha, is active in the canonical
-project roadmap. Core phase
-[`003-single-user-material-retention`](phases/003-single-user-material-retention/003-CLOSEOUT.md)
-is complete and published as `v0.7.0-phase1.1` with contract `3.1.0`.
+The Phase 1 completion roadmap
+([`plans/phase-1-completion.md`](../plans/phase-1-completion.md)) is active.
+**Slice 1 — Establish the canonical Core Phase 1 contract — is complete and
+committed locally (not pushed):**
 
-Core phase
-[`004-durable-learning-material`](phases/004-durable-learning-material/004-CLOSEOUT.md)
-is complete and published as `v0.7.0-phase1.2`. Contract `3.2.0` adds path-free
-text, media and mixed Learning Materials, immutable revisions, explicit
-material membership, media-to-material
-resolution, and SQLite v59 backfill. Material membership synchronizes the
-legacy retained-media projection for compatibility. Consumer pinning and
-cross-repository acceptance remain the next transition.
+- Domain (commit `9d87d63`) owns the canonical material model: Source Assets,
+  Source/Derived Document and Media Renditions with exact producer and
+  compatibility evidence, Structured Reading with stable Reading Anchors,
+  anchor-to-time alignment, Material Capability projection with durable
+  attempts, and Source Identity mappings.
+- Application and persistence (commit `f8d6e58`) own the 4.0.0 lifecycle:
+  durable materials, capability attempts, Source Identity, candidate-only
+  Package Installation, explicit atomic Learning Edition Adoption, and the
+  SQLite v61 canonical cutover with idempotent legacy backfill.
+- **Content Package v3** (`crates/content-package/src/v3/`) is the new package
+  schema beside unchanged v2: source/derived Document and Media Renditions,
+  Structured Reading and anchor-to-time alignment payloads, Assistance
+  Resources, dependencies, compatibility evidence, material/revision/edition
+  identity, and explicit embedded/referenced blob declarations. Inspection is
+  total and deterministic; a missing embedded blob is an invalid carrier while
+  missing referenced blobs are honest availability facts. Committed examples
+  under `contracts/content-package/v3/examples/` prove document-only,
+  media-only, and composed packages with mixed embedded/referenced blobs.
+- `install_for_material` dispatches on the declared release schema (`probe`
+  first, then the v2 or v3 inspection): v3 Source renditions must match the
+  Material's own renditions exactly, Derived renditions carry producer facts
+  and are available only when their blob is present; installation stays
+  candidate-only and idempotent through the existing atomic seam.
+- The OpenAPI contract moved to `4.0.0` with the materials/capability/
+  source-identity/package-lifecycle surface, the generated `local-api-v1.ts`
+  client was regenerated, and `scripts/validate-contracts.sh` validates the
+  v2 and v3 contract trees plus the full OpenAPI/generated-client assertions.
+- Workspace gates are green: `cargo fmt --check`, `cargo clippy --workspace
+  --all-targets -D warnings`, `cargo test --workspace --locked` (1262 tests),
+  and `bash scripts/validate-contracts.sh`.
 
-Core phase
-[`005-durable-package-lifecycle`](phases/005-durable-package-lifecycle/005-CONTEXT.md)
-is active. The application/domain package lifecycle
-(`PackageLifecycleUseCases`: candidate-only Package Installation, Edition
-Listing, explicit idempotent Learning Edition Adoption) landed via commit
-`db53cdf`; the SQLite v60 adapter landed via PR #131 (merge `d435606`). The
-current slice composes the real SQLite repository into `api-http` and publishes
-the fixed HTTP surface — `POST /v1/materials/{material_id}/package-installations`,
-`GET /v1/materials/{material_id}/editions`,
-`PUT /v1/materials/{material_id}/edition-adoption` — plus the additive OpenAPI
-`3.3.0` contract (operationIds `installMaterialPackage`, `listLearningEditions`,
-`adoptLearningEdition`) with typed 404/422/409/500 error semantics and
-path/payload/manifest-free DTOs. Contract `3.3.0` is not yet published; App
-pinning, App client/UI, real three-repository acceptance and release/closeout
-remain subsequent slices, so no `005-CLOSEOUT.md` is written.
+Contract `4.0.0` is not yet published; App pinning, document intake, and the
+cross-repository acceptance of Slice 2 remain subsequent slices, so no
+`005-CLOSEOUT.md` is written.
 
 ## Completed Foundation
 
@@ -207,17 +216,19 @@ not code evidence.
 
 ## Next
 
-1. Complete the consumer pin to `v0.7.0-phase1.2` and the material lifecycle
-   cross-repository acceptance against those exact artifacts.
+1. Proceed to Slice 2 of `plans/phase-1-completion.md`: App document intake,
+   direct view, and structured reading in `listen-app` against the pinned
+   Slice 1 contract, plus the cross-repository acceptance of the canonical
+   material lifecycle.
 2. Retain `v0.7.0-split.4` as the immutable R4 baseline. App R5 now pins Gen
    merge `a660946a` / tool `0.4.0` and Core merge `105568ed` / contract
    `3.0.0` / runtime `0.7.0`; the Core archives are local-only and verified by
    exact SHA-256, while Gen `v0.4.0` is published immutably.
 3. Treat Content Package v2 as the completed release/inspection/producer seam;
-   durable Learning Material exists independently, Package Installation and
-   Learning Edition Adoption are implemented (application/domain `db53cdf`,
-   SQLite v60 `d435606`) and exposed over HTTP with the unpublished contract
-   `3.3.0`; hosted catalog behavior remains a later explicit slice.
+   Content Package v3 is the canonical Phase 1 package schema; durable
+   Learning Material exists independently, Package Installation and Learning
+   Edition Adoption are implemented and exposed over HTTP with the unpublished
+   contract `4.0.0`; hosted catalog behavior remains a later explicit slice.
 4. Split core issue #80 into a production-model slice followed by an
    app-originated contract slice; do not promote the English-centric spike
    variant enums into the multilingual contract.

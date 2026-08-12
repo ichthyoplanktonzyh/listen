@@ -1,0 +1,15 @@
+{
+  "alignments": [
+    {
+      "anchor_id": "anchor-1",
+      "media_time_ms": 0
+    },
+    {
+      "anchor_id": "anchor-2",
+      "media_time_ms": 1200
+    }
+  ],
+  "anchor_resource_id": "sha256:26e36cdd716a0b411b0d41f061d9524ba37b6ed589527914417c5b64266cb3bb",
+  "extensions": {},
+  "rendition_id": "sha256:19d205dee6d7e1306cbdcdb9e72dbd21125dd329ae39532ba7b7c4d7a48e8b73"
+}

@@ -29,11 +29,11 @@ fn openapi_version_snapshot_and_path_count() {
     let openapi = include_str!("../../../../contracts/openapi/v1.yaml");
 
     // Contract version snapshot — bump intentionally, never accidentally.
-    // 3.3.0 adds the package lifecycle surface (candidate-only Package
-    // Installation, Edition Listing, explicit Learning Edition Adoption) as
-    // an additive minor over the learning-material 3.2.0.
+    // 4.0.0 rebuilds the learning-material surface on the canonical Phase 1
+    // model (Source Assets and typed Document/Media Renditions) and adds the
+    // capability, source-asset availability, and source-identity surfaces.
     assert!(
-        openapi.contains("version: 3.3.0"),
+        openapi.contains("version: 4.0.0"),
         "OpenAPI info.version snapshot changed — update test if intentional"
     );
 
@@ -106,13 +106,23 @@ fn openapi_version_snapshot_and_path_count() {
         "SubtitleSearchResult:",
         "UpdateLexicalLearningContent:",
         "LearningMaterial:",
-        "MaterialAsset:",
-        "DocumentTextAsset:",
-        "MediaRenditionAsset:",
+        "SourceAsset:",
+        "DocumentRendition:",
+        "MediaRendition:",
         "MaterialRevision:",
         "MaterialDetails:",
         "CreateLearningMaterial:",
         "AppendMaterialRevision:",
+        "SourceAssetInput:",
+        "DocumentRenditionInput:",
+        "MediaRenditionInput:",
+        "MaterialCapabilityProjection:",
+        "CapabilityAttempt:",
+        "StartCapabilityAttemptRequest:",
+        "FinalizeCapabilityAttemptRequest:",
+        "SourceIdentityMapping:",
+        "SourceItemEvidence:",
+        "RegisterSourceIdentityMappingRequest:",
         "InstallMaterialPackageRequest:",
         "AdoptLearningEditionRequest:",
         "LearningEditionDetails:",

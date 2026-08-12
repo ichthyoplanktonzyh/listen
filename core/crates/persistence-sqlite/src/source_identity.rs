@@ -2,12 +2,12 @@
 
 use application::{ApplicationError, SourceIdentityRepository};
 use domain::{
-    ContentSourceId, LearningMaterialId, MaterialRevisionId, SourceIdentityMapping,
-    SourceItemEvidence, SourceItemId, SourceItemIdentity,
+    ContentSourceId, LearningMaterialId, MaterialRevisionId, SourceIdentityMapping, SourceItemId,
+    SourceItemIdentity,
 };
 use rusqlite::{OptionalExtension, params};
 
-use super::{SqliteRepository, domain_sql, from_json, json, repo};
+use super::{SqliteRepository, from_json, json, repo};
 
 impl SourceIdentityRepository for SqliteRepository {
     fn save_mapping(&self, mapping: &SourceIdentityMapping) -> Result<(), ApplicationError> {
@@ -91,17 +91,57 @@ impl SourceIdentityRepository for SqliteRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use application::MaterialRepository;
+    use domain::{
+        DocumentRendition, LearningMaterial, MaterialRevision, Rendition, RenditionOrigin,
+        SourceItemEvidence, initial_material_id,
+    };
 
     fn repository() -> SqliteRepository {
-        let connection = rusqlite::Connection::open_in_memory().expect("in-memory database");
-        super::super::migrate(&connection).expect("migrations run");
-        SqliteRepository {
-            connection: std::sync::Mutex::new(connection),
-            _database_lock: None,
-        }
+        SqliteRepository::in_memory().expect("in-memory repository")
     }
 
-    fn mapping(source: &str, item: &str) -> SourceIdentityMapping {
+    /// A file-backed repository used to prove mappings survive a real close
+    /// and reopen; the `TempDir` is returned so the database file stays alive
+    /// for the duration of the test.
+    fn file_repository() -> (SqliteRepository, tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("temp directory");
+        let path = dir.path().join("source-identity.db");
+        let repo = SqliteRepository::open(&path).expect("file repository");
+        (repo, dir, path)
+    }
+
+    /// Creates one real material (and its revision) the mappings can reference
+    /// through the foreign keys, returning both ids.
+    fn ensure_material(store: &SqliteRepository) -> (LearningMaterialId, MaterialRevisionId) {
+        let rendition = Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                None,
+                "source identity material",
+                None,
+                None,
+                None,
+            )
+            .unwrap(),
+        );
+        let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            "Source identity material",
+            Vec::new(),
+            vec![rendition],
+            1,
+        )
+        .unwrap();
+        let material = LearningMaterial::new(&revision, None, 1, 1).unwrap();
+        MaterialRepository::create_material(store, &material, &revision).unwrap();
+        (material.id.clone(), revision.id.clone())
+    }
+
+    fn mapping(store: &SqliteRepository, source: &str, item: &str) -> SourceIdentityMapping {
+        let (material_id, material_revision_id) = ensure_material(store);
         SourceIdentityMapping {
             source_item: SourceItemIdentity {
                 source_id: ContentSourceId::parse(source).expect("valid source"),
@@ -114,17 +154,16 @@ mod tests {
                 file_sha256: Some("abcd".into()),
                 title: Some("Entry".into()),
             },
-            material_id: LearningMaterialId::parse("material-1").expect("valid material id"),
-            material_revision_id: MaterialRevisionId::parse("revision-1")
-                .expect("valid revision id"),
+            material_id,
+            material_revision_id,
             mapped_at_ms: 10,
         }
     }
 
     #[test]
     fn mappings_are_source_scoped_and_survive_reopen() {
-        let store = repository();
-        let first = mapping("rss:https://example.com/feed.xml", "item-1");
+        let (store, _dir, database_path) = file_repository();
+        let first = mapping(&store, "rss:https://example.com/feed.xml", "item-1");
         store.save_mapping(&first).expect("saved");
 
         // Same canonical key under a different source never resolves.
@@ -136,7 +175,10 @@ mod tests {
         assert!(store.resolve(&other_source).expect("resolved").is_none());
 
         // Reopening keeps the mapping and the recorded evidence.
-        let reopened = repository();
+        // Reopening keeps the mapping: close the first repository (releasing
+        // its exclusive database lock) and open the file again.
+        drop(store);
+        let reopened = SqliteRepository::open(&database_path).expect("reopened repository");
         let resolved = reopened
             .resolve(&first.source_item)
             .expect("resolved")
@@ -144,7 +186,7 @@ mod tests {
         assert_eq!(resolved, first);
 
         // Re-registering converges on the same canonical key with new facts.
-        let mut updated = mapping("rss:https://example.com/feed.xml", "item-1");
+        let mut updated = mapping(&reopened, "rss:https://example.com/feed.xml", "item-1");
         updated.mapped_at_ms = 20;
         reopened.save_mapping(&updated).expect("updated");
         let resolved = reopened
@@ -157,7 +199,7 @@ mod tests {
     #[test]
     fn evidence_fields_are_typed_and_not_identity_substitutes() {
         let store = repository();
-        let first = mapping("rss:feed", "item-1");
+        let first = mapping(&store, "rss:feed", "item-1");
         store.save_mapping(&first).expect("saved");
         // Equal evidence under a different canonical item key is a different
         // ownership fact.

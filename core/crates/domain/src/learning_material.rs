@@ -8,7 +8,6 @@
 //! concern.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::{
     DomainError, LearningMaterialId, MaterialRevisionId, MediaId, Rendition, RenditionOrigin,
@@ -291,6 +290,8 @@ fn revision_identity_fingerprint(
 
 #[cfg(test)]
 mod tests {
+    use sha2::{Digest as _, Sha256};
+
     use super::*;
     use crate::{
         DocumentRendition, LanguageCode, MaterialShape, MediaAvailability, MediaKind,
@@ -477,14 +478,14 @@ mod tests {
     fn media_backed_material_identity_converges_on_media_id() {
         let media = media_rendition(MediaKind::Audio, "media-known", "fp-1");
         let rev_a = revision(
-            initial_material_id(&[], &[media.clone()]).unwrap(),
+            initial_material_id(&[], std::slice::from_ref(&media)).unwrap(),
             "A",
             vec![media],
             1,
         );
         let media_b = media_rendition(MediaKind::Video, "media-known", "fp-2");
         let rev_b = revision(
-            initial_material_id(&[], &[media_b.clone()]).unwrap(),
+            initial_material_id(&[], std::slice::from_ref(&media_b)).unwrap(),
             "B",
             vec![media_b],
             2,

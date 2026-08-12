@@ -170,18 +170,20 @@ impl StructuredReadingResource {
 fn block_cycle_exists(blocks: &[ReadingBlock]) -> bool {
     fn reachable(from: &str, blocks: &[ReadingBlock], visited: &mut Vec<String>) -> bool {
         for block in blocks {
-            if block.block_id == from {
-                if let Some(parent) = &block.parent_block_id {
-                    if visited.contains(parent) {
-                        return true;
-                    }
-                    visited.push(parent.clone());
-                    if reachable(parent, blocks, visited) {
-                        return true;
-                    }
-                    visited.pop();
-                }
+            if block.block_id != from {
+                continue;
             }
+            let Some(parent) = &block.parent_block_id else {
+                continue;
+            };
+            if visited.contains(parent) {
+                return true;
+            }
+            visited.push(parent.clone());
+            if reachable(parent, blocks, visited) {
+                return true;
+            }
+            visited.pop();
         }
         false
     }

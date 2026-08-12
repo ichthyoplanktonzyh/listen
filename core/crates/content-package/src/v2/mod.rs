@@ -5,12 +5,12 @@
 //! - `installation_plan` (pure; no persistence or activation)
 //! - `serialize_canonical` (pure canonical JSON helper for identities/fixtures)
 
-mod canonical;
-mod inspect;
-mod model;
-mod payload;
-mod plan;
-mod validate;
+pub(crate) mod canonical;
+pub(crate) mod inspect;
+pub(crate) mod model;
+pub(crate) mod payload;
+pub(crate) mod plan;
+pub(crate) mod validate;
 
 #[cfg(test)]
 mod tests;

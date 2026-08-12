@@ -1161,7 +1161,7 @@ fn assert_no_lltimeline_import_rows(repo: &SqliteRepository) {
         // the import: a failed import leaves no graph rows either.
         "learning_materials",
         "material_revisions",
-        "material_assets",
+        "material_media_renditions",
         "material_media_bindings",
     ] {
         let count = connection
@@ -1205,21 +1205,18 @@ fn lltimeline_import_creates_media_and_its_material_graph_atomically() {
     assert_eq!(material.updated_at_ms, media_item.updated_at_ms);
 
     // Exactly one deterministic graph: one material, one initial revision, one
-    // rendition asset, one binding, and the asset JSON never carries a path.
+    // rendition, one binding, and the stored rendition never carries a path.
     assert_eq!(table_count(&repo, "learning_materials"), 1);
     assert_eq!(table_count(&repo, "material_revisions"), 1);
-    assert_eq!(table_count(&repo, "material_assets"), 1);
+    assert_eq!(table_count(&repo, "material_media_renditions"), 1);
     assert_eq!(table_count(&repo, "material_media_bindings"), 1);
     let revision = repo
         .get_revision(&material.current_revision_id)
         .unwrap()
         .expect("initial revision stored");
-    let assets = revision.assets;
+    let assets = revision.renditions;
     assert_eq!(assets.len(), 1);
-    assert!(matches!(
-        assets.first(),
-        Some(MaterialAsset::MediaRendition(_))
-    ));
+    assert!(matches!(assets.first(), Some(domain::Rendition::Media(_))));
     let asset_json = serde_json::to_string(&assets[0]).unwrap();
     assert!(
         !asset_json.contains("\"path\""),

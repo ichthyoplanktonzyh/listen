@@ -239,6 +239,7 @@ impl MediaRendition {
     /// the content digest (Derived), kind, and media type. A blank fingerprint
     /// is rejected. Availability and producer facts are stored facts and do
     /// not participate in identity.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         origin: RenditionOrigin,
         kind: MediaKind,

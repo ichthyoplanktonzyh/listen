@@ -1048,7 +1048,9 @@ fn fresh_schema_reports_v59_with_learning_material_tables_and_columns() {
     for table in [
         "learning_materials",
         "material_revisions",
-        "material_assets",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
         "material_media_bindings",
     ] {
         assert!(table_exists(&connection, table), "{table} must exist");
@@ -1078,16 +1080,60 @@ fn fresh_schema_reports_v59_with_learning_material_tables_and_columns() {
     assert_eq!(
         table_column_count(
             &connection,
-            "material_assets",
+            "material_source_assets",
             &[
                 "revision_id",
-                "ordinal",
                 "asset_id",
-                "asset_kind",
-                "asset_json"
+                "media_type",
+                "byte_length",
+                "sha256_digest",
+                "binding_json",
+                "availability_json",
+                "created_at_ms"
             ],
         ),
-        5
+        8
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_document_renditions",
+            &[
+                "revision_id",
+                "rendition_id",
+                "origin",
+                "media_type",
+                "language",
+                "text_bytes",
+                "text_sha256",
+                "text_byte_size",
+                "source_asset_id",
+                "producer_json",
+                "compatibility_json"
+            ],
+        ),
+        11
+    );
+    assert_eq!(
+        table_column_count(
+            &connection,
+            "material_media_renditions",
+            &[
+                "revision_id",
+                "rendition_id",
+                "origin",
+                "kind",
+                "media_type",
+                "fingerprint",
+                "availability",
+                "media_sha256",
+                "media_byte_size",
+                "media_id",
+                "producer_json",
+                "compatibility_json"
+            ],
+        ),
+        12
     );
     assert_eq!(
         table_column_count(
@@ -1103,6 +1149,9 @@ fn fresh_schema_reports_v59_with_learning_material_tables_and_columns() {
         ("learning_materials", "id"),
         ("material_revisions", "id"),
         ("material_media_bindings", "media_id"),
+        ("material_document_renditions", "rendition_id"),
+        ("material_media_renditions", "rendition_id"),
+        ("material_source_assets", "asset_id"),
     ] {
         let notnull: u8 = connection
             .query_row(
@@ -1135,11 +1184,18 @@ fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_
             INSERT INTO material_revisions
               (id,material_id,title,created_at_ms)
             VALUES ('revision-1','material-1','First title',100);
-            INSERT INTO material_assets
-              (revision_id,ordinal,asset_id,asset_kind,asset_json)
-            VALUES
-              ('revision-1',0,'asset-text','document_text','{"text":"hello"}'),
-              ('revision-1',1,'asset-media','media_rendition','{"media_id":"media-1"}');
+            INSERT INTO material_document_renditions
+              (revision_id,rendition_id,origin,media_type,language,text_bytes,
+               text_sha256,text_byte_size,source_asset_id,producer_json,compatibility_json)
+            VALUES ('revision-1','asset-text','source','text/plain',NULL,
+                    x'68656c6c6f',
+                    '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+                    5,NULL,NULL,NULL);
+            INSERT INTO material_media_renditions
+              (revision_id,rendition_id,origin,kind,media_type,fingerprint,
+               availability,media_sha256,media_byte_size,media_id,producer_json,compatibility_json)
+            VALUES ('revision-1','asset-media','source','audio','audio/mpeg',
+                    'media-1-fp','available',NULL,NULL,'media-1',NULL,NULL);
             INSERT INTO material_media_bindings
               (media_id,material_id)
             VALUES ('media-1','material-1');
@@ -1194,22 +1250,40 @@ fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_
              VALUES ('bad-retained-late','revision-1',150,100,100)",
         ),
         (
-            "negative asset ordinal",
-            "INSERT INTO material_assets
-               (revision_id,ordinal,asset_id,asset_kind,asset_json)
-             VALUES ('revision-1',-1,'asset-bad','document_text','{}')",
+            "unknown document rendition origin",
+            "INSERT INTO material_document_renditions
+               (revision_id,rendition_id,origin,media_type,language,text_bytes,
+                text_sha256,text_byte_size,source_asset_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','futuristic','text/plain',NULL,
+                     x'6162',
+                     '907d14fb3af2b0d4f18c8d46abe9a7b504ffb9f9a8f7b0a2e94d0f5a5a5a5a5a5',
+                     2,NULL,NULL,NULL)",
         ),
         (
-            "unknown asset_kind",
-            "INSERT INTO material_assets
-               (revision_id,ordinal,asset_id,asset_kind,asset_json)
-             VALUES ('revision-1',2,'asset-bad','audio','{}')",
+            "unknown media rendition kind",
+            "INSERT INTO material_media_renditions
+               (revision_id,rendition_id,origin,kind,media_type,fingerprint,
+                availability,media_sha256,media_byte_size,media_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','source','podcast','audio/mpeg',
+                     'fp','available',NULL,NULL,'media-1',NULL,NULL)",
         ),
         (
-            "malformed asset_json",
-            "INSERT INTO material_assets
-               (revision_id,ordinal,asset_id,asset_kind,asset_json)
-             VALUES ('revision-1',3,'asset-bad','document_text','{not json}')",
+            "unknown media rendition availability",
+            "INSERT INTO material_media_renditions
+               (revision_id,rendition_id,origin,kind,media_type,fingerprint,
+                availability,media_sha256,media_byte_size,media_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','source','audio','audio/mpeg',
+                     'fp','queued',NULL,NULL,'media-1',NULL,NULL)",
+        ),
+        (
+            "malformed producer_json",
+            "INSERT INTO material_document_renditions
+               (revision_id,rendition_id,origin,media_type,language,text_bytes,
+                text_sha256,text_byte_size,source_asset_id,producer_json,compatibility_json)
+             VALUES ('revision-1','asset-bad','source','text/plain',NULL,
+                     x'6162',
+                     '907d14fb3af2b0d4f18c8d46abe9a7b504ffb9f9a8f7b0a2e94d0f5a5a5a5a5a5',
+                     2,NULL,'{not json}',NULL)",
         ),
         // Rowid-table PRIMARY KEYs in SQLite do not imply NOT NULL; the FK
         // references below are valid, so rejection must come from the explicit
@@ -1250,17 +1324,20 @@ fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_
             .is_err()
     );
     // Valid rows committed above are readable after the rejected writes.
-    let (title, asset_count): (String, u32) = connection
+    let (title, rendition_count): (String, u32) = connection
         .query_row(
-            "SELECT title, (SELECT COUNT(*) FROM material_assets
-                            WHERE revision_id='revision-1')
+            "SELECT title,
+                    (SELECT COUNT(*) FROM material_media_renditions
+                     WHERE revision_id='revision-1')
+                  + (SELECT COUNT(*) FROM material_document_renditions
+                     WHERE revision_id='revision-1')
              FROM material_revisions WHERE id='revision-1'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
     assert_eq!(title, "First title");
-    assert_eq!(asset_count, 2);
+    assert_eq!(rendition_count, 2);
 }
 
 #[test]
@@ -1272,16 +1349,13 @@ fn sparse_v58_fixture_without_media_items_upgrades_to_v59_learning_material_sche
     let connection = Connection::open_in_memory().unwrap();
     migrate(&connection).unwrap();
     // Rebuild the fixture shape: full v58 schema minus the v59 learning-material
-    // tables and the v1 media foundation. Dropping a table removes its own
-    // indexes, and children are dropped before parents for clarity even though
-    // foreign keys are disabled during the rebuild.
+    // tables (including the v61 canonical renditions) and the v1 media
+    // foundation. Dropping a table removes its own indexes, and children are
+    // dropped before parents even though foreign keys are disabled.
+    drop_v59_learning_material_tables(&connection);
     connection
         .execute_batch(
             "PRAGMA foreign_keys=OFF;
-             DROP TABLE material_assets;
-             DROP TABLE material_media_bindings;
-             DROP TABLE material_revisions;
-             DROP TABLE learning_materials;
              DROP TABLE media_items;
              PRAGMA foreign_keys=ON;",
         )
@@ -1301,7 +1375,9 @@ fn sparse_v58_fixture_without_media_items_upgrades_to_v59_learning_material_sche
     for table in [
         "learning_materials",
         "material_revisions",
-        "material_assets",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
         "material_media_bindings",
     ] {
         assert!(table_exists(&connection, table), "{table} must exist");
@@ -1309,16 +1385,22 @@ fn sparse_v58_fixture_without_media_items_upgrades_to_v59_learning_material_sche
 }
 
 /// Rebuilds the historical v58 fixture shape inside an already-migrated
-/// database: the full latest schema minus the v59 learning-material tables.
+/// database: the full latest schema minus the v59 learning-material tables
+/// (including the v61 canonical renditions built on top of them).
 /// `media_items` keeps the v58 `retained_at_ms` membership column.
 fn drop_v59_learning_material_tables(connection: &Connection) {
     connection
         .execute_batch(
             "PRAGMA foreign_keys=OFF;
-             DROP TABLE material_assets;
-             DROP TABLE material_media_bindings;
-             DROP TABLE material_revisions;
-             DROP TABLE learning_materials;
+             DROP TABLE IF EXISTS source_identity_mappings;
+             DROP TABLE IF EXISTS capability_attempts;
+             DROP TABLE IF EXISTS material_document_renditions;
+             DROP TABLE IF EXISTS material_media_renditions;
+             DROP TABLE IF EXISTS material_source_assets;
+             DROP TABLE IF EXISTS material_assets;
+             DROP TABLE IF EXISTS material_media_bindings;
+             DROP TABLE IF EXISTS material_revisions;
+             DROP TABLE IF EXISTS learning_materials;
              PRAGMA foreign_keys=ON;",
         )
         .unwrap();
@@ -1350,9 +1432,14 @@ fn seed_v60_package_lifecycle_rows(connection: &Connection) {
         INSERT INTO material_revisions
           (id,material_id,title,created_at_ms)
         VALUES ('package-revision','package-material','Package material',100);
-        INSERT INTO material_assets
-          (revision_id,ordinal,asset_id,asset_kind,asset_json)
-        VALUES ('package-revision',0,'asset-package','document_text','{"text":"package"}');
+        INSERT INTO material_document_renditions
+          (revision_id, rendition_id, origin, media_type, language, text_bytes,
+           text_sha256, text_byte_size, source_asset_id, producer_json,
+           compatibility_json)
+        VALUES ('package-revision','asset-package','source','text/plain',NULL,
+                x'7061636b616765',
+                'bc4a71180870f7945155fbb02f4b0a2e3faa2a62d6d31b7039013055ed19869a',
+                7,NULL,NULL,NULL);
         INSERT INTO package_installations
           (material_id,release_id,material_revision_id,release_created_at_ms,
            edition_json,resources_json,renditions_json,installed_at_ms)
@@ -1394,18 +1481,33 @@ struct LegacyFixture {
 
 impl LegacyFixture {
     fn expected(&self) -> (LearningMaterial, MaterialRevision) {
-        let rendition = MediaRenditionAsset::new(
-            MediaId::parse(self.media_id).unwrap(),
+        let media_type = match self.kind {
+            MediaKind::Video => "video/mp4".to_owned(),
+            MediaKind::Audio => "audio/mpeg".to_owned(),
+        };
+        let rendition = MediaRendition::new(
+            domain::RenditionOrigin::Source,
             self.kind,
+            media_type,
             self.fingerprint,
             self.availability,
+            Some(MediaId::parse(self.media_id).unwrap()),
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
-        let assets = vec![MaterialAsset::MediaRendition(rendition)];
-        let material_id = initial_material_id(&assets).unwrap();
-        let revision =
-            MaterialRevision::new(material_id.clone(), self.title, assets, self.created_at_ms)
-                .unwrap();
+        let renditions = vec![domain::Rendition::Media(rendition)];
+        let material_id = initial_material_id(&[], &renditions).unwrap();
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            self.title,
+            Vec::new(),
+            renditions,
+            self.created_at_ms,
+        )
+        .unwrap();
         let material = LearningMaterial::new(
             &revision,
             self.retained_at_ms,
@@ -1567,61 +1669,79 @@ fn v59_backfills_legacy_media_rows_into_durable_learning_materials() {
         assert_eq!(created_at_ms, revision.created_at_ms);
     }
 
-    // Asset rows: one media_rendition at ordinal 0 whose typed JSON snapshots
-    // id/kind/fingerprint/availability and never carries the media path.
+    // Media rendition rows: one source rendition at the exact deterministic
+    // id, whose typed columns snapshot origin/kind/media_type/fingerprint/
+    // availability and never carry the media path.
     for (_, revision) in &expected {
-        let asset = revision.assets.first().unwrap();
-        let MaterialAsset::MediaRendition(rendition) = asset else {
-            panic!("legacy backfill must produce a media rendition asset");
+        let domain::Rendition::Media(rendition) = revision.renditions.first().unwrap() else {
+            panic!("legacy backfill must produce a media rendition");
         };
-        let (ordinal, asset_id, asset_kind, asset_json): (i64, String, String, String) = connection
+        let (rendition_id, origin, kind, media_type, fingerprint, availability, media_id): (
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+        ) = connection
             .query_row(
-                "SELECT ordinal, asset_id, asset_kind, asset_json
-                     FROM material_assets WHERE revision_id=?1",
+                "SELECT rendition_id, origin, kind, media_type, fingerprint,
+                        availability, media_id
+                 FROM material_media_renditions WHERE revision_id=?1",
                 [revision.id.as_str()],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
             )
             .unwrap();
-        assert_eq!(ordinal, 0);
-        assert_eq!(asset_id, asset.id().as_str());
-        assert_eq!(asset_kind, "media_rendition");
-        let parsed: serde_json::Value = serde_json::from_str(&asset_json).unwrap();
-        assert_eq!(parsed, serde_json::to_value(asset).unwrap());
-        let typed = parsed.get("media_rendition").expect("typed asset JSON");
+        assert_eq!(rendition_id, rendition.id.as_str());
+        assert_eq!(origin, "source");
         assert_eq!(
-            typed["media_id"],
-            serde_json::to_value(&rendition.media_id).unwrap()
+            kind,
+            serde_json::to_value(rendition.kind)
+                .unwrap()
+                .as_str()
+                .unwrap()
         );
-        assert_eq!(typed["kind"], serde_json::to_value(rendition.kind).unwrap());
+        assert_eq!(media_type, rendition.media_type);
+        assert_eq!(fingerprint, rendition.fingerprint);
         assert_eq!(
-            typed["fingerprint"],
-            serde_json::json!(rendition.fingerprint)
+            availability,
+            serde_json::to_value(rendition.availability)
+                .unwrap()
+                .as_str()
+                .unwrap()
         );
         assert_eq!(
-            typed["availability"],
-            serde_json::to_value(rendition.availability).unwrap()
+            media_id,
+            rendition.media_id.as_ref().map(|id| id.as_str().to_owned())
         );
-        let object = typed.as_object().expect("media rendition object");
-        assert!(
-            !object.contains_key("path"),
-            "asset JSON must never carry the media path"
-        );
-        for key in ["id", "media_id", "kind", "fingerprint", "availability"] {
-            assert!(object.contains_key(key), "missing typed asset key: {key}");
-        }
     }
 
     // Media bindings: every legacy media id resolves to exactly its material,
     // and the binding deliberately carries no FK to `media_items` (only the
     // material parent).
     for (_, revision) in &expected {
-        let MaterialAsset::MediaRendition(rendition) = revision.assets.first().unwrap() else {
+        let domain::Rendition::Media(rendition) = revision.renditions.first().unwrap() else {
             unreachable!("legacy backfill produces media renditions only");
         };
+        let media_id = rendition
+            .media_id
+            .as_ref()
+            .expect("legacy backfill media renditions bind their media id");
         let material_id: String = connection
             .query_row(
                 "SELECT material_id FROM material_media_bindings WHERE media_id=?1",
-                [rendition.media_id.as_str()],
+                [media_id.as_str()],
                 |row| row.get(0),
             )
             .unwrap();
@@ -1694,7 +1814,7 @@ fn v59_backfills_legacy_media_rows_into_durable_learning_materials() {
     for table in [
         "learning_materials",
         "material_revisions",
-        "material_assets",
+        "material_media_renditions",
         "material_media_bindings",
     ] {
         assert_eq!(
@@ -1712,7 +1832,7 @@ fn v59_backfills_legacy_media_rows_into_durable_learning_materials() {
 #[test]
 fn v59_backfill_rejects_invalid_legacy_media_rows_without_partial_persistence() {
     // A legacy row that cannot become a valid material (blank fingerprint
-    // fails `MediaRenditionAsset::new`) converts into the repository migration
+    // fails `MediaRendition::new`) converts into the repository migration
     // error path: the whole v59 transaction rolls back atomically instead of
     // silently dropping the invalid row or persisting partial state.
     let connection = Connection::open_in_memory().unwrap();
@@ -1745,7 +1865,9 @@ fn v59_backfill_rejects_invalid_legacy_media_rows_without_partial_persistence() 
     for table in [
         "learning_materials",
         "material_revisions",
-        "material_assets",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
         "material_media_bindings",
     ] {
         assert!(
@@ -1947,8 +2069,8 @@ fn v59_database_upgrades_to_v60_preserving_material_rows_byte_for_byte() {
         .unwrap();
     let asset_before: (String, String, String) = connection
         .query_row(
-            "SELECT asset_id,asset_kind,asset_json
-             FROM material_assets WHERE revision_id='package-revision'",
+            "SELECT rendition_id, origin, media_type
+             FROM material_document_renditions WHERE revision_id='package-revision'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
@@ -2001,8 +2123,8 @@ fn v59_database_upgrades_to_v60_preserving_material_rows_byte_for_byte() {
         .unwrap();
     let asset_after: (String, String, String) = connection
         .query_row(
-            "SELECT asset_id,asset_kind,asset_json
-             FROM material_assets WHERE revision_id='package-revision'",
+            "SELECT rendition_id, origin, media_type
+             FROM material_document_renditions WHERE revision_id='package-revision'",
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )

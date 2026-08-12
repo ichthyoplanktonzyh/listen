@@ -50,30 +50,62 @@ export interface LearningMaterial {
   updated_at_ms: number;
 }
 
-// Discriminated by `asset_type`. Material assets never expose a path.
-export type MaterialAsset =
-  | {
-      asset_type: "document_text";
-      id: string;
-      text: string;
-      sha256_digest: string;
-      byte_size: number;
-      language: string | null;
-    }
-  | {
-      asset_type: "media_rendition";
-      id: string;
-      media_id: string;
-      media_kind: MediaKind;
-      fingerprint: string;
-      availability: "available" | "missing" | "archived";
-    };
+// Phase 1 canonical model (contract 4.0.0): Source Assets and typed
+// Document/Media Renditions compose a revision. No material, revision,
+// rendition, or source asset DTO ever exposes a path.
+export type RenditionOrigin = "source" | "derived";
+export type MediaAvailability = "available" | "missing" | "archived";
+
+export interface SourceAssetBinding {
+  type: "managed" | "referenced";
+  reference?: string | null;
+}
+
+export interface SourceAssetAvailability {
+  state: "available" | "unavailable";
+  reason?: "file_missing" | "integrity_mismatch" | null;
+}
+
+export interface SourceAsset {
+  id: string;
+  media_type: string;
+  byte_length: number;
+  sha256_digest: string;
+  binding: SourceAssetBinding;
+  availability: SourceAssetAvailability;
+  created_at_ms: number;
+}
+
+export interface DocumentRendition {
+  id: string;
+  origin: RenditionOrigin;
+  media_type: string;
+  language: string | null;
+  text: string;
+  text_sha256: string;
+  text_byte_size: number;
+  source_asset_id: string | null;
+}
+
+export interface MediaRendition {
+  id: string;
+  origin: RenditionOrigin;
+  kind: MediaKind;
+  media_type: string;
+  fingerprint: string;
+  availability: MediaAvailability;
+  media_id: string | null;
+  media_sha256: string | null;
+  media_byte_size: number | null;
+}
 
 export interface MaterialRevision {
   id: string;
   material_id: string;
   title: string;
-  assets: MaterialAsset[];
+  source_assets: SourceAsset[];
+  document_renditions: DocumentRendition[];
+  media_renditions: MediaRendition[];
   created_at_ms: number;
 }
 
@@ -83,20 +115,100 @@ export interface MaterialDetails {
   shape: MaterialShape;
 }
 
-// Typed asset input for creating or extending a learning material.
-export type MaterialAssetInput =
-  | { asset_type: "document_text"; text: string; language?: string | null }
-  | { asset_type: "media_rendition"; media_id: string };
+export interface SourceAssetInput {
+  media_type: string;
+  byte_length: number;
+  sha256_digest: string;
+  binding: {
+    type: "managed" | "referenced";
+    reference?: string | null;
+  };
+}
+
+export interface DocumentRenditionInput {
+  media_type: string;
+  language?: string | null;
+  text: string;
+  source_asset_index?: number | null;
+}
+
+export interface MediaRenditionInput {
+  media_id: string;
+}
 
 export interface CreateLearningMaterial {
   title: string;
-  assets: MaterialAssetInput[];
+  source_assets: SourceAssetInput[];
+  document_renditions: DocumentRenditionInput[];
+  media_renditions: MediaRenditionInput[];
   retain?: boolean | null;
 }
 
 export interface AppendMaterialRevision {
   title: string;
-  assets: MaterialAssetInput[];
+  source_assets: SourceAssetInput[];
+  document_renditions: DocumentRenditionInput[];
+  media_renditions: MediaRenditionInput[];
+}
+
+// Material Capability surface (contract 4.0.0): the five-state projection
+// and durable production attempts.
+export type MaterialCapability = "read" | "listen" | "watch" | "synchronized_read_listen";
+export type CapabilityStatus = "available" | "derivable" | "generating" | "unavailable" | "failed_attempt";
+
+export interface CapabilityAttempt {
+  attempt_id: string;
+  material_id: string;
+  capability: MaterialCapability;
+  status: "running" | "succeeded" | "failed";
+  started_at_ms: number;
+  finished_at_ms: number | null;
+  failure_reason: string | null;
+  producer_tool_id: string | null;
+  producer_tool_version: string | null;
+}
+
+export interface MaterialCapabilityProjection {
+  capability: MaterialCapability;
+  status: CapabilityStatus;
+  latest_attempt: CapabilityAttempt | null;
+}
+
+export interface StartCapabilityAttemptRequest {
+  capability: MaterialCapability;
+}
+
+export interface FinalizeCapabilityAttemptRequest {
+  status: "succeeded" | "failed";
+  tool_id?: string | null;
+  tool_version?: string | null;
+  reason?: string | null;
+}
+
+export interface SourceItemEvidence {
+  feed_item_id?: string | null;
+  entry_url?: string | null;
+  enclosure_urls: string[];
+  file_sha256?: string | null;
+  title?: string | null;
+}
+
+export interface SourceIdentityMapping {
+  source_id: string;
+  item_id: string;
+  evidence: SourceItemEvidence;
+  material_id: string;
+  material_revision_id: string;
+  mapped_at_ms: number;
+}
+
+export interface RegisterSourceIdentityMappingRequest {
+  source_id: string;
+  item_id: string;
+  evidence: SourceItemEvidence;
+  material_id: string;
+  material_revision_id: string;
+  mapped_at_ms: number;
 }
 
 // Package lifecycle (contract 3.3.0): candidate-only Package Installation,
@@ -1299,6 +1411,69 @@ export class LocalApiV1 {
 
   resolveLearningMaterialForMedia(mediaId: string): Promise<MaterialDetails> {
     return this.request(`/v1/media/${encodeURIComponent(mediaId)}/material`);
+  }
+
+  updateSourceAssetAvailability(
+    materialId: string,
+    sourceAssetId: string,
+    input: SourceAssetAvailability,
+  ): Promise<MaterialRevision> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/source-assets/${encodeURIComponent(sourceAssetId)}/availability`,
+      { method: "PUT", body: JSON.stringify({ availability: input }) },
+    );
+  }
+
+  listMaterialCapabilities(materialId: string): Promise<MaterialCapabilityProjection[]> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}/capabilities`);
+  }
+
+  startMaterialCapabilityAttempt(
+    materialId: string,
+    input: StartCapabilityAttemptRequest,
+  ): Promise<CapabilityAttempt> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/capability-attempts`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  }
+
+  finalizeMaterialCapabilityAttempt(
+    materialId: string,
+    attemptId: string,
+    input: FinalizeCapabilityAttemptRequest,
+  ): Promise<CapabilityAttempt> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/capability-attempts/${encodeURIComponent(attemptId)}`,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  }
+
+  registerSourceIdentityMapping(
+    input: RegisterSourceIdentityMappingRequest,
+  ): Promise<SourceIdentityMapping> {
+    return this.request(`/v1/source-identities/mappings`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  resolveSourceIdentity(
+    sourceId: string,
+    itemId: string,
+  ): Promise<SourceIdentityMapping> {
+    return this.request(
+      `/v1/source-identities/resolve?source_id=${encodeURIComponent(sourceId)}&item_id=${encodeURIComponent(itemId)}`,
+    );
+  }
+
+  resolveSourceIdentityPath(
+    sourceId: string,
+    itemId: string,
+  ): Promise<SourceIdentityMapping> {
+    return this.request(
+      `/v1/source-identities/${encodeURIComponent(sourceId)}/items/${encodeURIComponent(itemId)}`,
+    );
   }
 
   installMaterialPackage(

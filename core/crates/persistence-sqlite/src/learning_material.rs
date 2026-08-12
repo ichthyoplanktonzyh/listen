@@ -89,6 +89,12 @@ pub(crate) fn backfill_legacy_media_materials(
     if !table_exists(transaction, "media_items")? {
         return Ok(());
     }
+    // The legacy backfill writes the v59 `material_assets` union table, which
+    // the v61 migration drops after converting its rows. On an already-canonical
+    // database the conversion owns the data, so the backfill is a no-op here.
+    if !table_exists(transaction, "material_assets")? {
+        return Ok(());
+    }
     let rows = {
         let mut statement = transaction.prepare(
             "SELECT id, fingerprint, title, kind, availability,
@@ -288,6 +294,23 @@ pub(crate) fn ensure_media_material_in_transaction(
                         stored.current_revision_id.as_str()
                     ))
                 })?;
+            if stored_revision.material_id != stored.id {
+                return Err(ApplicationError::Repository(format!(
+                    "material {} current revision {} belongs to another material",
+                    stored.id.as_str(),
+                    stored_revision.id.as_str()
+                )));
+            }
+            // A media registered under a retained material follows the
+            // aggregate membership; its own update timestamp is preserved and
+            // never rolled back to the material's.
+            if stored.retained_at_ms.is_some() {
+                tx.execute(
+                    "UPDATE media_items SET retained_at_ms=?2 WHERE id=?1",
+                    params![media.id.as_str(), stored.retained_at_ms],
+                )
+                .map_err(repo)?;
+            }
             return Ok(());
         }
         Some(_) => {
@@ -298,14 +321,6 @@ pub(crate) fn ensure_media_material_in_transaction(
         None => {}
     }
 
-    insert_revision(tx, &revision)?;
-    insert_components(tx, &revision)?;
-    tx.execute(
-        "INSERT INTO material_media_bindings (media_id, material_id)
-         VALUES (?1,?2)",
-        params![media.id.as_str(), material.id.as_str()],
-    )
-    .map_err(repo)?;
     tx.execute(
         "INSERT INTO learning_materials
            (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
@@ -325,6 +340,14 @@ pub(crate) fn ensure_media_material_in_transaction(
             repo(error)
         }
     })?;
+    insert_revision(tx, &revision)?;
+    insert_components(tx, &revision)?;
+    tx.execute(
+        "INSERT INTO material_media_bindings (media_id, material_id)
+         VALUES (?1,?2)",
+        params![media.id.as_str(), material.id.as_str()],
+    )
+    .map_err(repo)?;
     Ok(())
 }
 
@@ -334,7 +357,10 @@ fn media_graph_error(error: DomainError) -> ApplicationError {
 
 /// Reconciles the membership of the material bound to `media_id` from the
 /// media's membership, mirroring the legacy projection when the material
-/// exists.
+/// exists. The material's own update time is preserved by idempotent calls:
+/// only a membership state change (retained -> temporary or the reverse)
+/// rewrites the material row, so a repeated retain keeps the original
+/// timestamps.
 pub(crate) fn reconcile_media_material_membership(
     tx: &Transaction<'_>,
     media: &MediaItem,
@@ -351,7 +377,8 @@ pub(crate) fn reconcile_media_material_membership(
         return Ok(());
     };
     tx.execute(
-        "UPDATE learning_materials SET retained_at_ms=?2, updated_at_ms=?3 WHERE id=?1",
+        "UPDATE learning_materials SET retained_at_ms=?2, updated_at_ms=?3 WHERE id=?1
+         AND (retained_at_ms IS NULL OR ?2 IS NULL)",
         params![material_id, media.retained_at_ms, media.updated_at_ms],
     )
     .map_err(repo)?;
@@ -907,8 +934,14 @@ fn insert_components(
                         .source_asset_id
                         .as_ref()
                         .map(domain::SourceAssetId::as_str),
-                    serde_json::to_string(&rendition.producer).ok(),
-                    serde_json::to_string(&rendition.compatibility).ok(),
+                    rendition
+                        .producer
+                        .as_ref()
+                        .and_then(|fact| serde_json::to_string(fact).ok()),
+                    rendition
+                        .compatibility
+                        .as_ref()
+                        .and_then(|evidence| serde_json::to_string(evidence).ok()),
                 ],
             )
             .map_err(repo)?;
@@ -951,8 +984,14 @@ fn insert_components(
                     rendition.media_sha256,
                     rendition.media_byte_size.map(|size| size as i64),
                     rendition.media_id.as_ref().map(MediaId::as_str),
-                    serde_json::to_string(&rendition.producer).ok(),
-                    serde_json::to_string(&rendition.compatibility).ok(),
+                    rendition
+                        .producer
+                        .as_ref()
+                        .and_then(|fact| serde_json::to_string(fact).ok()),
+                    rendition
+                        .compatibility
+                        .as_ref()
+                        .and_then(|evidence| serde_json::to_string(evidence).ok()),
                 ],
             )
             .map_err(repo)?;
@@ -1148,6 +1187,14 @@ impl MaterialRepository for SqliteRepository {
         insert_revision(&tx, &revision)?;
         insert_components(&tx, &revision)?;
         insert_bindings(&tx, &revision)?;
+        // Mirror the material membership onto every bound registered media so
+        // the media library and the material graph agree on the exact timestamps.
+        apply_media_membership_in_transaction(
+            &tx,
+            material.id.as_str(),
+            material.retained_at_ms,
+            material.updated_at_ms,
+        )?;
         tx.commit().map_err(repo)?;
         Ok(material)
     }
@@ -1190,6 +1237,15 @@ impl MaterialRepository for SqliteRepository {
                 material_from_row,
             )
             .map_err(repo)?;
+        // An appended revision does not change membership, but the media
+        // library and the material graph must stay in agreement on the update
+        // timestamp.
+        apply_media_membership_in_transaction(
+            &tx,
+            material_id.as_str(),
+            updated.retained_at_ms,
+            updated.updated_at_ms,
+        )?;
         tx.commit().map_err(repo)?;
         Ok(updated)
     }
@@ -1234,8 +1290,8 @@ impl MaterialRepository for SqliteRepository {
     ) -> Result<LearningMaterial, ApplicationError> {
         let mut conn = self.connection.lock();
         let tx = conn.transaction().map_err(repo)?;
-        let material = query_material(&tx, material_id.as_str())?
-            .ok_or(ApplicationError::NotFound("material"))?;
+        // The membership target must exist; its stored row is untouched.
+        query_material(&tx, material_id.as_str())?.ok_or(ApplicationError::NotFound("material"))?;
         let updated = tx
             .query_row(
                 "UPDATE learning_materials
