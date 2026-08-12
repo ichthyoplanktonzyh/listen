@@ -34,8 +34,12 @@ use super::learning_material::backfill_legacy_media_materials;
 // the durable package lifecycle schema: installation facts with exact payload
 // BLOB bodies and the current adoption with its full selection plan, all
 // referencing the learning-material graph with RESTRICT so deletion never
-// cascades into durable package state.
-pub const MIGRATION_VERSION: u32 = 60;
+// cascades into durable package state. v61 rebuilds the material schema on
+// the canonical Phase 1 model: source assets, document/media renditions,
+// durable capability attempts, and source identity mappings; legacy
+// media-rendition asset rows migrate into the canonical media rendition
+// table before the old `material_assets` union is dropped.
+pub const MIGRATION_VERSION: u32 = 61;
 
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
@@ -528,6 +532,12 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         let tx = connection.unchecked_transaction()?;
         tx.execute_batch(include_str!("../migrations/0060_package_lifecycle.sql"))?;
         tx.pragma_update(None, "user_version", 60)?;
+        tx.commit()?;
+    }
+    if current < 61 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0061_canonical_materials.sql"))?;
+        tx.pragma_update(None, "user_version", 61)?;
         tx.commit()?;
     }
     Ok(())

@@ -36,11 +36,12 @@ use content_package::v2::{
     ReviewStatus, V2Error, V2Inspection, inspect_v2_path, installation_plan,
 };
 use domain::{
-    AdoptionCommitPlan, DocumentTextAsset, LanguageCode, LearningEdition, LearningMaterial,
-    LearningMaterialId, MaterialAsset, MaterialRevision, MaterialRevisionId, MediaAvailability,
-    MediaKind, MediaRenditionAsset, PackageInstallation, PackageLifecycleError, PackageReleaseId,
+    AdoptionCommitPlan, DocumentRendition, LanguageCode, LearningEdition, LearningMaterial,
+    LearningMaterialId, MaterialRevision, MaterialRevisionId, MediaAvailability, MediaId,
+    MediaKind, MediaRendition, PackageInstallation, PackageLifecycleError, PackageReleaseId,
     PackageRenditionFact, PackageResourceAvailability, PackageResourceFact,
-    PackageResourceProvenance, PackageResourceRole, PackageReviewStatus, adoption_commit_plan,
+    PackageResourceProvenance, PackageResourceRole, PackageReviewStatus, Rendition,
+    RenditionOrigin, adoption_commit_plan,
 };
 
 use crate::{ApplicationError, MaterialRepository, now_ms};
@@ -464,46 +465,49 @@ impl PackageLifecycleUseCases {
 fn validate_media_sources(
     current_revision: &MaterialRevision,
     plan: &InstallationPlan,
-) -> Result<HashMap<String, bool>, ApplicationError> {
+) -> Result<HashMap<String, (bool, Option<MediaId>)>, ApplicationError> {
     let mut availability = HashMap::with_capacity(plan.renditions.len());
     for rendition in &plan.renditions {
-        let matches = matching_media_assets(current_revision, rendition);
+        let matches = matching_media_renditions(current_revision, rendition);
         if matches.is_empty() {
             return Err(ApplicationError::Invalid(
-                "content package v2 media rendition does not match a bound material media asset"
+                "content package media rendition does not match a bound material media rendition"
                     .into(),
             ));
         }
         if matches.len() > 1 {
             return Err(ApplicationError::Invalid(
-                "content package v2 media rendition binding is ambiguous".into(),
+                "content package media rendition binding is ambiguous".into(),
             ));
         }
         availability.insert(
             rendition.rendition_id.clone(),
-            matches[0].availability == MediaAvailability::Available,
+            (
+                matches[0].availability == MediaAvailability::Available,
+                matches[0].media_id.clone(),
+            ),
         );
     }
     Ok(availability)
 }
 
-fn matching_media_assets<'a>(
+fn matching_media_renditions<'a>(
     current_revision: &'a MaterialRevision,
     rendition: &PlanRendition,
-) -> Vec<&'a MediaRenditionAsset> {
+) -> Vec<&'a MediaRendition> {
     current_revision
-        .assets
+        .renditions
         .iter()
-        .filter_map(|asset| {
-            let MaterialAsset::MediaRendition(asset) = asset else {
+        .filter_map(|component| {
+            let Rendition::Media(media) = component else {
                 return None;
             };
-            let kind_matches = match asset.kind {
+            let kind_matches = match media.kind {
                 MediaKind::Audio => rendition.kind == "audio",
                 MediaKind::Video => rendition.kind == "video",
             };
-            (kind_matches && media_fingerprint_matches(&asset.fingerprint, &rendition.media_digest))
-                .then_some(asset)
+            (kind_matches && media_fingerprint_matches(&media.fingerprint, &rendition.media_digest))
+                .then_some(media)
         })
         .collect()
 }
@@ -542,11 +546,11 @@ fn validate_document_text_sources(
         let KnownPayload::DocumentText(payload) = &record.payload else {
             unreachable!("payload kind was checked above");
         };
-        let matches: Vec<&DocumentTextAsset> = current_revision
-            .assets
+        let matches: Vec<&DocumentRendition> = current_revision
+            .renditions
             .iter()
-            .filter_map(|asset| match asset {
-                MaterialAsset::DocumentText(asset) if asset.text == payload.text => Some(asset),
+            .filter_map(|component| match component {
+                Rendition::Document(rendition) if rendition.text == payload.text => Some(rendition),
                 _ => None,
             })
             .collect();
@@ -771,21 +775,26 @@ fn resource_fact(
 
 fn rendition_fact(
     plan_rendition: &PlanRendition,
-    availability: &HashMap<String, bool>,
+    availability: &HashMap<String, (bool, Option<MediaId>)>,
 ) -> Result<PackageRenditionFact, ApplicationError> {
-    let available = availability
+    let (available, media_id) = availability
         .get(&plan_rendition.rendition_id)
-        .copied()
+        .cloned()
         .ok_or_else(|| {
             ApplicationError::Repository("package release rendition is missing".into())
         })?;
     Ok(PackageRenditionFact {
         rendition_id: plan_rendition.rendition_id.clone(),
         kind: plan_rendition.kind.clone(),
+        // A v2 package rendition always references the Material's own media
+        // source: it is a Source fact, never a producer's derived output.
+        origin: RenditionOrigin::Source,
         media_type: plan_rendition.media_type.clone(),
         available,
         media_digest: plan_rendition.media_digest.clone(),
         media_size_bytes: plan_rendition.media_size_bytes,
+        media_id,
+        producer: None,
     })
 }
 
@@ -1031,6 +1040,15 @@ mod tests {
             &self,
             _media_id: &MediaId,
         ) -> Result<Option<LearningMaterial>, ApplicationError> {
+            Ok(None)
+        }
+
+        fn set_source_asset_availability(
+            &self,
+            _material_id: &LearningMaterialId,
+            _source_asset_id: &domain::SourceAssetId,
+            _availability: domain::SourceAssetAvailability,
+        ) -> Result<Option<MaterialRevision>, ApplicationError> {
             Ok(None)
         }
     }
@@ -1998,13 +2016,28 @@ mod tests {
         retained: bool,
         text: &str,
     ) -> (LearningMaterial, MaterialRevision) {
-        let asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(text, Some(language("en"))).expect("valid text asset"),
+        let rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                text,
+                None,
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
         let material_id =
-            initial_material_id(std::slice::from_ref(&asset)).expect("deterministic id");
-        let revision = MaterialRevision::new(material_id.clone(), "Material", vec![asset], 1)
-            .expect("valid revision");
+            initial_material_id(&[], std::slice::from_ref(&rendition)).expect("deterministic id");
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            "Material",
+            Vec::new(),
+            vec![rendition],
+            1,
+        )
+        .expect("valid revision");
         let material =
             LearningMaterial::new(&revision, retained.then_some(1), 1, 1).expect("valid material");
         setup
@@ -2022,24 +2055,41 @@ mod tests {
         fingerprint: &str,
         media_availability: MediaAvailability,
     ) -> (LearningMaterial, MaterialRevision) {
-        let text_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(TEXT, Some(language("en"))).expect("valid text asset"),
+        let text_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                TEXT,
+                None,
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let media_asset = MaterialAsset::MediaRendition(
-            MediaRenditionAsset::new(
-                MediaId::parse("media-1").expect("valid media id"),
+        let media_rendition = domain::Rendition::Media(
+            MediaRendition::new(
+                RenditionOrigin::Source,
                 MediaKind::Audio,
+                "audio/mpeg",
                 fingerprint,
                 media_availability,
+                Some(MediaId::parse("media-1").expect("valid media id")),
+                None,
+                None,
+                None,
+                None,
             )
             .expect("valid media rendition"),
         );
-        let material_id = initial_material_id(&[text_asset.clone(), media_asset.clone()])
-            .expect("deterministic id");
+        let material_id =
+            initial_material_id(&[], &[text_rendition.clone(), media_rendition.clone()])
+                .expect("deterministic id");
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Material",
-            vec![text_asset, media_asset],
+            Vec::new(),
+            vec![text_rendition, media_rendition],
             1,
         )
         .expect("valid revision");
@@ -2275,7 +2325,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 media rendition does not match a bound material media asset"
+                    == "content package media rendition does not match a bound material media rendition"
         ));
     }
 
@@ -2295,7 +2345,7 @@ mod tests {
             error,
             ApplicationError::Invalid(message)
                 if message
-                    == "content package v2 media rendition does not match a bound material media asset"
+                    == "content package media rendition does not match a bound material media rendition"
         ));
     }
 
@@ -2411,18 +2461,37 @@ mod tests {
     #[test]
     fn install_rejects_ambiguous_document_text_binding() {
         let setup = setup();
-        let text_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(TEXT, Some(language("en"))).expect("valid text asset"),
+        let text_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                TEXT,
+                None,
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let zh_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new(TEXT, Some(language("zh-Hans"))).expect("valid text asset"),
+        let zh_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("zh-Hans")),
+                TEXT,
+                None,
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let material_id =
-            initial_material_id(&[text_asset.clone(), zh_asset.clone()]).expect("deterministic id");
+        let material_id = initial_material_id(&[], &[text_rendition.clone(), zh_rendition.clone()])
+            .expect("deterministic id");
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Material",
-            vec![text_asset, zh_asset],
+            Vec::new(),
+            vec![text_rendition, zh_rendition],
             1,
         )
         .expect("valid revision");
@@ -2445,26 +2514,39 @@ mod tests {
     #[test]
     fn install_rejects_ambiguous_media_binding() {
         let setup = setup();
-        let first = MediaRenditionAsset::new(
-            MediaId::parse("media-a").unwrap(),
+        let first = MediaRendition::new(
+            RenditionOrigin::Source,
             MediaKind::Audio,
+            "audio/mpeg",
             format!("sha256:{}", media_hex()),
             MediaAvailability::Available,
+            Some(MediaId::parse("media-a").unwrap()),
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
-        let second = MediaRenditionAsset::new(
-            MediaId::parse("media-b").unwrap(),
+        let second = MediaRendition::new(
+            RenditionOrigin::Source,
             MediaKind::Audio,
+            "audio/mpeg",
             format!("sha256:{}", media_hex()),
             MediaAvailability::Available,
+            Some(MediaId::parse("media-b").unwrap()),
+            None,
+            None,
+            None,
+            None,
         )
         .unwrap();
         let revision = MaterialRevision::new(
             LearningMaterialId::parse("material-ambiguous").unwrap(),
             "Material",
+            Vec::new(),
             vec![
-                MaterialAsset::MediaRendition(first),
-                MaterialAsset::MediaRendition(second),
+                domain::Rendition::Media(first),
+                domain::Rendition::Media(second),
             ],
             1,
         )
@@ -2486,7 +2568,7 @@ mod tests {
         assert!(matches!(
             error,
             ApplicationError::Invalid(message)
-                if message == "content package v2 media rendition binding is ambiguous"
+                if message == "content package media rendition binding is ambiguous"
         ));
     }
 
@@ -3137,13 +3219,26 @@ mod tests {
         let (_, blobs) = text_only_release(&ids, "edition-1");
         let installed = install_ok(&setup, &material.id, &blobs);
 
-        let next_asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new("Second revision.", Some(language("en")))
-                .expect("valid text asset"),
+        let next_rendition = domain::Rendition::Document(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "text/plain",
+                Some(language("en")),
+                "Second revision.",
+                None,
+                None,
+                None,
+            )
+            .expect("valid document rendition"),
         );
-        let next_revision =
-            MaterialRevision::new(material.id.clone(), "Material v2", vec![next_asset], 2)
-                .expect("valid revision");
+        let next_revision = MaterialRevision::new(
+            material.id.clone(),
+            "Material v2",
+            Vec::new(),
+            vec![next_rendition],
+            2,
+        )
+        .expect("valid revision");
         setup.materials.append_revision_fake(next_revision, 2);
 
         let error = setup

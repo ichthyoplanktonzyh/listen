@@ -73,7 +73,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_llm_provider_profile_repository(repository.clone())
     .with_realtime_conversation_repository(repository.clone())
     .with_material_repository(repository.clone())
-    .with_package_lifecycle_repository(repository.clone());
+    .with_package_lifecycle_repository(repository.clone())
+    .with_capability_attempt_repository(repository.clone())
+    .with_source_identity_repository(repository.clone());
     let services = services
         .with_coach_dashboard_repository(repository.clone())
         .with_semantic_embedding(repository.clone(), semantic_embedding.clone());

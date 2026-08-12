@@ -69,6 +69,7 @@ mod learning_preparation;
 mod lexical;
 mod listening;
 mod llm_provider;
+mod material_capability;
 mod media;
 mod package_lifecycle;
 mod personal_expression;
@@ -89,6 +90,7 @@ mod secret_store;
 mod semantic_embedding;
 mod semantic_task;
 mod sense_groups;
+mod source_identity;
 mod speech_synthesis;
 mod subtitles;
 mod syntactic_consumers;
@@ -121,6 +123,7 @@ pub use learning_material::*;
 pub use learning_preparation::*;
 pub use lexical::LexicalLearningUseCases;
 pub use llm_provider::LlmProviderUseCases;
+pub use material_capability::*;
 pub use media::MediaAnalysisUseCases;
 pub use package_lifecycle::*;
 pub use personal_expression::PersonalExpressionUseCases;
@@ -139,6 +142,7 @@ pub use secret_store::{InMemorySecretStore, SecretStore, SecretStoreError};
 pub use semantic_embedding::*;
 pub use semantic_task::SemanticUseCases;
 pub use sense_groups::foundation_rule_sense_group_policy;
+pub use source_identity::*;
 pub use speech_synthesis::*;
 pub use syntactic_consumers::*;
 pub use util::now_ms;
@@ -163,6 +167,8 @@ pub struct AppServices {
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
     pub(crate) content_package_imports: Arc<dyn ContentPackageImportRepository>,
     pub(crate) package_lifecycle: Arc<dyn PackageLifecycleRepository>,
+    pub(crate) capability_attempts: Arc<dyn CapabilityAttemptRepository>,
+    pub(crate) source_identity: Arc<dyn SourceIdentityRepository>,
     pub(crate) dictionary: Arc<dyn DictionaryCacheRepository>,
     pub(crate) lexical_capabilities: Arc<dyn LexicalCapabilityRepository>,
     pub(crate) lexical_entries: Arc<dyn LexicalEntryRepository>,
@@ -207,6 +213,18 @@ impl AppServices {
 
     pub fn package_lifecycle(&self) -> PackageLifecycleUseCases {
         PackageLifecycleUseCases::new(self.materials.clone(), self.package_lifecycle.clone())
+    }
+
+    pub fn material_capability(&self) -> MaterialCapabilityUseCases {
+        MaterialCapabilityUseCases::new(
+            self.materials.clone(),
+            self.package_lifecycle.clone(),
+            self.capability_attempts.clone(),
+        )
+    }
+
+    pub fn source_identity(&self) -> SourceIdentityUseCases {
+        SourceIdentityUseCases::new(self.source_identity.clone(), self.materials.clone())
     }
 
     pub fn lexical_learning(&self) -> LexicalLearningUseCases {
@@ -316,6 +334,8 @@ impl AppServices {
             lltimeline_imports: timelines.clone(),
             content_package_imports: timelines,
             package_lifecycle: Arc::new(DisabledPackageLifecycleRepository),
+            capability_attempts: Arc::new(DisabledCapabilityAttemptRepository),
+            source_identity: Arc::new(DisabledSourceIdentityRepository),
             dictionary,
             lexical_capabilities: learning_assets.clone(),
             lexical_entries: learning_assets.clone(),
@@ -364,6 +384,22 @@ impl AppServices {
         package_lifecycle: Arc<dyn PackageLifecycleRepository>,
     ) -> Self {
         self.package_lifecycle = package_lifecycle;
+        self
+    }
+
+    pub fn with_capability_attempt_repository(
+        mut self,
+        capability_attempts: Arc<dyn CapabilityAttemptRepository>,
+    ) -> Self {
+        self.capability_attempts = capability_attempts;
+        self
+    }
+
+    pub fn with_source_identity_repository(
+        mut self,
+        source_identity: Arc<dyn SourceIdentityRepository>,
+    ) -> Self {
+        self.source_identity = source_identity;
         self
     }
 

@@ -35,7 +35,9 @@ fn build_app() -> Router {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_material_repository(repo.clone())
-    .with_package_lifecycle_repository(repo.clone());
+    .with_package_lifecycle_repository(repo.clone())
+    .with_capability_attempt_repository(repo.clone())
+    .with_source_identity_repository(repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 

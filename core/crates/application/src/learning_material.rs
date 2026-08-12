@@ -13,23 +13,39 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use domain::{
-    DocumentTextAsset, LanguageCode, LearningMaterial, LearningMaterialId, MaterialAsset,
-    MaterialRevision, MaterialRevisionId, MaterialShape, MediaId, MediaRenditionAsset,
-    initial_material_id,
+    DocumentRendition, DomainError, LanguageCode, LearningMaterial, LearningMaterialId,
+    MaterialRevision, MaterialRevisionId, MaterialShape, MediaId, MediaKind, MediaRendition,
+    Rendition, RenditionOrigin, SourceAsset, SourceAssetBinding, initial_material_id,
 };
 
 use crate::{ApplicationError, MediaRepository, now_ms};
 
-/// A typed asset input for creating or extending a learning material.
+/// Input for one Source Asset: the exact byte facts of the learner's
+/// authorized original source. The availability of a referenced asset is a
+/// later, separate fact.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MaterialAssetInput {
-    /// Inline learner-facing text, optionally tagged with a language.
-    DocumentText {
-        text: String,
-        language: Option<LanguageCode>,
-    },
-    /// A reference to an already-registered media source.
-    MediaRendition { media_id: MediaId },
+pub struct SourceAssetInput {
+    pub media_type: String,
+    pub byte_length: u64,
+    pub sha256_digest: String,
+    pub binding: SourceAssetBinding,
+}
+
+/// Input for one Document Rendition. A Source rendition optionally binds the
+/// Source Asset declared earlier in the same request by position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentRenditionInput {
+    pub media_type: String,
+    pub language: Option<LanguageCode>,
+    pub text: String,
+    pub source_asset_index: Option<usize>,
+}
+
+/// Input for one Media Rendition, resolving authoritative media facts from
+/// the media repository.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaRenditionInput {
+    pub media_id: MediaId,
 }
 
 /// Input for creating a learning material.
@@ -40,7 +56,9 @@ pub enum MaterialAssetInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateLearningMaterial {
     pub title: String,
-    pub assets: Vec<MaterialAssetInput>,
+    pub source_assets: Vec<SourceAssetInput>,
+    pub document_renditions: Vec<DocumentRenditionInput>,
+    pub media_renditions: Vec<MediaRenditionInput>,
     pub retain: Option<bool>,
 }
 
@@ -48,7 +66,9 @@ pub struct CreateLearningMaterial {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppendMaterialRevision {
     pub title: String,
-    pub assets: Vec<MaterialAssetInput>,
+    pub source_assets: Vec<SourceAssetInput>,
+    pub document_renditions: Vec<DocumentRenditionInput>,
+    pub media_renditions: Vec<MediaRenditionInput>,
 }
 
 /// A material together with a specific (typically the current) revision.
@@ -128,6 +148,18 @@ pub trait MaterialRepository: Send + Sync {
         &self,
         media_id: &MediaId,
     ) -> Result<Option<LearningMaterial>, ApplicationError>;
+
+    /// Updates the stored availability fact of one Source Asset of the
+    /// material's current revision. Returns the material's current revision
+    /// with the updated fact, or `None` when the asset does not belong to the
+    /// current revision. Availability never participates in revision identity,
+    /// so this is a fact update, not a new revision.
+    fn set_source_asset_availability(
+        &self,
+        material_id: &LearningMaterialId,
+        source_asset_id: &domain::SourceAssetId,
+        availability: domain::SourceAssetAvailability,
+    ) -> Result<Option<MaterialRevision>, ApplicationError>;
 }
 
 /// Durable learning material requires configured persistence: without a
@@ -193,6 +225,15 @@ impl MaterialRepository for DisabledMaterialRepository {
     ) -> Result<Option<LearningMaterial>, ApplicationError> {
         Err(Self::disabled())
     }
+
+    fn set_source_asset_availability(
+        &self,
+        _material_id: &LearningMaterialId,
+        _source_asset_id: &domain::SourceAssetId,
+        _availability: domain::SourceAssetAvailability,
+    ) -> Result<Option<MaterialRevision>, ApplicationError> {
+        Err(Self::disabled())
+    }
 }
 
 /// Use cases that own learning-material creation, revision, retention, and
@@ -208,7 +249,7 @@ impl MaterialUseCases {
         Self { materials, media }
     }
 
-    /// Creates a learning material from typed asset inputs.
+    /// Creates a learning material from typed component inputs.
     ///
     /// Unknown media inputs fail with `NotFound("media")`. When media inputs
     /// are already bound to exactly one existing material, the request
@@ -226,13 +267,22 @@ impl MaterialUseCases {
         input: CreateLearningMaterial,
     ) -> Result<MaterialDetails, ApplicationError> {
         let now = now_ms();
-        let assets = self.assets_from_inputs(&input.assets)?;
-        let bound_materials = self.bound_materials_for_inputs(&input.assets)?;
+        let (source_assets, renditions) = self.components_from_inputs(
+            &input.source_assets,
+            &input.document_renditions,
+            &input.media_renditions,
+        )?;
+        let bound_materials = self.bound_materials_for_inputs(&input.media_renditions)?;
         let material = match bound_materials.len() {
             0 => {
-                let material_id = initial_material_id(&assets)?;
-                let revision =
-                    MaterialRevision::new(material_id.clone(), input.title, assets, now)?;
+                let material_id = initial_material_id(&source_assets, &renditions)?;
+                let revision = MaterialRevision::new(
+                    material_id.clone(),
+                    input.title.clone(),
+                    source_assets,
+                    renditions,
+                    now,
+                )?;
                 if self.materials.get_material(&material_id)?.is_some() {
                     // The deterministic identity already exists (for example a
                     // text-only retry after a prior convergent write): this
@@ -254,8 +304,13 @@ impl MaterialUseCases {
                     .into_iter()
                     .next()
                     .expect("exactly one bound material");
-                let revision =
-                    MaterialRevision::new(material_id.clone(), input.title, assets, now)?;
+                let revision = MaterialRevision::new(
+                    material_id.clone(),
+                    input.title,
+                    source_assets,
+                    renditions,
+                    now,
+                )?;
                 self.materials
                     .append_revision(&material_id, &revision, now)?
             }
@@ -289,10 +344,13 @@ impl MaterialUseCases {
         self.materials
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
-        let assets = self.assets_from_inputs(&input.assets)?;
-        for asset_input in &input.assets {
-            if let MaterialAssetInput::MediaRendition { media_id } = asset_input
-                && let Some(bound) = self.materials.material_for_media(media_id)?
+        let (source_assets, renditions) = self.components_from_inputs(
+            &input.source_assets,
+            &input.document_renditions,
+            &input.media_renditions,
+        )?;
+        for media_input in &input.media_renditions {
+            if let Some(bound) = self.materials.material_for_media(&media_input.media_id)?
                 && bound.id != *material_id
             {
                 return Err(ApplicationError::Conflict(
@@ -300,7 +358,13 @@ impl MaterialUseCases {
                 ));
             }
         }
-        let revision = MaterialRevision::new(material_id.clone(), input.title, assets, now)?;
+        let revision = MaterialRevision::new(
+            material_id.clone(),
+            input.title,
+            source_assets,
+            renditions,
+            now,
+        )?;
         let material = self
             .materials
             .append_revision(material_id, &revision, now)?;
@@ -402,6 +466,25 @@ impl MaterialUseCases {
         self.details_for_material(material)
     }
 
+    /// Updates the availability fact of one Source Asset of the material's
+    /// current revision. The material must exist and the asset must belong to
+    /// its current revision, otherwise `NotFound("source asset")`. A missing
+    /// referenced asset is an unavailable fact: the Material and its
+    /// membership stay untouched.
+    pub fn update_source_asset_availability(
+        &self,
+        material_id: &LearningMaterialId,
+        source_asset_id: &domain::SourceAssetId,
+        availability: domain::SourceAssetAvailability,
+    ) -> Result<MaterialRevision, ApplicationError> {
+        self.materials
+            .get_material(material_id)?
+            .ok_or(ApplicationError::NotFound("material"))?;
+        self.materials
+            .set_source_asset_availability(material_id, source_asset_id, availability)?
+            .ok_or(ApplicationError::NotFound("source asset"))
+    }
+
     /// Resolves the learning material bound to a media source, or `None` when
     /// the media is not bound to any material.
     pub fn resolve_for_media(
@@ -449,50 +532,84 @@ impl MaterialUseCases {
         Ok(revision)
     }
 
-    /// Resolves typed inputs into domain assets, strictly through the media
-    /// repository for renditions so only authoritative kind, fingerprint, and
-    /// availability facts are snapshotted. No path ever enters a material.
-    fn assets_from_inputs(
+    /// Resolves typed inputs into domain components, strictly through the
+    /// media repository for media renditions so only authoritative kind,
+    /// fingerprint, and availability facts are snapshotted. No path ever
+    /// enters a material.
+    fn components_from_inputs(
         &self,
-        inputs: &[MaterialAssetInput],
-    ) -> Result<Vec<MaterialAsset>, ApplicationError> {
-        let mut assets = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            match input {
-                MaterialAssetInput::DocumentText { text, language } => {
-                    assets.push(MaterialAsset::DocumentText(DocumentTextAsset::new(
-                        text.clone(),
-                        language.clone(),
-                    )?));
-                }
-                MaterialAssetInput::MediaRendition { media_id } => {
-                    let media = self
-                        .media
-                        .get(media_id)?
-                        .ok_or(ApplicationError::NotFound("media"))?;
-                    assets.push(MaterialAsset::MediaRendition(MediaRenditionAsset::new(
-                        media_id.clone(),
-                        media.kind,
-                        media.fingerprint.clone(),
-                        media.availability,
-                    )?));
-                }
-            }
+        source_asset_inputs: &[SourceAssetInput],
+        document_inputs: &[DocumentRenditionInput],
+        media_inputs: &[MediaRenditionInput],
+    ) -> Result<(Vec<SourceAsset>, Vec<Rendition>), ApplicationError> {
+        let now = now_ms();
+        let mut source_assets = Vec::with_capacity(source_asset_inputs.len());
+        for input in source_asset_inputs {
+            source_assets.push(SourceAsset::new(
+                input.media_type.clone(),
+                input.byte_length,
+                input.sha256_digest.clone(),
+                input.binding.clone(),
+                domain::SourceAssetAvailability::Available,
+                now,
+            )?);
         }
-        Ok(assets)
+        let mut renditions = Vec::with_capacity(document_inputs.len() + media_inputs.len());
+        for input in document_inputs {
+            let source_asset_id = match input.source_asset_index {
+                Some(index) => Some(
+                    source_assets
+                        .get(index)
+                        .ok_or_else(|| {
+                            ApplicationError::Invalid(format!(
+                                "document rendition references missing source asset index {index}"
+                            ))
+                        })?
+                        .id
+                        .clone(),
+                ),
+                None => None,
+            };
+            renditions.push(Rendition::Document(DocumentRendition::new(
+                RenditionOrigin::Source,
+                input.media_type.clone(),
+                input.language.clone(),
+                input.text.clone(),
+                source_asset_id,
+                None,
+                None,
+            )?));
+        }
+        for input in media_inputs {
+            let media = self
+                .media
+                .get(&input.media_id)?
+                .ok_or(ApplicationError::NotFound("media"))?;
+            renditions.push(Rendition::Media(MediaRendition::new(
+                RenditionOrigin::Source,
+                media.kind,
+                media_media_type(media.kind),
+                media.fingerprint.clone(),
+                media.availability,
+                Some(media.id.clone()),
+                None,
+                None,
+                None,
+                None,
+            )?));
+        }
+        Ok((source_assets, renditions))
     }
 
     /// Distinct material ids that the given media inputs are currently bound
     /// to, deduplicated.
     fn bound_materials_for_inputs(
         &self,
-        inputs: &[MaterialAssetInput],
+        inputs: &[MediaRenditionInput],
     ) -> Result<HashSet<LearningMaterialId>, ApplicationError> {
         let mut bound = HashSet::new();
         for input in inputs {
-            if let MaterialAssetInput::MediaRendition { media_id } = input
-                && let Some(material) = self.materials.material_for_media(media_id)?
-            {
+            if let Some(material) = self.materials.material_for_media(&input.media_id)? {
                 bound.insert(material.id);
             }
         }
@@ -518,23 +635,37 @@ impl MaterialUseCases {
     }
 }
 
+fn media_media_type(kind: MediaKind) -> String {
+    match kind {
+        MediaKind::Video => "video/mp4".to_owned(),
+        MediaKind::Audio => "audio/mpeg".to_owned(),
+    }
+}
+
+/// Maps a domain construction failure to the stable application error.
+pub fn domain_error(error: DomainError) -> ApplicationError {
+    ApplicationError::Invalid(error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
-    use domain::{DomainError, MediaAvailability, MediaItem, MediaKind};
+    use domain::{MediaAvailability, MediaItem};
 
-    fn text_input(text: &str) -> MaterialAssetInput {
-        MaterialAssetInput::DocumentText {
-            text: text.to_owned(),
+    fn text_input(text: &str) -> DocumentRenditionInput {
+        DocumentRenditionInput {
+            media_type: "text/plain".to_owned(),
             language: None,
+            text: text.to_owned(),
+            source_asset_index: None,
         }
     }
 
-    fn media_input(media_id: &str) -> MaterialAssetInput {
-        MaterialAssetInput::MediaRendition {
+    fn media_input(media_id: &str) -> MediaRenditionInput {
+        MediaRenditionInput {
             media_id: MediaId::parse(media_id).expect("valid media id"),
         }
     }
@@ -584,17 +715,6 @@ mod tests {
                 .unwrap()
                 .items
                 .insert(item.id.as_str().to_owned(), item);
-        }
-
-        fn get_calls(&self) -> u64 {
-            self.store.lock().unwrap().get_calls
-        }
-
-        fn snapshot(&self) -> Vec<MediaItem> {
-            let store = self.store.lock().unwrap();
-            let mut items: Vec<MediaItem> = store.items.values().cloned().collect();
-            items.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            items
         }
     }
 
@@ -681,13 +801,7 @@ mod tests {
         create_calls: u64,
         append_calls: u64,
         membership_calls: u64,
-        /// When set, `list_retained_materials` reports every material, even
-        /// temporary ones, to exercise the use case's defensive filter.
         misbehave_list_retained: bool,
-        /// When set, every persisted revision is stored with this
-        /// `created_at_ms` (an adapter whose immutable revision keeps its
-        /// original timestamp across idempotent retries), to prove write paths
-        /// return the persisted revision and not the local candidate.
         rewrite_revision_created_at: Option<u64>,
     }
 
@@ -697,11 +811,13 @@ mod tests {
     }
 
     fn bind_media_assets(state: &mut FakeMaterialState, revision: &MaterialRevision) {
-        for asset in &revision.assets {
-            if let MaterialAsset::MediaRendition(rendition) = asset {
+        for rendition in &revision.renditions {
+            if let Rendition::Media(media) = rendition
+                && let Some(media_id) = &media.media_id
+            {
                 state
                     .media_bindings
-                    .entry(rendition.media_id.as_str().to_owned())
+                    .entry(media_id.as_str().to_owned())
                     .or_insert_with(|| revision.material_id.as_str().to_owned());
             }
         }
@@ -738,32 +854,8 @@ mod tests {
             self.state.lock().unwrap().revisions.len()
         }
 
-        fn revision_ids(&self) -> Vec<String> {
-            let state = self.state.lock().unwrap();
-            let mut ids: Vec<String> = state.revisions.keys().cloned().collect();
-            ids.sort();
-            ids
-        }
-
         fn set_misbehaving_list_retained(&self, misbehave: bool) {
             self.state.lock().unwrap().misbehave_list_retained = misbehave;
-        }
-
-        /// Directly points a material's current-revision pointer, simulating a
-        /// corrupt repository that breaks the material-to-revision ownership
-        /// invariant. Adversarial tests use this seam to prove the use case
-        /// revalidates ownership instead of trusting the pointer.
-        fn set_current_revision_pointer(
-            &self,
-            material_id: &LearningMaterialId,
-            revision_id: &MaterialRevisionId,
-        ) {
-            let mut state = self.state.lock().unwrap();
-            state
-                .materials
-                .get_mut(material_id.as_str())
-                .expect("material must exist before repointing its current revision")
-                .current_revision_id = revision_id.clone();
         }
 
         fn set_rewrite_revision_created_at(&self, created_at_ms: Option<u64>) {
@@ -780,8 +872,6 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             state.create_calls += 1;
             if let Some(existing) = state.materials.get(material.id.as_str()) {
-                // Deterministic idempotency: equal content converges on the
-                // first persisted material and revision.
                 return Ok(existing.clone());
             }
             state
@@ -808,7 +898,6 @@ mod tests {
                 if material.current_revision_id == revision.id
                     && state.revisions.contains_key(revision.id.as_str())
                 {
-                    // Idempotent retry of the already-current revision.
                     return Ok(material.clone());
                 }
             }
@@ -890,6 +979,15 @@ mod tests {
                 None => None,
             })
         }
+
+        fn set_source_asset_availability(
+            &self,
+            _material_id: &LearningMaterialId,
+            _source_asset_id: &domain::SourceAssetId,
+            _availability: domain::SourceAssetAvailability,
+        ) -> Result<Option<MaterialRevision>, ApplicationError> {
+            Ok(None)
+        }
     }
 
     #[test]
@@ -899,7 +997,9 @@ mod tests {
         let text = use_cases
             .create(CreateLearningMaterial {
                 title: "Notes".into(),
-                assets: vec![text_input("spoken notes")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("spoken notes")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("text material");
@@ -909,7 +1009,9 @@ mod tests {
         let audio = use_cases
             .create(CreateLearningMaterial {
                 title: "Audio".into(),
-                assets: vec![media_input("media-audio")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-audio")],
                 retain: None,
             })
             .expect("audio material");
@@ -919,7 +1021,9 @@ mod tests {
         let video = use_cases
             .create(CreateLearningMaterial {
                 title: "Video".into(),
-                assets: vec![media_input("media-video")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-video")],
                 retain: None,
             })
             .expect("video material");
@@ -929,40 +1033,84 @@ mod tests {
         let mixed = use_cases
             .create(CreateLearningMaterial {
                 title: "Mixed".into(),
-                assets: vec![text_input("with notes"), media_input("media-mixed-a")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("with notes")],
+                media_renditions: vec![media_input("media-mixed-a")],
                 retain: None,
             })
             .expect("text plus audio material");
         assert_eq!(mixed.shape(), MaterialShape::Mixed);
-
-        media.seed(media_item("media-mixed-v", MediaKind::Video, "fp-mv"));
-        let audio_plus_video = use_cases
-            .create(CreateLearningMaterial {
-                title: "AV".into(),
-                assets: vec![media_input("media-mixed-a"), media_input("media-mixed-v")],
-                retain: None,
-            })
-            .expect("audio plus video material");
-        assert_eq!(audio_plus_video.shape(), MaterialShape::Mixed);
     }
 
     #[test]
-    fn document_text_preserves_exact_input_bytes() {
+    fn document_rendition_preserves_exact_input_bytes() {
         let (use_cases, _, _) = setup();
         let details = use_cases
             .create(CreateLearningMaterial {
                 title: "Exact".into(),
-                assets: vec![MaterialAssetInput::DocumentText {
-                    text: "  leading and trailing whitespace  ".into(),
+                source_assets: Vec::new(),
+                document_renditions: vec![DocumentRenditionInput {
+                    media_type: "text/plain".into(),
                     language: None,
+                    text: "  leading and trailing whitespace  ".into(),
+                    source_asset_index: None,
                 }],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("material");
-        let MaterialAsset::DocumentText(asset) = &details.current_revision.assets[0] else {
-            panic!("expected a document text asset");
+        let Rendition::Document(rendition) = &details.current_revision.renditions[0] else {
+            panic!("expected a document rendition");
         };
-        assert_eq!(asset.text, "  leading and trailing whitespace  ");
+        assert_eq!(rendition.text, "  leading and trailing whitespace  ");
+    }
+
+    #[test]
+    fn source_assets_bind_document_renditions_by_position() {
+        let (use_cases, _, _) = setup();
+        let details = use_cases
+            .create(CreateLearningMaterial {
+                title: "With source".into(),
+                source_assets: vec![SourceAssetInput {
+                    media_type: "text/plain".into(),
+                    byte_length: 11,
+                    sha256_digest: "a".repeat(64),
+                    binding: SourceAssetBinding::Managed,
+                }],
+                document_renditions: vec![DocumentRenditionInput {
+                    media_type: "text/plain".into(),
+                    language: None,
+                    text: "hello world".into(),
+                    source_asset_index: Some(0),
+                }],
+                media_renditions: Vec::new(),
+                retain: None,
+            })
+            .expect("material with source asset");
+        assert_eq!(details.current_revision.source_assets.len(), 1);
+        let asset = &details.current_revision.source_assets[0];
+        assert_eq!(asset.byte_length, 11);
+        let Rendition::Document(rendition) = &details.current_revision.renditions[0] else {
+            panic!("expected a document rendition");
+        };
+        assert_eq!(rendition.source_asset_id.as_ref(), Some(&asset.id));
+
+        // An out-of-range source asset index is refused.
+        let err = use_cases
+            .create(CreateLearningMaterial {
+                title: "Bad index".into(),
+                source_assets: Vec::new(),
+                document_renditions: vec![DocumentRenditionInput {
+                    media_type: "text/plain".into(),
+                    language: None,
+                    text: "hello".into(),
+                    source_asset_index: Some(2),
+                }],
+                media_renditions: Vec::new(),
+                retain: None,
+            })
+            .expect_err("out-of-range index");
+        assert!(matches!(err, ApplicationError::Invalid(_)));
     }
 
     #[test]
@@ -972,17 +1120,27 @@ mod tests {
         let details = use_cases
             .create(CreateLearningMaterial {
                 title: "Video notes".into(),
-                assets: vec![media_input("media-vid")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-vid")],
                 retain: None,
             })
             .expect("video material");
-        let MaterialAsset::MediaRendition(rendition) = &details.current_revision.assets[0] else {
-            panic!("expected a media rendition asset");
+        let Rendition::Media(rendition) = &details.current_revision.renditions[0] else {
+            panic!("expected a media rendition");
         };
-        assert_eq!(rendition.media_id.as_str(), "media-vid");
+        assert_eq!(
+            rendition.media_id.as_ref().expect("media id").as_str(),
+            "media-vid"
+        );
         assert_eq!(rendition.kind, MediaKind::Video);
         assert_eq!(rendition.fingerprint, "fp-xyz");
         assert_eq!(rendition.availability, MediaAvailability::Available);
+        let json = serde_json::to_value(rendition).expect("serializes");
+        assert!(
+            !json.as_object().expect("object").contains_key("path"),
+            "renditions never carry paths"
+        );
     }
 
     #[test]
@@ -991,25 +1149,20 @@ mod tests {
         let retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Default retained".into(),
-                assets: vec![text_input("kept")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("kept")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("default retained");
         assert!(retained.material.retained_at_ms.is_some());
 
-        let explicit_retained = use_cases
-            .create(CreateLearningMaterial {
-                title: "Explicit retained".into(),
-                assets: vec![text_input("also kept")],
-                retain: Some(true),
-            })
-            .expect("explicit retained");
-        assert!(explicit_retained.material.retained_at_ms.is_some());
-
         let temporary = use_cases
             .create(CreateLearningMaterial {
                 title: "Temporary".into(),
-                assets: vec![text_input("expiring")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("expiring")],
+                media_renditions: Vec::new(),
                 retain: Some(false),
             })
             .expect("temporary");
@@ -1021,7 +1174,6 @@ mod tests {
             .map(|details| details.material.id.as_str())
             .collect();
         assert!(ids.contains(&retained.material.id.as_str()));
-        assert!(ids.contains(&explicit_retained.material.id.as_str()));
         assert!(!ids.contains(&temporary.material.id.as_str()));
     }
 
@@ -1031,14 +1183,18 @@ mod tests {
         let first = use_cases
             .create(CreateLearningMaterial {
                 title: "Same".into(),
-                assets: vec![text_input("identical content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("identical content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("first create");
         let retry = use_cases
             .create(CreateLearningMaterial {
                 title: "Same".into(),
-                assets: vec![text_input("identical content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("identical content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("retry create");
@@ -1047,140 +1203,81 @@ mod tests {
             retry.material.current_revision_id, first.material.current_revision_id,
             "equal content retries converge on the same revision"
         );
-        assert_eq!(
-            retry.current_revision.id, first.current_revision.id,
-            "the returned revision is the converged persisted revision"
-        );
-        assert_eq!(
-            materials.create_calls(),
-            1,
-            "the deterministic material identity exists, so the retry must not create again"
-        );
-        assert_eq!(
-            materials.append_calls(),
-            1,
-            "the retry converges by appending the content-idempotent revision"
-        );
-        assert_eq!(
-            materials.material_count(),
-            1,
-            "convergence keeps exactly one material"
-        );
+        assert_eq!(materials.create_calls(), 1, "no second create");
+        assert_eq!(materials.append_calls(), 1, "converged by appending");
+        assert_eq!(materials.material_count(), 1);
         assert_eq!(materials.revision_count(), 1);
-        assert_eq!(
-            retry.material.retained_at_ms, first.material.retained_at_ms,
-            "the retry converges on the persisted membership"
-        );
     }
 
     #[test]
     fn create_returns_the_persisted_revision_not_the_local_candidate() {
         let (use_cases, materials, _) = setup();
-        // The adapter persists the immutable revision once with its original
-        // timestamp; an idempotent retry constructs a candidate with a fresh
-        // created_at_ms that must never win.
         materials.set_rewrite_revision_created_at(Some(42));
 
         let first = use_cases
             .create(CreateLearningMaterial {
                 title: "Source of truth".into(),
-                assets: vec![text_input("authoritative content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("authoritative content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("first create");
-        assert_eq!(
-            first.current_revision.created_at_ms, 42,
-            "create returns the persisted revision, not the locally constructed candidate"
-        );
-        let stored = materials
-            .get_revision(&first.current_revision.id)
-            .expect("read")
-            .expect("stored revision");
-        assert_eq!(stored, first.current_revision);
+        assert_eq!(first.current_revision.created_at_ms, 42);
 
         let retry = use_cases
             .create(CreateLearningMaterial {
                 title: "Source of truth".into(),
-                assets: vec![text_input("authoritative content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("authoritative content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("retry create");
-        assert_eq!(retry.material.id, first.material.id);
-        assert_eq!(retry.current_revision.id, first.current_revision.id);
-        assert_eq!(
-            retry.current_revision.created_at_ms, 42,
-            "the retry returns the persisted immutable revision, never the fresh candidate"
-        );
-
-        let appended = use_cases
-            .append_revision(
-                &retry.material.id,
-                AppendMaterialRevision {
-                    title: "Source of truth v2".into(),
-                    assets: vec![text_input("authoritative content")],
-                },
-            )
-            .expect("append");
-        assert_eq!(
-            appended.current_revision.created_at_ms, 42,
-            "append returns the persisted revision too"
-        );
-        assert_eq!(appended.current_revision.title, "Source of truth v2");
-        let stored = materials
-            .get_revision(&appended.current_revision.id)
-            .expect("read")
-            .expect("stored revision");
-        assert_eq!(stored, appended.current_revision);
+        assert_eq!(retry.current_revision.created_at_ms, 42);
     }
 
     #[test]
-    fn text_only_temporary_retry_with_default_retain_converges_and_retains() {
+    fn temporary_retry_with_default_retain_converges_and_retains() {
         let (use_cases, materials, _) = setup();
         let temporary = use_cases
             .create(CreateLearningMaterial {
                 title: "Draft".into(),
-                assets: vec![text_input("convergent content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("convergent content")],
+                media_renditions: Vec::new(),
                 retain: Some(false),
             })
             .expect("temporary create");
         let material_id = temporary.material.id.clone();
         assert!(temporary.material.retained_at_ms.is_none());
-        assert_eq!(materials.create_calls(), 1);
-        assert_eq!(materials.membership_calls(), 0);
 
-        // Equal-content retry with default retention converges on the existing
-        // deterministic material, appends idempotently, and retains it.
         let retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Draft".into(),
-                assets: vec![text_input("convergent content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("convergent content")],
+                media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("default-retain retry");
         assert_eq!(retained.material.id, material_id);
-        assert_eq!(materials.create_calls(), 1, "no second create");
-        assert_eq!(materials.append_calls(), 1, "converged by appending");
-        assert_eq!(materials.material_count(), 1);
-        assert_eq!(
-            materials.membership_calls(),
-            1,
-            "a previously temporary material becomes retained by default"
-        );
+        assert_eq!(materials.membership_calls(), 1);
         assert!(retained.material.retained_at_ms.is_some());
 
-        // Explicit false on the now-retained material never clears membership.
         let still_retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Draft".into(),
-                assets: vec![text_input("convergent content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("convergent content")],
+                media_renditions: Vec::new(),
                 retain: Some(false),
             })
             .expect("explicit-false retry");
-        assert_eq!(still_retained.material.id, material_id);
         assert_eq!(
             materials.membership_calls(),
             1,
-            "explicit false never clears membership"
+            "explicit false never clears"
         );
         assert!(still_retained.material.retained_at_ms.is_some());
     }
@@ -1192,19 +1289,22 @@ mod tests {
         let created = use_cases
             .create(CreateLearningMaterial {
                 title: "V1".into(),
-                assets: vec![media_input("media-app")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-app")],
                 retain: None,
             })
             .expect("create");
         let material_id = created.material.id.clone();
-        assert_eq!(materials.revision_count(), 1);
 
         let first = use_cases
             .append_revision(
                 &material_id,
                 AppendMaterialRevision {
                     title: "V2".into(),
-                    assets: vec![media_input("media-app"), text_input("more notes")],
+                    source_assets: Vec::new(),
+                    document_renditions: vec![text_input("more notes")],
+                    media_renditions: vec![media_input("media-app")],
                 },
             )
             .expect("first append");
@@ -1215,7 +1315,9 @@ mod tests {
                 &material_id,
                 AppendMaterialRevision {
                     title: "V2".into(),
-                    assets: vec![media_input("media-app"), text_input("more notes")],
+                    source_assets: Vec::new(),
+                    document_renditions: vec![text_input("more notes")],
+                    media_renditions: vec![media_input("media-app")],
                 },
             )
             .expect("idempotent retry");
@@ -1227,34 +1329,7 @@ mod tests {
             retry.material.updated_at_ms, first.material.updated_at_ms,
             "an idempotent retry must not advance the update time"
         );
-        assert_eq!(
-            materials.revision_count(),
-            2,
-            "the retry persists no duplicate revision"
-        );
-        assert_eq!(retry.current_revision.id, first.current_revision.id);
-
-        // Exact revision ownership: read_revision returns the bare revision.
-        let read_back = use_cases
-            .read_revision(&material_id, &retry.current_revision.id)
-            .expect("read revision");
-        assert_eq!(read_back.id, retry.current_revision.id);
-        assert_eq!(read_back.material_id, material_id);
-
-        let other = use_cases
-            .create(CreateLearningMaterial {
-                title: "Other".into(),
-                assets: vec![text_input("other notes")],
-                retain: None,
-            })
-            .expect("other material");
-        let err = use_cases
-            .read_revision(&other.material.id, &retry.current_revision.id)
-            .expect_err("revision belongs to another material");
-        assert!(matches!(
-            err,
-            ApplicationError::NotFound("material revision")
-        ));
+        assert_eq!(materials.revision_count(), 2);
 
         let err = use_cases
             .read_revision(
@@ -1275,21 +1350,22 @@ mod tests {
         let retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Retained".into(),
-                assets: vec![media_input("media-list")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-list")],
                 retain: None,
             })
             .expect("retained material");
         use_cases
             .create(CreateLearningMaterial {
                 title: "Temporary".into(),
-                assets: vec![text_input("temp notes")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("temp notes")],
+                media_renditions: Vec::new(),
                 retain: Some(false),
             })
             .expect("temporary material");
-        assert_eq!(materials.material_count(), 2);
 
-        // The misbehaving repository reports every material; the use case must
-        // still return only the retained projection.
         materials.set_misbehaving_list_retained(true);
         let list = use_cases.list_retained().expect("list retained");
         assert_eq!(list.len(), 1);
@@ -1302,32 +1378,27 @@ mod tests {
         let created = use_cases
             .create(CreateLearningMaterial {
                 title: "Toggle".into(),
-                assets: vec![text_input("toggle content")],
+                source_assets: Vec::new(),
+                document_renditions: vec![text_input("toggle content")],
+                media_renditions: Vec::new(),
                 retain: Some(false),
             })
             .expect("temporary material");
         let material_id = created.material.id.clone();
-        assert_eq!(materials.membership_calls(), 0);
 
         use_cases.retain(&material_id).expect("retain");
         assert_eq!(materials.membership_calls(), 1);
-        let retained = use_cases.retain(&material_id).expect("retain again");
+        use_cases.retain(&material_id).expect("retain again");
         assert_eq!(
             materials.membership_calls(),
             1,
-            "retaining an already-retained material is a no-op"
+            "already retained is a no-op"
         );
-        assert!(retained.material.retained_at_ms.is_some());
 
-        let unretained = use_cases.unretain(&material_id).expect("unretain");
+        use_cases.unretain(&material_id).expect("unretain");
         assert_eq!(materials.membership_calls(), 2);
-        assert!(unretained.material.retained_at_ms.is_none());
         use_cases.unretain(&material_id).expect("unretain again");
-        assert_eq!(
-            materials.membership_calls(),
-            2,
-            "unretaining a temporary material is a no-op"
-        );
+        assert_eq!(materials.membership_calls(), 2, "temporary is a no-op");
 
         let err = use_cases
             .unretain(&LearningMaterialId::parse("material-absent").unwrap())
@@ -1336,497 +1407,26 @@ mod tests {
     }
 
     #[test]
-    fn unretain_invokes_only_membership_mutation() {
-        let (use_cases, materials, media) = setup();
-        media.seed(media_item("media-keep", MediaKind::Video, "fp-keep"));
-        let created = use_cases
-            .create(CreateLearningMaterial {
-                title: "Keep".into(),
-                assets: vec![media_input("media-keep")],
-                retain: None,
-            })
-            .expect("create");
-        let material_id = created.material.id.clone();
-        let revision_ids_before = materials.revision_ids();
-        let media_snapshot_before = media.snapshot();
-        let get_calls_before = media.get_calls();
-
-        let unretained = use_cases.unretain(&material_id).expect("unretain");
-        assert!(unretained.material.retained_at_ms.is_none());
-        assert_eq!(
-            materials.membership_calls(),
-            1,
-            "exactly one membership mutation"
-        );
-        assert_eq!(materials.create_calls(), 1, "no additional create");
-        assert_eq!(materials.append_calls(), 0, "no revision append");
-        assert_eq!(
-            media.get_calls(),
-            get_calls_before,
-            "the media repository is untouched"
-        );
-        assert_eq!(
-            materials.revision_ids(),
-            revision_ids_before,
-            "revisions are unchanged"
-        );
-        assert_eq!(
-            media.snapshot(),
-            media_snapshot_before,
-            "media items are unchanged"
-        );
-
-        let bound = use_cases
-            .resolve_for_media(&MediaId::parse("media-keep").unwrap())
-            .expect("resolve")
-            .expect("binding survives unretain");
-        assert_eq!(
-            bound.material.id, material_id,
-            "media bindings are unchanged"
-        );
-    }
-
-    #[test]
-    fn unknown_media_is_not_found_for_create_and_append() {
+    fn resolve_for_media_returns_bound_material_details() {
         let (use_cases, _, media) = setup();
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "Broken".into(),
-                assets: vec![media_input("media-missing")],
-                retain: None,
-            })
-            .expect_err("unknown media on create");
-        assert!(matches!(err, ApplicationError::NotFound("media")));
-
-        media.seed(media_item("media-real", MediaKind::Audio, "fp-real"));
-        let created = use_cases
-            .create(CreateLearningMaterial {
-                title: "Real".into(),
-                assets: vec![media_input("media-real")],
-                retain: None,
-            })
-            .expect("create");
-        let err = use_cases
-            .append_revision(
-                &created.material.id,
-                AppendMaterialRevision {
-                    title: "Broken append".into(),
-                    assets: vec![media_input("media-gone")],
-                },
-            )
-            .expect_err("unknown media on append");
-        assert!(matches!(err, ApplicationError::NotFound("media")));
-    }
-
-    #[test]
-    fn domain_constructors_own_validation_errors() {
-        let (use_cases, _, media) = setup();
-
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "Title".into(),
-                assets: vec![text_input("   ")],
-                retain: None,
-            })
-            .expect_err("whitespace-only text");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::WhitespaceOnlyText)
-        ));
-
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "Title".into(),
-                assets: vec![],
-                retain: None,
-            })
-            .expect_err("empty assets");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::EmptyValue("LearningMaterial.assets"))
-        ));
-
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "   ".into(),
-                assets: vec![text_input("content")],
-                retain: None,
-            })
-            .expect_err("blank title");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::EmptyValue("MaterialRevision.title"))
-        ));
-
-        media.seed(media_item("media-dup", MediaKind::Audio, "fp-dup"));
-        let created = use_cases
-            .create(CreateLearningMaterial {
-                title: "Valid".into(),
-                assets: vec![media_input("media-dup")],
-                retain: None,
-            })
-            .expect("valid material");
-
-        let err = use_cases
-            .append_revision(
-                &created.material.id,
-                AppendMaterialRevision {
-                    title: "   ".into(),
-                    assets: vec![media_input("media-dup")],
-                },
-            )
-            .expect_err("blank append title");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::EmptyValue("MaterialRevision.title"))
-        ));
-
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "Duplicates".into(),
-                assets: vec![text_input("same"), text_input("same")],
-                retain: None,
-            })
-            .expect_err("duplicate text assets");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::DuplicateAssetId)
-        ));
-
-        let err = use_cases
-            .append_revision(
-                &created.material.id,
-                AppendMaterialRevision {
-                    title: "Dup media".into(),
-                    assets: vec![media_input("media-dup"), media_input("media-dup")],
-                },
-            )
-            .expect_err("duplicate media assets");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::DuplicateAssetId)
-        ));
-
-        media.seed(media_item("media-amb", MediaKind::Audio, "fp-amb"));
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "Ambiguous".into(),
-                assets: vec![media_input("media-amb"), media_input("media-amb")],
-                retain: None,
-            })
-            .expect_err("ambiguous initial media identity");
-        assert!(matches!(
-            err,
-            ApplicationError::Domain(DomainError::AmbiguousInitialMediaIdentity)
-        ));
-    }
-
-    #[test]
-    fn create_converges_on_an_already_bound_media() {
-        let (use_cases, materials, media) = setup();
-        media.seed(media_item("media-conv", MediaKind::Audio, "fp-conv"));
-        let first = use_cases
-            .create(CreateLearningMaterial {
-                title: "First".into(),
-                assets: vec![media_input("media-conv")],
-                retain: Some(false),
-            })
-            .expect("temporary first material");
-        let first_id = first.material.id.clone();
-        assert_eq!(materials.create_calls(), 1);
-        assert_eq!(materials.append_calls(), 0);
-
-        let converged = use_cases
-            .create(CreateLearningMaterial {
-                title: "Second".into(),
-                assets: vec![media_input("media-conv")],
-                retain: None,
-            })
-            .expect("converged material");
-        assert_eq!(
-            converged.material.id, first_id,
-            "media-bound create converges on the existing material"
-        );
-        assert_eq!(
-            materials.create_calls(),
-            1,
-            "convergence must not create a new material"
-        );
-        assert_eq!(
-            materials.append_calls(),
-            1,
-            "convergence appends a revision"
-        );
-        assert_eq!(
-            materials.membership_calls(),
-            1,
-            "a previously temporary material is retained by default"
-        );
-        assert!(converged.material.retained_at_ms.is_some());
-        assert_eq!(converged.current_revision.title, "Second");
-
-        // Explicit false never clears existing membership.
-        let recreated = use_cases
-            .create(CreateLearningMaterial {
-                title: "Third".into(),
-                assets: vec![media_input("media-conv")],
-                retain: Some(false),
-            })
-            .expect("retain false on a retained material");
-        assert!(recreated.material.retained_at_ms.is_some());
-        assert_eq!(
-            materials.membership_calls(),
-            1,
-            "explicit false never clears membership"
-        );
-    }
-
-    #[test]
-    fn append_accepts_same_material_and_rejects_other_materials() {
-        let (use_cases, _, media) = setup();
-        media.seed(media_item("media-same", MediaKind::Audio, "fp-same"));
-        media.seed(media_item("media-other", MediaKind::Video, "fp-other"));
-        let a = use_cases
-            .create(CreateLearningMaterial {
-                title: "A".into(),
-                assets: vec![media_input("media-same")],
-                retain: None,
-            })
-            .expect("material A");
-        let b = use_cases
-            .create(CreateLearningMaterial {
-                title: "B".into(),
-                assets: vec![media_input("media-other")],
-                retain: None,
-            })
-            .expect("material B");
-        assert_ne!(a.material.id, b.material.id);
-
-        // Same-material append: media already bound to the target material.
-        let appended = use_cases
-            .append_revision(
-                &a.material.id,
-                AppendMaterialRevision {
-                    title: "A v2".into(),
-                    assets: vec![media_input("media-same"), text_input("notes")],
-                },
-            )
-            .expect("same material append");
-        assert_eq!(appended.material.id, a.material.id);
-        assert_eq!(appended.current_revision.title, "A v2");
-
-        // Cross-material append: media bound to B cannot join A.
-        let err = use_cases
-            .append_revision(
-                &a.material.id,
-                AppendMaterialRevision {
-                    title: "A v3".into(),
-                    assets: vec![media_input("media-other")],
-                },
-            )
-            .expect_err("media belongs to another material");
-        assert!(matches!(
-            err,
-            ApplicationError::Conflict("media rendition belongs to another material")
-        ));
-
-        // Unbound media may join any existing material and becomes bound.
-        media.seed(media_item("media-fresh", MediaKind::Audio, "fp-fresh"));
-        let joined = use_cases
-            .append_revision(
-                &a.material.id,
-                AppendMaterialRevision {
-                    title: "A v4".into(),
-                    assets: vec![media_input("media-fresh")],
-                },
-            )
-            .expect("unbound media joins the target");
-        assert_eq!(joined.material.id, a.material.id);
-        let resolved = use_cases
-            .resolve_for_media(&MediaId::parse("media-fresh").unwrap())
-            .expect("resolve")
-            .expect("fresh media is now bound");
-        assert_eq!(resolved.material.id, a.material.id);
-    }
-
-    #[test]
-    fn create_rejects_media_bound_to_different_materials() {
-        let (use_cases, _, media) = setup();
-        media.seed(media_item("media-x1", MediaKind::Audio, "fp-x1"));
-        media.seed(media_item("media-x2", MediaKind::Video, "fp-x2"));
-        use_cases
-            .create(CreateLearningMaterial {
-                title: "X1".into(),
-                assets: vec![media_input("media-x1")],
-                retain: None,
-            })
-            .expect("material for x1");
-        use_cases
-            .create(CreateLearningMaterial {
-                title: "X2".into(),
-                assets: vec![media_input("media-x2")],
-                retain: None,
-            })
-            .expect("material for x2");
-
-        let err = use_cases
-            .create(CreateLearningMaterial {
-                title: "Both".into(),
-                assets: vec![media_input("media-x1"), media_input("media-x2")],
-                retain: None,
-            })
-            .expect_err("inputs bound to different materials");
-        assert!(matches!(
-            err,
-            ApplicationError::Conflict("media renditions belong to different materials")
-        ));
-    }
-
-    #[test]
-    fn resolve_for_media_returns_none_without_a_binding() {
-        let (use_cases, _, media) = setup();
-        let none = use_cases
-            .resolve_for_media(&MediaId::parse("media-free").unwrap())
-            .expect("resolve");
-        assert!(none.is_none());
-
-        media.seed(media_item("media-bound", MediaKind::Audio, "fp-bound"));
+        media.seed(media_item("media-resolve", MediaKind::Audio, "fp-r"));
         let created = use_cases
             .create(CreateLearningMaterial {
                 title: "Bound".into(),
-                assets: vec![media_input("media-bound")],
+                source_assets: Vec::new(),
+                document_renditions: Vec::new(),
+                media_renditions: vec![media_input("media-resolve")],
                 retain: None,
             })
-            .expect("material");
+            .expect("bound material");
         let resolved = use_cases
-            .resolve_for_media(&MediaId::parse("media-bound").unwrap())
+            .resolve_for_media(&MediaId::parse("media-resolve").unwrap())
             .expect("resolve")
-            .expect("binding exists");
+            .expect("bound");
         assert_eq!(resolved.material.id, created.material.id);
-        assert_eq!(resolved.current_revision.id, created.current_revision.id);
-    }
-
-    #[test]
-    fn read_returns_none_for_missing_and_details_for_present() {
-        let (use_cases, _, _) = setup();
-        let missing = use_cases
-            .read(&LearningMaterialId::parse("material-absent").unwrap())
-            .expect("read");
-        assert!(missing.is_none());
-
-        let created = use_cases
-            .create(CreateLearningMaterial {
-                title: "Read me".into(),
-                assets: vec![text_input("readable")],
-                retain: None,
-            })
-            .expect("material");
-        let read = use_cases
-            .read(&created.material.id)
-            .expect("read")
-            .expect("present");
-        assert_eq!(read.material.id, created.material.id);
-        assert_eq!(read.current_revision.id, created.current_revision.id);
-        assert_eq!(read.shape(), MaterialShape::Text);
-    }
-
-    #[test]
-    fn current_revision_guard_rejects_missing_and_cross_material_pointers() {
-        let (use_cases, materials, media) = setup();
-        media.seed(media_item("media-guard", MediaKind::Audio, "fp-guard"));
-        let a = use_cases
-            .create(CreateLearningMaterial {
-                title: "A".into(),
-                assets: vec![media_input("media-guard")],
-                retain: None,
-            })
-            .expect("material A");
-        let b = use_cases
-            .create(CreateLearningMaterial {
-                title: "B".into(),
-                assets: vec![text_input("b content")],
-                retain: None,
-            })
-            .expect("material B");
-        assert_ne!(a.material.id, b.material.id);
-
-        // A valid current revision still assembles details on every path.
-        let valid = use_cases
-            .read(&a.material.id)
-            .expect("read")
-            .expect("valid details");
-        assert_eq!(valid.current_revision.id, a.current_revision.id);
-
-        // Corruption 1: the pointer names no revision at all. The existing
-        // missing-current-revision Repository behavior is preserved.
-        materials.set_current_revision_pointer(
-            &a.material.id,
-            &MaterialRevisionId::from_fingerprint("material-revision", "missing"),
-        );
-        let err = use_cases
-            .read(&a.material.id)
-            .expect_err("missing current revision");
-        assert!(matches!(
-            err,
-            ApplicationError::Repository(message) if message == "current revision is missing"
-        ));
-
-        // Corruption 2: the pointer names a revision owned by another
-        // material. Every details path must reject it as repository corruption
-        // instead of assembling cross-material MaterialDetails.
-        materials.set_current_revision_pointer(&a.material.id, &b.current_revision.id);
-        let corrupted = "current revision belongs to another material";
-        let err = use_cases
-            .read(&a.material.id)
-            .expect_err("cross-material current revision on read");
-        assert!(matches!(
-            err,
-            ApplicationError::Repository(message) if message == corrupted
-        ));
-        let err = use_cases
-            .resolve_for_media(&MediaId::parse("media-guard").unwrap())
-            .expect_err("cross-material current revision on resolve_for_media");
-        assert!(matches!(
-            err,
-            ApplicationError::Repository(message) if message == corrupted
-        ));
-        let err = use_cases
-            .list_retained()
-            .expect_err("cross-material current revision on list_retained");
-        assert!(matches!(
-            err,
-            ApplicationError::Repository(message) if message == corrupted
-        ));
-    }
-
-    fn assert_not_configured<T: std::fmt::Debug>(result: Result<T, ApplicationError>) {
-        match result {
-            Err(ApplicationError::Repository(message)) => {
-                assert_eq!(message, "learning material repository is not configured")
-            }
-            other => panic!("expected not-configured repository error, got: {other:?}"),
-        }
-    }
-
-    #[test]
-    fn disabled_material_repository_errors_as_not_configured() {
-        let repository = DisabledMaterialRepository;
-        let asset = MaterialAsset::DocumentText(
-            DocumentTextAsset::new("disabled content", None).expect("valid text asset"),
-        );
-        let material_id =
-            initial_material_id(std::slice::from_ref(&asset)).expect("deterministic material id");
-        let revision = MaterialRevision::new(material_id.clone(), "Disabled", vec![asset], 1)
-            .expect("valid revision");
-        let material = LearningMaterial::new(&revision, None, 1, 1).expect("valid material");
-        let media_id = MediaId::parse("media-disabled").expect("valid media id");
-
-        assert_not_configured(repository.get_material(&material_id));
-        assert_not_configured(repository.create_material(&material, &revision));
-        assert_not_configured(repository.append_revision(&material_id, &revision, 1));
-        assert_not_configured(repository.get_revision(&revision.id));
-        assert_not_configured(repository.list_retained_materials());
-        assert_not_configured(repository.set_library_membership(&material_id, Some(1), 1));
-        assert_not_configured(repository.material_for_media(&media_id));
+        let none = use_cases
+            .resolve_for_media(&MediaId::parse("media-other").unwrap())
+            .expect("resolve");
+        assert!(none.is_none());
     }
 }
