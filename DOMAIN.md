@@ -3,6 +3,9 @@
 This glossary is the canonical cross-repository product language. It does not
 describe endpoints, tables, screens, release versions, or implementation status.
 Repository-local glossaries may add terms but must not redefine these concepts.
+A maintained Chinese rendering is available in
+[DOMAIN.zh-CN.md](DOMAIN.zh-CN.md); both files describe the same model and must
+change together.
 
 ## People and languages
 
@@ -43,7 +46,9 @@ _Avoid_: File hash, Package Release
 
 **Language Material**: A language-bearing work the Learner may study, such as an
 article, podcast episode, video, conversation, or recording.
-_Avoid_: Media file, Content Package, course
+Its Source Renditions and Structured Reading Resources do not become separate
+Materials.
+_Avoid_: Media file, Content Package, course, Raw Material, Structured Material
 
 **Material Revision**: A stable semantic and timeline version of a Language
 Material. A changed cut, dub, inserted segment, or text revision may create
@@ -59,8 +64,10 @@ _Avoid_: Learning Resource, Managed Asset Store, Content Source
 **Document Rendition**: A concrete document-format realization of a Material
 Revision, such as plain text, Markdown, HTML, EPUB, or PDF. It preserves the
 source representation and may be directly viewable without a Structured
-Reading Resource. Multiple Document Renditions may realize the same revision.
-_Avoid_: Structured Reading Resource, pasted-text form, Material Revision
+Reading Resource. Authored markup or layout does not make it a Structured
+Reading Resource; multiple Document Renditions may realize the same revision.
+_Avoid_: Structured Reading Resource, Structured Material, pasted-text form,
+Material Revision
 
 **Media Rendition**: A concrete playable audio or video realization of a
 Material Revision. Two renditions may represent the same revision without
@@ -119,8 +126,9 @@ _Avoid_: Translation, learner-specific explanation
 represents exact logical reading content as ordered hierarchy, blocks, and text
 spans with Content Language metadata and stable Reading Anchors. It may map
 those anchors back to one or more Document Renditions, but it is neither an
-original document nor a rendered screen.
-_Avoid_: Document Rendition, extracted-text cache, reading UI state
+original document, a Markdown file, a rendered screen, nor a second Material.
+_Avoid_: Document Rendition, Structured Material, Markdown document,
+extracted-text cache, reading UI state
 
 **Assistance Resource**: A Learning Resource that helps a particular audience,
 such as a translation, explanation, hint, or level-specific annotation.

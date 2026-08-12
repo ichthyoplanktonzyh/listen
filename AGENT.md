@@ -14,6 +14,9 @@ This repository contains project-level documentation only.
 ## Maintenance
 
 - Put each fact in one canonical document and link to it elsewhere.
+- `DOMAIN.md` and `DOMAIN.zh-CN.md` are one bilingual glossary. English domain
+  names remain the stable identifiers used by code and contracts; every domain
+  language change must update both files in the same documentation change.
 - Keep `STATE.md` short and update it only at meaningful project transitions.
 - Keep `ROADMAP.md` outcome-based; tasks belong in issues or Supervisor plans.
 - Add a decision record only for a durable cross-repository decision. Local

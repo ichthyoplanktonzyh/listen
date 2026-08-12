@@ -22,6 +22,7 @@ The concise learner promise is:
 |---|---|
 | [PRODUCT.md](PRODUCT.md) | Product purpose, principles, and non-goals |
 | [DOMAIN.md](DOMAIN.md) | Shared ubiquitous language |
+| [DOMAIN.zh-CN.md](DOMAIN.zh-CN.md) | Maintained Chinese rendering of the same ubiquitous language |
 | [CONTEXT-MAP.md](CONTEXT-MAP.md) | Context and repository ownership |
 | [JOURNEYS.md](JOURNEYS.md) | Simple learner journeys and experience invariants |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Owner, Supervisor, Worker, validation, and delivery policy |
@@ -32,6 +33,11 @@ The concise learner promise is:
 
 Each fact has one authority. Other repositories link here rather than copying
 these documents.
+
+`DOMAIN.md` and `DOMAIN.zh-CN.md` form one bilingual glossary and change
+together. English domain names are the stable identifiers used in code and
+executable contracts; the Chinese document supplies the canonical Chinese
+terms for product discussion without creating a second model.
 
 ## Code repositories
 
