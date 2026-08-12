@@ -1,3 +1,10 @@
+"""listen-gen CLI: the capability production command.
+
+The v1 media-package commands and machine protocol were removed in the Slice
+3 cutover; ``package from-capability`` is the only command and the v2
+machine protocol the only machine exchange.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -9,7 +16,6 @@ import signal
 import sys
 import tempfile
 import time
-import zipfile
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
@@ -17,40 +23,18 @@ from .asr import (
     CommandAsrAdapter,
     FixtureAsrAdapter,
     PreprocessingAsrAdapter,
-    package_media,
 )
-from .alignment import (
-    CommandAlignerAdapter,
-    FixtureAlignerAdapter,
-    WhisperCppAlignerAdapter,
-)
+from .capability import CapabilityRequest
+from .document import FixtureOcrProvider
 from .media import FfmpegAudioPreprocessor
-from .package import ConversionError, package_from_lltimeline
-from .package_v2 import ReleaseSpec, read_v2_details
-from .phone import (
-    CommandPhoneAdapter,
-    FixturePhoneAdapter,
-    Wav2Vec2CtcPhoneAdapter,
+from .package import ConversionError
+from .plan import UnsupportedCapability
+from .produce import ProduceConfig, ProductionFailure, produce
+from .protocol_v2 import (
+    MachineEventV2Emitter,
+    protocol_capabilities_v2,
 )
-from .protocol import (
-    MACHINE_ERROR_MESSAGES,
-    MachineEventEmitter,
-    machine_error,
-    protocol_capabilities,
-)
-from .rich import (
-    CommandAcousticsAdapter,
-    CommandProsodyAdapter,
-    CommandSenseGroupAdapter,
-    FixtureAcousticsAdapter,
-    FixtureProsodyAdapter,
-    FixtureSenseGroupAdapter,
-)
-from .rich_baselines import (
-    AcousticProsodyBaseline,
-    PunctuationSenseGroupBaseline,
-    WavWordAcousticsBaseline,
-)
+from .tts import FakeTtsAdapter, FixtureTtsAdapter, SayTtsAdapter
 from .whisper_cpp import WhisperCppAsrAdapter
 
 
@@ -123,591 +107,228 @@ def parser(
     commands = root.add_subparsers(dest="command", required=True)
     package = commands.add_parser("package", help="build a Listen content package")
     package_commands = package.add_subparsers(dest="package_command", required=True)
-    native = package_commands.add_parser(
-        "from-media", help="transcribe media and emit native v1 resources"
+    produce = package_commands.add_parser(
+        "from-capability",
+        help="produce a Content Package v3 from a capability request",
     )
-    native.add_argument("input", type=Path)
-    native.add_argument("--output", required=True, type=Path)
-    native.add_argument(
+    produce.add_argument("request", type=Path, help="capability request JSON document")
+    produce.add_argument("--output", required=True, type=Path)
+    produce.add_argument(
+        "--tts-provider",
+        default="none",
+        choices=["none", "fixture", "say", "fake"],
+        help="TTS provider for document-to-listen derivations (say is the macOS local adapter)",
+    )
+    produce.add_argument("--tts-fixture", type=Path, help="audio fixture for the fixture TTS provider")
+    produce.add_argument(
+        "--tts-alignment-fixture",
+        type=Path,
+        help="committed anchor alignment JSON for the fixture TTS provider",
+    )
+    produce.add_argument("--tts-voice", help="macOS say voice name for the say TTS provider")
+    produce.add_argument("--tts-timeout-seconds", type=float, default=600.0)
+    produce.add_argument(
+        "--ocr-provider",
+        default="none",
+        choices=["none", "fixture"],
+        help="optional OCR path for scanned PDFs; absence is an honest capability result",
+    )
+    produce.add_argument("--ocr-fixture", type=Path, help="committed OCR text for the fixture OCR provider")
+    produce.add_argument(
         "--provider",
-        required=True,
-        choices=["fixture", "command", "whisper-cpp"],
+        default="none",
+        choices=["none", "fixture", "command", "whisper-cpp"],
+        help="ASR provider for media-to-read derivations",
     )
-    native.add_argument("--fixture", type=Path, help="normalized JSON for the fixture provider")
-    native.add_argument("--command", help="external ASR wrapper executable; no shell is used")
-    native.add_argument(
+    produce.add_argument("--fixture", type=Path, help="normalized JSON for the fixture ASR provider")
+    produce.add_argument("--command", help="external ASR wrapper executable; no shell is used")
+    produce.add_argument(
         "--command-arg",
         action="append",
         default=[],
-        help="one argv item for the command provider; include {media} exactly once",
+        help="one argv item for the command ASR provider; include {media} exactly once",
     )
-    native.add_argument("--command-timeout-seconds", type=float, default=3600.0)
-    native.add_argument("--whisper-cli", default="whisper-cli")
-    native.add_argument("--whisper-model", type=Path)
-    native.add_argument("--whisper-model-id")
-    native.add_argument("--whisper-language", default="auto")
-    native.add_argument("--whisper-translate-to-english", action="store_true")
-    native.add_argument("--whisper-timeout-seconds", type=float, default=3600.0)
-    native.add_argument(
+    produce.add_argument("--command-timeout-seconds", type=float, default=3600.0)
+    produce.add_argument("--whisper-cli", default="whisper-cli")
+    produce.add_argument("--whisper-model", type=Path)
+    produce.add_argument("--whisper-model-id")
+    produce.add_argument("--whisper-language", default="auto")
+    produce.add_argument("--whisper-translate-to-english", action="store_true")
+    produce.add_argument("--whisper-timeout-seconds", type=float, default=3600.0)
+    produce.add_argument(
         "--audio-stream-index",
         type=int,
         help="container stream index; required when the media has multiple audio streams",
     )
-    native.add_argument("--ffprobe-command", default="ffprobe")
-    native.add_argument("--ffmpeg-command", default="ffmpeg")
-    native.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
-    native.add_argument(
-        "--aligner",
-        default="none",
-        choices=["none", "fixture", "command", "whisper-cpp"],
-        help="optional word-alignment adapter; alignment is always optional",
-    )
-    native.add_argument(
-        "--alignment-fixture",
-        type=Path,
-        help="normalized align-result JSON for the fixture aligner",
-    )
-    native.add_argument(
-        "--alignment-command",
-        help="external word-aligner executable; no shell is used",
-    )
-    native.add_argument(
-        "--alignment-command-arg",
-        action="append",
-        default=[],
-        help=(
-            "one argv item for the command aligner; include {media} and "
-            "{transcript} exactly once each"
-        ),
-    )
-    native.add_argument(
-        "--alignment-command-timeout-seconds", type=float, default=3600.0
-    )
-    native.add_argument(
-        "--sense-groups",
-        default="none",
-        choices=["none", "fixture", "command", "baseline"],
-        help=(
-            "optional sense-group stage adapter; the stage is always optional "
-            "(baseline is the built-in deterministic punctuation/length producer)"
-        ),
-    )
-    native.add_argument(
-        "--sense-groups-fixture",
-        type=Path,
-        help="normalized sense-group-result JSON for the fixture adapter",
-    )
-    native.add_argument(
-        "--sense-groups-command",
-        help="external sense-group analyzer; no shell is used",
-    )
-    native.add_argument(
-        "--sense-groups-command-arg",
-        action="append",
-        default=[],
-        help=(
-            "one argv item for the sense-group analyzer; include {input} "
-            "exactly once"
-        ),
-    )
-    native.add_argument(
-        "--sense-groups-command-timeout-seconds", type=float, default=3600.0
-    )
-    native.add_argument(
-        "--acoustics",
-        default="none",
-        choices=["none", "fixture", "command", "baseline"],
-        help=(
-            "optional word-acoustics stage adapter; requires a word timeline "
-            "(baseline measures the normalized 16 kHz mono PCM WAV in-process)"
-        ),
-    )
-    native.add_argument(
-        "--acoustics-fixture",
-        type=Path,
-        help="normalized acoustics-result JSON for the fixture adapter",
-    )
-    native.add_argument(
-        "--acoustics-command",
-        help="external acoustics extractor; no shell is used",
-    )
-    native.add_argument(
-        "--acoustics-command-arg",
-        action="append",
-        default=[],
-        help=(
-            "one argv item for the acoustics extractor; include {media} and "
-            "{timeline} exactly once each"
-        ),
-    )
-    native.add_argument(
-        "--acoustics-command-timeout-seconds", type=float, default=3600.0
-    )
-    native.add_argument(
-        "--prosody",
-        default="none",
-        choices=["none", "fixture", "command", "baseline"],
-        help=(
-            "optional prosody stage adapter; requires a word timeline and acoustics "
-            "(baseline is the built-in acoustic-rule producer)"
-        ),
-    )
-    native.add_argument(
-        "--prosody-fixture",
-        type=Path,
-        help="normalized prosody-result JSON for the fixture adapter",
-    )
-    native.add_argument(
-        "--prosody-command",
-        help="external prosody analyzer; no shell is used",
-    )
-    native.add_argument(
-        "--prosody-command-arg",
-        action="append",
-        default=[],
-        help=(
-            "one argv item for the prosody analyzer; include {input} exactly once"
-        ),
-    )
-    native.add_argument(
-        "--prosody-command-timeout-seconds", type=float, default=3600.0
-    )
-    native.add_argument(
-        "--phone",
-        default="none",
-        choices=["none", "fixture", "command", "wav2vec2-ctc"],
-        help="optional audio-backed phone analysis; unselected means explicit abstention",
-    )
-    native.add_argument("--phone-fixture", type=Path)
-    native.add_argument("--phone-command")
-    native.add_argument("--phone-command-arg", action="append", default=[])
-    native.add_argument("--phone-command-timeout-seconds", type=float, default=3600.0)
-    native.add_argument("--phone-python", type=Path)
-    native.add_argument("--phone-sidecar", type=Path)
-    native.add_argument("--phone-model-dir", type=Path)
-    native.add_argument("--phone-model-id")
-    native.add_argument("--phone-model-revision")
-    native.add_argument("--phone-timeout-seconds", type=float, default=3600.0)
-    native.add_argument("--title", required=True)
-    native.add_argument("--media-kind", required=True, choices=["audio", "video"])
-    native.add_argument("--duration-ms", required=True, type=int)
-    native.add_argument("--created-at-ms", required=True, type=int)
-    native.add_argument(
-        "--package-version",
-        type=int,
-        choices=[1, 2],
-        default=1,
-        help="Content Package contract version (default 1; v2 requires the release spec flags below)",
-    )
-    native.add_argument(
-        "--edition-id",
-        help="v2 caller-owned edition identifier (required with --package-version 2)",
-    )
-    native.add_argument(
-        "--material-id",
-        help="v2 caller-owned material identifier (required with --package-version 2)",
-    )
-    native.add_argument(
-        "--material-revision-id",
-        help="v2 caller-owned material revision identifier (required with --package-version 2)",
-    )
-    native.add_argument(
-        "--target-language",
-        help="v2 target language tag; must agree with the generated transcript (required with --package-version 2)",
-    )
-    native.add_argument(
-        "--support-language",
-        action="append",
-        default=[],
-        help="v2 support language tag; repeatable and empty is valid",
-    )
-    native.add_argument(
-        "--media-delivery",
-        choices=["referenced", "embedded"],
-        default=None,
-        help="v2 media carrier choice; referenced is the default (embedded includes the exact media bytes)",
-    )
-    native.add_argument(
-        "--media-type",
-        help="v2 caller-owned rendition media type, e.g. audio/wav; must agree with --media-kind (required with --package-version 2)",
-    )
-    native.add_argument(
+    produce.add_argument("--ffprobe-command", default="ffprobe")
+    produce.add_argument("--ffmpeg-command", default="ffmpeg")
+    produce.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
+    produce.add_argument(
         "--machine-events",
         action="store_true",
         help="write the machine-event protocol as NDJSON to stdout",
     )
-    legacy = package_commands.add_parser(
-        "from-lltimeline", help="convert an LLTimeline v1 document"
-    )
-    legacy.add_argument("input", type=Path)
-    legacy.add_argument("--output", required=True, type=Path)
     return root
+
+
+def _build_asr(args: argparse.Namespace, progress=None) -> Any | None:
+    """Resolve the optional ASR adapter for capability derivations."""
+    if getattr(args, "provider", "none") == "none":
+        return None
+    if args.provider == "fixture":
+        if args.fixture is None:
+            raise ConversionError("--fixture is required for the fixture ASR provider")
+        return FixtureAsrAdapter(args.fixture, progress=progress)
+    preprocessor = FfmpegAudioPreprocessor(
+        ffprobe_executable=args.ffprobe_command,
+        ffmpeg_executable=args.ffmpeg_command,
+        timeout_seconds=args.media_command_timeout_seconds,
+        progress=progress,
+    )
+    if args.provider == "command":
+        if args.command is None:
+            raise ConversionError("--command is required for the command ASR provider")
+        return PreprocessingAsrAdapter(
+            CommandAsrAdapter(
+                args.command,
+                args.command_arg,
+                args.command_timeout_seconds,
+                progress=progress,
+            ),
+            preprocessor,
+            audio_stream_index=args.audio_stream_index,
+            progress=progress,
+        )
+    return PreprocessingAsrAdapter(
+        WhisperCppAsrAdapter(
+            args.whisper_cli,
+            args.whisper_model,
+            args.whisper_model_id,
+            args.whisper_language,
+            args.whisper_translate_to_english,
+            args.whisper_timeout_seconds,
+        ),
+        preprocessor,
+        audio_stream_index=args.audio_stream_index,
+        progress=progress,
+    )
+
+
+def _build_tts(args: argparse.Namespace) -> Any | None:
+    selected = args.tts_provider
+    if selected == "none":
+        return None
+    if selected == "fake":
+        return FakeTtsAdapter()
+    if selected == "say":
+        return SayTtsAdapter(
+            voice=args.tts_voice,
+            timeout_seconds=args.tts_timeout_seconds,
+        )
+    if args.tts_fixture is None:
+        raise ConversionError("--tts-fixture is required for the fixture TTS provider")
+    return FixtureTtsAdapter(args.tts_fixture, args.tts_alignment_fixture)
+
+
+def _build_ocr(args: argparse.Namespace) -> Any | None:
+    if args.ocr_provider == "none":
+        return None
+    if args.ocr_fixture is None:
+        raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
+    return FixtureOcrProvider(args.ocr_fixture)
+
+
+def _default_attempt_id(request: CapabilityRequest) -> str:
+    identity = "|".join(
+        (
+            request.material.material_id,
+            request.material.material_revision_id,
+            request.requested_capability,
+            str(request.created_at_ms),
+        )
+    )
+    return "attempt-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
 
 
 def _run(
     args: argparse.Namespace,
     state: _CancellationState,
-    writer: MachineEventEmitter | None,
+    writer: MachineEventV2Emitter | None,
 ) -> dict[str, Any]:
-    progress: Callable[[str], None] | None = None
+    request = CapabilityRequest.from_json_file(args.request)
     if writer is not None:
+        writer.accepted(request.attempt_id or _default_attempt_id(request))
 
-        def progress(phase: str) -> None:
+        def check_cancelled() -> None:
             if state.requested():
                 raise CancellationRequested(state.signal_number or signal.SIGINT)
-            writer.phase(phase)
 
-    if args.package_command == "from-media":
-        release_spec = _release_spec(args)
-        if args.provider == "fixture":
-            if args.fixture is None:
-                raise ConversionError("--fixture is required for the fixture provider")
-            adapter = FixtureAsrAdapter(args.fixture, progress=progress)
-        elif args.provider == "command":
-            if args.command is None:
-                raise ConversionError("--command is required for the command provider")
-            command_adapter = CommandAsrAdapter(
-                args.command,
-                args.command_arg,
-                args.command_timeout_seconds,
-                progress=progress,
-            )
-            adapter = PreprocessingAsrAdapter(
-                command_adapter,
-                FfmpegAudioPreprocessor(
-                    ffprobe_executable=args.ffprobe_command,
-                    ffmpeg_executable=args.ffmpeg_command,
-                    timeout_seconds=args.media_command_timeout_seconds,
-                    progress=progress,
-                ),
-                audio_stream_index=args.audio_stream_index,
-                progress=progress,
-            )
-        else:
-            whisper_adapter = WhisperCppAsrAdapter(
-                args.whisper_cli,
-                args.whisper_model,
-                args.whisper_model_id,
-                args.whisper_language,
-                args.whisper_translate_to_english,
-                args.whisper_timeout_seconds,
-            )
-            adapter = PreprocessingAsrAdapter(
-                whisper_adapter,
-                FfmpegAudioPreprocessor(
-                    ffprobe_executable=args.ffprobe_command,
-                    ffmpeg_executable=args.ffmpeg_command,
-                    timeout_seconds=args.media_command_timeout_seconds,
-                    progress=progress,
-                ),
-                audio_stream_index=args.audio_stream_index,
-                progress=progress,
-            )
-        aligner, aligner_preprocessor = _build_aligner(args)
-        (
-            sense_analyzer,
-            acoustics_extractor,
-            acoustics_preprocessor,
-            prosody_analyzer,
-        ) = _build_rich(args)
-        phone_analyzer, phone_preprocessor = _build_phone(args)
-        return package_media(
-            args.input,
-            args.output,
-            adapter,
-            title=args.title,
-            media_kind=args.media_kind,
-            duration_ms=args.duration_ms,
-            created_at_ms=args.created_at_ms,
-            progress=progress,
-            aligner=aligner,
-            aligner_preprocessor=aligner_preprocessor,
-            aligner_audio_stream_index=args.audio_stream_index,
-            sense_analyzer=sense_analyzer,
-            acoustics_extractor=acoustics_extractor,
-            acoustics_preprocessor=acoustics_preprocessor,
-            acoustics_audio_stream_index=args.audio_stream_index,
-            prosody_analyzer=prosody_analyzer,
-            phone_analyzer=phone_analyzer,
-            phone_preprocessor=phone_preprocessor,
-            phone_audio_stream_index=args.audio_stream_index,
-            package_version=args.package_version,
-            release_spec=release_spec,
-        )
-    return package_from_lltimeline(args.input, args.output)
+        def progress(stage: str) -> None:
+            check_cancelled()
+            writer.running(stage)
 
+        from .plan import plan as plan_request
 
-def _release_spec(args: argparse.Namespace) -> ReleaseSpec | None:
-    """Resolve the v2 release specification or reject v2 flags under v1.
-
-    ``--package-version 2`` requires the caller-owned semantic inputs; every
-    missing or malformed value raises a stable :class:`ConversionError` so the
-    machine protocol can classify it honestly. Under v1 the v2-only flags are
-    rejected instead of silently ignored.
-    """
-    if args.package_version == 2:
-        return ReleaseSpec(
-            edition_id=args.edition_id,
-            title=args.title,
-            material_id=args.material_id,
-            material_revision_id=args.material_revision_id,
-            target_language=args.target_language,
-            media_type=args.media_type,
-            support_languages=tuple(args.support_language),
-            media_delivery=args.media_delivery or "referenced",
-        )
-    used = [
-        name
-        for name, value in (
-            ("--edition-id", args.edition_id),
-            ("--material-id", args.material_id),
-            ("--material-revision-id", args.material_revision_id),
-            ("--target-language", args.target_language),
-            ("--media-delivery", args.media_delivery),
-            ("--media-type", args.media_type),
-        )
-        if value is not None
-    ]
-    if args.support_language:
-        used.append("--support-language")
-    if used:
-        raise ConversionError(
-            "package version 1 does not accept v2 release specification flags"
-        )
-    return None
-
-
-def _build_aligner(
-    args: argparse.Namespace,
-) -> tuple[Any | None, FfmpegAudioPreprocessor | None]:
-    """Resolve the optional alignment adapter and its audio preprocessor.
-
-    The whisper-cpp aligner reuses the whisper provider arguments so the
-    first-class whisper.cpp path can select it directly
-    (``--provider whisper-cpp --aligner whisper-cpp``). The alignment
-    preprocessor never emits machine phases; ``aligning`` covers the whole
-    stage.
-    """
-    if args.aligner == "none":
-        return None, None
-    preprocessor = FfmpegAudioPreprocessor(
-        ffprobe_executable=args.ffprobe_command,
-        ffmpeg_executable=args.ffmpeg_command,
-        timeout_seconds=args.media_command_timeout_seconds,
+        production_plan = plan_request(request)
+        writer.planned(production_plan.describe())
+    else:
+        check_cancelled = None
+        progress = None
+    config = ProduceConfig(
+        tts=_build_tts(args),
+        ocr=_build_ocr(args),
+        asr=_build_asr(args, progress=progress),
     )
-    if args.aligner == "fixture":
-        if args.alignment_fixture is None:
-            raise ConversionError(
-                "--alignment-fixture is required for the fixture aligner"
-            )
-        return FixtureAlignerAdapter(args.alignment_fixture), None
-    if args.aligner == "command":
-        if args.alignment_command is None:
-            raise ConversionError(
-                "--alignment-command is required for the command aligner"
-            )
-        aligner = CommandAlignerAdapter(
-            args.alignment_command,
-            args.alignment_command_arg,
-            args.alignment_command_timeout_seconds,
-        )
-        return aligner, preprocessor
-    whisper_aligner = WhisperCppAlignerAdapter(
-        args.whisper_cli,
-        args.whisper_model,
-        args.whisper_model_id,
-        args.whisper_language,
-        args.whisper_translate_to_english,
-        args.whisper_timeout_seconds,
+    outcome = produce(
+        request,
+        Path(args.output),
+        config=config,
+        progress=progress,
+        check_cancelled=check_cancelled,
     )
-    return whisper_aligner, preprocessor
-
-
-def _rich_command(
-    args: argparse.Namespace,
-    *,
-    stage: str,
-    fixture: str,
-    command: str,
-    command_args: str,
-    timeout: str,
-) -> Any:
-    """Resolve one optional rich-stage adapter from the CLI arguments.
-
-    The ``baseline`` choice selects the built-in deterministic, credential-free
-    producer for the stage; it needs no fixture, command, or timeout and is
-    never selected implicitly.
-    """
-    selected = getattr(args, stage)
-    fixture_path = getattr(args, fixture)
-    executable = getattr(args, command)
-    arguments = getattr(args, command_args)
-    timeout_seconds = getattr(args, timeout)
-    if selected == "baseline":
-        if stage == "sense_groups":
-            return PunctuationSenseGroupBaseline()
-        if stage == "acoustics":
-            return WavWordAcousticsBaseline()
-        return AcousticProsodyBaseline()
-    if selected == "fixture":
-        if fixture_path is None:
-            flag = fixture.replace("_", "-")
-            raise ConversionError(f"--{flag} is required for the {stage} fixture adapter")
-        if stage == "sense_groups":
-            return FixtureSenseGroupAdapter(fixture_path)
-        if stage == "acoustics":
-            return FixtureAcousticsAdapter(fixture_path)
-        return FixtureProsodyAdapter(fixture_path)
-    if selected == "command":
-        if executable is None:
-            flag = command.replace("_", "-")
-            raise ConversionError(f"--{flag} is required for the {stage} command adapter")
-        if stage == "sense_groups":
-            return CommandSenseGroupAdapter(executable, arguments, timeout_seconds)
-        if stage == "acoustics":
-            return CommandAcousticsAdapter(executable, arguments, timeout_seconds)
-        return CommandProsodyAdapter(executable, arguments, timeout_seconds)
-    return None
-
-
-def _build_rich(
-    args: argparse.Namespace,
-) -> tuple[Any | None, Any | None, FfmpegAudioPreprocessor | None, Any | None]:
-    """Resolve the optional sense-group, acoustics, and prosody adapters.
-
-    The acoustics stage receives the same temporary 16 kHz mono PCM WAV as the
-    ASR stage when a command adapter is selected; the fixture adapters replay
-    committed results and need no media commands. The acoustics preprocessor
-    never emits machine phases; the ``measuring_acoustics`` phase covers the
-    whole stage.
-    """
-    sense_analyzer = _rich_command(
-        args,
-        stage="sense_groups",
-        fixture="sense_groups_fixture",
-        command="sense_groups_command",
-        command_args="sense_groups_command_arg",
-        timeout="sense_groups_command_timeout_seconds",
-    )
-    acoustics_extractor = _rich_command(
-        args,
-        stage="acoustics",
-        fixture="acoustics_fixture",
-        command="acoustics_command",
-        command_args="acoustics_command_arg",
-        timeout="acoustics_command_timeout_seconds",
-    )
-    prosody_analyzer = _rich_command(
-        args,
-        stage="prosody",
-        fixture="prosody_fixture",
-        command="prosody_command",
-        command_args="prosody_command_arg",
-        timeout="prosody_command_timeout_seconds",
-    )
-    acoustics_preprocessor: FfmpegAudioPreprocessor | None = None
-    if getattr(args, "acoustics") in {"command", "baseline"}:
-        acoustics_preprocessor = FfmpegAudioPreprocessor(
-            ffprobe_executable=args.ffprobe_command,
-            ffmpeg_executable=args.ffmpeg_command,
-            timeout_seconds=args.media_command_timeout_seconds,
-        )
-    return (
-        sense_analyzer,
-        acoustics_extractor,
-        acoustics_preprocessor,
-        prosody_analyzer,
-    )
-
-
-def _build_phone(
-    args: argparse.Namespace,
-) -> tuple[Any | None, FfmpegAudioPreprocessor | None]:
-    if args.phone == "none":
-        return None, None
-    if args.phone == "fixture":
-        if args.phone_fixture is None:
-            raise ConversionError("--phone-fixture is required for the fixture adapter")
-        try:
-            return FixturePhoneAdapter(args.phone_fixture), None
-        except ValueError as error:
-            raise ConversionError(str(error)) from error
-    preprocessor = FfmpegAudioPreprocessor(
-        ffprobe_executable=args.ffprobe_command,
-        ffmpeg_executable=args.ffmpeg_command,
-        timeout_seconds=args.media_command_timeout_seconds,
-    )
-    if args.phone == "command":
-        if args.phone_command is None:
-            raise ConversionError("--phone-command is required for the command adapter")
-        try:
-            adapter = CommandPhoneAdapter(
-                args.phone_command,
-                args.phone_command_arg,
-                args.phone_command_timeout_seconds,
-            )
-        except ValueError as error:
-            raise ConversionError(str(error)) from error
-        return adapter, preprocessor
-    required = (
-        args.phone_python,
-        args.phone_sidecar,
-        args.phone_model_dir,
-        args.phone_model_id,
-        args.phone_model_revision,
-    )
-    if any(value is None for value in required):
-        raise ConversionError(
-            "wav2vec2 phone analysis requires python, sidecar, model directory, id and revision"
-        )
-    try:
-        adapter = Wav2Vec2CtcPhoneAdapter(
-            args.phone_python,
-            args.phone_sidecar,
-            args.phone_model_dir,
-            args.phone_model_id,
-            args.phone_model_revision,
-            args.phone_timeout_seconds,
-        )
-    except ValueError as error:
-        raise ConversionError(str(error)) from error
-    return adapter, preprocessor
-
-
-def _completed_details(package_path: Path) -> dict[str, object]:
-    """Read the final package for the completed event, without guessing.
-
-    The v1 carrier is read from ``manifest.json``; the v2 carrier is read from
-    ``release.json`` and ``delivery.json``. In v2 the media fingerprint is the
-    rendition media blob digest (the exact original media SHA-256) and the
-    resources come from the release document in release order.
-    """
-    digest = hashlib.sha256()
-    with package_path.open("rb") as package:
-        for chunk in iter(lambda: package.read(1024 * 1024), b""):
-            digest.update(chunk)
-    package_sha256 = f"sha256:{digest.hexdigest()}"
-    with zipfile.ZipFile(package_path) as archive:
-        if "release.json" in archive.namelist():
-            details = read_v2_details(package_path)
-            details["package_sha256"] = package_sha256
-            return details
-        manifest = json.loads(archive.read("manifest.json"))
-        resources: list[dict[str, object]] = []
-        for entry in manifest["resources"]:
-            document = json.loads(archive.read(entry["path"]))
-            resources.append(
-                {
-                    "resource_id": entry["resource_id"],
-                    "kind": entry["kind"],
-                    "review_status": document["quality"]["review_status"],
-                }
-            )
+    for warning in outcome.warnings:
+        if writer is not None:
+            writer.warning(warning["code"], warning["message"])
+    if outcome.release is None:
+        return {
+            "status": "completed",
+            "package_sha256": None,
+            "warnings": list(outcome.warnings),
+            "document_renditions": [],
+            "media_renditions": [],
+            "resources": [],
+        }
+    release = outcome.release
     return {
-        "package_sha256": package_sha256,
-        "media_fingerprint": manifest["content_document"]["media_fingerprint"],
-        "resources": resources,
+        "status": "completed",
+        "package_sha256": (
+            f"sha256:{outcome.package_sha256}" if outcome.package_sha256 else None
+        ),
+        "warnings": list(outcome.warnings),
+        "document_renditions": [
+            {"rendition_id": entry.rendition_id, "origin": entry.origin}
+            for entry in release.document_renditions
+        ],
+        "media_renditions": [
+            {"rendition_id": entry.rendition_id, "origin": entry.origin}
+            for entry in release.media_renditions
+        ],
+        "resources": [
+            {"resource_id": entry.resource_id, "kind": entry.kind}
+            for entry in release.resources
+        ],
     }
+
+
+def _classify_error(error: BaseException) -> tuple[str, str]:
+    """Map a capability-run exception to a stable v2 failure code."""
+    if isinstance(error, UnsupportedCapability):
+        return ("unsupported_capability", str(error))
+    if isinstance(error, ProductionFailure):
+        return (error.code, str(error))
+    if isinstance(error, (ConversionError, OSError, json.JSONDecodeError)):
+        return ("invalid_request", str(error))
+    return ("internal_error", "generation failed because of an internal error")
 
 
 def _create_machine_staging_path(output_path: Path) -> Path:
@@ -728,7 +349,7 @@ def _create_machine_staging_path(output_path: Path) -> Path:
 def _main_machine(
     args: argparse.Namespace,
     *,
-    writer: MachineEventEmitter,
+    writer: MachineEventV2Emitter,
     state: _CancellationState,
 ) -> int:
     with _cancellation_signals(state):
@@ -738,7 +359,6 @@ def _main_machine(
                 machine_args = argparse.Namespace(**vars(args))
                 machine_args.output = staging_path
                 result = _run(machine_args, state, writer)
-                details = _completed_details(staging_path)
                 if (
                     os.environ.get("LISTEN_GEN_TEST_PAUSE_BEFORE_TERMINAL_COMMIT")
                     == "1"
@@ -753,20 +373,14 @@ def _main_machine(
                         state.signal_number or signal.SIGINT
                     )
                 with _terminal_commit(state):
-                    os.replace(staging_path, args.output)
+                    if result["package_sha256"] is not None:
+                        os.replace(staging_path, args.output)
                     writer.completed(
-                        package_sha256=details["package_sha256"],
-                        media_fingerprint=details["media_fingerprint"],
-                        resources=details["resources"],
+                        package_sha256=result["package_sha256"],
+                        document_renditions=result["document_renditions"],
+                        media_renditions=result["media_renditions"],
+                        resources=result["resources"],
                         warnings=result["warnings"],
-                        alignment=result.get("alignment"),
-                        rich_resources=result.get("rich_resources"),
-                        # Only the v2 carrier adds these fields; for v1 the
-                        # missing keys resolve to None and are omitted by the
-                        # emitter, keeping the default v1 event shape intact.
-                        package_version=details.get("package_version"),
-                        release_id=details.get("release_id"),
-                        delivery_profile=details.get("delivery_profile"),
                     )
                 return 0
             finally:
@@ -777,13 +391,13 @@ def _main_machine(
             writer.cancelled()
             return 130
         except (ConversionError, OSError, json.JSONDecodeError) as error:
-            code, message = machine_error(error)
+            code, message = _classify_error(error)
             writer.failed(code=code, message=message)
             return 2
         except Exception:
             writer.failed(
                 code="internal_error",
-                message=MACHINE_ERROR_MESSAGES["internal_error"],
+                message="generation failed because of an internal error",
             )
             return 2
 
@@ -793,9 +407,10 @@ def _main_ordinary(args: argparse.Namespace) -> int:
     try:
         result = _run(args, state, None)
     except (ConversionError, OSError, json.JSONDecodeError) as error:
+        code, message = _classify_error(error)
         print(
             json.dumps(
-                {"status": "failed", "error": str(error)},
+                {"status": "failed", "code": code, "error": message},
                 ensure_ascii=False,
                 sort_keys=True,
             ),
@@ -813,17 +428,15 @@ def main(argv: list[str] | None = None) -> int:
     if not machine_requested:
         args = parser().parse_args(raw_argv)
         return _main_ordinary(args)
-    writer = MachineEventEmitter()
+    writer = MachineEventV2Emitter()
     state = _CancellationState()
-    writer.protocol(protocol_capabilities())
-    writer.started()
-    writer.phase("validating")
+    writer.protocol(protocol_capabilities_v2())
     try:
         args = parser(parser_class=MachineArgumentParser).parse_args(raw_argv)
     except ArgumentParsingFailed:
         writer.failed(
             code="invalid_arguments",
-            message=MACHINE_ERROR_MESSAGES["invalid_arguments"],
+            message="Generation arguments are invalid.",
         )
         return 2
     return _main_machine(args, writer=writer, state=state)

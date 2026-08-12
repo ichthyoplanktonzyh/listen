@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 import release_bundle as rb
-from listen_gen import protocol
+from listen_gen import protocol_v2 as protocol
 
 FAKE_COMMIT = "ab12cd34ef56ab12cd34ef56ab12cd34ef56ab12"
 VERSION = "0.4.0"
@@ -47,17 +47,56 @@ def env_with_src() -> dict[str, str]:
     return env
 
 
+def _capability_request_path(directory: Path) -> Path:
+    import hashlib
+
+    text = b"Release bundle sample text.\nSecond sentence."
+    digest = "sha256:" + hashlib.sha256(text).hexdigest()
+    document_path = directory / "sample.txt"
+    document_path.write_bytes(text)
+    request = {
+        "schema": "listen_gen.capability-request.v2",
+        "version": 2,
+        "created_at_ms": 1786000000000,
+        "attempt_id": "attempt-release-bundle",
+        "material": {
+            "material_id": "material-1",
+            "material_revision_id": "revision-1",
+            "title": "Release bundle sample",
+        },
+        "edition": {
+            "edition_id": "edition-1",
+            "title": "Edition",
+            "target_language": "en",
+            "support_languages": [],
+        },
+        "requested_capability": "read",
+        "available_renditions": [
+            {
+                "kind": "document",
+                "rendition_id": "sha256:" + "1" * 64,
+                "media_type": "text/plain",
+                "language": "en",
+                "source_asset_id": "sha256:" + "2" * 64,
+                "blob": {
+                    "digest": digest,
+                    "size_bytes": len(text),
+                    "path": str(document_path),
+                },
+            }
+        ],
+        "available_resources": [],
+    }
+    request_path = directory / "request.json"
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+    return request_path
+
+
 def fixture_argv(output: Path, *, machine: bool) -> list[str]:
     argv = [
-        "package", "from-media",
-        str(ROOT / "tests" / "fixtures" / "sample-media.wav"),
+        "package", "from-capability",
+        str(_capability_request_path(output.parent)),
         "--output", str(output),
-        "--provider", "fixture",
-        "--fixture", str(ROOT / "tests" / "fixtures" / "sample.asr.json"),
-        "--title", "Release bundle sample",
-        "--media-kind", "audio",
-        "--duration-ms", "2200",
-        "--created-at-ms", "1786000000000",
     ]
     if machine:
         argv.append("--machine-events")
@@ -175,8 +214,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
             set(manifest["content_package_contract"]),
             {
                 "authority",
-                "manifest_schema_id",
-                "resource_schema_id",
+                "release_schema_id",
                 "package_schema",
                 "schema_version",
                 "canonical_sha256",
@@ -211,7 +249,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
             "version": protocol.TOOL_VERSION,
         })
         self.assertEqual(manifest["machine_protocol"], {
-            "schema": protocol.MACHINE_EVENT_SCHEMA,
+            "schema": protocol.MACHINE_EVENT_SCHEMA_V2,
             "version": protocol.MACHINE_PROTOCOL_VERSION,
         })
         runtime_identity = manifest["runtime_identity"]
@@ -263,10 +301,7 @@ class ManifestContentTests(ReleaseBundleTestBase):
             "path": lock["authority"]["path"],
         })
         self.assertEqual(
-            contract["manifest_schema_id"], lock["manifest_schema_id"]
-        )
-        self.assertEqual(
-            contract["resource_schema_id"], lock["resource_schema_id"]
+            contract["release_schema_id"], lock["release_schema_id"]
         )
         self.assertEqual(contract["package_schema"], lock["package_schema"])
         self.assertEqual(contract["schema_version"], lock["schema_version"])
@@ -387,8 +422,8 @@ class ZipappRuntimeTests(ReleaseBundleTestBase):
             ]
             self.assertGreaterEqual(len(events), 2)
             for index, event in enumerate(events):
-                self.assertEqual(event["schema"], "listen_gen.machine-event.v1")
-                self.assertEqual(event["protocol_version"], 1)
+                self.assertEqual(event["schema"], "listen_gen.machine-event.v2")
+                self.assertEqual(event["protocol_version"], 2)
                 self.assertEqual(event["tool"], {
                     "id": protocol.TOOL_ID,
                     "version": protocol.TOOL_VERSION,
@@ -396,7 +431,7 @@ class ZipappRuntimeTests(ReleaseBundleTestBase):
                 self.assertEqual(event["sequence"], index)
             terminals = [
                 event for event in events
-                if event["event"] in {"completed", "failed", "cancelled"}
+                if event["event"] in {"completed", "cancelled", "failed"}
             ]
             self.assertEqual(len(terminals), 1)
             terminal = terminals[0]
@@ -836,7 +871,7 @@ class ModuleIsolationAndSourceTests(unittest.TestCase):
     def test_repo_root_module_isolation(self) -> None:
         root = copy_repo_root("isolated-repo-")
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
-        protocol_file = root / "src" / "listen_gen" / "protocol.py"
+        protocol_file = root / "src" / "listen_gen" / "protocol_v2.py"
         with protocol_file.open("a", encoding="utf-8") as handle:
             handle.write('\nTOOL_VERSION = "9.9.9"\n')
         with tempfile.TemporaryDirectory() as tmp:

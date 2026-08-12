@@ -7,6 +7,9 @@ name = "listen-gen"
 version = "0.4.0"
 description = "Heavy resource generation and content packaging for Listen"
 requires-python = ">=3.11"
+dependencies = [
+    "pypdf>=5.0,<7",
+]
 
 [project.scripts]
 listen-gen = "listen_gen.cli:main"

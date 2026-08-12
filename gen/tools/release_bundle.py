@@ -27,8 +27,8 @@ RELEASE_BUNDLE_SCHEMA = "listen_gen.release-bundle.v1"
 SOURCE_REPOSITORY = "https://github.com/ichthyoplanktonzyh/listen-gen"
 TOOL_NAME = "listen-gen"
 REQUIRED_PYTHON = ">=3.11"
-MACHINE_EVENT_SCHEMA = "listen_gen.machine-event.v1"
-MACHINE_PROTOCOL_VERSION = 1
+MACHINE_EVENT_SCHEMA = "listen_gen.machine-event.v2"
+MACHINE_PROTOCOL_VERSION = 2
 TOOL_ID = "listen-gen"
 PROVIDER_REQUIREMENTS = {
     "fixture": [],
@@ -51,23 +51,21 @@ PROVIDER_REQUIREMENTS = {
 }
 EXPECTED_LOCK = {
     "authority": {
-        "path": "contracts/content-package/v1",
+        "path": "contracts/content-package/v3",
         "repository": "ichthyoplanktonzyh/listen-core",
     },
-    "manifest_schema_id": "https://listen.dev/contracts/content-package/v1/manifest.schema.json",
-    "package_schema": "listen.resource-package.v1",
-    "resource_schema_id": "https://listen.dev/contracts/content-package/v1/resource.schema.json",
-    "schema_version": 1,
-    "v2": {
+    "package_schema": "listen.content-package.release.v3",
+    "release_schema_id": "listen.content-package.release.v3",
+    "schema_version": 3,
+    "v3": {
         "authority": {
-            "path": "contracts/content-package/v2",
+            "path": "contracts/content-package/v3",
             "repository": "ichthyoplanktonzyh/listen-core",
         },
-        "package_schema": "listen.content-package.release.v2",
-        "release_schema_id": "https://listen.dev/contracts/content-package/v2/release.schema.json",
-        "delivery_schema_id": "https://listen.dev/contracts/content-package/v2/delivery.schema.json",
-        "resource_schema_id": "https://listen.dev/contracts/content-package/v2/resource.schema.json",
-        "schema_version": 2,
+        "package_schema": "listen.content-package.release.v3",
+        "release_schema_id": "listen.content-package.release.v3",
+        "plan_schema_id": "listen.content-package.plan.v3",
+        "schema_version": 3,
     },
 }
 
@@ -184,8 +182,7 @@ MANIFEST_PROTOCOL_FIELDS = frozenset({"schema", "version"})
 MANIFEST_CONTRACT_FIELDS = frozenset(
     {
         "authority",
-        "manifest_schema_id",
-        "resource_schema_id",
+        "release_schema_id",
         "package_schema",
         "schema_version",
         "canonical_sha256",
@@ -244,11 +241,11 @@ def _load_protocol_constants(repo_root: Path) -> dict[str, object]:
     sys.path.insert(0, src)
     try:
         try:
-            protocol = importlib.import_module("listen_gen.protocol")
+            protocol = importlib.import_module("listen_gen.protocol_v2")
             constants = {
                 "tool_id": protocol.TOOL_ID,
                 "tool_version": protocol.TOOL_VERSION,
-                "machine_event_schema": protocol.MACHINE_EVENT_SCHEMA,
+                "machine_event_schema": protocol.MACHINE_EVENT_SCHEMA_V2,
                 "machine_protocol_version": protocol.MACHINE_PROTOCOL_VERSION,
             }
         except Exception:
@@ -380,8 +377,7 @@ def _build_manifest(
                 "repository": authority["repository"],
                 "path": authority["path"],
             },
-            "manifest_schema_id": lock["manifest_schema_id"],
-            "resource_schema_id": lock["resource_schema_id"],
+            "release_schema_id": lock["release_schema_id"],
             "package_schema": lock["package_schema"],
             "schema_version": lock["schema_version"],
             "canonical_sha256": _sha256_hex(_canonical_json_bytes(lock)),
@@ -502,9 +498,7 @@ def _parse_manifest(manifest_path: Path) -> dict[str, object]:
     _check_keys(authority, MANIFEST_AUTHORITY_FIELDS)
     if authority != EXPECTED_LOCK["authority"]:
         raise ReleaseBundleError("release manifest is invalid")
-    if contract["manifest_schema_id"] != EXPECTED_LOCK["manifest_schema_id"]:
-        raise ReleaseBundleError("release manifest is invalid")
-    if contract["resource_schema_id"] != EXPECTED_LOCK["resource_schema_id"]:
+    if contract["release_schema_id"] != EXPECTED_LOCK["release_schema_id"]:
         raise ReleaseBundleError("release manifest is invalid")
     if contract["package_schema"] != EXPECTED_LOCK["package_schema"]:
         raise ReleaseBundleError("release manifest is invalid")
@@ -680,9 +674,7 @@ def verify_release_bundle(
         raise ReleaseBundleError("content package contract lock is invalid")
     if authority["path"] != lock_authority["path"]:
         raise ReleaseBundleError("content package contract lock is invalid")
-    if contract["manifest_schema_id"] != lock["manifest_schema_id"]:
-        raise ReleaseBundleError("content package contract lock is invalid")
-    if contract["resource_schema_id"] != lock["resource_schema_id"]:
+    if contract["release_schema_id"] != lock["release_schema_id"]:
         raise ReleaseBundleError("content package contract lock is invalid")
     if contract["package_schema"] != lock["package_schema"]:
         raise ReleaseBundleError("content package contract lock is invalid")
