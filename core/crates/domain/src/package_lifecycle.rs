@@ -18,7 +18,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
-    LanguageCode, LearningEditionId, LearningMaterialId, MaterialRevisionId, PackageReleaseId,
+    LanguageCode, LearningEditionId, LearningMaterialId, MaterialRevisionId, MediaId,
+    PackageReleaseId, RenditionOrigin,
 };
 
 /// Availability of one package resource. Candidate resources may be selected
@@ -88,17 +89,24 @@ pub struct PackageResourceFact {
     pub quality_warnings: Vec<String>,
 }
 
-/// One immutable media rendition fact of a package release. Only the kind,
-/// digest, size, and availability snapshot are retained; media paths never
-/// enter this module.
+/// One immutable rendition fact of a package release. A Document or Media
+/// Rendition states whether it is Source or Derived; a Derived rendition
+/// retains exact producer facts. Only the kind, digest, size, and availability
+/// snapshot are retained; paths never enter this module.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageRenditionFact {
     pub rendition_id: String,
+    /// `document` or `media`.
     pub kind: String,
+    pub origin: RenditionOrigin,
     pub media_type: String,
     pub available: bool,
     pub media_digest: String,
     pub media_size_bytes: u64,
+    /// The bound media source for a Source media rendition, when known.
+    pub media_id: Option<MediaId>,
+    /// Exact producer facts for a Derived rendition.
+    pub producer: Option<PackageResourceProvenance>,
 }
 
 /// One Learning Edition of a learning material revision, as declared by an
@@ -308,7 +316,9 @@ fn exclusive_families(resource: &PackageResourceFact) -> Vec<String> {
         | "phone_timeline"
         | "sense_group_analysis"
         | "word_acoustics"
-        | "prosody_analysis" => vec![format!("exclusive:{}", resource.kind)],
+        | "prosody_analysis"
+        | "structured_reading"
+        | "anchor_time_alignment" => vec![format!("exclusive:{}", resource.kind)],
         "translation" => resource
             .support_languages
             .iter()
@@ -427,11 +437,14 @@ mod tests {
         let mut installation = installation(Vec::new());
         installation.renditions = vec![PackageRenditionFact {
             rendition_id: "rendition-1".into(),
-            kind: "audio".into(),
+            kind: "media".into(),
+            origin: RenditionOrigin::Derived,
             media_type: "audio/mpeg".into(),
             available: true,
             media_digest: format!("sha256:{}", "a".repeat(64)),
             media_size_bytes: 100,
+            media_id: None,
+            producer: None,
         }];
         let plan = adoption_commit_plan(&installation, 100).unwrap();
         assert!(plan.selected_resource_ids.is_empty());

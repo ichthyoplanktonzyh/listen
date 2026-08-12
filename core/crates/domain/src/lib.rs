@@ -19,6 +19,18 @@ pub use media::*;
 mod learning_material;
 pub use learning_material::*;
 
+mod rendition;
+pub use rendition::*;
+
+mod material_resource;
+pub use material_resource::*;
+
+mod material_capability;
+pub use material_capability::*;
+
+mod source_identity;
+pub use source_identity::*;
+
 mod package_lifecycle;
 pub use package_lifecycle::*;
 
@@ -138,6 +150,12 @@ macro_rules! string_id {
                 &self.0
             }
         }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
     };
 }
 
@@ -206,9 +224,13 @@ string_id!(PhoneticFindingId);
 string_id!(ShadowingAnalysisId);
 string_id!(LearningMaterialId);
 string_id!(MaterialRevisionId);
-string_id!(MaterialAssetId);
 string_id!(LearningEditionId);
 string_id!(PackageReleaseId);
+string_id!(SourceAssetId);
+string_id!(RenditionId);
+string_id!(ResourceId);
+string_id!(ReadingAnchorId);
+string_id!(CapabilityAttemptId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -283,6 +305,24 @@ pub enum DomainError {
     MaterialIdentityMismatch,
     #[error("material timestamps are inconsistent: {0}")]
     InvalidTimestamp(&'static str),
+    #[error("derived {0} requires exact producer facts")]
+    MissingDerivedProducer(&'static str),
+    #[error("source {0} requires its bound source evidence")]
+    MissingSourceBinding(&'static str),
+    #[error("derived media rendition requires an exact content digest")]
+    MissingDerivedDigest,
+    #[error("anchor range is invalid: end precedes start")]
+    InvalidAnchorRange,
+    #[error("duplicate reading anchor: {0}")]
+    DuplicateAnchor(ReadingAnchorId),
+    #[error("unknown reading anchor: {0}")]
+    UnknownAnchor(ReadingAnchorId),
+    #[error("unknown reading block: {0}")]
+    UnknownBlock(String),
+    #[error("reading block hierarchy contains a cycle")]
+    BlockCycle,
+    #[error("anchor-to-time alignment must be monotonic in media time")]
+    NonMonotonicAlignment,
 }
 
 pub fn normalize_lemma(value: &str) -> String {
