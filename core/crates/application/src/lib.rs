@@ -55,7 +55,6 @@ pub mod batch_governor;
 mod chunks;
 mod coach_dashboard;
 mod content_fit;
-mod content_package_import;
 mod corpus;
 mod diagnosis;
 mod dictionary;
@@ -107,11 +106,6 @@ pub use coach_dashboard::{
     CoachAssessmentSummary, CoachChannelStatus, CoachChannelSummary, CoachDashboard,
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
     CoachSuggestion, CoachSuggestionDestination,
-};
-pub use content_package_import::{
-    ContentPackageImportReceipt, ImportedContentPackage, PreparedContentPackageImport,
-    ResourceImportDisposition, ResourceImportOutcome, ResourceImportProducer,
-    ResourceImportProvenance, ResourceImportReviewStatus, prepare_content_package_document,
 };
 pub(crate) use corpus::prosody_chunk_projections_from_document;
 pub use dictionary::DictionaryUseCases;
@@ -165,7 +159,6 @@ pub struct AppServices {
     pub(crate) phone_timelines: Arc<dyn PhoneTimelineRepository>,
     pub(crate) lltimeline_resources: Arc<dyn LLTimelineResourceRepository>,
     pub(crate) lltimeline_imports: Arc<dyn LLTimelineImportRepository>,
-    pub(crate) content_package_imports: Arc<dyn ContentPackageImportRepository>,
     pub(crate) package_lifecycle: Arc<dyn PackageLifecycleRepository>,
     pub(crate) capability_attempts: Arc<dyn CapabilityAttemptRepository>,
     pub(crate) source_identity: Arc<dyn SourceIdentityRepository>,
@@ -311,7 +304,6 @@ impl AppServices {
             + ProsodyAnalysisRepository
             + PhoneTimelineRepository
             + LLTimelineImportRepository
-            + ContentPackageImportRepository
             + 'static,
         L: LexicalCapabilityRepository
             + LexicalEntryRepository
@@ -332,7 +324,6 @@ impl AppServices {
             phone_timelines: timelines.clone(),
             lltimeline_resources,
             lltimeline_imports: timelines.clone(),
-            content_package_imports: timelines,
             package_lifecycle: Arc::new(DisabledPackageLifecycleRepository),
             capability_attempts: Arc::new(DisabledCapabilityAttemptRepository),
             source_identity: Arc::new(DisabledSourceIdentityRepository),

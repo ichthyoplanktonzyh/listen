@@ -16,48 +16,6 @@ pub const SENSE_GROUP_ANALYSIS_SCHEMA_V1: &str = "listen.resource.sense-group-an
 pub const WORD_ACOUSTICS_SCHEMA_V1: &str = "listen.resource.word-acoustics.v1";
 pub const PROSODY_ANALYSIS_SCHEMA_V1: &str = "listen.resource.prosody-analysis.v1";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PackageManifest {
-    pub schema: String,
-    pub created_at_ms: u64,
-    pub content_document: ContentDocument,
-    pub resources: Vec<ResourceManifestEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ContentDocument {
-    pub media_fingerprint: String,
-    pub title: String,
-    pub media_kind: MediaKind,
-    pub duration_ms: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MediaKind {
-    Audio,
-    Video,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceManifestEntry {
-    pub resource_id: String,
-    pub path: String,
-    pub kind: String,
-    pub schema: String,
-    pub size_bytes: u64,
-    pub required: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceSubject {
-    pub media_fingerprint: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceEnvelope<P> {
@@ -68,6 +26,12 @@ pub struct ResourceEnvelope<P> {
     pub provenance: Provenance,
     pub quality: Quality,
     pub payload: P,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceSubject {
+    pub media_fingerprint: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

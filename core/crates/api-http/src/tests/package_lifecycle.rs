@@ -3,10 +3,10 @@
 //! These exercise the real axum router over a real in-memory SQLite
 //! repository: the full `api-http -> application -> persistence-sqlite`
 //! stack with the package lifecycle repository composed in. Carriers are
-//! deterministic local Content Package v2 directories bound to the
+//! deterministic local Content Package v3 directories bound to the
 //! material_id/current_revision_id actually created over HTTP; release and
-//! resource identities come from the canonical v2 computation (`content-package`
-//! `serialize_canonical` + the inspector), never from hard-coded fake ids.
+//! resource identities come from the canonical computation
+//! (`serialize_canonical` + the inspector), never from hard-coded fake ids.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -18,7 +18,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::to_bytes;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{Request, StatusCode};
-use content_package::v2::{RELEASE_SCHEMA_V2, serialize_canonical};
+use content_package::v2::serialize_canonical;
+use content_package::v3::RELEASE_SCHEMA_V3;
 use rusqlite::params;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -108,7 +109,7 @@ fn base_descriptor(
         "dependencies": [],
         "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
         "quality": {"review_status": review_status, "warnings": [], "extensions": {}},
-        "payload_blob": {"digest": digest, "size_bytes": size},
+        "payload_blob": {"digest": digest, "size_bytes": size, "embedded": true},
         "extensions": {},
     })
 }
@@ -141,9 +142,29 @@ fn text_release_carrier(
         review_status,
     );
     let resource = resource_entry(&descriptor, true);
-    let resource_id = resource["resource_id"].as_str().unwrap().to_owned();
+    let text_digest = sha256_id(text.as_bytes());
+    let text_blob = json!({
+        "digest": text_digest,
+        "size_bytes": text.len() as u64,
+        "embedded": true,
+    });
+    let document = json!({
+        "rendition_id": sha256_id(&canonical_bytes(&json!({
+            "media_type": "text/plain",
+            "language": "en",
+            "text_blob": text_blob,
+        }))),
+        "origin": "source",
+        "media_type": "text/plain",
+        "language": "en",
+        "text_blob": text_blob,
+        "source_asset_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "producer": null,
+        "compatibility": null,
+        "extensions": {},
+    });
     let release = json!({
-        "schema": RELEASE_SCHEMA_V2,
+        "schema": RELEASE_SCHEMA_V3,
         "created_at_ms": 1u64,
         "edition": {
             "edition_id": edition_id,
@@ -156,14 +177,18 @@ fn text_release_carrier(
             "material_revision_id": revision_id,
             "title": "Wire Fixture Material",
         },
-        "entrypoints": [{"entrypoint_id": "primary", "resource_id": resource_id}],
+        "document_renditions": [document],
+        "media_renditions": [],
         "resources": [resource],
-        "renditions": [],
         "extensions": {},
     });
     let mut files = BTreeMap::new();
     files.insert("release.json".into(), canonical_bytes(&release));
     files.insert(blob_path(&digest), bytes);
+    files.insert(
+        blob_path(&sha256_id(text.as_bytes())),
+        text.as_bytes().to_vec(),
+    );
     let directory = TestDirectory::new();
     for (name, bytes) in &files {
         let path = directory.path().join(name);
@@ -374,7 +399,9 @@ async fn installing_a_matching_v2_package_returns_exact_candidate_dto() {
     assert_eq!(resource["review_status"], "human_reviewed");
     assert_eq!(resource["content_language"], "en");
     assert_eq!(resource["support_languages"], json!([]));
-    assert_eq!(installed["renditions"], json!([]));
+    assert_eq!(installed["renditions"].as_array().unwrap().len(), 1);
+    assert_eq!(installed["renditions"][0]["kind"], "document");
+    assert_eq!(installed["renditions"][0]["available"], true);
     assert_no_private_facts(&installed);
 }
 

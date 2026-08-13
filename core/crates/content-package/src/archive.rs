@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::{Component, Path};
 
 use sha2::{Digest as _, Sha256};
@@ -36,161 +36,7 @@ pub(crate) enum ArchiveError {
 ///
 /// `manifest_names` lists the carrier files that receive the manifest size
 /// limit instead of the ordinary per-file limit.
-pub(crate) fn read_package(
-    path: &Path,
-    limits: InspectLimits,
-    manifest_names: &[&str],
-) -> Result<BTreeMap<String, Vec<u8>>, ArchiveError> {
-    let metadata = fs::symlink_metadata(path)?;
-    if metadata.file_type().is_symlink() {
-        return Err(ArchiveError::Symlink(path.display().to_string()));
-    }
-    if metadata.is_dir() {
-        read_directory(path, limits, manifest_names)
-    } else {
-        read_zip(path, limits, manifest_names)
-    }
-}
-
-fn read_directory(
-    root: &Path,
-    limits: InspectLimits,
-    manifest_names: &[&str],
-) -> Result<BTreeMap<String, Vec<u8>>, ArchiveError> {
-    let mut pending = vec![root.to_path_buf()];
-    let mut files = BTreeMap::new();
-    let mut total = 0_u64;
-    while let Some(directory) = pending.pop() {
-        for entry in fs::read_dir(&directory)? {
-            let entry = entry?;
-            let metadata = fs::symlink_metadata(entry.path())?;
-            let relative = entry
-                .path()
-                .strip_prefix(root)
-                .map_err(|_| invalid("package", "entry escaped package root"))?
-                .to_path_buf();
-            let name = safe_path_string(&relative)?;
-            if metadata.file_type().is_symlink() {
-                return Err(ArchiveError::Symlink(name));
-            }
-            if metadata.is_dir() {
-                pending.push(entry.path());
-                continue;
-            }
-            if !metadata.is_file() {
-                return Err(invalid(&name, "entry is not a regular file"));
-            }
-            enforce_file_limits(
-                &name,
-                metadata.len(),
-                &mut total,
-                files.len(),
-                limits,
-                manifest_names,
-            )?;
-            let bytes = fs::read(entry.path())?;
-            if files.insert(name.clone(), bytes).is_some() {
-                return Err(ArchiveError::DuplicatePath(name));
-            }
-        }
-    }
-    Ok(files)
-}
-
-fn read_zip(
-    path: &Path,
-    limits: InspectLimits,
-    manifest_names: &[&str],
-) -> Result<BTreeMap<String, Vec<u8>>, ArchiveError> {
-    if fs::metadata(path)?.len() > limits.max_total_bytes {
-        return Err(ArchiveError::Limit("ZIP file size"));
-    }
-    let bytes = fs::read(path)?;
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
-    // Preserve the legacy v1 archive-entry bound before skipping directory
-    // entries. A carrier with thousands of empty directories must not bypass
-    // `max_file_count` merely because it has few regular files.
-    if archive.len() > limits.max_file_count {
-        return Err(ArchiveError::Limit("ZIP entry count"));
-    }
-    let mut files = BTreeMap::new();
-    let mut total = 0_u64;
-    for index in 0..archive.len() {
-        let mut entry = archive.by_index(index)?;
-        let raw_name = entry.name().to_owned();
-        let enclosed = entry
-            .enclosed_name()
-            .ok_or_else(|| ArchiveError::UnsafePath(raw_name.clone()))?;
-        let name = safe_path_string(&enclosed)?;
-        if entry.is_symlink() {
-            return Err(ArchiveError::Symlink(name));
-        }
-        if entry.is_dir() {
-            continue;
-        }
-        enforce_file_limits(
-            &name,
-            entry.size(),
-            &mut total,
-            files.len(),
-            limits,
-            manifest_names,
-        )?;
-        let capacity =
-            usize::try_from(entry.size()).map_err(|_| ArchiveError::Limit("file size"))?;
-        let mut contents = Vec::with_capacity(capacity);
-        entry
-            .by_ref()
-            .take(limits.max_file_bytes.saturating_add(1))
-            .read_to_end(&mut contents)?;
-        if contents.len() as u64 != entry.size() {
-            return Err(invalid(
-                &name,
-                "ZIP entry size does not match decompressed bytes",
-            ));
-        }
-        if files.insert(name.clone(), contents).is_some() {
-            return Err(ArchiveError::DuplicatePath(name));
-        }
-    }
-    Ok(files)
-}
-
-fn enforce_file_limits(
-    name: &str,
-    size: u64,
-    total: &mut u64,
-    current_count: usize,
-    limits: InspectLimits,
-    manifest_names: &[&str],
-) -> Result<(), ArchiveError> {
-    if current_count >= limits.max_file_count {
-        return Err(ArchiveError::Limit("file count"));
-    }
-    let maximum = if manifest_names.contains(&name) {
-        limits.max_manifest_bytes
-    } else {
-        limits.max_file_bytes
-    };
-    if size > maximum {
-        return Err(ArchiveError::Limit("file size"));
-    }
-    *total = total
-        .checked_add(size)
-        .ok_or(ArchiveError::Limit("total decompressed size"))?;
-    if *total > limits.max_total_bytes {
-        return Err(ArchiveError::Limit("total decompressed size"));
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// v2 bounded archive APIs (crate-private; consumed by the v2 inspection).
-// They share the v1 safety checks but never read ordinary bodies up front and
-// never materialize streamed bodies at all.
-// ---------------------------------------------------------------------------
-
-/// Per-file size-limit class applied to a single package entry.
+/// Which size limit class a carrier file belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FileLimit {
     /// Control file: bounded by `max_manifest_bytes` and retained.
@@ -201,8 +47,7 @@ enum FileLimit {
     None,
 }
 
-/// A single non-directory entry discovered by the catalog pass.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CatalogEntry {
     /// Safe forward-slash path within the package.
     pub name: String,
@@ -938,14 +783,12 @@ mod tests {
         archive.finish().unwrap();
 
         // There is only one regular file but three central-directory entries.
-        // The legacy v1 reader counted all three before this archive module
-        // was extracted, and both v2 passes need the same bounded behavior.
+        // Both inspection passes need the same bounded behavior.
         let limits = InspectLimits {
             max_file_count: 2,
             ..tiny_limits()
         };
         for result in [
-            read_package(&zip_path, limits, &[]).map(|_| ()),
             read_package_controls(&zip_path, limits, &[]).map(|_| ()),
             read_package_selective(&zip_path, limits, &[], &[]).map(|_| ()),
         ] {

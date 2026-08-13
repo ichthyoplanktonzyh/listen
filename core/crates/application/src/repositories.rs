@@ -352,16 +352,6 @@ pub struct ContentPackageCandidateImport {
     pub corpus_occurrences: Vec<CorpusOccurrence>,
 }
 
-/// Atomic, candidate-only persistence boundary for a Resource Package.
-pub trait ContentPackageImportRepository: Send + Sync {
-    /// Adds resources idempotently without changing any existing active
-    /// selection. Returning `Err` guarantees that no package write committed.
-    fn import_content_package_candidates(
-        &self,
-        import: &ContentPackageCandidateImport,
-    ) -> Result<(), ApplicationError>;
-}
-
 /// Capability projections and their audit history change under one invariant.
 pub trait LexicalCapabilityRepository: Send + Sync {
     fn lexical_capability_profile(
