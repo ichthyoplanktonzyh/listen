@@ -9,6 +9,12 @@ The plan is honest by construction: an already-satisfied capability yields an
 empty plan (a minimal package still documents the available source), and a
 capability that no supported derivation can produce raises
 :class:`UnsupportedCapability` before anything runs.
+
+Compatible resources are reused without suppressing generation: a Structured
+Reading is reusable only when it is a base resource whose declared language
+and Material Revision both match this request. A resource that is unknown,
+stale, or language-incompatible never suppresses a planned derivation — the
+run generates rather than silently reusing the wrong input.
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from .capability import CapabilityRequest
+from .capability import CapabilityRequest, AvailableResource
 from .package import ConversionError
 
 
@@ -44,17 +50,24 @@ REQUIRES_MEDIA = frozenset({DerivationKind.MEDIA_READ})
 
 @dataclass(frozen=True)
 class Derivation:
-    """One planned step: exact inputs, one provider-kind requirement."""
+    """One planned step: exact inputs, one provider-kind requirement.
+
+    ``input_resource_ids`` carries already-available Resources the derivation
+    consumes (for example a compatible Structured Reading that must not be
+    regenerated). An empty tuple means the run produces the resource itself.
+    """
 
     kind: DerivationKind
     input_rendition_ids: tuple[str, ...]
     provider: str
     label: str
+    input_resource_ids: tuple[str, ...] = ()
 
     def describe(self) -> dict[str, object]:
         return {
             "kind": self.kind.value,
             "input_rendition_ids": list(self.input_rendition_ids),
+            "input_resource_ids": list(self.input_resource_ids),
             "provider": self.provider,
             "label": self.label,
         }
@@ -123,12 +136,84 @@ def _media_input(request: CapabilityRequest):
     )
 
 
-def _already_readable(request: CapabilityRequest) -> bool:
-    """A compatible Structured Reading resource already satisfies reading."""
-    return any(
-        entry.kind == "structured_reading" and entry.role == "base"
-        for entry in request.resources
-    )
+def _target_language(request: CapabilityRequest) -> str:
+    """The exact language the derivation must produce.
+
+    The rendition's declared language is authoritative for the source
+    document; the edition target language is the fallback when the rendition
+    carries none.
+    """
+    for entry in request.document_renditions:
+        if entry.language:
+            return entry.language
+    return request.edition.target_language
+
+
+def _compatible_reading(
+    request: CapabilityRequest,
+) -> AvailableResource | None:
+    """The available Structured Reading this request can safely reuse.
+
+    Reuse requires an exact match of both facts the planner can verify: the
+    resource's declared language equals the target language, and its subject
+    names this exact Material Revision. A resource missing either fact is not
+    treated as compatible — unknown never suppresses generation.
+    """
+    target = _target_language(request)
+    for entry in request.resources:
+        if entry.kind != "structured_reading" or entry.role != "base":
+            continue
+        if entry.content_language is None or entry.content_language != target:
+            continue
+        if (
+            entry.material_revision_id is None
+            or entry.material_revision_id != request.material.material_revision_id
+        ):
+            continue
+        return entry
+    return None
+
+
+def _document_listen_derivations(
+    request: CapabilityRequest,
+) -> list[Derivation]:
+    """The smallest derivation chain for document-to-listen.
+
+    A compatible Structured Reading is reused as the TTS input; otherwise the
+    run first derives the reading and then synthesizes from it in the same
+    run.
+    """
+    rendition = _document_input(request)
+    compatible = _compatible_reading(request)
+    derivations: list[Derivation] = []
+    if compatible is None:
+        derivations.append(
+            Derivation(
+                kind=DerivationKind.DOCUMENT_READ,
+                input_rendition_ids=(rendition.rendition_id,),
+                provider="extraction",
+                label="extract the structured reading from the document",
+            )
+        )
+        derivations.append(
+            Derivation(
+                kind=DerivationKind.DOCUMENT_LISTEN,
+                input_rendition_ids=(rendition.rendition_id,),
+                provider="tts",
+                label="synthesize speech audio and align reading anchors",
+            )
+        )
+    else:
+        derivations.append(
+            Derivation(
+                kind=DerivationKind.DOCUMENT_LISTEN,
+                input_rendition_ids=(rendition.rendition_id,),
+                provider="tts",
+                label="synthesize speech audio from the existing structured reading",
+                input_resource_ids=(compatible.resource_id,),
+            )
+        )
+    return derivations
 
 
 def plan(request: CapabilityRequest) -> ProductionPlan:
@@ -144,15 +229,15 @@ def plan(request: CapabilityRequest) -> ProductionPlan:
 
     if capability == "read":
         if request.document_renditions:
-            if _already_readable(request):
+            if _compatible_reading(request) is not None:
                 return ProductionPlan((), capability)
             rendition = _document_input(request)
             derivations.append(
                 Derivation(
                     kind=DerivationKind.DOCUMENT_READ,
                     input_rendition_ids=(rendition.rendition_id,),
-                    provider="document_text",
-                    label="extract structured reading from the document",
+                    provider="extraction",
+                    label="extract the structured reading from the document",
                 )
             )
         elif request.media_renditions:
@@ -171,16 +256,9 @@ def plan(request: CapabilityRequest) -> ProductionPlan:
 
     if capability == "listen":
         if request.document_renditions:
-            rendition = _document_input(request)
-            derivations.append(
-                Derivation(
-                    kind=DerivationKind.DOCUMENT_LISTEN,
-                    input_rendition_ids=(rendition.rendition_id,),
-                    provider="tts",
-                    label="synthesize speech audio from the document text",
-                )
+            return ProductionPlan(
+                tuple(_document_listen_derivations(request)), capability
             )
-            return ProductionPlan(tuple(derivations), capability)
         if request.media_renditions:
             return ProductionPlan((), capability)
         raise UnsupportedCapability("listen requires a Document or Media Rendition")
@@ -194,16 +272,9 @@ def plan(request: CapabilityRequest) -> ProductionPlan:
 
     if capability == "synchronized_read_listen":
         if request.document_renditions:
-            rendition = _document_input(request)
-            derivations.append(
-                Derivation(
-                    kind=DerivationKind.DOCUMENT_LISTEN,
-                    input_rendition_ids=(rendition.rendition_id,),
-                    provider="tts",
-                    label="synthesize speech audio and align reading anchors",
-                )
+            return ProductionPlan(
+                tuple(_document_listen_derivations(request)), capability
             )
-            return ProductionPlan(tuple(derivations), capability)
         if request.media_renditions:
             rendition = _media_input(request)
             derivations.append(

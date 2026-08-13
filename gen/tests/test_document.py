@@ -74,10 +74,48 @@ class DecodeTextFamilyTests(unittest.TestCase):
         with self.assertRaises(DocumentDecodeError):
             decode_document(b"   \n", "text/plain")
 
-    def test_markdown_is_byte_identical(self) -> None:
-        decoded = decode_document(b"# Title\n\nSome **bold** text.", "text/markdown")
-        self.assertTrue(decoded.source_identical)
-        self.assertEqual(decoded.text, "# Title\n\nSome **bold** text.")
+    def test_markdown_is_parsed_and_markup_free(self) -> None:
+        decoded = decode_document(
+            b"# Title\n\nSome **bold** and *italic* and `code` text.",
+            "text/markdown",
+        )
+        self.assertFalse(decoded.source_identical)
+        self.assertEqual(decoded.text, "Title\nSome bold and italic and code text.")
+
+    def test_markdown_markers_never_reach_speech(self) -> None:
+        decoded = decode_document(
+            b"# Heading\n\nSee [link](https://example.com) and ![alt](img.png).\n"
+            b"- item one\n- item two\n\n> quoted line.",
+            "text/markdown",
+        )
+        speech = plain_text_for_speech(decoded)
+        self.assertNotIn("#", speech)
+        self.assertNotIn("*", speech)
+        self.assertNotIn("[", speech)
+        self.assertNotIn("]", speech)
+        self.assertNotIn("(", speech)
+        self.assertNotIn(")", speech)
+        self.assertNotIn("https://", speech)
+        self.assertIn("Heading", speech)
+        self.assertIn("link", speech)
+        self.assertIn("alt", speech)
+        self.assertIn("item one", speech)
+        self.assertIn("quoted line", speech)
+
+    def test_markdown_blocks_carry_heading_structure(self) -> None:
+        decoded = decode_document(
+            b"# Title\n\nFirst paragraph.\n\n## Section\n\nSecond.",
+            "text/markdown",
+        )
+        kinds = [block.kind for block in decoded.blocks]
+        self.assertIn("heading", kinds)
+        blocks = [
+            block for block in decoded.blocks if block.kind != "root"
+        ]
+        self.assertEqual([block.kind for block in blocks], ["heading", "paragraph", "heading", "paragraph"])
+        root = decoded.blocks[0]
+        self.assertEqual(root.kind, "root")
+        self.assertTrue(root.sentence_ids)
 
 
 class DecodeHtmlTests(unittest.TestCase):
@@ -183,6 +221,41 @@ class DecodeEpubTests(unittest.TestCase):
         with self.assertRaises(DocumentDecodeError):
             decode_epub(buffer.getvalue())
 
+    def test_epub_preserves_chapter_blocks(self) -> None:
+        epub = make_epub(
+            [
+                (
+                    "c1.xhtml",
+                    "<html><body><h1>First</h1><p>Chapter one.</p></body></html>",
+                ),
+                ("c2.xhtml", "<html><body><p>Chapter two!</p></body></html>"),
+            ]
+        )
+        decoded = decode_document(epub, "application/epub+zip")
+        kinds = [block.kind for block in decoded.blocks]
+        self.assertIn("chapter", kinds)
+        chapters = [b for b in decoded.blocks if b.kind == "chapter"]
+        self.assertEqual(len(chapters), 2)
+        self.assertTrue(
+            all(chapter.parent_id == "block-root" for chapter in chapters)
+        )
+        nested = [
+            b for b in decoded.blocks if b.kind in ("heading", "paragraph")
+        ]
+        self.assertTrue(
+            all(n.parent_id.startswith("chapter-") for n in nested)
+        )
+        self.assertIn("Chapter one.", decoded.text)
+        self.assertIn("Chapter two!", decoded.text)
+
+    def test_html_navigation_is_discarded(self) -> None:
+        text = decode_html(
+            b"<html><body><nav><a href=\"/x\">Menu</a></nav>"
+            b"<article><p>Content.</p></article></body></html>"
+        )
+        self.assertNotIn("Menu", text)
+        self.assertIn("Content.", text)
+
     def test_script_content_never_reaches_text(self) -> None:
         epub = make_epub(
             [("c1.xhtml", "<html><body><p>Good.</p><script>bad()</script></body></html>")]
@@ -230,8 +303,10 @@ class ReadingStructureTests(unittest.TestCase):
         structure = build_reading_structure(
             decoded, language="en", rendition_id="sha256:" + "a" * 64
         )
-        self.assertTrue(structure.document_text["text"])
+        self.assertTrue(structure.structured_reading["text"])
         self.assertNotEqual(structure.structured_reading["document_mappings"], [])
+        mapping = structure.structured_reading["document_mappings"][0]
+        self.assertEqual(mapping["locator"]["kind"], "character_range")
         html_decoded = decode_document(b"<p>Hello.</p>", "text/html")
         html_structure = build_reading_structure(
             html_decoded, language="en", rendition_id="sha256:" + "a" * 64
@@ -244,9 +319,24 @@ class ReadingStructureTests(unittest.TestCase):
             decoded, language="zh-Hans", rendition_id="sha256:" + "a" * 64
         )
         anchors = structure.structured_reading["anchors"]
-        first = anchors[0]
+        first = next(
+            anchor
+            for anchor in anchors
+            if anchor["kind"] == "sentence"
+        )
         self.assertEqual(first["start_offset"], 0)
-        self.assertEqual(first["end_offset"], len("大熊猫吃竹子。".encode("utf-8")))
+        self.assertEqual(
+            first["end_offset"],
+            len("大熊猫吃竹子。\n".encode("utf-8")),
+        )
+        self.assertEqual(
+            structure.structured_reading["text"],
+            "大熊猫吃竹子。\n它们生活在中国。",
+        )
+        end = anchors[-1]["end_offset"]
+        self.assertEqual(
+            end, len("大熊猫吃竹子。\n它们生活在中国。".encode("utf-8"))
+        )
 
     def test_blocks_reference_sentence_anchors(self) -> None:
         decoded = decode_document(b"One. Two!\nThree?", "text/plain")

@@ -73,22 +73,40 @@ def blob_declaration(digest: str, size_bytes: int, embedded: bool) -> dict[str, 
     return {"digest": digest, "size_bytes": size_bytes, "embedded": embedded}
 
 
-def producer_declaration(created_at_ms: int) -> dict[str, object]:
+def producer_declaration(
+    created_at_ms: int,
+    *,
+    provider: dict[str, object] | None = None,
+    model: dict[str, object] | None = None,
+    config_sha256: str | None = None,
+) -> dict[str, object]:
     return {
         "created_at_ms": created_at_ms,
         "tool": {"id": TOOL_ID, "version": TOOL_VERSION},
-        "provider": None,
-        "model": None,
-        "config_sha256": None,
+        "provider": provider,
+        "model": model,
+        "config_sha256": config_sha256,
     }
 
 
-def provenance(created_at_ms: int, input_resource_ids: list[str] | None = None) -> dict[str, object]:
+def provenance(
+    created_at_ms: int,
+    *,
+    input_rendition_ids: list[str] | None = None,
+    input_resource_ids: list[str] | None = None,
+    provider: dict[str, object] | None = None,
+    model: dict[str, object] | None = None,
+    config_sha256: str | None = None,
+) -> dict[str, object]:
     return {
         "created_at_ms": created_at_ms,
-        "extensions": {},
-        "input_resource_ids": list(input_resource_ids or []),
         "tool": {"id": TOOL_ID, "version": TOOL_VERSION},
+        "provider": provider,
+        "model": model,
+        "config_sha256": config_sha256,
+        "input_rendition_ids": list(input_rendition_ids or []),
+        "input_resource_ids": list(input_resource_ids or []),
+        "extensions": {},
     }
 
 
@@ -96,13 +114,13 @@ def quality(review_status: str = "machine_checked") -> dict[str, object]:
     return {"review_status": review_status, "warnings": [], "extensions": {}}
 
 
-def compatibility(checks: list[str], verified_rendition_ids: list[str]) -> dict[str, object]:
+def compatibility(
+    checks: list[str],
+    verified_inputs: list[dict[str, object]],
+) -> dict[str, object]:
     return {
         "checks": list(checks),
-        "verified_inputs": [
-            {"rendition_id": rendition_id, "resource_id": None}
-            for rendition_id in verified_rendition_ids
-        ],
+        "verified_inputs": [dict(input_) for input_ in verified_inputs],
     }
 
 
@@ -295,6 +313,7 @@ class V3Release:
         for rendition in self.media_renditions:
             rendition.qualify()
         declared_ids = {resource.resource_id for resource in self.resources}
+        roles = {resource.resource_id: resource.role for resource in self.resources}
         for resource in self.resources:
             resource.qualify()
             for dependency in resource.dependencies:
@@ -304,10 +323,18 @@ class V3Release:
                     raise QualificationError(
                         f"resource dependency is not in the release: {dependency}"
                     )
-            subject_renditions = set(resource.subject.get("rendition_ids", []))
+                if resource.role == "base" and roles[dependency] == "assistance":
+                    raise QualificationError(
+                        "base resource must not depend on an assistance resource"
+                    )
+                if resource.role == "assistance" and roles[dependency] != "base":
+                    raise QualificationError(
+                        "assistance resource may only depend on base resources"
+                    )
             known = {
                 entry.rendition_id for entry in self.document_renditions
             } | {entry.rendition_id for entry in self.media_renditions}
+            subject_renditions = set(resource.subject.get("rendition_ids", []))
             if not subject_renditions <= known:
                 raise QualificationError(
                     "resource subject references an undeclared rendition"

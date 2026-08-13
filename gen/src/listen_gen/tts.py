@@ -1,14 +1,18 @@
 """Provider-neutral TTS and the derived audio rendition path.
 
-A TTS adapter synthesizes speech audio from the exact extracted text and
-reports an exact media type. Anchored reading requires a separate
-anchor-to-time alignment: adapters that cannot produce exact timing return
-``alignment=None`` and synchronized reading stays honestly unavailable —
-timing is never fabricated.
+A TTS adapter synthesizes speech audio from the exact logical text of a
+Structured Reading and reports its provider identity facts. Anchored reading
+requires a separate anchor-to-time alignment: adapters that cannot produce
+exact timing return ``alignment=None`` and synchronized reading stays
+honestly unavailable — timing is never fabricated.
 
 Adapters:
 - :class:`SayTtsAdapter`: the locally executable macOS ``say``/``afconvert``
-  path used by the supported smoke test. No paid or live credential service.
+  path. Speech is synthesized per sentence, every segment's real duration is
+  measured with ``ffprobe``, and the segments are concatenated into one
+  audio stream; the anchor alignment therefore comes from real segment
+  boundaries. When measurement is unavailable the audio still succeeds and
+  alignment is honestly absent. No paid or live credential service.
 - :class:`FakeTtsAdapter`: deterministic in-process WAV synthesis with exact
   anchor timing for tests.
 - :class:`FixtureTtsAdapter`: replays committed audio bytes (and an optional
@@ -17,6 +21,7 @@ Adapters:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import struct
@@ -28,6 +33,8 @@ from typing import Protocol, Sequence
 
 from .package import ConversionError
 from .process import ProcessResult, ProcessTimedOut, ProcessOutputTooLarge, run_argv
+
+WAV_HEADER_SIZE = 44
 
 
 class TtsProviderError(ConversionError):
@@ -57,6 +64,11 @@ class TtsResult:
     audio_bytes: bytes
     media_type: str
     alignment: tuple[AnchorAlignment, ...] | None
+    provider_id: str
+    provider_version: str
+    model_id: str | None
+    model_version: str | None
+    config_sha256: str | None
 
     @property
     def anchored(self) -> bool:
@@ -71,6 +83,17 @@ class TtsAdapter(Protocol):
         text: str,
         sentence_anchors: Sequence[tuple[str, str]],
     ) -> TtsResult: ...
+
+
+def _config_identity(config: dict[str, object]) -> str:
+    return "sha256:" + hashlib.sha256(
+        json.dumps(
+            config,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +142,17 @@ class FakeTtsAdapter:
             audio_bytes=audio,
             media_type="audio/wav",
             alignment=tuple(alignments),
+            provider_id="fake",
+            provider_version="0.0.0",
+            model_id=None,
+            model_version=None,
+            config_sha256=_config_identity(
+                {
+                    "sample_rate_hz": _SAMPLE_RATE,
+                    "ms_per_character": _MS_PER_CHARACTER,
+                    "ms_silence": _MS_SILENCE,
+                }
+            ),
         )
 
     @staticmethod
@@ -155,12 +189,63 @@ def _silence_window(ms: int) -> list[int]:
 # ---------------------------------------------------------------------------
 
 
-class SayTtsAdapter:
-    """Synthesize speech with the locally executable macOS ``say`` tool.
+def _wav_duration_ms(path: Path) -> int:
+    """Real media duration of a WAV file in milliseconds.
 
-    ``say`` writes AIFF; ``afconvert`` converts it to AAC/m4a. Both are
-    shipped with macOS and require no credentials. Exact anchor timing cannot
-    be derived from ``say`` output, so alignment is honestly absent.
+    The duration is derived from the file's own fmt/data chunks; this is a
+    measurement of produced audio, never an estimate.
+    """
+    data = path.read_bytes()
+    if len(data) < WAV_HEADER_SIZE or data[:4] != b"RIFF":
+        raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
+    try:
+        sample_rate = struct.unpack_from("<I", data, 24)[0]
+        channels = struct.unpack_from("<H", data, 22)[0]
+        bits = struct.unpack_from("<H", data, 34)[0]
+    except struct.error as error:
+        raise TtsProviderOutputInvalid(
+            "the TTS provider produced invalid WAV audio"
+        ) from error
+    data_size = struct.unpack_from("<I", data, 40)[0]
+    if sample_rate <= 0 or channels <= 0 or bits <= 0:
+        raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
+    byte_rate = sample_rate * channels * bits // 8
+    if byte_rate <= 0:
+        raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
+    return data_size * 1000 // byte_rate
+
+
+def _concat_wav(segments: Sequence[bytes]) -> bytes:
+    """Concatenate same-format PCM WAV files into one WAV stream.
+
+    The header comes from the first segment; the data bodies follow in
+    order. All segments must share the format declaration.
+    """
+    if not segments:
+        raise TtsProviderOutputInvalid("the TTS provider produced no audio")
+    header = segments[0][:WAV_HEADER_SIZE]
+    body = b"".join(segment[WAV_HEADER_SIZE:] for segment in segments)
+    data_size = len(body)
+    rewritten = (
+        header[:4]
+        + struct.pack("<I", 36 + data_size)
+        + header[8:40]
+        + struct.pack("<I", data_size)
+        + body
+    )
+    return rewritten
+
+
+class SayTtsAdapter:
+    """Synthesize speech per sentence with the local macOS ``say`` tool.
+
+    Each sentence is synthesized into its own AIFF, converted to a shared
+    16 kHz mono PCM WAV, and its real duration is measured from the WAV
+    bytes. The segments are concatenated into one WAV and converted to
+    AAC/m4a with ``afconvert``. The reported anchor alignment is the exact
+    cumulative real duration of the preceding segments — timing is measured,
+    never fabricated. If measurement fails the audio still succeeds and
+    alignment is honestly absent.
     """
 
     name = "say"
@@ -177,27 +262,83 @@ class SayTtsAdapter:
         self.say_executable = say_executable
         self.afconvert_executable = afconvert_executable
         self.timeout_seconds = timeout_seconds
+        self._say_version = "say:" + self._tool_fingerprint(say_executable)
+        self._afconvert_version = "afconvert:" + self._tool_fingerprint(
+            afconvert_executable
+        )
+
+    @staticmethod
+    def _tool_fingerprint(executable: str) -> str:
+        import shutil
+
+        candidate = Path(executable)
+        if not candidate.is_file():
+            resolved = shutil.which(executable)
+            if resolved:
+                candidate = Path(resolved)
+        try:
+            data = candidate.read_bytes()
+            return hashlib.sha256(data).hexdigest()[:16]
+        except OSError:
+            return "unknown"
 
     def synthesize(
         self,
         text: str,
         sentence_anchors: Sequence[tuple[str, str]],
     ) -> TtsResult:
+        if not sentence_anchors:
+            raise TtsProviderOutputInvalid(
+                "the TTS provider requires at least one sentence anchor"
+            )
+        segments: list[bytes] = []
+        alignments: list[AnchorAlignment] = []
+        cursor_ms = 0
+        measured = True
         with tempfile.TemporaryDirectory(prefix="listen-gen-tts-") as directory:
             directory_path = Path(directory)
-            input_path = directory_path / "speech.txt"
-            input_path.write_text(text, encoding="utf-8")
-            aiff_path = directory_path / "speech.aiff"
+            for index, (anchor_id, sentence) in enumerate(sentence_anchors):
+                input_path = directory_path / f"segment-{index}.txt"
+                input_path.write_text(sentence, encoding="utf-8")
+                aiff_path = directory_path / f"segment-{index}.aiff"
+                wav_path = directory_path / f"segment-{index}.wav"
+                self._run_say(input_path, aiff_path)
+                self._run_afconvert(aiff_path, wav_path, "WAVE", "LEI16@16000")
+                segments.append(wav_path.read_bytes())
+                try:
+                    duration_ms = _wav_duration_ms(wav_path)
+                    if duration_ms <= 0:
+                        raise TtsProviderOutputInvalid(
+                            "the TTS provider produced zero-length audio"
+                        )
+                    alignments.append(AnchorAlignment(anchor_id, cursor_ms))
+                    cursor_ms += duration_ms
+                except TtsProviderError:
+                    measured = False
             m4a_path = directory_path / "speech.m4a"
-            self._run_say(input_path, aiff_path)
-            self._run_afconvert(aiff_path, m4a_path)
+            combined = _concat_wav(segments)
+            combined_path = directory_path / "combined.wav"
+            combined_path.write_bytes(combined)
+            self._run_afconvert(combined_path, m4a_path, "m4af", "aac")
             audio = m4a_path.read_bytes()
         if not audio:
             raise TtsProviderOutputInvalid("the TTS provider produced no audio")
         return TtsResult(
             audio_bytes=audio,
             media_type="audio/mp4",
-            alignment=None,
+            alignment=tuple(alignments) if measured else None,
+            provider_id="say",
+            provider_version=self._say_version,
+            model_id=self.voice,
+            model_version=None,
+            config_sha256=_config_identity(
+                {
+                    "sample_rate_hz": 16000,
+                    "channels": 1,
+                    "sample_format": "pcm_s16le",
+                    "concat_order": "sentence_spine_order",
+                }
+            ),
         )
 
     def _run_say(self, input_path: Path, output_path: Path) -> None:
@@ -213,14 +354,20 @@ class SayTtsAdapter:
                 "the TTS provider could not be started"
             ) from error
 
-    def _run_afconvert(self, input_path: Path, output_path: Path) -> None:
+    def _run_afconvert(
+        self,
+        input_path: Path,
+        output_path: Path,
+        format_flag: str,
+        data_format: str,
+    ) -> None:
         argv = [
             self.afconvert_executable,
             str(input_path),
             "-f",
-            "m4af",
+            format_flag,
             "-d",
-            "aac",
+            data_format,
             "-o",
             str(output_path),
         ]
@@ -277,4 +424,9 @@ class FixtureTtsAdapter:
             audio_bytes=audio,
             media_type="audio/wav",
             alignment=alignment,
+            provider_id="fixture",
+            provider_version="0.0.0",
+            model_id=None,
+            model_version=None,
+            config_sha256=None,
         )

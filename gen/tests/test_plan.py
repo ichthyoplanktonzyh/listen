@@ -103,13 +103,17 @@ class PlanTests(unittest.TestCase):
             production_plan.derivations[0].kind, DerivationKind.MEDIA_READ
         )
 
-    def test_listen_from_document_plans_tts(self) -> None:
+    def test_listen_from_document_plans_reading_then_tts(self) -> None:
         production_plan = plan(document_request(requested_capability="listen"))
-        self.assertEqual(len(production_plan.derivations), 1)
+        self.assertEqual(len(production_plan.derivations), 2)
         self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_LISTEN
+            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
         )
-        self.assertEqual(production_plan.derivations[0].provider, "tts")
+        self.assertEqual(
+            production_plan.derivations[1].kind, DerivationKind.DOCUMENT_LISTEN
+        )
+        self.assertEqual(production_plan.derivations[1].provider, "tts")
+        self.assertEqual(production_plan.derivations[1].input_resource_ids, ())
 
     def test_listen_from_media_is_already_satisfied(self) -> None:
         production_plan = plan(media_request(requested_capability="listen"))
@@ -123,13 +127,16 @@ class PlanTests(unittest.TestCase):
         production_plan = plan(media_request(requested_capability="watch"))
         self.assertTrue(production_plan.empty)
 
-    def test_synchronized_from_document_plans_tts(self) -> None:
+    def test_synchronized_from_document_plans_reading_then_tts(self) -> None:
         production_plan = plan(
             document_request(requested_capability="synchronized_read_listen")
         )
-        self.assertEqual(len(production_plan.derivations), 1)
+        self.assertEqual(len(production_plan.derivations), 2)
         self.assertEqual(
-            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_LISTEN
+            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
+        )
+        self.assertEqual(
+            production_plan.derivations[1].kind, DerivationKind.DOCUMENT_LISTEN
         )
 
     def test_synchronized_from_media_plans_media_derivation(self) -> None:
@@ -141,7 +148,55 @@ class PlanTests(unittest.TestCase):
             production_plan.derivations[0].kind, DerivationKind.MEDIA_READ
         )
 
-    def test_read_reuses_existing_structured_reading(self) -> None:
+    def test_read_reuses_existing_compatible_structured_reading(self) -> None:
+        resource = {
+            "resource_id": "sha256:" + "f" * 64,
+            "kind": "structured_reading",
+            "schema": "listen.payload.structured-reading.v1",
+            "role": "base",
+            "content_language": "en",
+            "material_revision_id": "revision-1",
+            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
+        }
+        production_plan = plan(
+            document_request(available_resources=[resource])
+        )
+        self.assertTrue(production_plan.empty)
+
+    def test_language_incompatible_reading_never_suppresses_generation(self) -> None:
+        resource = {
+            "resource_id": "sha256:" + "f" * 64,
+            "kind": "structured_reading",
+            "schema": "listen.payload.structured-reading.v1",
+            "role": "base",
+            "content_language": "de",
+            "material_revision_id": "revision-1",
+            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
+        }
+        production_plan = plan(
+            document_request(available_resources=[resource])
+        )
+        self.assertFalse(production_plan.empty)
+        self.assertEqual(
+            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_READ
+        )
+
+    def test_stale_revision_reading_never_suppresses_generation(self) -> None:
+        resource = {
+            "resource_id": "sha256:" + "f" * 64,
+            "kind": "structured_reading",
+            "schema": "listen.payload.structured-reading.v1",
+            "role": "base",
+            "content_language": "en",
+            "material_revision_id": "revision-0",
+            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
+        }
+        production_plan = plan(
+            document_request(available_resources=[resource])
+        )
+        self.assertFalse(production_plan.empty)
+
+    def test_unknown_facts_never_suppress_generation(self) -> None:
         resource = {
             "resource_id": "sha256:" + "f" * 64,
             "kind": "structured_reading",
@@ -152,7 +207,28 @@ class PlanTests(unittest.TestCase):
         production_plan = plan(
             document_request(available_resources=[resource])
         )
-        self.assertTrue(production_plan.empty)
+        self.assertFalse(production_plan.empty)
+
+    def test_listen_reuses_compatible_reading_for_tts(self) -> None:
+        resource = {
+            "resource_id": "sha256:" + "f" * 64,
+            "kind": "structured_reading",
+            "schema": "listen.payload.structured-reading.v1",
+            "role": "base",
+            "content_language": "en",
+            "material_revision_id": "revision-1",
+            "blob": {"digest": "sha256:" + "9" * 64, "size_bytes": 10, "path": "/tmp/r.json"},
+        }
+        production_plan = plan(
+            document_request(requested_capability="listen", available_resources=[resource])
+        )
+        self.assertEqual(len(production_plan.derivations), 1)
+        self.assertEqual(
+            production_plan.derivations[0].kind, DerivationKind.DOCUMENT_LISTEN
+        )
+        self.assertEqual(
+            production_plan.derivations[0].input_resource_ids, ("sha256:" + "f" * 64,)
+        )
 
     def test_empty_inputs_are_unsupported(self) -> None:
         with self.assertRaises(UnsupportedCapability):

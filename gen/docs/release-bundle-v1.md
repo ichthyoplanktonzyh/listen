@@ -88,14 +88,43 @@ the runtime/toolchain it may bind to:
   The bundle never downloads a phone model.
 - These native tools and models are never placed inside the zipapp.
 
+## Content package contract identity
+
+The manifest's `content_package_contract` block pins the exact listen-core
+contract the bundle produces packages against:
+
+```json
+"content_package_contract": {
+  "authority": {
+    "repository": "ichthyoplanktonzyh/listen-core",
+    "path": "contracts/content-package/v3"
+  },
+  "release_schema_id": "listen.content-package.release.v3",
+  "package_schema": "listen.content-package.release.v3",
+  "schema_version": 3,
+  "contract_version": "4.0.0",
+  "canonical_sha256": "sha256:<release.schema.json file digest>"
+}
+```
+
+`contract_version` and `canonical_sha256` come **only** from a real
+listen-core contract artifact manifest (the `listen-contracts-<version>.
+manifest.json` produced by Core's `release_artifacts.py contract`); the
+`canonical_sha256` is the SHA-256 of that manifest's
+`contracts/content-package/v3/release.schema.json` file entry, copied
+verbatim. Gen never invents a Core release identity: a build without the
+Core manifest fails instead of recording a fabricated version or digest.
+
 ## Building
 
 Build from a clean, merged or tagged checkout. `--source-commit` must be the
-exact commit of that checkout:
+exact commit of that checkout, and `--core-contract-manifest` must name a
+real listen-core contract artifact manifest:
 
 ```bash
 python tools/release_bundle.py build \
   --source-commit "$(git rev-parse HEAD)" \
+  --core-contract-manifest /path/to/listen-contracts-4.0.0.manifest.json \
   --output-parent dist
 ```
 
@@ -107,12 +136,13 @@ dist/listen-gen-0.5.0/
 └── listen-gen-0.5.0.release.json
 ```
 
-The build is deterministic: identical source, version, and generation rules
-produce byte-identical `.pyz` and `.release.json` files regardless of the
-checkout path or the output directory. The build never calls Git, never
-accesses the network, and never overwrites an existing bundle directory.
-Recorded metadata excludes checkout paths, user and host names, build time,
-operating system, branch names, and local tool or model paths.
+The build is deterministic: identical source, version, contract identity,
+and generation rules produce byte-identical `.pyz` and `.release.json` files
+regardless of the checkout path or the output directory. The build never
+calls Git, never accesses the network, and never overwrites an existing
+bundle directory. Recorded metadata excludes checkout paths, user and host
+names, build time, operating system, branch names, and local tool or model
+paths.
 
 ## Verification
 
@@ -120,14 +150,17 @@ Run the verifier before publishing:
 
 ```bash
 python tools/release_bundle.py verify \
-  dist/listen-gen-0.5.0/listen-gen-0.5.0.release.json
+  dist/listen-gen-0.5.0/listen-gen-0.5.0.release.json \
+  --core-contract-manifest /path/to/listen-contracts-4.0.0.manifest.json
 ```
 
 The verifier strictly parses the manifest — including the complete
 `runtime_identity` block, whose schema, versions, runtime, and toolchain must
 exactly match the release source constants — and checks the artifact size,
 SHA-256, shebang, and the complete archive structure and entry contents
-against the source tree, without executing any archive code. On success it
+against the source tree, without executing any archive code. The contract
+version and digest must exactly match the supplied Core artifact manifest.
+On success it
 prints one canonical JSON line with `"status": "verified"`, the tool
 identity, the artifact SHA-256, and the verified `runtime_identity`.
 

@@ -1,17 +1,30 @@
 """Document to Structured Reading derivation.
 
-Deterministic text extraction for the supported document families, plus a
-provider-neutral optional OCR seam for scanned PDFs. Output is a pure
-intermediate representation that the packager turns into a ``document-text``
-resource and a ``structured-reading`` resource.
+Deterministic, semantic text extraction for the supported document families,
+plus a provider-neutral optional OCR seam for scanned PDFs. Output is a pure
+intermediate representation that the packager turns into exactly one
+``structured-reading`` resource.
+
+The logical text and its block hierarchy are the source of every downstream
+production decision:
+
+- plain text keeps byte identity with the source document (the only family
+  that can honestly produce ``character_range`` document mappings);
+- Markdown is parsed semantically: heading/paragraph structure is preserved,
+  the extracted logical text is free of markup characters, and speech never
+  receives markdown markers;
+- HTML discards ``script``/``style``/``nav``/hidden content and preserves
+  heading structure;
+- EPUB preserves the spine order and chapter boundaries;
+- a PDF with a text layer is extracted deterministically; a scanned PDF uses
+  the configured OCR provider or abstains honestly.
 
 Honesty rules:
 - A document with no extractable text and no OCR provider abstains from the
   derivation; it is never treated as an import failure.
 - ``document_mappings`` into the exact Document Rendition are produced only
-  when they can be exact: plain text and Markdown preserve byte identity
-  between the extracted text and the source document. HTML, EPUB, and PDF
-  text never fabricate source locators.
+  when they can be exact (byte-identical plain text); no other family
+  fabricates source locators.
 """
 
 from __future__ import annotations
@@ -32,6 +45,8 @@ MAX_CONTAINER_BYTES = 128 * 1024 * 1024
 TEXT_FAMILIES = ("text/plain", "text/markdown", "text/html")
 PDF_MEDIA_TYPES = ("application/pdf",)
 EPUB_MEDIA_TYPES = ("application/epub+zip",)
+
+BLOCK_KINDS = ("root", "book", "chapter", "section", "heading", "paragraph")
 
 
 class DocumentDecodeError(ConversionError):
@@ -73,15 +88,48 @@ class Paragraph:
 
 
 @dataclass(frozen=True)
+class ReadingBlock:
+    """One structured block: kind, hierarchy, order, and exact ranges.
+
+    ``order`` is the 0-based sibling order under ``parent_id``; the block
+    tree has exactly one root block covering the whole text.
+    """
+
+    id: str
+    kind: str
+    parent_id: str | None
+    order: int
+    start_char: int
+    end_char: int
+    sentence_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ExtractedText:
     text: str
     paragraphs: tuple[Paragraph, ...]
     sentences: tuple[Sentence, ...]
+    blocks: tuple[ReadingBlock, ...] = ()
     source_identical: bool = False
 
     @property
     def language_hint(self) -> str | None:
         return None
+
+
+@dataclass(frozen=True)
+class DecodedDocument:
+    media_type: str
+    text: str
+    paragraphs: tuple[Paragraph, ...]
+    sentences: tuple[Sentence, ...]
+    blocks: tuple[ReadingBlock, ...]
+    #: The exact text in the source document equals the extracted text.
+    byte_identical: bool
+
+    @property
+    def source_identical(self) -> bool:
+        return self.byte_identical
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +224,140 @@ def segment_text(text: str) -> tuple[tuple[Paragraph, ...], tuple[Sentence, ...]
     )
 
 
+def _split_single_line(line: str) -> list[tuple[int, int]]:
+    """Sentence bounds within one line (no trailing newline)."""
+    starts = [match.start() for match in _SENTENCE_END.finditer(line)]
+    bounds: list[tuple[int, int]] = []
+    if starts:
+        cursor = 0
+        for end in starts:
+            if end > cursor:
+                bounds.append((cursor, end))
+            cursor = end
+        if cursor < len(line):
+            bounds.append((cursor, len(line)))
+    else:
+        bounds = [(0, len(line))]
+    return bounds
+
+
+def _segment_raw_blocks(
+    text: str, raw_blocks: Sequence[tuple[str | None, str, str | None, str]]
+) -> tuple[tuple[ReadingBlock, ...], tuple[Sentence, ...]]:
+    """Segment structured block texts into sentences with exact offsets.
+
+    ``raw_blocks`` are ``(block_id, kind, parent_id, block_text)`` tuples; a
+    ``None`` block id gets a deterministic ``block-<index>`` id. The block
+    texts already join into ``text`` with ``"\\n"`` separators, so the
+    trailing newline of every block except the last belongs to that block's
+    final sentence.
+    """
+    sentences: list[Sentence] = []
+    blocks: list[ReadingBlock] = []
+    cursor = 0
+    sentence_index = 0
+    sibling_orders: dict[str, int] = {}
+    for index, (block_id, kind, parent_id, block_text) in enumerate(raw_blocks):
+        start_char = cursor
+        end_char = cursor + len(block_text)
+        if index < len(raw_blocks) - 1:
+            end_char += 1
+        resolved_parent = parent_id or "block-root"
+        order = sibling_orders.get(resolved_parent, 0)
+        sibling_orders[resolved_parent] = order + 1
+        sentence_ids: list[str] = []
+        line_cursor = 0
+        for line_index, raw_line in enumerate(block_text.split("\n")):
+            line_has_newline = line_index < len(block_text.split("\n")) - 1
+            if not raw_line.strip():
+                if line_has_newline and sentences:
+                    previous = sentences[-1]
+                    previous = Sentence(
+                        id=previous.id,
+                        index=previous.index,
+                        start_char=previous.start_char,
+                        end_char=previous.end_char + 1,
+                        text=previous.text + "\n",
+                    )
+                    sentences[-1] = previous
+                line_cursor += len(raw_line) + (1 if line_has_newline else 0)
+                continue
+            for (bound_start, bound_end) in _split_single_line(raw_line):
+                is_last_line_sentence = bound_end == len(raw_line)
+                slice_start = line_cursor + bound_start
+                slice_end = line_cursor + bound_end
+                text_slice = raw_line[bound_start:bound_end]
+                if is_last_line_sentence and line_has_newline:
+                    slice_end += 1
+                    text_slice += "\n"
+                sentence_id = f"sentence-{sentence_index}"
+                sentence_index += 1
+                sentences.append(
+                    Sentence(
+                        id=sentence_id,
+                        index=sentence_index - 1,
+                        start_char=slice_start,
+                        end_char=slice_end,
+                        text=text_slice,
+                    )
+                )
+                sentence_ids.append(sentence_id)
+            line_cursor += len(raw_line) + (1 if line_has_newline else 0)
+        blocks.append(
+            ReadingBlock(
+                id=block_id or f"block-{index}",
+                kind=kind,
+                parent_id=resolved_parent,
+                order=order,
+                start_char=start_char,
+                end_char=end_char,
+                sentence_ids=tuple(sentence_ids),
+            )
+        )
+        cursor = end_char
+    root = ReadingBlock(
+        id="block-root",
+        kind="root",
+        parent_id=None,
+        order=0,
+        start_char=0,
+        end_char=len(text),
+        sentence_ids=tuple(sentence.id for sentence in sentences),
+    )
+    return (root, *blocks), tuple(sentences)
+
+
+def _blocks_from_paragraphs(
+    paragraphs: Sequence[Paragraph], sentences: Sequence[Sentence]
+) -> tuple[ReadingBlock, ...]:
+    """Blocks for paragraph-segmented families (plain text, PDF, transcript)."""
+    blocks: list[ReadingBlock] = []
+    for index, paragraph in enumerate(paragraphs):
+        blocks.append(
+            ReadingBlock(
+                id=paragraph.id,
+                kind="paragraph",
+                parent_id="block-root",
+                order=index,
+                start_char=paragraph.start_char,
+                end_char=paragraph.end_char,
+                sentence_ids=paragraph.sentence_ids,
+            )
+        )
+    root = ReadingBlock(
+        id="block-root",
+        kind="root",
+        parent_id=None,
+        order=0,
+        start_char=0,
+        end_char=len("".join(sentence.text for sentence in sentences))
+        if sentences
+        else 0,
+        sentence_ids=tuple(sentence.id for sentence in sentences),
+    )
+    return (root, *blocks)
+
+
 # ---------------------------------------------------------------------------
 # Text family decoders
 # ---------------------------------------------------------------------------
@@ -201,30 +383,156 @@ def decode_text_family(raw: bytes) -> str:
     return text
 
 
+# ---------------------------------------------------------------------------
+# Markdown
+# ---------------------------------------------------------------------------
+
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+_LIST_RE = re.compile(r"^(\s*[-*+]\s+|\s*\d{1,9}[.)]\s+)(.*)$")
+_BLOCKQUOTE_RE = re.compile(r"^>\s?(.*)$")
+_FENCE_RE = re.compile(r"^(\s*)(```|~~~)(.*)$")
+
+_INLINE_CODE_RE = re.compile(r"`([^`]*)`")
+_INLINE_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+_INLINE_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_INLINE_EMPHASIS_RE = re.compile(r"(\*\*|__|\*|_)(?=[^\s])(.*?)(?<=[^\s])\1")
+
+
+def strip_markdown_inline(text: str) -> str:
+    """Remove Markdown markup while keeping the label text.
+
+    Inline code, images, links, and emphasis markers are stripped; the
+    visible label text survives so the logical text is markup-free.
+    """
+    stripped = _INLINE_CODE_RE.sub(r"\1", text)
+    stripped = _INLINE_IMAGE_RE.sub(r"\1", stripped)
+    stripped = _INLINE_LINK_RE.sub(r"\1", stripped)
+    for _ in range(4):
+        replaced = _INLINE_EMPHASIS_RE.sub(r"\2", stripped)
+        if replaced == stripped:
+            break
+        stripped = replaced
+    return stripped
+
+
+def parse_markdown(raw: bytes) -> tuple[str, list[tuple[str | None, str, str | None, str]]]:
+    """Parse Markdown into ``(text, raw_blocks)``.
+
+    ``raw_blocks`` are ``(kind, parent_id, block_text)``; every block text is
+    free of Markdown markers. Headings keep their hierarchy intent as
+    ``heading`` blocks; everything else is a ``paragraph``. The block texts
+    join into ``text`` with ``"\\n"`` separators.
+    """
+    text = decode_text_family(raw)
+    if len(text.encode("utf-8")) > MAX_TEXT_BYTES:
+        raise TextTooLarge("extracted text exceeds the safety limit")
+    pending: list[str] = []
+    blocks: list[tuple[str | None, str, str | None, str]] = []
+    in_fence: str | None = None
+    fence_marker: str = ""
+
+    def flush() -> None:
+        if pending:
+            content = " ".join(
+                line.strip() for line in pending if line.strip()
+            )
+            if content:
+                blocks.append((None, "paragraph", None, content))
+            pending.clear()
+
+    for raw_line in text.split("\n"):
+        if in_fence is not None:
+            if raw_line.strip().startswith(fence_marker) or raw_line.strip() == in_fence:
+                flush()
+                in_fence = None
+                fence_marker = ""
+            else:
+                pending.append(raw_line)
+            continue
+        fence_match = _FENCE_RE.match(raw_line)
+        if fence_match and raw_line.strip().startswith(("```", "~~~")):
+            flush()
+            in_fence = fence_match.group(2)
+            fence_marker = in_fence
+            continue
+        heading = _HEADING_RE.match(raw_line)
+        if heading:
+            flush()
+            content = strip_markdown_inline(heading.group(2).strip())
+            if content:
+                blocks.append((None, "heading", None, content))
+            continue
+        quote = _BLOCKQUOTE_RE.match(raw_line)
+        if quote:
+            pending.append(strip_markdown_inline(quote.group(1)))
+            continue
+        listed = _LIST_RE.match(raw_line)
+        if listed:
+            pending.append(strip_markdown_inline(listed.group(2)))
+            continue
+        if not raw_line.strip():
+            flush()
+            continue
+        pending.append(strip_markdown_inline(raw_line))
+    flush()
+    if not blocks:
+        raise DocumentDecodeError("document Markdown contains no extractable text")
+    return "\n".join(content for _, _, _, content in blocks), blocks
+
+
+# ---------------------------------------------------------------------------
+# HTML
+# ---------------------------------------------------------------------------
+
+
 class _HtmlTextExtractor(HTMLParser):
-    """Extract text while discarding scripts, styles, and hidden content.
+    """Extract block text while discarding scripts, styles, and hidden content.
 
     Mirrors the App's restricted renderer policy: no content from ``script``,
-    ``style``, ``noscript``, ``iframe``, ``svg``, or ``template`` elements
-    reaches the extracted text.
+    ``style``, ``noscript``, ``iframe``, ``svg``, ``template``, ``head``, or
+    ``nav`` elements reaches the extracted text. Heading elements become
+    ``heading`` blocks; other block elements become ``paragraph`` blocks.
     """
 
     _DISCARDED = frozenset(
-        {"script", "style", "noscript", "iframe", "svg", "template", "head"}
+        {
+            "script",
+            "style",
+            "noscript",
+            "iframe",
+            "svg",
+            "template",
+            "head",
+            "nav",
+        }
+    )
+    _HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+    _PARAGRAPH_TAGS = frozenset(
+        {
+            "p",
+            "div",
+            "section",
+            "article",
+            "li",
+            "blockquote",
+            "pre",
+            "tr",
+        }
     )
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-        self._depth = 0
+        self.parts: list[tuple[str, list[str]]] = []
         self._skip = 0
+        self._current: list[str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in self._DISCARDED:
             self._skip += 1
-        if tag in ("p", "div", "section", "article", "li", "h1", "h2", "h3",
-                   "h4", "h5", "h6", "blockquote", "pre", "tr", "br"):
-            self.parts.append("\n")
+        if tag in self._HEADING_TAGS:
+            self._new_part("heading")
+        elif tag in self._PARAGRAPH_TAGS or tag == "br":
+            self._new_part("paragraph")
 
     def handle_endtag(self, tag: str) -> None:
         if tag in self._DISCARDED and self._skip > 0:
@@ -232,25 +540,50 @@ class _HtmlTextExtractor(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self._skip == 0:
-            self.parts.append(data)
+            if self._current is None:
+                self._new_part("paragraph")
+            self._current.append(data)
+
+    def _new_part(self, kind: str) -> None:
+        if self._current is not None and "".join(self._current).strip():
+            self.parts.append((self._current_kind, self._current))
+        self._current_kind = kind
+        self._current = []
+
+    def finish(self) -> list[tuple[str, str]]:
+        if self._current is not None and "".join(self._current).strip():
+            self.parts.append((self._current_kind, self._current))
+        result: list[tuple[str, str]] = []
+        for kind, pieces in self.parts:
+            content = " ".join("".join(pieces).split())
+            if content:
+                result.append((kind, content))
+        return result
 
 
-def decode_html(raw: bytes) -> str:
+def extract_html_blocks(raw: bytes) -> tuple[str, list[tuple[str | None, str, str | None, str]]]:
+    """Extract ``(text, raw_blocks)`` from an HTML document."""
     text = decode_text_family(raw)
     extractor = _HtmlTextExtractor()
     try:
         extractor.feed(text)
     except Exception as error:  # pragma: no cover - parser robustness
         raise DocumentDecodeError("document HTML could not be parsed") from error
-    lines = [
-        " ".join(line.split())
-        for line in "".join(extractor.parts).split("\n")
-        if line.strip()
-    ]
-    result = "\n".join(lines)
-    if not result.strip():
+    parts = extractor.finish()
+    if not parts:
         raise DocumentDecodeError("document HTML contains no extractable text")
-    return result
+    raw_blocks = [
+        (None, kind, None, content)
+        for kind, content in parts
+        if kind in ("heading", "paragraph")
+    ]
+    if not raw_blocks:
+        raise DocumentDecodeError("document HTML contains no extractable text")
+    return "\n".join(content for _, _, _, content in raw_blocks), raw_blocks
+
+
+def decode_html(raw: bytes) -> str:
+    return extract_html_blocks(raw)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -269,15 +602,31 @@ def _zip_total_size(archive: zipfile.ZipFile) -> int:
     return sum(info.file_size for info in archive.infolist())
 
 
-def _epub_spine_text(
+def _resolve_opf_path(opf_dir: str, href: str) -> str:
+    """Resolve an OPF-relative href inside the OPF directory with traversal
+    protection."""
+    combined = (opf_dir + "/" + href).strip("/")
+    parts = [part for part in combined.split("/") if part not in ("", ".")]
+    resolved: list[str] = []
+    for part in parts:
+        if part == "..":
+            if resolved:
+                resolved.pop()
+            continue
+        resolved.append(part)
+    return "/".join(resolved)
+
+
+def _epub_spine_blocks(
     archive: zipfile.ZipFile,
     root_path: str,
-    media_type: str,
-) -> str:
-    """Decode an EPUB spine into deterministic text.
+) -> list[tuple[str | None, str, str | None, str]]:
+    """Decode an EPUB spine into structured blocks.
 
     The spine order and the OPF-relative href resolution follow the exact
-    container declarations. Traversal outside the OPF directory is rejected.
+    container declarations; each spine item becomes a ``chapter`` block whose
+    heading/paragraph blocks are its children. Traversal outside the OPF
+    directory is rejected.
     """
     try:
         opf_entry = next(
@@ -314,7 +663,8 @@ def _epub_spine_text(
         raise DocumentDecodeError("EPUB spine is empty")
 
     opf_dir = opf_entry.rsplit("/", 1)[0]
-    parts: list[str] = []
+    blocks: list[tuple[str | None, str, str | None, str]] = []
+    chapter_index = 0
     for item_id in spine_items:
         entry = manifest.get(item_id)
         if entry is None:
@@ -332,31 +682,24 @@ def _epub_spine_text(
         content_text = content.decode("utf-8", errors="replace")
         extractor = _HtmlTextExtractor()
         extractor.feed(content_text)
-        chapter_text = "\n".join(
-            " ".join(line.split())
-            for line in "".join(extractor.parts).split("\n")
-            if line.strip()
-        )
-        if chapter_text.strip():
-            parts.append(chapter_text)
-    if not parts:
-        raise DocumentDecodeError("EPUB contains no extractable text")
-    return "\n\n".join(parts)
-
-
-def _resolve_opf_path(opf_dir: str, href: str) -> str:
-    """Resolve an OPF-relative href inside the OPF directory with traversal
-    protection."""
-    combined = (opf_dir + "/" + href).strip("/")
-    parts = [part for part in combined.split("/") if part not in ("", ".")]
-    resolved: list[str] = []
-    for part in parts:
-        if part == "..":
-            if resolved:
-                resolved.pop()
+        parts = extractor.finish()
+        if not parts:
             continue
-        resolved.append(part)
-    return "/".join(resolved)
+        chapter_id = f"chapter-{chapter_index}"
+        chapter_index += 1
+        chapter_parts: list[tuple[str | None, str, str | None, str]] = [
+            (None, kind, chapter_id, content)
+            for kind, content in parts
+            if kind in ("heading", "paragraph")
+        ]
+        if not chapter_parts:
+            continue
+        chapter_text = "\n".join(content for _, _, _, content in chapter_parts)
+        blocks.append((chapter_id, "chapter", None, chapter_text))
+        blocks.extend(chapter_parts)
+    if not blocks:
+        raise DocumentDecodeError("EPUB contains no extractable text")
+    return blocks
 
 
 def decode_epub(raw: bytes) -> str:
@@ -386,7 +729,8 @@ def decode_epub(raw: bytes) -> str:
                 "EPUB container.xml does not name a package document"
             )
         root_path = root_match.group(1)
-        return _epub_spine_text(archive, root_path, "application/epub+zip")
+        blocks = _epub_spine_blocks(archive, root_path)
+    return "\n".join(content for _, _, _, content in blocks)
 
 
 # ---------------------------------------------------------------------------
@@ -462,18 +806,40 @@ def decode_pdf(raw: bytes, ocr: OcrProvider | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class DecodedDocument:
-    media_type: str
-    text: str
-    paragraphs: tuple[Paragraph, ...]
-    sentences: tuple[Sentence, ...]
-    #: The exact text in the source document equals the extracted text.
-    byte_identical: bool
+def _assemble_document(
+    media_type: str,
+    text: str,
+    sentences: Sequence[Sentence],
+    paragraphs: Sequence[Paragraph],
+    blocks: Sequence[ReadingBlock],
+    byte_identical: bool,
+) -> DecodedDocument:
+    if not text.strip():
+        raise DocumentDecodeError("document contains no extractable text")
+    return DecodedDocument(
+        media_type=media_type,
+        text=text,
+        paragraphs=tuple(paragraphs),
+        sentences=tuple(sentences),
+        blocks=tuple(blocks),
+        byte_identical=byte_identical,
+    )
 
-    @property
-    def source_identical(self) -> bool:
-        return self.byte_identical
+
+def _paragraphs_from_blocks(
+    blocks: Sequence[ReadingBlock],
+) -> tuple[Paragraph, ...]:
+    return tuple(
+        Paragraph(
+            id=block.id,
+            index=index,
+            start_char=block.start_char,
+            end_char=block.end_char,
+            sentence_ids=block.sentence_ids,
+        )
+        for index, block in enumerate(blocks)
+        if block.kind != "root"
+    )
 
 
 def decode_document(
@@ -485,64 +851,87 @@ def decode_document(
     """Decode one exact Document Rendition into extractable text.
 
     ``byte_identical`` reports whether the extracted text is byte-for-byte
-    the source document text (plain text and Markdown), which is the only
-    honest basis for source locator mappings.
+    the source document text (plain text only), which is the only honest
+    basis for source locator mappings.
     """
     if media_type == "text/plain":
         text = decode_text_family(raw)
+        if len(text.encode("utf-8")) > MAX_TEXT_BYTES:
+            raise TextTooLarge("extracted text exceeds the safety limit")
         paragraphs, sentences = segment_text(text)
-        return DecodedDocument(
-            media_type=media_type,
-            text=text,
-            paragraphs=paragraphs,
-            sentences=sentences,
-            byte_identical=True,
+        blocks = _blocks_from_paragraphs(paragraphs, sentences)
+        return _assemble_document(
+            media_type, text, sentences, paragraphs, blocks, byte_identical=True
         )
     if media_type == "text/markdown":
-        text = decode_text_family(raw)
-        paragraphs, sentences = segment_text(text)
-        return DecodedDocument(
-            media_type=media_type,
-            text=text,
-            paragraphs=paragraphs,
-            sentences=sentences,
-            byte_identical=True,
+        text, raw_blocks = parse_markdown(raw)
+        blocks, sentences = _segment_raw_blocks(text, raw_blocks)
+        paragraphs = _paragraphs_from_blocks(blocks)
+        return _assemble_document(
+            media_type, text, sentences, paragraphs, blocks, byte_identical=False
         )
     if media_type == "text/html":
-        text = decode_html(raw)
-        paragraphs, sentences = segment_text(text)
-        return DecodedDocument(
-            media_type=media_type,
-            text=text,
-            paragraphs=paragraphs,
-            sentences=sentences,
-            byte_identical=False,
+        text, raw_blocks = extract_html_blocks(raw)
+        blocks, sentences = _segment_raw_blocks(text, raw_blocks)
+        paragraphs = _paragraphs_from_blocks(blocks)
+        return _assemble_document(
+            media_type, text, sentences, paragraphs, blocks, byte_identical=False
         )
     if media_type in EPUB_MEDIA_TYPES:
-        text = decode_epub(raw)
-        paragraphs, sentences = segment_text(text)
-        return DecodedDocument(
-            media_type=media_type,
-            text=text,
-            paragraphs=paragraphs,
-            sentences=sentences,
-            byte_identical=False,
+        if len(raw) > MAX_CONTAINER_BYTES:
+            raise ContainerTooLarge("EPUB container exceeds the safety limit")
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(raw))
+        except zipfile.BadZipFile as error:
+            raise DocumentDecodeError(
+                "EPUB container is not a valid ZIP archive"
+            ) from error
+        with archive:
+            if _zip_total_size(archive) > MAX_CONTAINER_BYTES:
+                raise ContainerTooLarge("EPUB container exceeds the safety limit")
+            names = archive.namelist()
+            if (
+                "mimetype" not in names
+                or archive.read("mimetype") != b"application/epub+zip"
+            ):
+                raise DocumentDecodeError(
+                    "EPUB container lacks a valid mimetype entry"
+                )
+            try:
+                container = archive.read("META-INF/container.xml").decode("utf-8")
+            except KeyError as error:
+                raise DocumentDecodeError(
+                    "EPUB container lacks META-INF/container.xml"
+                ) from error
+            root_match = re.search(
+                r'full-path\s*=\s*"([^"]*\.opf)"', container
+            )
+            if root_match is None:
+                raise DocumentDecodeError(
+                    "EPUB container.xml does not name a package document"
+                )
+            root_path = root_match.group(1)
+            raw_blocks = _epub_spine_blocks(archive, root_path)
+        text = "\n".join(content for _, _, _, content in raw_blocks)
+        blocks, sentences = _segment_raw_blocks(text, raw_blocks)
+        paragraphs = _paragraphs_from_blocks(blocks)
+        return _assemble_document(
+            media_type, text, sentences, paragraphs, blocks, byte_identical=False
         )
     if media_type in PDF_MEDIA_TYPES:
         text = decode_pdf(raw, ocr=ocr)
+        if len(text.encode("utf-8")) > MAX_TEXT_BYTES:
+            raise TextTooLarge("extracted text exceeds the safety limit")
         paragraphs, sentences = segment_text(text)
-        return DecodedDocument(
-            media_type=media_type,
-            text=text,
-            paragraphs=paragraphs,
-            sentences=sentences,
-            byte_identical=False,
+        blocks = _blocks_from_paragraphs(paragraphs, sentences)
+        return _assemble_document(
+            media_type, text, sentences, paragraphs, blocks, byte_identical=False
         )
     raise DocumentDecodeError(f"unsupported document media type: {media_type}")
 
 
 # ---------------------------------------------------------------------------
-# Reading structure (document_text + structured_reading payloads)
+# Reading structure (the single structured_reading payload)
 # ---------------------------------------------------------------------------
 
 
@@ -555,49 +944,38 @@ def _char_to_byte_offsets(text: str) -> list[int]:
     return offsets
 
 
+def _blocks_for(decoded) -> tuple[ReadingBlock, ...]:
+    """The decoded document's structured blocks (with a root fallback)."""
+    blocks = getattr(decoded, "blocks", ())
+    if blocks:
+        return blocks
+    return _blocks_from_paragraphs(decoded.paragraphs, decoded.sentences)
+
+
 @dataclass(frozen=True)
 class ReadingStructure:
-    document_text: dict[str, object]
     structured_reading: dict[str, object]
 
 
 def build_reading_structure(
-    decoded: DecodedDocument,
+    decoded,
     *,
     language: str,
     rendition_id: str,
 ) -> ReadingStructure:
-    """Build the deterministic reading payloads for one document rendition.
+    """Build the deterministic structured-reading payload for one rendition.
 
-    Byte offsets in the structured reading anchors refer to the exact text of
-    the paired ``document-text`` resource. Source locator mappings are
-    produced only when the extraction is byte-identical.
+    Byte offsets in the structured reading anchors refer to the exact logical
+    ``text`` carried by the payload itself (the resource is self-contained).
+    Source locator mappings are produced only when the extraction is
+    byte-identical.
     """
     byte_offsets = _char_to_byte_offsets(decoded.text)
-    segments: list[dict[str, object]] = []
+    blocks = _blocks_for(decoded)
+    sentence_anchors: list[dict[str, object]] = []
+    block_anchors: list[dict[str, object]] = []
     for sentence in decoded.sentences:
-        segments.append(
-            {
-                "id": sentence.id,
-                "index": sentence.index,
-                "start_char": sentence.start_char,
-                "end_char": sentence.end_char,
-                "language": language,
-                "extensions": {},
-            }
-        )
-    anchors: list[dict[str, object]] = []
-    for paragraph in decoded.paragraphs:
-        anchors.append(
-            {
-                "anchor_id": paragraph.id,
-                "kind": "block",
-                "start_offset": byte_offsets[paragraph.start_char],
-                "end_offset": byte_offsets[paragraph.end_char],
-            }
-        )
-    for sentence in decoded.sentences:
-        anchors.append(
+        sentence_anchors.append(
             {
                 "anchor_id": sentence.id,
                 "kind": "sentence",
@@ -605,51 +983,66 @@ def build_reading_structure(
                 "end_offset": byte_offsets[sentence.end_char],
             }
         )
-    blocks: list[dict[str, object]] = []
-    for paragraph in decoded.paragraphs:
-        blocks.append(
+    for block in blocks:
+        if block.kind == "root":
+            continue
+        block_anchors.append(
             {
-                "block_id": paragraph.id,
-                "span_anchor_ids": list(paragraph.sentence_ids),
-                "parent_block_id": None,
+                "anchor_id": block.id,
+                "kind": "block",
+                "start_offset": byte_offsets[block.start_char],
+                "end_offset": byte_offsets[block.end_char],
+            }
+        )
+    payload_blocks: list[dict[str, object]] = []
+    for block in blocks:
+        payload_blocks.append(
+            {
+                "block_id": block.id,
+                "kind": block.kind,
+                "order": block.order,
+                "span_anchor_ids": list(block.sentence_ids),
+                "parent_block_id": block.parent_id,
             }
         )
     document_mappings: list[dict[str, object]] = []
     if decoded.source_identical:
-        for paragraph in decoded.paragraphs:
-            start = byte_offsets[paragraph.start_char]
-            end = byte_offsets[paragraph.end_char]
+        for block in blocks:
+            if block.kind == "root":
+                continue
+            start = byte_offsets[block.start_char]
+            end = byte_offsets[block.end_char]
             document_mappings.append(
                 {
-                    "anchor_id": paragraph.id,
+                    "anchor_id": block.id,
                     "rendition_id": rendition_id,
-                    "locator": f"bytes:{start}-{end}",
+                    "locator": {
+                        "kind": "character_range",
+                        "value": f"{start}:{end}",
+                    },
                 }
             )
-    document_text = {
-        "language": language,
-        "text": decoded.text,
-        "segments": segments,
-        "extensions": {},
-    }
+    anchors = sorted(
+        sentence_anchors + block_anchors,
+        key=lambda anchor: (anchor["start_offset"], anchor["end_offset"]),
+    )
     structured_reading = {
         "language": language,
+        "text": decoded.text,
         "anchors": anchors,
-        "blocks": blocks,
+        "blocks": payload_blocks,
         "spans": [],
         "document_mappings": document_mappings,
         "extensions": {},
     }
-    return ReadingStructure(
-        document_text=document_text,
-        structured_reading=structured_reading,
-    )
+    return ReadingStructure(structured_reading=structured_reading)
 
 
-def plain_text_for_speech(decoded: DecodedDocument) -> str:
+def plain_text_for_speech(decoded) -> str:
     """Deterministic single-text rendering for speech synthesis.
 
     Sentences already carry their terminal punctuation; joining them with a
-    single space yields clean continuous speech input.
+    single space yields clean continuous speech input. The text is the
+    exact logical text of the structured reading, free of markup markers.
     """
     return " ".join(sentence.text.strip() for sentence in decoded.sentences)

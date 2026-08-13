@@ -56,7 +56,10 @@ def sample_release() -> V3Release:
         fingerprint=audio_digest,
         origin="derived",
         producer=producer_declaration(1),
-        compatibility=compatibility(["provider:fake"], [source_document.rendition_id]),
+        compatibility=compatibility(
+            ["provider:fake"],
+            [{"rendition_id": source_document.rendition_id, "resource_id": None}],
+        ),
     )
     reading = PackageResource(
         kind="structured_reading",

@@ -27,16 +27,25 @@ Derivations:
 
 - **document → structured reading** — deterministic extraction for plain
   text, Markdown, HTML, and EPUB, PDF text-layer extraction (`pypdf`), and an
-  optional OCR provider seam for scanned PDFs. OCR absence or failure is an
-  honest capability result, never an import failure.
+  optional OCR provider seam for scanned PDFs. Markdown is parsed
+  semantically (heading/paragraph structure preserved, markup markers never
+  reach speech text); HTML discards script/style/navigation; EPUB preserves
+  spine order and chapter boundaries. OCR absence or failure is an honest
+  capability result, never an import failure. Every derivation emits exactly
+  one self-contained Structured Reading resource.
 - **document → listen** — provider-neutral TTS behind a local macOS `say`
-  adapter, a deterministic in-process fake, and a fixture adapter. A Derived
-  audio Media Rendition and a separate anchor-to-time alignment Resource are
-  produced; when exact timing cannot be produced, audio succeeds while
-  synchronized reading stays unavailable — timing is never fabricated.
+  adapter, a deterministic in-process fake, and a fixture adapter. TTS
+  consumes only the exact logical text of a Structured Reading through an
+  internal production input projection (never the raw document). The `say`
+  adapter synthesizes per sentence, measures each segment's real duration,
+  and concatenates the audio, so the anchor-to-time alignment comes from
+  measured segment boundaries; when exact timing cannot be produced, audio
+  succeeds while synchronized reading stays unavailable — timing is never
+  fabricated.
 - **media → structured reading** — the existing ASR adapters (fixture,
   command, whisper.cpp) and exact media-time alignment behind the request
-  interface.
+  interface. Provider, model, and configuration facts flow into resource
+  provenance and never leak raw output or paths into the package.
 
 An offline fixture flow exercises the full CLI without model credentials or
 network access:

@@ -96,15 +96,24 @@ class FixtureTtsAdapterTests(unittest.TestCase):
 
 
 class SayTtsAdapterTests(unittest.TestCase):
-    def test_runs_say_and_afconvert_and_reports_no_alignment(self) -> None:
+    def test_runs_say_per_sentence_and_reports_real_alignment(self) -> None:
         adapter = SayTtsAdapter(
             say_executable=str(FIXTURES / "fake_say.py"),
             afconvert_executable=str(FIXTURES / "fake_afconvert.py"),
         )
-        result = adapter.synthesize("Hello.", [("sentence-0", "Hello.")])
+        result = adapter.synthesize(
+            "Hello. Second sentence!",
+            [("sentence-0", "Hello."), ("sentence-1", "Second sentence!")],
+        )
         self.assertEqual(result.media_type, "audio/mp4")
-        self.assertEqual(result.audio_bytes, b"FAKE-SAY-AIFF-DATA")
-        self.assertIsNone(result.alignment)
+        self.assertEqual(len(result.audio_bytes), 44 + 2 * 32000)
+        self.assertIsNotNone(result.alignment)
+        self.assertEqual(result.alignment, (
+            AnchorAlignment("sentence-0", 0),
+            AnchorAlignment("sentence-1", 1000),
+        ))
+        self.assertEqual(result.provider_id, "say")
+        self.assertIsNotNone(result.config_sha256)
 
     def test_missing_executable_is_a_start_failure(self) -> None:
         adapter = SayTtsAdapter(

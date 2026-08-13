@@ -222,18 +222,32 @@ class AvailableResource:
     schema: str
     role: str
     blob: BlobSource
+    content_language: str | None = None
+    material_revision_id: str | None = None
 
     @classmethod
     def from_document(cls, document: dict[str, Any]) -> "AvailableResource":
         role = _required(document, "role")
         if role not in ("base", "assistance"):
             raise ConversionError(f"capability request resource role is invalid: {role!r}")
+        content_language = _optional_string(document, "content_language")
+        if content_language is not None:
+            content_language = _language_tag(content_language)
+        material_revision_id = _optional_string(document, "material_revision_id")
+        if material_revision_id is not None and not _IDENTIFIER_RE.match(
+            material_revision_id
+        ):
+            raise ConversionError(
+                "capability request resource material_revision_id is not a stable identifier"
+            )
         return cls(
             resource_id=_sha256_id(document, "resource_id"),
             kind=_required(document, "kind"),
             schema=_required(document, "schema"),
             role=role,
             blob=BlobSource.from_document(_required(document, "blob", "dict")),
+            content_language=content_language,
+            material_revision_id=material_revision_id,
         )
 
 

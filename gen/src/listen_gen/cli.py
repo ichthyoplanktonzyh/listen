@@ -126,6 +126,8 @@ def parser(
         help="committed anchor alignment JSON for the fixture TTS provider",
     )
     produce.add_argument("--tts-voice", help="macOS say voice name for the say TTS provider")
+    produce.add_argument("--tts-say-executable", default="say", help="say executable for the say TTS provider")
+    produce.add_argument("--tts-afconvert-executable", default="afconvert", help="afconvert executable for the say TTS provider")
     produce.add_argument("--tts-timeout-seconds", type=float, default=600.0)
     produce.add_argument(
         "--ocr-provider",
@@ -223,6 +225,8 @@ def _build_tts(args: argparse.Namespace) -> Any | None:
     if selected == "say":
         return SayTtsAdapter(
             voice=args.tts_voice,
+            say_executable=args.tts_say_executable,
+            afconvert_executable=args.tts_afconvert_executable,
             timeout_seconds=args.tts_timeout_seconds,
         )
     if args.tts_fixture is None:
@@ -235,6 +239,8 @@ def _build_ocr(args: argparse.Namespace) -> Any | None:
         return None
     if args.ocr_fixture is None:
         raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
+    if not args.ocr_fixture.is_file():
+        raise ConversionError("the OCR fixture must be a regular file")
     return FixtureOcrProvider(args.ocr_fixture)
 
 
