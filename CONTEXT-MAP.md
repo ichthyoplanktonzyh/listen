@@ -98,6 +98,7 @@ sibling checkout or moving branch.
 | Detailed UI states, discovery, and acquisition UX | `listen-app` |
 | Safe document rendering and basic supported-format decoding | `listen-app` |
 | Canonical Learning Record and material state | `listen-core` |
+| Installed/adopted composition, package payloads, and embedded derived media persistence | `listen-core` |
 | Rendition, Structured Reading Resource, and Reading Anchor semantics | `listen-core` |
 | Material Capability, compatibility, and candidate/adoption semantics | `listen-core` |
 | Runtime and Content Package contracts | `listen-core` |
@@ -143,7 +144,11 @@ consumer-bundled adapter or Gen may produce a candidate Structured Reading
 Resource, and Core validates its identity, subject, anchors, provenance, and
 applicability; Core also owns any persistence and selection semantics. Basic
 viewing of a supported Document Rendition never requires Gen, and no parser or
-renderer becomes the canonical owner of material or learner state.
+renderer becomes the canonical owner of material or learner state. Gen reads
+raw Document Rendition bytes (parsing, cleanup, or OCR) only when no compatible
+Structured Reading Resource exists. Semantic production — TTS, translation,
+explanation — consumes Structured Reading, never raw PDF or EPUB bytes;
+Markdown is only a temporary Production Input Projection.
 
 Document inputs are untrusted data. Direct rendering or extraction does not
 grant a document executable-code authority, hidden network access, or access to
@@ -169,6 +174,13 @@ and learner-owned.
   and Learning Resources; neither is one monolithic resource.
 - TTS produces a Derived Media Rendition; text-to-time alignment remains a
   separate Base Resource, and neither replaces the source document.
+- Document and media paths converge in Structured Reading: document bytes
+  through parser/OCR, media bytes through ASR. Semantic production consumes
+  Structured Reading, never raw PDF or EPUB bytes, and Markdown is not a
+  uniform intermediate format.
+- Core is the sole persistence authority for the installed/adopted composition,
+  package payloads, and embedded derived media. App never keeps a second
+  carrier projection that can drift from Core authority.
 - One material may expose Read, Listen, and Watch without being split into
   modality-specific library objects.
 - A Reading Anchor is stable within an exact Base Resource. Cross-resource or

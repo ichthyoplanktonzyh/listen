@@ -56,16 +56,19 @@ another revision.
 _Avoid_: Media Rendition, Package Release
 
 **Source Asset**: A concrete, Learner-authorized content object acquired or
-bound for a Material Revision. It may be copied into a Managed Asset Store or
-referenced in place; storage location and current availability are not its
-semantic identity.
+bound for a Material Revision: the original bytes plus their digest, size, and
+binding. It may be copied into a Managed Asset Store or referenced in place;
+storage location and current availability are not its semantic identity.
 _Avoid_: Learning Resource, Managed Asset Store, Content Source
 
 **Document Rendition**: A concrete document-format realization of a Material
-Revision, such as plain text, Markdown, HTML, EPUB, or PDF. It preserves the
-source representation and may be directly viewable without a Structured
-Reading Resource. Authored markup or layout does not make it a Structured
-Reading Resource; multiple Document Renditions may realize the same revision.
+Revision, such as plain text, Markdown, HTML, EPUB, or PDF. It binds the true
+Document Rendition bytes: the exact source representation, not an extraction
+result, and may be directly viewable without a Structured Reading Resource.
+Authored markup or layout does not make it a Structured Reading Resource;
+multiple Document Renditions may realize the same revision. A Source Document
+Rendition must bind a real Source Asset and never fabricate a Source Asset
+identity from a Rendition identity.
 _Avoid_: Structured Reading Resource, Structured Material, pasted-text form,
 Material Revision
 
@@ -75,20 +78,46 @@ identical bytes.
 _Avoid_: Material Revision, Source Identity
 
 **Source Rendition**: A Document or Media Rendition realized directly by a
-Learner-authorized Source Asset without generative transformation.
+Learner-authorized Source Asset without generative transformation. A Source
+Document Rendition binds the exact Source Asset that authorized its bytes; a
+Source Media Rendition binds the exact media identity. A Rendition never
+fabricates or fakes a Source Asset identity.
 _Avoid_: Source Asset, Derived Rendition, publisher guarantee
 
 **Derived Rendition**: A Document or Media Rendition produced from exact input
 Renditions or Learning Resources rather than acquired directly as a Source
 Asset. It realizes the same Material Revision only when its meaning and any
-required alignment remain compatible.
+required alignment remain compatible. TTS output is a Derived Media Rendition
+of the same Material Revision only when it faithfully realizes the exact input
+reading content.
 _Avoid_: Source Rendition, Learning Resource, automatic replacement
 
 **Material Capability**: A learner-facing ability that a compatible composition
 of Renditions and Learning Resources can offer, such as Read, Listen, Watch, or
-synchronized Read-and-Listen. Its current availability is a projection, not
-Material identity or a universal measure of quality.
+synchronized Read-and-Listen. Its current availability is a projection over the
+current Material Renditions and the adopted composition, not Material identity
+or a universal measure of quality. A directly viewable Document Rendition is
+never presented as unreadable just because Structured Reading is missing.
 _Avoid_: Learning Activity, Material Shape, completion score
+
+**Capability State**: The current availability or readiness of a Material
+Capability, or of a resource such as Structured Reading: `available`,
+`derivable`, `generating`, `unavailable`, or a `failed attempt`. A failed
+attempt is attached to the exact attempt that failed and never invalidates an
+otherwise usable Material.
+_Avoid_: Missing flag, broken material, automatic generation command
+
+- **Read**: available when a usable Document Rendition or an adopted Structured
+  Reading Resource exists; derivable when media can produce Structured Reading
+  through ASR.
+- **Listen**: available when a usable audio Rendition exists; derivable when a
+  Document Rendition or Structured Reading can yield audio through TTS.
+- **Watch**: available when a usable video Rendition exists. Phase 1 does not
+  derive video from documents.
+- **Synchronized Read-and-Listen**: available when an exact Structured Reading
+  Resource, usable media, and a compatible Alignment Resource all exist;
+  derivable when inputs that can produce the missing structure, audio, and
+  alignment exist.
 
 **Capability Gap**: A Material Capability requested by the Learner but not
 currently available. It may be derivable and does not make the Material invalid
@@ -122,17 +151,42 @@ Content Language, such as structured reading content, transcription,
 segmentation, or timing.
 _Avoid_: Translation, learner-specific explanation
 
-**Structured Reading Resource**: A versioned, format-neutral Base Resource that
-represents exact logical reading content as ordered hierarchy, blocks, and text
-spans with Content Language metadata and stable Reading Anchors. It may map
-those anchors back to one or more Document Renditions, but it is neither an
-original document, a Markdown file, a rendered screen, nor a second Material.
+**Structured Reading Resource**: A self-contained, format-neutral Base Resource
+that owns the exact logical reading text (exact UTF-8 bytes) together with
+ordered hierarchy, blocks, spans, Content Language metadata, and stable Reading
+Anchors whose ranges are byte-validated against that text. It may map those
+anchors back to one or more Document Renditions, but it is neither an original
+document, a Markdown file, a rendered screen, nor a second Material. Semantic
+production — TTS, future translation, explanation — consumes Structured
+Reading, never raw PDF or EPUB bytes, and Markdown is not a uniform
+intermediate format.
 _Avoid_: Document Rendition, Structured Material, Markdown document,
 extracted-text cache, reading UI state
 
+**Structured Reading Production**: The path by which document and media inputs
+converge on Structured Reading: document bytes through parsing, cleanup, or
+OCR, and media bytes through ASR. Gen reads raw Document Rendition bytes only
+when no compatible Structured Reading Resource exists; it never treats
+generation as a viewing gate.
+_Avoid_: Mandatory extraction, import gate, document_text extraction cache
+
+**Alignment Resource**: A Base Resource that maps exact Reading Anchors of one
+Structured Reading Resource to exact media-time Rendition Locators of one Media
+Rendition. Synchronized Read-and-Listen requires it; entries are exact or
+absent, never fabricated.
+_Avoid_: Inferred timing, subtitle-track substitute, playback state
+
 **Assistance Resource**: A Learning Resource that helps a particular audience,
 such as a translation, explanation, hint, or level-specific annotation.
+Translation is an Assistance Resource; Phase 1 does not add a translation
+provider.
 _Avoid_: Base Resource, Learning Fact
+
+**Production Input Projection**: A temporary, format-specific projection (for
+example Markdown) derived from a Structured Reading Resource for a producer
+that prefers that format. It is not a Rendition, a Learning Resource, or
+authoritative storage, and it never appears in a Content Package.
+_Avoid_: Structured Reading Resource, Document Rendition, canonical storage
 
 **Content Enrichment**: The optional process of deriving new Renditions or
 Learning Resources from exact existing inputs to offer another Material

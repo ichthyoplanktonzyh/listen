@@ -238,6 +238,16 @@ leaking database layout, renderer types, provider choices, or Gen workflows.
   Structured Reading, timed text, anchor-to-time alignment, Assistance
   Resources, dependencies, compatibility, material/revision/edition identity,
   and embedded or referenced blob declarations.
+- Remove the inline `document_text` resource from the active path: raw document
+  bytes live on the Document Rendition, and exact logical reading content lives
+  in the Structured Reading payload. No dual `document_text` +
+  `structured_reading` model is kept.
+- The Structured Reading payload is self-contained exact UTF-8 logical text;
+  every anchor/span range is byte-validated against that text (in bounds,
+  character-boundary-safe, monotonic); the block hierarchy has a deterministic
+  kind, order, and parent/child structure; document mappings point at exact
+  Document Renditions with format-related locators; provenance records input
+  rendition and resource ids plus tool/provider/model/config facts.
 - Keep packages data-only and allowlisted: no local paths, credentials, raw
   provider payloads, executable code, or learner records.
 - Validation is total and deterministic. Invalid identity, hash, dependency,
@@ -246,6 +256,10 @@ leaking database layout, renderer types, provider choices, or Gen workflows.
 - Installation is idempotent and candidate-only. Adoption is an explicit,
   atomic intent that either selects one coherent composition or changes
   nothing.
+- Contract validation performs real JSON Schema validation of the examples and
+  package bodies, and schema changes change the published contract artifact
+  digest; the release-artifact inventory names exactly the live v3 tree and
+  rejects v1/v2 paths in the active Phase 1 artifact.
 
 **HTTP/application interface**
 

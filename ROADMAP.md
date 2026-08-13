@@ -54,7 +54,12 @@ Exit conditions:
   playable without a package, and document intake is not limited to typed or
   pasted text;
 - direct document viewing, structured reading, extraction or OCR, and
-  Assistance Resources expose independent availability and failure states;
+  Assistance Resources expose independent availability and failure states; a
+  directly viewable Document Rendition is never presented as unreadable while
+  Structured Reading is missing;
+- semantic production (TTS, translation, explanation) consumes Structured
+  Reading rather than raw PDF/EPUB bytes, and Gen reads raw Document Rendition
+  bytes only when no compatible Structured Reading exists;
 - Material Capability presentation distinguishes available, derivable,
   generating, unavailable, and an explicit failed attempt without treating a
   valid single-modality Material as broken;

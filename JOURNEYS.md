@@ -25,7 +25,8 @@ remain the authority for what a current build already supports.
    source-layout viewing only; when a compatible Structured Reading Resource is
    available it also offers structured reading, stable resume, and span-based
    learning capabilities. A scanned PDF remains viewable while OCR is absent,
-   running, failed, or declined.
+   running, failed, or declined, and a directly viewable rendition is never
+   presented as unreadable because structured reading is missing.
 3. Resolve compatible installed or community capabilities in the background.
 4. Derive missing structure or generate other learning data when useful.
 5. Explicitly keep the material when it should enter the Personal Library;
@@ -101,7 +102,16 @@ results but do not replace the Learner's corpus or become its authority.
   graphs, or installation plans.
 - Direct document viewing or media playback begins as soon as a supported
   source asset is usable. Structured reading and Assistance Resources degrade
-  independently.
+  independently: each has its own available, derivable, generating,
+  unavailable, and failed-attempt presentation.
+- Material Capability is projected from the current Renditions and the adopted
+  composition. Read, Listen, Watch, and Synchronized Read-and-Listen follow the
+  availability rules in [PRODUCT.md](PRODUCT.md); a text-only Material honestly
+  reports Listen as derivable or generating instead of pretending it cannot be
+  read.
+- Semantic production consumes Structured Reading, never raw PDF or EPUB bytes.
+  Markdown exists only as a temporary Production Input Projection, never as a
+  Rendition, Resource, or authoritative storage.
 - Source Renditions remain source representations; Structured Reading Resources
   and Derived Renditions never silently replace them.
 - A text-only or media-only Material is valid. Capability absence becomes a

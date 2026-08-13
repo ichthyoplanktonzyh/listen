@@ -49,7 +49,10 @@ materials and resources.
 A supported Document or Media Rendition is usable before generation.
 Structured extraction, transcription, alignment, translation, explanation,
 pronunciation analysis, text-to-speech, and future resources are independent
-capabilities rather than admission gates.
+capabilities rather than admission gates. Gen reads raw Document Rendition
+bytes — parsing, cleanup, or OCR — only when no compatible Structured Reading
+Resource exists. A directly viewable rendition is never presented as
+unreadable just because Structured Reading is missing.
 
 ### Documents are first-class renditions
 
@@ -89,6 +92,32 @@ replace or mutate the source document. Synchronized Read-and-Listen additionally
 requires an exact mapping between Reading Anchors and media-time Rendition
 Locators. A translation, abridgement, or other semantic rewrite cannot silently
 claim to be a faithful rendition of the same Material Revision.
+
+Document and media paths converge in Structured Reading: document bytes through
+parser/OCR, media bytes through ASR. Semantic production — TTS, translation,
+explanation — consumes Structured Reading, never raw PDF or EPUB bytes, and
+Markdown is not a uniform intermediate format. A producer that prefers Markdown
+derives a temporary Production Input Projection from Structured Reading; that
+projection is not a Rendition, Resource, or authoritative storage.
+
+Material Capability is a projection over the current Renditions and the adopted
+composition:
+
+- Read is available when a usable Document Rendition or an adopted Structured
+  Reading Resource exists, and derivable when media can produce Structured
+  Reading through ASR.
+- Listen is available when a usable audio Rendition exists, and derivable when
+  a Document Rendition or Structured Reading can yield audio through TTS.
+- Watch is available when a usable video Rendition exists; Phase 1 does not
+  derive video from documents.
+- Synchronized Read-and-Listen is available when an exact Structured Reading
+  Resource, usable media, and a compatible Alignment Resource all exist, and
+  derivable when the missing structure, audio, and alignment can be produced
+  from exact inputs.
+
+Structured Reading and other resources surface their own availability or
+readiness with the same five states: available, derivable, generating,
+unavailable, and failed attempt.
 
 ### Self-directed learning
 

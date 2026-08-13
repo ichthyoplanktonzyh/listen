@@ -1,6 +1,7 @@
 # Compose multimodal capabilities from independent artifacts
 
-> Status: accepted, 2026-08-11.
+> Status: accepted, 2026-08-11; revised 2026-08-13 with the Phase 1 Slice 1
+> capability projection rules.
 
 A Material Revision is valid with any supported set of modalities. Text-only,
 audio-only, video-only, and mixed Materials are not different ownership objects
@@ -10,6 +11,26 @@ Learning Resources needed to satisfy it. The coherent multimodal unit is a
 composition: the Learning Material owns the active learner-facing selection,
 while a Learning Edition offers one coherent reusable selection. Neither is one
 monolithic Learning Resource.
+
+Material Capability is a projection over the current Material Renditions and
+the adopted composition, with a five-state resource availability vocabulary
+(available, derivable, generating, unavailable, and failed attempt):
+
+- **Read** is available when a usable Document Rendition or an adopted
+  Structured Reading Resource exists, and derivable when media can produce
+  Structured Reading through ASR.
+- **Listen** is available when a usable audio Rendition exists, and derivable
+  when a Document Rendition or Structured Reading can yield audio through TTS.
+- **Watch** is available when a usable video Rendition exists; Phase 1 does not
+  derive video from documents.
+- **Synchronized Read-and-Listen** is available when an exact Structured
+  Reading Resource, usable media, and a compatible Alignment Resource all
+  exist, and derivable when the missing structure, audio, and alignment can be
+  produced from exact inputs.
+
+A directly viewable Document Rendition is never presented as unreadable because
+Structured Reading is missing, and a failed attempt is attached to the exact
+attempt that failed rather than invalidating an otherwise usable Material.
 
 TTS output is a provenance-bearing Derived Media Rendition of the same Material
 Revision only when it faithfully realizes the exact input reading content. A
