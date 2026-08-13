@@ -289,9 +289,8 @@ DocumentRendition decodeDocumentRendition(Map<String, dynamic> json) =>
       origin: decodeRenditionOrigin(json['origin'] as String),
       mediaType: json['media_type'] as String,
       language: json['language'] as String?,
-      text: json['text'] as String,
-      textSha256: json['text_sha256'] as String,
-      textByteSize: json['text_byte_size'] as int,
+      digest: json['digest'] as String,
+      byteSize: json['byte_size'] as int,
       sourceAssetId: json['source_asset_id'] as String?,
     );
 
@@ -377,7 +376,8 @@ Map<String, dynamic> encodeDocumentRenditionInput(
 ) => {
   'media_type': input.mediaType,
   'language': input.language,
-  'text': input.text,
+  'digest': input.digest,
+  'byte_size': input.byteSize,
   'source_asset_index': input.sourceAssetIndex,
 };
 

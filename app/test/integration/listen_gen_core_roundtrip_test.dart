@@ -11,7 +11,6 @@ import 'package:llplayer_next/data/repositories/capability_repository.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/services/api_service.dart';
-import 'package:llplayer_next/services/composition_store.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
@@ -228,7 +227,7 @@ void main() {
 
   test(
     'a document material produces listen through the fake TTS provider and '
-    'its derived audio resolves from the retained carrier',
+    'its derived audio resolves from the adopted composition through Core',
     () async {
       HttpOverrides.global = null;
 
@@ -239,24 +238,34 @@ void main() {
       final generator = LocalListenGenProcessService(releaseService: release);
       final dbPath = scratchDatabasePath('roundtrip-listen');
       final api = await LocalApi.connect(databasePath: dbPath);
-      final storeRoot = Directory.systemTemp.createTempSync('e2e-store-');
       final coordinator = MaterialCapabilityCoordinator(
         repository: LocalCapabilityRepository(() => api),
         generator: generator,
         targetLanguage: () => 'en-US',
         providerArguments: const ['--tts-provider', 'fake'],
-        compositionStore: CompositionStore(root: storeRoot.path),
       );
       try {
+        final sourceBytes = utf8.encode('Listen, carefully! Words matter.');
         final created = await api.createLearningMaterial(
           CreateLearningMaterialInput(
             title: 'Document listen lesson',
-            sourceAssets: const [],
+            sourceAssets: [
+              SourceAssetInput(
+                mediaType: 'text/plain',
+                byteLength: sourceBytes.length,
+                sha256Digest: sha256.convert(sourceBytes).toString(),
+                binding: const SourceAssetBinding(
+                  type: SourceAssetBindingType.managed,
+                ),
+              ),
+            ],
             documentRenditions: [
               DocumentRenditionInput(
                 mediaType: 'text/plain',
-                text: 'Listen, carefully! Words matter.',
+                digest: sha256.convert(sourceBytes).toString(),
+                byteSize: sourceBytes.length,
                 language: 'en',
+                sourceAssetIndex: 0,
               ),
             ],
             mediaRenditions: const [],
@@ -284,28 +293,38 @@ void main() {
         expect(edition.providesSynchronizedReadListen, isTrue);
         expect(
           edition.resources.map((resource) => resource.kind),
-          containsAll(const ['document_text', 'anchor_time_alignment']),
+          containsAll(const ['structured_reading', 'anchor_time_alignment']),
         );
 
-        // The retained carrier resolves the produced audio for the player.
-        final store = CompositionStore(root: storeRoot.path);
-        final composition = await store.resolve(
-          materialId: created.material.id,
-          releaseId: edition.releaseId,
+        // The adopted composition resolves through Core's composition
+        // interface — never through an app-side retained carrier: the reading
+        // structure, the alignment, and the produced audio come back from
+        // Core, re-verified by it.
+        final repository = LocalCapabilityRepository(() => api);
+        final adopted = await repository.readAdoptedComposition(
+          created.material.id,
         );
-        expect(composition, isNotNull);
-        expect(composition!.derivedMediaPath, isNotNull);
-        expect(
-          await File(composition.derivedMediaPath!).length(),
-          greaterThan(0),
+        expect(adopted.releaseId, edition.releaseId);
+        final sr = adopted.resourceOfKind('structured_reading');
+        expect(sr, isNotNull);
+        final srPayload = await repository.readCompositionResourcePayload(
+          created.material.id,
+          sr!.resourceId,
         );
-        expect(composition.alignments, isNotEmpty);
-        expect(composition.sentences, isNotEmpty);
+        final srJson = jsonDecode(utf8.decode(srPayload))
+            as Map<String, dynamic>;
+        expect(srJson['text'], isNotEmpty);
+        final media = adopted.derivedMediaRendition;
+        expect(media, isNotNull);
+        final blob = await repository.readCompositionRenditionBlob(
+          created.material.id,
+          media!.renditionId,
+        );
+        expect(blob, isNotEmpty);
 
         coordinator.dispose();
       } finally {
         await api.close();
-        storeRoot.deleteSync(recursive: true);
       }
     },
     skip: runE2e

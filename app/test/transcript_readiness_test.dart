@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
@@ -16,6 +15,7 @@ import 'package:llplayer_next/data/repositories/learning_material_repository.dar
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
+import 'package:llplayer_next/models/adopted_composition.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/gen_machine_event.dart';
 import 'package:llplayer_next/services/capability_generation_request.dart';
@@ -24,7 +24,6 @@ import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
-import 'package:llplayer_next/services/composition_store.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
@@ -284,9 +283,6 @@ _readinessViewModel({
     repository: repository,
     generator: generator,
     targetLanguage: () => 'en',
-    compositionStore: CompositionStore(
-      root: Directory.systemTemp.createTempSync('readiness-store-').path,
-    ),
   );
   final vm = TranscriptReadinessViewModel(
     subtitle: harness.subtitle,
@@ -555,6 +551,23 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
       producerToolVersion: toolVersion,
     );
   }
+
+  @override
+  Future<AdoptedComposition> readAdoptedComposition(
+    String materialId,
+  ) async => throw StateError('unexpected readAdoptedComposition');
+
+  @override
+  Future<List<int>> readCompositionResourcePayload(
+    String materialId,
+    String resourceId,
+  ) async => throw StateError('unexpected readCompositionResourcePayload');
+
+  @override
+  Future<List<int>> readCompositionRenditionBlob(
+    String materialId,
+    String renditionId,
+  ) async => throw StateError('unexpected readCompositionRenditionBlob');
 
   @override
   Future<LearningEdition> installPackage(

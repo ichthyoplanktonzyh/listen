@@ -3,8 +3,29 @@
 /// repeating the surrounding boilerplate.
 library;
 
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
+
+/// A Source Document Rendition carrying [text]: the digest is the exact
+/// UTF-8 byte digest of the text, as Core binds a Source rendition to its
+/// Source Asset bytes.
+DocumentRendition documentRenditionForText(
+  String text, {
+  String id = 'document-1',
+  String mediaType = 'text/plain',
+  String? language,
+  String? sourceAssetId = 'source-1',
+}) => documentRendition(
+  id: id,
+  mediaType: mediaType,
+  digest: sha256.convert(utf8.encode(text)).toString(),
+  byteSize: utf8.encode(text).length,
+  language: language,
+  sourceAssetId: sourceAssetId,
+);
 
 SourceAsset sourceAsset({
   String id = 'source-1',
@@ -30,7 +51,8 @@ SourceAsset sourceAsset({
 DocumentRendition documentRendition({
   String id = 'document-1',
   String mediaType = 'text/plain',
-  String text = 'Sample text',
+  String digest = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  int byteSize = 11,
   String? language,
   String? sourceAssetId = 'source-1',
   RenditionOrigin origin = RenditionOrigin.source,
@@ -39,9 +61,8 @@ DocumentRendition documentRendition({
   origin: origin,
   mediaType: mediaType,
   language: language,
-  text: text,
-  textSha256: 'a' * 64,
-  textByteSize: text.length,
+  digest: digest,
+  byteSize: byteSize,
   sourceAssetId: sourceAssetId,
 );
 
@@ -100,13 +121,14 @@ MaterialDetails materialDetails({
 PersonalLibraryEntry textLibraryEntry({
   String materialId = 'material-1',
   String title = 'Sample',
-  String text = 'Sample text',
+  String digest = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  int byteSize = 11,
   int? retainedAtMs = 42,
 }) => PersonalLibraryEntry(
   details: materialDetails(
     materialId: materialId,
     title: title,
-    documentRenditions: [documentRendition(text: text)],
+    documentRenditions: [documentRendition(digest: digest, byteSize: byteSize)],
     retainedAtMs: retainedAtMs,
   ),
   mediaEntries: const [],

@@ -230,12 +230,6 @@ class DocumentSessionController extends ChangeNotifier {
     return assets.length == 1 ? assets.single : null;
   }
 
-  /// The sole Source Asset of the revision, or null when ambiguous.
-  static SourceAsset? _firstSourceAsset(MaterialDetails details) {
-    final assets = details.currentRevision.sourceAssets;
-    return assets.length == 1 ? assets.single : null;
-  }
-
   /// Retries the last failed intent: a failed file open re-picks, a failed
   /// paste re-submits the same input.
   Future<void> retry() async {
@@ -439,9 +433,9 @@ class DocumentSessionController extends ChangeNotifier {
       return;
     }
 
-    final text = input.text;
+    final MaterialDetails details;
     try {
-      final details = await materialRepository.createLearningMaterial(
+      details = await materialRepository.createLearningMaterial(
         CreateLearningMaterialInput(
           title: input.title,
           sourceAssets: [
@@ -455,57 +449,19 @@ class DocumentSessionController extends ChangeNotifier {
             ),
           ],
           documentRenditions: [
-            if (text != null)
-              DocumentRenditionInput(
-                mediaType: input.mediaType,
-                text: text,
-                sourceAssetIndex: 0,
-              ),
+            // The Source Document Rendition is the exact Source Asset bytes:
+            // same digest, same size, bound to the Source Asset. The material
+            // never carries a fabricated extracted-text body.
+            DocumentRenditionInput(
+              mediaType: input.mediaType,
+              digest: input.sha256Digest,
+              byteSize: input.byteLength,
+              sourceAssetIndex: 0,
+            ),
           ],
           mediaRenditions: const [],
         ),
         retain: const MaterialRetainExplicit(false),
-      );
-      if (_stale(generation)) return;
-      // The create succeeded; a fresh store copy is now owned by the material
-      // and must not be rolled back.
-      createdStoreCopy = null;
-      if (text == null) {
-        // No text layer (e.g. scanned PDF): the Source Asset alone is the
-        // material; direct view renders the bytes, never a fabricated text.
-        _enterReady(
-          details: details,
-          rendition: null,
-          sourceAsset: _firstSourceAsset(details),
-        );
-        return;
-      }
-      final rendition = matchingDocumentRendition(details, text);
-      if (rendition == null) {
-        // The response holds no document rendition whose text matches the
-        // submitted text. Refuse to guess: showing another rendition's body as
-        // the picked document breaks direct-view integrity. The diagnostic
-        // travels only inside the typed ApiFailure, behind the explicit
-        // disclosure; ordinary prose stays localized and stable.
-        _setState(
-          DocumentSessionFailed(
-            DocumentSessionFailure(
-              DocumentSessionFailureKind.apiFailure,
-              apiFailure: materialRepository.failureDetail(
-                StateError(
-                  'create response has no document rendition matching the '
-                  'submitted text',
-                ),
-              ),
-            ),
-          ),
-        );
-        return;
-      }
-      _enterReady(
-        details: details,
-        rendition: rendition,
-        sourceAsset: _sourceAssetFor(details, rendition),
       );
     } catch (error) {
       // The create failed: roll back the store copy only when this call
@@ -535,7 +491,39 @@ class DocumentSessionController extends ChangeNotifier {
           ),
         ),
       );
+      return;
     }
+    if (_stale(generation)) return;
+    // The create succeeded; a fresh store copy is now owned by the material
+    // and must not be rolled back.
+    createdStoreCopy = null;
+    final rendition = matchingDocumentRendition(details, input.sha256Digest);
+    if (rendition == null) {
+      // The response holds no source document rendition bound to the exact
+      // submitted bytes. Refuse to guess: showing another rendition's body as
+      // the picked document breaks direct-view integrity. The diagnostic
+      // travels only inside the typed ApiFailure, behind the explicit
+      // disclosure; ordinary prose stays localized and stable.
+      _setState(
+        DocumentSessionFailed(
+          DocumentSessionFailure(
+            DocumentSessionFailureKind.apiFailure,
+            apiFailure: materialRepository.failureDetail(
+              StateError(
+                'create response has no document rendition matching the '
+                'submitted bytes',
+              ),
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    _enterReady(
+      details: details,
+      rendition: rendition,
+      sourceAsset: _sourceAssetFor(details, rendition),
+    );
   }
 
   static DocumentSessionFailureKind _intakeFailureKind(
@@ -555,20 +543,20 @@ class DocumentSessionController extends ChangeNotifier {
       DocumentSessionFailureKind.encrypted,
   };
 
-  /// The created material's source document rendition whose text is
-  /// byte-for-byte the submitted text, or null when no rendition matches.
+  /// The created material's source document rendition whose exact bytes are
+  /// the submitted Source Asset's, or null when no rendition matches.
   ///
   /// Core 4.0 may converge an equal-content create onto an already retained
-  /// material; its persisted revision then holds the same text, so an exact
-  /// match still exists. A response without an exact match must be refused by
-  /// the caller, never guessed.
+  /// material; its persisted revision then holds the same bytes, so an exact
+  /// digest match still exists. A response without an exact match must be
+  /// refused by the caller, never guessed.
   static DocumentRendition? matchingDocumentRendition(
     MaterialDetails details,
-    String text,
+    String sourceSha256,
   ) {
     for (final rendition in details.currentRevision.documentRenditions) {
       if (rendition.origin != RenditionOrigin.source) continue;
-      if (rendition.text == text) return rendition;
+      if (rendition.digest == sourceSha256) return rendition;
     }
     return null;
   }

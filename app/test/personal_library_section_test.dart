@@ -78,7 +78,7 @@ PersonalLibraryEntry _textRow(String id, String title) => PersonalLibraryEntry(
     revisionId: 'revision-$id',
     title: title,
     documentRenditions: [
-      documentRendition(id: 'text-$id', text: 'A readable document.'),
+      documentRenditionForText('A readable document.', id: 'text-$id', ),
     ],
     shape: MaterialShape.text,
   ),
@@ -96,7 +96,7 @@ PersonalLibraryEntry _mixedRow(
     revisionId: 'revision-$id',
     title: title,
     documentRenditions: [
-      documentRendition(id: 'text-$id', text: 'A readable document.'),
+      documentRenditionForText('A readable document.', id: 'text-$id', ),
     ],
     mediaRenditions: [
       mediaRendition(

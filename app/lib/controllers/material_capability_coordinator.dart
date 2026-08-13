@@ -11,7 +11,6 @@ import '../models/material_capability.dart';
 import '../services/capability_file_resolver.dart';
 import '../services/capability_generation_request.dart';
 import '../services/capability_request_encoder.dart';
-import '../services/composition_store.dart';
 import '../services/listen_gen_process_service.dart';
 
 /// The deep Material Capability coordinator. One learner intent — "Read",
@@ -34,30 +33,20 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     required this._generator,
     required this._targetLanguage,
     this.mediaFilePath,
-    this.documentTextPath,
     this.providerArguments = const [],
     this.generatorToolId = 'listen-gen',
     this.generatorToolVersion = '0.5.0',
-    CompositionStore? compositionStore,
     CapabilityFileResolver? fileResolver,
-  }) : _compositionStore = compositionStore ?? CompositionStore(),
-       _fileResolver =
-           fileResolver ??
-           LocalCapabilityFileResolver(mediaFilePath: mediaFilePath);
+  }) : _fileResolver = fileResolver ?? const _UnresolvingCapabilityFileResolver();
 
   final CapabilityRepository _repository;
   final ListenGenProcessService _generator;
   final String Function() _targetLanguage;
-  final CompositionStore _compositionStore;
   final CapabilityFileResolver _fileResolver;
 
   /// Resolves the local file behind a media rendition, or null when the file
   /// is not available on this machine.
   final String? Function(MediaRendition rendition)? mediaFilePath;
-
-  /// Resolves (or writes) the local text file behind a document rendition,
-  /// overriding the resolver's default.
-  final String? Function(DocumentRendition rendition)? documentTextPath;
 
   /// CLI arguments selecting the Gen providers for a run (e.g.
   /// `--tts-provider say`); provider choice and secrets never enter the
@@ -233,6 +222,25 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       if (facts != null) mediaBlobFacts[rendition.id] = facts;
     }
 
+    // Document renditions resolve to their exact Source Asset bytes — never a
+    // fabricated extracted-text file. The path map feeds the Gen run; the
+    // digest facts travel in the request.
+    final revision = material.currentRevision;
+    final assetsById = <String, SourceAsset>{
+      for (final asset in revision.sourceAssets) asset.id: asset,
+    };
+    final documentSourcePaths = <String, String>{};
+    final documentSourceAssetIds = <String, String>{};
+    for (final rendition in revision.documentRenditions) {
+      final asset = assetsById[rendition.sourceAssetId];
+      final path = await _fileResolver.documentSourcePath(rendition, asset);
+      if (path != null) {
+        documentSourcePaths[rendition.id] = path;
+        documentSourceAssetIds[rendition.id] =
+            rendition.sourceAssetId ?? rendition.id;
+      }
+    }
+
     final requestJson = CapabilityRequestEncoder.encode(
       materialId: material.material.id,
       materialRevisionId: material.currentRevision.id,
@@ -245,8 +253,9 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       createdAtMs: attempt.startedAtMs,
       attemptId: attempt.attemptId,
       documentRenditions: material.currentRevision.documentRenditions,
+      documentSourcePaths: documentSourcePaths,
+      documentSourceAssetIds: documentSourceAssetIds,
       mediaRenditions: material.currentRevision.mediaRenditions,
-      documentTextPath: documentTextPath ?? _fileResolver.documentTextPath,
       mediaFilePath: mediaFilePath,
       mediaBlobFacts: mediaBlobFacts,
     );
@@ -344,7 +353,9 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       return _fail(run, const ListenGenProcessFailure('generator_plan_was_empty'));
     }
 
-    // Candidate-only installation, then explicit adoption.
+    // Candidate-only installation, then explicit adoption. The produced
+    // carrier is Core-owned from here on: adopted content resolves through
+    // Core's composition interface, never through an app-side retained copy.
     run.phase = CapabilityRunPhase.installing;
     _emit();
     final LearningEdition installed;
@@ -354,19 +365,6 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       await _finalizeFailure(run, _stableCode(error));
       unawaited(processRun.cleanUp());
       return _fail(run, error);
-    }
-    // Retain the produced carrier beside the installed composition so the
-    // app can resolve its content (derived audio, reading structure,
-    // alignment). Adoption itself stays Core-owned.
-    try {
-      await _compositionStore.save(
-        materialId: material.material.id,
-        releaseId: installed.releaseId,
-        packagePath: packagePath,
-      );
-    } on Object catch (_) {
-      // A retained carrier is a convenience, never a requirement: content
-      // resolution degrades honestly when it is absent.
     }
     run.phase = CapabilityRunPhase.adopting;
     _emit();
@@ -563,6 +561,26 @@ final class _CapabilityRun {
 /// null). Treated as a failed attempt, not a capability verdict.
 final class _CoordinatorUnavailable implements Exception {
   const _CoordinatorUnavailable();
+}
+
+/// Default file resolver when no real one is wired: resolves nothing. The
+/// coordinator is testable without a file system; production wiring injects
+/// the local resolver at the composition root.
+final class _UnresolvingCapabilityFileResolver implements CapabilityFileResolver {
+  const _UnresolvingCapabilityFileResolver();
+
+  @override
+  Future<String?> documentSourcePath(
+    DocumentRendition rendition,
+    SourceAsset? sourceAsset,
+  ) async => null;
+
+  @override
+  Future<MediaBlobFacts?> mediaBlobFacts(MediaRendition rendition) async =>
+      null;
+
+  @override
+  Future<void> dispose() async {}
 }
 
 

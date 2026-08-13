@@ -1048,7 +1048,7 @@ MaterialDetails _materialDetails({
 }) => materialDetails(
   materialId: materialId,
   retainedAtMs: retained ? 42 : null,
-  documentRenditions: [documentRendition(text: 'Hello')],
+  documentRenditions: [documentRenditionForText('Hello', )],
   shape: MaterialShape.audio,
 );
 

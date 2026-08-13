@@ -1,16 +1,15 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/material_capability_coordinator.dart';
 import 'package:llplayer_next/data/repositories/capability_repository.dart';
+import 'package:llplayer_next/models/adopted_composition.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/gen_machine_event.dart';
 import 'package:llplayer_next/models/learning_edition.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/services/capability_generation_request.dart';
-import 'package:llplayer_next/services/composition_store.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 
@@ -353,15 +352,11 @@ void main() {
 final class _Harness {
   final repo = _FakeCapabilityRepository();
   final gen = _FakeGenService();
-  late final Directory storeRoot = Directory.systemTemp.createTempSync(
-    'coordinator-store-',
-  );
   late final MaterialCapabilityCoordinator coordinator =
       MaterialCapabilityCoordinator(
         repository: repo,
         generator: gen,
         targetLanguage: () => 'en',
-        compositionStore: CompositionStore(root: storeRoot.path),
       );
 
   Future<CapabilityOutcome> request(
@@ -604,6 +599,23 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     adoptedReleases.add(releaseId);
     return _satisfyingEdition;
   }
+
+  @override
+  Future<AdoptedComposition> readAdoptedComposition(
+    String materialId,
+  ) async => throw StateError('unexpected readAdoptedComposition');
+
+  @override
+  Future<List<int>> readCompositionResourcePayload(
+    String materialId,
+    String resourceId,
+  ) async => throw StateError('unexpected readCompositionResourcePayload');
+
+  @override
+  Future<List<int>> readCompositionRenditionBlob(
+    String materialId,
+    String renditionId,
+  ) async => throw StateError('unexpected readCompositionRenditionBlob');
 }
 
 LearningEdition _editionCopy({required bool adopted}) => LearningEdition(

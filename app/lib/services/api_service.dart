@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 
+import '../models/adopted_composition.dart';
 import '../models/api_failure.dart';
 import '../models/coach_dashboard.dart';
 import '../models/discovery.dart';
@@ -48,6 +49,7 @@ part 'api/semantic_embedding.dart';
 part 'api/materials.dart';
 part 'api/capability_attempts.dart';
 part 'api/package_lifecycle.dart';
+part 'api/composition.dart';
 part 'api/source_identities.dart';
 
 Future<String> computeOpenSubtitlesMovieHash(String path) async {
@@ -106,6 +108,17 @@ ApiFailure describeApiFailure(Object error) => error is ApiFailure
 typedef ApiTransport =
     Future<ApiResponse> Function(String method, String path, String? body);
 
+/// The pluggable transport behind [LocalApi]'s raw-byte reads (composition
+/// rendition blobs). Defaults to the real [HttpClient]; tests inject a fake
+/// alongside [ApiTransport].
+typedef ApiBlobTransport = Future<ApiBlobResponse> Function(
+  String method,
+  String path,
+  String? body,
+);
+
+typedef ApiBlobResponse = ({int statusCode, List<int> bytes});
+
 class LocalApi {
   LocalApi._(
     this.baseUrl,
@@ -114,6 +127,7 @@ class LocalApi {
     this.logPath,
     this._logSink, [
     this._transport,
+    this._blobTransport,
   ]);
 
   /// Test-only constructor that drives the API through an injected
@@ -122,7 +136,8 @@ class LocalApi {
     required String baseUrl,
     required String token,
     required ApiTransport transport,
-  }) => LocalApi._(baseUrl, token, null, null, null, transport);
+    ApiBlobTransport? blobTransport,
+  }) => LocalApi._(baseUrl, token, null, null, null, transport, blobTransport);
 
   final String baseUrl;
   final String token;
@@ -131,6 +146,7 @@ class LocalApi {
   final IOSink? _logSink;
   final HttpClient _client = HttpClient();
   final ApiTransport? _transport;
+  final ApiBlobTransport? _blobTransport;
   bool _closed = false;
 
   static Future<LocalApi> connect({String? databasePath}) async {
@@ -244,6 +260,18 @@ class LocalApi {
     return jsonDecode(response.body);
   }
 
+  /// Raw-byte read (composition rendition blobs). Non-2xx responses carry a
+  /// JSON error body that is surfaced exactly like [_request]'s.
+  Future<List<int>?> _requestBlob(String method, String path) async {
+    final transport = _blobTransport ?? _httpBlobTransport;
+    final response = await transport(method, path, null);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final body = utf8.decode(response.bytes, allowMalformed: true);
+      throw HttpException(body, uri: Uri.parse('$baseUrl$path'));
+    }
+    return response.bytes;
+  }
+
   /// Default transport: the real `dart:io` HttpClient. Preserves the original
   /// header and request behavior exactly; only the raw exchange is extracted so
   /// it can be swapped in tests.
@@ -260,6 +288,26 @@ class LocalApi {
     final response = await request.close();
     final text = await response.transform(utf8.decoder).join();
     return (statusCode: response.statusCode, body: text);
+  }
+
+  /// Default raw-byte transport: the real `dart:io` HttpClient, preserving
+  /// the exact bytes of the response body.
+  Future<ApiBlobResponse> _httpBlobTransport(
+    String method,
+    String path,
+    String? encodedBody,
+  ) async {
+    final request = await _client.openUrl(method, Uri.parse('$baseUrl$path'));
+    request.headers
+      ..contentType = ContentType.json
+      ..set(HttpHeaders.authorizationHeader, 'Bearer $token');
+    if (encodedBody != null) request.write(encodedBody);
+    final response = await request.close();
+    final bytes = await response.fold<List<int>>(
+      const [],
+      (buffer, chunk) => [...buffer, ...chunk],
+    );
+    return (statusCode: response.statusCode, bytes: bytes);
   }
 
   /// Asks the sidecar to stop without awaiting it. Safe to call from

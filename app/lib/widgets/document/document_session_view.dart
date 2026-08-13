@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -54,7 +55,6 @@ class DocumentSessionView extends StatelessWidget {
         ),
         DocumentSessionReady(
           :final details,
-          :final documentRendition,
           :final sourceAsset,
           :final capabilities,
           :final format,
@@ -63,7 +63,6 @@ class DocumentSessionView extends StatelessWidget {
           :final retentionFailure,
         ) => _ReadyPane(
           title: details.currentRevision.title,
-          text: documentRendition?.text,
           format: format,
           sourceAsset: sourceAsset,
           capabilities: capabilities,
@@ -283,7 +282,7 @@ class _DocumentAssetTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text(
-          '${_formatBytes(rendition.textByteSize, l)} · ${_preview(rendition.text)}',
+          _formatBytes(rendition.byteSize, l),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -295,19 +294,11 @@ class _DocumentAssetTile extends StatelessWidget {
       ),
     );
   }
-
-  String _preview(String text) {
-    const limit = 120;
-    final flat = text.replaceAll('\n', ' ');
-    if (flat.length <= limit) return flat;
-    return '${flat.substring(0, limit)}…';
-  }
 }
 
 class _ReadyPane extends StatefulWidget {
   const _ReadyPane({
     required this.title,
-    required this.text,
     required this.format,
     required this.sourceAsset,
     required this.capabilities,
@@ -320,9 +311,6 @@ class _ReadyPane extends StatefulWidget {
   });
 
   final String title;
-
-  /// The inline rendition text, or null when the source carries no text layer.
-  final String? text;
   final DocumentFormat format;
 
   /// The Source Asset backing the direct view; null only when the revision
@@ -362,13 +350,13 @@ class _ReadyPaneState extends State<_ReadyPane> {
     }
   }
 
-  bool get _needsBytes => switch (widget.format) {
-    DocumentFormat.epub || DocumentFormat.pdf => true,
-    _ => false,
-  };
+  bool get _needsBytes => widget.sourceAsset != null;
 
   void _resolveIfNeeded() {
-    if (!_needsBytes) return;
+    if (!_needsBytes) {
+      setState(() => _bytes = const DocumentSourceUnavailable());
+      return;
+    }
     final asset = widget.sourceAsset;
     if (asset == null) {
       setState(() => _bytes = const DocumentSourceUnavailable());
@@ -467,41 +455,36 @@ class _ReadyPaneState extends State<_ReadyPane> {
     );
   }
 
-  /// The direct document view, dispatched by format. Text-family formats
-  /// render the rendition's exact text; container formats render the exact
-  /// source bytes (missing referenced location = honest unavailable fact).
+  /// The direct document view, dispatched by format. Every format renders the
+  /// exact Source Asset bytes of the open document — text-family formats
+  /// decode them, container formats render them directly. A missing
+  /// referenced location is an honest unavailable fact, never a fabricated
+  /// text and never a reason to remove the Material.
   List<Widget> _body(AppLocalizations l) {
-    if (!_needsBytes) {
-      return switch (widget.format) {
-        DocumentFormat.plainText => [
-          // The exact source text, selectable, line breaks and trailing
-          // spaces preserved. No fabricated cues or paragraphs.
-          SelectionArea(child: SelectableText(widget.text ?? '')),
-        ],
-        DocumentFormat.markdown => [
-          DocumentBlockView(
-            document: const MarkdownParser().parse(widget.text ?? ''),
-          ),
-        ],
-        DocumentFormat.html => [
-          DocumentBlockView(
-            document: RestrictedHtmlParser().parse(widget.text ?? ''),
-          ),
-        ],
-        _ => throw StateError('unreachable: non-byte formats handled above'),
-      };
-    }
     if (_bytesLoading) return const [Center(child: ListenLoading.inline())];
     final bytes = _bytes;
     if (bytes is! DocumentSourceAvailable || bytes.bytes.isEmpty) {
       return [ListenErrorNotice(message: l.text('documentSourceUnavailable'))];
     }
+    final decoded = utf8.decode(bytes.bytes, allowMalformed: true);
     return switch (widget.format) {
+      DocumentFormat.plainText => [
+        // The exact source text, selectable, line breaks and trailing spaces
+        // preserved. No fabricated cues or paragraphs.
+        SelectionArea(child: SelectableText(decoded)),
+      ],
+      DocumentFormat.markdown => [
+        DocumentBlockView(document: const MarkdownParser().parse(decoded)),
+      ],
+      DocumentFormat.html => [
+        DocumentBlockView(
+          document: RestrictedHtmlParser().parse(decoded),
+        ),
+      ],
       DocumentFormat.epub => [
         DocumentEpubView(epub: EpubDecoder().decode(bytes.bytes)),
       ],
       DocumentFormat.pdf => [DocumentPdfView(bytes: bytes.bytes)],
-      _ => throw StateError('unreachable: byte formats handled above'),
     };
   }
 }

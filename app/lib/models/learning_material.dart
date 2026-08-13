@@ -155,9 +155,8 @@ class DocumentRendition {
     required this.origin,
     required this.mediaType,
     required this.language,
-    required this.text,
-    required this.textSha256,
-    required this.textByteSize,
+    required this.digest,
+    required this.byteSize,
     required this.sourceAssetId,
   });
 
@@ -167,11 +166,11 @@ class DocumentRendition {
 
   /// Normalized language tag; null means the text is untagged.
   final String? language;
-  final String text;
 
-  /// Lowercase hex SHA-256 of the exact stored UTF-8 bytes.
-  final String textSha256;
-  final int textByteSize;
+  /// Lowercase hex SHA-256 of the exact rendition bytes. For a Source
+  /// rendition those are the bound Source Asset's exact bytes.
+  final String digest;
+  final int byteSize;
 
   /// The bound Source Asset for a Source rendition; null for Derived.
   final String? sourceAssetId;
@@ -273,13 +272,19 @@ class SourceAssetInput {
 class DocumentRenditionInput {
   const DocumentRenditionInput({
     required this.mediaType,
-    required this.text,
+    required this.digest,
+    required this.byteSize,
     this.language,
     this.sourceAssetIndex,
   });
 
   final String mediaType;
-  final String text;
+
+  /// Lowercase hex SHA-256 of the exact rendition bytes. The App always binds
+  /// Source rendition bytes to a Source Asset in the same request, so this is
+  /// the Source Asset's own digest; Core verifies the exact match.
+  final String digest;
+  final int byteSize;
 
   /// Normalized language tag; null means the text is untagged.
   final String? language;

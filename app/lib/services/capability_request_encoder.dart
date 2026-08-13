@@ -7,10 +7,13 @@ abstract final class CapabilityRequestEncoder {
   static const schema = 'listen_gen.capability-request.v2';
   static const version = 2;
 
-  /// [documentTextSha256] is the Core 4.0 lowercase hex digest; the request
-  /// declares the `sha256:` reference form. [documentTextPath] must be an
-  /// absolute readable path carrying exactly those bytes (or null when the
-  /// document rendition has no local text).
+  /// [documentSourcePaths] maps each document rendition id to an absolute
+  /// readable path carrying exactly the rendition's bytes (the Source Asset's
+  /// exact bytes, never a projection); [documentSourceAssetIds] maps the
+  /// rendition to its bound Source Asset id. [documentTextSha256] facts come
+  /// from the rendition itself: Core 4.0 documents carry the digest and size
+  /// of their exact bytes, and the request declares them in the `sha256:`
+  /// reference form.
   static Map<String, dynamic> encode({
     required String materialId,
     required String materialRevisionId,
@@ -23,18 +26,22 @@ abstract final class CapabilityRequestEncoder {
     required int createdAtMs,
     String? attemptId,
     List<DocumentRendition> documentRenditions = const [],
+    Map<String, String>? documentSourcePaths,
+    Map<String, String>? documentSourceAssetIds,
     List<MediaRendition> mediaRenditions = const [],
-    String? Function(DocumentRendition rendition)? documentTextPath,
     String? Function(MediaRendition rendition)? mediaFilePath,
     Map<String, MediaBlobFacts>? mediaBlobFacts,
   }) {
     final documentEntries = <Map<String, dynamic>>[];
     for (final rendition in documentRenditions) {
-      final path = documentTextPath?.call(rendition);
-      // Core 4.0 document renditions without a source asset bind carry no
-      // source_asset_id; the rendition's own stable sha256 id anchors the
-      // source identity for the package qualification.
-      final sourceAssetId = rendition.sourceAssetId ?? rendition.id;
+      final path = documentSourcePaths?[rendition.id];
+      final sourceAssetId =
+          documentSourceAssetIds?[rendition.id] ??
+          rendition.sourceAssetId ??
+          // Core 4.0 document renditions without a source asset bind carry no
+          // source_asset_id; the rendition's own stable sha256 id anchors the
+          // source identity for the package qualification.
+          rendition.id;
       documentEntries.add({
         'kind': 'document',
         'rendition_id': _sha256Reference(rendition.id),
@@ -42,8 +49,8 @@ abstract final class CapabilityRequestEncoder {
         'language': rendition.language,
         'source_asset_id': _sha256Reference(sourceAssetId),
         'blob': {
-          'digest': _sha256Reference(rendition.textSha256),
-          'size_bytes': rendition.textByteSize,
+          'digest': _sha256Reference(rendition.digest),
+          'size_bytes': rendition.byteSize,
           'path': path,
         },
       });

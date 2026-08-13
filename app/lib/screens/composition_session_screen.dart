@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../controllers/material_capability_coordinator.dart';
 import '../localization.dart';
-import '../models/learning_edition.dart';
+import '../services/composition_resolution.dart';
 import '../services/composition_session_service.dart';
-import '../services/composition_store.dart';
 import '../theme/radii.dart';
 import '../theme/spacing.dart';
 import '../widgets/composition/composition_audio_player.dart';
@@ -36,7 +35,6 @@ class CompositionSessionScreen extends StatefulWidget {
 }
 
 class _CompositionSessionScreenState extends State<CompositionSessionScreen> {
-  LearningEdition? _adopted;
   ResolvedComposition? _composition;
   Object? _failure;
   int _currentSentenceIndex = -1;
@@ -49,13 +47,8 @@ class _CompositionSessionScreenState extends State<CompositionSessionScreen> {
 
   Future<void> _load() async {
     try {
-      final adopted = await widget.session.adoptedEdition(widget.materialId);
-      if (!mounted) return;
-      setState(() => _adopted = adopted);
-      if (adopted == null) return;
       final composition = await widget.session.resolveComposition(
         widget.materialId,
-        adopted.releaseId,
       );
       if (!mounted || composition == null) return;
       setState(() => _composition = composition);
@@ -98,12 +91,9 @@ class _CompositionSessionScreenState extends State<CompositionSessionScreen> {
     if (_failure != null) {
       return Center(child: Text(l.text('compositionLoadFailed')));
     }
-    if (_adopted == null) {
-      return Center(child: Text(l.text('compositionNone')));
-    }
     final composition = _composition;
     if (composition == null) {
-      return Center(child: Text(l.text('compositionMissing')));
+      return Center(child: Text(l.text('compositionNone')));
     }
     final mediaPath = composition.derivedMediaPath;
     return ListView(

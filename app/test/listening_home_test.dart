@@ -65,9 +65,9 @@ MaterialDetails _details(
   shape: shape,
 );
 
-DocumentRendition _textAsset(String id) => documentRendition(
+DocumentRendition _textAsset(String id) => documentRenditionForText(
+  'Readable text',
   id: '$id-text',
-  text: 'Readable text',
 );
 
 MediaRendition _mediaAsset(String id) => mediaRendition(

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 import '../models/learning_material.dart';
 import 'document_reference_store.dart';
 import 'managed_asset_store.dart';
@@ -71,6 +73,16 @@ class LocalDocumentSourceResolver implements DocumentSourceResolver {
           final file = File(location);
           if (!await file.exists()) return const DocumentSourceUnavailable();
           final bytes = await file.readAsBytes();
+          // Reference in Place is re-verified at every use: the exact bytes
+          // must match the Source Asset's digest and size. A changed or
+          // replaced file is an honest unavailable fact — never a wrong
+          // document.
+          if (bytes.length != asset.byteLength) {
+            return const DocumentSourceUnavailable();
+          }
+          if (sha256.convert(bytes).toString() != asset.sha256Digest) {
+            return const DocumentSourceUnavailable();
+          }
           return DocumentSourceAvailable(bytes);
         } on FileSystemException {
           return const DocumentSourceUnavailable();

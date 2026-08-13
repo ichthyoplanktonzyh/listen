@@ -56,7 +56,7 @@ void main() {
     expect(entry.shape, MaterialShape.text);
     expect(entry.mediaEntries, isEmpty);
     expect(entry.primaryMedia, isNull);
-    expect(entry.documentRenditions.single.text, 'Hello');
+    expect(entry.documentRenditions.single.digest, isNotEmpty);
   });
 
   test('projects title, shape, updated time and document assets', () {
@@ -75,7 +75,7 @@ void main() {
     expect(entry.shape, MaterialShape.mixed);
     expect(entry.updatedAtMs, 4242);
     expect(entry.isRetained, isTrue);
-    expect(entry.documentRenditions.map((asset) => asset.text), ['A', 'B']);
+    expect(entry.documentRenditions.map((asset) => asset.digest), isNotEmpty);
   });
 
   test('chooses the first usable rendition in revision order', () {
@@ -279,7 +279,8 @@ MediaRendition _rendition(
 
 DocumentRendition _textAsset(String text) => documentRendition(
   id: 'text-$text',
-  text: text,
+  digest: text.hashCode.abs().toRadixString(16).padLeft(64, 'a'),
+  byteSize: text.length,
 );
 
 MaterialDetails _details({

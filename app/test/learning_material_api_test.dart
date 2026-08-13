@@ -53,9 +53,8 @@ void main() {
                   'origin': 'source',
                   'media_type': 'text/plain',
                   'language': null,
-                  'text': 'Hello world',
-                  'text_sha256': 'a' * 64,
-                  'text_byte_size': 11,
+                  'digest': 'a' * 64,
+                  'byte_size': 11,
                   'source_asset_id': 'source-1',
                 },
               ],
@@ -95,10 +94,9 @@ void main() {
     expect(source.binding.reference, isNull);
     expect(source.availability.isAvailable, isTrue);
     final document = revision.documentRenditions.single;
-    expect(document.text, 'Hello world');
     expect(document.language, isNull);
-    expect(document.textSha256, hasLength(64));
-    expect(document.textByteSize, 11);
+    expect(document.digest, hasLength(64));
+    expect(document.byteSize, 11);
     expect(document.sourceAssetId, 'source-1');
     final media = revision.mediaRenditions.single;
     expect(media.mediaId, 'media-1');
@@ -209,7 +207,8 @@ void main() {
         documentRenditions: [
           DocumentRenditionInput(
             mediaType: 'text/plain',
-            text: 'Hello',
+            digest: 'b' * 64,
+            byteSize: 5,
             language: 'en',
             sourceAssetIndex: 0,
           ),
@@ -233,7 +232,8 @@ void main() {
     expect(documentRenditions[0], {
       'media_type': 'text/plain',
       'language': 'en',
-      'text': 'Hello',
+      'digest': 'b' * 64,
+      'byte_size': 5,
       'source_asset_index': 0,
     });
     expect(request!['media_renditions'], [
@@ -308,7 +308,8 @@ void main() {
         documentRenditions: [
           DocumentRenditionInput(
             mediaType: 'text/plain',
-            text: 'More',
+            digest: 'c' * 64,
+            byteSize: 4,
             sourceAssetIndex: 0,
           ),
         ],
@@ -324,8 +325,12 @@ void main() {
       'c' * 64,
     );
     expect(
-      (request!['document_renditions'] as List<dynamic>).single['text'],
-      'More',
+      (request!['document_renditions'] as List<dynamic>).single['digest'],
+      'c' * 64,
+    );
+    expect(
+      (request!['document_renditions'] as List<dynamic>).single['byte_size'],
+      4,
     );
   });
 
@@ -359,9 +364,8 @@ void main() {
                 'origin': 'source',
                 'media_type': 'text/plain',
                 'language': null,
-                'text': 'Hello world',
-                'text_sha256': 'b' * 64,
-                'text_byte_size': 11,
+                'digest': 'b' * 64,
+                'byte_size': 11,
                 'source_asset_id': 'source-1',
               },
             ],
@@ -556,9 +560,8 @@ Map<String, dynamic> _details({
             'origin': 'source',
             'media_type': 'text/plain',
             'language': 'en',
-            'text': 'Hello world',
-            'text_sha256': 'a' * 64,
-            'text_byte_size': 11,
+            'digest': 'a' * 64,
+            'byte_size': 11,
             'source_asset_id': 'source-1',
           },
         ],
@@ -597,7 +600,8 @@ CreateLearningMaterialInput _createInput() => CreateLearningMaterialInput(
   documentRenditions: [
     DocumentRenditionInput(
       mediaType: 'text/plain',
-      text: 'Hello',
+      digest: 'b' * 64,
+      byteSize: 5,
       sourceAssetIndex: 0,
     ),
   ],

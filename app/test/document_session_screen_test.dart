@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +31,7 @@ class _FakePdfTextExtractor implements PdfTextExtractor {
 MaterialDetails _detailsFor(
   String title, {
   List<DocumentRendition> documentRenditions = const [],
+  List<SourceAsset> sourceAssets = const [],
   int? retainedAtMs,
   String materialId = 'material-1',
 }) => MaterialDetails(
@@ -44,7 +46,7 @@ MaterialDetails _detailsFor(
     id: 'revision-1',
     materialId: materialId,
     title: title,
-    sourceAssets: const [],
+    sourceAssets: sourceAssets,
     documentRenditions: documentRenditions,
     mediaRenditions: const [],
     createdAtMs: 1,
@@ -64,6 +66,18 @@ Widget _screen(DocumentSessionController controller) => MaterialApp(
   ],
   home: DocumentSessionScreen(controller: controller),
 );
+
+/// A source resolver that answers each text's exact UTF-8 bytes under its
+/// digest, so the direct view renders the exact source text.
+FakeDocumentSourceResolver _sourceResolver(List<String> texts) {
+  final resolver = FakeDocumentSourceResolver();
+  for (final text in texts) {
+    resolver.bytesByDigest[_digestOf(text)] = utf8.encode(text);
+  }
+  return resolver;
+}
+
+String _digestOf(String text) => sha256.convert(utf8.encode(text)).toString();
 
 void main() {
   testWidgets('idle offers the file action as primary and paste as secondary', (
@@ -132,7 +146,7 @@ void main() {
       codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -150,8 +164,15 @@ void main() {
     repo.createGate!.complete(
       _detailsFor(
         'a',
+        sourceAssets: [
+          sourceAsset(
+            id: 'source-1',
+            byteLength: 4,
+            sha256Digest: _digestOf('Body'),
+          ),
+        ],
         documentRenditions: [
-          documentRendition(id: 'a1', text: 'Body'),
+          documentRenditionForText('Body', id: 'a1', ),
         ],
       ),
     );
@@ -174,7 +195,7 @@ void main() {
       codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(const ['第一段。\n\nSecond paragraph with trailing space. ']),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -205,7 +226,7 @@ void main() {
       codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -298,13 +319,31 @@ void main() {
     final entry = PersonalLibraryEntry(
       details: _detailsFor(
         'Multi document',
-        documentRenditions: [
-          documentRendition(
-            id: 'a1',
-            text: 'English document body',
-            language: 'en',
+        sourceAssets: [
+          sourceAsset(
+            id: 'source-1',
+            byteLength: 'English document body'.length,
+            sha256Digest: _digestOf('English document body'),
           ),
-          documentRendition(id: 'a2', text: '中文文档正文', language: 'zh'),
+          sourceAsset(
+            id: 'source-2',
+            byteLength: '中文文档正文'.length,
+            sha256Digest: _digestOf('中文文档正文'),
+          ),
+        ],
+        documentRenditions: [
+          documentRenditionForText(
+            'English document body',
+            id: 'a1',
+            language: 'en',
+            sourceAssetId: 'source-1',
+          ),
+          documentRenditionForText(
+            '中文文档正文',
+            id: 'a2',
+            language: 'zh',
+            sourceAssetId: 'source-2',
+          ),
         ],
       ),
       mediaEntries: const [],
@@ -315,15 +354,17 @@ void main() {
       codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(
+        const ['English document body', '中文文档正文'],
+      ),
     );
     addTearDown(controller.dispose);
     controller.openLibraryEntry(entry);
     await tester.pumpWidget(_screen(controller));
     await tester.pumpAndSettle();
 
-    // Both assets are listed with language, size and a short preview — the
-    // internal asset ids never appear.
+    // Both assets are listed with language and exact byte size — the
+    // internal asset ids and any inline preview never appear.
     expect(find.text('语言：en'), findsOneWidget);
     expect(find.text('语言：zh'), findsOneWidget);
     expect(find.textContaining('KB'), findsNothing);
@@ -331,7 +372,7 @@ void main() {
     expect(find.text('a2'), findsNothing);
 
     // Choosing the second opens exactly that document.
-    await tester.tap(find.textContaining('中文文档正文'));
+    await tester.tap(find.text('语言：zh'));
     await tester.pumpAndSettle();
 
     expect(find.text('中文文档正文'), findsOneWidget);
@@ -355,7 +396,9 @@ void main() {
         codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(
+        ['A LONG DOCUMENT LINE '.toUpperCase() * 40],
+      ),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_screen(controller));
@@ -379,7 +422,7 @@ void main() {
       codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
@@ -424,7 +467,7 @@ void main() {
       codec: codec,
       store: FakeManagedAssetStoreService(),
       referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));

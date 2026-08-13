@@ -92,9 +92,15 @@ class FakeDocumentSourceResolver implements DocumentSourceResolver {
   DocumentSourceBytes result = const DocumentSourceUnavailable();
   SourceAsset? lastAsset;
 
+  /// Exact bytes by Source Asset digest; a hit wins over [result] so a test
+  /// can drive the direct view's exact bytes without per-asset setup.
+  final Map<String, List<int>> bytesByDigest = {};
+
   @override
   Future<DocumentSourceBytes> bytesFor(SourceAsset asset) async {
     lastAsset = asset;
+    final bytes = bytesByDigest[asset.sha256Digest];
+    if (bytes != null) return DocumentSourceAvailable(bytes);
     return result;
   }
 }
@@ -216,7 +222,7 @@ class FakeLearningMaterialRepository implements LearningMaterialRepository {
   ) async => _detailsFor(input.title, retainedAtMs: 42);
 
   /// Converts typed document-rendition inputs to the renditions a create
-  /// returns, keeping the submitted text for the exact-match check.
+  /// returns, keeping the submitted byte facts for the exact-match check.
   static List<DocumentRendition> _renditionsFrom(
     CreateLearningMaterialInput input,
   ) => [
@@ -224,7 +230,8 @@ class FakeLearningMaterialRepository implements LearningMaterialRepository {
       documentRendition(
         id: 'document-$index',
         mediaType: rendition.mediaType,
-        text: rendition.text,
+        digest: rendition.digest,
+        byteSize: rendition.byteSize,
         language: rendition.language,
         sourceAssetId: rendition.sourceAssetIndex == null
             ? null

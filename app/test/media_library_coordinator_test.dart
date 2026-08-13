@@ -819,19 +819,20 @@ void main() {
     },
   );
 
-  test('offlineLibrary keeps inline-text rows offline without any media', () {
+  test('offlineLibrary keeps document rows offline without any media', () {
     final w = _wire(() => null);
     final textOnly = PersonalLibraryEntry(
       details: _materialDetails(
         documentRenditions: [
-          documentRendition(id: 'text-1', text: 'Hello'),
+          documentRendition(id: 'text-1'),
         ],
       ),
       mediaEntries: const [],
     );
     w.coordinator.personalLibrary = [textOnly];
 
-    // Inline Document Rendition text is offline by itself: no file exists to check.
+    // A document rendition's bytes are resolvable (managed or referenced):
+    // no file exists to check, so the row is offline by itself.
     expect(w.coordinator.offlineLibrary, hasLength(1));
   });
 
@@ -853,13 +854,13 @@ void main() {
   });
 
   test(
-    'offlineLibrary keeps a mixed row with only its inline text available',
+    'offlineLibrary keeps a mixed row with only its document rendition',
     () {
       final w = _wire(() => null);
       final mixed = PersonalLibraryEntry(
         details: _materialDetails(
           documentRenditions: [
-            documentRendition(id: 'text-1', text: 'Hello'),
+            documentRendition(id: 'text-1'),
           ],
           mediaRenditions: [
             mediaRendition(
@@ -874,8 +875,8 @@ void main() {
       );
       w.coordinator.personalLibrary = [mixed];
 
-      // The media file is gone but the inline text is present: mixed rows need
-      // just one working capability to be offline.
+      // The media file is gone but the document rendition's bytes are still
+      // resolvable: mixed rows need just one working capability to be offline.
       expect(w.coordinator.offlineLibrary, hasLength(1));
     },
   );
@@ -946,7 +947,7 @@ void main() {
     final textOnly = PersonalLibraryEntry(
       details: _materialDetails(
         documentRenditions: [
-          documentRendition(id: 'text-1', text: 'Hello'),
+          documentRenditionForText('Hello', id: 'text-1', ),
         ],
       ),
       mediaEntries: const [],
@@ -996,7 +997,7 @@ void main() {
     final textOnly = PersonalLibraryEntry(
       details: _materialDetails(
         documentRenditions: [
-          documentRendition(id: 'text-1', text: 'Hello'),
+          documentRenditionForText('Hello', id: 'text-1', ),
         ],
       ),
       mediaEntries: const [],

@@ -408,7 +408,11 @@ void main() {
       expect(repo.lastCreateInput?.title, 'some 中文');
       final ready = controller.state as DocumentSessionReady;
       expect(ready.details.currentRevision.title, 'some 中文');
-      expect(ready.documentRendition?.text, 'Body text.');
+      expect(ready.documentRendition?.digest, hasLength(64));
+      expect(
+        ready.documentRendition?.byteSize,
+        utf8.encode('Body text.').length,
+      );
       expect(repo.lastCreateInput?.title, isNot(contains('/private')));
       expect(repo.lastCreateInput?.title, isNot(contains('secret')));
     });
@@ -436,7 +440,14 @@ void main() {
       expect(source.byteLength, utf8.encode('Body text.').length);
       expect(source.sha256Digest, hasLength(64));
       expect(source.binding.type, SourceAssetBindingType.managed);
-      expect(repo.lastCreateInput?.documentRenditions.single.text, 'Body text.');
+      expect(
+        repo.lastCreateInput?.documentRenditions.single.digest,
+        source.sha256Digest,
+      );
+      expect(
+        repo.lastCreateInput?.documentRenditions.single.byteSize,
+        source.byteLength,
+      );
       expect(repo.lastCreateInput?.documentRenditions.single.sourceAssetIndex, 0);
       // The managed copy was verified before the create.
       expect(store.copyCalls, 1);
@@ -517,7 +528,7 @@ void main() {
       expect(references.references, isEmpty);
     });
 
-    test('a scanned PDF opens ready with no rendition and a source asset',
+    test('a scanned PDF opens ready with its rendition bound to the source',
         () async {
       final repo = FakeLearningMaterialRepository()
         ..onCreate = (input) => materialDetails(
@@ -529,7 +540,17 @@ void main() {
                 sha256Digest: asset.sha256Digest,
               ),
           ],
-          documentRenditions: const [],
+          documentRenditions: [
+            // Core 4.0 binds the Source Document Rendition to the exact
+            // Source Asset bytes: same digest, same size.
+            for (final rendition in input.documentRenditions)
+              documentRendition(
+                mediaType: rendition.mediaType,
+                digest: rendition.digest,
+                byteSize: rendition.byteSize,
+                sourceAssetId: input.sourceAssets.single.sha256Digest,
+              ),
+          ],
           retainedAtMs: null,
         );
       final textless = LocalDocumentIntakeCodec(
@@ -554,9 +575,11 @@ void main() {
       await controller.openFile();
 
       final ready = controller.state as DocumentSessionReady;
-      expect(ready.documentRendition, isNull);
+      expect(ready.documentRendition, isNotNull);
+      expect(ready.documentRendition!.mediaType, 'application/pdf');
       expect(ready.sourceAsset, isNotNull);
       expect(ready.sourceAsset!.mediaType, 'application/pdf');
+      expect(ready.sourceAsset!.sha256Digest, ready.documentRendition!.digest);
     });
   group('Keep verification through the controller', () {
     test('a failing managed-store copy fails honestly without creating',

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/document_session_controller.dart';
 import 'package:llplayer_next/models/api_failure.dart';
@@ -24,8 +25,11 @@ class _FakePdfTextExtractor implements PdfTextExtractor {
 
 DocumentRendition _textAsset(String id, String text) => documentRendition(
   id: id,
-  text: text,
+  digest: _digestOf(text),
+  byteSize: utf8.encode(text).length,
 );
+
+String _digestOf(String text) => sha256.convert(utf8.encode(text)).toString();
 
 PersonalLibraryEntry _libraryEntry({
   required String materialId,
@@ -70,7 +74,8 @@ void main() {
       expect(input.title, 'notes');
       expect(input.documentRenditions, hasLength(1));
       final rendition = input.documentRenditions.single;
-      expect(rendition.text, 'First line\nSecond line');
+      expect(rendition.digest, _digestOf('First line\nSecond line'));
+      expect(rendition.byteSize, 'First line\nSecond line'.length);
       expect(rendition.language, isNull);
       expect(repo.lastRetainDirective, const MaterialRetainExplicit(false));
       expect(
@@ -108,8 +113,8 @@ void main() {
       expect(input.title, 'Pasted notes');
       expect(input.documentRenditions.single, isA<DocumentRenditionInput>());
       expect(
-        input.documentRenditions.single.text,
-        'Body  with  spacing\nkept.',
+        input.documentRenditions.single.digest,
+        _digestOf('Body  with  spacing\nkept.'),
       );
       expect(repo.lastRetainDirective, const MaterialRetainExplicit(false));
     },
@@ -292,11 +297,10 @@ void main() {
           title: 'Converged title',
           sourceAssets: const [],
           documentRenditions: [
-            _textAsset(
-              'asset-9',
-              input.documentRenditions.firstOrNull is DocumentRenditionInput
-                  ? input.documentRenditions.first.text
-                  : 'x',
+            documentRendition(
+              id: 'asset-9',
+              digest: input.documentRenditions.first.digest,
+              byteSize: input.documentRenditions.first.byteSize,
             ),
           ],
           mediaRenditions: const [],
@@ -320,7 +324,8 @@ void main() {
 
     final ready = controller.state as DocumentSessionReady;
     expect(ready.details.material.id, 'existing-material');
-    expect(ready.documentRendition!.text, 'Body');
+    expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
   });
 
   test('a throwing file service is a typed unreadable failure', () async {
@@ -434,7 +439,8 @@ void main() {
     // The full path never becomes the title.
     expect(repo.lastCreateInput?.title, isNot(contains('/tmp')));
     final ready = controller.state as DocumentSessionReady;
-    expect(ready.documentRendition!.text, 'Body');
+    expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
   });
 
   test(
@@ -549,7 +555,8 @@ void main() {
     expect(repo.lastRetainedMaterialId, 'material-1');
     final ready = controller.state as DocumentSessionReady;
     expect(ready.isRetained, isTrue);
-    expect(ready.documentRendition!.text, 'Body');
+    expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
     expect(refreshes, 1);
   });
 
@@ -577,7 +584,8 @@ void main() {
     expect(repo.unretainCalls, 1);
     final ready = controller.state as DocumentSessionReady;
     expect(ready.isRetained, isFalse);
-    expect(ready.documentRendition!.text, 'Body');
+    expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
     expect(refreshes, 2);
   });
 
@@ -608,7 +616,8 @@ void main() {
       final ready = controller.state as DocumentSessionReady;
       // The document is still fully readable and still Temporary.
       expect(ready.isRetained, isFalse);
-      expect(ready.documentRendition!.text, 'Body');
+      expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
       expect(ready.retentionFailure?.correlationId, 'api-2');
       // Ordinary state text never carries the raw transport text.
       expect(ready.retentionFailure?.raw, contains('nope'));
@@ -639,7 +648,8 @@ void main() {
 
     final ready = controller.state as DocumentSessionReady;
     expect(ready.isRetained, isTrue);
-    expect(ready.documentRendition!.text, 'Body');
+    expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
     expect(ready.retentionFailure, isNotNull);
   });
 
@@ -929,7 +939,8 @@ void main() {
 
     expect(repo.createCalls, 2);
     final ready = controller.state as DocumentSessionReady;
-    expect(ready.documentRendition!.text, 'Body');
+    expect(ready.documentRendition!.digest, _digestOf('Body'));
+    expect(ready.documentRendition!.byteSize, 'Body'.length);
     expect(repo.lastCreateInput?.title, 't');
   });
 
@@ -1007,7 +1018,7 @@ void main() {
 
       final ready = controller.state as DocumentSessionReady;
       expect(ready.documentRendition!.id, 'a2');
-      expect(ready.documentRendition!.text, 'Second');
+      expect(ready.documentRendition!.digest, _digestOf('Second'));
     },
   );
 
@@ -1127,7 +1138,7 @@ void main() {
     await _settle();
 
     final ready = controller.state as DocumentSessionReady;
-    expect(ready.documentRendition?.text, 'Hi');
+    expect(ready.documentRendition?.digest, _digestOf('Hi'));
     expect(ready.capabilities, isNull);
   });
 }

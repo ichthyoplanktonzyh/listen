@@ -68,9 +68,9 @@ class ListeningHome extends StatefulWidget {
   /// snapshot is not a library authority for the UI.
   final List<PersonalLibraryEntry>? personalLibrary;
 
-  /// The offline subset of [personalLibrary] (rows whose inline text or local
-  /// media file is available). Offline used to be its own sidebar destination;
-  /// it is a filter on the library now.
+  /// The offline subset of [personalLibrary] (rows whose document rendition
+  /// bytes or local media file is available). Offline used to be its own
+  /// sidebar destination; it is a filter on the library now.
   final List<PersonalLibraryEntry>? offlineEntries;
   final bool familiarSupplyEnabled;
 

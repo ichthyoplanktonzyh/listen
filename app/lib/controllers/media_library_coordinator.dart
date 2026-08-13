@@ -185,8 +185,9 @@ class MediaLibraryCoordinator {
       mediaLibrary?.map((entry) => entry.media.path).toList(growable: false);
 
   /// Subset of [personalLibrary] that is usable offline: a row is offline
-  /// when its inline document text is present, or when its primary media's
-  /// local file still exists. Mixed rows need just one working capability.
+  /// when its source document rendition's bytes are resolvable (managed or
+  /// referenced), or when its primary media's local file still exists. Mixed
+  /// rows need just one working capability.
   List<PersonalLibraryEntry>? get offlineLibrary {
     final library = personalLibrary;
     if (library == null) return null;
