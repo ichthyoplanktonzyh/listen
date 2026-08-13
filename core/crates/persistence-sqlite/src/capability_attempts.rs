@@ -1,4 +1,11 @@
 //! Durable capability attempt persistence (SQLite).
+//!
+//! `start_attempt` is the atomic seam: inside one transaction the previous
+//! running attempt of the same capability is superseded and the new attempt
+//! receives a monotonic per-capability sequence, so attempts in the same
+//! millisecond never collide and no capability is ever left with two running
+//! attempts. `reconcile_running_attempts` supersedes every attempt left
+//! running by a previous process at startup.
 
 use application::{ApplicationError, CapabilityAttemptRepository};
 use domain::{
@@ -15,13 +22,15 @@ use super::{SqliteRepository, domain_sql, repo};
 pub(crate) fn insert_attempt(
     connection: &Connection,
     attempt: &CapabilityAttempt,
+    attempt_sequence: u64,
 ) -> Result<(), ApplicationError> {
     connection
         .execute(
             "INSERT INTO capability_attempts
                (material_id, attempt_id, capability, status, started_at_ms,
-                finished_at_ms, failure_reason, producer_tool_id, producer_tool_version)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+                finished_at_ms, failure_reason, producer_tool_id, producer_tool_version,
+                attempt_sequence)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
              ON CONFLICT(material_id, attempt_id) DO UPDATE SET
                capability=excluded.capability,
                status=excluded.status,
@@ -29,7 +38,8 @@ pub(crate) fn insert_attempt(
                finished_at_ms=excluded.finished_at_ms,
                failure_reason=excluded.failure_reason,
                producer_tool_id=excluded.producer_tool_id,
-               producer_tool_version=excluded.producer_tool_version",
+               producer_tool_version=excluded.producer_tool_version,
+               attempt_sequence=excluded.attempt_sequence",
             params![
                 attempt.material_id.as_str(),
                 attempt.attempt_id.as_str(),
@@ -40,6 +50,7 @@ pub(crate) fn insert_attempt(
                 attempt.failure_reason,
                 attempt.producer_tool_id,
                 attempt.producer_tool_version,
+                attempt_sequence as i64,
             ],
         )
         .map_err(repo)?;
@@ -51,6 +62,8 @@ fn attempt_status_key(status: CapabilityAttemptStatus) -> &'static str {
         CapabilityAttemptStatus::Running => "running",
         CapabilityAttemptStatus::Succeeded => "succeeded",
         CapabilityAttemptStatus::Failed => "failed",
+        CapabilityAttemptStatus::Cancelled => "cancelled",
+        CapabilityAttemptStatus::Superseded => "superseded",
     }
 }
 
@@ -75,6 +88,8 @@ fn attempt_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CapabilityAttem
         "running" => CapabilityAttemptStatus::Running,
         "succeeded" => CapabilityAttemptStatus::Succeeded,
         "failed" => CapabilityAttemptStatus::Failed,
+        "cancelled" => CapabilityAttemptStatus::Cancelled,
+        "superseded" => CapabilityAttemptStatus::Superseded,
         other => {
             return Err(rusqlite::Error::FromSqlConversionFailure(
                 3,
@@ -86,6 +101,8 @@ fn attempt_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CapabilityAttem
             ));
         }
     };
+    let attempt_key = row.get::<_, u64>(9)?;
+    let _ = attempt_key;
     Ok(CapabilityAttempt {
         attempt_id: CapabilityAttemptId::parse(row.get::<_, String>(1)?).map_err(domain_sql)?,
         material_id: LearningMaterialId::parse(row.get::<_, String>(0)?).map_err(domain_sql)?,
@@ -100,20 +117,60 @@ fn attempt_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CapabilityAttem
 }
 
 const ATTEMPT_COLUMNS: &str = "material_id, attempt_id, capability, status, started_at_ms, finished_at_ms, \
-     failure_reason, producer_tool_id, producer_tool_version";
+     failure_reason, producer_tool_id, producer_tool_version, attempt_sequence";
 
 impl CapabilityAttemptRepository for SqliteRepository {
+    fn start_attempt(
+        &self,
+        material_id: LearningMaterialId,
+        capability: MaterialCapability,
+        started_at_ms: u64,
+    ) -> Result<CapabilityAttempt, ApplicationError> {
+        let mut conn = self.connection.lock();
+        let tx = conn.transaction().map_err(repo)?;
+        // Atomically supersede any running attempt of the same capability:
+        // a new attempt always terminates the previous in-flight work.
+        tx.execute(
+            "UPDATE capability_attempts
+             SET status='superseded', finished_at_ms=?3
+             WHERE material_id=?1 AND capability=?2 AND status='running'",
+            params![
+                material_id.as_str(),
+                capability.as_str(),
+                started_at_ms as i64,
+            ],
+        )
+        .map_err(repo)?;
+        // The monotonic per-capability sequence makes attempt identities
+        // unique within the same millisecond, including concurrent retries.
+        let sequence: u64 = tx
+            .query_row(
+                "SELECT COALESCE(MAX(attempt_sequence), 0) + 1
+                 FROM capability_attempts
+                 WHERE material_id=?1 AND capability=?2",
+                params![material_id.as_str(), capability.as_str()],
+                |row| row.get(0),
+            )
+            .map_err(repo)?;
+        let attempt =
+            CapabilityAttempt::start(material_id.clone(), capability, started_at_ms, sequence);
+        insert_attempt(&tx, &attempt, sequence)?;
+        tx.commit().map_err(repo)?;
+        drop(conn);
+        Ok(attempt)
+    }
+
     fn save_attempt(&self, attempt: &CapabilityAttempt) -> Result<(), ApplicationError> {
         let conn = self.connection.lock();
-        let existing: Option<String> = conn
+        let existing: Option<(String, u64)> = conn
             .query_row(
-                "SELECT attempt_id FROM capability_attempts WHERE attempt_id=?1",
+                "SELECT attempt_id, attempt_sequence FROM capability_attempts WHERE attempt_id=?1",
                 [attempt.attempt_id.as_str()],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
             .map_err(repo)?;
-        if existing.is_some() {
+        if let Some((_, sequence)) = existing {
             conn.execute(
                 "UPDATE capability_attempts
                  SET status=?3, finished_at_ms=?4, failure_reason=?5,
@@ -130,8 +187,9 @@ impl CapabilityAttemptRepository for SqliteRepository {
                 ],
             )
             .map_err(repo)?;
+            let _ = sequence;
         } else {
-            insert_attempt(&conn, attempt)?;
+            insert_attempt(&conn, attempt, 0)?;
         }
         Ok(())
     }
@@ -144,7 +202,7 @@ impl CapabilityAttemptRepository for SqliteRepository {
         let mut statement = conn
             .prepare(&format!(
                 "SELECT {ATTEMPT_COLUMNS} FROM capability_attempts
-                 WHERE material_id=?1 ORDER BY started_at_ms, attempt_id"
+                 WHERE material_id=?1 ORDER BY started_at_ms, attempt_sequence, attempt_id"
             ))
             .map_err(repo)?;
         let attempts = statement
@@ -153,6 +211,19 @@ impl CapabilityAttemptRepository for SqliteRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(repo)?;
         Ok(attempts)
+    }
+
+    fn reconcile_running_attempts(&self, superseded_at_ms: u64) -> Result<usize, ApplicationError> {
+        let conn = self.connection.lock();
+        let count = conn
+            .execute(
+                "UPDATE capability_attempts
+                 SET status='superseded', finished_at_ms=?1
+                 WHERE status='running'",
+                [superseded_at_ms as i64],
+            )
+            .map_err(repo)?;
+        Ok(count)
     }
 }
 
@@ -178,23 +249,42 @@ mod tests {
     /// Creates one real material the attempts can reference through the
     /// foreign key.
     fn ensure_material(store: &SqliteRepository) -> LearningMaterialId {
+        let text = "capability attempt material";
+        let digest = {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(text.as_bytes()))
+        };
+        let asset = domain::SourceAsset::new(
+            "text/plain",
+            text.len() as u64,
+            digest.clone(),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            1,
+        )
+        .unwrap();
         let rendition = Rendition::Document(
             DocumentRendition::new(
                 RenditionOrigin::Source,
                 "text/plain",
                 None,
-                "capability attempt material",
-                None,
+                digest,
+                text.len() as u64,
+                Some(asset.id.clone()),
                 None,
                 None,
             )
             .unwrap(),
         );
-        let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
+        let material_id = initial_material_id(
+            std::slice::from_ref(&asset),
+            std::slice::from_ref(&rendition),
+        )
+        .unwrap();
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Capability material",
-            Vec::new(),
+            vec![asset],
             vec![rendition],
             1,
         )
@@ -208,15 +298,18 @@ mod tests {
     fn attempts_persist_across_reopen_and_keep_old_facts() {
         let (first, _dir, database_path) = file_repository();
         let material_id = ensure_material(&first);
-        let mut attempt =
-            CapabilityAttempt::start(material_id.clone(), MaterialCapability::Listen, 5);
+        let started = first
+            .start_attempt(material_id.clone(), MaterialCapability::Listen, 5)
+            .expect("start");
+        let mut attempt = started.clone();
         attempt
             .fail(10, "provider unavailable")
             .expect("valid failure");
         first.save_attempt(&attempt).expect("saved");
 
-        let retry = CapabilityAttempt::start(material_id.clone(), MaterialCapability::Listen, 11);
-        first.save_attempt(&retry).expect("saved retry");
+        let retry = first
+            .start_attempt(material_id.clone(), MaterialCapability::Listen, 11)
+            .expect("start retry");
 
         // Reopening keeps the attempts: close the first repository (releasing
         // its exclusive database lock) and open the file again.
@@ -259,10 +352,74 @@ mod tests {
     }
 
     #[test]
+    fn start_attempt_is_atomic_and_same_millisecond_retries_never_collide() {
+        let store = SqliteRepository::in_memory().expect("in-memory repository");
+        let material_id = ensure_material(&store);
+        let first = store
+            .start_attempt(material_id.clone(), MaterialCapability::Listen, 7)
+            .expect("start");
+        let second = store
+            .start_attempt(material_id.clone(), MaterialCapability::Listen, 7)
+            .expect("same-millisecond retry");
+        assert_ne!(
+            first.attempt_id, second.attempt_id,
+            "attempt ids never collide within the same millisecond"
+        );
+        let read = store
+            .start_attempt(material_id.clone(), MaterialCapability::Read, 7)
+            .expect("different capability");
+        assert_ne!(first.attempt_id, read.attempt_id);
+        // The old running attempt was atomically superseded.
+        let attempts = store.list_attempts(&material_id).expect("listed");
+        let superseded = attempts
+            .iter()
+            .find(|attempt| attempt.attempt_id == first.attempt_id)
+            .expect("first attempt preserved");
+        assert_eq!(superseded.status, CapabilityAttemptStatus::Superseded);
+        assert_eq!(superseded.finished_at_ms, Some(7));
+        let running = attempts
+            .iter()
+            .find(|attempt| attempt.attempt_id == second.attempt_id)
+            .expect("second attempt");
+        assert_eq!(running.status, CapabilityAttemptStatus::Running);
+    }
+
+    #[test]
+    fn restart_reconciliation_supersedes_every_running_attempt() {
+        let (first, _dir, database_path) = file_repository();
+        let material_id = ensure_material(&first);
+        first
+            .start_attempt(material_id.clone(), MaterialCapability::Listen, 5)
+            .expect("start");
+        first
+            .start_attempt(material_id.clone(), MaterialCapability::Read, 6)
+            .expect("start");
+        drop(first);
+        let reopened = SqliteRepository::open(&database_path).expect("reopened repository");
+        let reconciled = reopened.reconcile_running_attempts(100).expect("reconcile");
+        assert_eq!(reconciled, 2);
+        let attempts = reopened.list_attempts(&material_id).expect("listed");
+        assert!(
+            attempts
+                .iter()
+                .all(|attempt| attempt.status != CapabilityAttemptStatus::Running),
+            "no attempt is left running after restart reconciliation"
+        );
+        assert!(
+            attempts
+                .iter()
+                .all(|attempt| attempt.status == CapabilityAttemptStatus::Superseded),
+            "every interrupted attempt is honestly superseded"
+        );
+    }
+
+    #[test]
     fn unknown_capability_storage_is_rejected() {
         let store = SqliteRepository::in_memory().expect("in-memory repository");
         let material_id = ensure_material(&store);
-        let attempt = CapabilityAttempt::start(material_id, MaterialCapability::Listen, 1);
+        let attempt = store
+            .start_attempt(material_id, MaterialCapability::Listen, 1)
+            .expect("start");
         // The schema rejects an unknown capability outright; the typed read
         // path can only ever see the known set.
         store
@@ -270,8 +427,8 @@ mod tests {
             .lock()
             .execute(
                 "INSERT INTO capability_attempts
-                   (material_id, attempt_id, capability, status, started_at_ms)
-                 VALUES (?1,?2,'futuristic', 'running', 1)",
+                   (material_id, attempt_id, capability, status, started_at_ms, attempt_sequence)
+                 VALUES (?1,?2,'futuristic', 'running', 1, 0)",
                 params![attempt.material_id.as_str(), attempt.attempt_id.as_str()],
             )
             .expect_err("unknown capability is rejected by the schema");

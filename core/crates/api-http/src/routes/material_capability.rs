@@ -48,6 +48,7 @@ pub(crate) enum FinalizeCapabilityAttemptRequest {
     Failed {
         reason: String,
     },
+    Cancelled,
 }
 
 impl From<domain::MaterialCapabilityProjection> for CapabilityProjectionResponse {
@@ -97,11 +98,13 @@ fn status_string(status: domain::CapabilityStatus) -> &'static str {
 }
 
 fn attempt_status_string(status: domain::CapabilityAttemptStatus) -> &'static str {
-    use domain::CapabilityAttemptStatus::{Failed, Running, Succeeded};
+    use domain::CapabilityAttemptStatus::{Cancelled, Failed, Running, Succeeded, Superseded};
     match status {
         Running => "running",
         Succeeded => "succeeded",
         Failed => "failed",
+        Cancelled => "cancelled",
+        Superseded => "superseded",
     }
 }
 
@@ -186,6 +189,7 @@ pub(crate) async fn finalize_material_capability_attempt(
             tool_version,
         },
         FinalizeCapabilityAttemptRequest::Failed { reason } => AttemptOutcome::Failed { reason },
+        FinalizeCapabilityAttemptRequest::Cancelled => AttemptOutcome::Cancelled,
     };
     state
         .application

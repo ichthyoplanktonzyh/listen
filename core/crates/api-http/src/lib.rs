@@ -470,6 +470,18 @@ impl From<ApplicationError> for ApiError {
                 error,
                 true,
             ),
+            ApplicationError::CompositionIntegrity => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "composition_integrity_failure",
+                "adopted composition content is missing or fails integrity verification",
+                false,
+            ),
+            ApplicationError::SourceUnavailable => Self::new(
+                StatusCode::BAD_GATEWAY,
+                "source_unavailable",
+                "a referenced source asset is unavailable",
+                true,
+            ),
             ApplicationError::Subtitle(error) => Self::new(
                 StatusCode::BAD_REQUEST,
                 "subtitle_parse_error",

@@ -19,7 +19,7 @@ use thiserror::Error;
 
 use crate::{
     LanguageCode, LearningEditionId, LearningMaterialId, MaterialRevisionId, MediaId,
-    PackageReleaseId, RenditionOrigin,
+    PackageReleaseId, RenditionOrigin, SourceAssetId,
 };
 
 /// Availability of one package resource. Candidate resources may be selected
@@ -82,6 +82,10 @@ pub struct PackageResourceFact {
     pub content_language: Option<LanguageCode>,
     pub support_languages: Vec<LanguageCode>,
     pub dependencies: Vec<String>,
+    /// Exact anchor-resource identities this resource depends on semantically
+    /// (for example an Alignment Resource declaring its exact Structured
+    /// Reading Resource). Empty when the kind carries no anchor inputs.
+    pub anchor_resource_ids: Vec<String>,
     pub payload_digest: String,
     pub payload_size_bytes: u64,
     pub provenance: PackageResourceProvenance,
@@ -91,8 +95,11 @@ pub struct PackageResourceFact {
 
 /// One immutable rendition fact of a package release. A Document or Media
 /// Rendition states whether it is Source or Derived; a Derived rendition
-/// retains exact producer facts. Only the kind, digest, size, and availability
-/// snapshot are retained; paths never enter this module.
+/// retains exact producer facts. A Source Document Rendition records the
+/// exact Source Asset it binds, so the adopted composition authority can
+/// return a binding without re-deriving it from the Material revision. Only
+/// the kind, digest, size, and availability snapshot are retained; paths
+/// never enter this module.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageRenditionFact {
     pub rendition_id: String,
@@ -105,6 +112,8 @@ pub struct PackageRenditionFact {
     pub media_size_bytes: u64,
     /// The bound media source for a Source media rendition, when known.
     pub media_id: Option<MediaId>,
+    /// The exact Source Asset bound by a Source document rendition.
+    pub source_asset_id: Option<SourceAssetId>,
     /// Exact producer facts for a Derived rendition.
     pub producer: Option<PackageResourceProvenance>,
 }
@@ -133,6 +142,61 @@ pub struct PackageInstallation {
     pub resources: Vec<PackageResourceFact>,
     pub renditions: Vec<PackageRenditionFact>,
     pub installed_at_ms: u64,
+}
+
+/// The resolved active composition of a Material: exactly the selected
+/// resources and renditions of the current adoption. This is the Core-owned
+/// composition authority the learner-facing capabilities and typed content
+/// reads project from; it is a pure projection of the immutable installed
+/// facts through the adoption plan, never a second store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdoptedComposition {
+    /// The selected resources of the adopted release, sorted by resource id.
+    pub resources: Vec<PackageResourceFact>,
+    /// The selected renditions of the adopted release, sorted by rendition id.
+    pub renditions: Vec<PackageRenditionFact>,
+    pub selected_resource_ids: Vec<String>,
+    pub selected_rendition_ids: Vec<String>,
+}
+
+impl AdoptedComposition {
+    pub fn has_selected_structured_reading(&self) -> bool {
+        self.resources
+            .iter()
+            .any(|resource| resource.kind == "structured_reading")
+    }
+}
+
+/// Projects the adopted composition from an installed release and its
+/// adoption commit plan. Deterministic: selection is taken from the plan's
+/// exact id lists and the facts are sorted by id.
+pub fn adopted_composition_for(
+    installation: &PackageInstallation,
+    plan: &AdoptionCommitPlan,
+) -> AdoptedComposition {
+    let mut resources: Vec<PackageResourceFact> = installation
+        .resources
+        .iter()
+        .filter(|resource| plan.selected_resource_ids.contains(&resource.resource_id))
+        .cloned()
+        .collect();
+    resources.sort_by(|a, b| a.resource_id.cmp(&b.resource_id));
+    let mut renditions: Vec<PackageRenditionFact> = installation
+        .renditions
+        .iter()
+        .filter(|rendition| {
+            plan.selected_rendition_ids
+                .contains(&rendition.rendition_id)
+        })
+        .cloned()
+        .collect();
+    renditions.sort_by(|a, b| a.rendition_id.cmp(&b.rendition_id));
+    AdoptedComposition {
+        resources,
+        renditions,
+        selected_resource_ids: plan.selected_resource_ids.clone(),
+        selected_rendition_ids: plan.selected_rendition_ids.clone(),
+    }
 }
 
 /// One resolved active selection for an exclusive resource family.
@@ -287,7 +351,17 @@ pub fn adoption_commit_plan(
     let mut selected_rendition_ids: Vec<String> = installation
         .renditions
         .iter()
-        .filter(|rendition| rendition.available)
+        .filter(|rendition| {
+            // A Source Document Rendition is a bound fact of the adopted
+            // composition: its bytes are read through its Source Asset
+            // binding even when the carrier did not embed them, so it is
+            // selected regardless of blob availability. A Source Media
+            // Rendition and every Derived rendition are selected only when
+            // usable: media sources have their own missing/archived facts,
+            // and Derived renditions need their embedded blob.
+            (rendition.origin == RenditionOrigin::Source && rendition.kind == "document")
+                || rendition.available
+        })
         .map(|rendition| rendition.rendition_id.clone())
         .collect();
     selected_rendition_ids.sort();
@@ -362,6 +436,7 @@ mod tests {
             content_language: Some(language("en")),
             support_languages: Vec::new(),
             dependencies: dependencies.iter().map(|id| (*id).to_owned()).collect(),
+            anchor_resource_ids: Vec::new(),
             payload_digest: format!("sha256:{resource_id}"),
             payload_size_bytes: 1,
             provenance: PackageResourceProvenance {
@@ -444,6 +519,7 @@ mod tests {
             media_digest: format!("sha256:{}", "a".repeat(64)),
             media_size_bytes: 100,
             media_id: None,
+            source_asset_id: None,
             producer: None,
         }];
         let plan = adoption_commit_plan(&installation, 100).unwrap();

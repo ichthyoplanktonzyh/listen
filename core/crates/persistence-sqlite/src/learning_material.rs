@@ -520,9 +520,8 @@ fn load_document_renditions(
 ) -> Result<Vec<DocumentRendition>, ApplicationError> {
     let mut statement = connection
         .prepare(
-            "SELECT rendition_id, origin, media_type, language, text_bytes,
-                    text_sha256, text_byte_size, source_asset_id, producer_json,
-                    compatibility_json
+            "SELECT rendition_id, origin, media_type, language, digest,
+                    byte_size, source_asset_id, producer_json, compatibility_json
              FROM material_document_renditions WHERE revision_id=?1 ORDER BY rendition_id",
         )
         .map_err(repo)?;
@@ -533,12 +532,11 @@ fn load_document_renditions(
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, Option<String>>(3)?,
-                row.get::<_, Vec<u8>>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, u64>(6)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, u64>(5)?,
+                row.get::<_, Option<String>>(6)?,
                 row.get::<_, Option<String>>(7)?,
                 row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
             ))
         })
         .map_err(repo)?
@@ -550,9 +548,8 @@ fn load_document_renditions(
         origin,
         media_type,
         language,
-        text_bytes,
-        text_sha256,
-        text_byte_size,
+        digest,
+        byte_size,
         source_asset_id,
         producer_json,
         compatibility_json,
@@ -573,22 +570,6 @@ fn load_document_renditions(
                     .map_err(|error| ApplicationError::Repository(error.to_string()))
             })
             .transpose()?;
-        let text = String::from_utf8(text_bytes).map_err(|_| {
-            ApplicationError::Repository(format!(
-                "revision {revision_id} stored document rendition text is not UTF-8"
-            ))
-        })?;
-        use sha2::Digest as _;
-        if text_sha256 != hex::encode(sha2::Sha256::digest(text.as_bytes())) {
-            return Err(ApplicationError::Repository(format!(
-                "revision {revision_id} stored document rendition digest does not match its text"
-            )));
-        }
-        if text_byte_size != text.len() as u64 {
-            return Err(ApplicationError::Repository(format!(
-                "revision {revision_id} stored document rendition byte size does not match its text"
-            )));
-        }
         let producer = producer_json
             .map(|json| from_json::<domain::ProducerFact>(&json).map_err(repo))
             .transpose()?;
@@ -605,7 +586,8 @@ fn load_document_renditions(
             origin,
             media_type,
             language,
-            text,
+            digest,
+            byte_size,
             source_asset_id,
             producer,
             compatibility,
@@ -911,10 +893,9 @@ fn insert_components(
         connection
             .execute(
                 "INSERT INTO material_document_renditions
-                   (revision_id, rendition_id, origin, media_type, language, text_bytes,
-                    text_sha256, text_byte_size, source_asset_id, producer_json,
-                    compatibility_json)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                   (revision_id, rendition_id, origin, media_type, language, digest,
+                    byte_size, source_asset_id, producer_json, compatibility_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
                 params![
                     revision.id.as_str(),
                     rendition.id.as_str(),
@@ -927,9 +908,8 @@ fn insert_components(
                         .language
                         .as_ref()
                         .map(domain::LanguageCode::as_str),
-                    rendition.text.as_bytes(),
-                    rendition.text_sha256,
-                    rendition.text_byte_size as i64,
+                    rendition.digest,
+                    rendition.byte_size as i64,
                     rendition
                         .source_asset_id
                         .as_ref()
@@ -1022,7 +1002,8 @@ fn validate_component(component: &Rendition) -> Result<Rendition, ApplicationErr
                 rendition.origin,
                 rendition.media_type.clone(),
                 rendition.language.clone(),
-                rendition.text.clone(),
+                rendition.digest.clone(),
+                rendition.byte_size,
                 rendition.source_asset_id.clone(),
                 rendition.producer.clone(),
                 rendition.compatibility.clone(),

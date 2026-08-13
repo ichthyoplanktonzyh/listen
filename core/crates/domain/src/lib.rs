@@ -311,6 +311,12 @@ pub enum DomainError {
     MissingSourceBinding(&'static str),
     #[error("derived media rendition requires an exact content digest")]
     MissingDerivedDigest,
+    #[error("digest must be 64 lowercase hex characters")]
+    InvalidDigest(&'static str),
+    #[error("byte size must be at least 1")]
+    InvalidByteSize(&'static str),
+    #[error("derived {0} must not bind a source asset")]
+    DerivedRenditionBindsSource(&'static str),
     #[error("anchor range is invalid: end precedes start")]
     InvalidAnchorRange,
     #[error("duplicate reading anchor: {0}")]

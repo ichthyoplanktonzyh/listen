@@ -227,20 +227,35 @@ mod tests {
     }
 
     fn revision() -> MaterialRevision {
+        let content = "content";
+        let asset = domain::SourceAsset::new(
+            "text/plain",
+            content.len() as u64,
+            {
+                use sha2::Digest as _;
+                hex::encode(sha2::Sha256::digest(content.as_bytes()))
+            },
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            1,
+        )
+        .expect("valid source asset");
         let renditions = vec![Rendition::Document(
             DocumentRendition::new(
                 RenditionOrigin::Source,
                 "text/plain",
                 None,
-                "content".to_owned(),
-                None,
+                asset.sha256_digest.clone(),
+                asset.byte_length,
+                Some(asset.id.clone()),
                 None,
                 None,
             )
             .expect("valid rendition"),
         )];
-        let material_id = domain::initial_material_id(&[], &renditions).expect("valid material id");
-        MaterialRevision::new(material_id, "Title", Vec::new(), renditions, 1)
+        let material_id = domain::initial_material_id(std::slice::from_ref(&asset), &renditions)
+            .expect("valid material id");
+        MaterialRevision::new(material_id, "Title", vec![asset], renditions, 1)
             .expect("valid revision")
     }
 

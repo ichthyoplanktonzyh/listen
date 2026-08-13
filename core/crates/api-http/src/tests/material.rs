@@ -15,6 +15,7 @@ use domain::{
     DocumentRendition, LanguageCode, LearningMaterial, MaterialRevision, MediaId, MediaKind,
     MediaRendition, Rendition, RenditionOrigin, initial_material_id,
 };
+use sha2::Digest as _;
 
 fn media_rendition() -> Rendition {
     Rendition::Media(
@@ -35,13 +36,15 @@ fn media_rendition() -> Rendition {
 }
 
 fn document_rendition() -> Rendition {
+    let bytes = "  exact 字节\n".as_bytes();
     Rendition::Document(
         DocumentRendition::new(
             RenditionOrigin::Source,
             "text/plain",
             Some(LanguageCode::parse("en").expect("language")),
-            "  exact 字节\n",
-            None,
+            hex::encode(sha2::Sha256::digest(bytes)),
+            bytes.len() as u64,
+            Some(domain::SourceAssetId::parse("asset-1").expect("asset id")),
             None,
             None,
         )
@@ -148,22 +151,20 @@ fn material_wire_dtos_are_typed_collections_and_path_free() {
             keys
         },
         vec![
+            "byte_size",
+            "digest",
             "id",
             "language",
             "media_type",
             "origin",
-            "source_asset_id",
-            "text",
-            "text_byte_size",
-            "text_sha256"
+            "source_asset_id"
         ]
     );
     assert_eq!(text["origin"], "source");
-    assert_eq!(text["text"], "  exact 字节\n");
-    assert_eq!(text["text_byte_size"], "  exact 字节\n".len() as u64);
+    assert_eq!(text["byte_size"], "  exact 字节\n".len() as u64);
     assert_eq!(text["language"], "en");
     assert!(
-        text["text_sha256"]
+        text["digest"]
             .as_str()
             .is_some_and(|digest| digest.len() == 64)
     );
@@ -218,13 +219,14 @@ fn material_input_dtos_deserialize_typed_components() {
     let text: serde_json::Value = serde_json::from_value(serde_json::json!({
         "media_type": "text/plain",
         "language": null,
-        "text": "typed input",
-        "source_asset_index": null,
+        "digest": "abcd",
+        "byte_size": 4,
+        "source_asset_index": 0,
     }))
     .expect("document rendition input");
     let _: DocumentRenditionInputRequest =
         serde_json::from_value(text.clone()).expect("typed document rendition input");
-    assert_eq!(text["text"], "typed input");
+    assert_eq!(text["digest"], "abcd");
 
     let rendition: serde_json::Value = serde_json::from_value(serde_json::json!({
         "media_id": "media-1",
@@ -305,7 +307,7 @@ fn openapi_material_schemas_match_wire_semantics() {
         ),
         (
             "DocumentRendition",
-            "id, origin, media_type, language, text, text_sha256, text_byte_size, source_asset_id",
+            "id, origin, media_type, language, digest, byte_size, source_asset_id",
         ),
         (
             "MediaRendition",

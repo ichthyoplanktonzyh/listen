@@ -19,7 +19,7 @@ use axum::body::to_bytes;
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::{Request, StatusCode};
 use content_package::v2::serialize_canonical;
-use content_package::v3::RELEASE_SCHEMA_V3;
+use content_package::v3::{RELEASE_SCHEMA_V3, STRUCTURED_READING_SCHEMA_V1};
 use rusqlite::params;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -79,18 +79,6 @@ impl Drop for TestDirectory {
     }
 }
 
-fn document_payload(text: &str, language: &str) -> (Value, Vec<u8>) {
-    let end = text.chars().count() as u32;
-    let payload = json!({
-        "language": language,
-        "text": text,
-        "segments": [{"id": "s1", "index": 0, "language": language, "start_char": 0, "end_char": end, "extensions": {}}],
-        "extensions": {},
-    });
-    let bytes = serde_json::to_vec(&payload).unwrap();
-    (payload, bytes)
-}
-
 fn base_descriptor(
     schema: &str,
     language: &str,
@@ -101,13 +89,13 @@ fn base_descriptor(
 ) -> Value {
     json!({
         "schema": schema,
-        "kind": "document_text",
+        "kind": "structured_reading",
         "role": "base",
         "content_language": language,
         "support_languages": [],
         "subject": {"material_revision_id": revision_id, "rendition_ids": [], "anchor_resource_ids": []},
         "dependencies": [],
-        "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "input_resource_ids": [], "extensions": {}},
+        "provenance": {"created_at_ms": 1, "tool": {"id": "listen-gen", "version": "0.4.0"}, "provider": null, "model": null, "config_sha256": null, "input_rendition_ids": [], "input_resource_ids": [], "extensions": {}},
         "quality": {"review_status": review_status, "warnings": [], "extensions": {}},
         "payload_blob": {"digest": digest, "size_bytes": size, "embedded": true},
         "extensions": {},
@@ -122,8 +110,69 @@ fn resource_entry(descriptor: &Value, required: bool) -> Value {
     })
 }
 
-/// A text-only v2 release bound to the given material and revision. The base
-/// document_text resource embeds the exact `text` payload.
+/// Sentence anchor ranges over the exact text so every offset is a true byte
+/// boundary of the payload's `text`.
+fn sentence_ranges(text: &str) -> Vec<(u64, u64)> {
+    let mut ranges = Vec::new();
+    let mut start = 0_u64;
+    let bytes = text.as_bytes();
+    let mut index = 0_usize;
+    while index < bytes.len() {
+        if matches!(bytes[index], b'.' | b'!' | b'?') {
+            let mut end = index + 1;
+            while bytes.get(end) == Some(&b' ') {
+                end += 1;
+            }
+            if start < end as u64 {
+                ranges.push((start, end as u64));
+            }
+            start = end as u64;
+            index = end;
+        } else {
+            index += 1;
+        }
+    }
+    if start < text.len() as u64 {
+        ranges.push((start, text.len() as u64));
+    }
+    ranges
+}
+
+/// A structured reading payload over the exact `text` with one root block.
+fn structured_payload(text: &str) -> Value {
+    let ranges = sentence_ranges(text);
+    let anchors: Vec<Value> = ranges
+        .iter()
+        .enumerate()
+        .map(|(index, (start, end))| {
+            json!({
+                "anchor_id": format!("anchor-{}", index + 1),
+                "kind": "sentence",
+                "start_offset": start,
+                "end_offset": end,
+            })
+        })
+        .collect();
+    json!({
+        "language": "en",
+        "text": text,
+        "anchors": anchors,
+        "blocks": [{
+            "block_id": "block-root",
+            "kind": "root",
+            "order": 0,
+            "span_anchor_ids": (0..ranges.len()).map(|index| format!("anchor-{}", index + 1)).collect::<Vec<_>>(),
+            "parent_block_id": null,
+        }],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    })
+}
+
+/// A text-only release bound to the given material and revision. The base
+/// structured reading resource embeds the exact `text` payload; the source
+/// Document Rendition carries the raw text bytes.
 fn text_release_carrier(
     material_id: &str,
     revision_id: &str,
@@ -131,10 +180,11 @@ fn text_release_carrier(
     text: &str,
     review_status: &str,
 ) -> (TestDirectory, Value, Value) {
-    let (_, bytes) = document_payload(text, "en");
+    let structured = structured_payload(text);
+    let bytes = canonical_bytes(&structured);
     let digest = sha256_id(&bytes);
     let descriptor = base_descriptor(
-        "listen.payload.document-text.v1",
+        STRUCTURED_READING_SCHEMA_V1,
         "en",
         &digest,
         bytes.len() as u64,
@@ -204,6 +254,7 @@ fn text_release_carrier(
 // ---------------------------------------------------------------------
 
 async fn create_text_material(app: &Router, text: &str) -> Value {
+    let digest = hex::encode(Sha256::digest(text.as_bytes()));
     let response = app
         .clone()
         .oneshot(
@@ -213,12 +264,18 @@ async fn create_text_material(app: &Router, text: &str) -> Value {
                 .body(Body::from(
                     json!({
                         "title": "Wire Fixture",
-                        "source_assets": [],
+                        "source_assets": [{
+                            "media_type": "text/plain",
+                            "byte_length": text.len(),
+                            "sha256_digest": digest,
+                            "binding": { "type": "managed" },
+                        }],
                         "document_renditions": [{
                             "media_type": "text/plain",
                             "language": "en",
-                            "text": text,
-                            "source_asset_index": null,
+                            "digest": digest,
+                            "byte_size": text.len(),
+                            "source_asset_index": 0,
                         }],
                         "media_renditions": [],
                     })
@@ -392,7 +449,7 @@ async fn installing_a_matching_v2_package_returns_exact_candidate_dto() {
     assert_eq!(installed["resources"].as_array().unwrap().len(), 1);
     let resource = &installed["resources"][0];
     assert_eq!(resource["resource_id"], resource_id);
-    assert_eq!(resource["kind"], "document_text");
+    assert_eq!(resource["kind"], "structured_reading");
     assert_eq!(resource["role"], "base");
     assert_eq!(resource["required"], true);
     assert_eq!(resource["availability"], "available");
@@ -1029,6 +1086,7 @@ async fn stale_revision_adoption_is_409_and_never_exposes_plan_details() {
     let release_id = installed["release_id"].as_str().unwrap().to_owned();
 
     // Append a new revision so the installed release is now stale.
+    let digest = hex::encode(Sha256::digest("New revision text.".as_bytes()));
     let response = app
         .clone()
         .oneshot(
@@ -1038,12 +1096,18 @@ async fn stale_revision_adoption_is_409_and_never_exposes_plan_details() {
                 .body(Body::from(
                     json!({
                         "title": "Stale adoption v2",
-                        "source_assets": [],
+                        "source_assets": [{
+                            "media_type": "text/plain",
+                            "byte_length": "New revision text.".len(),
+                            "sha256_digest": digest,
+                            "binding": { "type": "managed" },
+                        }],
                         "document_renditions": [{
                             "media_type": "text/plain",
                             "language": null,
-                            "text": "New revision text.",
-                            "source_asset_index": null,
+                            "digest": digest,
+                            "byte_size": "New revision text.".len(),
+                            "source_asset_index": 0,
                         }],
                         "media_renditions": [],
                     })
@@ -1239,4 +1303,533 @@ fn wire_dtos_convert_exact_fields_and_enum_strings() {
     let adoption: AdoptLearningEditionRequest =
         serde_json::from_value(json!({"release_id": "sha256:r"})).unwrap();
     assert_eq!(adoption.release_id, "sha256:r");
+}
+
+// ---------------------------------------------------------------------
+// Adopted composition surface (contract 4.0.0): the single Core-owned
+// composition authority. The App never re-parses a `.listenpkg`; these
+// typed reads are the only composition interface.
+// ---------------------------------------------------------------------
+
+/// A file-backed app so composition content can be proven to survive a real
+/// close and reopen, mirroring the production wiring in `main.rs`.
+fn file_app(database_path: &Path) -> Router {
+    let repo = Arc::new(SqliteRepository::open(database_path).unwrap());
+    let services = AppServices::new(
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+        repo.clone(),
+    )
+    .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
+    .with_material_repository(repo.clone())
+    .with_package_lifecycle_repository(repo.clone());
+    router(ApiState::new(services, repo, TOKEN))
+}
+
+async fn read_composition(app: &Router, material_id: &str) -> (StatusCode, Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/v1/materials/{material_id}/composition"))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    (status, serde_json::from_slice(&body).unwrap())
+}
+
+async fn read_payload(app: &Router, material_id: &str, resource_id: &str) -> (StatusCode, Vec<u8>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/materials/{material_id}/composition/resources/{resource_id}/payload"
+            ))
+            .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
+    (status, body)
+}
+
+async fn read_blob(app: &Router, material_id: &str, rendition_id: &str) -> (StatusCode, Vec<u8>) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob"
+            ))
+            .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
+    (status, body)
+}
+
+#[tokio::test]
+async fn adopted_composition_resolves_and_unadopted_material_is_typed_404() {
+    let app = test_app();
+    let material = create_text_material(&app, "Composition text.").await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // No adoption yet: typed not-found.
+    let (status, body) = read_composition(&app, &material_id).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "not_found");
+
+    let (directory, release, resource_id) = text_release_carrier(
+        &material_id,
+        &revision_id,
+        "edition-composition",
+        "Composition text.",
+        "machine_checked",
+    );
+    let resource_id = resource_id.as_str().unwrap().to_owned();
+    let rendition_id = release["document_renditions"][0]["rendition_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+
+    let (status, composition) = read_composition(&app, &material_id).await;
+    assert_eq!(status, StatusCode::OK, "{composition}");
+    assert_eq!(composition["release_id"], release_id);
+    assert_eq!(composition["material_id"], material_id);
+    assert_eq!(composition["material_revision_id"], revision_id);
+    assert_eq!(composition["target_language"], "en");
+
+    // Exactly the selected resource and rendition are listed, with exact
+    // digest/size facts and a binding that never leaks a path.
+    let resources = composition["resources"].as_array().unwrap();
+    assert_eq!(resources.len(), 1);
+    assert_eq!(resources[0]["resource_id"], resource_id);
+    assert!(resources[0]["payload_digest"].as_str().unwrap().len() > 10);
+    let renditions = composition["renditions"].as_array().unwrap();
+    assert_eq!(renditions.len(), 1);
+    assert_eq!(renditions[0]["rendition_id"], rendition_id);
+    assert_eq!(renditions[0]["origin"], "source");
+    assert_eq!(renditions[0]["binding"]["type"], "managed_source_asset");
+    assert!(renditions[0]["binding"].get("source_asset_id").is_some());
+    let serialized = composition.to_string();
+    assert!(
+        !serialized.contains("package_path") && !serialized.contains("local_path"),
+        "composition must never expose a local path: {serialized}"
+    );
+}
+
+#[tokio::test]
+async fn composition_payload_and_blob_survive_carrier_deletion_and_database_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("composition.db");
+    let material_id;
+    let release_id;
+    let revision_id;
+    let resource_id: String;
+    let rendition_id: String;
+    {
+        let app = file_app(&db_path);
+        let material = create_text_material(&app, "Durable composition.").await;
+        material_id = material["material"]["id"].as_str().unwrap().to_owned();
+        revision_id = material["current_revision"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let (directory, release, resource_id_value) = text_release_carrier(
+            &material_id,
+            &revision_id,
+            "edition-durable-composition",
+            "Durable composition.",
+            "machine_checked",
+        );
+        resource_id = resource_id_value.as_str().unwrap().to_owned();
+        rendition_id = release["document_renditions"][0]["rendition_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+        assert_eq!(status, StatusCode::OK, "{installed}");
+        release_id = installed["release_id"].as_str().unwrap().to_owned();
+        let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+        assert_eq!(status, StatusCode::OK, "{adopted}");
+        // Delete the source carrier while the app is still open.
+        drop(directory);
+        // The typed content is still readable through Core-owned storage.
+        let (status, payload) = read_payload(&app, &material_id, resource_id.as_str()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            payload,
+            canonical_bytes(&structured_payload("Durable composition."))
+        );
+        let (status, blob) = read_blob(&app, &material_id, rendition_id.as_str()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(blob, b"Durable composition.".to_vec());
+    }
+
+    // A real close and reopen: the App never re-parses the carrier; the
+    // adopted content is read straight from the durable Core store.
+    let reopened = file_app(&db_path);
+    let (status, composition) = read_composition(&reopened, &material_id).await;
+    assert_eq!(status, StatusCode::OK, "{composition}");
+    assert_eq!(composition["release_id"], release_id);
+    assert_eq!(composition["material_revision_id"], revision_id);
+    let (status, payload) = read_payload(&reopened, &material_id, resource_id.as_str()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        payload,
+        canonical_bytes(&structured_payload("Durable composition."))
+    );
+    let (status, blob) = read_blob(&reopened, &material_id, rendition_id.as_str()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(blob, b"Durable composition.".to_vec());
+}
+
+#[tokio::test]
+async fn tampered_stored_composition_content_fails_closed_as_integrity_failure() {
+    let dir = tempfile::tempdir().unwrap();
+    let db_path = dir.path().join("composition-tamper.db");
+    let material_id;
+    let release_id;
+    let revision_id;
+    let resource_id: String;
+    {
+        let app = file_app(&db_path);
+        let material = create_text_material(&app, "Tamper text.").await;
+        material_id = material["material"]["id"].as_str().unwrap().to_owned();
+        revision_id = material["current_revision"]["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let (directory, _, resource_id_value) = text_release_carrier(
+            &material_id,
+            &revision_id,
+            "edition-tamper",
+            "Tamper text.",
+            "machine_checked",
+        );
+        resource_id = resource_id_value.as_str().unwrap().to_owned();
+        let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+        assert_eq!(status, StatusCode::OK, "{installed}");
+        release_id = installed["release_id"].as_str().unwrap().to_owned();
+        let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+        assert_eq!(status, StatusCode::OK, "{adopted}");
+    }
+
+    // Tamper the stored payload bytes: digest and size no longer verify.
+    {
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "UPDATE package_resource_payloads SET body=?1 WHERE resource_id=?2",
+            params![b"tampered payload bytes".to_vec(), resource_id.as_str()],
+        )
+        .unwrap();
+    }
+
+    let reopened = file_app(&db_path);
+    let (status, body) = read_payload(&reopened, &material_id, resource_id.as_str()).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["code"], "composition_integrity_failure");
+    assert_eq!(
+        body["message"],
+        "adopted composition content is missing or fails integrity verification"
+    );
+    assert_eq!(body["retryable"], false);
+}
+
+#[tokio::test]
+async fn stale_revision_adopted_composition_is_integrity_failure() {
+    let app = test_app();
+    let material = create_text_material(&app, "Stale composition.").await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (directory, _, _) = text_release_carrier(
+        &material_id,
+        &revision_id,
+        "edition-stale-composition",
+        "Stale composition.",
+        "machine_checked",
+    );
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+
+    // Append a new revision: the adopted composition is now stale. The
+    // composition authority fails closed instead of silently serving the old
+    // selection.
+    let digest = hex::encode(Sha256::digest(b"new revision text"));
+    let (status, appended) = {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post(format!("/v1/materials/{material_id}/revisions"))
+                    .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "title": "Stale composition v2",
+                            "source_assets": [{
+                                "media_type": "text/plain",
+                                "byte_length": b"new revision text".len(),
+                                "sha256_digest": digest,
+                                "binding": { "type": "managed" },
+                            }],
+                            "document_renditions": [{
+                                "media_type": "text/plain",
+                                "language": null,
+                                "digest": digest,
+                                "byte_size": b"new revision text".len(),
+                                "source_asset_index": 0,
+                            }],
+                            "media_renditions": [],
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice::<Value>(&body).unwrap())
+    };
+    assert_eq!(status, StatusCode::OK, "{appended}");
+
+    let (status, body) = read_composition(&app, &material_id).await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(body["code"], "composition_integrity_failure");
+}
+
+#[tokio::test]
+async fn unselected_composition_reads_are_typed_not_found() {
+    let app = test_app();
+    let material = create_text_material(&app, "Selection text.").await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (directory, _, _) = text_release_carrier(
+        &material_id,
+        &revision_id,
+        "edition-selection",
+        "Selection text.",
+        "machine_checked",
+    );
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+
+    let (status, body) = read_payload(&app, &material_id, "resource-never-selected").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["code"], "not_found");
+
+    let (status, body) = read_blob(&app, &material_id, "rendition-never-selected").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["code"], "not_found");
+}
+
+#[tokio::test]
+async fn referenced_source_asset_unavailability_is_source_unavailable() {
+    // A Source Document Rendition whose bound Source Asset is referenced in
+    // place and unreachable: the blob read is an explicit source_unavailable,
+    // and the Material with its adoption stay untouched.
+    let app = test_app();
+    let text = "Reference text.";
+    let digest = hex::encode(Sha256::digest(text.as_bytes()));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/v1/materials")
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "title": "Wire Fixture",
+                        "source_assets": [{
+                            "media_type": "text/plain",
+                            "byte_length": text.len(),
+                            "sha256_digest": digest,
+                            "binding": { "type": "referenced", "reference": "/opaque/reference" },
+                        }],
+                        "document_renditions": [{
+                            "media_type": "text/plain",
+                            "language": "en",
+                            "digest": digest,
+                            "byte_size": text.len(),
+                            "source_asset_index": 0,
+                        }],
+                        "media_renditions": [],
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let material: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap();
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let source_asset_id = material["current_revision"]["source_assets"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    // The carrier binds a Source rendition with no embedded blob: the carrier
+    // declares the rendition's bytes as referenced, not embedded.
+    let structured = structured_payload(text);
+    let payload_bytes = canonical_bytes(&structured);
+    let payload_digest = sha256_id(&payload_bytes);
+    let descriptor = base_descriptor(
+        STRUCTURED_READING_SCHEMA_V1,
+        "en",
+        &payload_digest,
+        payload_bytes.len() as u64,
+        &revision_id,
+        "machine_checked",
+    );
+    let resource = resource_entry(&descriptor, true);
+    let text_digest = sha256_id(text.as_bytes());
+    let text_blob = json!({
+        "digest": text_digest,
+        "size_bytes": text.len() as u64,
+        "embedded": false,
+    });
+    let rendition_id = sha256_id(&canonical_bytes(&json!({
+        "media_type": "text/plain",
+        "language": "en",
+        "text_blob": text_blob,
+    })));
+    let document = json!({
+        "rendition_id": rendition_id,
+        "origin": "source",
+        "media_type": "text/plain",
+        "language": "en",
+        "text_blob": text_blob,
+        "source_asset_id": text_digest,
+        "producer": null,
+        "compatibility": null,
+        "extensions": {},
+    });
+    let release = json!({
+        "schema": RELEASE_SCHEMA_V3,
+        "created_at_ms": 1u64,
+        "edition": {
+            "edition_id": "edition-reference",
+            "title": "Reference Edition",
+            "target_language": "en",
+            "support_languages": ["zh-Hans"],
+        },
+        "material": {
+            "material_id": material_id,
+            "material_revision_id": revision_id,
+            "title": "Reference Material",
+        },
+        "document_renditions": [document],
+        "media_renditions": [],
+        "resources": [resource],
+        "extensions": {},
+    });
+    let mut files = BTreeMap::new();
+    files.insert("release.json".into(), canonical_bytes(&release));
+    files.insert(blob_path(&payload_digest), payload_bytes);
+    let directory = TestDirectory::new();
+    for (name, bytes) in &files {
+        let path = directory.path().join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    let (status, installed) = install_package(&app, &material_id, directory.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed}");
+    let release_id = installed["release_id"].as_str().unwrap().to_owned();
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_id).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+
+    // The referenced Source Asset is reported unavailable through the
+    // availability operation.
+    let (status, updated) = {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::put(format!(
+                    "/v1/materials/{material_id}/source-assets/{source_asset_id}/availability"
+                ))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "availability": {
+                            "state": "unavailable",
+                            "reason": "file_missing",
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice::<Value>(&body).unwrap())
+    };
+    assert_eq!(status, StatusCode::OK, "{updated}");
+
+    // The blob is not stored (embedded: false) and the referenced Source
+    // Asset is unreachable: an explicit source_unavailable that never deletes
+    // the Material or the adoption.
+    let (status, body) = read_blob(&app, &material_id, &rendition_id).await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["code"], "source_unavailable");
+    assert_eq!(body["retryable"], true);
+
+    let (status, composition) = read_composition(&app, &material_id).await;
+    assert_eq!(status, StatusCode::OK, "{composition}");
+    assert_eq!(composition["release_id"], release_id);
 }

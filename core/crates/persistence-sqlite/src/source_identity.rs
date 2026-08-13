@@ -114,23 +114,42 @@ mod tests {
     /// Creates one real material (and its revision) the mappings can reference
     /// through the foreign keys, returning both ids.
     fn ensure_material(store: &SqliteRepository) -> (LearningMaterialId, MaterialRevisionId) {
+        let text = "source identity material";
+        let digest = {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(text.as_bytes()))
+        };
+        let asset = domain::SourceAsset::new(
+            "text/plain",
+            text.len() as u64,
+            digest.clone(),
+            domain::SourceAssetBinding::Managed,
+            domain::SourceAssetAvailability::Available,
+            1,
+        )
+        .unwrap();
         let rendition = Rendition::Document(
             DocumentRendition::new(
                 RenditionOrigin::Source,
                 "text/plain",
                 None,
-                "source identity material",
-                None,
+                digest,
+                text.len() as u64,
+                Some(asset.id.clone()),
                 None,
                 None,
             )
             .unwrap(),
         );
-        let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
+        let material_id = initial_material_id(
+            std::slice::from_ref(&asset),
+            std::slice::from_ref(&rendition),
+        )
+        .unwrap();
         let revision = MaterialRevision::new(
             material_id.clone(),
             "Source identity material",
-            Vec::new(),
+            vec![asset],
             vec![rendition],
             1,
         )

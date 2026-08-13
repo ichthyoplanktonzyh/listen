@@ -12,11 +12,15 @@ while IFS= read -r -d '' v2_json; do
   python3 -m json.tool "$v2_json" >/dev/null
 done < <(find "$root/contracts/content-package/v2" -name '*.json' -print0)
 cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked v2::
-# Content Package v3: JSON syntax over the v3 contract tree, then the v3 suite.
+# Content Package v3: JSON syntax over the v3 contract tree, the v3 suite,
+# then real JSON Schema validation of the examples and package bodies.
 while IFS= read -r -d '' v3_json; do
   python3 -m json.tool "$v3_json" >/dev/null
 done < <(find "$root/contracts/content-package/v3" -name '*.json' -print0)
 cargo test --manifest-path "$root/Cargo.toml" -p content-package --locked v3::
+python3 "$root/scripts/validate_content_package_schemas.py" "$root/contracts/content-package"
+PYTHONPYCACHEPREFIX="$tmp/pycache" python3 -m unittest \
+  "$root/scripts/test_content_package_schemas.py"
 python3 "$root/scripts/openapi_contract.py" check
 if command -v openapi-generator >/dev/null 2>&1; then
   openapi-generator validate -i "$root/contracts/openapi/v1.yaml"
@@ -321,8 +325,37 @@ for (const materialSchema of ["LearningMaterial", "SourceAsset", "DocumentRendit
 }
 // The canonical component schemas must declare their required typed columns.
 if (!openapi.includes("    SourceAsset:\n") || !openapi.includes("required: [id, media_type, byte_length, sha256_digest, binding, availability, created_at_ms]")) throw new Error("SourceAsset must require its typed columns");
-if (!openapi.includes("    DocumentRendition:\n") || !openapi.includes("required: [id, origin, media_type, language, text, text_sha256, text_byte_size, source_asset_id]")) throw new Error("DocumentRendition must require its typed columns");
+if (!openapi.includes("    DocumentRendition:\n") || !openapi.includes("required: [id, origin, media_type, language, digest, byte_size, source_asset_id]")) throw new Error("DocumentRendition must require its typed columns");
 if (!openapi.includes("    MediaRendition:\n") || !openapi.includes("required: [id, origin, kind, media_type, fingerprint, availability, media_id, media_sha256, media_byte_size]")) throw new Error("MediaRendition must require its typed columns");
+// Document rendition inputs bind a Source Asset by index and never carry
+// extracted text.
+if (!openapi.includes("required: [media_type, digest, byte_size, source_asset_index]")) throw new Error("DocumentRenditionInput must require exact byte facts and a Source Asset index");
+for (const retiredWire of ["text_sha256:", "text_byte_size:"]) {
+  if (openapi.includes(retiredWire)) throw new Error(`retired inline document text wire surface ${retiredWire} must stay absent`);
+}
+// Capability attempts have honest terminal states; cancelled and superseded
+// are never failed attempts.
+if (!openapi.includes("status: { enum: [running, succeeded, failed, cancelled, superseded] }")) throw new Error("CapabilityAttempt status must carry the four honest terminal states");
+if (!openapi.includes("status: { enum: [succeeded, failed, cancelled] }")) throw new Error("FinalizeCapabilityAttemptRequest must support cancellation");
+// Adopted composition surface (4.0.0): the single Core-owned composition
+// interface with its typed content reads and stable failure codes.
+for (const compositionPath of ["/v1/materials/{material_id}/composition", "/v1/materials/{material_id}/composition/resources/{resource_id}/payload", "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob"]) {
+  if (!openapi.includes(compositionPath + ":")) throw new Error(`OpenAPI missing composition path ${compositionPath}`);
+}
+for (const compositionOperation of ["readMaterialComposition", "readCompositionResourcePayload", "readCompositionRenditionBlob"]) {
+  if (!openapi.includes(`operationId: ${compositionOperation}`)) throw new Error(`OpenAPI missing composition operationId ${compositionOperation}`);
+}
+for (const compositionSchema of ["AdoptedComposition", "CompositionResource", "CompositionRendition", "CompositionBinding"]) {
+  if (!openapi.includes(`    ${compositionSchema}:`)) throw new Error(`missing OpenAPI composition schema ${compositionSchema}`);
+}
+for (const compositionError of ["composition_integrity_failure", "source_unavailable"]) {
+  if (!openapi.includes(`code: ${compositionError}`)) throw new Error(`missing OpenAPI composition error code ${compositionError}`);
+}
+if (!client.includes("readMaterialComposition(materialId: string): Promise<AdoptedComposition>")) throw new Error("generated readMaterialComposition signature missing");
+if (!client.includes("readCompositionResourcePayload(materialId: string, resourceId: string): Promise<Blob>")) throw new Error("generated readCompositionResourcePayload signature missing");
+if (!client.includes("readCompositionRenditionBlob(materialId: string, renditionId: string): Promise<Blob>")) throw new Error("generated readCompositionRenditionBlob signature missing");
+if (client.includes("text_sha256: string;")) throw new Error("generated DocumentRendition inline text digest must stay absent");
+if (client.includes("text_byte_size: number;")) throw new Error("generated DocumentRendition inline text size must stay absent");
 // The capability projection must be a five-state enum over the known
 // capabilities.
 if (!openapi.includes("enum: [available, derivable, generating, unavailable, failed_attempt]")) throw new Error("MaterialCapabilityProjection must carry the five-state status enum");

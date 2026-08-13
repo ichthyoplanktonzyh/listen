@@ -27,6 +27,15 @@ pub enum ApplicationError {
     Cancelled(&'static str),
     #[error("external process failed: {0}")]
     ExternalProcess(String),
+    /// The adopted composition's selected content is missing or fails
+    /// integrity verification. Never a silent fallback: the App must surface
+    /// the honest failure instead of re-reading a carrier.
+    #[error("adopted composition content is missing or fails integrity verification")]
+    CompositionIntegrity,
+    /// A referenced Source Asset behind an adopted composition cannot be
+    /// reached. The Material and its adoption stay untouched.
+    #[error("a referenced source asset is unavailable")]
+    SourceUnavailable,
     /// A vendor LLM provider failed. Carries the standardized, secret-free
     /// taxonomy so HTTP/UI can degrade honestly without ever echoing a
     /// credential (Phase 3.12).

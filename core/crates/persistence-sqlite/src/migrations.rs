@@ -4,6 +4,7 @@ use domain::{
     ObservationOrigin, ObservationResult, learning_observation_id, observation_spec_for_marking,
 };
 use rusqlite::{Connection, params};
+use sha2::{Digest as _, Sha256};
 
 use super::PersistenceError;
 use super::learning_material::backfill_legacy_media_materials;
@@ -38,9 +39,14 @@ use super::learning_material::backfill_legacy_media_materials;
 // the canonical Phase 1 model: source assets, document/media renditions,
 // durable capability attempts, and source identity mappings; legacy
 // media-rendition asset rows migrate into the canonical media rendition
-// table before the old `material_assets` union is dropped.
-pub const MIGRATION_VERSION: u32 = 61;
-
+// table before the old `material_assets` union is dropped. v62 adds the
+// adopted-composition backing: document renditions move from inline text to
+// exact blob facts, capability attempts gain honest cancelled/superseded
+// terminal states plus a per-attempt sequence so same-millisecond retries
+// never collide, and `package_rendition_blobs` stores every present
+// Document/Media Rendition blob so adopted content stays readable after the
+// source carrier is deleted.
+pub const MIGRATION_VERSION: u32 = 62;
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
     let current: u32 = connection.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -541,6 +547,126 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
             tx.execute_batch(include_str!("../migrations/0061_convert_legacy_assets.sql"))?;
         }
         tx.pragma_update(None, "user_version", 61)?;
+        tx.commit()?;
+    }
+    if current < 62 {
+        let tx = connection.unchecked_transaction()?;
+        tx.execute_batch(include_str!("../migrations/0062_adopted_composition.sql"))?;
+        // Document renditions: convert the inline-text layout to exact blob
+        // facts (SHA-256 of the stored text bytes) when the v1 layout still
+        // exists. Fresh databases run the same rebuild over the empty v1
+        // table, so there is exactly one canonical layout.
+        if table_exists(&tx, "material_document_renditions")?
+            && table_has_column(&tx, "material_document_renditions", "text_bytes")?
+        {
+            tx.execute_batch(
+                "CREATE TABLE material_document_renditions_v2 (
+                   revision_id       TEXT NOT NULL REFERENCES material_revisions(id) ON DELETE RESTRICT,
+                   rendition_id      TEXT NOT NULL,
+                   origin            TEXT NOT NULL CHECK (origin IN ('source', 'derived')),
+                   media_type        TEXT NOT NULL,
+                   language          TEXT,
+                   digest            TEXT NOT NULL,
+                   byte_size         INTEGER NOT NULL CHECK (byte_size >= 0),
+                   source_asset_id   TEXT,
+                   producer_json     TEXT CHECK (producer_json IS NULL OR json_valid(producer_json)),
+                   compatibility_json TEXT CHECK (compatibility_json IS NULL OR json_valid(compatibility_json)),
+                   PRIMARY KEY (revision_id, rendition_id)
+                 )",
+            )?;
+            let mut statement = tx.prepare(
+                "SELECT revision_id, rendition_id, origin, media_type, language, text_bytes,
+                        source_asset_id, producer_json, compatibility_json
+                 FROM material_document_renditions",
+            )?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Vec<u8>>(5)?,
+                        row.get::<_, Option<String>>(6)?,
+                        row.get::<_, Option<String>>(7)?,
+                        row.get::<_, Option<String>>(8)?,
+                    ))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            drop(statement);
+            for (
+                revision_id,
+                rendition_id,
+                origin,
+                media_type,
+                language,
+                text_bytes,
+                source_asset_id,
+                producer_json,
+                compatibility_json,
+            ) in rows
+            {
+                let digest = hex::encode(Sha256::digest(&text_bytes));
+                let byte_size = text_bytes.len() as i64;
+                tx.execute(
+                    "INSERT INTO material_document_renditions_v2
+                       (revision_id, rendition_id, origin, media_type, language, digest,
+                        byte_size, source_asset_id, producer_json, compatibility_json)
+                     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+                    params![
+                        revision_id,
+                        rendition_id,
+                        origin,
+                        media_type,
+                        language,
+                        digest,
+                        byte_size,
+                        source_asset_id,
+                        producer_json,
+                        compatibility_json,
+                    ],
+                )?;
+            }
+            tx.execute_batch(
+                "DROP TABLE material_document_renditions;
+                 ALTER TABLE material_document_renditions_v2 RENAME TO material_document_renditions;
+                 CREATE INDEX IF NOT EXISTS idx_material_document_renditions_revision
+                   ON material_document_renditions (revision_id);",
+            )?;
+        }
+        // Capability attempts: rebuild with the honest terminal states and
+        // the per-attempt sequence column when the v1 layout still exists.
+        if table_exists(&tx, "capability_attempts")?
+            && !table_has_column(&tx, "capability_attempts", "attempt_sequence")?
+        {
+            tx.execute_batch(
+                "CREATE TABLE capability_attempts_v2 (
+                   material_id           TEXT NOT NULL REFERENCES learning_materials(id) ON DELETE RESTRICT,
+                   attempt_id            TEXT NOT NULL,
+                   capability            TEXT NOT NULL CHECK (capability IN ('read', 'listen', 'watch', 'synchronized_read_listen')),
+                   status                TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'failed', 'cancelled', 'superseded')),
+                   started_at_ms         INTEGER NOT NULL,
+                   finished_at_ms        INTEGER,
+                   failure_reason        TEXT,
+                   producer_tool_id      TEXT,
+                   producer_tool_version TEXT,
+                   attempt_sequence      INTEGER NOT NULL DEFAULT 0,
+                   PRIMARY KEY (material_id, attempt_id)
+                 );
+                 INSERT INTO capability_attempts_v2
+                   (material_id, attempt_id, capability, status, started_at_ms, finished_at_ms,
+                    failure_reason, producer_tool_id, producer_tool_version, attempt_sequence)
+                 SELECT material_id, attempt_id, capability, status, started_at_ms, finished_at_ms,
+                        failure_reason, producer_tool_id, producer_tool_version, 0
+                 FROM capability_attempts;
+                 DROP TABLE capability_attempts;
+                 ALTER TABLE capability_attempts_v2 RENAME TO capability_attempts;
+                 CREATE INDEX IF NOT EXISTS idx_capability_attempts_material
+                   ON capability_attempts (material_id);",
+            )?;
+        }
+        tx.pragma_update(None, "user_version", 62)?;
         tx.commit()?;
     }
     Ok(())

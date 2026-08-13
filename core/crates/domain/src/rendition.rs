@@ -16,7 +16,6 @@
 //!   Gen involvement.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::{
     DomainError, LanguageCode, MediaAvailability, MediaId, MediaKind, RenditionId, ResourceId,
@@ -150,34 +149,46 @@ pub struct CompatibilityEvidence {
     pub checks: Vec<String>,
 }
 
-/// A Document Rendition: the readable representation of a document for one
-/// Material Revision, with its exact text bytes verified. Source renditions
-/// bind their Source Asset; Derived renditions record producer facts and
-/// exact inputs.
+/// A Document Rendition: a concrete document-format realization of one
+/// Material Revision, bound to the true rendition bytes.
+///
+/// The rendition carries exact blob facts — media type, byte digest, byte
+/// size, optional language — never an extraction result and never inline
+/// text. A Source rendition must bind a real Source Asset whose byte facts
+/// match; a Derived rendition must record exact producer facts and
+/// compatibility evidence. PDF, EPUB, scanned PDF, and plain text alike can
+/// be a Document Rendition: no text layer is required.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentRendition {
     pub id: RenditionId,
     pub origin: RenditionOrigin,
     pub media_type: String,
     pub language: Option<LanguageCode>,
-    pub text: String,
-    pub text_sha256: String,
-    pub text_byte_size: u64,
+    /// Lowercase hex SHA-256 of the exact rendition bytes.
+    pub digest: String,
+    /// Exact byte size of the rendition bytes.
+    pub byte_size: u64,
+    /// The bound Source Asset for a Source rendition.
     pub source_asset_id: Option<SourceAssetId>,
     pub producer: Option<ProducerFact>,
     pub compatibility: Option<CompatibilityEvidence>,
 }
 
 impl DocumentRendition {
-    /// Derives the deterministic identity from the exact text bytes, media
-    /// type, and language. Whitespace-only text is rejected. Origin, source
-    /// binding, and producer facts are stored facts and do not participate in
-    /// identity: equal readable content is the same realization.
+    /// Derives the deterministic identity from the exact blob facts: media
+    /// type, language, and digest. A blank media type, an invalid digest, or
+    /// a zero byte size is rejected. A Source rendition must bind its Source
+    /// Asset; a Derived rendition must carry producer facts and must never
+    /// bind a Source Asset. Origin, binding, and producer facts are stored
+    /// facts and do not participate in identity: equal bytes are the same
+    /// realization.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         origin: RenditionOrigin,
         media_type: impl Into<String>,
         language: Option<LanguageCode>,
-        text: impl Into<String>,
+        digest: impl Into<String>,
+        byte_size: u64,
         source_asset_id: Option<SourceAssetId>,
         producer: Option<ProducerFact>,
         compatibility: Option<CompatibilityEvidence>,
@@ -186,33 +197,63 @@ impl DocumentRendition {
         if media_type.trim().is_empty() {
             return Err(DomainError::EmptyValue("DocumentRendition.media_type"));
         }
-        let text = text.into();
-        if text.trim().is_empty() {
-            return Err(DomainError::WhitespaceOnlyText);
+        let digest = digest.into();
+        validate_sha256_digest(&digest)?;
+        if byte_size == 0 {
+            return Err(DomainError::InvalidByteSize("DocumentRendition"));
         }
-        let text_sha256 = hex::encode(Sha256::digest(text.as_bytes()));
-        let text_byte_size = text.len() as u64;
-        if origin == RenditionOrigin::Derived && producer.is_none() {
-            return Err(DomainError::MissingDerivedProducer("DocumentRendition"));
+        match origin {
+            RenditionOrigin::Source if source_asset_id.is_none() => {
+                return Err(DomainError::MissingSourceBinding("DocumentRendition"));
+            }
+            RenditionOrigin::Derived => {
+                if producer.is_none() {
+                    return Err(DomainError::MissingDerivedProducer("DocumentRendition"));
+                }
+                if source_asset_id.is_some() {
+                    return Err(DomainError::DerivedRenditionBindsSource(
+                        "DocumentRendition",
+                    ));
+                }
+            }
+            RenditionOrigin::Source => {}
         }
         let language_key = language.as_ref().map(LanguageCode::as_str).unwrap_or("");
         let id = RenditionId::from_fingerprint(
             "document-rendition",
-            &length_prefixed(&[media_type.as_str(), language_key, text_sha256.as_str()]),
+            &length_prefixed(&[media_type.as_str(), language_key, digest.as_str()]),
         );
         Ok(Self {
             id,
             origin,
             media_type,
             language,
-            text,
-            text_sha256,
-            text_byte_size,
+            digest,
+            byte_size,
             source_asset_id,
             producer,
             compatibility,
         })
     }
+
+    /// Whether the byte facts of a Source Asset match this rendition exactly:
+    /// equal digest and equal byte size. Media type equality is a separate,
+    /// caller-chosen fact (a rendition may normalize its declared media type).
+    pub fn asset_bytes_match(&self, asset: &SourceAsset) -> bool {
+        self.digest == asset.sha256_digest && self.byte_size == asset.byte_length
+    }
+}
+
+/// Validates a lowercase hex SHA-256 digest string.
+pub(crate) fn validate_sha256_digest(digest: &str) -> Result<(), DomainError> {
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(DomainError::InvalidDigest("digest"));
+    }
+    Ok(())
 }
 
 /// A Media Rendition: an audio or video realization for one Material
@@ -351,6 +392,7 @@ pub(crate) fn length_prefixed(fields: &[&str]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Digest as _, Sha256};
 
     fn language(code: &str) -> LanguageCode {
         LanguageCode::parse(code).expect("valid language code")
@@ -372,7 +414,7 @@ mod tests {
     #[test]
     fn source_asset_identity_is_deterministic_and_path_free() {
         let asset = SourceAsset::new(
-            "text/plain",
+            "application/pdf",
             5,
             hex::encode(Sha256::digest(b"hello")),
             SourceAssetBinding::Managed,
@@ -381,7 +423,7 @@ mod tests {
         )
         .expect("valid source asset");
         let again = SourceAsset::new(
-            "text/plain",
+            "application/pdf",
             5,
             hex::encode(Sha256::digest(b"hello")),
             SourceAssetBinding::Managed,
@@ -430,22 +472,32 @@ mod tests {
         );
     }
 
-    #[test]
-    fn source_document_rendition_identity_is_content_deterministic() {
-        let source = SourceAsset::new(
-            "text/plain",
-            5,
-            hex::encode(Sha256::digest(b"hello")),
+    fn pdf_digest(bytes: &[u8]) -> String {
+        hex::encode(Sha256::digest(bytes))
+    }
+
+    fn pdf_source_asset(bytes: &[u8]) -> SourceAsset {
+        SourceAsset::new(
+            "application/pdf",
+            bytes.len() as u64,
+            pdf_digest(bytes),
             SourceAssetBinding::Managed,
             SourceAssetAvailability::Available,
             1,
         )
-        .expect("valid source asset");
+        .expect("valid source asset")
+    }
+
+    #[test]
+    fn source_document_rendition_identity_is_content_deterministic() {
+        let bytes = b"%PDF-1.4 fake pdf bytes";
+        let source = pdf_source_asset(bytes);
         let rendition = DocumentRendition::new(
             RenditionOrigin::Source,
-            "text/plain",
+            "application/pdf",
             Some(language("en")),
-            "hello",
+            pdf_digest(bytes),
+            bytes.len() as u64,
             Some(source.id.clone()),
             None,
             None,
@@ -453,25 +505,26 @@ mod tests {
         .expect("valid rendition");
         let equal = DocumentRendition::new(
             RenditionOrigin::Source,
-            "text/plain",
+            "application/pdf",
             Some(language("en")),
-            "hello",
-            None,
+            pdf_digest(bytes),
+            bytes.len() as u64,
+            Some(source.id.clone()),
             None,
             None,
         )
         .expect("valid rendition");
         assert_eq!(rendition.id, equal.id);
-        assert_eq!(rendition.text, "hello");
-        assert_eq!(rendition.text_sha256, hex::encode(Sha256::digest(b"hello")));
-        assert_eq!(rendition.text_byte_size, 5);
+        assert_eq!(rendition.digest, pdf_digest(bytes));
+        assert_eq!(rendition.byte_size, bytes.len() as u64);
 
         let different = DocumentRendition::new(
             RenditionOrigin::Source,
-            "text/plain",
+            "application/pdf",
             Some(language("en")),
-            "goodbye",
-            None,
+            pdf_digest(b"other pdf bytes"),
+            14,
+            Some(source.id.clone()),
             None,
             None,
         )
@@ -482,45 +535,111 @@ mod tests {
             source.id.as_str(),
             "rendition id differs from asset id"
         );
+        // The rendition serializes without inline text.
+        let json = serde_json::to_value(&rendition).expect("serializes");
+        let object = json.as_object().expect("object");
+        assert!(!object.contains_key("text"), "never inline text");
+        assert!(
+            !object.contains_key("text_sha256"),
+            "never inline text digest"
+        );
+        assert!(object.contains_key("digest"));
+        assert!(object.contains_key("byte_size"));
     }
 
     #[test]
-    fn whitespace_only_document_is_rejected() {
+    fn source_document_rendition_requires_a_binding_asset_and_invalid_facts_are_rejected() {
         assert_eq!(
             DocumentRendition::new(
                 RenditionOrigin::Source,
-                "text/plain",
+                "application/pdf",
                 None,
-                "   ",
+                pdf_digest(b"%PDF"),
+                4,
                 None,
                 None,
                 None,
             ),
-            Err(DomainError::WhitespaceOnlyText)
+            Err(DomainError::MissingSourceBinding("DocumentRendition"))
+        );
+        assert_eq!(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "application/pdf",
+                None,
+                "not-a-digest",
+                4,
+                Some(SourceAssetId::parse("asset").unwrap()),
+                None,
+                None,
+            ),
+            Err(DomainError::InvalidDigest("digest"))
+        );
+        assert_eq!(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "application/pdf",
+                None,
+                pdf_digest(b"%PDF"),
+                0,
+                Some(SourceAssetId::parse("asset").unwrap()),
+                None,
+                None,
+            ),
+            Err(DomainError::InvalidByteSize("DocumentRendition"))
+        );
+        assert_eq!(
+            DocumentRendition::new(
+                RenditionOrigin::Source,
+                "  ",
+                None,
+                pdf_digest(b"%PDF"),
+                4,
+                Some(SourceAssetId::parse("asset").unwrap()),
+                None,
+                None,
+            ),
+            Err(DomainError::EmptyValue("DocumentRendition.media_type"))
         );
     }
 
     #[test]
-    fn derived_renditions_require_producer_and_verify_exact_digest() {
-        let source = SourceAsset::new(
-            "text/plain",
-            1,
-            hex::encode(Sha256::digest(b"a")),
-            SourceAssetBinding::Managed,
-            SourceAssetAvailability::Available,
-            1,
+    fn scanned_pdf_without_text_layer_is_a_valid_document_rendition() {
+        // A scanned PDF has no text layer; the rendition is still a usable
+        // document via its exact blob facts and binding.
+        let bytes = b"%PDF-1.4 scanned no text layer";
+        let source = pdf_source_asset(bytes);
+        let rendition = DocumentRendition::new(
+            RenditionOrigin::Source,
+            "application/pdf",
+            None,
+            pdf_digest(bytes),
+            bytes.len() as u64,
+            Some(source.id.clone()),
+            None,
+            None,
         )
-        .expect("valid source asset");
+        .expect("scanned pdf is a valid rendition");
+        assert!(rendition.asset_bytes_match(&source));
+        // A binding to an asset with unequal bytes never matches.
+        let other = pdf_source_asset(b"%PDF-1.4 different scanned page");
+        assert!(!rendition.asset_bytes_match(&other));
+    }
+
+    #[test]
+    fn derived_renditions_require_producer_and_never_bind_a_source_asset() {
+        let source = pdf_source_asset(b"%PDF-1.4 one byte");
         let derived = DocumentRendition::new(
             RenditionOrigin::Derived,
-            "text/plain",
+            "text/markdown",
             None,
-            "a",
-            Some(source.id),
+            pdf_digest(b"# heading"),
+            9,
+            None,
             Some(producer("listen-gen")),
             Some(CompatibilityEvidence {
                 verified_inputs: vec![],
-                checks: vec!["exact_text_match".to_owned()],
+                checks: vec!["exact_byte_match".to_owned()],
             }),
         )
         .expect("valid derived rendition");
@@ -533,14 +652,31 @@ mod tests {
         assert_eq!(
             DocumentRendition::new(
                 RenditionOrigin::Derived,
-                "text/plain",
+                "text/markdown",
                 None,
-                "a",
+                pdf_digest(b"# heading"),
+                9,
                 None,
                 None,
                 None,
             ),
             Err(DomainError::MissingDerivedProducer("DocumentRendition"))
+        );
+        // A Derived rendition may never fake a Source Asset binding.
+        assert_eq!(
+            DocumentRendition::new(
+                RenditionOrigin::Derived,
+                "text/markdown",
+                None,
+                pdf_digest(b"# heading"),
+                9,
+                Some(source.id),
+                Some(producer("listen-gen")),
+                None,
+            ),
+            Err(DomainError::DerivedRenditionBindsSource(
+                "DocumentRendition"
+            ))
         );
     }
 
@@ -637,8 +773,9 @@ mod tests {
                 RenditionOrigin::Source,
                 "text/plain",
                 None,
-                "hello",
-                None,
+                pdf_digest(b"hello"),
+                5,
+                Some(SourceAssetId::parse("asset-1").unwrap()),
                 None,
                 None,
             )

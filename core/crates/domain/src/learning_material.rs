@@ -24,13 +24,37 @@ pub enum MaterialShape {
     Mixed,
 }
 
-/// Derives the composition shape from revision renditions: document-only is
-/// `Text`; exactly audio renditions is `Audio`; exactly video renditions is
-/// `Video`; any combination is `Mixed`. Source Assets alone carry no shape.
+/// Whether a media type is an audio or video media kind. Document media types
+/// (plain text, Markdown, HTML, PDF, EPUB, and other `application/*`
+/// document formats) are not a media kind: a Source Asset carrying a PDF
+/// without a text layer is still a document, never a Mixed shape.
+pub fn media_type_kind(media_type: &str) -> Option<crate::MediaKind> {
+    let lower = media_type.trim().to_ascii_lowercase();
+    if lower.starts_with("audio/") {
+        Some(crate::MediaKind::Audio)
+    } else if lower.starts_with("video/") {
+        Some(crate::MediaKind::Video)
+    } else {
+        None
+    }
+}
+
+/// Derives the composition shape from the revision components: a document
+/// Source Asset or Document Rendition makes it a text modality; exactly audio
+/// components is `Audio`; exactly video components is `Video`; any
+/// combination is `Mixed`. A Source Asset alone (for example a scanned PDF
+/// without a text layer) still contributes its modality.
 pub fn material_shape(revision: &MaterialRevision) -> MaterialShape {
     let mut has_document = false;
     let mut has_audio = false;
     let mut has_video = false;
+    for asset in &revision.source_assets {
+        match media_type_kind(&asset.media_type) {
+            Some(crate::MediaKind::Audio) => has_audio = true,
+            Some(crate::MediaKind::Video) => has_video = true,
+            None => has_document = true,
+        }
+    }
     for rendition in &revision.renditions {
         match rendition {
             Rendition::Document(_) => has_document = true,
@@ -295,7 +319,8 @@ mod tests {
     use super::*;
     use crate::{
         DocumentRendition, LanguageCode, MaterialShape, MediaAvailability, MediaKind,
-        MediaRendition,
+        MediaRendition, RenditionOrigin, SourceAssetAvailability, SourceAssetBinding,
+        SourceAssetId,
     };
 
     fn language(code: &str) -> LanguageCode {
@@ -308,13 +333,35 @@ mod tests {
                 RenditionOrigin::Source,
                 "text/plain",
                 language,
-                text.to_string(),
-                None,
+                hex::encode(Sha256::digest(text.as_bytes())),
+                text.len() as u64,
+                Some(SourceAssetId::parse("asset-text-1").unwrap()),
                 None,
                 None,
             )
             .expect("valid text rendition"),
         )
+    }
+
+    fn pdf_source_asset_only() -> MaterialRevision {
+        let bytes = b"%PDF-1.4 scanned without text layer";
+        let asset = SourceAsset::new(
+            "application/pdf",
+            bytes.len() as u64,
+            hex::encode(Sha256::digest(bytes)),
+            SourceAssetBinding::Managed,
+            SourceAssetAvailability::Available,
+            1,
+        )
+        .expect("valid pdf source asset");
+        MaterialRevision::new(
+            LearningMaterialId::parse("material").unwrap(),
+            "Scanned PDF",
+            vec![asset],
+            Vec::new(),
+            1,
+        )
+        .expect("valid revision")
     }
 
     fn media_rendition(kind: MediaKind, media_id: &str, fingerprint: &str) -> Rendition {
@@ -346,28 +393,26 @@ mod tests {
     }
 
     #[test]
-    fn document_rendition_preserves_exact_text_bytes() {
-        let Rendition::Document(rendition) =
-            text_rendition("  Hello, world!  \n", Some(language("en")))
-        else {
+    fn document_rendition_preserves_exact_blob_facts() {
+        let text = "  Hello, world!  \n";
+        let Rendition::Document(rendition) = text_rendition(text, Some(language("en"))) else {
             panic!("expected document rendition");
         };
-        assert_eq!(rendition.text, "  Hello, world!  \n");
+        assert_eq!(
+            rendition.digest,
+            hex::encode(Sha256::digest(text.as_bytes()))
+        );
         assert_eq!(
             rendition.language.as_ref().map(LanguageCode::as_str),
             Some("en")
         );
-        assert_eq!(
-            rendition.text_sha256,
-            hex::encode(Sha256::digest(b"  Hello, world!  \n"))
-        );
         // byte_size counts bytes, not characters.
-        let text = "héllo";
-        let Rendition::Document(unicode) = text_rendition(text, None) else {
+        let unicode_text = "héllo";
+        let Rendition::Document(unicode) = text_rendition(unicode_text, None) else {
             panic!("expected document rendition");
         };
-        assert_eq!(unicode.text_byte_size, text.len() as u64);
-        assert_eq!(unicode.text_byte_size, 6);
+        assert_eq!(unicode.byte_size, unicode_text.len() as u64);
+        assert_eq!(unicode.byte_size, 6);
     }
 
     #[test]
@@ -472,6 +517,24 @@ mod tests {
             ]),
             MaterialShape::Mixed
         );
+    }
+
+    #[test]
+    fn source_asset_only_pdf_is_text_modality_not_mixed() {
+        // A scanned PDF without a text layer, bound only as a Source Asset,
+        // is still a document/text material, never Mixed.
+        assert_eq!(pdf_source_asset_only().shape(), MaterialShape::Text);
+    }
+
+    #[test]
+    fn media_type_kind_classifies_documents_and_media() {
+        use crate::MediaKind;
+        assert_eq!(media_type_kind("application/pdf"), None);
+        assert_eq!(media_type_kind("application/epub+zip"), None);
+        assert_eq!(media_type_kind("text/markdown"), None);
+        assert_eq!(media_type_kind("audio/mpeg"), Some(MediaKind::Audio));
+        assert_eq!(media_type_kind("video/mp4"), Some(MediaKind::Video));
+        assert_eq!(media_type_kind("  Audio/MPEG "), Some(MediaKind::Audio));
     }
 
     #[test]

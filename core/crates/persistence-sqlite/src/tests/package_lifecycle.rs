@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use application::{
     AppServices, ApplicationError, MaterialRepository, PackageLifecycleRepository,
-    PreparedPackageInstallation, PreparedResourcePayload,
+    PreparedPackageInstallation, PreparedRenditionBlob, PreparedResourcePayload,
 };
 use domain::{
     AdoptionCommitPlan, DocumentRendition, ExclusiveSelection, LanguageCode, LearningEdition,
@@ -72,6 +72,7 @@ fn resource_fact(
         content_language: Some(language("en")),
         support_languages: Vec::new(),
         dependencies: Vec::new(),
+        anchor_resource_ids: Vec::new(),
         payload_digest: digest.to_owned(),
         payload_size_bytes: size_bytes,
         provenance: provenance(),
@@ -80,17 +81,52 @@ fn resource_fact(
     }
 }
 
-fn rendition_fact(rendition_id: &str, kind: &str, available: bool) -> PackageRenditionFact {
+fn rendition_fact(
+    rendition_id: &str,
+    kind: &str,
+    available: bool,
+    digest: &str,
+    size_bytes: u64,
+) -> PackageRenditionFact {
+    rendition_fact_with_origin(
+        rendition_id,
+        kind,
+        RenditionOrigin::Source,
+        available,
+        digest,
+        size_bytes,
+    )
+}
+
+fn rendition_fact_with_origin(
+    rendition_id: &str,
+    kind: &str,
+    origin: RenditionOrigin,
+    available: bool,
+    digest: &str,
+    size_bytes: u64,
+) -> PackageRenditionFact {
     PackageRenditionFact {
         rendition_id: rendition_id.to_owned(),
         kind: kind.to_owned(),
-        origin: RenditionOrigin::Source,
+        origin,
         media_type: format!("audio/{kind}"),
         available,
-        media_digest: format!("sha256:{}", "a".repeat(64)),
-        media_size_bytes: 100,
+        media_digest: digest.to_owned(),
+        media_size_bytes: size_bytes,
         media_id: None,
+        source_asset_id: None,
         producer: None,
+    }
+}
+
+fn rendition_blob(rendition_id: &str, kind: &str, bytes: Vec<u8>) -> PreparedRenditionBlob {
+    PreparedRenditionBlob {
+        rendition_id: rendition_id.to_owned(),
+        kind: kind.to_owned(),
+        digest: sha256_id(&bytes),
+        size_bytes: bytes.len() as u64,
+        bytes,
     }
 }
 
@@ -126,6 +162,7 @@ fn prepared(
             installed_at_ms: 0,
         },
         payloads,
+        rendition_blobs: Vec::new(),
     }
 }
 
@@ -154,24 +191,42 @@ fn text_prepared(
     )
 }
 
+fn text_asset(text: &str) -> domain::SourceAsset {
+    domain::SourceAsset::new(
+        "text/plain",
+        text.len() as u64,
+        hex::encode(Sha256::digest(text.as_bytes())),
+        domain::SourceAssetBinding::Managed,
+        domain::SourceAssetAvailability::Available,
+        1,
+    )
+    .unwrap()
+}
+
 fn seed_material(repo: &Arc<SqliteRepository>, text: &str) -> (LearningMaterial, MaterialRevision) {
+    let asset = text_asset(text);
     let rendition = Rendition::Document(
         DocumentRendition::new(
             RenditionOrigin::Source,
             "text/plain",
             Some(language("en")),
-            text,
-            None,
+            asset.sha256_digest.clone(),
+            asset.byte_length,
+            Some(asset.id.clone()),
             None,
             None,
         )
         .unwrap(),
     );
-    let material_id = initial_material_id(&[], std::slice::from_ref(&rendition)).unwrap();
+    let material_id = initial_material_id(
+        std::slice::from_ref(&asset),
+        std::slice::from_ref(&rendition),
+    )
+    .unwrap();
     let revision = MaterialRevision::new(
         material_id.clone(),
         "Material",
-        Vec::new(),
+        vec![asset],
         vec![rendition],
         1,
     )
@@ -182,13 +237,15 @@ fn seed_material(repo: &Arc<SqliteRepository>, text: &str) -> (LearningMaterial,
 }
 
 fn document_rendition(text: &str) -> Rendition {
+    let asset = text_asset(text);
     Rendition::Document(
         DocumentRendition::new(
             RenditionOrigin::Source,
             "text/plain",
             Some(language("en")),
-            text,
-            None,
+            asset.sha256_digest.clone(),
+            asset.byte_length,
+            Some(asset.id),
             None,
             None,
         )
@@ -771,8 +828,20 @@ fn duplicate_resource_or_rendition_facts_are_rejected_with_zero_writes() {
         "edition-dup-rendition",
     );
     duplicate_rendition.installation.renditions = vec![
-        rendition_fact("rendition-1", "audio", true),
-        rendition_fact("rendition-1", "video", false),
+        rendition_fact(
+            "rendition-1",
+            "audio",
+            true,
+            &sha256_id(b"duplicate audio"),
+            b"duplicate audio".len() as u64,
+        ),
+        rendition_fact(
+            "rendition-1",
+            "video",
+            false,
+            &sha256_id(b"duplicate video"),
+            b"duplicate video".len() as u64,
+        ),
     ];
     let error = PackageLifecycleRepository::save_installation(repo.as_ref(), &duplicate_rendition)
         .expect_err("duplicate rendition ids must be rejected");
@@ -987,10 +1056,26 @@ fn media_resource_selection_plan_round_trips_completely() {
             payload("resource-timeline", "word_timeline", timeline_bytes),
         ],
     );
+    let audio_bytes = b"audio blob bytes".to_vec();
+    let video_bytes = b"video blob bytes".to_vec();
     input.installation.renditions = vec![
-        rendition_fact("rendition-1", "audio", true),
-        rendition_fact("rendition-2", "video", false),
+        rendition_fact(
+            "rendition-1",
+            "audio",
+            true,
+            &sha256_id(&audio_bytes),
+            audio_bytes.len() as u64,
+        ),
+        rendition_fact_with_origin(
+            "rendition-2",
+            "video",
+            RenditionOrigin::Derived,
+            false,
+            &sha256_id(&video_bytes),
+            video_bytes.len() as u64,
+        ),
     ];
+    input.rendition_blobs = vec![rendition_blob("rendition-1", "audio", audio_bytes)];
     PackageLifecycleRepository::save_installation(repo.as_ref(), &input).unwrap();
 
     let plan = text_adoption(&repo, &material, "sha256:release-full");

@@ -81,9 +81,8 @@ export interface DocumentRendition {
   origin: RenditionOrigin;
   media_type: string;
   language: string | null;
-  text: string;
-  text_sha256: string;
-  text_byte_size: number;
+  digest: string;
+  byte_size: number;
   source_asset_id: string | null;
 }
 
@@ -128,8 +127,9 @@ export interface SourceAssetInput {
 export interface DocumentRenditionInput {
   media_type: string;
   language?: string | null;
-  text: string;
-  source_asset_index?: number | null;
+  digest: string;
+  byte_size: number;
+  source_asset_index: number;
 }
 
 export interface MediaRenditionInput {
@@ -160,7 +160,7 @@ export interface CapabilityAttempt {
   attempt_id: string;
   material_id: string;
   capability: MaterialCapability;
-  status: "running" | "succeeded" | "failed";
+  status: "running" | "succeeded" | "failed" | "cancelled" | "superseded";
   started_at_ms: number;
   finished_at_ms: number | null;
   failure_reason: string | null;
@@ -179,10 +179,61 @@ export interface StartCapabilityAttemptRequest {
 }
 
 export interface FinalizeCapabilityAttemptRequest {
-  status: "succeeded" | "failed";
+  status: "succeeded" | "failed" | "cancelled";
   tool_id?: string | null;
   tool_version?: string | null;
   reason?: string | null;
+}
+
+// Adopted composition surface (contract 4.0.0): the single Core-owned
+// composition authority. The App never re-parses a `.listenpkg` to read
+// adopted content; these typed reads are the only composition interface.
+export interface AdoptedComposition {
+  material_id: string;
+  material_revision_id: string;
+  release_id: string;
+  edition_id: string;
+  title: string;
+  target_language: string;
+  support_languages: string[];
+  adopted_at_ms: number;
+  resources: CompositionResource[];
+  renditions: CompositionRendition[];
+}
+
+export interface CompositionResource {
+  resource_id: string;
+  kind: string;
+  schema: string;
+  role: "base" | "assistance";
+  required: boolean;
+  availability: "available" | "missing" | "opaque";
+  content_language: string | null;
+  support_languages: string[];
+  payload_digest: string;
+  payload_size_bytes: number;
+  review_status: "unreviewed" | "machine_checked" | "human_reviewed";
+}
+
+export interface CompositionRendition {
+  rendition_id: string;
+  kind: string;
+  origin: RenditionOrigin;
+  media_type: string;
+  language: string | null;
+  digest: string;
+  byte_size: number;
+  blob_available: boolean;
+  binding: CompositionBinding | null;
+  producer_tool_id: string | null;
+}
+
+export interface CompositionBinding {
+  type: "managed_source_asset" | "referenced_source_asset" | "media";
+  source_asset_id?: string | null;
+  reference?: string | null;
+  available?: boolean | null;
+  media_id?: string | null;
 }
 
 export interface SourceItemEvidence {
@@ -1447,6 +1498,18 @@ export class LocalApiV1 {
       `/v1/materials/${encodeURIComponent(materialId)}/capability-attempts/${encodeURIComponent(attemptId)}`,
       { method: "PUT", body: JSON.stringify(input) },
     );
+  }
+
+  readMaterialComposition(materialId: string): Promise<AdoptedComposition> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}/composition`);
+  }
+
+  readCompositionResourcePayload(materialId: string, resourceId: string): Promise<Blob> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}/composition/resources/${encodeURIComponent(resourceId)}/payload`);
+  }
+
+  readCompositionRenditionBlob(materialId: string, renditionId: string): Promise<Blob> {
+    return this.request(`/v1/materials/${encodeURIComponent(materialId)}/composition/renditions/${encodeURIComponent(renditionId)}/blob`);
   }
 
   registerSourceIdentityMapping(

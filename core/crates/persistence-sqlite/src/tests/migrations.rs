@@ -1104,15 +1104,14 @@ fn fresh_schema_reports_v59_with_learning_material_tables_and_columns() {
                 "origin",
                 "media_type",
                 "language",
-                "text_bytes",
-                "text_sha256",
-                "text_byte_size",
+                "digest",
+                "byte_size",
                 "source_asset_id",
                 "producer_json",
                 "compatibility_json"
             ],
         ),
-        11
+        10
     );
     assert_eq!(
         table_column_count(
@@ -1185,10 +1184,9 @@ fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_
               (id,material_id,title,created_at_ms)
             VALUES ('revision-1','material-1','First title',100);
             INSERT INTO material_document_renditions
-              (revision_id,rendition_id,origin,media_type,language,text_bytes,
-               text_sha256,text_byte_size,source_asset_id,producer_json,compatibility_json)
+              (revision_id,rendition_id,origin,media_type,language,digest,
+               byte_size,source_asset_id,producer_json,compatibility_json)
             VALUES ('revision-1','asset-text','source','text/plain',NULL,
-                    x'68656c6c6f',
                     '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
                     5,NULL,NULL,NULL);
             INSERT INTO material_media_renditions
@@ -1252,8 +1250,8 @@ fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_
         (
             "unknown document rendition origin",
             "INSERT INTO material_document_renditions
-               (revision_id,rendition_id,origin,media_type,language,text_bytes,
-                text_sha256,text_byte_size,source_asset_id,producer_json,compatibility_json)
+               (revision_id,rendition_id,origin,media_type,language,digest,
+                byte_size,source_asset_id,producer_json,compatibility_json)
              VALUES ('revision-1','asset-bad','futuristic','text/plain',NULL,
                      x'6162',
                      '907d14fb3af2b0d4f18c8d46abe9a7b504ffb9f9a8f7b0a2e94d0f5a5a5a5a5a5',
@@ -1278,12 +1276,11 @@ fn v59_learning_material_schema_enforces_invariants_and_defers_current_revision_
         (
             "malformed producer_json",
             "INSERT INTO material_document_renditions
-               (revision_id,rendition_id,origin,media_type,language,text_bytes,
-                text_sha256,text_byte_size,source_asset_id,producer_json,compatibility_json)
+               (revision_id,rendition_id,origin,media_type,language,digest,
+                byte_size,source_asset_id,producer_json,compatibility_json)
              VALUES ('revision-1','asset-bad','source','text/plain',NULL,
-                     x'6162',
                      '907d14fb3af2b0d4f18c8d46abe9a7b504ffb9f9a8f7b0a2e94d0f5a5a5a5a5a5',
-                     2,NULL,'{not json}',NULL)",
+,NULL,'{not json}',NULL)",
         ),
         // Rowid-table PRIMARY KEYs in SQLite do not imply NOT NULL; the FK
         // references below are valid, so rejection must come from the explicit
@@ -1433,11 +1430,10 @@ fn seed_v60_package_lifecycle_rows(connection: &Connection) {
           (id,material_id,title,created_at_ms)
         VALUES ('package-revision','package-material','Package material',100);
         INSERT INTO material_document_renditions
-          (revision_id, rendition_id, origin, media_type, language, text_bytes,
-           text_sha256, text_byte_size, source_asset_id, producer_json,
+          (revision_id, rendition_id, origin, media_type, language, digest,
+           byte_size, source_asset_id, producer_json,
            compatibility_json)
         VALUES ('package-revision','asset-package','source','text/plain',NULL,
-                x'7061636b616765',
                 'bc4a71180870f7945155fbb02f4b0a2e3faa2a62d6d31b7039013055ed19869a',
                 7,NULL,NULL,NULL);
         INSERT INTO package_installations

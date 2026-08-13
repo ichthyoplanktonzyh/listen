@@ -3,14 +3,17 @@
 //!
 //! The projection is the observable five-state view over one Material:
 //! `available`, `derivable`, `generating`, `unavailable`, or `failed_attempt`.
+//! It reads both the current Material revision and the adopted composition.
 //! Attempts are durable facts owned here; a failed attempt never rewrites the
-//! facts of an earlier attempt.
+//! facts of an earlier attempt, and a new attempt atomically supersedes the
+//! previous running attempt of the same capability. Cancelled and superseded
+//! attempts are honest terminal states, never failed attempts.
 
 use std::sync::Arc;
 
 use domain::{
-    CapabilityAttempt, CapabilityAttemptStatus, LearningMaterialId, MaterialCapability,
-    MaterialCapabilityProjection, project_capability,
+    AdoptedComposition, CapabilityAttempt, CapabilityAttemptStatus, LearningMaterialId,
+    MaterialCapability, MaterialCapabilityProjection, adopted_composition_for, project_capability,
 };
 
 use crate::{ApplicationError, MaterialRepository, PackageLifecycleRepository};
@@ -51,15 +54,7 @@ impl MaterialCapabilityUseCases {
             .materials
             .get_revision(&material.current_revision_id)?
             .ok_or_else(|| ApplicationError::Repository("current revision is missing".into()))?;
-        let adopted = self.package_lifecycle.get_adoption(material_id)?;
-        // The adoption names a release; the adopted composition facts are the
-        // installed release's immutable resource and rendition facts.
-        let adopted_installation = match &adopted {
-            Some(plan) => self
-                .package_lifecycle
-                .get_installation(material_id, &plan.release_id)?,
-            None => None,
-        };
+        let adopted = self.adopted_composition(material_id)?;
         let attempts = self.attempts.list_attempts(material_id)?;
         Ok([
             MaterialCapability::Read,
@@ -67,19 +62,40 @@ impl MaterialCapabilityUseCases {
             MaterialCapability::Watch,
             MaterialCapability::SynchronizedReadListen,
         ]
-        .map(|capability| {
-            project_capability(
-                capability,
-                &revision,
-                adopted_installation.as_ref(),
-                &attempts,
-            )
-        })
+        .map(|capability| project_capability(capability, &revision, adopted.as_ref(), &attempts))
         .to_vec())
     }
 
-    /// Starts a production attempt for one capability. Retrying a capability
-    /// creates a new attempt and never rewrites the old attempt's facts.
+    /// Resolves the current adopted composition of one Material, if any. The
+    /// adoption names a release; the adopted composition is the projection of
+    /// the installed release through the adoption's exact selection.
+    fn adopted_composition(
+        &self,
+        material_id: &LearningMaterialId,
+    ) -> Result<Option<AdoptedComposition>, ApplicationError> {
+        let Some(plan) = self.package_lifecycle.get_adoption(material_id)? else {
+            return Ok(None);
+        };
+        let installation = self
+            .package_lifecycle
+            .get_installation(material_id, &plan.release_id)?;
+        let Some(installation) = installation else {
+            return Err(ApplicationError::Repository(
+                "adopted release installation is missing".into(),
+            ));
+        };
+        if installation.material_revision_id != plan.material_revision_id {
+            return Err(ApplicationError::Repository(
+                "adopted release installation does not match the adoption revision".into(),
+            ));
+        }
+        Ok(Some(adopted_composition_for(&installation, &plan)))
+    }
+
+    /// Starts a production attempt for one capability. Starting a new attempt
+    /// atomically supersedes the previous running attempt of the same
+    /// capability (the repository owns the atomic transition), and retries
+    /// never rewrite an old attempt's facts.
     pub fn start_attempt(
         &self,
         material_id: &LearningMaterialId,
@@ -89,14 +105,13 @@ impl MaterialCapabilityUseCases {
         self.materials
             .get_material(material_id)?
             .ok_or(ApplicationError::NotFound("material"))?;
-        let attempt = CapabilityAttempt::start(material_id.clone(), capability, started_at_ms);
-        self.attempts.save_attempt(&attempt)?;
-        Ok(attempt)
+        self.attempts
+            .start_attempt(material_id.clone(), capability, started_at_ms)
     }
 
-    /// Finalizes a running attempt as succeeded or failed. The attempt must
-    /// exist, belong to the material, and still be running; a failed attempt
-    /// carries a stable reason. Returns the finalized attempt.
+    /// Finalizes a running attempt as succeeded, failed, or cancelled. The
+    /// attempt must exist, belong to the material, and still be running; a
+    /// failed attempt carries a stable reason. Returns the finalized attempt.
     pub fn finalize_attempt(
         &self,
         material_id: &LearningMaterialId,
@@ -126,9 +141,23 @@ impl MaterialCapabilityUseCases {
                     .fail(finished_at_ms, reason)
                     .map_err(crate::learning_material::domain_error)?;
             }
+            AttemptOutcome::Cancelled => {
+                attempt.cancel(finished_at_ms);
+            }
         }
         self.attempts.save_attempt(&attempt)?;
         Ok(attempt)
+    }
+
+    /// Startup reconciliation: every attempt left running by a previous
+    /// process is honestly superseded (interrupted), so no capability ever
+    /// projects `generating` forever after a restart. Returns the number of
+    /// reconciled attempts.
+    pub fn reconcile_running_attempts(
+        &self,
+        superseded_at_ms: u64,
+    ) -> Result<usize, ApplicationError> {
+        self.attempts.reconcile_running_attempts(superseded_at_ms)
     }
 }
 
@@ -142,21 +171,50 @@ pub enum AttemptOutcome {
     Failed {
         reason: String,
     },
+    Cancelled,
 }
 
 /// Persistence contract for capability production attempts.
 pub trait CapabilityAttemptRepository: Send + Sync {
+    /// Atomically starts a new running attempt for one capability of one
+    /// Material: the previous running attempt of the same capability is
+    /// superseded in the same unit of work, and the new attempt receives a
+    /// unique attempt identity (per-capability monotonic key). A returned
+    /// `Err` leaves every previous attempt untouched.
+    fn start_attempt(
+        &self,
+        material_id: LearningMaterialId,
+        capability: MaterialCapability,
+        started_at_ms: u64,
+    ) -> Result<CapabilityAttempt, ApplicationError>;
+
     fn save_attempt(&self, attempt: &CapabilityAttempt) -> Result<(), ApplicationError>;
 
     fn list_attempts(
         &self,
         material_id: &LearningMaterialId,
     ) -> Result<Vec<CapabilityAttempt>, ApplicationError>;
+
+    /// Marks every running attempt of every capability as superseded
+    /// (interrupted) with the given finish time. Used once at startup so no
+    /// attempt is left `generating` forever across restarts.
+    fn reconcile_running_attempts(&self, superseded_at_ms: u64) -> Result<usize, ApplicationError>;
 }
 
 pub(crate) struct DisabledCapabilityAttemptRepository;
 
 impl CapabilityAttemptRepository for DisabledCapabilityAttemptRepository {
+    fn start_attempt(
+        &self,
+        _material_id: LearningMaterialId,
+        _capability: MaterialCapability,
+        _started_at_ms: u64,
+    ) -> Result<CapabilityAttempt, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "capability attempt repository is not configured".into(),
+        ))
+    }
+
     fn save_attempt(&self, _attempt: &CapabilityAttempt) -> Result<(), ApplicationError> {
         Err(ApplicationError::Repository(
             "capability attempt repository is not configured".into(),
@@ -167,6 +225,15 @@ impl CapabilityAttemptRepository for DisabledCapabilityAttemptRepository {
         &self,
         _material_id: &LearningMaterialId,
     ) -> Result<Vec<CapabilityAttempt>, ApplicationError> {
+        Err(ApplicationError::Repository(
+            "capability attempt repository is not configured".into(),
+        ))
+    }
+
+    fn reconcile_running_attempts(
+        &self,
+        _superseded_at_ms: u64,
+    ) -> Result<usize, ApplicationError> {
         Err(ApplicationError::Repository(
             "capability attempt repository is not configured".into(),
         ))
@@ -189,6 +256,33 @@ mod tests {
     }
 
     impl CapabilityAttemptRepository for FakeAttemptRepository {
+        fn start_attempt(
+            &self,
+            material_id: LearningMaterialId,
+            capability: MaterialCapability,
+            started_at_ms: u64,
+        ) -> Result<CapabilityAttempt, ApplicationError> {
+            let mut store = self.attempts.lock().unwrap();
+            let attempts = store.entry(material_id.as_str().to_owned()).or_default();
+            // Atomically supersede the previous running attempt of the same
+            // capability, then create the new attempt with a monotonic key.
+            for existing in attempts.iter_mut() {
+                if existing.capability == capability
+                    && existing.status == CapabilityAttemptStatus::Running
+                {
+                    existing.supersede(started_at_ms);
+                }
+            }
+            let key = attempts
+                .iter()
+                .filter(|attempt| attempt.capability == capability)
+                .count() as u64
+                + 1;
+            let attempt = CapabilityAttempt::start(material_id, capability, started_at_ms, key);
+            attempts.push(attempt.clone());
+            Ok(attempt)
+        }
+
         fn save_attempt(&self, attempt: &CapabilityAttempt) -> Result<(), ApplicationError> {
             let mut store = self.attempts.lock().unwrap();
             let attempts = store
@@ -217,6 +311,23 @@ mod tests {
                 .cloned()
                 .unwrap_or_default())
         }
+
+        fn reconcile_running_attempts(
+            &self,
+            superseded_at_ms: u64,
+        ) -> Result<usize, ApplicationError> {
+            let mut store = self.attempts.lock().unwrap();
+            let mut reconciled = 0;
+            for attempts in store.values_mut() {
+                for attempt in attempts.iter_mut() {
+                    if attempt.status == CapabilityAttemptStatus::Running {
+                        attempt.supersede(superseded_at_ms);
+                        reconciled += 1;
+                    }
+                }
+            }
+            Ok(reconciled)
+        }
     }
 
     #[derive(Default, Clone)]
@@ -228,22 +339,37 @@ mod tests {
     impl FakeMaterials {
         fn create_text_material(&self, title: &str, text: &str) -> LearningMaterialId {
             let now = 1;
+            let digest = {
+                use sha2::Digest as _;
+                hex::encode(sha2::Sha256::digest(text.as_bytes()))
+            };
+            let asset = domain::SourceAsset::new(
+                "text/plain",
+                text.len() as u64,
+                digest.clone(),
+                domain::SourceAssetBinding::Managed,
+                domain::SourceAssetAvailability::Available,
+                now,
+            )
+            .expect("valid source asset");
             let renditions = vec![Rendition::Document(
                 DocumentRendition::new(
                     RenditionOrigin::Source,
                     "text/plain",
                     None,
-                    text.to_owned(),
-                    None,
+                    digest,
+                    text.len() as u64,
+                    Some(asset.id.clone()),
                     None,
                     None,
                 )
                 .expect("valid rendition"),
             )];
             let material_id =
-                domain::initial_material_id(&[], &renditions).expect("valid material id");
+                domain::initial_material_id(std::slice::from_ref(&asset), &renditions)
+                    .expect("valid material id");
             let revision =
-                MaterialRevision::new(material_id.clone(), title, Vec::new(), renditions, now)
+                MaterialRevision::new(material_id.clone(), title, vec![asset], renditions, now)
                     .expect("valid revision");
             let material = domain::LearningMaterial::new(&revision, Some(now), now, now)
                 .expect("valid material");
@@ -360,6 +486,22 @@ mod tests {
         ) -> Result<domain::AdoptionCommitPlan, ApplicationError> {
             unreachable!("not used in these tests")
         }
+        fn read_resource_payload(
+            &self,
+            _material_id: &LearningMaterialId,
+            _release_id: &domain::PackageReleaseId,
+            _resource_id: &str,
+        ) -> Result<Option<Vec<u8>>, ApplicationError> {
+            unreachable!("not used in these tests")
+        }
+        fn read_rendition_blob(
+            &self,
+            _material_id: &LearningMaterialId,
+            _release_id: &domain::PackageReleaseId,
+            _rendition_id: &str,
+        ) -> Result<Option<Vec<u8>>, ApplicationError> {
+            unreachable!("not used in these tests")
+        }
     }
 
     fn setup() -> (MaterialCapabilityUseCases, FakeMaterials) {
@@ -430,6 +572,96 @@ mod tests {
             retry.attempt_id
         );
         assert_eq!(projection.status, domain::CapabilityStatus::Derivable);
+    }
+
+    #[test]
+    fn a_new_attempt_atomically_supersedes_the_previous_running_attempt() {
+        let (use_cases, materials) = setup();
+        let material_id = materials.create_text_material("Doc", "hello world");
+        let first = use_cases
+            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .expect("start");
+        assert_eq!(first.status, CapabilityAttemptStatus::Running);
+        // Same millisecond retry: distinct attempt ids and the old running
+        // attempt becomes superseded in the same atomic start.
+        let second = use_cases
+            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .expect("retry in the same millisecond");
+        assert_ne!(first.attempt_id, second.attempt_id);
+        let projection = use_cases
+            .project(&material_id)
+            .expect("project")
+            .into_iter()
+            .find(|projection| projection.capability == MaterialCapability::Listen)
+            .expect("listen projection");
+        assert_eq!(projection.status, domain::CapabilityStatus::Generating);
+        let latest = projection.latest_attempt.expect("latest attempt");
+        assert_eq!(latest.attempt_id, second.attempt_id);
+        assert_eq!(latest.status, CapabilityAttemptStatus::Running);
+        // The superseded attempt is preserved as an honest terminal fact.
+        let attempts = use_cases
+            .attempts
+            .list_attempts(&material_id)
+            .expect("listed");
+        let superseded = attempts
+            .iter()
+            .find(|attempt| attempt.attempt_id == first.attempt_id)
+            .expect("first attempt preserved");
+        assert_eq!(superseded.status, CapabilityAttemptStatus::Superseded);
+        assert_eq!(superseded.finished_at_ms, Some(5));
+    }
+
+    #[test]
+    fn cancelled_attempts_are_honest_and_never_failed_attempts() {
+        let (use_cases, materials) = setup();
+        let material_id = materials.create_text_material("Doc", "hello world");
+        let attempt = use_cases
+            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .expect("start");
+        let cancelled = use_cases
+            .finalize_attempt(
+                &material_id,
+                &attempt.attempt_id,
+                AttemptOutcome::Cancelled,
+                8,
+            )
+            .expect("cancel");
+        assert_eq!(cancelled.status, CapabilityAttemptStatus::Cancelled);
+        assert_eq!(cancelled.finished_at_ms, Some(8));
+        let projection = use_cases
+            .project(&material_id)
+            .expect("project")
+            .into_iter()
+            .find(|projection| projection.capability == MaterialCapability::Listen)
+            .expect("listen projection");
+        assert_eq!(projection.status, domain::CapabilityStatus::Derivable);
+    }
+
+    #[test]
+    fn restart_reconciliation_supersedes_every_running_attempt() {
+        let (use_cases, materials) = setup();
+        let material_id = materials.create_text_material("Doc", "hello world");
+        use_cases
+            .start_attempt(&material_id, MaterialCapability::Listen, 5)
+            .expect("start");
+        use_cases
+            .start_attempt(&material_id, MaterialCapability::Read, 6)
+            .expect("start");
+        let reconciled = use_cases
+            .reconcile_running_attempts(100)
+            .expect("reconcile");
+        assert_eq!(reconciled, 2);
+        let projection = use_cases
+            .project(&material_id)
+            .expect("project")
+            .into_iter()
+            .find(|projection| projection.capability == MaterialCapability::Listen)
+            .expect("listen projection");
+        assert_eq!(
+            projection.status,
+            domain::CapabilityStatus::Derivable,
+            "no attempt is left generating after restart"
+        );
     }
 
     #[test]

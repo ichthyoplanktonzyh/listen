@@ -31,14 +31,23 @@ pub struct SourceAssetInput {
     pub binding: SourceAssetBinding,
 }
 
-/// Input for one Document Rendition. A Source rendition optionally binds the
-/// Source Asset declared earlier in the same request by position.
+/// Input for one Document Rendition. A Source Document Rendition is created
+/// through its Source Asset binding: the exact byte facts (digest and size)
+/// must match the bound Source Asset, and the media type must agree. Core
+/// never accepts an "extracted text" input for a document rendition: PDF,
+/// EPUB, and scanned PDF enter as exact blob facts only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentRenditionInput {
     pub media_type: String,
     pub language: Option<LanguageCode>,
-    pub text: String,
-    pub source_asset_index: Option<usize>,
+    /// Lowercase hex SHA-256 of the exact document bytes.
+    pub digest: String,
+    /// Exact byte size of the document bytes.
+    pub byte_size: u64,
+    /// Index of the Source Asset in the same request that authorizes these
+    /// exact bytes. Required: a Source Document Rendition always binds a real
+    /// Source Asset.
+    pub source_asset_index: usize,
 }
 
 /// Input for one Media Rendition, resolving authoritative media facts from
@@ -556,26 +565,34 @@ impl MaterialUseCases {
         }
         let mut renditions = Vec::with_capacity(document_inputs.len() + media_inputs.len());
         for input in document_inputs {
-            let source_asset_id = match input.source_asset_index {
-                Some(index) => Some(
-                    source_assets
-                        .get(index)
-                        .ok_or_else(|| {
-                            ApplicationError::Invalid(format!(
-                                "document rendition references missing source asset index {index}"
-                            ))
-                        })?
-                        .id
-                        .clone(),
-                ),
-                None => None,
-            };
+            // A Source Document Rendition always binds the exact Source Asset
+            // that authorized its bytes; the byte facts and media type must
+            // agree, so no rendition ever fabricates a Source Asset binding.
+            let source_asset = source_assets.get(input.source_asset_index).ok_or_else(|| {
+                ApplicationError::Invalid(format!(
+                    "document rendition references missing source asset index {}",
+                    input.source_asset_index
+                ))
+            })?;
+            if source_asset.sha256_digest != input.digest
+                || source_asset.byte_length != input.byte_size
+            {
+                return Err(ApplicationError::Invalid(
+                    "document rendition byte facts do not match its bound source asset".into(),
+                ));
+            }
+            if source_asset.media_type != input.media_type {
+                return Err(ApplicationError::Invalid(
+                    "document rendition media type does not match its bound source asset".into(),
+                ));
+            }
             renditions.push(Rendition::Document(DocumentRendition::new(
                 RenditionOrigin::Source,
                 input.media_type.clone(),
                 input.language.clone(),
-                input.text.clone(),
-                source_asset_id,
+                input.digest.clone(),
+                input.byte_size,
+                Some(source_asset.id.clone()),
                 None,
                 None,
             )?));
@@ -655,13 +672,39 @@ mod tests {
 
     use domain::{MediaAvailability, MediaItem};
 
+    fn text_assets(text: &str) -> Vec<SourceAssetInput> {
+        let digest = {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(text.as_bytes()))
+        };
+        vec![SourceAssetInput {
+            media_type: "text/plain".to_owned(),
+            byte_length: text.len() as u64,
+            sha256_digest: digest,
+            binding: SourceAssetBinding::Managed,
+        }]
+    }
+
     fn text_input(text: &str) -> DocumentRenditionInput {
+        let digest = {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(text.as_bytes()))
+        };
         DocumentRenditionInput {
             media_type: "text/plain".to_owned(),
             language: None,
-            text: text.to_owned(),
-            source_asset_index: None,
+            digest,
+            byte_size: text.len() as u64,
+            source_asset_index: 0,
         }
+    }
+
+    /// A document input whose byte facts deliberately do not match its bound
+    /// Source Asset (tampered digest or size).
+    fn mismatched_text_input(text: &str, byte_size_offset: u64) -> DocumentRenditionInput {
+        let mut input = text_input(text);
+        input.byte_size = (text.len() as u64).saturating_add(byte_size_offset);
+        input
     }
 
     fn media_input(media_id: &str) -> MediaRenditionInput {
@@ -997,7 +1040,7 @@ mod tests {
         let text = use_cases
             .create(CreateLearningMaterial {
                 title: "Notes".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("spoken notes"),
                 document_renditions: vec![text_input("spoken notes")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1033,7 +1076,7 @@ mod tests {
         let mixed = use_cases
             .create(CreateLearningMaterial {
                 title: "Mixed".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("with notes"),
                 document_renditions: vec![text_input("with notes")],
                 media_renditions: vec![media_input("media-mixed-a")],
                 retain: None,
@@ -1043,18 +1086,14 @@ mod tests {
     }
 
     #[test]
-    fn document_rendition_preserves_exact_input_bytes() {
+    fn document_rendition_preserves_exact_blob_facts() {
         let (use_cases, _, _) = setup();
+        let text = "  leading and trailing whitespace  ";
         let details = use_cases
             .create(CreateLearningMaterial {
                 title: "Exact".into(),
-                source_assets: Vec::new(),
-                document_renditions: vec![DocumentRenditionInput {
-                    media_type: "text/plain".into(),
-                    language: None,
-                    text: "  leading and trailing whitespace  ".into(),
-                    source_asset_index: None,
-                }],
+                source_assets: text_assets(text),
+                document_renditions: vec![text_input(text)],
                 media_renditions: Vec::new(),
                 retain: None,
             })
@@ -1062,55 +1101,113 @@ mod tests {
         let Rendition::Document(rendition) = &details.current_revision.renditions[0] else {
             panic!("expected a document rendition");
         };
-        assert_eq!(rendition.text, "  leading and trailing whitespace  ");
+        assert_eq!(rendition.digest, {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(text.as_bytes()))
+        });
+        assert_eq!(rendition.byte_size, text.len() as u64);
+        assert_eq!(
+            rendition.source_asset_id,
+            Some(details.current_revision.source_assets[0].id.clone())
+        );
     }
 
     #[test]
-    fn source_assets_bind_document_renditions_by_position() {
+    fn source_assets_bind_document_renditions_and_mismatched_bytes_are_rejected() {
         let (use_cases, _, _) = setup();
+        let text = "hello world";
         let details = use_cases
             .create(CreateLearningMaterial {
                 title: "With source".into(),
-                source_assets: vec![SourceAssetInput {
-                    media_type: "text/plain".into(),
-                    byte_length: 11,
-                    sha256_digest: "a".repeat(64),
-                    binding: SourceAssetBinding::Managed,
-                }],
-                document_renditions: vec![DocumentRenditionInput {
-                    media_type: "text/plain".into(),
-                    language: None,
-                    text: "hello world".into(),
-                    source_asset_index: Some(0),
-                }],
+                source_assets: text_assets(text),
+                document_renditions: vec![text_input(text)],
                 media_renditions: Vec::new(),
                 retain: None,
             })
             .expect("material with source asset");
         assert_eq!(details.current_revision.source_assets.len(), 1);
         let asset = &details.current_revision.source_assets[0];
-        assert_eq!(asset.byte_length, 11);
+        assert_eq!(asset.byte_length, text.len() as u64);
         let Rendition::Document(rendition) = &details.current_revision.renditions[0] else {
             panic!("expected a document rendition");
         };
         assert_eq!(rendition.source_asset_id.as_ref(), Some(&asset.id));
 
+        // A document rendition whose byte facts do not match its bound Source
+        // Asset is refused: no rendition fabricates a Source Asset binding.
+        let err = use_cases
+            .create(CreateLearningMaterial {
+                title: "Tampered".into(),
+                source_assets: text_assets(text),
+                document_renditions: vec![mismatched_text_input(text, 1)],
+                media_renditions: Vec::new(),
+                retain: None,
+            })
+            .expect_err("mismatched byte facts");
+        assert!(matches!(err, ApplicationError::Invalid(_)));
+
+        // A document rendition with a different media type is refused too.
+        let mut wrong_type = text_input(text);
+        wrong_type.media_type = "application/pdf".into();
+        let err = use_cases
+            .create(CreateLearningMaterial {
+                title: "Wrong type".into(),
+                source_assets: text_assets(text),
+                document_renditions: vec![wrong_type],
+                media_renditions: Vec::new(),
+                retain: None,
+            })
+            .expect_err("media type mismatch");
+        assert!(matches!(err, ApplicationError::Invalid(_)));
+
         // An out-of-range source asset index is refused.
+        let mut bad_index = text_input(text);
+        bad_index.source_asset_index = 2;
         let err = use_cases
             .create(CreateLearningMaterial {
                 title: "Bad index".into(),
-                source_assets: Vec::new(),
-                document_renditions: vec![DocumentRenditionInput {
-                    media_type: "text/plain".into(),
-                    language: None,
-                    text: "hello".into(),
-                    source_asset_index: Some(2),
-                }],
+                source_assets: text_assets(text),
+                document_renditions: vec![bad_index],
                 media_renditions: Vec::new(),
                 retain: None,
             })
             .expect_err("out-of-range index");
         assert!(matches!(err, ApplicationError::Invalid(_)));
+    }
+
+    #[test]
+    fn a_pdf_source_asset_without_a_text_layer_creates_a_text_modality_material() {
+        let (use_cases, _, _) = setup();
+        let bytes = b"%PDF-1.4 scanned without text layer";
+        let digest = {
+            use sha2::Digest as _;
+            hex::encode(sha2::Sha256::digest(bytes))
+        };
+        let details = use_cases
+            .create(CreateLearningMaterial {
+                title: "Scanned PDF".into(),
+                source_assets: vec![SourceAssetInput {
+                    media_type: "application/pdf".into(),
+                    byte_length: bytes.len() as u64,
+                    sha256_digest: digest.clone(),
+                    binding: SourceAssetBinding::Managed,
+                }],
+                document_renditions: vec![DocumentRenditionInput {
+                    media_type: "application/pdf".into(),
+                    language: None,
+                    digest,
+                    byte_size: bytes.len() as u64,
+                    source_asset_index: 0,
+                }],
+                media_renditions: Vec::new(),
+                retain: None,
+            })
+            .expect("scanned pdf material");
+        assert_eq!(
+            details.shape(),
+            MaterialShape::Text,
+            "a PDF without a text layer is still a document material, never Mixed"
+        );
     }
 
     #[test]
@@ -1149,7 +1246,7 @@ mod tests {
         let retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Default retained".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("kept"),
                 document_renditions: vec![text_input("kept")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1160,7 +1257,7 @@ mod tests {
         let temporary = use_cases
             .create(CreateLearningMaterial {
                 title: "Temporary".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("expiring"),
                 document_renditions: vec![text_input("expiring")],
                 media_renditions: Vec::new(),
                 retain: Some(false),
@@ -1183,7 +1280,7 @@ mod tests {
         let first = use_cases
             .create(CreateLearningMaterial {
                 title: "Same".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("identical content"),
                 document_renditions: vec![text_input("identical content")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1192,7 +1289,7 @@ mod tests {
         let retry = use_cases
             .create(CreateLearningMaterial {
                 title: "Same".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("identical content"),
                 document_renditions: vec![text_input("identical content")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1217,7 +1314,7 @@ mod tests {
         let first = use_cases
             .create(CreateLearningMaterial {
                 title: "Source of truth".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("authoritative content"),
                 document_renditions: vec![text_input("authoritative content")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1228,7 +1325,7 @@ mod tests {
         let retry = use_cases
             .create(CreateLearningMaterial {
                 title: "Source of truth".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("authoritative content"),
                 document_renditions: vec![text_input("authoritative content")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1243,7 +1340,7 @@ mod tests {
         let temporary = use_cases
             .create(CreateLearningMaterial {
                 title: "Draft".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("convergent content"),
                 document_renditions: vec![text_input("convergent content")],
                 media_renditions: Vec::new(),
                 retain: Some(false),
@@ -1255,7 +1352,7 @@ mod tests {
         let retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Draft".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("convergent content"),
                 document_renditions: vec![text_input("convergent content")],
                 media_renditions: Vec::new(),
                 retain: None,
@@ -1268,7 +1365,7 @@ mod tests {
         let still_retained = use_cases
             .create(CreateLearningMaterial {
                 title: "Draft".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("convergent content"),
                 document_renditions: vec![text_input("convergent content")],
                 media_renditions: Vec::new(),
                 retain: Some(false),
@@ -1302,7 +1399,7 @@ mod tests {
                 &material_id,
                 AppendMaterialRevision {
                     title: "V2".into(),
-                    source_assets: Vec::new(),
+                    source_assets: text_assets("more notes"),
                     document_renditions: vec![text_input("more notes")],
                     media_renditions: vec![media_input("media-app")],
                 },
@@ -1315,7 +1412,7 @@ mod tests {
                 &material_id,
                 AppendMaterialRevision {
                     title: "V2".into(),
-                    source_assets: Vec::new(),
+                    source_assets: text_assets("more notes"),
                     document_renditions: vec![text_input("more notes")],
                     media_renditions: vec![media_input("media-app")],
                 },
@@ -1359,7 +1456,7 @@ mod tests {
         use_cases
             .create(CreateLearningMaterial {
                 title: "Temporary".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("temp notes"),
                 document_renditions: vec![text_input("temp notes")],
                 media_renditions: Vec::new(),
                 retain: Some(false),
@@ -1378,7 +1475,7 @@ mod tests {
         let created = use_cases
             .create(CreateLearningMaterial {
                 title: "Toggle".into(),
-                source_assets: Vec::new(),
+                source_assets: text_assets("toggle content"),
                 document_renditions: vec![text_input("toggle content")],
                 media_renditions: Vec::new(),
                 retain: Some(false),

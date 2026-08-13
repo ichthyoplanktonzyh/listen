@@ -83,9 +83,10 @@ pub(crate) struct DocumentRenditionResponse {
     origin: &'static str,
     media_type: String,
     language: Option<String>,
-    text: String,
-    text_sha256: String,
-    text_byte_size: u64,
+    /// Lowercase hex SHA-256 of the exact rendition bytes.
+    digest: String,
+    /// Exact byte size of the rendition bytes.
+    byte_size: u64,
     source_asset_id: Option<String>,
 }
 
@@ -121,8 +122,14 @@ pub(crate) struct SourceAssetInputRequest {
 pub(crate) struct DocumentRenditionInputRequest {
     media_type: String,
     language: Option<String>,
-    text: String,
-    source_asset_index: Option<usize>,
+    /// Lowercase hex SHA-256 of the exact document bytes.
+    digest: String,
+    /// Exact byte size of the document bytes.
+    byte_size: u64,
+    /// Index of the Source Asset in the same request that authorizes these
+    /// exact bytes. Required: a Source Document Rendition always binds a real
+    /// Source Asset.
+    source_asset_index: usize,
 }
 
 #[derive(Debug, Deserialize)]
@@ -268,9 +275,8 @@ impl From<&domain::DocumentRendition> for DocumentRenditionResponse {
                 .language
                 .as_ref()
                 .map(|language| language.as_str().to_owned()),
-            text: value.text.clone(),
-            text_sha256: value.text_sha256.clone(),
-            text_byte_size: value.text_byte_size,
+            digest: value.digest.clone(),
+            byte_size: value.byte_size,
             source_asset_id: value
                 .source_asset_id
                 .as_ref()
@@ -385,7 +391,8 @@ fn component_inputs(
                     .map(LanguageCode::parse)
                     .transpose()
                     .map_err(ApplicationError::from)?,
-                text: rendition.text,
+                digest: rendition.digest,
+                byte_size: rendition.byte_size,
                 source_asset_index: rendition.source_asset_index,
             })
         })

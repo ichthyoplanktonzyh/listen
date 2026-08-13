@@ -51,11 +51,11 @@ use std::collections::HashMap;
 
 use application::{
     ApplicationError, PackageLifecycleRepository, PreparedPackageInstallation,
-    PreparedResourcePayload,
+    PreparedRenditionBlob, PreparedResourcePayload,
 };
 use domain::{
     AdoptionCommitPlan, LearningMaterialId, PackageInstallation, PackageReleaseId,
-    PackageResourceAvailability, PackageResourceFact, adoption_commit_plan,
+    PackageResourceAvailability, PackageResourceFact, RenditionOrigin, adoption_commit_plan,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::de::DeserializeOwned;
@@ -81,6 +81,17 @@ pub(crate) struct StoredPayload {
     pub(crate) resource_id: String,
     pub(crate) kind: String,
     pub(crate) schema: String,
+    pub(crate) digest: String,
+    pub(crate) size_bytes: u64,
+    pub(crate) bytes: Vec<u8>,
+}
+
+/// One stored Document/Media Rendition blob with the facts that re-verify its
+/// association with its rendition fact. Blob bytes never leave this module
+/// except through the typed composition read seam.
+pub(crate) struct StoredRenditionBlob {
+    pub(crate) rendition_id: String,
+    pub(crate) kind: String,
     pub(crate) digest: String,
     pub(crate) size_bytes: u64,
     pub(crate) bytes: Vec<u8>,
@@ -203,6 +214,38 @@ pub(crate) fn query_payloads(
     Ok(rows)
 }
 
+/// Loads every stored rendition blob of one installation, ordered by
+/// rendition id. The bytes are compared and hash-verified inside the adapter
+/// and returned only through the typed composition read seam.
+pub(crate) fn query_rendition_blobs(
+    connection: &Connection,
+    material_id: &str,
+    release_id: &str,
+) -> Result<Vec<StoredRenditionBlob>, ApplicationError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT rendition_id, kind, digest, size_bytes, body
+             FROM package_rendition_blobs
+             WHERE material_id=?1 AND release_id=?2
+             ORDER BY rendition_id",
+        )
+        .map_err(repo)?;
+    let rows = statement
+        .query_map(params![material_id, release_id], |row| {
+            Ok(StoredRenditionBlob {
+                rendition_id: row.get(0)?,
+                kind: row.get(1)?,
+                digest: row.get(2)?,
+                size_bytes: row.get::<_, u64>(3)?,
+                bytes: row.get(4)?,
+            })
+        })
+        .map_err(repo)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(repo)?;
+    Ok(rows)
+}
+
 /// The seam's retry equality: identical immutable release facts with the
 /// adapter-stamped `installed_at_ms` excluded.
 fn immutable_facts_equal(first: &PackageInstallation, second: &PackageInstallation) -> bool {
@@ -240,10 +283,95 @@ fn stored_payloads_equal(stored: &[StoredPayload], prepared: &[PreparedResourceP
     })
 }
 
+/// Whether the stored rendition blob set is byte-for-byte and fact-for-fact
+/// equal to the prepared input, compared by rendition id.
+fn stored_rendition_blobs_equal(
+    stored: &[StoredRenditionBlob],
+    prepared: &[PreparedRenditionBlob],
+) -> bool {
+    if stored.len() != prepared.len() {
+        return false;
+    }
+    let stored_by_id: HashMap<&str, &StoredRenditionBlob> = stored
+        .iter()
+        .map(|blob| (blob.rendition_id.as_str(), blob))
+        .collect();
+    if stored_by_id.len() != stored.len() {
+        return false;
+    }
+    prepared.iter().all(|blob| {
+        stored_by_id
+            .get(blob.rendition_id.as_str())
+            .is_some_and(|stored| {
+                stored.kind == blob.kind
+                    && stored.digest == blob.digest
+                    && stored.size_bytes == blob.size_bytes
+                    && stored.bytes == blob.bytes
+            })
+    })
+}
+
 fn inconsistent_payloads() -> ApplicationError {
     ApplicationError::Repository(
         "package release prepared payloads are internally inconsistent".into(),
     )
+}
+
+/// Verifies the prepared rendition blob set: blob identities are unique,
+/// every blob is associated with an existing rendition fact whose kind,
+/// digest, and size match exactly, the bytes are the right length and digest,
+/// an available rendition carries exactly one body, and an unavailable
+/// rendition carries none. A present rendition blob is stored so adopted
+/// content stays readable after the source carrier is deleted.
+fn validate_prepared_rendition_blobs(
+    prepared: &PreparedPackageInstallation,
+) -> Result<(), ApplicationError> {
+    let mut by_rendition: HashMap<&str, &PreparedRenditionBlob> = HashMap::new();
+    for blob in &prepared.rendition_blobs {
+        if by_rendition
+            .insert(blob.rendition_id.as_str(), blob)
+            .is_some()
+        {
+            return Err(inconsistent_payloads());
+        }
+    }
+    for rendition in &prepared.installation.renditions {
+        let blob = by_rendition.get(rendition.rendition_id.as_str());
+        if rendition.available {
+            let Some(blob) = blob else {
+                // A Source rendition may stay blob-less: its bytes are read
+                // through its Source Asset / Media binding, and the carrier
+                // may legitimately reference them instead of embedding them.
+                // A Derived rendition without its embedded blob is
+                // internally inconsistent.
+                if rendition.origin == RenditionOrigin::Source {
+                    continue;
+                }
+                return Err(inconsistent_payloads());
+            };
+            if blob.kind != rendition.kind
+                || blob.digest != rendition.media_digest
+                || blob.size_bytes != rendition.media_size_bytes
+                || blob.bytes.len() as u64 != blob.size_bytes
+                || blob.digest != sha256_id(&blob.bytes)
+            {
+                return Err(inconsistent_payloads());
+            }
+        } else if blob.is_some() {
+            return Err(inconsistent_payloads());
+        }
+    }
+    for rendition_id in by_rendition.keys() {
+        if !prepared
+            .installation
+            .renditions
+            .iter()
+            .any(|rendition| rendition.rendition_id == **rendition_id)
+        {
+            return Err(inconsistent_payloads());
+        }
+    }
+    Ok(())
 }
 
 /// Verifies the prepared input's internal association before any write:
@@ -508,6 +636,7 @@ impl PackageLifecycleRepository for SqliteRepository {
         // The prepared input must be internally consistent before it may
         // influence any row read or write.
         validate_prepared_input(prepared)?;
+        validate_prepared_rendition_blobs(prepared)?;
         let installation = &prepared.installation;
         let material_id = installation.material_id.as_str();
         let release_id = installation.release_id.as_str();
@@ -525,6 +654,10 @@ impl PackageLifecycleRepository for SqliteRepository {
                 && stored_payloads_equal(
                     &query_payloads(&tx, material_id, release_id)?,
                     &prepared.payloads,
+                )
+                && stored_rendition_blobs_equal(
+                    &query_rendition_blobs(&tx, material_id, release_id)?,
+                    &prepared.rendition_blobs,
                 )
             {
                 return Ok(stored);
@@ -575,6 +708,23 @@ impl PackageLifecycleRepository for SqliteRepository {
                     payload.digest,
                     payload.size_bytes,
                     payload.bytes,
+                ],
+            )
+            .map_err(repo)?;
+        }
+        for blob in &prepared.rendition_blobs {
+            tx.execute(
+                "INSERT INTO package_rendition_blobs
+                   (material_id, release_id, rendition_id, kind, digest, size_bytes, body)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![
+                    material_id,
+                    release_id,
+                    blob.rendition_id,
+                    blob.kind,
+                    blob.digest,
+                    blob.size_bytes,
+                    blob.bytes,
                 ],
             )
             .map_err(repo)?;
@@ -753,6 +903,77 @@ impl PackageLifecycleRepository for SqliteRepository {
         tx.commit().map_err(repo)?;
         drop(conn);
         Ok(commit.clone())
+    }
+
+    fn read_resource_payload(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+        resource_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError> {
+        let conn = self.connection.lock();
+        let stored = query_payloads(&conn, material_id.as_str(), release_id.as_str())?;
+        let Some(payload) = stored
+            .into_iter()
+            .find(|payload| payload.resource_id == resource_id)
+        else {
+            return Ok(None);
+        };
+        // The stored bytes must re-verify against their own association
+        // facts: a tampered body is corruption, never silently returned.
+        let fact = query_installation(&conn, material_id.as_str(), release_id.as_str())?
+            .and_then(|installation| {
+                installation
+                    .resources
+                    .into_iter()
+                    .find(|fact| fact.resource_id == resource_id)
+            })
+            .ok_or_else(|| {
+                ApplicationError::Repository("package release resource fact is missing".into())
+            })?;
+        if !payload_backs_fact(&payload, &fact) {
+            return Err(ApplicationError::Repository(
+                "package release resource payload is corrupt".into(),
+            ));
+        }
+        Ok(Some(payload.bytes))
+    }
+
+    fn read_rendition_blob(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+        rendition_id: &str,
+    ) -> Result<Option<Vec<u8>>, ApplicationError> {
+        let conn = self.connection.lock();
+        let stored = query_rendition_blobs(&conn, material_id.as_str(), release_id.as_str())?;
+        let Some(blob) = stored
+            .into_iter()
+            .find(|blob| blob.rendition_id == rendition_id)
+        else {
+            return Ok(None);
+        };
+        let fact = query_installation(&conn, material_id.as_str(), release_id.as_str())?
+            .and_then(|installation| {
+                installation
+                    .renditions
+                    .into_iter()
+                    .find(|fact| fact.rendition_id == rendition_id)
+            })
+            .ok_or_else(|| {
+                ApplicationError::Repository("package release rendition fact is missing".into())
+            })?;
+        if blob.kind != fact.kind
+            || blob.digest != fact.media_digest
+            || blob.size_bytes != fact.media_size_bytes
+            || blob.bytes.len() as u64 != blob.size_bytes
+            || blob.digest != sha256_id(&blob.bytes)
+        {
+            return Err(ApplicationError::Repository(
+                "package release rendition blob is corrupt".into(),
+            ));
+        }
+        Ok(Some(blob.bytes))
     }
 }
 

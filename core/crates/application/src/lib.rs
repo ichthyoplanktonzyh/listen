@@ -54,6 +54,7 @@ pub mod batch_governor;
 
 mod chunks;
 mod coach_dashboard;
+mod composition;
 mod content_fit;
 mod corpus;
 mod diagnosis;
@@ -107,6 +108,7 @@ pub use coach_dashboard::{
     CoachEvidenceItem, CoachFeatureAvailability, CoachMaterialInsight, CoachMetric,
     CoachSuggestion, CoachSuggestionDestination,
 };
+pub use composition::*;
 pub(crate) use corpus::prosody_chunk_projections_from_document;
 pub use dictionary::DictionaryUseCases;
 pub use dto::*;
@@ -214,6 +216,10 @@ impl AppServices {
             self.package_lifecycle.clone(),
             self.capability_attempts.clone(),
         )
+    }
+
+    pub fn composition(&self) -> CompositionUseCases {
+        CompositionUseCases::new(self.materials.clone(), self.package_lifecycle.clone())
     }
 
     pub fn source_identity(&self) -> SourceIdentityUseCases {

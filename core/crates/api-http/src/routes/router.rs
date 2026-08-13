@@ -2,6 +2,9 @@ use axum::Router;
 use axum::middleware;
 use axum::routing::{delete, get, post, put};
 
+use super::composition::{
+    read_composition_rendition_blob, read_composition_resource_payload, read_material_composition,
+};
 use super::corpus::{reindex_corpus, search_corpus};
 use super::dictionary::{diagnose_sentence, dictionary_lookup};
 use super::language::{language_profile, list_languages};
@@ -191,6 +194,18 @@ fn material_routes() -> Router<ApiState> {
         .route(
             "/v1/materials/{material_id}/edition-adoption",
             put(adopt_learning_edition),
+        )
+        .route(
+            "/v1/materials/{material_id}/composition",
+            get(read_material_composition),
+        )
+        .route(
+            "/v1/materials/{material_id}/composition/resources/{resource_id}/payload",
+            get(read_composition_resource_payload),
+        )
+        .route(
+            "/v1/materials/{material_id}/composition/renditions/{rendition_id}/blob",
+            get(read_composition_rendition_blob),
         )
         .route(
             "/v1/media/{media_id}/material",
