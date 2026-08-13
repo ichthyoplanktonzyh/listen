@@ -46,7 +46,7 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
     final source = await rootBundle.loadString(_assetPath);
     final decoded = jsonDecode(source) as Map<dynamic, dynamic>;
     final sources = <ContentSource>[
-      for (final raw in decoded['channels'] as List<dynamic>)
+      for (final raw in decoded['sources'] as List<dynamic>)
         _sourceFromMap(raw as Map<dynamic, dynamic>),
     ];
     final kindsById = {for (final source in sources) source.id: source.kind};
@@ -98,16 +98,18 @@ ContentSource _sourceFromMap(Map<dynamic, dynamic> map) => ContentSource(
   language: map['language'] as String,
   description: map['description'] as String,
   cover: _coverFromName(map['cover'] as String),
-  kind: _kindFromName(map['type'] as String),
+  kind: _kindFromName(map['kind'] as String),
   avatarUrl: map['avatarUrl'] as String?,
 );
 
-/// The fixture used to hand every entry a `youtube.com/watch?v=` URL, whatever
-/// its channel said it was — so a podcast channel's episodes claimed to be
-/// YouTube videos. The acquisition path follows the channel's kind instead.
+/// The fixture catalog is written in Content Source / Discovery Item terms:
+/// every source declares its kind and every entry carries only the evidence
+/// that kind has — enclosure URLs for podcast sources, article links for
+/// document sources, a YouTube watch identity for video sources.
 DiscoveryItem _entryFromMap(Map<dynamic, dynamic> map, ContentSourceKind kind) {
   final id = map['id'] as String;
   final isYoutube = kind == ContentSourceKind.youtube;
+  final isDocument = kind == ContentSourceKind.document;
   return DiscoveryItem(
     id: id,
     sourceId: map['channelId'] as String,
@@ -120,11 +122,19 @@ DiscoveryItem _entryFromMap(Map<dynamic, dynamic> map, ContentSourceKind kind) {
     viewCount: map['viewCount'] as int? ?? 0,
     acquisition: isYoutube
         ? AcquisitionMode.externalTool
+        : isDocument
+        ? AcquisitionMode.article
         : AcquisitionMode.enclosure,
-    contentKind: isYoutube ? ItemContentKind.video : ItemContentKind.audio,
+    contentKind: isYoutube
+        ? ItemContentKind.video
+        : isDocument
+        ? ItemContentKind.article
+        : ItemContentKind.audio,
     mediaUrl: isYoutube
         ? 'https://www.youtube.com/watch?v=$id'
-        : map['enclosureUrl'] as String?,
+        : map['mediaUrl'] as String?,
+    entryUrl: map['entryUrl'] as String?,
+    mediaByteLength: map['mediaByteLength'] as int?,
   );
 }
 

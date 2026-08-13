@@ -12,12 +12,14 @@ import 'dart:io';
 /// re-derived: the app knows what it downloaded, and only has to remember it.
 typedef AcquiredMedia = ({String mediaId, String path});
 
-/// A durable entryId → acquired-media record.
+/// A durable source-scoped record of acquired media.
 ///
-/// Deliberately not part of `AppSettings`: settings are a person's
-/// preferences, edited by hand and migrated when their meaning changes. This
-/// is a growing log of what happened, and mixing the two would make every
-/// download rewrite the preferences file.
+/// Keys are composite `sourceId\u0000itemId` strings (see
+/// [DiscoveryViewModel]), so two feeds that publish the same item id never
+/// share bookkeeping. Deliberately not part of `AppSettings`: settings are a
+/// person's preferences, edited by hand and migrated when their meaning
+/// changes. This is a growing log of what happened, and mixing the two would
+/// make every download rewrite the preferences file.
 class AcquisitionLedger {
   AcquisitionLedger({required Directory this._directory});
 
@@ -45,7 +47,7 @@ class AcquisitionLedger {
 
   File? get _file => _directory == null
       ? null
-      : File('${_directory.path}/acquisitions-v1.json');
+      : File('${_directory.path}/acquisitions-v2.json');
 
   /// Reads the record, tolerating every way the file can be unusable.
   ///
@@ -121,7 +123,7 @@ class AcquisitionLedger {
       }
       await file.writeAsString(
         const JsonEncoder.withIndent('  ').convert({
-          'version': 1,
+          'version': 2,
           'acquisitions': {
             for (final entry in _entries.entries)
               entry.key: {

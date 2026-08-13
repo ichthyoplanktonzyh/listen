@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// surface: the job API methods, the wire model, the SSE event and the
 /// transcription center are gone. The retained surface is the provider/model
 /// operations the learner recording and realtime paths need, and every
-/// missing-transcript action opens the pinned listen-gen package journey.
+/// missing-transcript action opens the adopted listen-gen capability journey.
 ///
 /// These are source-level checks, the same style as
 /// `window_min_size_test.dart` pinning the Swift declaration: the app's own

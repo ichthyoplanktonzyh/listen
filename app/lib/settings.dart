@@ -300,7 +300,7 @@ class AppSettings {
   final String phoneticCachePolicy;
   final String learningLanguage;
 
-  /// Whether familiar-material marks (3.2) feed the extensive-listening
+  /// Whether familiar-material marks feed the extensive-listening
   /// queue suggestion on the home media library (restrained, off-switchable).
   final bool familiarMaterialSuggestions;
 

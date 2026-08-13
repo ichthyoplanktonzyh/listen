@@ -62,7 +62,7 @@ void main() {
     await subject.record('e-1', mediaId: 'm-1', path: '/a.mp3');
 
     final decoded =
-        jsonDecode(File('${root.path}/acquisitions-v1.json').readAsStringSync())
+        jsonDecode(File('${root.path}/acquisitions-v2.json').readAsStringSync())
             as Map<String, dynamic>;
 
     expect((decoded['acquisitions'] as Map).keys, ['e-1']);
@@ -85,7 +85,7 @@ void main() {
     () async {
       // The worst case of an unreadable ledger is offering a download that was
       // already done. Refusing to open the catalog over it would be worse.
-      File('${root.path}/acquisitions-v1.json')
+      File('${root.path}/acquisitions-v2.json')
         ..createSync(recursive: true)
         ..writeAsStringSync('{"acquisitions": [not json');
 
@@ -98,11 +98,11 @@ void main() {
   );
 
   test('malformed rows are skipped without discarding good ones', () async {
-    File('${root.path}/acquisitions-v1.json')
+    File('${root.path}/acquisitions-v2.json')
       ..createSync(recursive: true)
       ..writeAsStringSync(
         jsonEncode({
-          'version': 1,
+          'version': 2,
           'acquisitions': {
             'good': {'media_id': 'm-1', 'path': '/a.mp3'},
             'no-path': {'media_id': 'm-2'},

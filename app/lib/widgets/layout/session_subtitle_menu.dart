@@ -8,7 +8,7 @@ import '../common/menu_rows.dart';
 /// Subtitle sourcing for the media on the workbench: import or search per
 /// track, plus whole-media generation for the primary track, the embedded-text
 /// import, and archiving. Secondary sourcing is manual import and search only:
-/// the pinned package journey's selection always activates the primary track,
+/// the adopted composition's selection always activates the primary track,
 /// so there is no secondary "generate" entry that could only pretend to honor
 /// a secondary destination.
 ///

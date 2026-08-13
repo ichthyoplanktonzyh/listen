@@ -85,7 +85,7 @@ flutter:
   assets:
     - listen_gen.lock.json
     - assets/discovery_fixtures.json
-    - assets/podcast_starter_feeds.json
+    - assets/starter_feeds.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

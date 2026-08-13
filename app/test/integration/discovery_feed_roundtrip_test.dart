@@ -240,8 +240,6 @@ class _FixedDirectoryFileService implements MediaImportFileService {
   @override
   Future<String?> pickSubtitle() async => null;
   @override
-  Future<String?> pickContentPackage() async => null;
-  @override
   Future<TimelineFileDocument?> pickTimeline() async => null;
   @override
   String basename(String path) => path;

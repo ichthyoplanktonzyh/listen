@@ -257,7 +257,7 @@ class MediaItem {
     availability: json['availability'] as String,
     createdAtMs: json['created_at_ms'] as int,
     updatedAtMs: json['updated_at_ms'] as int,
-    // Core 3.1: only rows in the Personal Library carry a retention timestamp;
+    // Only rows in the Personal Library carry a retention timestamp;
     // Temporary Material has none.
     retainedAtMs: json['retained_at_ms'] as int?,
   );
@@ -272,7 +272,7 @@ class MediaItem {
   final int createdAtMs;
   final int updatedAtMs;
 
-  /// When this media entered the Personal Library (Core 3.1 library
+  /// When this media entered the Personal Library (library
   /// membership). Null means the media is Temporary Material — open or
   /// scanned, but not explicitly kept.
   final int? retainedAtMs;
@@ -302,7 +302,7 @@ abstract final class TriageQueue {
   static const graduated = 'graduated';
 }
 
-/// One media-library row for triage (Phase 3.5 Slice 5): media plus the
+/// One media-library row for triage: media plus the
 /// facts queue grouping derives from. Queues only suggest — ignoring them
 /// changes nothing about playback or learning behavior (P3/P5 red lines).
 class MediaLibraryEntry {

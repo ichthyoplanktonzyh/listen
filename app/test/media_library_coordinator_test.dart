@@ -831,7 +831,7 @@ void main() {
     );
     w.coordinator.personalLibrary = [textOnly];
 
-    // Inline document_text is offline by itself: no file exists to check.
+    // Inline Document Rendition text is offline by itself: no file exists to check.
     expect(w.coordinator.offlineLibrary, hasLength(1));
   });
 

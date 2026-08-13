@@ -46,7 +46,7 @@ void main() {
 
     final state = vm.state;
     expect(state.loading, isFalse);
-    expect(state.sources, hasLength(7));
+    expect(state.sources, hasLength(9));
     expect(state.selectedSourceId, 'c-bbc-learning');
     expect(state.selectedSource?.name, 'BBC Learning English');
     expect(state.entries, hasLength(3));

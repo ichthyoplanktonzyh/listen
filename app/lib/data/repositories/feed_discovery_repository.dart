@@ -33,7 +33,7 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
        _starterAssetPath = starterAssetPath ?? _defaultStarterAsset,
        _subscriptions = subscriptions ?? SubscriptionStore.inMemory();
 
-  static const _defaultStarterAsset = 'assets/podcast_starter_feeds.json';
+  static const _defaultStarterAsset = 'assets/starter_feeds.json';
 
   final HttpClient _client;
   final String _starterAssetPath;

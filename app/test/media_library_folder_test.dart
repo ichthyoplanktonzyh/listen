@@ -208,8 +208,6 @@ class _FakeFolderPicker implements MediaImportFileService {
   @override
   String basename(String path) => path.split(Platform.pathSeparator).last;
 
-  @override
-  Future<String?> pickContentPackage() async => null;
 
   @override
   Future<String?> pickMedia() async => null;

@@ -6,7 +6,7 @@ part of '../api_service.dart';
 extension MediaApi on LocalApi {
   /// Registers (or re-registers, by fingerprint identity) one media path.
   ///
-  /// [retain] is the Core 3.1 library-membership flag: `true` is an explicit
+  /// [retain] is the library-membership flag: `true` is an explicit
   /// Keep (Personal Library), `false` is Temporary Material — opening a file,
   /// scanning a folder, or adopting a download, none of which imply Personal
   /// Library membership on their own.
@@ -36,7 +36,7 @@ extension MediaApi on LocalApi {
   }
 
   /// Adds one media to the Personal Library without changing its path (Core
-  /// 3.1 library-membership). The media must already be registered.
+  /// library-membership). The media must already be registered.
   Future<MediaItem> retainMedia(String mediaId) async => MediaItem.fromJson(
     (await _request(
           'PUT',
@@ -63,7 +63,7 @@ extension MediaApi on LocalApi {
         as Map<String, dynamic>,
   );
 
-  /// Media library for triage (Phase 3.5): every registered media with
+  /// Media library for triage: every registered media with
   /// cached fit facts, user triage intent, and familiar-material mark.
   Future<List<MediaLibraryEntry>> listMediaLibrary() async =>
       ((await _request('GET', '/v1/media')) as List<dynamic>)

@@ -64,7 +64,7 @@ void main() {
 
     expect(find.text('6 Minute English: Why do we forget?'), findsNWidgets(2));
     expect(find.text('The English We Speak: on the same page'), findsOneWidget);
-    expect(find.text('3 个视频'), findsOneWidget);
+    expect(find.text('3 个条目'), findsOneWidget);
 
     // A remote entry's detail offers the single start-learning intent.
     expect(find.text('媒体尚未在本机'), findsOneWidget);
@@ -147,7 +147,7 @@ void main() {
 
     expect(find.text('这个媒体源加载失败。'), findsOneWidget);
     expect(find.text('这个媒体源还没有视频。'), findsNothing);
-    expect(find.text('3 个视频'), findsNothing);
+    expect(find.text('3 个条目'), findsNothing);
 
     repository.failingSources.clear();
     await tester.tap(find.widgetWithText(OutlinedButton, '重试'));

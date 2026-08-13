@@ -394,7 +394,7 @@ class _DiscoveryShelf extends StatelessWidget {
                       const SizedBox(height: ListenSpacing.gap8),
                       Text(
                         l
-                            .text('discoveryVideoCount')
+                            .text('discoveryItemCount')
                             .replaceFirst('{count}', '${state.entries.length}'),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
