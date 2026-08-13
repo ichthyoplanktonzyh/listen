@@ -137,9 +137,9 @@ void main() {
     tester,
   ) async {
     final repository = TestDiscoveryRepository(
-      sources: [testMediaSource('c-one', name: 'One')],
+      sources: [testContentSource('c-one', name: 'One')],
       entries: {
-        'c-one': [testMediaEntry('e-one', 'c-one')],
+        'c-one': [testDiscoveryItem('e-one', 'c-one')],
       },
     )..failingSources.add('c-one');
 
@@ -231,9 +231,9 @@ void main() {
     tester,
   ) async {
     final repository = TestDiscoveryRepository(
-      sources: [testMediaSource('c-notes', name: 'Notes')],
+      sources: [testContentSource('c-notes', name: 'Notes')],
       entries: {
-        'c-notes': [testUnacquirableEntry('i-notes', 'c-notes')],
+        'c-notes': [testUnacquirableItem('i-notes', 'c-notes')],
       },
     );
     await pumpDiscovery(tester, repository: repository);

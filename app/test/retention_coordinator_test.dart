@@ -1423,6 +1423,10 @@ class _FakeImportRepository implements MediaImportRepository {
   }) => throw UnimplementedError();
 
   @override
+  Future<String?> downloadArticle(String articleUrl, String directory) =>
+      throw UnimplementedError();
+
+  @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) =>
       throw UnimplementedError();
 

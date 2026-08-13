@@ -83,21 +83,21 @@ class DiscoveryHome extends StatelessWidget {
                 SizedBox(
                   width: 372,
                   child: DiscoveryDetailPanel(
-                    entry: state.selectedEntry!,
+                    item: state.selectedEntry!,
                     source: state.selectedSource!,
                     durationMs: viewModel.durationMsFor(
                       state.selectedEntry!.id,
                     ),
-                    downloadState: state.downloadStateOf(
+                    acquisitionState: state.acquisitionStateOf(
+                      state.selectedEntry!.id,
+                    ),
+                    acquisitionPhase: state.acquisitionPhaseOf(
                       state.selectedEntry!.id,
                     ),
                     downloadProgress: state.downloadProgressOf(
                       state.selectedEntry!.id,
                     ),
-                    downloadFailure: state.downloadFailureOf(
-                      state.selectedEntry!.id,
-                    ),
-                    mediaAvailability: state.mediaAvailabilityOf(
+                    acquisitionFailure: state.acquisitionFailureOf(
                       state.selectedEntry!.id,
                     ),
                     onStartLearning: onPlayMedia == null
@@ -159,14 +159,19 @@ class DiscoveryHome extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 24.0),
                         child: DiscoveryDetailPanel(
-                          entry: currentEntry,
+                          item: currentEntry,
                           source: currentSource,
                           durationMs: viewModel.durationMsFor(currentEntry.id),
-                          downloadState: state.downloadStateOf(currentEntry.id),
+                          acquisitionState: state.acquisitionStateOf(
+                            currentEntry.id,
+                          ),
+                          acquisitionPhase: state.acquisitionPhaseOf(
+                            currentEntry.id,
+                          ),
                           downloadProgress: state.downloadProgressOf(
                             currentEntry.id,
                           ),
-                          mediaAvailability: state.mediaAvailabilityOf(
+                          acquisitionFailure: state.acquisitionFailureOf(
                             currentEntry.id,
                           ),
                           onStartLearning: onPlayMedia == null
@@ -219,7 +224,7 @@ class _DiscoveryChannelChips extends StatelessWidget {
     required this.onSelectSource,
   });
 
-  final List<MediaSource> sources;
+  final List<ContentSource> sources;
   final String? selectedSourceId;
   final void Function(String) onSelectSource;
 
@@ -283,7 +288,7 @@ class _SourceSwitcherHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.onSelectSource,
   });
 
-  final List<MediaSource> sources;
+  final List<ContentSource> sources;
   final String? selectedSourceId;
   final void Function(String) onSelectSource;
 
@@ -496,14 +501,11 @@ class _DiscoveryShelf extends StatelessWidget {
                       delegate: SliverChildBuilderDelegate((context, index) {
                         final entry = state.entries[index];
                         return DiscoveryContentCard(
-                          entry: entry,
+                          item: entry,
                           source: state.sourceById(entry.sourceId) ?? source!,
                           durationMs: durationMsFor(entry.id),
-                          downloadState: state.downloadStateOf(entry.id),
+                          acquisitionState: state.acquisitionStateOf(entry.id),
                           downloadProgress: state.downloadProgressOf(entry.id),
-                          mediaAvailability: state.mediaAvailabilityOf(
-                            entry.id,
-                          ),
                           selected: entry.id == state.selectedEntryId,
                           onTap: () => onSelectItem(entry.id),
                           onDownload: () => onDownload(entry.id),
@@ -518,14 +520,11 @@ class _DiscoveryShelf extends StatelessWidget {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8.0),
                           child: DiscoveryContentCard(
-                            entry: entry,
+                            item: entry,
                             source: state.sourceById(entry.sourceId) ?? source!,
                             durationMs: durationMsFor(entry.id),
-                            downloadState: state.downloadStateOf(entry.id),
+                            acquisitionState: state.acquisitionStateOf(entry.id),
                             downloadProgress: state.downloadProgressOf(
-                              entry.id,
-                            ),
-                            mediaAvailability: state.mediaAvailabilityOf(
                               entry.id,
                             ),
                             selected: entry.id == state.selectedEntryId,

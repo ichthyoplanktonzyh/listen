@@ -12,17 +12,16 @@ import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
 import 'source_display_name.dart';
 
-/// A YouTube-style video card representing a MediaEntry: thumbnail, title,
-/// views count, published time, and the acquisition/local state.
+/// A card representing a discovery item: thumbnail, title, source, published
+/// time, and the acquisition/local state.
 class DiscoveryContentCard extends StatelessWidget {
   const DiscoveryContentCard({
     super.key,
-    required this.entry,
+    required this.item,
     required this.source,
     this.durationMs,
-    required this.downloadState,
-    required this.downloadProgress,
-    required this.mediaAvailability,
+    required this.acquisitionState,
+    this.downloadProgress,
     required this.selected,
     required this.onTap,
     required this.onDownload,
@@ -30,14 +29,13 @@ class DiscoveryContentCard extends StatelessWidget {
     this.axis = Axis.horizontal,
   });
 
-  final MediaEntry entry;
-  final MediaSource source;
+  final DiscoveryItem item;
+  final ContentSource source;
   final int? durationMs;
-  final DownloadState downloadState;
+  final DiscoveryItemState acquisitionState;
 
   /// Null while the total is unknown; renders indeterminate.
   final double? downloadProgress;
-  final DiscoveryMediaAvailability mediaAvailability;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onDownload;
@@ -61,7 +59,7 @@ class DiscoveryContentCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _CardCover(
-                      entry: entry,
+                      item: item,
                       source: source,
                       selected: selected,
                       durationMs: durationMs,
@@ -79,7 +77,7 @@ class DiscoveryContentCard extends StatelessWidget {
                       child: AspectRatio(
                         aspectRatio: 16 / 9,
                         child: _CardCover(
-                          entry: entry,
+                          item: item,
                           source: source,
                           selected: selected,
                           durationMs: durationMs,
@@ -105,7 +103,7 @@ class DiscoveryContentCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          entry.title,
+          item.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -115,7 +113,7 @@ class DiscoveryContentCard extends StatelessWidget {
         ),
         const SizedBox(height: ListenSpacing.gap4),
         Text(
-          '${sourceDisplayName(l, source)} · ${_formatViews(l, entry.viewCount)} · ${entry.publishedOn}',
+          '${sourceDisplayName(l, source)} · ${_formatViews(l, item.viewCount)} · ${item.publishedOn}',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(
@@ -128,22 +126,37 @@ class DiscoveryContentCard extends StatelessWidget {
           runSpacing: ListenSpacing.gap4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (mediaAvailability == DiscoveryMediaAvailability.local)
-              _LocalChip(labelText: l.text('discoveryAvailableOnDevice'))
-            else if (entry.acquisition == MediaAcquisition.none)
-              Text(
+            switch (acquisitionState) {
+              DiscoveryItemState.available => _LocalChip(
+                labelText: l.text('discoveryAvailableOnDevice'),
+              ),
+              DiscoveryItemState.discoverable => Text(
                 l.text('discoveryUnacquirable'),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
-              )
-            else
-              _DownloadControl(
-                state: downloadState,
+              ),
+              DiscoveryItemState.acquirable ||
+              DiscoveryItemState.unavailable =>
+                _DownloadControl(
+                  state: acquisitionState,
+                  progress: downloadProgress,
+                  onDownload: onDownload,
+                  onCancel: onCancel,
+                ),
+              DiscoveryItemState.acquiring => _DownloadControl(
+                state: acquisitionState,
                 progress: downloadProgress,
                 onDownload: onDownload,
                 onCancel: onCancel,
               ),
+              DiscoveryItemState.failed => _DownloadControl(
+                state: acquisitionState,
+                progress: downloadProgress,
+                onDownload: onDownload,
+                onCancel: onCancel,
+              ),
+            },
           ],
         ),
       ],
@@ -169,15 +182,15 @@ String _coverInitial(String text) {
 
 class _CardCover extends StatelessWidget {
   const _CardCover({
-    required this.entry,
+    required this.item,
     required this.source,
     required this.selected,
     this.durationMs,
     this.axis = Axis.horizontal,
   });
 
-  final MediaEntry entry;
-  final MediaSource source;
+  final DiscoveryItem item;
+  final ContentSource source;
   final bool selected;
   final int? durationMs;
   final Axis axis;
@@ -187,7 +200,7 @@ class _CardCover extends StatelessWidget {
     final background = discoveryCoverTone(context, source.cover);
     final ink = discoveryCoverInk(context, source.cover);
     final scheme = Theme.of(context).colorScheme;
-    final thumbnail = entry.thumbnailUrl;
+    final thumbnail = item.thumbnailUrl;
     return Container(
       width: axis == Axis.horizontal ? 168 : null,
       height: axis == Axis.horizontal ? 94 : null,
@@ -211,20 +224,20 @@ class _CardCover extends StatelessWidget {
               fallback: _CoverPlaceholder(
                 ink: ink,
                 sourceName: source.name,
-                title: entry.title,
+                title: item.title,
               ),
             )
           else
             _CoverPlaceholder(
               ink: ink,
               sourceName: source.name,
-              title: entry.title,
+              title: item.title,
             ),
           // Duration badge in the bottom right corner — only when a duration
           // is actually known. The badge used to render a hardcoded five
           // minutes for every entry in a feed that publishes no durations,
           // which is the most confident-looking way to state a guess.
-          if (durationMs ?? entry.durationMs case final int known)
+          if (durationMs ?? item.durationMs case final int known)
             Positioned(
               right: 6,
               bottom: 6,
@@ -341,7 +354,7 @@ class _DownloadControl extends StatelessWidget {
     required this.onCancel,
   });
 
-  final DownloadState state;
+  final DiscoveryItemState state;
 
   /// Null when the response carried no length, so the bar animates and the
   /// percentage is omitted rather than invented.
@@ -355,7 +368,8 @@ class _DownloadControl extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return switch (state) {
-      DownloadState.none => TextButton.icon(
+      DiscoveryItemState.acquirable ||
+      DiscoveryItemState.unavailable => TextButton.icon(
         onPressed: onDownload,
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -368,7 +382,7 @@ class _DownloadControl extends StatelessWidget {
           style: const TextStyle(fontSize: 12),
         ),
       ),
-      DownloadState.downloading => Row(
+      DiscoveryItemState.acquiring => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
@@ -402,31 +416,10 @@ class _DownloadControl extends StatelessWidget {
           ),
         ],
       ),
-      DownloadState.done => Container(
-        padding: ListenPadding.tight,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.check_circle_outline,
-              size: ListenIconSize.inline,
-              color: scheme.primary,
-            ),
-            const SizedBox(width: ListenSpacing.gap4),
-            Text(
-              l.text('discoveryDownloaded'),
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: scheme.primary,
-                fontSize: 11,
-              ),
-            ),
-          ],
-        ),
-      ),
       // The row keeps the failure and offers the retry in place. The detail
       // panel carries the reason; a card this dense only has room to say that
       // it did not work and that trying again is one tap away.
-      DownloadState.failed => TextButton.icon(
+      DiscoveryItemState.failed => TextButton.icon(
         onPressed: onDownload,
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -440,6 +433,8 @@ class _DownloadControl extends StatelessWidget {
           style: const TextStyle(fontSize: 12),
         ),
       ),
+      DiscoveryItemState.available || DiscoveryItemState.discoverable =>
+        const SizedBox.shrink(),
     };
   }
 }
@@ -449,7 +444,7 @@ Widget discoveryContentCardPreview() => discoveryPreviewShell(
   const Padding(
     padding: EdgeInsets.all(12),
     child: DiscoveryContentCard(
-      entry: MediaEntry(
+      item: DiscoveryItem(
         id: 'i-preview',
         sourceId: 'c-preview',
         title: '6 Minute English: Why do we forget?',
@@ -460,18 +455,17 @@ Widget discoveryContentCardPreview() => discoveryPreviewShell(
         thumbnailUrl: null,
         viewCount: 142000,
       ),
-      source: MediaSource(
+      source: ContentSource(
         id: 'c-preview',
         name: 'BBC Learning English',
         language: 'English',
         description: '',
         cover: ChannelCoverTone.blue,
-        type: MediaSourceType.youtube,
+        kind: ContentSourceKind.youtube,
         avatarUrl: null,
       ),
-      downloadState: DownloadState.done,
+      acquisitionState: DiscoveryItemState.available,
       downloadProgress: 1,
-      mediaAvailability: DiscoveryMediaAvailability.local,
       selected: false,
       onTap: _noop,
       onDownload: _noop,
@@ -499,7 +493,7 @@ Widget discoveryContentCardUnknownDurationPreview() => discoveryPreviewShell(
   const Padding(
     padding: EdgeInsets.all(12),
     child: DiscoveryContentCard(
-      entry: MediaEntry(
+      item: DiscoveryItem(
         id: 'i-preview-unknown',
         sourceId: 'c-preview',
         title: 'Up First: the stories behind the morning news',
@@ -509,22 +503,21 @@ Widget discoveryContentCardUnknownDurationPreview() => discoveryPreviewShell(
         publishedOn: '2026-07-28',
         thumbnailUrl: null,
         viewCount: 0,
-        acquisition: MediaAcquisition.enclosure,
-        mediaKind: MediaKind.audio,
+        acquisition: AcquisitionMode.enclosure,
+        contentKind: ItemContentKind.audio,
         mediaUrl: 'https://cdn.example.com/ep001.mp3',
       ),
-      source: MediaSource(
+      source: ContentSource(
         id: 'c-preview',
         name: 'NPR',
         language: 'English',
         description: '',
         cover: ChannelCoverTone.blue,
-        type: MediaSourceType.podcast,
+        kind: ContentSourceKind.podcast,
         avatarUrl: null,
       ),
-      downloadState: DownloadState.none,
+      acquisitionState: DiscoveryItemState.acquirable,
       downloadProgress: 0,
-      mediaAvailability: DiscoveryMediaAvailability.remote,
       selected: false,
       onTap: _noop,
       onDownload: _noop,
@@ -551,7 +544,7 @@ Widget discoveryContentCardIndeterminatePreview() => discoveryPreviewShell(
   const Padding(
     padding: EdgeInsets.all(12),
     child: DiscoveryContentCard(
-      entry: MediaEntry(
+      item: DiscoveryItem(
         id: 'i-preview-indeterminate',
         sourceId: 'c-preview',
         title: 'Up First: the stories behind the morning news',
@@ -561,22 +554,21 @@ Widget discoveryContentCardIndeterminatePreview() => discoveryPreviewShell(
         publishedOn: '2026-07-28',
         thumbnailUrl: null,
         viewCount: 0,
-        acquisition: MediaAcquisition.enclosure,
-        mediaKind: MediaKind.audio,
+        acquisition: AcquisitionMode.enclosure,
+        contentKind: ItemContentKind.audio,
         mediaUrl: 'https://cdn.example.com/ep001.mp3',
       ),
-      source: MediaSource(
+      source: ContentSource(
         id: 'c-preview',
         name: 'NPR',
         language: 'English',
         description: '',
         cover: ChannelCoverTone.blue,
-        type: MediaSourceType.podcast,
+        kind: ContentSourceKind.podcast,
         avatarUrl: null,
       ),
-      downloadState: DownloadState.downloading,
+      acquisitionState: DiscoveryItemState.acquiring,
       downloadProgress: null,
-      mediaAvailability: DiscoveryMediaAvailability.remote,
       selected: false,
       onTap: _noop,
       onDownload: _noop,

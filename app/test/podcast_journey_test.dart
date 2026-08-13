@@ -6,7 +6,7 @@ import 'package:llplayer_next/controllers/discovery_view_model.dart';
 import 'package:llplayer_next/data/repositories/composite_discovery_repository.dart';
 import 'package:llplayer_next/data/repositories/discovery_repository.dart';
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
-import 'package:llplayer_next/data/repositories/podcast_discovery_repository.dart';
+import 'package:llplayer_next/data/repositories/feed_discovery_repository.dart';
 import 'package:llplayer_next/models/discovery.dart';
 
 import 'discovery_test_helpers.dart';
@@ -21,18 +21,18 @@ import 'discovery_test_helpers.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const podcastSource = MediaSource(
+  const podcastSource = ContentSource(
     id: 'https://feeds.example.com/show.xml',
     name: 'Daily Listening',
     language: 'en',
     description: '',
     cover: ChannelCoverTone.amber,
-    type: MediaSourceType.podcast,
+    kind: ContentSourceKind.podcast,
     avatarUrl: null,
   );
 
   (DiscoveryViewModel, TestMediaImportRepository) podcastViewModel({
-    List<MediaEntry>? entries,
+    List<DiscoveryItem>? entries,
     TestMediaLibraryRepository? library,
     AcquisitionLedger? ledger,
   }) {
@@ -42,7 +42,7 @@ void main() {
         sources: const [podcastSource],
         entries: {
           podcastSource.id:
-              entries ?? [testPodcastEntry('i-bbc-1', podcastSource.id)],
+              entries ?? [testPodcastItem('i-bbc-1', podcastSource.id)],
         },
       ),
       imports,
@@ -91,7 +91,7 @@ void main() {
       tester,
     ) async {
       final (vm, imports) = podcastViewModel(
-        entries: [testUnacquirableEntry('i-notes', podcastSource.id)],
+        entries: [testUnacquirableItem('i-notes', podcastSource.id)],
       );
       await vm.load();
 
@@ -100,7 +100,12 @@ void main() {
 
       expect(imports.enclosureRequests, isEmpty);
       expect(imports.downloadedUrls, isEmpty);
-      expect(vm.state.downloadStateOf('i-notes'), DownloadState.none);
+      expect(
+        vm.state.acquisitionStateOf('i-notes'),
+        DiscoveryItemState.discoverable,
+        reason: 'an item with nothing to acquire is discoverable, not '
+            'acquirable',
+      );
     });
 
     testWidgets('does not run duration workers against enclosure URLs', (
@@ -133,8 +138,8 @@ void main() {
         expect(imports.enclosureRequests, hasLength(1));
         expect(imports.downloadedUrls, isEmpty);
         expect(
-          vm.state.mediaAvailabilityOf('i-bbc-1'),
-          DiscoveryMediaAvailability.local,
+          vm.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
         );
       },
     );
@@ -166,13 +171,13 @@ void main() {
   group('CompositeDiscoveryRepository', () {
     test('lists podcast sources before YouTube ones', () async {
       final composite = CompositeDiscoveryRepository(
-        PodcastDiscoveryRepository(),
-        TestDiscoveryRepository(sources: [testMediaSource('c-yt')]),
+        FeedDiscoveryRepository(),
+        TestDiscoveryRepository(sources: [testContentSource('c-yt')]),
       );
 
       final sources = await composite.sources();
 
-      expect(sources.first.type, MediaSourceType.podcast);
+      expect(sources.first.kind, ContentSourceKind.podcast);
       expect(sources.last.id, 'c-yt');
     });
 
@@ -180,13 +185,13 @@ void main() {
       'routes a feed URL to the podcast side and a channel id to YouTube',
       () async {
         final youtube = TestDiscoveryRepository(
-          sources: [testMediaSource('c-yt')],
+          sources: [testContentSource('c-yt')],
           entries: {
-            'c-yt': [testMediaEntry('v-1', 'c-yt')],
+            'c-yt': [testDiscoveryItem('v-1', 'c-yt')],
           },
         );
         final composite = CompositeDiscoveryRepository(
-          PodcastDiscoveryRepository(),
+          FeedDiscoveryRepository(),
           youtube,
         );
 
@@ -203,7 +208,7 @@ void main() {
     test('sends a pasted YouTube link to the channel resolver', () async {
       final youtube = _RecordingDiscoveryRepository();
       final composite = CompositeDiscoveryRepository(
-        PodcastDiscoveryRepository(),
+        FeedDiscoveryRepository(),
         youtube,
       );
 
@@ -228,7 +233,7 @@ void main() {
       final first = AcquisitionLedger(directory: directory);
       await first.load();
       await first.record(
-        'i-bbc-1',
+        '${podcastSource.id}\u0000i-bbc-1',
         mediaId: 'm-1',
         path: '/library/p0p1qc9j.mp3',
       );
@@ -249,7 +254,7 @@ void main() {
       vm.selectItem('i-bbc-1');
       await pumpEventQueue();
 
-      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.done);
+      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
       expect(vm.localPathFor('i-bbc-1'), '/library/p0p1qc9j.mp3');
     });
 
@@ -262,7 +267,11 @@ void main() {
 
       final ledger = AcquisitionLedger(directory: directory);
       await ledger.load();
-      await ledger.record('i-bbc-1', mediaId: 'm-gone', path: '/gone.mp3');
+      await ledger.record(
+        '${podcastSource.id}\u0000i-bbc-1',
+        mediaId: 'm-gone',
+        path: '/gone.mp3',
+      );
 
       final (vm, _) = podcastViewModel(
         library: TestMediaLibraryRepository(),
@@ -273,7 +282,7 @@ void main() {
       vm.selectItem('i-bbc-1');
       await pumpEventQueue();
 
-      expect(vm.state.downloadStateOf('i-bbc-1'), DownloadState.none);
+      expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.acquirable);
       expect(ledger['i-bbc-1'], isNull);
     });
   });
@@ -283,23 +292,23 @@ class _RecordingDiscoveryRepository implements DiscoveryRepository {
   final resolvedChannels = <String>[];
 
   @override
-  Future<List<MediaSource>> sources() async => const [];
+  Future<List<ContentSource>> sources() async => const [];
 
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async => const [];
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async => const [];
 
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   ) => throw UnimplementedError();
 
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) async {
     resolvedChannels.add(url);
-    return testMediaSource('c-resolved');
+    return testContentSource('c-resolved');
   }
 }

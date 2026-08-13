@@ -5,23 +5,27 @@ import 'dart:isolate';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../../models/discovery.dart';
-import '../../services/podcast_feed_parser.dart';
+import '../../services/feed_parser.dart';
 import '../../services/subscription_store.dart';
 import 'discovery_repository.dart';
 import 'media_import_repository.dart';
 
-/// Discovery over podcast RSS.
+/// Discovery over RSS and Atom feeds: podcasts and article/blog feeds.
 ///
-/// Podcasts are the one remote source where discovery and acquisition are both
-/// first-class: the feed lists the episodes and hands over a media URL the
-/// publisher put there for clients to fetch. There is no extractor to keep
-/// alive and no platform term being stretched, so this is the path the rest of
-/// the journey — generation, import, learning — gets exercised against.
+/// These are the remote sources where discovery and acquisition are both
+/// first-class: the feed lists the items and hands over what the publisher
+/// put there — a media enclosure for a podcast, an article link for a
+/// document feed. There is no extractor to keep alive and no platform term
+/// being stretched, so this is the path the rest of the journey —
+/// generation, import, learning — gets exercised against.
 ///
-/// A source id is the feed URL. For a podcast the feed address is the stable
-/// thing to point at; there is no separate channel identifier to prefer.
-final class PodcastDiscoveryRepository implements DiscoveryRepository {
-  PodcastDiscoveryRepository({
+/// A source id is the feed URL. For a feed the address is the stable thing to
+/// point at; there is no separate channel identifier to prefer. The source
+/// kind (podcast or document) is decided at subscription time from what the
+/// feed actually carries, so a feed whose items are enclosures and a feed
+/// whose items are articles never stand in for each other.
+final class FeedDiscoveryRepository implements DiscoveryRepository {
+  FeedDiscoveryRepository({
     HttpClient? client,
     String? starterAssetPath,
     SubscriptionStore? subscriptions,
@@ -37,22 +41,23 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
   /// Parsed feeds for this session.
   ///
   /// `entriesFor` used to refetch on every selection, so clicking away from a
-  /// channel and back paid the whole download again. A feed's episode list is
+  /// channel and back paid the whole download again. A feed's item list is
   /// the same for the minutes a person spends browsing it; refreshing it is a
   /// deliberate act, not a side effect of navigation.
-  final Map<String, PodcastFeed> _feeds = {};
+  final Map<String, ParsedFeed> _feeds = {};
 
-  List<MediaSource>? _starters;
+  List<ContentSource>? _starters;
 
   /// Subscribed feeds, durable when the composition root supplied a backed
   /// store. Held here only through the store so a restart cannot disagree with
   /// what is on screen.
   final SubscriptionStore _subscriptions;
 
-  List<MediaSource> get _customSources =>
-      _subscriptions.of(MediaSourceType.podcast);
+  List<ContentSource> get _customSources =>
+      _subscriptions.of(ContentSourceKind.podcast) +
+      _subscriptions.of(ContentSourceKind.document);
 
-  /// A podcast source id is its feed URL, and YouTube channel ids are never
+  /// A feed source id is its feed URL, and YouTube channel ids are never
   /// URLs — so the shape answers this even before [sources] has been awaited
   /// and the starter list exists to search.
   bool owns(String sourceId) {
@@ -65,13 +70,13 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<List<MediaSource>> sources() async {
+  Future<List<ContentSource>> sources() async {
     if (!_subscriptions.isLoaded) await _subscriptions.load();
     final starters = _starters ??= await _loadStarters();
     return List.unmodifiable([...starters, ..._customSources]);
   }
 
-  Future<List<MediaSource>> _loadStarters() async {
+  Future<List<ContentSource>> _loadStarters() async {
     final raw = await rootBundle.loadString(_starterAssetPath);
     final decoded = jsonDecode(raw) as Map<dynamic, dynamic>;
     return [
@@ -81,45 +86,46 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
   }
 
   /// Throws on transport, status or format failure rather than returning an
-  /// empty list: "this podcast has published nothing" and "we could not read
-  /// the feed" must not render as the same screen.
+  /// empty list: "this feed has published nothing" and "we could not read the
+  /// feed" must not render as the same screen.
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async {
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
     final feed = await _fetchFeed(sourceId);
+    final kind = _kindOf(sourceId, feed);
     return [
-      for (final episode in feed.episodes)
-        _entryFrom(episode, sourceId, feed.language),
+      for (final item in feed.items)
+        _itemFrom(item, sourceId, feed.language, kind),
     ];
   }
 
-  /// A podcast has no per-episode subscribe action; an episode is reached
-  /// through its feed.
+  /// A feed has no per-item subscribe action; an item is reached through its
+  /// feed.
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
-  ) => throw const PodcastFeedFormatException(
-    'A podcast episode is added by subscribing to its feed, not on its own.',
+  ) => throw const FeedFormatException(
+    'A feed item is added by subscribing to its feed, not on its own.',
   );
 
   /// Subscribes to a feed pasted by the user. The feed is fetched and parsed
   /// before the source is added, so a bad URL fails here rather than becoming
   /// a channel that is permanently empty.
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) async {
     final trimmed = url.trim();
     final feed = await _fetchFeed(trimmed);
 
-    final source = MediaSource(
+    final source = ContentSource(
       id: trimmed,
       name: feed.title.isEmpty ? trimmed : feed.title,
       language: feed.language.isEmpty ? '' : feed.language,
       description: feed.description,
       cover: ChannelCoverTone.slate,
-      type: MediaSourceType.podcast,
+      kind: _kindOf(trimmed, feed),
       avatarUrl: feed.imageUrl,
     );
 
@@ -131,7 +137,23 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
   /// network. The refresh affordance is the caller's to offer.
   void forget(String sourceId) => _feeds.remove(sourceId);
 
-  Future<PodcastFeed> _fetchFeed(String feedUrl) async {
+  /// What the feed's items mean: enclosures are media (podcast), article
+  /// links are documents. Decided from the feed's own content, never assumed.
+  ContentSourceKind _kindOf(String sourceId, ParsedFeed feed) {
+    if (_customSources.any((source) => source.id == sourceId)) {
+      final subscribed = _customSources.firstWhere(
+        (source) => source.id == sourceId,
+      );
+      return subscribed.kind;
+    }
+    for (final item in feed.items) {
+      if (item.enclosureUrl != null) return ContentSourceKind.podcast;
+      if (item.entryUrl != null) return ContentSourceKind.document;
+    }
+    return ContentSourceKind.document;
+  }
+
+  Future<ParsedFeed> _fetchFeed(String feedUrl) async {
     final cached = _feeds[feedUrl];
     if (cached != null) return cached;
     final feed = await _downloadFeed(feedUrl);
@@ -139,11 +161,11 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
     return feed;
   }
 
-  Future<PodcastFeed> _downloadFeed(String feedUrl) async {
+  Future<ParsedFeed> _downloadFeed(String feedUrl) async {
     final uri = Uri.parse(feedUrl);
     if (!uri.isScheme('http') && !uri.isScheme('https')) {
-      throw const PodcastFeedFormatException(
-        'A podcast feed address must be an http or https URL.',
+      throw const FeedFormatException(
+        'A feed address must be an http or https URL.',
       );
     }
 
@@ -157,55 +179,65 @@ final class PodcastDiscoveryRepository implements DiscoveryRepository {
         uri: uri,
       );
     }
-    final body = await readPodcastFeedBody(response.transform(utf8.decoder));
+    final body = await readFeedBody(response.transform(utf8.decoder));
     // Even a capped feed is hundreds of kilobytes of XML, and parsing it on
     // the UI isolate showed up as a dropped frame rather than as work.
-    return Isolate.run(
-      () => parsePodcastFeed(body, maxEpisodes: podcastEpisodeLimit),
-    );
+    return Isolate.run(() => parseFeed(body, maxItems: feedItemLimit));
   }
 
-  MediaEntry _entryFrom(
-    PodcastEpisode episode,
+  DiscoveryItem _itemFrom(
+    ParsedFeedItem item,
     String sourceId,
     String feedLanguage,
+    ContentSourceKind kind,
   ) {
-    final url = episode.enclosureUrl;
-    return MediaEntry(
-      id: episode.guid,
+    final enclosure = item.enclosureUrl;
+    return DiscoveryItem(
+      id: item.id,
       sourceId: sourceId,
-      title: episode.title,
-      description: episode.description,
-      durationMs: episode.durationMs,
+      title: item.title,
+      description: item.description,
+      durationMs: item.durationMs,
       language: feedLanguage,
-      publishedOn: episode.publishedOn,
-      thumbnailUrl: episode.imageUrl,
-      // Podcast feeds do not publish play counts. Zero here means "the source
-      // does not report this", and the surface omits the figure rather than
-      // showing a channel where every episode has no listeners.
-      viewCount: 0,
-      acquisition: url == null
-          ? MediaAcquisition.none
-          : MediaAcquisition.enclosure,
-      mediaKind: _kindFor(episode.enclosureType),
-      mediaUrl: url,
-      mediaByteLength: episode.enclosureBytes,
+      publishedOn: item.publishedOn,
+      thumbnailUrl: item.imageUrl,
+      viewCount: item.viewCount,
+      acquisition: switch (kind) {
+        ContentSourceKind.podcast => enclosure == null
+            ? AcquisitionMode.none
+            : AcquisitionMode.enclosure,
+        ContentSourceKind.document => item.entryUrl == null
+            ? AcquisitionMode.none
+            : AcquisitionMode.article,
+        ContentSourceKind.youtube => AcquisitionMode.externalTool,
+      },
+      contentKind: switch (kind) {
+        ContentSourceKind.podcast => _kindFor(enclosure == null
+            ? null
+            : item.enclosureType),
+        ContentSourceKind.document => ItemContentKind.article,
+        ContentSourceKind.youtube => ItemContentKind.video,
+      },
+      mediaUrl: kind == ContentSourceKind.podcast ? enclosure : null,
+      entryUrl: item.entryUrl,
+      publisherId: item.publisherId,
+      mediaByteLength: item.enclosureBytes,
     );
   }
 
-  MediaKind _kindFor(String? enclosureType) =>
+  ItemContentKind _kindFor(String? enclosureType) =>
       enclosureType != null && enclosureType.toLowerCase().startsWith('video/')
-      ? MediaKind.video
-      : MediaKind.audio;
+      ? ItemContentKind.video
+      : ItemContentKind.audio;
 }
 
-MediaSource _sourceFromMap(Map<dynamic, dynamic> map) => MediaSource(
+ContentSource _sourceFromMap(Map<dynamic, dynamic> map) => ContentSource(
   id: map['url'] as String,
   name: map['name'] as String,
   language: map['language'] as String? ?? '',
   description: map['description'] as String? ?? '',
   cover: _coverFromName(map['cover'] as String? ?? ''),
-  type: MediaSourceType.podcast,
+  kind: ContentSourceKind.podcast,
   avatarUrl: null,
 );
 

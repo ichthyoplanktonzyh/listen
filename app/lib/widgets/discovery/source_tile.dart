@@ -16,7 +16,7 @@ class DiscoverySourceTile extends StatelessWidget {
     required this.onTap,
   });
 
-  final MediaSource source;
+  final ContentSource source;
   final bool selected;
   final VoidCallback onTap;
 
@@ -79,7 +79,7 @@ String _coverInitial(String text) {
 class _SourceMark extends StatelessWidget {
   const _SourceMark({required this.source});
 
-  final MediaSource source;
+  final ContentSource source;
 
   @override
   Widget build(BuildContext context) {
@@ -109,13 +109,13 @@ Widget discoverySourceTilePreview() => discoveryPreviewShell(
   const Padding(
     padding: EdgeInsets.all(12),
     child: DiscoverySourceTile(
-      source: MediaSource(
+      source: ContentSource(
         id: 'c-preview',
         name: 'BBC Learning English',
         language: 'English',
         description: '',
         cover: ChannelCoverTone.blue,
-        type: MediaSourceType.youtube,
+        kind: ContentSourceKind.youtube,
         avatarUrl: null,
       ),
       selected: true,

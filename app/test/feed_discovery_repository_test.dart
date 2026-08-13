@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:llplayer_next/data/repositories/podcast_discovery_repository.dart';
+import 'package:llplayer_next/data/repositories/feed_discovery_repository.dart';
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
 import 'package:llplayer_next/models/discovery.dart';
 import 'package:llplayer_next/services/subscription_store.dart';
-import 'package:llplayer_next/services/podcast_feed_parser.dart';
+import 'package:llplayer_next/services/feed_parser.dart';
 
 import 'discovery_test_helpers.dart';
 
@@ -20,7 +20,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late HttpServer server;
-  late PodcastDiscoveryRepository repository;
+  late FeedDiscoveryRepository repository;
   late Future<void> Function(HttpRequest request) handler;
 
   String feedUrl() => 'http://${server.address.host}:${server.port}/show.xml';
@@ -30,7 +30,7 @@ void main() {
     unawaited(server.forEach((request) async => handler(request)));
     // The test binding installs an HttpOverrides that answers every request
     // with 400, so the repository gets a client built outside it.
-    repository = PodcastDiscoveryRepository(
+    repository = FeedDiscoveryRepository(
       client: HttpOverrides.runWithHttpOverrides(
         HttpClient.new,
         _RealHttpOverrides(),
@@ -57,8 +57,8 @@ void main() {
     expect(first.sourceId, feedUrl());
     expect(first.title, 'Why do we forget?');
     expect(first.durationMs, 360000);
-    expect(first.acquisition, MediaAcquisition.enclosure);
-    expect(first.mediaKind, MediaKind.audio);
+    expect(first.acquisition, AcquisitionMode.enclosure);
+    expect(first.contentKind, ItemContentKind.audio);
     expect(first.mediaUrl, 'https://cdn.example.com/ep001.mp3');
     expect(first.mediaByteLength, 8123456);
     expect(first.language, 'en-us');
@@ -67,7 +67,7 @@ void main() {
   test('marks an item with no enclosure as nothing to acquire', () async {
     final entries = await repository.entriesFor(feedUrl());
 
-    expect(entries.last.acquisition, MediaAcquisition.none);
+    expect(entries.last.acquisition, AcquisitionMode.none);
     expect(entries.last.mediaUrl, isNull);
     expect(entries.last.durationMs, isNull);
   });
@@ -95,7 +95,7 @@ void main() {
 
     await expectLater(
       repository.entriesFor(feedUrl()),
-      throwsA(isA<PodcastFeedFormatException>()),
+      throwsA(isA<FeedFormatException>()),
     );
   });
 
@@ -107,7 +107,7 @@ void main() {
 
     expect(source.id, feedUrl());
     expect(source.name, 'Daily Listening');
-    expect(source.type, MediaSourceType.podcast);
+    expect(source.kind, ContentSourceKind.podcast);
     expect(source.avatarUrl, 'https://cdn.example.com/cover.jpg');
     expect(await repository.sources(), contains(source));
   });
@@ -120,7 +120,7 @@ void main() {
 
     await expectLater(
       repository.resolveCustomChannel(feedUrl(), TestMediaImportRepository()),
-      throwsA(isA<PodcastFeedFormatException>()),
+      throwsA(isA<FeedFormatException>()),
     );
     expect(
       (await repository.sources()).where((s) => s.id == feedUrl()),
@@ -138,7 +138,7 @@ void main() {
 
     expect(starters, isNotEmpty);
     for (final source in starters) {
-      expect(source.type, MediaSourceType.podcast);
+      expect(source.kind, ContentSourceKind.podcast);
       expect(source.name, isNotEmpty);
       expect(Uri.parse(source.id).isScheme('https'), isTrue, reason: source.id);
     }
@@ -202,7 +202,7 @@ void main() {
     addTearDown(() => directory.deleteSync(recursive: true));
 
     final store = SubscriptionStore(directory: directory);
-    final subscribing = PodcastDiscoveryRepository(
+    final subscribing = FeedDiscoveryRepository(
       client: HttpOverrides.runWithHttpOverrides(
         HttpClient.new,
         _RealHttpOverrides(),
@@ -215,7 +215,7 @@ void main() {
     );
 
     // A fresh store and repository, as a relaunch would build.
-    final relaunched = PodcastDiscoveryRepository(
+    final relaunched = FeedDiscoveryRepository(
       client: HttpOverrides.runWithHttpOverrides(
         HttpClient.new,
         _RealHttpOverrides(),
@@ -230,6 +230,71 @@ void main() {
       'Daily Listening',
     );
   });
+
+  test(
+    'an article feed subscribes as a document source, not a podcast',
+    () async {
+      // The kind is the feed's own fact: enclosures are media, article links
+      // are documents. A feed of articles must never be offered as a podcast.
+      handler = (request) async {
+        request.response.write(_documentFeed);
+        await request.response.close();
+      };
+
+      final source = await repository.resolveCustomChannel(
+        feedUrl(),
+        _UnusedImportRepository(),
+      );
+
+      expect(source.kind, ContentSourceKind.document);
+
+      final items = await repository.entriesFor(feedUrl());
+      expect(items.single.acquisition, AcquisitionMode.article);
+      expect(items.single.contentKind, ItemContentKind.article);
+      expect(items.single.entryUrl, 'https://blog.example.com/posts/1');
+      expect(items.single.mediaUrl, isNull);
+    },
+  );
+
+  test(
+    'the subscribed kind is what the entries mean after a restart',
+    () async {
+      final directory = Directory.systemTemp.createTempSync('subs-doc-');
+      addTearDown(() => directory.deleteSync(recursive: true));
+
+      handler = (request) async {
+        request.response.write(_documentFeed);
+        await request.response.close();
+      };
+      final subscribing = FeedDiscoveryRepository(
+        client: HttpOverrides.runWithHttpOverrides(
+          HttpClient.new,
+          _RealHttpOverrides(),
+        ),
+        subscriptions: SubscriptionStore(directory: directory),
+      );
+      final added = await subscribing.resolveCustomChannel(
+        feedUrl(),
+        _UnusedImportRepository(),
+      );
+      expect(added.kind, ContentSourceKind.document);
+
+      // A fresh repository, as a relaunch would build: the cached parse is
+      // gone and the subscribed kind is the only thing left to say what the
+      // feed's items mean.
+      final relaunched = FeedDiscoveryRepository(
+        client: HttpOverrides.runWithHttpOverrides(
+          HttpClient.new,
+          _RealHttpOverrides(),
+        ),
+        subscriptions: SubscriptionStore(directory: directory),
+      );
+      final items = await relaunched.entriesFor(feedUrl());
+
+      expect(items.single.acquisition, AcquisitionMode.article);
+      expect(items.single.contentKind, ItemContentKind.article);
+    },
+  );
 }
 
 /// The base class's own `createHttpClient` builds a real one.
@@ -263,6 +328,23 @@ const _feed = '''
       <title>Show notes only</title>
       <guid>ep-002</guid>
       <pubDate>Wed, 29 Jul 2026 09:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+''';
+
+const _documentFeed = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>The Weekly Article</title>
+    <description>Long reads for learners.</description>
+    <language>en</language>
+    <item>
+      <title>The first article</title>
+      <guid>post-001</guid>
+      <pubDate>Tue, 28 Jul 2026 09:00:00 GMT</pubDate>
+      <link>https://blog.example.com/posts/1</link>
     </item>
   </channel>
 </rss>

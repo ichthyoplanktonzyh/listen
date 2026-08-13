@@ -24,6 +24,7 @@ import 'resource_repository.dart';
 import 'review_repository.dart';
 import 'semantic_search_repository.dart';
 import 'settings_repository.dart';
+import 'source_identity_repository.dart';
 import 'speaking_session_repository.dart';
 import 'speaking_task_repository.dart';
 import 'speech_enhancement_repository.dart';
@@ -64,7 +65,10 @@ final class LocalCoreRepositories {
       subtitleAnalysis = LocalSubtitleAnalysisRepository(
         () => _transport.currentApi,
       ),
-      writingTask = LocalWritingTaskRepository(() => _transport.currentApi);
+      writingTask = LocalWritingTaskRepository(() => _transport.currentApi),
+      sourceIdentity = LocalSourceIdentityRepository(
+        () => _transport.currentApi,
+      );
 
   final LocalCoreTransportService _transport;
 
@@ -83,6 +87,7 @@ final class LocalCoreRepositories {
   final ReadingTaskRepository readingTask;
   final ReadingSessionRepository readingSession;
   final SpeakingSessionRepository speakingSession;
+  final SourceIdentityRepository sourceIdentity;
   final SpeechEnhancementRepository speechEnhancement;
   final SubtitleAnalysisRepository subtitleAnalysis;
   final WritingTaskRepository writingTask;

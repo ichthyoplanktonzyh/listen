@@ -14,43 +14,43 @@ import 'cover_tone.dart';
 import 'discovery_preview_shell.dart';
 import 'source_display_name.dart';
 
-/// The right-hand lesson detail: full metadata plus one active decision —
-/// "start learning". Acquiring the media, when needed, happens here with its
+/// The right-hand item detail: full metadata plus one active decision —
+/// "start learning". Acquiring the content, when needed, happens here with its
 /// progress visible; opening Workbench is the caller's step after
 /// [DiscoveryViewModel.acquireForLearning] returns a local path.
 class DiscoveryDetailPanel extends StatelessWidget {
   const DiscoveryDetailPanel({
     super.key,
-    required this.entry,
+    required this.item,
     required this.source,
     this.durationMs,
-    required this.mediaAvailability,
-    required this.downloadState,
+    required this.acquisitionState,
+    required this.acquisitionPhase,
     required this.downloadProgress,
-    this.downloadFailure,
+    this.acquisitionFailure,
     required this.onStartLearning,
     required this.onCancelDownload,
     required this.onRecheckAvailability,
   });
 
-  final MediaEntry entry;
-  final MediaSource source;
+  final DiscoveryItem item;
+  final ContentSource source;
   final int? durationMs;
-  final DiscoveryMediaAvailability mediaAvailability;
-  final DownloadState downloadState;
+  final DiscoveryItemState acquisitionState;
+  final ItemAcquisitionPhase acquisitionPhase;
 
   /// Null while the total is unknown; renders indeterminate.
   final double? downloadProgress;
 
   /// Why the last acquisition attempt failed, shown only in the failed state.
-  final ApiFailure? downloadFailure;
+  final ApiFailure? acquisitionFailure;
 
   /// The single "start learning" intent. Null when nothing in this app can
   /// open the media, so the button renders disabled rather than pretending.
   final VoidCallback? onStartLearning;
   final VoidCallback onCancelDownload;
 
-  /// Re-runs the local-media reconciliation after an undetermined answer.
+  /// Re-runs the local-media reconciliation after an unavailable answer.
   final VoidCallback onRecheckAvailability;
 
   @override
@@ -62,10 +62,10 @@ class DiscoveryDetailPanel extends StatelessWidget {
       child: ListView(
         padding: ListenPadding.pageCompact,
         children: [
-          _HeroCover(entry: entry, source: source),
+          _HeroCover(item: item, source: source),
           const SizedBox(height: ListenSpacing.gap12),
           Text(
-            entry.title,
+            item.title,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -75,20 +75,20 @@ class DiscoveryDetailPanel extends StatelessWidget {
             label: l.text('discoveryDuration'),
             // A duration nobody has stated is said to be unstated. It used to
             // be a hardcoded five minutes rendered as a fact.
-            value: switch (durationMs ?? entry.durationMs) {
+            value: switch (durationMs ?? item.durationMs) {
               final int known => formatDuration(Duration(milliseconds: known)),
               null => l.text('discoveryDurationUnknown'),
             },
           ),
-          _MetaRow(label: l.text('discoveryLanguage'), value: entry.language),
+          _MetaRow(label: l.text('discoveryLanguage'), value: item.language),
           const SizedBox(height: ListenSpacing.gap24),
 
           _MediaAccessCard(
-            entry: entry,
-            mediaAvailability: mediaAvailability,
-            downloadState: downloadState,
+            item: item,
+            acquisitionState: acquisitionState,
+            acquisitionPhase: acquisitionPhase,
             downloadProgress: downloadProgress,
-            downloadFailure: downloadFailure,
+            acquisitionFailure: acquisitionFailure,
             onStartLearning: onStartLearning,
             onCancelDownload: onCancelDownload,
             onRecheckAvailability: onRecheckAvailability,
@@ -105,16 +105,16 @@ String _coverInitial(String text) {
 }
 
 class _HeroCover extends StatelessWidget {
-  const _HeroCover({required this.entry, required this.source});
+  const _HeroCover({required this.item, required this.source});
 
-  final MediaEntry entry;
-  final MediaSource source;
+  final DiscoveryItem item;
+  final ContentSource source;
 
   @override
   Widget build(BuildContext context) {
     final background = discoveryCoverTone(context, source.cover);
     final ink = discoveryCoverInk(context, source.cover);
-    final thumbnail = entry.thumbnailUrl;
+    final thumbnail = item.thumbnailUrl;
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Container(
@@ -137,7 +137,7 @@ class _HeroCover extends StatelessWidget {
                 fallback: _HeroCaption(
                   ink: ink,
                   sourceName: source.name,
-                  title: entry.title,
+                  title: item.title,
                 ),
               )
             else
@@ -147,7 +147,7 @@ class _HeroCover extends StatelessWidget {
                   AppLocalizations.of(context),
                   source,
                 ),
-                title: entry.title,
+                title: item.title,
               ),
           ],
         ),
@@ -233,39 +233,44 @@ class _MetaRow extends StatelessWidget {
 /// "can I learn this now, and if not, what is actually happening?".
 ///
 /// This deliberately knows nothing about packages, generation or transcripts:
-/// once the media is local, Workbench owns learning-transcript readiness.
+/// once the content is local, Workbench owns learning-transcript readiness.
 class _MediaAccessCard extends StatelessWidget {
   const _MediaAccessCard({
-    required this.entry,
-    required this.mediaAvailability,
-    required this.downloadState,
+    required this.item,
+    required this.acquisitionState,
+    required this.acquisitionPhase,
     required this.downloadProgress,
-    this.downloadFailure,
+    this.acquisitionFailure,
     required this.onStartLearning,
     required this.onCancelDownload,
     required this.onRecheckAvailability,
   });
 
-  final MediaEntry entry;
-  final DiscoveryMediaAvailability mediaAvailability;
-  final DownloadState downloadState;
+  final DiscoveryItem item;
+  final DiscoveryItemState acquisitionState;
+  final ItemAcquisitionPhase acquisitionPhase;
 
   /// Null while the total is unknown; renders indeterminate.
   final double? downloadProgress;
-  final ApiFailure? downloadFailure;
+  final ApiFailure? acquisitionFailure;
   final VoidCallback? onStartLearning;
   final VoidCallback onCancelDownload;
   final VoidCallback onRecheckAvailability;
 
-  bool get isDownloading => downloadState == DownloadState.downloading;
-  bool get downloadFailed => downloadState == DownloadState.failed;
-  bool get isLocal =>
-      mediaAvailability == DiscoveryMediaAvailability.local;
+  bool get isDownloading =>
+      acquisitionState == DiscoveryItemState.acquiring &&
+      acquisitionPhase == ItemAcquisitionPhase.download;
   bool get isChecking =>
-      mediaAvailability == DiscoveryMediaAvailability.checking;
+      acquisitionState == DiscoveryItemState.acquiring &&
+      acquisitionPhase == ItemAcquisitionPhase.check;
+  bool get downloadFailed =>
+      acquisitionState == DiscoveryItemState.failed;
+  bool get isLocal => acquisitionState == DiscoveryItemState.available;
   bool get isUndetermined =>
-      mediaAvailability == DiscoveryMediaAvailability.undetermined;
-  bool get canAcquire => entry.acquisition != MediaAcquisition.none;
+      acquisitionState == DiscoveryItemState.unavailable;
+  bool get isDiscoverable =>
+      acquisitionState == DiscoveryItemState.discoverable;
+  bool get canAcquire => item.acquisition != AcquisitionMode.none;
   bool get loading => isDownloading || isChecking;
 
   @override
@@ -331,10 +336,11 @@ class _MediaAccessCard extends StatelessWidget {
 
   String _statusText(AppLocalizations l) {
     if (isDownloading) return l.text('discoveryGettingMedia');
+    if (isChecking) return l.text('discoveryCheckingLocalMedia');
     if (downloadFailed) return l.text('discoveryDownloadFailed');
     if (isLocal) return l.text('discoveryAvailableOnDevice');
-    if (isChecking) return l.text('discoveryCheckingLocalMedia');
     if (isUndetermined) return l.text('discoveryCannotCheckMedia');
+    if (isDiscoverable) return l.text('discoveryCannotAcquire');
     return l.text('discoveryRemoteMedia');
   }
 
@@ -362,7 +368,7 @@ class _MediaAccessCard extends StatelessWidget {
 
     if (downloadFailed) {
       return [
-        if (downloadFailure case final failure?) ...[
+        if (acquisitionFailure case final failure?) ...[
           Text(
             _downloadFailureDetail(l, failure),
             style: Theme.of(
@@ -383,9 +389,9 @@ class _MediaAccessCard extends StatelessWidget {
     }
 
     if (isLocal || (canAcquire && !isChecking && !isUndetermined)) {
-      // Local media, or remote media whose bytes can be acquired: the single
-      // "start learning" intent covers both. In the remote case the press
-      // starts acquisition and this surface keeps showing its progress.
+      // Local content, or remote content whose bytes can be acquired: the
+      // single "start learning" intent covers both. In the remote case the
+      // press starts acquisition and this surface keeps showing its progress.
       return [
         FilledButton.icon(
           onPressed: onStartLearning,
@@ -430,18 +436,10 @@ class _MediaAccessCard extends StatelessWidget {
       ];
     }
 
-    // Remote with nothing to acquire: no dead download/start CTA. The honest
-    // sentence is the whole answer; the generic "open local media" picker,
-    // where the surface offers one, remains the way in for a file already
-    // on disk that the catalog does not know about.
-    return [
-      Text(
-        l.text('discoveryCannotAcquire'),
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-        ),
-      ),
-    ];
+    // A discoverable item: the source lists it but grants nothing to fetch.
+    // The status row already carries the sentence, so there is no dead
+    // download/start CTA and nothing further to say.
+    return const [];
   }
 }
 
@@ -458,7 +456,7 @@ String _downloadFailureDetail(AppLocalizations l, ApiFailure failure) {
 @Preview(name: 'Detail panel · local', group: 'Discovery', size: Size(380, 720))
 Widget discoveryDetailPanelLocalPreview() => discoveryPreviewShell(
   DiscoveryDetailPanel(
-    entry: const MediaEntry(
+    item: const DiscoveryItem(
       id: 'i-preview',
       sourceId: 'c-preview',
       title: '6 Minute English: Why do we forget?',
@@ -469,17 +467,17 @@ Widget discoveryDetailPanelLocalPreview() => discoveryPreviewShell(
       thumbnailUrl: null,
       viewCount: 142000,
     ),
-    source: const MediaSource(
+    source: const ContentSource(
       id: 'c-preview',
       name: 'BBC Learning English',
       language: 'English',
       description: '',
       cover: ChannelCoverTone.blue,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    mediaAvailability: DiscoveryMediaAvailability.local,
-    downloadState: DownloadState.done,
+    acquisitionState: DiscoveryItemState.available,
+    acquisitionPhase: ItemAcquisitionPhase.download,
     downloadProgress: 1,
     onStartLearning: _noop,
     onCancelDownload: _noop,
@@ -492,7 +490,7 @@ Widget discoveryDetailPanelLocalPreview() => discoveryPreviewShell(
 @Preview(name: 'Detail panel · remote', group: 'Discovery', size: Size(380, 720))
 Widget discoveryDetailPanelRemotePreview() => discoveryPreviewShell(
   DiscoveryDetailPanel(
-    entry: const MediaEntry(
+    item: const DiscoveryItem(
       id: 'i-preview-remote',
       sourceId: 'c-preview',
       title: 'The fastest way to board a plane, according to mathematics',
@@ -502,21 +500,21 @@ Widget discoveryDetailPanelRemotePreview() => discoveryPreviewShell(
       publishedOn: '2026-07-28',
       thumbnailUrl: null,
       viewCount: 142000,
-      acquisition: MediaAcquisition.externalTool,
-      mediaKind: MediaKind.video,
+      acquisition: AcquisitionMode.externalTool,
+      contentKind: ItemContentKind.video,
       mediaUrl: 'https://www.youtube.com/watch?v=i-preview-remote',
     ),
-    source: const MediaSource(
+    source: const ContentSource(
       id: 'c-preview',
       name: 'TED-Ed',
       language: 'English',
       description: '',
       cover: ChannelCoverTone.rose,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    mediaAvailability: DiscoveryMediaAvailability.remote,
-    downloadState: DownloadState.none,
+    acquisitionState: DiscoveryItemState.acquirable,
+    acquisitionPhase: ItemAcquisitionPhase.download,
     downloadProgress: null,
     onStartLearning: _noop,
     onCancelDownload: _noop,
@@ -529,7 +527,7 @@ Widget discoveryDetailPanelRemotePreview() => discoveryPreviewShell(
 @Preview(name: 'Detail panel · acquiring', group: 'Discovery', size: Size(380, 720))
 Widget discoveryDetailPanelAcquiringPreview() => discoveryPreviewShell(
   DiscoveryDetailPanel(
-    entry: const MediaEntry(
+    item: const DiscoveryItem(
       id: 'i-preview-acquiring',
       sourceId: 'c-preview',
       title: 'The fastest way to board a plane, according to mathematics',
@@ -539,21 +537,21 @@ Widget discoveryDetailPanelAcquiringPreview() => discoveryPreviewShell(
       publishedOn: '2026-07-28',
       thumbnailUrl: null,
       viewCount: 142000,
-      acquisition: MediaAcquisition.externalTool,
-      mediaKind: MediaKind.video,
+      acquisition: AcquisitionMode.externalTool,
+      contentKind: ItemContentKind.video,
       mediaUrl: 'https://www.youtube.com/watch?v=i-preview-acquiring',
     ),
-    source: const MediaSource(
+    source: const ContentSource(
       id: 'c-preview',
       name: 'TED-Ed',
       language: 'English',
       description: '',
       cover: ChannelCoverTone.rose,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    mediaAvailability: DiscoveryMediaAvailability.remote,
-    downloadState: DownloadState.downloading,
+    acquisitionState: DiscoveryItemState.acquiring,
+    acquisitionPhase: ItemAcquisitionPhase.download,
     downloadProgress: 0.4,
     onStartLearning: _noop,
     onCancelDownload: _noop,
@@ -570,7 +568,7 @@ Widget discoveryDetailPanelAcquiringPreview() => discoveryPreviewShell(
 )
 Widget discoveryDetailPanelUnavailablePreview() => discoveryPreviewShell(
   DiscoveryDetailPanel(
-    entry: const MediaEntry(
+    item: const DiscoveryItem(
       id: 'i-preview-none',
       sourceId: 'c-preview',
       title: 'Up First: notes without an enclosure',
@@ -581,17 +579,17 @@ Widget discoveryDetailPanelUnavailablePreview() => discoveryPreviewShell(
       thumbnailUrl: null,
       viewCount: 0,
     ),
-    source: const MediaSource(
+    source: const ContentSource(
       id: 'c-preview',
       name: 'NPR',
       language: 'English',
       description: '',
       cover: ChannelCoverTone.blue,
-      type: MediaSourceType.podcast,
+      kind: ContentSourceKind.podcast,
       avatarUrl: null,
     ),
-    mediaAvailability: DiscoveryMediaAvailability.remote,
-    downloadState: DownloadState.none,
+    acquisitionState: DiscoveryItemState.discoverable,
+    acquisitionPhase: ItemAcquisitionPhase.download,
     downloadProgress: null,
     onStartLearning: _noop,
     onCancelDownload: _noop,

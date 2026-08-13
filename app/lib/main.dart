@@ -63,7 +63,7 @@ import 'controllers/material_capability_coordinator.dart';
 import 'data/repositories/core_repositories.dart';
 import 'data/repositories/composite_discovery_repository.dart';
 import 'data/repositories/discovery_repository.dart';
-import 'data/repositories/podcast_discovery_repository.dart';
+import 'data/repositories/feed_discovery_repository.dart';
 import 'screens/composition_session_screen.dart';
 import 'screens/discovery_home_screen.dart';
 import 'services/listen_gen_process_service.dart';
@@ -303,7 +303,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     CompositeDiscoveryRepository(
       // One store across both sides: a subscription is a subscription, and
       // only the composition root hands out one backed by a real directory.
-      PodcastDiscoveryRepository(subscriptions: subscriptionStore),
+      FeedDiscoveryRepository(subscriptions: subscriptionStore),
       YoutubeDiscoveryRepository(subscriptions: subscriptionStore),
     ),
     mediaImportRepository,
@@ -311,6 +311,12 @@ class _PlayerScreenState extends State<PlayerScreen>
     // The composition root is the only place that hands out a ledger backed by
     // a real directory; everything else defaults to remembering nothing.
     AcquisitionLedger.forCurrentUser(),
+    // Source Identity and the material boundary: intake records the canonical
+    // key once a discovered item converges on a Material, and a later refresh
+    // of the same feed item resolves the same Material instead of offering a
+    // second download.
+    coreRepositories.sourceIdentity,
+    coreRepositories.learningMaterial,
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);
   late final coreRepositories = LocalCoreRepositories(coreTransport);

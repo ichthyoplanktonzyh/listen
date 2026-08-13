@@ -157,6 +157,21 @@ class TestMediaImportRepository implements MediaImportRepository {
     return TestMediaDownloadHandle(entryId, completer);
   }
 
+  /// Every article URL handed to the document path, so a test can tell which
+  /// acquisition actually ran.
+  final articleRequests = <String>[];
+
+  @override
+  Future<String?> downloadArticle(String articleUrl, String directory) async {
+    articleRequests.add(articleUrl);
+    if (downloadFails) return null;
+    final entryId = articleUrl.contains('i-doc-1') ? 'i-doc-1' : 'i-doc-2';
+    final completer = Completer<String?>();
+    completer.complete('/path/to/downloaded/[$entryId].html');
+    completers[entryId] = completer;
+    return completer.future;
+  }
+
   @override
   Future<ResolvedVideoDetails> resolveVideoDetails(String pageUrl) async {
     resolvedUrls.add(pageUrl);
@@ -320,17 +335,17 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   }
 }
 
-MediaSource testMediaSource(String id, {String? name}) => MediaSource(
+ContentSource testContentSource(String id, {String? name}) => ContentSource(
   id: id,
   name: name ?? id,
   language: 'en',
   description: 'Source $id',
   cover: ChannelCoverTone.slate,
-  type: MediaSourceType.youtube,
+  kind: ContentSourceKind.youtube,
   avatarUrl: null,
 );
 
-MediaEntry testMediaEntry(String id, String sourceId) => MediaEntry(
+DiscoveryItem testDiscoveryItem(String id, String sourceId) => DiscoveryItem(
   id: id,
   sourceId: sourceId,
   title: 'Entry $id',
@@ -342,13 +357,14 @@ MediaEntry testMediaEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  acquisition: MediaAcquisition.externalTool,
+  acquisition: AcquisitionMode.externalTool,
+  contentKind: ItemContentKind.video,
   mediaUrl: 'https://www.youtube.com/watch?v=$id',
 );
 
 /// A podcast episode: a duration the feed stated, an enclosure to fetch
 /// directly, and audio rather than video.
-MediaEntry testPodcastEntry(String id, String sourceId) => MediaEntry(
+DiscoveryItem testPodcastItem(String id, String sourceId) => DiscoveryItem(
   id: id,
   sourceId: sourceId,
   title: 'Episode $id',
@@ -358,14 +374,30 @@ MediaEntry testPodcastEntry(String id, String sourceId) => MediaEntry(
   publishedOn: '2026-08-01',
   thumbnailUrl: null,
   viewCount: 0,
-  acquisition: MediaAcquisition.enclosure,
-  mediaKind: MediaKind.audio,
+  acquisition: AcquisitionMode.enclosure,
+  contentKind: ItemContentKind.audio,
   mediaUrl: 'https://cdn.example.com/$id.mp3',
   mediaByteLength: 8123456,
 );
 
+/// A document item: an article link the feed offered, fetched as a document.
+DiscoveryItem testArticleItem(String id, String sourceId) => DiscoveryItem(
+  id: id,
+  sourceId: sourceId,
+  title: 'Article $id',
+  description: '',
+  durationMs: null,
+  language: 'en',
+  publishedOn: '2026-08-01',
+  thumbnailUrl: null,
+  viewCount: 0,
+  acquisition: AcquisitionMode.article,
+  contentKind: ItemContentKind.article,
+  entryUrl: 'https://blog.example.com/$id',
+);
+
 /// A feed item with show notes but no enclosure: discoverable, not acquirable.
-MediaEntry testUnacquirableEntry(String id, String sourceId) => MediaEntry(
+DiscoveryItem testUnacquirableItem(String id, String sourceId) => DiscoveryItem(
   id: id,
   sourceId: sourceId,
   title: 'Notes for $id',
@@ -382,13 +414,13 @@ MediaEntry testUnacquirableEntry(String id, String sourceId) => MediaEntry(
 /// answer at all, so the in-flight window is observable.
 class TestDiscoveryRepository implements DiscoveryRepository {
   TestDiscoveryRepository({
-    List<MediaSource> sources = const [],
-    Map<String, List<MediaEntry>> entries = const {},
+    List<ContentSource> sources = const [],
+    Map<String, List<DiscoveryItem>> entries = const {},
   }) : _sources = List.of(sources),
        _entries = Map.of(entries);
 
-  final List<MediaSource> _sources;
-  final Map<String, List<MediaEntry>> _entries;
+  final List<ContentSource> _sources;
+  final Map<String, List<DiscoveryItem>> _entries;
 
   /// Set to make `sources()` throw instead of answering.
   bool failSources = false;
@@ -400,28 +432,28 @@ class TestDiscoveryRepository implements DiscoveryRepository {
   final gates = <String, Completer<void>>{};
 
   @override
-  Future<List<MediaSource>> sources() async {
+  Future<List<ContentSource>> sources() async {
     if (failSources) throw StateError('source list unavailable');
     return List.unmodifiable(_sources);
   }
 
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async {
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
     await gates[sourceId]?.future;
     if (failingSources.contains(sourceId)) {
       throw StateError('feed for $sourceId unavailable');
     }
-    return List.unmodifiable(_entries[sourceId] ?? const <MediaEntry>[]);
+    return List.unmodifiable(_entries[sourceId] ?? const <DiscoveryItem>[]);
   }
 
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   ) => throw UnimplementedError();
 
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) => throw UnimplementedError();

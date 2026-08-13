@@ -4,26 +4,27 @@ import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../../models/discovery.dart';
+import '../../services/feed_parser.dart';
 import '../../services/subscription_store.dart';
 import 'media_import_repository.dart';
 
 /// Content-resource discovery boundary for the home preflight.
 ///
-/// The preflight ships with a fixture implementation backed by a bundled
-/// catalog; a real implementation would aggregate channel metadata and lesson
-/// listings from a source such as a curated catalog or a platform feed, and
-/// stays behind this seam.
+/// Each family answers for its own sources: a feed is fetched and parsed
+/// here in the app, a YouTube channel goes through its own Atom feed and,
+/// for acquisition, an external tool. The preflight also ships a fixture
+/// implementation backed by a bundled catalog.
 abstract interface class DiscoveryRepository {
-  Future<List<MediaSource>> sources();
+  Future<List<ContentSource>> sources();
 
-  Future<List<MediaEntry>> entriesFor(String sourceId);
+  Future<List<DiscoveryItem>> entriesFor(String sourceId);
 
-  Future<MediaEntry> resolveCustomVideo(
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   );
 
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   );
@@ -37,23 +38,23 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
 
   static const _assetPath = 'assets/discovery_fixtures.json';
 
-  List<MediaSource>? _sources;
-  List<MediaEntry>? _entries;
+  List<ContentSource>? _sources;
+  List<DiscoveryItem>? _entries;
 
   Future<void> _ensureLoaded() async {
     if (_sources != null) return;
     final source = await rootBundle.loadString(_assetPath);
     final decoded = jsonDecode(source) as Map<dynamic, dynamic>;
-    final sources = <MediaSource>[
+    final sources = <ContentSource>[
       for (final raw in decoded['channels'] as List<dynamic>)
         _sourceFromMap(raw as Map<dynamic, dynamic>),
     ];
-    final typesById = {for (final source in sources) source.id: source.type};
-    final entries = <MediaEntry>[
+    final kindsById = {for (final source in sources) source.id: source.kind};
+    final entries = <DiscoveryItem>[
       for (final raw in decoded['items'] as List<dynamic>)
         _entryFromMap(
           raw as Map<dynamic, dynamic>,
-          typesById[raw['channelId']] ?? MediaSourceType.youtube,
+          kindsById[raw['channelId']] ?? ContentSourceKind.youtube,
         ),
     ];
     _sources = List.unmodifiable(sources);
@@ -61,13 +62,13 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<List<MediaSource>> sources() async {
+  Future<List<ContentSource>> sources() async {
     await _ensureLoaded();
     return _sources!;
   }
 
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async {
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
     await _ensureLoaded();
     return List.unmodifiable(
       _entries!.where((entry) => entry.sourceId == sourceId),
@@ -75,7 +76,7 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   ) {
@@ -83,7 +84,7 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) {
@@ -91,23 +92,23 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
   }
 }
 
-MediaSource _sourceFromMap(Map<dynamic, dynamic> map) => MediaSource(
+ContentSource _sourceFromMap(Map<dynamic, dynamic> map) => ContentSource(
   id: map['id'] as String,
   name: map['name'] as String,
   language: map['language'] as String,
   description: map['description'] as String,
   cover: _coverFromName(map['cover'] as String),
-  type: _typeFromName(map['type'] as String),
+  kind: _kindFromName(map['type'] as String),
   avatarUrl: map['avatarUrl'] as String?,
 );
 
 /// The fixture used to hand every entry a `youtube.com/watch?v=` URL, whatever
 /// its channel said it was — so a podcast channel's episodes claimed to be
-/// YouTube videos. The acquisition path follows the channel's type instead.
-MediaEntry _entryFromMap(Map<dynamic, dynamic> map, MediaSourceType type) {
+/// YouTube videos. The acquisition path follows the channel's kind instead.
+DiscoveryItem _entryFromMap(Map<dynamic, dynamic> map, ContentSourceKind kind) {
   final id = map['id'] as String;
-  final isYoutube = type == MediaSourceType.youtube;
-  return MediaEntry(
+  final isYoutube = kind == ContentSourceKind.youtube;
+  return DiscoveryItem(
     id: id,
     sourceId: map['channelId'] as String,
     title: map['title'] as String,
@@ -118,19 +119,20 @@ MediaEntry _entryFromMap(Map<dynamic, dynamic> map, MediaSourceType type) {
     thumbnailUrl: map['thumbnailUrl'] as String?,
     viewCount: map['viewCount'] as int? ?? 0,
     acquisition: isYoutube
-        ? MediaAcquisition.externalTool
-        : MediaAcquisition.enclosure,
-    mediaKind: isYoutube ? MediaKind.video : MediaKind.audio,
+        ? AcquisitionMode.externalTool
+        : AcquisitionMode.enclosure,
+    contentKind: isYoutube ? ItemContentKind.video : ItemContentKind.audio,
     mediaUrl: isYoutube
         ? 'https://www.youtube.com/watch?v=$id'
         : map['enclosureUrl'] as String?,
   );
 }
 
-MediaSourceType _typeFromName(String name) => switch (name) {
-  'youtube' => MediaSourceType.youtube,
-  'podcast' => MediaSourceType.podcast,
-  _ => MediaSourceType.youtube,
+ContentSourceKind _kindFromName(String name) => switch (name) {
+  'youtube' => ContentSourceKind.youtube,
+  'podcast' => ContentSourceKind.podcast,
+  'document' => ContentSourceKind.document,
+  _ => ContentSourceKind.youtube,
 };
 
 ChannelCoverTone _coverFromName(String name) => switch (name) {
@@ -147,7 +149,7 @@ ChannelCoverTone _coverFromName(String name) => switch (name) {
 /// Discovery only. Listing a video here grants no acquisition right: the
 /// download path below runs a user-provided external tool, on the user's own
 /// responsibility, which is why entries from this source are marked
-/// [MediaAcquisition.externalTool] rather than sharing the podcast enclosure
+/// [AcquisitionMode.externalTool] rather than sharing the podcast enclosure
 /// path.
 final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   YoutubeDiscoveryRepository({
@@ -198,75 +200,75 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   /// `yt3.googleusercontent.com` links that used to be here were fabricated
   /// too. Nothing renders the avatar today, so a real one would have to be
   /// fetched when something does.
-  static const List<MediaSource> _defaultSources = [
-    MediaSource(
+  static const List<ContentSource> _defaultSources = [
+    ContentSource(
       id: 'UCsooa4yRKGN_zEE8iknghZA',
       name: 'TED-Ed',
       language: 'en',
       description:
           'Carefully curated educational videos, many of which are collaborations between talented educators and animators.',
       cover: ChannelCoverTone.rose,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    MediaSource(
+    ContentSource(
       id: 'UCsXVk37bltHxD1rDPwtNM8Q',
       name: 'Kurzgesagt – In a Nutshell',
       language: 'en',
       description:
           'Animation videos explaining science, space, technology, history, and philosophy with beautiful illustration.',
       cover: ChannelCoverTone.blue,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    MediaSource(
+    ContentSource(
       id: 'UCLXo7UDZvByw2ixzpQCufnA',
       name: 'Vox',
       language: 'en',
       description:
           'Vox helps you understand our complex world with news, context, maps, and video essays on society and science.',
       cover: ChannelCoverTone.slate,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    MediaSource(
+    ContentSource(
       id: 'UCftwRNsjfRo08xYE31tkiyw',
       name: 'Wired',
       language: 'en',
       description:
           'Wired is where tomorrow is realized, focusing on technology, science, culture, and business through interviews.',
       cover: ChannelCoverTone.green,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    MediaSource(
+    ContentSource(
       id: 'UCHaHD477h-FeBbVh9Sh7syA',
       name: 'BBC Learning English',
       language: 'en',
       description:
           'Learn English from the BBC with new videos, podcasts, and quizzes published every week to improve your skills.',
       cover: ChannelCoverTone.amber,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
-    MediaSource(
+    ContentSource(
       id: 'UCZYTClx2T1of7BRZ86-8fow',
       name: 'SciShow',
       language: 'en',
       description:
           'SciShow explores the unexpected, explaining the scientific mysteries of the universe and daily life.',
       cover: ChannelCoverTone.blue,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     ),
   ];
 
   @override
-  Future<List<MediaSource>> sources() async {
+  Future<List<ContentSource>> sources() async {
     if (!_subscriptions.isLoaded) await _subscriptions.load();
     return List.unmodifiable([
       ..._defaultSources,
-      ..._subscriptions.of(MediaSourceType.youtube),
+      ..._subscriptions.of(ContentSourceKind.youtube),
     ]);
   }
 
@@ -274,63 +276,35 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   /// hand the surface an empty list, which reads as "this channel has no
   /// videos" — indistinguishable from offline or rate-limited.
   @override
-  Future<List<MediaEntry>> entriesFor(String sourceId) async {
+  Future<List<DiscoveryItem>> entriesFor(String sourceId) async {
     final body = await _fetchFeed(sourceId);
+    final feed = parseFeed(body, assumeFormat: FeedFormat.atom);
+    return [
+      for (final item in feed.items) _itemFrom(item, sourceId),
+    ];
+  }
 
-    final entryMatches = RegExp(r'<entry>([\s\S]*?)</entry>').allMatches(body);
-    final entries = <MediaEntry>[];
-    for (final match in entryMatches) {
-      final segment = match.group(1) ?? '';
-      final videoId = RegExp(
-        r'<yt:videoId>([^<]+)</yt:videoId>',
-      ).firstMatch(segment)?.group(1)?.trim();
-      final titleRaw =
-          RegExp(
-            r'<title>([^<]+)</title>',
-          ).firstMatch(segment)?.group(1)?.trim() ??
-          '';
-      final descRaw =
-          RegExp(
-            r'<media:description>([\s\S]*?)</media:description>',
-          ).firstMatch(segment)?.group(1)?.trim() ??
-          '';
-      final published =
-          RegExp(
-            r'<published>([^<]+)</published>',
-          ).firstMatch(segment)?.group(1)?.trim() ??
-          '';
-      final thumb = RegExp(
-        r'<media:thumbnail\s+url="([^"]+)"',
-      ).firstMatch(segment)?.group(1)?.trim();
-      final viewsRaw = RegExp(
-        r'<media:statistics\s+views="(\d+)"',
-      ).firstMatch(segment)?.group(1);
-      final views = viewsRaw == null ? 0 : int.tryParse(viewsRaw) ?? 0;
-
-      if (videoId == null || videoId.isEmpty) continue;
-
-      entries.add(
-        MediaEntry(
-          id: videoId,
-          sourceId: sourceId,
-          title: _decodeXml(titleRaw),
-          description: _decodeXml(descRaw),
-          // The Atom feed carries no duration. It used to be filled with a
-          // hardcoded five minutes, which every card then rendered as a real
-          // badge; unknown stays unknown until `_resolveRemoteDurations`
-          // reports an actual one.
-          durationMs: null,
-          language: 'en',
-          publishedOn: published,
-          thumbnailUrl: thumb,
-          viewCount: views,
-          acquisition: MediaAcquisition.externalTool,
-          mediaKind: MediaKind.video,
-          mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
-        ),
-      );
-    }
-    return entries;
+  DiscoveryItem _itemFrom(ParsedFeedItem item, String sourceId) {
+    final videoId = item.id;
+    return DiscoveryItem(
+      id: videoId,
+      sourceId: sourceId,
+      title: item.title,
+      description: item.description,
+      // The Atom feed carries no duration. It used to be filled with a
+      // hardcoded five minutes, which every card then rendered as a real
+      // badge; unknown stays unknown until the view model's duration
+      // resolver reports an actual one.
+      durationMs: null,
+      language: 'en',
+      publishedOn: item.publishedOn,
+      thumbnailUrl: item.imageUrl,
+      viewCount: item.viewCount,
+      acquisition: AcquisitionMode.externalTool,
+      contentKind: ItemContentKind.video,
+      mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
+      entryUrl: item.entryUrl,
+    );
   }
 
   /// The feed XML for [sourceId], retried through the endpoint's throttling.
@@ -364,12 +338,12 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<MediaEntry> resolveCustomVideo(
+  Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
   ) async {
     final details = await importRepo.resolveVideoDetails(url);
-    return MediaEntry(
+    return DiscoveryItem(
       id: details.id,
       sourceId: details.channelId,
       title: details.title,
@@ -379,42 +353,30 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
       publishedOn: details.uploadDate,
       thumbnailUrl: details.thumbnail,
       viewCount: details.viewCount,
-      acquisition: MediaAcquisition.externalTool,
-      mediaKind: MediaKind.video,
+      acquisition: AcquisitionMode.externalTool,
+      contentKind: ItemContentKind.video,
       mediaUrl: url,
     );
   }
 
   @override
-  Future<MediaSource> resolveCustomChannel(
+  Future<ContentSource> resolveCustomChannel(
     String url,
     MediaImportRepository importRepo,
   ) async {
     final details = await importRepo.resolveChannelDetails(url);
 
-    final newSource = MediaSource(
+    final newSource = ContentSource(
       id: details.id,
       name: details.name,
       language: 'en',
       description: 'Custom imported channel from YouTube.',
       cover: ChannelCoverTone.slate,
-      type: MediaSourceType.youtube,
+      kind: ContentSourceKind.youtube,
       avatarUrl: null,
     );
 
     await _subscriptions.add(newSource);
     return newSource;
-  }
-
-  String _decodeXml(String val) {
-    return val
-        .replaceAll('&quot;', '"')
-        .replaceAll('&amp;', '&')
-        .replaceAll('&apos;', "'")
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&reg;', '®')
-        .replaceAll('&copy;', '©');
   }
 }
