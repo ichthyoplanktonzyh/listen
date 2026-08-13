@@ -1,9 +1,8 @@
 # listen-gen Machine Event Protocol v2
 
 The v2 protocol is the capability-oriented exchange between Listen App and
-Listen Gen, produced by `listen-gen package from-capability`. Protocol v1
-remains the media-package exchange until the Slice 3 cutover; v2 is the only
-App integration after it.
+Listen Gen, produced by `listen-gen package from-capability`. It is the only
+App integration; the pre-Slice-3 media-package protocol is retired.
 
 - Protocol schema: `listen_gen.machine-event.v2`
 - Protocol version: `2`

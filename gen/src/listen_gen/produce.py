@@ -125,7 +125,6 @@ class ProduceConfig:
     ocr: OcrProvider | None = None
     asr: AsrAdapter | None = None
     asr_preprocessor: FfmpegAudioPreprocessor | None = None
-    aligner: AlignerAdapter | None = None
 
 
 def _blob_source_bytes(blob: Any) -> bytes:

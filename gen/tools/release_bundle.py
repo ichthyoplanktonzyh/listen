@@ -34,20 +34,6 @@ PROVIDER_REQUIREMENTS = {
     "fixture": [],
     "command": ["ffprobe", "ffmpeg", "asr-wrapper"],
     "whisper-cpp": ["ffprobe", "ffmpeg", "whisper-cli", "whisper-model"],
-    "sense-groups-fixture": [],
-    "sense-groups-command": ["sense-group-extractor"],
-    "sense-groups-baseline": [],
-    "acoustics-fixture": [],
-    "acoustics-command": ["ffprobe", "ffmpeg", "acoustics-extractor"],
-    "acoustics-baseline": ["ffprobe", "ffmpeg"],
-    "prosody-fixture": [],
-    "prosody-command": ["prosody-extractor"],
-    "prosody-baseline": [],
-    "phone-fixture": [],
-    "phone-command": ["ffprobe", "ffmpeg", "phone-analyzer"],
-    "phone-wav2vec2-ctc": [
-        "ffprobe", "ffmpeg", "python", "wav2vec2-phone-sidecar", "wav2vec2-phone-model"
-    ],
 }
 EXPECTED_LOCK = {
     "authority": {
@@ -84,25 +70,13 @@ TOOLCHAIN_IDENTITY_VERSION = 1
 RUNTIME_ROLE_NAMES = (
     "media",
     "asr",
-    "alignment",
-    "sense_groups",
-    "acoustics",
-    "prosody",
-    "phone",
 )
 TOOLCHAIN_ROLES: dict[str, tuple[str, ...]] = {
-    "acoustics-extractor": ("acoustics",),
     "asr-wrapper": ("asr",),
-    "ffmpeg": ("media", "asr", "alignment", "acoustics", "phone"),
-    "ffprobe": ("media", "asr", "alignment", "acoustics", "phone"),
-    "phone-analyzer": ("phone",),
-    "prosody-extractor": ("prosody",),
-    "python": ("phone",),
-    "sense-group-extractor": ("sense_groups",),
-    "wav2vec2-phone-model": ("phone",),
-    "wav2vec2-phone-sidecar": ("phone",),
-    "whisper-cli": ("asr", "alignment"),
-    "whisper-model": ("asr", "alignment"),
+    "ffmpeg": ("media", "asr"),
+    "ffprobe": ("media", "asr"),
+    "whisper-cli": ("asr",),
+    "whisper-model": ("asr",),
 }
 
 
