@@ -15,6 +15,8 @@ import 'package:llplayer_next/models/discovery.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/services/acquisition_ledger.dart';
 import 'package:llplayer_next/services/api_service.dart';
+
+import 'e2e_database.dart';
 import 'package:llplayer_next/services/external_tools.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
 
@@ -88,7 +90,8 @@ void main() {
       });
 
       // ── Real Core and app-side repositories ────────────────────────────
-      final api = await LocalApi.connect();
+      final dbPath = scratchDatabasePath('feed-journey');
+      final api = await LocalApi.connect(databasePath: dbPath);
       addTearDown(() async => api.close());
 
       final ledger = AcquisitionLedger.inMemory();

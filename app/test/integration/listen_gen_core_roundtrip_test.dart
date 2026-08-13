@@ -15,35 +15,87 @@ import 'package:llplayer_next/services/composition_store.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
-/// Real three-repository round trip: the pinned listen-gen release bundle
-/// produces a Content Package v3 from a capability request, and the pinned
-/// Core installs it as a candidate and then adopts it as the Learning Edition.
-/// The coordinator drives the whole product path: resolution, durable attempt,
-/// production, candidate installation, adoption, and attempt finalize.
+import 'e2e_database.dart';
+
+/// Real three-repository round trip: a locally built listen-gen release
+/// bundle produces a Content Package v3 from a capability request, and a
+/// locally built Core installs it as a candidate and then adopts it as the
+/// Learning Edition. The coordinator drives the whole product path:
+/// resolution, durable attempt, production, candidate installation, adoption,
+/// and attempt finalize.
 ///
-/// This exercises live subprocesses (the verified `.pyz` and the Core
-/// `api-http` binary), so it is skipped unless `LISTEN_PACKAGE_E2E=1`. Drive it
-/// through `tool/verify_local_content_package_roundtrip.sh`, which builds both
-/// external repositories at their pinned commits and wires the environment.
+/// This exercises live subprocesses (the `.pyz` and the Core `api-http`
+/// binary), so it is skipped unless `LISTEN_PACKAGE_E2E=1`. Drive it through
+/// `tool/verify_local_content_package_roundtrip.sh`, which builds both
+/// external repositories at their local HEAD and wires the environment. The
+/// production `listen_gen.lock.json` is deliberately not touched: the test
+/// derives an equivalent lock from the freshly built manifest so the
+/// product's release verification runs against the exact probe artifact.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final runE2e = Platform.environment['LISTEN_PACKAGE_E2E'] == '1';
 
+  /// Derive a release lock from the freshly built release manifest so
+  /// [LocalListenGenReleaseService.verify] can validate the probe artifact
+  /// without touching the committed production lock. Every field the lock
+  /// parser and the manifest validator require is copied from the manifest;
+  /// the manifest hash is computed from the on-disk bytes.
+  Future<LocalListenGenReleaseService> releaseForProbeManifest() async {
+    final manifestPath = Platform.environment['LISTEN_GEN_RELEASE_MANIFEST'];
+    expect(
+      manifestPath,
+      isNotNull,
+      reason: 'LISTEN_GEN_RELEASE_MANIFEST must point at the probe manifest',
+    );
+    final manifestFile = File(manifestPath!);
+    final manifestBytes = await manifestFile.readAsBytes();
+    final manifest = jsonDecode(utf8.decode(manifestBytes))
+        as Map<String, dynamic>;
+    final artifact = manifest['artifact'] as Map<String, dynamic>;
+    final source = manifest['source'] as Map<String, dynamic>;
+    final tool = manifest['tool'] as Map<String, dynamic>;
+    final machineProtocol = manifest['machine_protocol'] as Map<String, dynamic>;
+    final contract = manifest['content_package_contract'] as Map<String, dynamic>;
+    final runtime = manifest['runtime'] as Map<String, dynamic>;
+    final lock = <String, dynamic>{
+      'manifest_version': 1,
+      'repository': 'ichthyoplanktonzyh/listen-gen',
+      'source_git_sha': source['commit'],
+      'release_manifest': {
+        'schema': manifest['schema'],
+        'filename': manifestFile.uri.pathSegments.last,
+        'sha256': 'sha256:${sha256.convert(manifestBytes)}',
+      },
+      'tool': tool,
+      'machine_protocol': machineProtocol,
+      'content_package_contract': contract,
+      'runtime': {
+        'python_requires': runtime['python_requires'],
+      },
+      'runtime_identity': manifest['runtime_identity'],
+      'artifact': artifact,
+    };
+    return LocalListenGenReleaseService(
+      manifestPath: manifestPath,
+      loadLockBytes: () async => utf8.encode(jsonEncode(lock)),
+    );
+  }
+
   test(
-    'pinned Gen 0.5.0 bundle to Core 4.0 round trips through capability '
+    'local Gen bundle to local Core round trips through capability '
     'production, installation, and adoption',
     () async {
       // TestWidgetsFlutterBinding installs an HttpOverrides that stubs every
       // request to status 400. This test talks to a real Core sidecar, so drop
-      // the override and use the platform HttpClient. The binding is still what
-      // lets `rootBundle` read the committed lock asset.
+      // the override and use the platform HttpClient.
       HttpOverrides.global = null;
 
       const fixtureRoot = 'test/fixtures/content-package-roundtrip';
 
       // The test owns its fixtures; verify their bytes before trusting them
       // and never reach into a sibling Gen checkout.
+      final dbPath = scratchDatabasePath('roundtrip-read');
       final fixtureManifest =
           jsonDecode(await File('$fixtureRoot/manifest.json').readAsString())
               as Map<String, dynamic>;
@@ -58,19 +110,11 @@ void main() {
       }
       final mediaPath = File('$fixtureRoot/sample-media.wav').absolute.path;
 
-      // Verify the pinned release from the committed asset lock + env manifest.
-      final release = LocalListenGenReleaseService();
-      expect(
-        release.isConfigured,
-        isTrue,
-        reason: 'LISTEN_GEN_RELEASE_MANIFEST must point at the pinned manifest',
-      );
+      // Verify the freshly built probe release: manifest and artifact must
+      // pass the product's release verification against the derived lock.
+      final release = await releaseForProbeManifest();
       final verified = await release.verify();
       expect(verified.toolVersion, '0.5.0');
-      expect(
-        verified.artifactSha256,
-        'sha256:946c0b40a2d4d4ccd32915b5f54ac58644755b24a127af637f8a460819cb7ef5',
-      );
 
       final generator = LocalListenGenProcessService(releaseService: release);
       expect(
@@ -93,7 +137,7 @@ void main() {
                   Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS']!) as List<dynamic>)
               .cast<String>();
 
-      final api = await LocalApi.connect();
+      final api = await LocalApi.connect(databasePath: dbPath);
       try {
         // Register the fixture media, then resolve the material Core bound to
         // it. The material id and current revision anchor the round trip.
@@ -188,12 +232,13 @@ void main() {
     () async {
       HttpOverrides.global = null;
 
-      final release = LocalListenGenReleaseService();
+      final release = await releaseForProbeManifest();
       final verified = await release.verify();
       expect(verified.toolVersion, '0.5.0');
 
       final generator = LocalListenGenProcessService(releaseService: release);
-      final api = await LocalApi.connect();
+      final dbPath = scratchDatabasePath('roundtrip-listen');
+      final api = await LocalApi.connect(databasePath: dbPath);
       final storeRoot = Directory.systemTemp.createTempSync('e2e-store-');
       final coordinator = MaterialCapabilityCoordinator(
         repository: LocalCapabilityRepository(() => api),

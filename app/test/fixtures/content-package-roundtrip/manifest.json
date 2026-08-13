@@ -1,14 +1,9 @@
 {
   "schema": "listen_app.content-package-roundtrip-fixture.v1",
   "source_repository": "ichthyoplanktonzyh/listen-gen",
-  "source_commit": "42649d9f3687bdc9374151efcbc827c6a4dae61b",
+  "source_commit": "11f9fe91deb203b060da6c2f5dd9c0295903858c",
   "files": {
-    "acoustics-result.json": "399b1e23273e6705c2817e7a8286c9b60bd4311ad6fd155e4d945a8ee3869d84",
-    "alignment-result.json": "886fb2078722d195a42bccc6ecba40ee6fce85139e65c647a0e0cbc3a83e1369",
-    "phone-result.json": "cdc30bbcc495ffb2463c27dbf1b848a70c9c19a0e7aaabfcb791779c5de15580",
-    "prosody-result.json": "fa8c313409b365fe60c67ba7f7d547ebb050ff041ddfdfe6b06cbebc658a610d",
     "sample-media.wav": "34faebfe4439bd33484a89ef52e4dd5314e6a1d6cc17556487ac3c9cec82a26a",
-    "sample.asr.json": "66f9858a7abcf1133369a75e0bff52a94256265ff2865f66f89b6b31fed073c2",
-    "sense-group-result.json": "c3f3b7713c304d39d42dd50fb91a9175d6c94171d891e7856685b192197b124f"
+    "sample.asr.json": "66f9858a7abcf1133369a75e0bff52a94256265ff2865f66f89b6b31fed073c2"
   }
 }

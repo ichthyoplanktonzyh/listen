@@ -133,14 +133,21 @@ class LocalApi {
   final ApiTransport? _transport;
   bool _closed = false;
 
-  static Future<LocalApi> connect() async {
+  static Future<LocalApi> connect({String? databasePath}) async {
     final configuredUrl = Platform.environment['LLPLAYERNEXT_API_URL'];
     final configuredToken = Platform.environment['LLPLAYERNEXT_API_TOKEN'];
     if (configuredUrl != null && configuredToken != null) {
       return LocalApi._(configuredUrl, configuredToken, null, null, null);
     }
     final binary = await _findSidecar();
-    final process = await Process.start(binary, const []);
+    final process = await Process.start(
+      binary,
+      const [],
+      environment: {
+        ...Platform.environment,
+        'LLPLAYERNEXT_DB': ?databasePath,
+      },
+    );
     try {
       final lines = process.stdout
           .transform(utf8.decoder)
