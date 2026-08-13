@@ -1,10 +1,13 @@
 //! Known payload decoding for Content Package v3.
 //!
 //! The v3 supported schema inventory is the shared v2 payload families
-//! (document_text v1, timed_text_track v2, translation v1, and the six
-//! generated v1 resource families) plus the v3 structured reading and
-//! anchor-to-time alignment payloads. The v3 payload shapes are owned here;
-//! the shared v2 shapes are reused verbatim.
+//! (`timed_text_track` v2, `translation` v1, and the six generated v1
+//! resource families) plus the v3 structured reading and anchor-to-time
+//! alignment payloads. The v3 payload shapes are owned here; the shared v2
+//! shapes are reused verbatim. There is no `document_text` resource in the
+//! v3 active path: exact logical reading content is carried by a Structured
+//! Reading payload, and raw document bytes live on the Document Rendition's
+//! `text_blob`, never in a second resource model.
 
 use std::collections::BTreeMap;
 
@@ -16,23 +19,26 @@ use crate::model::{
     WordTimeline,
 };
 use crate::v2::{
-    DOCUMENT_TEXT_SCHEMA_V1, DocumentText, PHONE_TIMELINE_SCHEMA_V1, PROSODY_ANALYSIS_SCHEMA_V1,
-    SENSE_GROUP_ANALYSIS_SCHEMA_V1, SUBTITLE_TEXT_TRACK_SCHEMA_V1, TIMED_TEXT_TRACK_SCHEMA_V2,
-    TRANSLATION_SCHEMA_V1, TimedTextTrack, Translation, WORD_ACOUSTICS_SCHEMA_V1,
-    WORD_TIMELINE_SCHEMA_V1,
+    PHONE_TIMELINE_SCHEMA_V1, PROSODY_ANALYSIS_SCHEMA_V1, SENSE_GROUP_ANALYSIS_SCHEMA_V1,
+    SUBTITLE_TEXT_TRACK_SCHEMA_V1, TIMED_TEXT_TRACK_SCHEMA_V2, TRANSLATION_SCHEMA_V1,
+    TimedTextTrack, Translation, WORD_ACOUSTICS_SCHEMA_V1, WORD_TIMELINE_SCHEMA_V1,
 };
 
 use super::model::{ANCHOR_TIME_ALIGNMENT_SCHEMA_V1, STRUCTURED_READING_SCHEMA_V1};
 
-/// `structured_reading` v1: ordered hierarchy, blocks/spans, language
-/// metadata, stable anchors, and optional mappings into exact Document
-/// Rendition Locators. A Reading Anchor is stable only inside the exact
-/// Resource identity; this schema never promises cross-resource anchor
+/// `structured_reading` v1: self-contained exact UTF-8 logical text with
+/// ordered hierarchy, blocks/spans, language metadata, stable anchors, and
+/// optional mappings into exact Document Rendition Locators. Every anchor
+/// range is a half-open byte window into the exact `text` bytes; spans never
+/// duplicate the text they anchor. A Reading Anchor is stable only inside the
+/// exact Resource identity; this schema never promises cross-resource anchor
 /// stability.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StructuredReading {
     pub language: String,
+    /// The exact logical text. Anchors address these UTF-8 bytes.
+    pub text: String,
     pub anchors: Vec<ReadingAnchor>,
     #[serde(default)]
     pub blocks: Vec<ReadingBlock>,
@@ -66,12 +72,36 @@ pub struct ReadingAnchor {
     pub end_offset: u64,
 }
 
+/// Kind of a hierarchical Reading Block. The hierarchy has one `root` block
+/// and a deterministic `(kind, order)` structure per parent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadingBlockKind {
+    /// The single top-level block of the hierarchy.
+    Root,
+    /// A whole-work block (for example `book`).
+    Book,
+    /// A chapter-level block.
+    Chapter,
+    /// A section-level block.
+    Section,
+    /// A heading block.
+    Heading,
+    /// A paragraph block.
+    Paragraph,
+}
+
 /// One hierarchical block of the Structured Reading document structure.
-/// Blocks reference spans by their exact anchor identity.
+/// `order` is the deterministic position inside the parent (or the root
+/// position when `parent_block_id` is absent); blocks reference spans by
+/// their exact anchor identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReadingBlock {
     pub block_id: String,
+    pub kind: ReadingBlockKind,
+    /// Deterministic order within the parent block (0-based).
+    pub order: u32,
     pub span_anchor_ids: Vec<String>,
     #[serde(default)]
     pub parent_block_id: Option<String>,
@@ -89,15 +119,39 @@ pub struct ReadingSpan {
 }
 
 /// Optional mapping of an anchor to an exact Document Rendition Locator. A
-/// locator is meaningful only against the exact rendition identity.
+/// locator is meaningful only against the exact rendition identity and is
+/// format-specific (EPUB spine itemref, PDF page, source character range, or
+/// document fragment).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AnchorDocumentMapping {
     pub anchor_id: String,
     pub rendition_id: String,
-    /// Opaque locator into the rendition, verified against the rendition
-    /// identity only.
-    pub locator: String,
+    /// Format-related locator into the exact Document Rendition.
+    pub locator: RenditionLocator,
+}
+
+/// The kind of a format-related Rendition Locator. The `value` is
+/// meaningful only together with the exact rendition identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocatorKind {
+    /// EPUB spine item reference (for example `chapter-3.xhtml`).
+    EpubItemref,
+    /// PDF page (for example `12` or `12:5` for a page region).
+    PdfPage,
+    /// Source character range (for example `"120:420"`).
+    CharacterRange,
+    /// Document fragment (for example `#section-2`).
+    Fragment,
+}
+
+/// One format-related locator into an exact Document Rendition.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RenditionLocator {
+    pub kind: LocatorKind,
+    pub value: String,
 }
 
 /// `anchor_time_alignment` v1: a Base Resource mapping exact Reading Anchors
@@ -128,7 +182,6 @@ pub struct AnchorTimeAlignmentEntry {
 /// A decoded, structurally validated known payload.
 #[derive(Debug, Clone, PartialEq)]
 pub enum KnownPayloadV3 {
-    DocumentText(DocumentText),
     TimedTextTrack(TimedTextTrack),
     Translation(Translation),
     SubtitleTextTrack(SubtitleTextTrack),
@@ -144,7 +197,6 @@ pub enum KnownPayloadV3 {
 impl KnownPayloadV3 {
     pub fn schema(&self) -> &'static str {
         match self {
-            Self::DocumentText(_) => DOCUMENT_TEXT_SCHEMA_V1,
             Self::TimedTextTrack(_) => TIMED_TEXT_TRACK_SCHEMA_V2,
             Self::Translation(_) => TRANSLATION_SCHEMA_V1,
             Self::SubtitleTextTrack(_) => SUBTITLE_TEXT_TRACK_SCHEMA_V1,
@@ -160,7 +212,6 @@ impl KnownPayloadV3 {
 
     pub fn kind(&self) -> &'static str {
         match self {
-            Self::DocumentText(_) => "document_text",
             Self::TimedTextTrack(_) => "timed_text_track",
             Self::Translation(_) => "translation",
             Self::SubtitleTextTrack(_) => "subtitle_text_track",
@@ -179,8 +230,7 @@ impl KnownPayloadV3 {
 pub(crate) fn is_known(kind: &str, schema: &str) -> bool {
     matches!(
         (kind, schema),
-        ("document_text", DOCUMENT_TEXT_SCHEMA_V1)
-            | ("timed_text_track", TIMED_TEXT_TRACK_SCHEMA_V2)
+        ("timed_text_track", TIMED_TEXT_TRACK_SCHEMA_V2)
             | ("translation", TRANSLATION_SCHEMA_V1)
             | ("subtitle_text_track", SUBTITLE_TEXT_TRACK_SCHEMA_V1)
             | ("word_timeline", WORD_TIMELINE_SCHEMA_V1)
@@ -203,9 +253,6 @@ pub(crate) fn decode_known(
     bytes: &[u8],
 ) -> Result<Option<KnownPayloadV3>, serde_json::Error> {
     let payload = match (kind, schema) {
-        ("document_text", DOCUMENT_TEXT_SCHEMA_V1) => {
-            KnownPayloadV3::DocumentText(serde_json::from_slice(bytes)?)
-        }
         ("timed_text_track", TIMED_TEXT_TRACK_SCHEMA_V2) => {
             KnownPayloadV3::TimedTextTrack(serde_json::from_slice(bytes)?)
         }

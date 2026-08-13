@@ -23,11 +23,12 @@ pub use model::{
     ANCHOR_TIME_ALIGNMENT_SCHEMA_V1, BlobDeclaration, CompatibilityDeclaration, CompatibilityInput,
     DocumentRenditionDeclaration, MediaRenditionDeclaration, PLAN_SCHEMA_V3, PackageReleaseV3,
     ProducerDeclaration, RELEASE_SCHEMA_V3, ReleaseResourceV3, RenditionOrigin,
-    ResourceDescriptorV3, STRUCTURED_READING_SCHEMA_V1, SubjectDeclaration,
+    ResourceDescriptorV3, ResourceProvenanceV3, STRUCTURED_READING_SCHEMA_V1, SubjectDeclaration,
 };
 pub use payload::{
     AnchorDocumentMapping, AnchorKind, AnchorTimeAlignment, AnchorTimeAlignmentEntry,
-    KnownPayloadV3, ReadingAnchor, ReadingBlock, ReadingSpan, StructuredReading,
+    KnownPayloadV3, LocatorKind, ReadingAnchor, ReadingBlock, ReadingBlockKind, ReadingSpan,
+    RenditionLocator, StructuredReading,
 };
 pub use plan::{
     PlanDocumentRendition, PlanMediaRendition, PlanProducer, V3InstallationPlan,

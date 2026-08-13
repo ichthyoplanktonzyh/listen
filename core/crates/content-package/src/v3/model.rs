@@ -12,7 +12,9 @@
 //!
 //! v3 deliberately reuses the shared v2 identity, quality, role, producer,
 //! and blob vocabulary so one canonical set of meanings stays stable across
-//! package schema versions.
+//! package schema versions. Resource provenance is v3-owned because Phase 1
+//! production must record both input Rendition ids and input Resource ids
+//! beside tool/provider/model/config facts.
 
 use std::collections::BTreeMap;
 
@@ -20,8 +22,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::v2::model::{
-    BLOB_DIRECTORY, BLOB_HASH_ALGORITHM_DIRECTORY, EditionIdentity, MaterialIdentity, Provenance,
-    Quality, ResourceDependency, ResourceRole, VersionedProducer,
+    BLOB_DIRECTORY, BLOB_HASH_ALGORITHM_DIRECTORY, EditionIdentity, MaterialIdentity, Quality,
+    ResourceDependency, ResourceRole, VersionedProducer,
 };
 
 pub const RELEASE_SCHEMA_V3: &str = "listen.content-package.release.v3";
@@ -150,13 +152,39 @@ pub struct ResourceDescriptorV3 {
     pub subject: SubjectDeclaration,
     #[serde(default)]
     pub dependencies: Vec<ResourceDependency>,
-    pub provenance: Provenance,
+    pub provenance: ResourceProvenanceV3,
     pub quality: Quality,
     #[serde(default)]
     pub producer: Option<ProducerDeclaration>,
     #[serde(default)]
     pub compatibility: Option<CompatibilityDeclaration>,
     pub payload_blob: BlobDeclaration,
+    #[serde(default)]
+    pub extensions: BTreeMap<String, Value>,
+}
+
+/// Strict, identity-bearing v3 resource provenance. It records creation time,
+/// the producing `tool`, optional `provider` and `model` with versions, an
+/// optional `config_sha256`, and the exact production inputs: declared input
+/// Rendition ids and declared input Resource ids. Every input reference is
+/// validated against the release; `input_*` ids are a production-lineage
+/// ledger, independent of the runtime dependency DAG. Raw provider output,
+/// local paths, credentials, and floating confidence never appear here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceProvenanceV3 {
+    pub created_at_ms: u64,
+    pub tool: VersionedProducer,
+    #[serde(default)]
+    pub provider: Option<VersionedProducer>,
+    #[serde(default)]
+    pub model: Option<VersionedProducer>,
+    #[serde(default)]
+    pub config_sha256: Option<String>,
+    #[serde(default)]
+    pub input_rendition_ids: Vec<String>,
+    #[serde(default)]
+    pub input_resource_ids: Vec<String>,
     #[serde(default)]
     pub extensions: BTreeMap<String, Value>,
 }

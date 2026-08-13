@@ -1,0 +1,42 @@
+{
+  "language": "en",
+  "text": "Pandas eat bamboo. They live in China.",
+  "anchors": [
+    {
+      "anchor_id": "anchor-1",
+      "kind": "sentence",
+      "start_offset": 0,
+      "end_offset": 19
+    },
+    {
+      "anchor_id": "anchor-2",
+      "kind": "sentence",
+      "start_offset": 19,
+      "end_offset": 38
+    }
+  ],
+  "blocks": [
+    {
+      "block_id": "block-root",
+      "kind": "root",
+      "order": 0,
+      "span_anchor_ids": [
+        "anchor-1",
+        "anchor-2"
+      ],
+      "parent_block_id": null
+    },
+    {
+      "block_id": "block-section",
+      "kind": "section",
+      "order": 0,
+      "span_anchor_ids": [
+        "anchor-2"
+      ],
+      "parent_block_id": "block-root"
+    }
+  ],
+  "spans": [],
+  "document_mappings": [],
+  "extensions": {}
+}

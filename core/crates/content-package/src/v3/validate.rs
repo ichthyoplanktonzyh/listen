@@ -9,15 +9,17 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::v2::validate::{
-    validate_document_text, validate_half_open, validate_language_tag, validate_phone_timeline,
-    validate_prosody_analysis, validate_sense_group_analysis, validate_subtitle_text_track,
-    validate_timed_text_track, validate_word_acoustics, validate_word_timeline,
+    validate_half_open, validate_language_tag, validate_phone_timeline, validate_prosody_analysis,
+    validate_sense_group_analysis, validate_subtitle_text_track, validate_timed_text_track,
+    validate_word_acoustics, validate_word_timeline,
 };
 
 use crate::v2::ResourceRole;
 
 use super::model::PackageReleaseV3;
-use super::payload::{AnchorTimeAlignment, KnownPayloadV3, ReadingBlock, StructuredReading};
+use super::payload::{
+    AnchorTimeAlignment, KnownPayloadV3, ReadingBlock, ReadingBlockKind, StructuredReading,
+};
 
 /// Validates one known payload of `resource` against locally checkable
 /// in-release references.
@@ -38,7 +40,6 @@ pub(crate) fn validate_payload(
         _ => None,
     });
     match payload {
-        KnownPayloadV3::DocumentText(value) => validate_document_text(value),
         KnownPayloadV3::TimedTextTrack(value) => validate_timed_text_track(value),
         KnownPayloadV3::Translation(value) => {
             validate_translation(release, resource_id, kind, decoded, value, warnings)
@@ -58,8 +59,10 @@ pub(crate) fn validate_payload(
     }
 }
 
-/// A `translation` v1 assistance payload: anchored to an exact Base Resource
-/// with an explicit support language.
+/// A `translation` v1 assistance payload: anchored to an exact Structured
+/// Reading Base Resource with an explicit support language. Phase 1 semantic
+/// production consumes Structured Reading; a translation never re-parses raw
+/// document bytes.
 fn validate_translation(
     release: &PackageReleaseV3,
     resource_id: &str,
@@ -95,6 +98,11 @@ fn validate_translation(
     if base.descriptor.role != ResourceRole::Base {
         return Err("translation base_resource_id must reference a Base Resource".to_owned());
     }
+    if base.descriptor.kind != "structured_reading" {
+        return Err(
+            "translation base_resource_id must reference a structured_reading resource".to_owned(),
+        );
+    }
     if !descriptor
         .descriptor
         .dependencies
@@ -118,24 +126,18 @@ fn validate_translation(
             return Err("translation segment text must not be empty".to_owned());
         }
     }
-    // Validate source segment references against the base payload when the
-    // base payload is embedded and known; otherwise warn instead of assuming.
+    // Validate source segment references against the base Structured Reading
+    // payload when it is embedded and known; otherwise warn instead of
+    // assuming. A source segment must reference a sentence anchor.
     match decoded.get(&payload.base_resource_id) {
-        Some(KnownPayloadV3::DocumentText(base_payload)) => {
-            let base_ids: Vec<&str> = base_payload
-                .segments
+        Some(KnownPayloadV3::StructuredReading(base_payload)) => {
+            let sentence_anchors: Vec<&str> = base_payload
+                .anchors
                 .iter()
-                .map(|segment| segment.id.as_str())
+                .filter(|anchor| anchor.kind == super::payload::AnchorKind::Sentence)
+                .map(|anchor| anchor.anchor_id.as_str())
                 .collect();
-            validate_translation_segment_refs(payload, &base_ids)
-        }
-        Some(KnownPayloadV3::TimedTextTrack(base_payload)) => {
-            let base_ids: Vec<&str> = base_payload
-                .segments
-                .iter()
-                .map(|segment| segment.id.as_str())
-                .collect();
-            validate_translation_segment_refs(payload, &base_ids)
+            validate_translation_segment_refs(payload, &sentence_anchors)
         }
         Some(_) => Err("translation base resource payload kind is unsupported".to_owned()),
         None => {
@@ -162,18 +164,29 @@ fn validate_translation_segment_refs(
     Ok(())
 }
 
-/// A `structured_reading` v1 Base Resource: ordered hierarchy, blocks/spans,
-/// language metadata, stable anchors, and optional mappings into exact
-/// Document Rendition Locators.
+/// A `structured_reading` v1 Base Resource: self-contained exact UTF-8
+/// logical text, ordered hierarchy, blocks/spans, language metadata, stable
+/// anchors, and optional mappings into exact Document Rendition Locators.
+/// Every anchor range is a half-open byte window into the exact `text` bytes:
+/// it must stay in bounds, land on character boundaries, and appear in
+/// monotonic order.
 fn validate_structured_reading(
     release: &PackageReleaseV3,
     payload: &StructuredReading,
 ) -> Result<(), String> {
     validate_language_tag(&payload.language)?;
+    if payload.text.is_empty() {
+        return Err("structured_reading text must not be empty".to_owned());
+    }
     if payload.anchors.is_empty() {
         return Err("structured_reading must declare at least one anchor".to_owned());
     }
+    let text_len = payload.text.len() as u64;
+    let in_bounds =
+        |offset: u64| offset <= text_len && payload.text.is_char_boundary(offset as usize);
     let mut anchor_ids = HashSet::new();
+    let mut previous_start: Option<u64> = None;
+    let mut previous_end: Option<u64> = None;
     for anchor in &payload.anchors {
         if anchor.anchor_id.trim().is_empty() {
             return Err("anchor ids must not be empty".to_owned());
@@ -182,6 +195,22 @@ fn validate_structured_reading(
             return Err(format!("duplicate anchor id {}", anchor.anchor_id));
         }
         validate_half_open(anchor.start_offset, anchor.end_offset, "anchor range")?;
+        if !in_bounds(anchor.start_offset) || !in_bounds(anchor.end_offset) {
+            return Err(format!(
+                "anchor {} range exceeds the text bytes or splits a character",
+                anchor.anchor_id
+            ));
+        }
+        // Monotonic order: anchors are declared in non-decreasing
+        // (start, end) byte order; backwards anchors are invalid.
+        if previous_start.is_some_and(|start| anchor.start_offset < start)
+            || (previous_start == Some(anchor.start_offset)
+                && previous_end.is_some_and(|end| anchor.end_offset < end))
+        {
+            return Err("anchor ranges must be in monotonic byte order".to_owned());
+        }
+        previous_start = Some(anchor.start_offset);
+        previous_end = Some(anchor.end_offset);
     }
     let anchor_known = |anchor_id: &str| anchor_ids.contains(anchor_id);
     for span in &payload.spans {
@@ -202,54 +231,16 @@ fn validate_structured_reading(
             ));
         }
     }
-    let block_known = |block_id: &str| {
-        payload
-            .blocks
-            .iter()
-            .any(|block| block.block_id == block_id)
-    };
-    for block in &payload.blocks {
-        if block.block_id.trim().is_empty() {
-            return Err("block ids must not be empty".to_owned());
-        }
-        if block.span_anchor_ids.is_empty() {
-            return Err(format!(
-                "block {} must reference at least one anchor",
-                block.block_id
-            ));
-        }
-        for span_anchor in &block.span_anchor_ids {
-            if !anchor_known(span_anchor) {
-                return Err(format!(
-                    "block {} references unknown anchor {span_anchor}",
-                    block.block_id
-                ));
-            }
-        }
-        if block
-            .parent_block_id
-            .as_deref()
-            .is_some_and(|parent| !block_known(parent))
-        {
-            return Err(format!(
-                "block {} references unknown parent block {}",
-                block.block_id,
-                block.parent_block_id.as_deref().expect("checked above")
-            ));
-        }
-    }
-    if block_hierarchy_has_cycle(&payload.blocks) {
-        return Err("block hierarchy contains a cycle".to_owned());
-    }
+    validate_block_hierarchy(payload)?;
     for mapping in &payload.document_mappings {
-        if mapping.locator.trim().is_empty() {
-            return Err("document mapping locator must not be empty".to_owned());
-        }
         if !anchor_known(&mapping.anchor_id) {
             return Err(format!(
                 "document mapping references unknown anchor {}",
                 mapping.anchor_id
             ));
+        }
+        if mapping.locator.value.trim().is_empty() {
+            return Err("document mapping locator value must not be empty".to_owned());
         }
         if !release
             .document_renditions
@@ -259,6 +250,112 @@ fn validate_structured_reading(
             return Err(format!(
                 "document mapping references undeclared rendition {}",
                 mapping.rendition_id
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Block hierarchy rules: one `root` block with no parent; every other block
+/// has a valid parent; `order` is 0-based and contiguous within each parent;
+/// references are acyclic. Block kinds are constrained by the payload enum.
+fn validate_block_hierarchy(payload: &StructuredReading) -> Result<(), String> {
+    let block_known = |block_id: &str| {
+        payload
+            .blocks
+            .iter()
+            .any(|block| block.block_id == block_id)
+    };
+    let mut roots = 0_usize;
+    let mut seen_ids = HashSet::new();
+    for block in &payload.blocks {
+        if block.block_id.trim().is_empty() {
+            return Err("block ids must not be empty".to_owned());
+        }
+        if !seen_ids.insert(&block.block_id) {
+            return Err(format!("duplicate block id {}", block.block_id));
+        }
+        if block.kind == ReadingBlockKind::Root {
+            roots += 1;
+            if block.parent_block_id.is_some() {
+                return Err("root block must not declare a parent block".to_owned());
+            }
+        }
+        if block.span_anchor_ids.is_empty() {
+            return Err(format!(
+                "block {} must reference at least one anchor",
+                block.block_id
+            ));
+        }
+        let mut seen_anchors = HashSet::new();
+        for span_anchor in &block.span_anchor_ids {
+            if !payload
+                .anchors
+                .iter()
+                .any(|anchor| anchor.anchor_id == *span_anchor)
+            {
+                return Err(format!(
+                    "block {} references unknown anchor {span_anchor}",
+                    block.block_id
+                ));
+            }
+            if !seen_anchors.insert(span_anchor) {
+                return Err(format!(
+                    "block {} references anchor {span_anchor} more than once",
+                    block.block_id
+                ));
+            }
+        }
+    }
+    if roots != 1 {
+        return Err(format!(
+            "block hierarchy must declare exactly one root block (found {roots})"
+        ));
+    }
+    for block in &payload.blocks {
+        if block.kind == ReadingBlockKind::Root {
+            continue;
+        }
+        let parent = block
+            .parent_block_id
+            .as_deref()
+            .ok_or_else(|| format!("block {} must declare a parent block", block.block_id))?;
+        if !block_known(parent) {
+            return Err(format!(
+                "block {} references unknown parent block {}",
+                block.block_id, parent
+            ));
+        }
+        if parent == block.block_id {
+            return Err(format!("block {} cannot be its own parent", block.block_id));
+        }
+    }
+    if block_hierarchy_has_cycle(&payload.blocks) {
+        return Err("block hierarchy contains a cycle".to_owned());
+    }
+    // Contiguous 0-based order within every parent group.
+    for block in &payload.blocks {
+        let key = block
+            .parent_block_id
+            .clone()
+            .unwrap_or_else(|| block.block_id.clone());
+        let mut orders: Vec<u32> = payload
+            .blocks
+            .iter()
+            .filter(|candidate| {
+                candidate.parent_block_id.as_deref() == block.parent_block_id.as_deref()
+                    && candidate.block_id != block.block_id
+            })
+            .map(|candidate| candidate.order)
+            .collect();
+        orders.push(block.order);
+        let mut expected: Vec<u32> = (0..orders.len() as u32).collect();
+        orders.sort_unstable();
+        expected.sort_unstable();
+        if orders != expected {
+            return Err(format!(
+                "block {} sibling orders are not contiguous 0-based values",
+                key
             ));
         }
     }

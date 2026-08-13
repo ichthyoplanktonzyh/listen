@@ -19,9 +19,7 @@ use zip::write::SimpleFileOptions;
 
 use crate::inspect::InspectLimits;
 use crate::v2::canonical::serialize_canonical;
-use crate::v2::{
-    DOCUMENT_TEXT_SCHEMA_V1, ResourceDisposition, ResourceRole, TRANSLATION_SCHEMA_V1,
-};
+use crate::v2::{ResourceDisposition, ResourceRole, TRANSLATION_SCHEMA_V1};
 use crate::v3::{
     ANCHOR_TIME_ALIGNMENT_SCHEMA_V1, KnownPayloadV3, RELEASE_SCHEMA_V3,
     STRUCTURED_READING_SCHEMA_V1, V3Error, V3Inspection, inspect_v3_path,
@@ -78,26 +76,101 @@ fn blob_path(digest: &str) -> String {
     format!("blobs/sha256/{}", digest.strip_prefix("sha256:").unwrap())
 }
 
-/// A document_text payload built from real bytes with the given per-segment
-/// end character positions; returns (payload value, raw bytes, digest).
-fn document_payload(text: &str, segment_ends: &[u32]) -> (Value, Vec<u8>, String) {
-    let mut segments = Vec::new();
-    let mut start = 0_u32;
-    for (index, end) in segment_ends.iter().enumerate() {
-        segments.push(json!({
-            "id": format!("s{}", index + 1),
-            "index": index,
-            "language": "en",
-            "start_char": start,
-            "end_char": end,
-            "extensions": {},
-        }));
-        start = *end;
+/// Sentence anchor ranges split `text` on sentence enders so every fixture
+/// offset stays a true UTF-8 byte boundary of the exact text.
+fn sentence_ranges(text: &str) -> Vec<(u64, u64)> {
+    let mut ranges = Vec::new();
+    let mut start = 0_usize;
+    for (index, character) in text.char_indices() {
+        if matches!(character, '.' | '!' | '?')
+            && text[index..].starts_with(character.to_string().as_str())
+            && text[index + character.len_utf8()..]
+                .chars()
+                .next()
+                .is_none_or(|next| next.is_whitespace() || matches!(next, '.' | '!' | '?'))
+        {
+            let mut end = index + character.len_utf8();
+            while text.as_bytes().get(end) == Some(&b' ') {
+                end += 1;
+            }
+            if start < end {
+                ranges.push((start as u64, end as u64));
+            }
+            start = end;
+        }
     }
+    if start < text.len() {
+        ranges.push((start as u64, text.len() as u64));
+    }
+    ranges
+}
+
+/// A structured reading payload with sentence anchors over the exact `text`,
+/// one `root` block, an optional block hierarchy, and an optional document
+/// mapping to the given document rendition id. Returns (payload value, raw
+/// bytes, digest).
+fn structured_payload(text: &str, rendition_id: Option<&str>) -> (Value, Vec<u8>, String) {
+    let ranges = sentence_ranges(text);
+    let anchors: Vec<Value> = ranges
+        .iter()
+        .enumerate()
+        .map(|(index, (start, end))| {
+            json!({
+                "anchor_id": format!("anchor-{}", index + 1),
+                "kind": "sentence",
+                "start_offset": start,
+                "end_offset": end,
+            })
+        })
+        .collect();
+    let mut blocks = vec![json!({
+        "block_id": "block-root",
+        "kind": "root",
+        "order": 0,
+        "span_anchor_ids": (0..ranges.len())
+            .map(|index| format!("anchor-{}", index + 1))
+            .collect::<Vec<_>>(),
+        "parent_block_id": null,
+    })];
+    if ranges.len() > 1 {
+        blocks.push(json!({
+            "block_id": "block-section",
+            "kind": "section",
+            "order": 0,
+            "span_anchor_ids": [format!("anchor-{}", ranges.len())],
+            "parent_block_id": "block-root",
+        }));
+    }
+    let document_mappings = match rendition_id {
+        Some(id) => json!([{
+            "anchor_id": "anchor-1",
+            "rendition_id": id,
+            "locator": {"kind": "character_range", "value": format!("0:{}", ranges[0].1)},
+        }]),
+        None => json!([]),
+    };
     let payload = json!({
         "language": "en",
         "text": text,
-        "segments": segments,
+        "anchors": anchors,
+        "blocks": blocks,
+        "spans": [],
+        "document_mappings": document_mappings,
+        "extensions": {},
+    });
+    let bytes = serde_json::to_vec_pretty(&payload).unwrap();
+    let digest = sha256_id(&bytes);
+    (payload, bytes, digest)
+}
+
+/// A timed text track payload (a shared v2 family still in the v3 active
+/// inventory) used to prove that non-structured-reading bases are rejected.
+fn timed_text_payload(text: &str) -> (Value, Vec<u8>, String) {
+    let payload = json!({
+        "language": "en",
+        "segments": [
+            {"id": "tt-1", "index": 0, "language": "en", "start_ms": 0, "end_ms": 1000, "text": text},
+        ],
         "extensions": {},
     });
     let bytes = serde_json::to_vec_pretty(&payload).unwrap();
@@ -375,20 +448,15 @@ fn inspect_example(name: &str, as_zip: bool) -> V3Inspection {
 
 const TEXT: &str = "Pandas eat bamboo. They live in China.";
 
-/// One embedded base document_text resource and one source Document
-/// Rendition carrying the same text.
+/// One source Document Rendition carrying the exact raw text bytes and one
+/// embedded structured reading resource over the same text. This is the
+/// document-source golden shape: raw bytes live on the rendition's
+/// `text_blob`, exact logical reading content lives in the Structured
+/// Reading payload.
 fn document_source_fixture() -> (Value, Vec<(String, Vec<u8>)>) {
-    let (_, bytes, digest) = document_payload(TEXT, &[20, TEXT.len() as u32]);
-    let descriptor = base_descriptor(
-        "document_text",
-        DOCUMENT_TEXT_SCHEMA_V1,
-        "en",
-        &[],
-        &digest,
-        bytes.len() as u64,
-    );
-    let resource = resource_entry(&descriptor, true);
-    let text_blob = blob_declaration(&digest, bytes.len() as u64, true);
+    let text_bytes = TEXT.as_bytes().to_vec();
+    let text_digest = sha256_id(&text_bytes);
+    let text_blob = blob_declaration(&text_digest, text_bytes.len() as u64, true);
     let document = document_rendition_value(
         "source",
         "text/plain",
@@ -398,8 +466,22 @@ fn document_source_fixture() -> (Value, Vec<(String, Vec<u8>)>) {
         None,
         None,
     );
+    let document_id = document["rendition_id"].as_str().unwrap().to_owned();
+    let (_, structured_bytes, structured_digest) = structured_payload(TEXT, Some(&document_id));
+    let descriptor = base_descriptor(
+        "structured_reading",
+        STRUCTURED_READING_SCHEMA_V1,
+        "en",
+        &[],
+        &structured_digest,
+        structured_bytes.len() as u64,
+    );
+    let resource = resource_entry(&descriptor, true);
     let release = release_value(&[], vec![document], vec![], vec![resource]);
-    let blobs = vec![(blob_path(&digest), bytes)];
+    let blobs = vec![
+        (blob_path(&text_digest), text_bytes),
+        (blob_path(&structured_digest), structured_bytes),
+    ];
     (release, blobs)
 }
 
@@ -423,7 +505,10 @@ fn document_only_fixture() -> (Value, Vec<(String, Vec<u8>)>) {
     (release, blobs)
 }
 
-/// One embedded and one referenced Media Rendition.
+/// One embedded and one referenced Media Rendition, plus a derived
+/// Structured Reading base resource and its anchor-to-time alignment. This
+/// proves the media path converges on Structured Reading (ASR-derived) in
+/// the same format-neutral model as documents.
 fn media_only_fixture() -> (Value, Vec<(String, Vec<u8>)>) {
     let embedded_bytes = b"listen fixture derived audio".to_vec();
     let embedded_digest = sha256_id(&embedded_bytes);
@@ -437,47 +522,56 @@ fn media_only_fixture() -> (Value, Vec<(String, Vec<u8>)>) {
         "fp-derived-1",
         media_extras(Some(&producer_value()), Some(&compatibility_value(None))),
     );
-    let referenced_digest = format!("sha256:{}", "c".repeat(64));
-    let referenced_blob = blob_declaration(&referenced_digest, 100, false);
-    let source = media_rendition_value(
-        "source",
-        "audio",
-        "audio/mpeg",
-        &referenced_blob,
-        Some("media-1"),
-        "fp-source-1",
-        media_extras(None, None),
-    );
-    let release = release_value(&[], vec![], vec![derived, source], vec![]);
-    let blobs = vec![(blob_path(&embedded_digest), embedded_bytes)];
-    (release, blobs)
-}
-
-/// A structured reading payload with two anchors, one block, and an optional
-/// document mapping to the given document rendition id.
-fn structured_payload(rendition_id: Option<&str>) -> (Value, Vec<u8>, String) {
-    let document_mappings = match rendition_id {
-        Some(id) => json!([{"anchor_id": "anchor-1", "rendition_id": id, "locator": "loc-1"}]),
-        None => json!([]),
+    let source = {
+        let referenced_digest = format!("sha256:{}", "c".repeat(64));
+        let referenced_blob = blob_declaration(&referenced_digest, 100, false);
+        media_rendition_value(
+            "source",
+            "audio",
+            "audio/mpeg",
+            &referenced_blob,
+            Some("media-1"),
+            "fp-source-1",
+            media_extras(None, None),
+        )
     };
-    let payload = json!({
-        "language": "en",
-        "anchors": [
-            {"anchor_id": "anchor-1", "kind": "block", "start_offset": 0, "end_offset": 20},
-            {"anchor_id": "anchor-2", "kind": "sentence", "start_offset": 21, "end_offset": 43},
-        ],
-        "blocks": [
-            {"block_id": "block-1", "span_anchor_ids": ["anchor-1", "anchor-2"], "parent_block_id": null},
-        ],
-        "spans": [
-            {"span_id": "span-1", "anchor_id": "anchor-2", "parent_anchor_id": null},
-        ],
-        "document_mappings": document_mappings,
-        "extensions": {},
-    });
-    let bytes = serde_json::to_vec_pretty(&payload).unwrap();
-    let digest = sha256_id(&bytes);
-    (payload, bytes, digest)
+    let source_id = source["rendition_id"].as_str().unwrap().to_owned();
+    let (_, structured, structured_digest) = structured_payload(TEXT, None);
+    let structured_descriptor = base_descriptor(
+        "structured_reading",
+        STRUCTURED_READING_SCHEMA_V1,
+        "en",
+        &[],
+        &structured_digest,
+        structured.len() as u64,
+    );
+    let structured_resource = resource_entry(&structured_descriptor, false);
+    let structured_id = structured_resource["resource_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (_, alignment, alignment_digest) = alignment_payload(&structured_id, &source_id);
+    let alignment_descriptor = base_descriptor(
+        "anchor_time_alignment",
+        ANCHOR_TIME_ALIGNMENT_SCHEMA_V1,
+        "en",
+        &[],
+        &alignment_digest,
+        alignment.len() as u64,
+    );
+    let alignment_resource = resource_entry(&alignment_descriptor, false);
+    let release = release_value(
+        &[],
+        vec![],
+        vec![derived, source],
+        vec![structured_resource, alignment_resource],
+    );
+    let blobs = vec![
+        (blob_path(&embedded_digest), embedded_bytes),
+        (blob_path(&structured_digest), structured),
+        (blob_path(&alignment_digest), alignment),
+    ];
+    (release, blobs)
 }
 
 fn alignment_payload(anchor_resource_id: &str, rendition_id: &str) -> (Value, Vec<u8>, String) {
@@ -496,11 +590,11 @@ fn alignment_payload(anchor_resource_id: &str, rendition_id: &str) -> (Value, Ve
 }
 
 /// The composed fixture: a source Document Rendition, source and derived
-/// Media Renditions, a document text base resource, a structured reading base
-/// resource, an anchor-to-time alignment base resource, and a translation
-/// assistance resource. Embedded and referenced blobs mix. The identity
-/// strings are parameterized so committed examples can carry example-flavoured
-/// identities without touching the shared builders.
+/// Media Renditions, a structured reading base resource, an anchor-to-time
+/// alignment base resource, and a translation assistance resource anchored
+/// to the Structured Reading sentence anchors. Embedded and referenced blobs
+/// mix. The identity strings are parameterized so committed examples can
+/// carry example-flavoured identities without touching the shared builders.
 fn composed_fixture() -> (Value, Vec<(String, Vec<u8>)>) {
     composed_fixture_with(
         "edition-fixture-v1",
@@ -564,9 +658,10 @@ fn composed_fixture_with(
     };
     let mut blobs = Vec::new();
 
-    let (_, doc_bytes, doc_digest) = document_payload(TEXT, &[20, TEXT.len() as u32]);
-    let doc_blob = blob_declaration(&doc_digest, doc_bytes.len() as u64, true);
-    blobs.push((blob_path(&doc_digest), doc_bytes));
+    let text_bytes = TEXT.as_bytes().to_vec();
+    let doc_digest = sha256_id(&text_bytes);
+    let doc_blob = blob_declaration(&doc_digest, text_bytes.len() as u64, true);
+    blobs.push((blob_path(&doc_digest), text_bytes));
     let document = document_rendition_value(
         "source",
         "text/plain",
@@ -578,8 +673,8 @@ fn composed_fixture_with(
     );
     let document_id = document["rendition_id"].as_str().unwrap().to_owned();
 
-    let (_, derived_text, derived_digest) =
-        document_payload("Pandas eat bamboo. They live in China. (derived)", &[50]);
+    let derived_text = b"Pandas eat bamboo. They live in China. (derived)".to_vec();
+    let derived_digest = sha256_id(&derived_text);
     let derived_blob = blob_declaration(&derived_digest, derived_text.len() as u64, false);
     let derived_document = document_rendition_value(
         "derived",
@@ -622,7 +717,7 @@ fn composed_fixture_with(
         ),
     );
 
-    let (_, structured, structured_digest) = structured_payload(Some(&document_id));
+    let (_, structured, structured_digest) = structured_payload(TEXT, Some(&document_id));
     let structured_descriptor = base_descriptor(
         "structured_reading",
         STRUCTURED_READING_SCHEMA_V1,
@@ -650,28 +745,14 @@ fn composed_fixture_with(
     let alignment_resource = resource_entry(&alignment_descriptor, true);
     blobs.push((blob_path(&alignment_digest), alignment));
 
-    let (_, doc_text_bytes, doc_text_digest) = document_payload(TEXT, &[20, TEXT.len() as u32]);
-    let doc_text_descriptor = base_descriptor(
-        "document_text",
-        DOCUMENT_TEXT_SCHEMA_V1,
-        "en",
-        &[],
-        &doc_text_digest,
-        doc_text_bytes.len() as u64,
-    );
-    let doc_text_resource = resource_entry(&doc_text_descriptor, true);
-    let doc_text_id = doc_text_resource["resource_id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    blobs.push((blob_path(&doc_text_digest), doc_text_bytes));
-
+    // The translation is an Assistance Resource anchored to the exact
+    // Structured Reading sentence anchors; there is no document_text base.
     let translation = json!({
         "support_language": "zh-Hans",
-        "base_resource_id": doc_text_id,
+        "base_resource_id": structured_id,
         "segments": [
-            {"id": "tr-1", "index": 0, "text": "大熊猫吃竹子。", "source_segment_id": "s1", "extensions": {}},
-            {"id": "tr-2", "index": 1, "text": "它们住在中国。", "source_segment_id": "s2", "extensions": {}},
+            {"id": "tr-1", "index": 0, "text": "大熊猫吃竹子。", "source_segment_id": "anchor-1", "extensions": {}},
+            {"id": "tr-2", "index": 1, "text": "它们住在中国。", "source_segment_id": "anchor-2", "extensions": {}},
         ],
         "extensions": {},
     });
@@ -681,7 +762,7 @@ fn composed_fixture_with(
         "translation",
         TRANSLATION_SCHEMA_V1,
         &["zh-Hans"],
-        &[&doc_text_id],
+        &[&structured_id],
         &translation_digest,
         translation_bytes.len() as u64,
     );
@@ -707,7 +788,6 @@ fn composed_fixture_with(
         "resources": [
             structured_resource,
             alignment_resource,
-            doc_text_resource,
             translation_resource,
         ],
         "extensions": {},
@@ -725,11 +805,19 @@ fn committed_document_source_example_inspects() {
     assert_eq!(inspection.release.schema, RELEASE_SCHEMA_V3);
     assert_eq!(inspection.document_renditions.len(), 1);
     assert_eq!(inspection.media_renditions.len(), 0);
-    assert!(inspection.resources.iter().any(|record| {
-        record.entry.descriptor.kind == "document_text"
-            && record.entry.required
-            && record.entry.descriptor.role == ResourceRole::Base
-    }));
+    let structured = inspection
+        .resources
+        .iter()
+        .find(|record| record.entry.descriptor.kind == "structured_reading")
+        .expect("structured reading record");
+    assert!(structured.entry.required);
+    assert_eq!(structured.entry.descriptor.role, ResourceRole::Base);
+    let KnownPayloadV3::StructuredReading(payload) = &structured.payload else {
+        panic!("expected structured reading payload");
+    };
+    assert_eq!(payload.anchors.len(), 2);
+    assert!(!payload.text.is_empty());
+    assert_eq!(payload.document_mappings.len(), 1);
     assert_eq!(inspection.missing_blobs.len(), 0);
     assert!(!inspection.payload_blobs.is_empty());
     // The same carrier in deterministic ZIP form inspects identically.
@@ -743,7 +831,19 @@ fn committed_media_only_example_inspects() {
     let inspection = inspect_example("media-only", false);
     assert_eq!(inspection.document_renditions.len(), 0);
     assert_eq!(inspection.media_renditions.len(), 2);
-    assert!(inspection.resources.is_empty());
+    assert_eq!(inspection.resources.len(), 2);
+    assert!(
+        inspection
+            .resources
+            .iter()
+            .any(|record| record.entry.descriptor.kind == "structured_reading")
+    );
+    assert!(
+        inspection
+            .resources
+            .iter()
+            .any(|record| record.entry.descriptor.kind == "anchor_time_alignment")
+    );
     let derived = inspection
         .media_renditions
         .iter()
@@ -774,7 +874,7 @@ fn committed_composed_example_inspects() {
     let inspection = inspect_example("composed", false);
     assert_eq!(inspection.document_renditions.len(), 2);
     assert_eq!(inspection.media_renditions.len(), 2);
-    assert_eq!(inspection.resources.len(), 4);
+    assert_eq!(inspection.resources.len(), 3);
     assert_eq!(inspection.missing_blobs.len(), 2);
     let derived_document = inspection
         .document_renditions
@@ -856,20 +956,20 @@ fn composed_package_inspects_and_plans() {
     let inspection = inspect_ok(&carrier(&release, &blobs));
     assert_eq!(inspection.document_renditions.len(), 2);
     assert_eq!(inspection.media_renditions.len(), 2);
-    assert_eq!(inspection.resources.len(), 4);
+    assert_eq!(inspection.resources.len(), 3);
     assert_eq!(inspection.missing_blobs.len(), 2);
 
     let plan = installation_plan_v3(&inspection);
     assert_eq!(plan.schema, "listen.content-package.plan.v3");
     assert_eq!(plan.document_renditions.len(), 2);
     assert_eq!(plan.media_renditions.len(), 2);
-    assert_eq!(plan.resources.len(), 4);
+    assert_eq!(plan.resources.len(), 3);
     assert_eq!(
         plan.resources
             .iter()
             .filter(|r| r.disposition == ResourceDisposition::Candidate)
             .count(),
-        4
+        3
     );
     let derived_document = plan
         .document_renditions
@@ -1115,17 +1215,10 @@ fn media_type_must_match_the_rendition_kind_family() {
     );
 }
 
-#[test]
-fn structured_reading_requires_at_least_one_anchor() {
-    let empty = json!({
-        "language": "en",
-        "anchors": [],
-        "blocks": [],
-        "spans": [],
-        "document_mappings": [],
-        "extensions": {},
-    });
-    let bytes = serde_json::to_vec_pretty(&empty).unwrap();
+/// Wraps a raw structured reading payload JSON as a resource and carrier so
+/// negative tests stay compact.
+fn structured_reading_carrier(payload: Value) -> BTreeMap<String, Vec<u8>> {
+    let bytes = serde_json::to_vec_pretty(&payload).unwrap();
     let digest = sha256_id(&bytes);
     let descriptor = base_descriptor(
         "structured_reading",
@@ -1137,7 +1230,21 @@ fn structured_reading_requires_at_least_one_anchor() {
     );
     let resource = resource_entry(&descriptor, false);
     let release = release_value(&[], vec![], vec![], vec![resource]);
-    let error = inspect_err(&carrier(&release, &[(blob_path(&digest), bytes)]));
+    carrier(&release, &[(blob_path(&digest), bytes)])
+}
+
+#[test]
+fn structured_reading_requires_at_least_one_anchor() {
+    let empty = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [],
+        "blocks": [],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(empty));
     assert!(
         error
             .to_string()
@@ -1146,33 +1253,110 @@ fn structured_reading_requires_at_least_one_anchor() {
 }
 
 #[test]
-fn structured_reading_block_cycle_is_rejected() {
-    let cyclic = json!({
+fn structured_reading_requires_non_empty_text() {
+    let empty_text = json!({
         "language": "en",
+        "text": "",
         "anchors": [
-            {"anchor_id": "anchor-1", "kind": "block", "start_offset": 0, "end_offset": 20},
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 0},
         ],
         "blocks": [
-            {"block_id": "block-1", "span_anchor_ids": ["anchor-1"], "parent_block_id": "block-2"},
-            {"block_id": "block-2", "span_anchor_ids": ["anchor-1"], "parent_block_id": "block-1"},
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
         ],
         "spans": [],
         "document_mappings": [],
         "extensions": {},
     });
-    let bytes = serde_json::to_vec_pretty(&cyclic).unwrap();
-    let digest = sha256_id(&bytes);
-    let descriptor = base_descriptor(
-        "structured_reading",
-        STRUCTURED_READING_SCHEMA_V1,
-        "en",
-        &[],
-        &digest,
-        bytes.len() as u64,
+    let error = inspect_err(&structured_reading_carrier(empty_text));
+    assert!(
+        error
+            .to_string()
+            .contains("structured_reading text must not be empty")
     );
-    let resource = resource_entry(&descriptor, false);
-    let release = release_value(&[], vec![], vec![], vec![resource]);
-    let error = inspect_err(&carrier(&release, &[(blob_path(&digest), bytes)]));
+}
+
+#[test]
+fn structured_reading_rejects_out_of_bounds_anchor_ranges() {
+    let payload = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": (TEXT.len() + 10) as u64},
+        ],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(payload));
+    assert!(error.to_string().contains("exceeds the text bytes"));
+}
+
+#[test]
+fn structured_reading_rejects_non_char_boundary_offsets() {
+    // "您" is three UTF-8 bytes; offset 1 splits a character.
+    let text = "您吃竹子。";
+    let payload = json!({
+        "language": "zh-Hans",
+        "text": text,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 1, "end_offset": 6},
+        ],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(payload));
+    assert!(error.to_string().contains("splits a character"));
+}
+
+#[test]
+fn structured_reading_rejects_non_monotonic_anchor_order() {
+    let payload = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-2", "kind": "sentence", "start_offset": 20, "end_offset": TEXT.len() as u64},
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
+        ],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1", "anchor-2"], "parent_block_id": null},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(payload));
+    assert!(
+        error
+            .to_string()
+            .contains("anchor ranges must be in monotonic byte order")
+    );
+}
+
+#[test]
+fn structured_reading_block_cycle_is_rejected() {
+    let cyclic = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
+        ],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+            {"block_id": "block-1", "kind": "section", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": "block-2"},
+            {"block_id": "block-2", "kind": "section", "order": 1, "span_anchor_ids": ["anchor-1"], "parent_block_id": "block-1"},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(cyclic));
     assert!(
         error
             .to_string()
@@ -1181,32 +1365,89 @@ fn structured_reading_block_cycle_is_rejected() {
 }
 
 #[test]
+fn structured_reading_requires_exactly_one_root_block() {
+    let no_root = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
+        ],
+        "blocks": [
+            {"block_id": "block-1", "kind": "section", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(no_root));
+    assert!(
+        error
+            .to_string()
+            .contains("must declare exactly one root block (found 0)")
+    );
+}
+
+#[test]
+fn structured_reading_rejects_non_contiguous_sibling_order() {
+    let bad_order = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
+        ],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+            {"block_id": "block-a", "kind": "section", "order": 2, "span_anchor_ids": ["anchor-1"], "parent_block_id": "block-root"},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(bad_order));
+    assert!(
+        error
+            .to_string()
+            .contains("sibling orders are not contiguous 0-based values")
+    );
+}
+
+#[test]
+fn structured_reading_unknown_block_kind_is_rejected() {
+    let unknown_kind = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
+        ],
+        "blocks": [
+            {"block_id": "block-1", "kind": "folio", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+        ],
+        "spans": [],
+        "document_mappings": [],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(unknown_kind));
+    assert!(error.to_string().contains("unknown variant `folio`"));
+}
+
+#[test]
 fn structured_reading_mapping_requires_a_declared_document_rendition() {
     let mapping = json!({
         "language": "en",
+        "text": TEXT,
         "anchors": [
-            {"anchor_id": "anchor-1", "kind": "block", "start_offset": 0, "end_offset": 20},
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
         ],
-        "blocks": [],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+        ],
         "spans": [],
         "document_mappings": [
-            {"anchor_id": "anchor-1", "rendition_id": format!("sha256:{}", "a".repeat(64)), "locator": "loc-1"},
+            {"anchor_id": "anchor-1", "rendition_id": format!("sha256:{}", "a".repeat(64)), "locator": {"kind": "character_range", "value": "0:19"}},
         ],
         "extensions": {},
     });
-    let bytes = serde_json::to_vec_pretty(&mapping).unwrap();
-    let digest = sha256_id(&bytes);
-    let descriptor = base_descriptor(
-        "structured_reading",
-        STRUCTURED_READING_SCHEMA_V1,
-        "en",
-        &[],
-        &digest,
-        bytes.len() as u64,
-    );
-    let resource = resource_entry(&descriptor, false);
-    let release = release_value(&[], vec![], vec![], vec![resource]);
-    let error = inspect_err(&carrier(&release, &[(blob_path(&digest), bytes)]));
+    let error = inspect_err(&structured_reading_carrier(mapping));
     assert!(
         error
             .to_string()
@@ -1215,25 +1456,50 @@ fn structured_reading_mapping_requires_a_declared_document_rendition() {
 }
 
 #[test]
+fn structured_reading_rejects_empty_locator_value() {
+    let mapping = json!({
+        "language": "en",
+        "text": TEXT,
+        "anchors": [
+            {"anchor_id": "anchor-1", "kind": "sentence", "start_offset": 0, "end_offset": 19},
+        ],
+        "blocks": [
+            {"block_id": "block-root", "kind": "root", "order": 0, "span_anchor_ids": ["anchor-1"], "parent_block_id": null},
+        ],
+        "spans": [],
+        "document_mappings": [
+            {"anchor_id": "anchor-1", "rendition_id": format!("sha256:{}", "a".repeat(64)), "locator": {"kind": "fragment", "value": ""}},
+        ],
+        "extensions": {},
+    });
+    let error = inspect_err(&structured_reading_carrier(mapping));
+    assert!(
+        error
+            .to_string()
+            .contains("document mapping locator value must not be empty")
+    );
+}
+
+#[test]
 fn anchor_time_alignment_requires_a_structured_reading_anchor_resource() {
     // A declared base resource that is not a structured reading may not be
     // the alignment's anchor resource.
-    let (_, bytes, digest) = document_payload("Pandas eat bamboo.", &[18]);
-    let doc_text_descriptor = base_descriptor(
-        "document_text",
-        DOCUMENT_TEXT_SCHEMA_V1,
+    let (_, bytes, digest) = timed_text_payload("Pandas eat bamboo.");
+    let timed_text_descriptor = base_descriptor(
+        "timed_text_track",
+        crate::v2::TIMED_TEXT_TRACK_SCHEMA_V2,
         "en",
         &[],
         &digest,
         bytes.len() as u64,
     );
-    let doc_text_resource = resource_entry(&doc_text_descriptor, false);
-    let doc_text_id = doc_text_resource["resource_id"]
+    let timed_text_resource = resource_entry(&timed_text_descriptor, false);
+    let timed_text_id = timed_text_resource["resource_id"]
         .as_str()
         .unwrap()
         .to_owned();
     let (_, alignment, alignment_digest) =
-        alignment_payload(&doc_text_id, &format!("sha256:{}", "c".repeat(64)));
+        alignment_payload(&timed_text_id, &format!("sha256:{}", "c".repeat(64)));
     let alignment_descriptor = base_descriptor(
         "anchor_time_alignment",
         ANCHOR_TIME_ALIGNMENT_SCHEMA_V1,
@@ -1247,7 +1513,7 @@ fn anchor_time_alignment_requires_a_structured_reading_anchor_resource() {
         &[],
         vec![],
         vec![],
-        vec![doc_text_resource, alignment_resource],
+        vec![timed_text_resource, alignment_resource],
     );
     let error = inspect_err(&carrier(
         &release,
@@ -1272,7 +1538,7 @@ fn anchor_time_alignment_must_reference_a_media_rendition() {
         .as_str()
         .unwrap()
         .to_owned();
-    let (_, structured, structured_digest) = structured_payload(Some(&document_id));
+    let (_, structured, structured_digest) = structured_payload(TEXT, Some(&document_id));
     let structured_descriptor = base_descriptor(
         "structured_reading",
         STRUCTURED_READING_SCHEMA_V1,
@@ -1328,7 +1594,7 @@ fn non_monotonic_alignment_is_rejected() {
         media_extras(Some(&producer_value()), Some(&compatibility_value(None))),
     );
     let media_id = media["rendition_id"].as_str().unwrap().to_owned();
-    let (_, structured, structured_digest) = structured_payload(None);
+    let (_, structured, structured_digest) = structured_payload(TEXT, None);
     let structured_descriptor = base_descriptor(
         "structured_reading",
         STRUCTURED_READING_SCHEMA_V1,
@@ -1440,7 +1706,7 @@ fn subject_must_reference_declared_renditions() {
 #[test]
 fn base_resource_cannot_reach_assistance_resource() {
     let (release, blobs) = composed_fixture();
-    // Make the base document_text resource depend on the translation
+    // Make the base structured reading resource depend on the translation
     // assistance resource: the direct edge is rejected.
     let translation_id = release["resources"]
         .as_array()
@@ -1455,13 +1721,13 @@ fn base_resource_cannot_reach_assistance_resource() {
         .unwrap()
         .as_array_mut()
         .unwrap();
-    let doc_text_index = resources
+    let structured_index = resources
         .iter()
-        .position(|entry| entry["descriptor"]["kind"] == "document_text")
+        .position(|entry| entry["descriptor"]["kind"] == "structured_reading")
         .unwrap();
-    let descriptor = resources[doc_text_index].get_mut("descriptor").unwrap();
+    let descriptor = resources[structured_index].get_mut("descriptor").unwrap();
     descriptor["dependencies"] = json!([{"resource_id": translation_id}]);
-    resources[doc_text_index]["resource_id"] = json!(sha256_id(&canonical_bytes(descriptor)));
+    resources[structured_index]["resource_id"] = json!(sha256_id(&canonical_bytes(descriptor)));
     let error = inspect_err(&carrier(&release, &blobs));
     assert!(
         error

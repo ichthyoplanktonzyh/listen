@@ -31,8 +31,8 @@ use crate::archive::{
 use crate::inspect::InspectLimits;
 use crate::v2::canonical::{self, CanonicalError};
 use crate::v2::inspect::{
-    dependency_graph_has_cycle, reachable, sha256_id, validate_digest, validate_provenance,
-    validate_quality, verify_carrier_consistency, verify_retained_blobs, verify_streamed_blobs,
+    dependency_graph_has_cycle, reachable, sha256_id, validate_digest, validate_quality,
+    verify_carrier_consistency, verify_retained_blobs, verify_streamed_blobs,
 };
 use crate::v2::model::{BLOB_DIRECTORY, BLOB_HASH_ALGORITHM_DIRECTORY};
 use crate::v2::validate::validate_language_tag;
@@ -42,7 +42,7 @@ use crate::v2::ResourceRole;
 use super::model::{
     BlobDeclaration, CompatibilityDeclaration, DocumentRenditionDeclaration,
     MediaRenditionDeclaration, PackageReleaseV3, ProducerDeclaration, RELEASE_SCHEMA_V3,
-    RenditionOrigin, SubjectDeclaration,
+    RenditionOrigin, ResourceProvenanceV3, SubjectDeclaration,
 };
 use super::payload::{self, KnownPayloadV3};
 use super::validate::validate_payload;
@@ -142,9 +142,13 @@ pub struct V3Inspection {
     /// Exact raw bytes of every present, size- and digest-verified payload
     /// blob: known resource payloads and present opaque payloads. Keyed by
     /// `sha256:<hex>` digest, never by carrier path, so durable persistence
-    /// can store and later verify every present payload body. Rendition
-    /// text/media is never retained and never appears here.
+    /// can store and later verify every present payload body.
     pub payload_blobs: BTreeMap<String, Vec<u8>>,
+    /// Exact raw bytes of every present Document/Media Rendition blob, keyed
+    /// by `sha256:<hex>` digest, never by carrier path. Core persists these
+    /// bodies together with the installation so adopted reading/audio stays
+    /// readable after the source carrier is deleted.
+    pub rendition_blobs: BTreeMap<String, Vec<u8>>,
     pub missing_blobs: Vec<MissingBlob>,
     pub warnings: Vec<String>,
     pub total_bytes: u64,
@@ -256,9 +260,10 @@ fn inspect_v3_catalog(
     // path. Reject undeclared files without reading their bodies.
     verify_catalog_inventory(&entries, &expected)?;
 
-    // Second, selective pass: known and present opaque payload blobs stay
-    // retained and bounded by max_file_bytes; only rendition text/media is
-    // streamed so its body never occupies memory.
+    // Second, selective pass: every declared blob that Core may need to
+    // persist — known and present opaque payload blobs plus present
+    // Document/Media Rendition blobs — stays retained and bounded by
+    // max_file_bytes, so adopted content never depends on a carrier re-parse.
     let streamed_paths = streamed_blob_paths(&release);
     let streamed_refs: Vec<&str> = streamed_paths.iter().map(String::as_str).collect();
     let selective = read_package_selective(path, limits, &["release.json"], &streamed_refs)?;
@@ -356,7 +361,7 @@ fn inspect_v3_catalog(
     // in-release references.
     validate_known_payloads(&release, &decoded, &mut warnings)?;
 
-    let document_renditions = release
+    let document_renditions: Vec<DocumentRenditionRecord> = release
         .document_renditions
         .iter()
         .map(|entry| DocumentRenditionRecord {
@@ -365,7 +370,7 @@ fn inspect_v3_catalog(
         })
         .collect();
 
-    let media_renditions = release
+    let media_renditions: Vec<MediaRenditionRecord> = release
         .media_renditions
         .iter()
         .map(|entry| MediaRenditionRecord {
@@ -387,6 +392,23 @@ fn inspect_v3_catalog(
         if record.payload_present {
             let digest = &record.entry.descriptor.payload_blob.digest;
             payload_blobs.insert(digest.clone(), retained[&blob_path(digest)].clone());
+        }
+    }
+
+    // Exact verified bytes of every present rendition blob (document text and
+    // media bodies), keyed by digest, so Core can durably persist adopted
+    // content without re-parsing the carrier.
+    let mut rendition_blobs = BTreeMap::<String, Vec<u8>>::new();
+    for record in &document_renditions {
+        let digest: &str = &record.entry.text_blob.digest;
+        if present.contains(&blob_path(digest)) {
+            rendition_blobs.insert(digest.to_owned(), retained[&blob_path(digest)].clone());
+        }
+    }
+    for record in &media_renditions {
+        let digest: &str = &record.entry.media_blob.digest;
+        if present.contains(&blob_path(digest)) {
+            rendition_blobs.insert(digest.to_owned(), retained[&blob_path(digest)].clone());
         }
     }
 
@@ -422,6 +444,7 @@ fn inspect_v3_catalog(
         opaque_resources,
         blobs,
         payload_blobs,
+        rendition_blobs,
         missing_blobs,
         warnings,
         total_bytes,
@@ -482,6 +505,11 @@ fn enforce_inventory_limits(
             resource.descriptor.provenance.input_resource_ids.len(),
             maximum,
             "input resource lineage inventory",
+        )?;
+        enforce_count(
+            resource.descriptor.provenance.input_rendition_ids.len(),
+            maximum,
+            "input rendition lineage inventory",
         )?;
         enforce_count(
             resource.descriptor.subject.rendition_ids.len(),
@@ -766,6 +794,68 @@ fn validate_producer(owner: &str, producer: &ProducerDeclaration) -> Result<(), 
     Ok(())
 }
 
+/// v3 resource provenance: creation time, tool, optional provider/model with
+/// versions, optional config digest, and exact production inputs — declared
+/// input Rendition ids and declared input Resource ids, each unique and
+/// in-release.
+fn validate_provenance_v3(
+    release: &PackageReleaseV3,
+    resource_id: &str,
+    provenance: &ResourceProvenanceV3,
+) -> Result<(), V3Error> {
+    if provenance.tool.id.trim().is_empty() || provenance.tool.version.trim().is_empty() {
+        return Err(invalid(
+            resource_id,
+            "provenance tool id/version must not be empty",
+        ));
+    }
+    for versioned in [&provenance.provider, &provenance.model]
+        .into_iter()
+        .flatten()
+    {
+        if versioned.id.trim().is_empty() || versioned.version.trim().is_empty() {
+            return Err(invalid(
+                resource_id,
+                "provenance producer id/version must not be empty",
+            ));
+        }
+    }
+    if let Some(digest) = &provenance.config_sha256 {
+        validate_digest(digest).map_err(|message| invalid(resource_id, message))?;
+    }
+    let mut rendition_lineage = HashSet::new();
+    for input in &provenance.input_rendition_ids {
+        validate_digest(input).map_err(|message| invalid(resource_id, message))?;
+        if !rendition_lineage.insert(input) {
+            return Err(invalid(resource_id, "input_rendition_ids must be unique"));
+        }
+        if !rendition_declared(release, input) {
+            return Err(invalid(
+                resource_id,
+                "input_rendition_ids must reference declared rendition ids",
+            ));
+        }
+    }
+    let mut resource_lineage = HashSet::new();
+    for input in &provenance.input_resource_ids {
+        validate_digest(input).map_err(|message| invalid(resource_id, message))?;
+        if !resource_lineage.insert(input) {
+            return Err(invalid(resource_id, "input_resource_ids must be unique"));
+        }
+        if !release
+            .resources
+            .iter()
+            .any(|resource| &resource.resource_id == input)
+        {
+            return Err(invalid(
+                resource_id,
+                "input_resource_ids must reference declared resource ids",
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Every compatibility input must reference an exact declared rendition and,
 /// when present, an exact declared resource; checks are stable non-empty
 /// strings.
@@ -827,11 +917,6 @@ fn validate_resource_descriptors(
     release: &PackageReleaseV3,
     release_value: &Value,
 ) -> Result<(), V3Error> {
-    let declared_ids: HashSet<&str> = release
-        .resources
-        .iter()
-        .map(|resource| resource.resource_id.as_str())
-        .collect();
     let edition_support: HashSet<&str> = release
         .edition
         .support_languages
@@ -869,7 +954,7 @@ fn validate_resource_descriptors(
         }
         validate_blob_declaration(&descriptor.payload_blob)
             .map_err(|message| invalid(&resource.resource_id, message))?;
-        validate_provenance(&resource.resource_id, &descriptor.provenance, &declared_ids)?;
+        validate_provenance_v3(release, &resource.resource_id, &descriptor.provenance)?;
         validate_quality(&resource.resource_id, &descriptor.quality)?;
         if let Some(producer) = &descriptor.producer {
             validate_producer(&resource.resource_id, producer)?;
@@ -1224,33 +1309,15 @@ fn verify_catalog_inventory(
     Ok(())
 }
 
-/// Every carrier blob path whose body must be streamed rather than retained:
-/// rendition text/media blobs only, excluding any path whose digest is
-/// already retained as a known or opaque payload. Known and present opaque
-/// payload blobs are always retained so their exact verified bytes are
-/// available to durable persistence; every retained body is bounded by
-/// `max_file_bytes`.
-fn streamed_blob_paths(release: &PackageReleaseV3) -> Vec<String> {
-    let retained_paths: HashSet<String> = release
-        .resources
-        .iter()
-        .map(|resource| blob_path(&resource.descriptor.payload_blob.digest))
-        .collect();
-    let mut streamed = Vec::new();
-    let mut seen = HashSet::new();
-    for rendition in &release.document_renditions {
-        let path = blob_path(&rendition.text_blob.digest);
-        if !retained_paths.contains(&path) && seen.insert(path.clone()) {
-            streamed.push(path);
-        }
-    }
-    for rendition in &release.media_renditions {
-        let path = blob_path(&rendition.media_blob.digest);
-        if !retained_paths.contains(&path) && seen.insert(path.clone()) {
-            streamed.push(path);
-        }
-    }
-    streamed
+/// Every carrier blob path whose body must be streamed rather than retained.
+///
+/// Every declared blob that Core may need to persist — resource payloads and
+/// present Document/Media Rendition blobs — is retained and bounded by
+/// `max_file_bytes`, so this set is empty for the current contract. The seam
+/// stays so future large bodies can be streamed without changing the
+/// inspection contract.
+fn streamed_blob_paths(_release: &PackageReleaseV3) -> Vec<String> {
+    Vec::new()
 }
 
 /// Parses `blobs/sha256/<64 lowercase hex>` and returns the digest string.
