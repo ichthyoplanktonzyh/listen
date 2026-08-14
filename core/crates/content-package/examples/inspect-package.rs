@@ -2,12 +2,12 @@
 
 use std::path::PathBuf;
 
-use content_package::v3::{inspect_v3_path, V3Inspection};
+use content_package::v3::{V3Inspection, inspect_v3_path};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::args_os().nth(1).ok_or_else(|| {
-        "usage: inspect-package <package-path>".to_owned()
-    })?;
+    let path = std::env::args_os()
+        .nth(1)
+        .ok_or_else(|| "usage: inspect-package <package-path>".to_owned())?;
     let inspection = inspect_v3_path(PathBuf::from(path))?;
     println!("OK {}", summarize(&inspection));
     Ok(())
