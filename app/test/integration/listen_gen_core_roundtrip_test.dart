@@ -11,6 +11,7 @@ import 'package:llplayer_next/data/repositories/capability_repository.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/services/api_service.dart';
+import 'package:llplayer_next/services/capability_file_resolver.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
@@ -233,13 +234,23 @@ void main() {
       final generator = LocalListenGenProcessService(releaseService: release);
       final dbPath = scratchDatabasePath('roundtrip-listen');
       final api = await LocalApi.connect(databasePath: dbPath);
+      final managedRoot =
+          await Directory.systemTemp.createTemp('roundtrip-managed');
       final coordinator = MaterialCapabilityCoordinator(
         repository: LocalCapabilityRepository(() => api),
         generator: generator,
         providerArguments: () => const ['--tts-provider', 'fake'],
+        fileResolver: LocalCapabilityFileResolver(
+          // The managed store is content-addressed: the learner-authorized
+          // bytes live at <root>/<digest>, exactly as the App stores them.
+          managedStorePath: (SourceAsset asset) =>
+              '${managedRoot.path}/${asset.sha256Digest}',
+        ),
       );
       try {
         final sourceBytes = utf8.encode('Listen, carefully! Words matter.');
+        final digest = sha256.convert(sourceBytes).toString();
+        await File('${managedRoot.path}/$digest').writeAsBytes(sourceBytes);
         final created = await api.createLearningMaterial(
           CreateLearningMaterialInput(
             title: 'Document listen lesson',
@@ -318,6 +329,7 @@ void main() {
 
         coordinator.dispose();
       } finally {
+        await managedRoot.delete(recursive: true);
         await api.close();
       }
     },

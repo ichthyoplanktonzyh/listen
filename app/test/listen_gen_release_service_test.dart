@@ -49,6 +49,7 @@ Map<String, dynamic> _manifestTemplate() => {
     'package_schema': 'listen.content-package.release.v3',
     'release_schema_id': 'listen.content-package.release.v3',
     'schema_version': 3,
+    'contract_version': '4.0.0',
   },
   'runtime': {
     'provider_requirements': {
@@ -87,6 +88,7 @@ Map<String, dynamic> _lockTemplate() => {
     'package_schema': 'listen.content-package.release.v3',
     'release_schema_id': 'listen.content-package.release.v3',
     'schema_version': 3,
+    'contract_version': '4.0.0',
     'canonical_sha256': _contractSha,
   },
   'runtime': {'python_requires': '>=3.11'},

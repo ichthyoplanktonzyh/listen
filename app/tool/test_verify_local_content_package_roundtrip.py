@@ -41,6 +41,12 @@ class ScriptSemanticsTests(unittest.TestCase):
             "with open(os.environ['RUNNER_CWD_FILE'], 'a') as f:\n"
             " f.write(stage + '|' + os.getcwd() + '|' + ' '.join(sys.argv[2:]) + '\\n')\n"
             "if stage == os.environ.get('FAIL_STAGE'): sys.exit(23)\n"
+            "if stage == 'core-contract':\n"
+            " out = sys.argv[sys.argv.index('--output-dir') + 1]\n"
+            " os.makedirs(out, exist_ok=True)\n"
+            " m = {'contract_version': '4.0.0',\n"
+            "      'files': {'release.schema.json': 'a' * 64}}\n"
+            " open(os.path.join(out, 'listen-contracts-4.0.0.manifest.json'), 'w').write(json.dumps(m))\n"
             "if stage == 'flutter-test':\n"
             " p = os.environ['VERIFY_ROUNDTRIP_REPORT_PATH']\n"
             f" n = {NAME!r}\n"
@@ -72,7 +78,7 @@ class ScriptSemanticsTests(unittest.TestCase):
         self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
 
     def test_each_build_or_verify_failure_is_nonzero_and_never_prints_ok(self):
-        for stage in ("gen-build", "gen-verify", "core-build"):
+        for stage in ("gen-build", "gen-verify", "core-build", "core-contract"):
             with self.subTest(stage=stage):
                 result, _ = self.run_gate(stage)
                 self.assertNotEqual(result.returncode, 0)
@@ -107,9 +113,15 @@ class ScriptSemanticsTests(unittest.TestCase):
         for stage in ("gen-build", "gen-verify"):
             cwd, _ = stages[stage]
             self.assertIn("snapshots", cwd, stage)
+        core_contract_cwd, core_contract_args = stages["core-contract"]
+        self.assertIn("snapshots", core_contract_cwd, "core-contract")
+        self.assertIn("--output-dir", core_contract_args)
         core_cwd, core_args = stages["core-build"]
         self.assertNotIn("snapshots", core_cwd)
         self.assertIn("snapshots", core_args)
+        for stage in ("gen-build", "gen-verify"):
+            _, args = stages[stage]
+            self.assertIn("--core-contract-manifest", args, stage)
 
 
 if __name__ == "__main__":

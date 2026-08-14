@@ -177,7 +177,9 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'package_schema',
       'schema_version',
       'canonical_sha256',
+      'contract_version',
     });
+    read.string(contract, 'contract_version');
     final authority = read.object(contract['authority']);
     read.exactKeys(authority, const {'repository', 'path'});
     final authorityRepository = read.string(authority, 'repository');
@@ -385,7 +387,9 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'package_schema',
       'schema_version',
       'canonical_sha256',
+      'contract_version',
     });
+    read.string(contract, 'contract_version');
     final authority = read.object(contract['authority']);
     read.exactKeys(authority, const {'repository', 'path'});
     read.expect(

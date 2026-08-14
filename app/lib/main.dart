@@ -85,6 +85,7 @@ import 'models/content_channel.dart';
 import 'models/workbench_study_mode.dart';
 import 'models/personal_expression.dart';
 import 'models/practice.dart';
+import 'models/learning_material.dart';
 import 'models/personal_library.dart';
 import 'models/task_status.dart';
 import 'models/timeline.dart';
@@ -512,18 +513,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     repository: coreRepositories.mediaLibrary,
     materialRepository: coreRepositories.learningMaterial,
   );
+  String? _mediaFilePathForRendition(MediaRendition rendition) {
+    for (final entry
+        in mediaLibraryActions.mediaLibrary ?? const <MediaLibraryEntry>[]) {
+      if (entry.media.id == rendition.mediaId) return entry.media.path;
+    }
+    return null;
+  }
+
   late final capabilityCoordinator = MaterialCapabilityCoordinator(
     repository: coreRepositories.capability,
     generator: LocalListenGenProcessService(
       releaseService: LocalListenGenReleaseService(),
     ),
-    mediaFilePath: (rendition) {
-      for (final entry
-          in mediaLibraryActions.mediaLibrary ?? const <MediaLibraryEntry>[]) {
-        if (entry.media.id == rendition.mediaId) return entry.media.path;
-      }
-      return null;
-    },
+    mediaFilePath: _mediaFilePathForRendition,
     // Document source bytes for a Gen run come from the same places direct
     // rendering reads them: the content-addressed managed store copy for
     // managed bindings, the learner-chosen referenced location (re-verified
@@ -539,6 +542,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           settingsController.settings.supportDirectory,
         ),
       ),
+      mediaFilePath: _mediaFilePathForRendition,
     ),
     // Provider selection stays out of the request document: the toolchain is
     // located on this machine (whisper model, whisper-cli, ffprobe, ffmpeg)

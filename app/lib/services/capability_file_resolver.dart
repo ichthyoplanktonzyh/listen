@@ -38,8 +38,8 @@ abstract interface class CapabilityFileResolver {
 /// rendition's local file.
 final class LocalCapabilityFileResolver implements CapabilityFileResolver {
   LocalCapabilityFileResolver({
-    required this._managedStorePath,
-    required this._referenceStore,
+    this._managedStorePath,
+    this._referenceStore,
     this._mediaFilePath,
   });
 
@@ -48,7 +48,7 @@ final class LocalCapabilityFileResolver implements CapabilityFileResolver {
   final String? Function(SourceAsset asset)? _managedStorePath;
 
   /// The app-owned reference map for `referenced` bindings.
-  final DocumentReferenceStore _referenceStore;
+  final DocumentReferenceStore? _referenceStore;
 
   final String? Function(MediaRendition rendition)? _mediaFilePath;
 
@@ -67,7 +67,9 @@ final class LocalCapabilityFileResolver implements CapabilityFileResolver {
     }
     final reference = asset.binding.reference;
     if (reference == null || reference.isEmpty) return null;
-    final location = await _referenceStore.resolve(reference);
+    final store = _referenceStore;
+    if (store == null) return null;
+    final location = await store.resolve(reference);
     if (location == null || !await _verifies(location, asset)) return null;
     return location;
   }

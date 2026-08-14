@@ -136,17 +136,30 @@ echo "verify-roundtrip: resolving App dependencies from existing PUB_CACHE (offl
   run_stage dependency-setup \
     env HOME="$tmp/home" PUB_CACHE="$pub_cache" flutter pub get --offline )
 
+# Build the Core contract artifact from the Core snapshot so the Gen bundle
+# records the contract identity of the exact Core checkout this gate builds
+# against, never a production lock identity.
+echo "verify-roundtrip: building Core contract artifact at $CORE_HEAD"
+( cd "$CORE_SOURCE" &&
+  run_stage core-contract env python3 scripts/release_artifacts.py contract \
+    --allow-dirty \
+    --output-dir "$tmp/contracts" )
+core_contract_manifest="$(ls "$tmp/contracts"/listen-contracts-*.manifest.json | head -1)"
+[ -n "$core_contract_manifest" ] || fail "core contract manifest was not produced"
+
 # PYTHONDONTWRITEBYTECODE keeps the Gen build/verify from leaving __pycache__
 # behind inside the Gen checkout (or its snapshot).
 echo "verify-roundtrip: building local Gen bundle at $GEN_HEAD"
 ( cd "$GEN_SOURCE" &&
   run_stage gen-build env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py build \
     --source-commit "$GEN_HEAD" \
+    --core-contract-manifest "$core_contract_manifest" \
     --output-parent "$tmp/gen" )
 
 echo "verify-roundtrip: verifying Gen bundle"
 ( cd "$GEN_SOURCE" &&
   run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
+    --core-contract-manifest "$core_contract_manifest" \
     "$tmp/gen/listen-gen-0.5.0/listen-gen-0.5.0.release.json" )
 
 # Build Core into a temporary target so nothing is written into the checkout

@@ -38,7 +38,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     this.generatorToolVersion = '0.5.0',
     CapabilityFileResolver? fileResolver,
     ReusableResourceResolver? reusableResources,
-  }) : _fileResolver = fileResolver ?? const _UnresolvingCapabilityFileResolver(),
+  }) : _fileResolver = fileResolver ?? _defaultFileResolver(mediaFilePath),
        _reusableResources = reusableResources ??
            ReusableResourceResolver(_repository);
 
@@ -60,6 +60,13 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   final String generatorToolVersion;
 
   final Map<String, _CapabilitySession> _sessions = {};
+
+  static CapabilityFileResolver _defaultFileResolver(
+    String? Function(MediaRendition rendition)? mediaFilePath,
+  ) =>
+      mediaFilePath == null
+          ? const _UnresolvingCapabilityFileResolver()
+          : LocalCapabilityFileResolver(mediaFilePath: mediaFilePath);
 
   bool get isConfigured => _generator.isConfigured;
 
@@ -366,7 +373,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       final code = awaited.code ?? 'generation_failed';
       await _finalizeFailure(run, code);
       unawaited(processRun.cleanUp());
-      return _fail(run, ListenGenProcessFailure(code));
+      return _fail(run, ListenGenProcessFailure(code, message: awaited.message));
     }
 
     final packagePath = awaited.packageSha256 == null
