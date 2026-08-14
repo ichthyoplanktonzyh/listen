@@ -16,16 +16,18 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 import 'e2e_database.dart';
 
-/// Real-media journey against the real local stack, driven by
+/// Real-media (fixture-ASR) journey against the real local stack, driven by
 /// `REAL_MEDIA_PATH` pointing at a local audio/video file (for example a file
 /// from the read-only desktop sample folder). The path is never committed:
 /// without the environment variable the test is skipped.
 ///
-/// The journey: register and open the real media, produce Structured Reading
-/// through capability production, install and adopt the edition, then restart
-/// the Core sidecar against the same database and reopen the same material —
-/// the adopted composition must still satisfy the capability without a new
-/// attempt.
+/// The media file is real; the Structured Reading comes from the committed
+/// fixture ASR transcript, so this is a fixture-backed journey, not a real
+/// transcription. The journey: register and open the real media, produce
+/// Structured Reading through capability production, install and adopt the
+/// edition, then restart the Core sidecar against the same database and
+/// reopen the same material — the adopted composition must still satisfy the
+/// capability without a new attempt.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -70,8 +72,8 @@ void main() {
   }
 
   test(
-    'a real media file opens, gains structured reading, survives a sidecar '
-    'restart, and reopens from the adopted composition',
+    'a real media file opens, gains structured reading from the fixture ASR, '
+    'survives a sidecar restart, and reopens from the adopted composition',
     () async {
       HttpOverrides.global = null;
       expect(realMediaPath, isNotNull, reason: 'REAL_MEDIA_PATH is required');

@@ -57,6 +57,15 @@ def write_locks(app: Path, core_sha: str, gen_sha: str, contract: dict) -> None:
     }))
 
 
+def write_app_requirements(app: Path) -> None:
+    target = app / "lib/services/api_service.dart"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "const supportedContractMajor = 4;\n"
+        "const supportedContractMinor = 0;\n"
+    )
+
+
 class DiscoveryTests(unittest.TestCase):
     def test_worktree_discovers_siblings_beside_canonical_checkout(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -112,6 +121,9 @@ class ContractTests(unittest.TestCase):
             root = Path(tmp)
             app, core, gen = root / "listen-app", root / "listen-core", root / "listen-gen"
             app.mkdir()
+            make_repo(app)
+            write_app_requirements(app)
+            commit(app, {"README.md": "app\n"})
             make_repo(core)
             core_sha = commit(core, {
                 "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
@@ -124,9 +136,91 @@ class ContractTests(unittest.TestCase):
             repos = {name: status.Repo(name, path) for name, path in {
                 "listen-app": app, "listen-core": core, "listen-gen": gen,
             }.items()}
-            _, release, problems = status.inspect(repos)
+            _, release, requirements, integrity, runnable = status.inspect(repos)
             self.assertEqual(release.sha, gen_sha)
-            self.assertEqual(problems, [])
+            self.assertEqual(integrity, [])
+            self.assertTrue(
+                any("Core contract" in problem for problem in runnable)
+            )
+
+    def test_contract_lock_is_compared_against_the_pinned_commit_not_head(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app, core, gen = root / "listen-app", root / "listen-core", root / "listen-gen"
+            app.mkdir()
+            make_repo(core)
+            core_sha = commit(core, {
+                "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
+                "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+            })
+            make_repo(gen)
+            pinned_lock = contract_lock()
+            gen_sha = commit(gen, {"contracts.lock.json": json.dumps(pinned_lock)})
+            write_locks(app, core_sha, gen_sha, pinned_lock)
+            changed = {**pinned_lock, "schema_version": 2}
+            commit(gen, {"contracts.lock.json": json.dumps(changed)}, "head drift")
+            repos = {name: status.Repo(name, path) for name, path in {
+                "listen-app": app, "listen-core": core, "listen-gen": gen,
+            }.items()}
+            _, release, _, integrity, _ = status.inspect(repos)
+            self.assertEqual(release.sha, gen_sha)
+            self.assertEqual(integrity, [])
+
+    def test_app_lock_mismatching_the_pinned_gen_contract_is_an_integrity_problem(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app, core, gen = root / "listen-app", root / "listen-core", root / "listen-gen"
+            app.mkdir()
+            make_repo(core)
+            core_sha = commit(core, {
+                "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
+                "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+            })
+            make_repo(gen)
+            pinned_lock = contract_lock()
+            gen_sha = commit(gen, {"contracts.lock.json": json.dumps(pinned_lock)})
+            drifted = {**pinned_lock, "schema_version": 2}
+            write_locks(app, core_sha, gen_sha, drifted)
+            repos = {name: status.Repo(name, path) for name, path in {
+                "listen-app": app, "listen-core": core, "listen-gen": gen,
+            }.items()}
+            _, _, _, integrity, _ = status.inspect(repos)
+            self.assertTrue(
+                any("schema_version" in problem for problem in integrity)
+            )
+
+    def test_machine_protocol_mismatch_is_a_runnable_problem_not_integrity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app, core, gen = root / "listen-app", root / "listen-core", root / "listen-gen"
+            app.mkdir()
+            make_repo(app)
+            commit(app, {"README.md": "app\n"})
+            make_repo(core)
+            core_sha = commit(core, {
+                "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
+                "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+            })
+            make_repo(gen)
+            lock = contract_lock()
+            gen_sha = commit(gen, {"contracts.lock.json": json.dumps(lock)})
+            commit(app, {
+                "lib/services/listen_gen_release_service.dart": (
+                    "class _ {\n"
+                    "  static const _machineSchema = 'listen_gen.machine-event.v2';\n"
+                    "  static const _machineVersion = 2;\n"
+                    "}\n"
+                ),
+            }, "requirements")
+            write_locks(app, core_sha, gen_sha, lock)
+            repos = {name: status.Repo(name, path) for name, path in {
+                "listen-app": app, "listen-core": core, "listen-gen": gen,
+            }.items()}
+            _, _, _, integrity, runnable = status.inspect(repos)
+            self.assertEqual(integrity, [])
+            self.assertTrue(
+                any("machine protocol" in problem for problem in runnable)
+            )
 
     def test_gen_checkout_must_contain_release_pin(self):
         with tempfile.TemporaryDirectory() as tmp:

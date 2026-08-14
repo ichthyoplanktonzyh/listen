@@ -21,12 +21,16 @@ def make_repo(path: Path) -> str:
 
 
 class ScriptSemanticsTests(unittest.TestCase):
-    def run_gate(self, fail_stage=""):
+    def run_gate(self, fail_stage="", dirty=False):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         core, gen = root / "core", root / "gen"
         core_pin, gen_pin = make_repo(core), make_repo(gen)
+        if dirty:
+            for repo in (core, gen):
+                (repo / "tracked.txt").write_text("edited\n")
+                (repo / "uncommitted.txt").write_text("dirty\n")
         cache = root / "pub-cache"
         cache.mkdir()
         runner = root / "runner.py"
@@ -34,6 +38,8 @@ class ScriptSemanticsTests(unittest.TestCase):
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
             "stage = sys.argv[1]\n"
+            "with open(os.environ['RUNNER_CWD_FILE'], 'a') as f:\n"
+            " f.write(stage + '|' + os.getcwd() + '|' + ' '.join(sys.argv[2:]) + '\\n')\n"
             "if stage == os.environ.get('FAIL_STAGE'): sys.exit(23)\n"
             "if stage == 'flutter-test':\n"
             " p = os.environ['VERIFY_ROUNDTRIP_REPORT_PATH']\n"
@@ -42,6 +48,7 @@ class ScriptSemanticsTests(unittest.TestCase):
             " open(p, 'w').write(''.join(json.dumps(x) + '\\n' for x in e))\n"
         )
         runner.chmod(0o755)
+        cwd_file = root / "runner-cwd.txt"
         env = {
             **os.environ,
             "LISTEN_CORE_REPO": str(core),
@@ -49,31 +56,32 @@ class ScriptSemanticsTests(unittest.TestCase):
             "VERIFY_ROUNDTRIP_STAGE_RUNNER": str(runner),
             "PUB_CACHE": str(cache),
             "FAIL_STAGE": fail_stage,
+            "RUNNER_CWD_FILE": str(cwd_file),
         }
-        return subprocess.run([str(SCRIPT)], capture_output=True, text=True, env=env)
+        return subprocess.run([str(SCRIPT)], capture_output=True, text=True, env=env), cwd_file
 
     def test_success_prints_ok_only_after_structured_evidence(self):
-        result = self.run_gate()
+        result, _ = self.run_gate()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("structured report confirms", result.stdout)
         self.assertIn("verify-roundtrip: OK", result.stdout)
 
     def test_dependency_failure_is_nonzero_and_never_prints_ok(self):
-        result = self.run_gate("dependency-setup")
+        result, _ = self.run_gate("dependency-setup")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
 
     def test_each_build_or_verify_failure_is_nonzero_and_never_prints_ok(self):
         for stage in ("gen-build", "gen-verify", "core-build"):
             with self.subTest(stage=stage):
-                result = self.run_gate(stage)
+                result, _ = self.run_gate(stage)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn(
                     "verify-roundtrip: OK", result.stdout + result.stderr
                 )
 
     def test_flutter_runner_failure_is_nonzero_and_never_prints_ok(self):
-        result = self.run_gate("flutter-test")
+        result, _ = self.run_gate("flutter-test")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("verify-roundtrip: OK", result.stdout + result.stderr)
 
@@ -86,6 +94,22 @@ class ScriptSemanticsTests(unittest.TestCase):
         self.assertNotIn("5a65b2735325aac18f1eacb736b8d9676adf59a9", text)
         self.assertNotIn("80edcbd7057d4b2e1a7edb8ed9966cd4ecd82e5d", text)
         self.assertIn('--source-commit "$GEN_HEAD"', text)
+
+    def test_dirty_workspaces_build_from_isolated_snapshots(self):
+        result, cwd_file = self.run_gate(dirty=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("isolated snapshot", result.stderr)
+        self.assertIn("verify-roundtrip: OK", result.stdout)
+        stages = {}
+        for line in cwd_file.read_text().splitlines():
+            stage, cwd, args = line.split("|", 2)
+            stages[stage] = (cwd, args)
+        for stage in ("gen-build", "gen-verify"):
+            cwd, _ = stages[stage]
+            self.assertIn("snapshots", cwd, stage)
+        core_cwd, core_args = stages["core-build"]
+        self.assertNotIn("snapshots", core_cwd)
+        self.assertIn("snapshots", core_args)
 
 
 if __name__ == "__main__":

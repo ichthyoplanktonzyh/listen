@@ -205,7 +205,7 @@ class WordTimelineSummary {
       createdBy == 'user' || lifecycleStage == 'user_adjusted';
 }
 
-/// Core domain projection of content-package v1 `prosody_analysis`.
+/// Core LLTimeline document projection of `prosody_analysis` resources.
 ///
 /// The sole semantic source for the Prosodic Chunk slot (R3+): word-anchored
 /// prominence/stress/utterance roles plus package-declared prosodic chunk

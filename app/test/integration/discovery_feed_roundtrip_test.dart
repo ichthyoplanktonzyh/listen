@@ -20,12 +20,12 @@ import 'e2e_database.dart';
 import 'package:llplayer_next/services/external_tools.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
 
-/// Real feed journey against the real Core: a podcast RSS feed served by a
-/// local HTTP server, an enclosure fetched over real HTTP, adoption through
-/// Core's media registration, a material created the way the workbench would
-/// create it, and — after a restart with a fresh view model — the same item
-/// reopening from the ledger and a second refresh producing no second
-/// material.
+/// Fixture-feed journey against the real Core: a fixture podcast RSS feed
+/// served by a local HTTP server, a fixture enclosure fetched over real HTTP,
+/// adoption through Core's media registration, a material created the way the
+/// workbench would create it, and — after a restart with a fresh view model —
+/// the same item reopening from the ledger and a second refresh producing no
+/// second material.
 ///
 /// This exercises a live `api-http` binary, so it is skipped unless
 /// `LISTEN_PACKAGE_E2E=1`. Drive it with the same environment the Slice 4
@@ -37,8 +37,8 @@ void main() {
   final runE2e = Platform.environment['LISTEN_PACKAGE_E2E'] == '1';
 
   test(
-    'a feed item acquires, keeps, reopens after restart, and never duplicates '
-    'its material on a second refresh',
+    'a fixture feed item acquires, keeps, reopens after restart, and never '
+    'duplicates its material on a second refresh',
     () async {
       HttpOverrides.global = null;
 
@@ -57,7 +57,7 @@ void main() {
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
   <channel>
     <title>E2E Show</title>
-    <description>Real feed journey.</description>
+    <description>Fixture feed journey.</description>
     <language>en</language>
     <item>
       <title>Episode one</title>

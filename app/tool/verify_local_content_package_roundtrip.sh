@@ -16,8 +16,15 @@
 # directory that is removed on exit.
 #
 # Required environment:
-#   LISTEN_CORE_REPO   absolute path to a clean listen-core checkout
-#   LISTEN_GEN_REPO    absolute path to a clean listen-gen checkout
+#   LISTEN_CORE_REPO   absolute path to a listen-core checkout
+#   LISTEN_GEN_REPO    absolute path to a listen-gen checkout
+#
+# Each checkout may be dirty. A dirty working tree is never built as if its
+# HEAD were the content: the script materializes an isolated snapshot of the
+# working-tree contents (tracked edits plus untracked source, minus build
+# artifacts) into a throwaway git repo and builds from that snapshot commit,
+# so the source commit recorded in the Gen manifest is the actual content
+# that was built, never a bare dirty HEAD.
 #
 set -euo pipefail
 
@@ -56,18 +63,68 @@ check_repo() {
   if ! status="$(git -C "$repo" status --porcelain)"; then
     fail "cannot inspect $name working tree: $repo"
   fi
-  [ -z "$status" ] || fail "$name working tree is not clean"
+}
+
+# Materialize an isolated source snapshot of a possibly-dirty checkout.
+# Prints the directory to build from and records the snapshot commit in
+# $snapshot_sha (empty when the checkout was clean).
+snapshot_workspace() {
+  local repo="$1" name="$2" target="$3"
+  local status
+  if ! status="$(git -C "$repo" status --porcelain)"; then
+    fail "cannot inspect $name working tree: $repo"
+  fi
+  if [ -z "$status" ]; then
+    snapshot_sha=""
+    printf '%s\n' "$repo"
+    return 0
+  fi
+  mkdir -p "$target"
+  git -C "$repo" archive HEAD | tar -x -C "$target"
+  local path
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if [ -f "$repo/$path" ]; then
+      mkdir -p "$target/$(dirname "$path")"
+      cp "$repo/$path" "$target/$path"
+    else
+      rm -f "$target/$path"
+    fi
+  done < <(git -C "$repo" diff --name-only HEAD)
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    case "$path" in
+      dist/*|target/*|.dart_tool/*|build/*|__pycache__/*|*.pyc) continue ;;
+    esac
+    mkdir -p "$target/$(dirname "$path")"
+    cp "$repo/$path" "$target/$path"
+  done < <(git -C "$repo" ls-files --others --exclude-standard)
+  git -C "$target" init -q
+  git -C "$target" config user.email "roundtrip@localhost"
+  git -C "$target" config user.name "listen roundtrip"
+  git -C "$target" add -A
+  git -C "$target" commit -q -m "isolated snapshot of dirty $name working tree"
+  snapshot_sha="$(git -C "$target" rev-parse HEAD)"
+  echo "verify-roundtrip: $name working tree is dirty; building from an isolated snapshot of its contents (snapshot $snapshot_sha)" >&2
+  printf '%s\n' "$target"
 }
 
 check_repo "$LISTEN_CORE_REPO" "listen-core"
 check_repo "$LISTEN_GEN_REPO" "listen-gen"
-readonly CORE_HEAD="$(git -C "$LISTEN_CORE_REPO" rev-parse HEAD)"
-readonly GEN_HEAD="$(git -C "$LISTEN_GEN_REPO" rev-parse HEAD)"
 
 tmp="$(mktemp -d)"
 cleanup() { rm -rf "$tmp"; }
 trap cleanup EXIT
-mkdir -p "$tmp/home"
+mkdir -p "$tmp/home" "$tmp/snapshots"
+
+snapshot_sha=""
+CORE_SOURCE="$(snapshot_workspace "$LISTEN_CORE_REPO" "listen-core" "$tmp/snapshots/core")"
+CORE_SNAPSHOT="$snapshot_sha"
+snapshot_sha=""
+GEN_SOURCE="$(snapshot_workspace "$LISTEN_GEN_REPO" "listen-gen" "$tmp/snapshots/gen")"
+GEN_SNAPSHOT="$snapshot_sha"
+readonly CORE_HEAD="$(git -C "$CORE_SOURCE" rev-parse HEAD)"
+readonly GEN_HEAD="$(git -C "$GEN_SOURCE" rev-parse HEAD)"
 
 # Preserve the caller's populated cache while isolating runtime HOME. Offline
 # dependency resolution makes a missing cache entry an immediate setup error,
@@ -80,25 +137,26 @@ echo "verify-roundtrip: resolving App dependencies from existing PUB_CACHE (offl
     env HOME="$tmp/home" PUB_CACHE="$pub_cache" flutter pub get --offline )
 
 # PYTHONDONTWRITEBYTECODE keeps the Gen build/verify from leaving __pycache__
-# behind inside the Gen checkout.
+# behind inside the Gen checkout (or its snapshot).
 echo "verify-roundtrip: building local Gen bundle at $GEN_HEAD"
-( cd "$LISTEN_GEN_REPO" &&
+( cd "$GEN_SOURCE" &&
   run_stage gen-build env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py build \
     --source-commit "$GEN_HEAD" \
     --output-parent "$tmp/gen" )
 
 echo "verify-roundtrip: verifying Gen bundle"
-( cd "$LISTEN_GEN_REPO" &&
+( cd "$GEN_SOURCE" &&
   run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
     "$tmp/gen/listen-gen-0.5.0/listen-gen-0.5.0.release.json" )
 
-# Build Core into a temporary target so nothing is written into the checkout.
+# Build Core into a temporary target so nothing is written into the checkout
+# (or its snapshot).
 echo "verify-roundtrip: building local Core api-http at $CORE_HEAD"
 run_stage core-build env CARGO_TARGET_DIR="$tmp/core-target" \
   cargo build \
   --locked \
   --offline \
-  --manifest-path "$LISTEN_CORE_REPO/Cargo.toml" \
+  --manifest-path "$CORE_SOURCE/Cargo.toml" \
   -p api-http
 
 echo "verify-roundtrip: running focused integration tests"

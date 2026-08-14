@@ -1,43 +1,41 @@
 {
   "manifest_version": 1,
   "repository": "ichthyoplanktonzyh/listen-gen",
-  "source_git_sha": "80edcbd7057d4b2e1a7edb8ed9966cd4ecd82e5d",
+  "source_git_sha": "a660946a4410c6c6b6e720ecdd02e7a88d16e5dc",
   "release_manifest": {
     "schema": "listen_gen.release-bundle.v1",
-    "filename": "listen-gen-0.5.0.release.json",
-    "sha256": "sha256:76bff6fa962a610da5419997b406d52b71c14af01cb9768cf3fe91d3dcbf4500"
+    "filename": "listen-gen-0.4.0.release.json",
+    "sha256": "sha256:ba82adce3004918d3e5b10975c47b51c35ba89ee6770460a6f296ebe68a59c7f"
   },
   "tool": {
     "id": "listen-gen",
-    "version": "0.5.0"
+    "version": "0.4.0"
   },
   "machine_protocol": {
-    "schema": "listen_gen.machine-event.v2",
-    "version": 2
+    "schema": "listen_gen.machine-event.v1",
+    "version": 1
   },
   "content_package_contract": {
     "authority": {
-      "repository": "ichthyoplanktonzyh/listen-core",
-      "path": "contracts/content-package/v3"
+      "path": "contracts/content-package/v1",
+      "repository": "ichthyoplanktonzyh/listen-core"
     },
-    "release_schema_id": "listen.content-package.release.v3",
-    "package_schema": "listen.content-package.release.v3",
-    "schema_version": 3,
-    "canonical_sha256": "sha256:996ed4286474726db9d49646adbd348fdb6f8bd01acef7f24fe1b098fa6e4d65"
+    "release_schema_id": "https://listen.dev/contracts/content-package/v1/manifest.schema.json",
+    "package_schema": "listen.resource-package.v1",
+    "schema_version": 1,
+    "canonical_sha256": "sha256:3a0c67c2e4498dbbe5ad5556bac41eff01e50c06c7d020bd5af1fdcbe46c5dc5"
   },
   "runtime": {
     "python_requires": ">=3.11"
   },
   "runtime_identity": {
-    "schema": "listen_gen.runtime-identity.v1",
-    "version": 1,
     "runtime": {
       "family": "python",
       "requires": ">=3.11"
     },
+    "schema": "listen_gen.runtime-identity.v1",
     "toolchain": {
       "schema": "listen_gen.toolchain-identity.v1",
-      "version": 1,
       "tools": [
         {
           "id": "acoustics-extractor",
@@ -121,14 +119,16 @@
             "alignment"
           ]
         }
-      ]
-    }
+      ],
+      "version": 1
+    },
+    "version": 1
   },
   "artifact": {
-    "filename": "listen-gen-0.5.0.pyz",
-    "format": "python-zipapp",
     "entrypoint": "__main__.py",
-    "size_bytes": 147350,
-    "sha256": "sha256:946c0b40a2d4d4ccd32915b5f54ac58644755b24a127af637f8a460819cb7ef5"
+    "filename": "listen-gen-0.4.0.pyz",
+    "format": "python-zipapp",
+    "sha256": "sha256:47cef5bb9c1711432db1bcd285c1f0e4f637842d1ef199e13abeef83ca46cf63",
+    "size_bytes": 259730
   }
 }
