@@ -30,18 +30,11 @@ The manifest carries an explicit, versioned runtime/toolchain identity in
     "schema": "listen_gen.toolchain-identity.v1",
     "version": 1,
     "tools": [
-      {"id": "acoustics-extractor", "roles": ["acoustics"]},
       {"id": "asr-wrapper", "roles": ["asr"]},
-      {"id": "ffmpeg", "roles": ["media", "asr", "alignment", "acoustics", "phone"]},
-      {"id": "ffprobe", "roles": ["media", "asr", "alignment", "acoustics", "phone"]},
-      {"id": "phone-analyzer", "roles": ["phone"]},
-      {"id": "prosody-extractor", "roles": ["prosody"]},
-      {"id": "python", "roles": ["phone"]},
-      {"id": "sense-group-extractor", "roles": ["sense_groups"]},
-      {"id": "wav2vec2-phone-model", "roles": ["phone"]},
-      {"id": "wav2vec2-phone-sidecar", "roles": ["phone"]},
-      {"id": "whisper-cli", "roles": ["asr", "alignment"]},
-      {"id": "whisper-model", "roles": ["asr", "alignment"]}
+      {"id": "ffmpeg", "roles": ["media", "asr"]},
+      {"id": "ffprobe", "roles": ["media", "asr"]},
+      {"id": "whisper-cli", "roles": ["asr"]},
+      {"id": "whisper-model", "roles": ["asr"]}
     ]
   }
 }
@@ -53,10 +46,9 @@ the runtime/toolchain it may bind to:
 - The runtime is the interpreter family and version requirement the zipapp
   itself needs.
 - The toolchain is every external tool the bundle may invoke across the
-  declared providers, with the Gen stage families (`media`, `asr`,
-  `alignment`, `sense_groups`, `acoustics`, `prosody`, `phone`) that require
-  each tool. It is exactly the union of the per-provider requirements in
-  `runtime.provider_requirements`.
+  declared ASR providers, with the Gen stage families (`media`, `asr`) that
+  require each tool. It is exactly the union of the per-provider requirements
+  in `PROVIDER_REQUIREMENTS`.
 - Consumers record this identity immutably in their pin and the verifier
   rejects any manifest whose identity drifts from the source constants, so a
   release cannot silently add, drop, or re-role a tool.
@@ -64,28 +56,15 @@ the runtime/toolchain it may bind to:
 ## Runtime requirements
 
 - The `.pyz` still requires Python 3.11 or newer; nothing is vendored.
-- The `fixture` provider needs no external media commands.
-- The `command` provider needs `ffprobe`, `ffmpeg`, and the external ASR
+- The `fixture` ASR provider needs no external media commands.
+- The `command` ASR provider needs `ffprobe`, `ffmpeg`, and the external ASR
   wrapper.
-- The `whisper-cpp` provider needs `ffprobe`, `ffmpeg`, `whisper-cli`, and a
-  whisper model.
-- Optional alignment reuses those tools: `--aligner fixture` needs no media
-  commands, `--aligner command` needs `ffprobe`, `ffmpeg`, and the external
-  aligner command, and `--aligner whisper-cpp` needs `ffprobe`, `ffmpeg`,
-  `whisper-cli`, and a whisper model.
-- Optional rich stages (R4) follow the same pattern: the `fixture` adapters
-  for `--sense-groups`, `--acoustics`, and `--prosody` need no media commands;
-  `--sense-groups command` needs the external sense-group analyzer,
-  `--acoustics command` needs `ffprobe`, `ffmpeg`, and the external acoustics
-  extractor, and `--prosody command` needs the external prosody analyzer. The
-  `baseline` adapters (`--sense-groups baseline`, `--acoustics baseline`,
-  `--prosody baseline`) are the built-in deterministic, in-process producers
-  and need no model or provider command. `--acoustics baseline` uses
-  `ffprobe`/`ffmpeg` to produce its normalized 16 kHz mono PCM WAV input.
-- Optional Phone Timeline production uses `--phone fixture` without external
-  tools, `--phone command` with `ffmpeg`/`ffprobe` and an analyzer, or
-  `--phone wav2vec2-ctc` with explicit Python, sidecar, and local model inputs.
-  The bundle never downloads a phone model.
+- The `whisper-cpp` ASR provider needs `ffprobe`, `ffmpeg`, `whisper-cli`,
+  and a whisper model.
+- The `fake` and `fixture` TTS providers need no external commands; the `say`
+  TTS provider binds to the macOS `say` and `afconvert` executables.
+- The `fixture` OCR provider needs no external commands; the absence of a
+  real OCR adapter is an honest capability result, not a hidden pipeline.
 - These native tools and models are never placed inside the zipapp.
 
 ## Content package contract identity
@@ -172,11 +151,10 @@ with the bundle pin.
 
 ```bash
 python dist/listen-gen-0.5.0/listen-gen-0.5.0.pyz --help
-python dist/listen-gen-0.5.0/listen-gen-0.5.0.pyz package from-media \
-  tests/fixtures/sample-media.wav \
+python dist/listen-gen-0.5.0/listen-gen-0.5.0.pyz package from-capability \
+  /path/to/capability.json \
   --provider fixture --fixture tests/fixtures/sample.asr.json \
-  --title "Smoke" --media-kind audio --duration-ms 2200 \
-  --created-at-ms 1786000000000 --output /tmp/smoke.listenpkg
+  --machine-events
 ```
 
 ## Distribution rules

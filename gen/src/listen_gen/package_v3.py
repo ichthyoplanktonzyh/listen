@@ -30,7 +30,6 @@ from .package import ConversionError, ZIP_TIMESTAMP
 RELEASE_SCHEMA_V3 = "listen.content-package.release.v3"
 STRUCTURED_READING_SCHEMA_V1 = "listen.payload.structured-reading.v1"
 ANCHOR_TIME_ALIGNMENT_SCHEMA_V1 = "listen.payload.anchor-time-alignment.v1"
-DOCUMENT_TEXT_SCHEMA_V1 = "listen.payload.document-text.v1"
 
 TOOL_ID = "listen-gen"
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")

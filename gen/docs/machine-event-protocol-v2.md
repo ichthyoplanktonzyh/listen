@@ -101,5 +101,5 @@ listen-gen package from-capability REQUEST --output OUT \
   live credential service); `fake` is the deterministic in-process adapter
   with exact alignment for tests; `fixture` replays committed audio.
 - `--ocr-provider fixture` is the optional OCR seam for scanned PDFs.
-- The ASR flags mirror the v1 media pipeline (`--provider fixture` etc.) for
-  media-to-read derivations.
+- The ASR flags drive media-to-read derivations with the same provider
+  vocabulary (`--provider fixture` etc.) as the capability pipeline.
