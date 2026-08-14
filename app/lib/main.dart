@@ -103,6 +103,7 @@ import 'services/fullscreen_window.dart';
 import 'services/acquisition_ledger.dart';
 import 'services/document_intake_service.dart';
 import 'services/document_reference_store.dart';
+import 'services/capability_file_resolver.dart';
 import 'services/document_source_resolver.dart';
 import 'services/pdf_text_extractor.dart';
 import 'services/subscription_store.dart';
@@ -507,6 +508,22 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       return null;
     },
+    // Document source bytes for a Gen run come from the same places direct
+    // rendering reads them: the content-addressed managed store copy for
+    // managed bindings, the learner-chosen referenced location (re-verified
+    // at use) for reference-in-place bindings.
+    fileResolver: LocalCapabilityFileResolver(
+      managedStorePath: (asset) {
+        final root = managedAssetStore.resolveRoot();
+        if (root == null || root.isEmpty) return null;
+        return '$root${Platform.pathSeparator}${asset.sha256Digest}';
+      },
+      referenceStore: DocumentReferenceStore(
+        file: DocumentReferenceStore.fileFor(
+          settingsController.settings.supportDirectory,
+        ),
+      ),
+    ),
     // Provider selection stays out of the request document: the toolchain is
     // located on this machine (whisper model, whisper-cli, ffprobe, ffmpeg)
     // and the run reads the latest resolved setup each time it starts.

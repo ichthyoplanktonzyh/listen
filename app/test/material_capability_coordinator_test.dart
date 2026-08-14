@@ -312,7 +312,7 @@ void main() {
     },
   );
 
-  test('an empty-plan completion fails the run', () async {
+  test('an empty-plan completion is a satisfied outcome, not a failure', () async {
     final requestFuture = harness.request(MaterialCapability.read);
     await _settle();
     harness.gen.lastRun!
@@ -324,8 +324,11 @@ void main() {
     await _settle();
 
     final outcome = await requestFuture;
-    expect(outcome, isA<CapabilityFailed>());
-    expect(harness.repo.finalizedFailures, ['generator_plan_was_empty']);
+    expect(outcome, isA<CapabilityAvailable>());
+    expect(harness.repo.finalizedFailures, isEmpty);
+    expect(harness.repo.finalizedSucceeded, 1,
+        reason: 'an empty plan is a successful attempt');
+    expect(harness.runView!.phase, CapabilityRunPhase.completed);
   });
 
   test('warnings surface on the run view', () async {

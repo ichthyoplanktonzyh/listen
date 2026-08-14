@@ -375,9 +375,25 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
             (Object error) => throw error,
           );
     if (packagePath == null) {
-      await _finalizeFailure(run, 'generator_plan_was_empty');
+      // An empty plan is a satisfied outcome, not a failure: the generator
+      // found the capability already provided by the available resources and
+      // produced no package. The durable attempt records the success and the
+      // run completes without an installed edition.
+      try {
+        await _repository.finalizeAttempt(
+          materialId: material.material.id,
+          attemptId: attempt.attemptId,
+          succeeded: true,
+          toolId: generatorToolId,
+          toolVersion: generatorToolVersion,
+        );
+      } on Object catch (_) {
+        // The run is still completed; the attempt note is best-effort.
+      }
+      run.phase = CapabilityRunPhase.completed;
+      _emit();
       unawaited(processRun.cleanUp());
-      return _fail(run, const ListenGenProcessFailure('generator_plan_was_empty'));
+      return const CapabilityAvailable();
     }
 
     // Candidate-only installation, then explicit adoption. The produced

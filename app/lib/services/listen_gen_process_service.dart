@@ -453,8 +453,10 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
     }
     final expectedDigest = terminal.packageSha256;
     if (expectedDigest == null) {
-      // The app only starts Gen for derivable capabilities, whose plans are
-      // never empty. An empty-plan completion is therefore a run failure.
+      // A completed run without a package is an empty plan (the capability
+      // was already satisfied by the available resources). The run hands the
+      // outcome back without an artifact path; the coordinator treats it as a
+      // satisfied result, never as a fabricated package.
       _completeFailure('generator_plan_was_empty');
       return;
     }
