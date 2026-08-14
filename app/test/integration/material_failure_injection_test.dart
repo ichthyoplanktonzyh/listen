@@ -188,12 +188,11 @@ void main() {
         final coordinator = MaterialCapabilityCoordinator(
           repository: repository,
           generator: generator,
-          targetLanguage: () => 'en-US',
           mediaFilePath: (rendition) =>
               rendition.mediaId == media.id ? mediaPath : null,
           // A fixture path that does not exist: the ASR provider must fail
           // as a provider failure, not hang or fabricate output.
-          providerArguments: const [
+          providerArguments: () => const [
             '--provider',
             'fixture',
             '--fixture',

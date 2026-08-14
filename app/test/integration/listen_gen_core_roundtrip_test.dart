@@ -146,10 +146,9 @@ void main() {
         final coordinator = MaterialCapabilityCoordinator(
           repository: LocalCapabilityRepository(() => api),
           generator: generator,
-          targetLanguage: () => 'en-US',
           mediaFilePath: (rendition) =>
               rendition.mediaId == media.id ? mediaPath : null,
-          providerArguments: providerArguments,
+          providerArguments: () => providerArguments,
         );
 
         // The fresh material has no adopted composition and no derivable
@@ -175,7 +174,7 @@ void main() {
         expect(edition.adoptedAtMs, isNotNull);
 
         // The read derivation produced a playable media rendition plus the
-        // document text, structured reading, and time alignment resources.
+        // structured reading and time alignment resources.
         expect(edition.providesRead, isTrue);
         expect(
           edition.renditions.map((rendition) => rendition.kind),
@@ -185,11 +184,7 @@ void main() {
             edition.resources.map((resource) => resource.kind).toSet();
         expect(
           resourceKinds,
-          containsAll(const [
-            'document_text',
-            'structured_reading',
-            'anchor_time_alignment',
-          ]),
+          containsAll(const ['structured_reading', 'anchor_time_alignment']),
         );
 
         // ── Durable attempt assertions ──
@@ -241,8 +236,7 @@ void main() {
       final coordinator = MaterialCapabilityCoordinator(
         repository: LocalCapabilityRepository(() => api),
         generator: generator,
-        targetLanguage: () => 'en-US',
-        providerArguments: const ['--tts-provider', 'fake'],
+        providerArguments: () => const ['--tts-provider', 'fake'],
       );
       try {
         final sourceBytes = utf8.encode('Listen, carefully! Words matter.');

@@ -93,10 +93,9 @@ void main() {
         final coordinator = MaterialCapabilityCoordinator(
           repository: LocalCapabilityRepository(() => api),
           generator: generator,
-          targetLanguage: () => 'en-US',
           mediaFilePath: (rendition) =>
               rendition.mediaId == media.id ? mediaPath : null,
-          providerArguments: const [
+          providerArguments: () => const [
             '--provider',
             'fixture',
             '--fixture',
@@ -135,10 +134,9 @@ void main() {
           final replay = MaterialCapabilityCoordinator(
             repository: LocalCapabilityRepository(() => restarted),
             generator: generator,
-            targetLanguage: () => 'en-US',
             mediaFilePath: (rendition) =>
                 rendition.mediaId == mediaId ? mediaPath : null,
-            providerArguments: const [
+            providerArguments: () => const [
               '--provider',
               'fixture',
               '--fixture',

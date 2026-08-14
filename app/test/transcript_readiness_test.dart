@@ -282,7 +282,6 @@ _readinessViewModel({
   final coordinator = MaterialCapabilityCoordinator(
     repository: repository,
     generator: generator,
-    targetLanguage: () => 'en',
   );
   final vm = TranscriptReadinessViewModel(
     subtitle: harness.subtitle,
@@ -555,13 +554,13 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   @override
   Future<AdoptedComposition> readAdoptedComposition(
     String materialId,
-  ) async => throw StateError('unexpected readAdoptedComposition');
+  ) async => throw const ApiFailure(raw: 'not found', code: 'not_found');
 
   @override
   Future<List<int>> readCompositionResourcePayload(
     String materialId,
     String resourceId,
-  ) async => throw StateError('unexpected readCompositionResourcePayload');
+  ) async => throw const ApiFailure(raw: 'payload not found');
 
   @override
   Future<List<int>> readCompositionRenditionBlob(

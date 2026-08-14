@@ -16,6 +16,69 @@ import 'support/learning_material_fixtures.dart';
 /// `sha256:` reference form. Managed copies were verified when copied;
 /// referenced locations are re-verified at use.
 void main() {
+  group('CapabilityRequestEncoder reusable resources', () {
+    test('declare the resource and its exact payload facts', () {
+      final request = CapabilityRequestEncoder.encode(
+        materialId: 'material-1',
+        materialRevisionId: 'revision-1',
+        materialTitle: 'Lesson',
+        editionId: 'edition:material-1',
+        editionTitle: 'Lesson',
+        targetLanguage: 'en',
+        supportLanguages: const [],
+        requestedCapability: 'listen',
+        createdAtMs: 1,
+        attemptId: 'attempt-1',
+        availableResources: const [
+          RequestAvailableResource(
+            resourceId:
+                'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            kind: 'structured_reading',
+            schema: 'listen.structured_reading.v1',
+            role: 'base',
+            contentLanguage: 'en',
+            materialRevisionId: 'revision-1',
+            payloadDigest:
+                'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+            payloadSizeBytes: 28,
+            payloadPath: '/tmp/capability-resources/resource.json',
+          ),
+        ],
+      );
+
+      final entry =
+          (request['available_resources'] as List<dynamic>).single
+              as Map<String, dynamic>;
+      expect(entry['resource_id'], 'sha256:${'a' * 64}');
+      expect(entry['kind'], 'structured_reading');
+      expect(entry['schema'], 'listen.structured_reading.v1');
+      expect(entry['role'], 'base');
+      expect(entry['content_language'], 'en');
+      expect(entry['material_revision_id'], 'revision-1');
+      final blob = entry['blob'] as Map<String, dynamic>;
+      expect(blob['digest'], 'sha256:${'b' * 64}');
+      expect(blob['size_bytes'], 28);
+      expect(blob['path'], '/tmp/capability-resources/resource.json');
+    });
+
+    test('an empty reuse list declares no resources', () {
+      final request = CapabilityRequestEncoder.encode(
+        materialId: 'material-1',
+        materialRevisionId: 'revision-1',
+        materialTitle: 'Lesson',
+        editionId: 'edition:material-1',
+        editionTitle: 'Lesson',
+        targetLanguage: 'en',
+        supportLanguages: const [],
+        requestedCapability: 'read',
+        createdAtMs: 1,
+        attemptId: 'attempt-1',
+      );
+
+      expect(request['available_resources'], isEmpty);
+    });
+  });
+
   group('CapabilityRequestEncoder document entries', () {
     test('declare the rendition digest and size in sha256 reference form', () {
       final digest = 'b' * 64;
@@ -42,8 +105,9 @@ void main() {
         documentSourceAssetIds: {'document-1': 'source-1'},
       );
 
-      final entry = (request['available_renditions'] as List<dynamic>).single
-          as Map<String, dynamic>;
+      final entry =
+          (request['available_renditions'] as List<dynamic>).single
+              as Map<String, dynamic>;
       expect(entry['kind'], 'document');
       expect(entry['source_asset_id'], 'sha256:source-1');
       final blob = entry['blob'] as Map<String, dynamic>;
@@ -52,8 +116,7 @@ void main() {
       expect(blob['path'], '/library/lesson.txt');
     });
 
-    test('fall back to the rendition id for a rendition without a binding',
-        () {
+    test('fall back to the rendition id for a rendition without a binding', () {
       final rendition = documentRendition(
         id: 'document-9',
         digest: 'c' * 64,
@@ -74,8 +137,9 @@ void main() {
         documentRenditions: [rendition],
       );
 
-      final entry = (request['available_renditions'] as List<dynamic>).single
-          as Map<String, dynamic>;
+      final entry =
+          (request['available_renditions'] as List<dynamic>).single
+              as Map<String, dynamic>;
       expect(entry['source_asset_id'], 'sha256:document-9');
       final blob = entry['blob'] as Map<String, dynamic>;
       expect(blob['digest'], 'sha256:${'c' * 64}');
@@ -116,10 +180,7 @@ void main() {
       );
 
       expect(
-        await resolver.documentSourcePath(
-          documentRendition(),
-          null,
-        ),
+        await resolver.documentSourcePath(documentRendition(), null),
         isNull,
       );
     });

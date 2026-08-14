@@ -12,6 +12,7 @@ import '../services/capability_file_resolver.dart';
 import '../services/capability_generation_request.dart';
 import '../services/capability_request_encoder.dart';
 import '../services/listen_gen_process_service.dart';
+import '../services/reusable_resource_resolver.dart';
 
 /// The deep Material Capability coordinator. One learner intent — "Read",
 /// "Listen", "Watch", or synchronized Read-and-Listen for one Material —
@@ -31,27 +32,30 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   MaterialCapabilityCoordinator({
     required this._repository,
     required this._generator,
-    required this._targetLanguage,
     this.mediaFilePath,
-    this.providerArguments = const [],
+    this.providerArguments = _noProviderArguments,
     this.generatorToolId = 'listen-gen',
     this.generatorToolVersion = '0.5.0',
     CapabilityFileResolver? fileResolver,
-  }) : _fileResolver = fileResolver ?? const _UnresolvingCapabilityFileResolver();
+    ReusableResourceResolver? reusableResources,
+  }) : _fileResolver = fileResolver ?? const _UnresolvingCapabilityFileResolver(),
+       _reusableResources = reusableResources ??
+           ReusableResourceResolver(_repository);
 
   final CapabilityRepository _repository;
   final ListenGenProcessService _generator;
-  final String Function() _targetLanguage;
   final CapabilityFileResolver _fileResolver;
+  final ReusableResourceResolver _reusableResources;
 
   /// Resolves the local file behind a media rendition, or null when the file
   /// is not available on this machine.
   final String? Function(MediaRendition rendition)? mediaFilePath;
 
   /// CLI arguments selecting the Gen providers for a run (e.g.
-  /// `--tts-provider say`); provider choice and secrets never enter the
-  /// request document.
-  final List<String> providerArguments;
+  /// `--tts-provider say`, `--provider whisper-cpp --model …`); provider
+  /// choice and secrets never enter the request document. Evaluated per run
+  /// so a toolchain resolved after construction still applies.
+  final List<String> Function() providerArguments;
   final String generatorToolId;
   final String generatorToolVersion;
 
@@ -111,6 +115,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       session.activeRun?.processRun?.cancel();
     }
     unawaited(_fileResolver.dispose());
+    unawaited(_reusableResources.dispose());
     _sessions.clear();
     super.dispose();
   }
@@ -187,12 +192,27 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         .where((projection) => projection.capability == capability)
         ._firstOrNull
         ?.status;
-    if (status != MaterialCapabilityStatus.derivable &&
-        status != MaterialCapabilityStatus.failedAttempt) {
-      run.phase = CapabilityRunPhase.completed;
-      return const CapabilityUnavailable();
+    switch (status) {
+      // The capability is already satisfied by the current material facts —
+      // a directly readable document or an adopted composition the learner
+      // already has — so no production run starts. The projection carries
+      // the evidence; the run reports it as available, never as broken.
+      case MaterialCapabilityStatus.available:
+        run.phase = CapabilityRunPhase.completed;
+        return const CapabilityAvailable();
+      case MaterialCapabilityStatus.unavailable:
+        run.phase = CapabilityRunPhase.completed;
+        return const CapabilityUnavailable();
+      case MaterialCapabilityStatus.derivable:
+      case MaterialCapabilityStatus.failedAttempt:
+      // A projection still marked generating (a leftover running attempt)
+      // is superseded by a fresh attempt: latest-request-wins.
+      case MaterialCapabilityStatus.generating:
+        return _produce(material, capability, run);
+      case null:
+        run.phase = CapabilityRunPhase.completed;
+        return const CapabilityUnavailable();
     }
-    return _produce(material, capability, run);
   }
 
   Future<CapabilityOutcome> _produce(
@@ -241,13 +261,19 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       }
     }
 
+    // Resources the current adopted composition already carries are declared
+    // as reusable: a compatible Structured Reading is consumed by Gen instead
+    // of being regenerated. The payload is materialized to a run-owned
+    // temporary file so the generator can verify the exact bytes it reuses.
+    final availableResources = await _reusableResources.resolve(material);
+
     final requestJson = CapabilityRequestEncoder.encode(
       materialId: material.material.id,
       materialRevisionId: material.currentRevision.id,
       materialTitle: material.currentRevision.title,
       editionId: CapabilityRequestEncoder.editionIdFor(material.material.id),
       editionTitle: material.currentRevision.title,
-      targetLanguage: _targetLanguage(),
+      targetLanguage: _targetLanguageFor(material),
       supportLanguages: const [],
       requestedCapability: _capabilityName(capability),
       createdAtMs: attempt.startedAtMs,
@@ -258,6 +284,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       mediaRenditions: material.currentRevision.mediaRenditions,
       mediaFilePath: mediaFilePath,
       mediaBlobFacts: mediaBlobFacts,
+      availableResources: availableResources,
     );
 
     final ListenGenProcessRun processRun;
@@ -265,7 +292,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       processRun = await _generator.start(
         CapabilityGenerationRequest(
           requestJson: requestJson,
-          providerArguments: providerArguments,
+          providerArguments: providerArguments(),
         ),
       );
     } on Object catch (error) {
@@ -395,6 +422,20 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     unawaited(processRun.cleanUp());
     return CapabilityAvailable(edition: adopted);
   }
+
+  /// The language the generation must produce: the exact language of the
+  /// source document when one is known. A material with no language fact
+  /// declares `und` (undetermined) — never a guessed learner surface
+  /// language — and the generators decide from the content itself.
+  static String _targetLanguageFor(MaterialDetails material) {
+    for (final rendition in material.currentRevision.documentRenditions) {
+      final language = rendition.language;
+      if (language != null && language.isNotEmpty) return language;
+    }
+    return 'und';
+  }
+
+  static List<String> _noProviderArguments() => const [];
 
   Future<void> _finalizeFailure(_CapabilityRun run, String reason) async {
     final attemptId = run.attemptId;

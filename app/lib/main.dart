@@ -93,6 +93,7 @@ import 'player_adapter.dart';
 import 'player_shortcuts.dart';
 import 'services/anki_package_file_service.dart';
 import 'services/core_transport_service.dart';
+import 'services/content_generator_setup.dart';
 import 'services/cover_art_cache.dart';
 import 'services/desktop_playback_bootstrap.dart';
 import 'services/diagnostic_log_export_service.dart';
@@ -283,6 +284,21 @@ class _PlayerScreenState extends State<PlayerScreen>
   Timer? syntaxCapabilityTimer;
   final coreTransport = LocalCoreTransportService();
   final currentRoute = ValueNotifier<AppRoute>(AppRoute.today);
+
+  /// The resolved generation toolchain (whisper model, whisper-cli, ffprobe,
+  /// ffmpeg), refreshed once after launch and re-read at every run through
+  /// the provider-arguments closure. A setup resolved later (whisper model
+  /// downloaded after the first launch) still applies to the next run.
+  ContentGeneratorSetup _generatorSetup = unresolvedContentGeneratorSetup;
+
+  Future<void> _resolveGeneratorToolchain() async {
+    final setup = await ContentGeneratorLocator(
+      ffprobePath: settingsController.ffprobePath,
+      ffmpegPath: settingsController.ffmpegPath,
+    ).resolve();
+    if (!mounted) return;
+    setState(() => _generatorSetup = setup);
+  }
 
   // Segment selections live beside the route because they have to be settable
   // from outside the pane that draws them: the coach's suggestions land on a
@@ -484,10 +500,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     generator: LocalListenGenProcessService(
       releaseService: LocalListenGenReleaseService(),
     ),
-    // Phase 1 target language: the learning edition's content language
-    // defaults to the app's English learner surface; document renditions
-    // carry their own language in the request.
-    targetLanguage: () => 'en',
     mediaFilePath: (rendition) {
       for (final entry
           in mediaLibraryActions.mediaLibrary ?? const <MediaLibraryEntry>[]) {
@@ -495,7 +507,14 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       return null;
     },
-    providerArguments: const ['--tts-provider', 'say'],
+    // Provider selection stays out of the request document: the toolchain is
+    // located on this machine (whisper model, whisper-cli, ffprobe, ffmpeg)
+    // and the run reads the latest resolved setup each time it starts.
+    providerArguments: () => [
+      ...contentGeneratorProviderArguments(_generatorSetup),
+      '--tts-provider',
+      'say',
+    ],
   );
   late final mediaLibraryScan = MediaLibraryScanController(
     scanner: MediaLibraryScanner(
@@ -681,6 +700,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(_resolveGeneratorToolchain());
     playerController.addListener(_surfaceErrorStatus);
     playerController.addListener(_trackExtensivePlayback);
     currentRoute.addListener(_scanLibraryWhileVisible);

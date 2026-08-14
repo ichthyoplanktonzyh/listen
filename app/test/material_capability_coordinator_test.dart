@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/material_capability_coordinator.dart';
@@ -13,6 +15,8 @@ import 'package:llplayer_next/services/capability_generation_request.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 
+import 'support/learning_material_fixtures.dart';
+
 /// The coordinator is the deep completion flow: resolution order (adopted →
 /// candidate adopt → local import → production), durable attempts, cancellation
 /// with latest-request-wins, and honest state transitions. This harness drives
@@ -25,16 +29,23 @@ void main() {
     harness = _Harness();
   });
 
-  test('an already adopted satisfying composition resolves immediately', () async {
-    harness.repo.editions = [_editionCopy(adopted: true)];
-    harness.repo.capabilities = const [];
+  test(
+    'an already adopted satisfying composition resolves immediately',
+    () async {
+      harness.repo.editions = [_editionCopy(adopted: true)];
+      harness.repo.capabilities = const [];
 
-    final outcome = await harness.request(MaterialCapability.read);
+      final outcome = await harness.request(MaterialCapability.read);
 
-    expect(outcome, isA<CapabilityAvailable>());
-    expect(harness.gen.startCount, 0, reason: 'no production run should start');
-    expect(harness.repo.adoptedReleases, isEmpty);
-  });
+      expect(outcome, isA<CapabilityAvailable>());
+      expect(
+        harness.gen.startCount,
+        0,
+        reason: 'no production run should start',
+      );
+      expect(harness.repo.adoptedReleases, isEmpty);
+    },
+  );
 
   test('an installed candidate is adopted explicitly', () async {
     harness.repo.editions = [_editionCopy(adopted: false)];
@@ -147,24 +158,27 @@ void main() {
     },
   );
 
-  test('a generator failure finalizes the attempt and reports the code', () async {
-    final requestFuture = harness.request(MaterialCapability.read);
-    await _settle();
-    final run = harness.gen.lastRun!;
+  test(
+    'a generator failure finalizes the attempt and reports the code',
+    () async {
+      final requestFuture = harness.request(MaterialCapability.read);
+      await _settle();
+      final run = harness.gen.lastRun!;
 
-    run.emitProtocol();
-    await _settle();
-    run.emitFailed(code: 'provider_timeout');
-    await _settle();
-    await _settle();
+      run.emitProtocol();
+      await _settle();
+      run.emitFailed(code: 'provider_timeout');
+      await _settle();
+      await _settle();
 
-    final outcome = await requestFuture;
-    expect(outcome, isA<CapabilityFailed>());
-    expect((outcome as CapabilityFailed).retryable, isTrue);
-    expect(harness.repo.finalizedFailures, ['provider_timeout']);
-    expect(harness.runView!.phase, CapabilityRunPhase.failed);
-    expect(harness.runView!.failureCode, 'provider_timeout');
-  });
+      final outcome = await requestFuture;
+      expect(outcome, isA<CapabilityFailed>());
+      expect((outcome as CapabilityFailed).retryable, isTrue);
+      expect(harness.repo.finalizedFailures, ['provider_timeout']);
+      expect(harness.runView!.phase, CapabilityRunPhase.failed);
+      expect(harness.runView!.failureCode, 'provider_timeout');
+    },
+  );
 
   test('a failed attempt is still retryable through a fresh attempt', () async {
     harness.repo.failNextStart = true;
@@ -282,18 +296,21 @@ void main() {
     expect(harness.gen.startCount, 0);
   });
 
-  test('a media edition does not satisfy watch without a video material', () async {
-    // The edition carries a media rendition, but the material is audio-only:
-    // watch stays unsatisfied and production is attempted (and fails here on
-    // the generator level is not reached — the projection gates it).
-    harness.repo.editions = [_mediaEdition];
+  test(
+    'a media edition does not satisfy watch without a video material',
+    () async {
+      // The edition carries a media rendition, but the material is audio-only:
+      // watch stays unsatisfied and production is attempted (and fails here on
+      // the generator level is not reached — the projection gates it).
+      harness.repo.editions = [_mediaEdition];
 
-    final outcome = await harness.request(MaterialCapability.watch);
+      final outcome = await harness.request(MaterialCapability.watch);
 
-    // No satisfying adopted edition and no derivable watch projection.
-    expect(outcome, isA<CapabilityUnavailable>());
-    expect(harness.gen.startCount, 0);
-  });
+      // No satisfying adopted edition and no derivable watch projection.
+      expect(outcome, isA<CapabilityUnavailable>());
+      expect(harness.gen.startCount, 0);
+    },
+  );
 
   test('an empty-plan completion fails the run', () async {
     final requestFuture = harness.request(MaterialCapability.read);
@@ -347,6 +364,170 @@ void main() {
     await _settle();
     expect(await requestFuture, isA<CapabilityFailed>());
   });
+
+  test(
+    'an already-satisfied projection resolves as available without a run',
+    () async {
+      // The material has no document rendition, but the projection already
+      // reports read available (an adopted composition the learner has): the
+      // capability is present, never reported as broken.
+      harness.repo.capabilities = const [
+        MaterialCapabilityProjection(
+          capability: MaterialCapability.read,
+          status: MaterialCapabilityStatus.available,
+          latestAttempt: null,
+        ),
+      ];
+
+      final outcome = await harness.request(MaterialCapability.read);
+
+      expect(outcome, isA<CapabilityAvailable>());
+      expect(harness.gen.startCount, 0);
+      expect(harness.repo.attemptCount, 0);
+      expect(harness.runView!.phase, CapabilityRunPhase.completed);
+    },
+  );
+
+  test(
+    'a leftover generating projection is superseded by a fresh attempt',
+    () async {
+      // A projection still marked generating is a running attempt nobody owns
+      // (for example after an App restart); the new request supersedes it via
+      // Core's atomic start and produces afresh.
+      harness.repo.capabilities = const [
+        MaterialCapabilityProjection(
+          capability: MaterialCapability.read,
+          status: MaterialCapabilityStatus.generating,
+          latestAttempt: null,
+        ),
+      ];
+
+      final requestFuture = harness.request(MaterialCapability.read);
+      await _settle();
+
+      expect(harness.repo.attemptCount, 1);
+      expect(harness.gen.startCount, 1);
+
+      harness.gen.lastRun!
+        ..emitProtocol()
+        ..emitAccepted(attemptId: 'attempt-1');
+      await _settle();
+      harness.gen.lastRun!.emitCompleted();
+      await _settle();
+      await _settle();
+
+      expect(await requestFuture, isA<CapabilityAvailable>());
+    },
+  );
+
+  test('the request declares reusable adopted resources with exact payload '
+      'facts', () async {
+    harness.repo.composition = _adoptedComposition;
+    harness.repo.resourcePayloads[_adoptedResourceId] = utf8.encode(
+      '{"text":"Hello","anchors":[]}',
+    );
+
+    final requestFuture = harness.request(MaterialCapability.read);
+    await _settleUntil(() => harness.gen.hasRun);
+
+    final resources =
+        harness.gen.lastRun!.request.requestJson['available_resources']
+            as List<dynamic>;
+    expect(resources, hasLength(1));
+    final entry = resources.single as Map<String, dynamic>;
+    expect(entry['resource_id'], 'sha256:$_adoptedResourceId');
+    expect(entry['kind'], 'structured_reading');
+    expect(entry['schema'], 'listen.structured_reading.v1');
+    expect(entry['role'], 'base');
+    expect(entry['content_language'], 'en');
+    expect(entry['material_revision_id'], 'revision-1');
+    final blob = entry['blob'] as Map<String, dynamic>;
+    expect(blob['digest'], 'sha256:$_adoptedPayloadDigest');
+    expect(blob['size_bytes'], 28);
+    final path = blob['path'] as String;
+    expect(path, isNotEmpty);
+    expect(await File(path).readAsString(), '{"text":"Hello","anchors":[]}');
+
+    harness.gen.lastRun!
+      ..emitProtocol()
+      ..emitAccepted(attemptId: 'attempt-1');
+    await _settle();
+    harness.gen.lastRun!.emitCompleted();
+    await _settle();
+    await _settle();
+    await requestFuture;
+  });
+
+  test('an unreadable resource payload is not declared for reuse', () async {
+    // The adopted composition declares the structured reading, but its
+    // payload cannot be read from Core: the request must not claim a reuse
+    // it cannot back, and generation proceeds without it.
+    harness.repo.composition = _adoptedComposition;
+
+    final requestFuture = harness.request(MaterialCapability.read);
+    await _settleUntil(() => harness.gen.hasRun);
+
+    final resources =
+        harness.gen.lastRun!.request.requestJson['available_resources']
+            as List<dynamic>;
+    expect(resources, isEmpty);
+
+    harness.gen.lastRun!
+      ..emitProtocol()
+      ..emitAccepted(attemptId: 'attempt-1');
+    await _settle();
+    harness.gen.lastRun!.emitCompleted();
+    await _settle();
+    await _settle();
+    await requestFuture;
+  });
+
+  test(
+    'the request target language is the document rendition language',
+    () async {
+      final documentMaterial = _documentMaterial(language: 'zh');
+
+      final requestFuture = harness.request(
+        MaterialCapability.read,
+        material: documentMaterial,
+      );
+      await _settle();
+
+      expect(
+        harness.gen.lastRun!.request.requestJson['edition']['target_language'],
+        'zh',
+      );
+
+      harness.gen.lastRun!
+        ..emitProtocol()
+        ..emitAccepted(attemptId: 'attempt-1');
+      await _settle();
+      harness.gen.lastRun!.emitCompleted();
+      await _settle();
+      await _settle();
+      await requestFuture;
+    },
+  );
+
+  test('a material with no language fact declares und, never a guessed '
+      'surface language', () async {
+    final requestFuture = harness.request(MaterialCapability.read);
+    await _settle();
+
+    expect(
+      harness.gen.lastRun!.request.requestJson['edition']['target_language'],
+      'und',
+    );
+
+    harness.gen.lastRun!
+      ..emitProtocol()
+      ..emitAccepted(attemptId: 'attempt-1');
+    await _settle();
+    harness.gen.lastRun!.emitCompleted();
+    await _settle();
+    await _settle();
+    await requestFuture;
+  });
 }
 
 final class _Harness {
@@ -356,14 +537,15 @@ final class _Harness {
       MaterialCapabilityCoordinator(
         repository: repo,
         generator: gen,
-        targetLanguage: () => 'en',
+        providerArguments: () => const ['--tts-provider', 'say'],
       );
 
   Future<CapabilityOutcome> request(
     MaterialCapability capability, {
+    MaterialDetails? material,
     String? localPackagePath,
   }) => coordinator.requestCapability(
-    _mediaOnlyMaterial,
+    material ?? _mediaOnlyMaterial,
     capability,
     localPackagePath: localPackagePath,
   );
@@ -378,6 +560,8 @@ final class _FakeGenService implements ListenGenProcessService {
   _FakeGenRun? lastRun;
   int startCount = 0;
 
+  bool get hasRun => lastRun != null;
+
   @override
   bool get isConfigured => true;
 
@@ -385,9 +569,7 @@ final class _FakeGenService implements ListenGenProcessService {
   ContentGeneratorState get state => ContentGeneratorState.ready;
 
   @override
-  Future<ListenGenProcessRun> start(
-    CapabilityGenerationRequest request,
-  ) async {
+  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) async {
     startCount++;
     final run = _FakeGenRun(request);
     lastRun = run;
@@ -437,7 +619,11 @@ final class _FakeGenRun implements ListenGenProcessRun {
   );
 
   void emitRunning(String stage) => _events.add(
-    GenMachineEvent(sequence: _sequence++, kind: GenEventKind.running, stage: stage),
+    GenMachineEvent(
+      sequence: _sequence++,
+      kind: GenEventKind.running,
+      stage: stage,
+    ),
   );
 
   void emitWarning(String text) => _events.add(
@@ -511,9 +697,17 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   bool failNextStart = false;
   bool failListCapabilities = false;
 
+  /// The adopted composition a production run may reuse resources from; null
+  /// reads as Core's typed not-found (no adopted composition).
+  AdoptedComposition? composition;
+
+  /// Keyed by resource id: the exact payload bytes behind each declared
+  /// resource. Missing payloads read as unreadable and are not reused.
+  final Map<String, List<int>> resourcePayloads = {};
+  bool failReadComposition = false;
+
   @override
-  ApiFailure failureDetail(Object error) =>
-      ApiFailure(raw: '', code: '$error');
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
 
   @override
   Future<MaterialDetails> readMaterial(String materialId) async =>
@@ -601,15 +795,26 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   }
 
   @override
-  Future<AdoptedComposition> readAdoptedComposition(
-    String materialId,
-  ) async => throw StateError('unexpected readAdoptedComposition');
+  Future<AdoptedComposition> readAdoptedComposition(String materialId) async {
+    if (failReadComposition) throw const ApiFailure(raw: 'composition failed');
+    final value = composition;
+    if (value == null) {
+      throw const ApiFailure(raw: 'not found', code: 'not_found');
+    }
+    return value;
+  }
 
   @override
   Future<List<int>> readCompositionResourcePayload(
     String materialId,
     String resourceId,
-  ) async => throw StateError('unexpected readCompositionResourcePayload');
+  ) async {
+    final payload = resourcePayloads[resourceId];
+    if (payload == null) {
+      throw const ApiFailure(raw: 'payload not found');
+    }
+    return payload;
+  }
 
   @override
   Future<List<int>> readCompositionRenditionBlob(
@@ -622,7 +827,8 @@ LearningEdition _editionCopy({required bool adopted}) => LearningEdition(
   materialId: 'material-1',
   materialRevisionId: 'revision-1',
   editionId: 'edition:material-1',
-  releaseId: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  releaseId:
+      'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
   title: 'Lesson',
   targetLanguage: 'en',
   supportLanguages: [],
@@ -631,7 +837,8 @@ LearningEdition _editionCopy({required bool adopted}) => LearningEdition(
   adopted: adopted,
   resources: const [
     LearningEditionResource(
-      resourceId: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      resourceId:
+          'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
       kind: 'structured_reading',
       role: 'base',
       required: true,
@@ -648,7 +855,8 @@ final _satisfyingEdition = LearningEdition(
   materialId: 'material-1',
   materialRevisionId: 'revision-1',
   editionId: 'edition:material-1',
-  releaseId: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  releaseId:
+      'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
   title: 'Lesson',
   targetLanguage: 'en',
   supportLanguages: [],
@@ -657,7 +865,8 @@ final _satisfyingEdition = LearningEdition(
   adopted: true,
   resources: [
     LearningEditionResource(
-      resourceId: 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      resourceId:
+          'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
       kind: 'structured_reading',
       role: 'base',
       required: true,
@@ -674,7 +883,8 @@ final _mediaEdition = LearningEdition(
   materialId: 'material-1',
   materialRevisionId: 'revision-1',
   editionId: 'edition:material-1',
-  releaseId: 'sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+  releaseId:
+      'sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
   title: 'Lesson',
   targetLanguage: 'en',
   supportLanguages: [],
@@ -684,7 +894,8 @@ final _mediaEdition = LearningEdition(
   resources: [],
   renditions: [
     LearningEditionRendition(
-      renditionId: 'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+      renditionId:
+          'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
       kind: 'media',
       available: true,
     ),
@@ -723,4 +934,63 @@ final _mediaOnlyMaterial = MaterialDetails(
   shape: MaterialShape.audio,
 );
 
+/// A text document material whose Source Document Rendition declares a
+/// concrete language: the request's target language must come from here,
+/// never from a hardcoded learner surface language.
+MaterialDetails _documentMaterial({String language = 'zh'}) => materialDetails(
+  title: 'Lesson',
+  sourceAssets: [sourceAsset(id: 'source-1')],
+  documentRenditions: [
+    documentRenditionForText(
+      '你好世界',
+      id: 'document-rendition-1',
+      language: language,
+      sourceAssetId: 'source-1',
+    ),
+  ],
+);
+
+const _adoptedResourceId =
+    'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
+const _adoptedPayloadDigest =
+    'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
+
+/// The adopted composition a production run can reuse resources from.
+AdoptedComposition get _adoptedComposition => AdoptedComposition(
+  materialId: 'material-1',
+  materialRevisionId: 'revision-1',
+  releaseId:
+      'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  editionId: 'edition:material-1',
+  title: 'Lesson',
+  targetLanguage: 'en',
+  supportLanguages: const [],
+  adoptedAtMs: 2,
+  resources: const [
+    AdoptedCompositionResource(
+      resourceId: _adoptedResourceId,
+      kind: 'structured_reading',
+      schema: 'listen.structured_reading.v1',
+      role: 'base',
+      required: true,
+      availability: 'available',
+      contentLanguage: 'en',
+      supportLanguages: [],
+      payloadDigest: _adoptedPayloadDigest,
+      payloadSizeBytes: 28,
+      reviewStatus: 'machine_checked',
+    ),
+  ],
+  renditions: const [],
+);
+
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
+
+/// Settles until [condition] holds or a generous number of rounds passed.
+/// Production now reads and materializes adopted resources before starting
+/// the generator, so a single settle round is no longer enough.
+Future<void> _settleUntil(bool Function() condition) async {
+  for (var i = 0; i < 200 && !condition(); i++) {
+    await _settle();
+  }
+}
