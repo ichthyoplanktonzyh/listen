@@ -6,6 +6,16 @@
 > `ROADMAP.md` owns the outcome and exit conditions; this file owns the current
 > execution order and may be archived when Phase 1 closes.
 
+> Validation update, 2026-08-14: Slices 0–7 have produced an unreleased
+> integration candidate, but Phase 1 is not accepted. Do not begin with another
+> exhaustive cross-repository diff audit or treat implementation-agent test
+> reports as product acceptance. Current validation proceeds outside-in from
+> real App use and Information Architecture observation under
+> [phase-1-product-validation-and-ia.md](phase-1-product-validation-and-ia.md).
+> Findings from that session determine any corrective implementation slices;
+> release and closeout remain blocked until the same learner journeys pass on
+> the installed, pinned stack.
+
 ## Objective
 
 Deliver one material-centered, single-device loop in which a learner can open or
