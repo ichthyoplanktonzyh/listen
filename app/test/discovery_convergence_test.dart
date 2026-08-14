@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/discovery_view_model.dart';
 import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
@@ -7,14 +9,21 @@ import 'package:llplayer_next/models/discovery.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/source_identity.dart';
 import 'package:llplayer_next/services/acquisition_ledger.dart';
+import 'package:llplayer_next/services/document_intake_flow.dart';
+import 'package:llplayer_next/services/document_intake_service.dart';
 
 import 'discovery_test_helpers.dart';
+import 'support/document_session_test_fakes.dart';
 import 'support/learning_material_fixtures.dart';
 
 /// Slice 5 convergence: document items travel the same acquisition path as
 /// media, recognition keys are source-scoped, and Source Identity makes a
 /// re-read of the same feed item resolve the same Material instead of
 /// offering a second download.
+///
+/// Slice 6: an article is a document, so it enters through the document
+/// intake — the same decode, binding, and Core create a local file travels —
+/// and is never registered as media.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -99,10 +108,15 @@ void main() {
   });
 
   group('a document item is acquired like a file', () {
-    (DiscoveryViewModel, TestMediaImportRepository, TestMediaLibraryRepository)
-    articleViewModel({AcquisitionLedger? ledger}) {
+    (
+      DiscoveryViewModel,
+      TestMediaImportRepository,
+      TestMediaLibraryRepository,
+      _TestMaterialRepository,
+    ) articleViewModel({AcquisitionLedger? ledger}) {
       final imports = TestMediaImportRepository();
       final library = TestMediaLibraryRepository();
+      final materials = _TestMaterialRepository();
       final vm = DiscoveryViewModel(
         TestDiscoveryRepository(
           sources: [testContentSource('c-doc', name: 'Blog')],
@@ -113,38 +127,122 @@ void main() {
         imports,
         library,
         ledger,
+        null,
+        materials,
+        _TestDocumentIntakeFileService(
+          utf8.encode('<article><h1>The first article</h1></article>'),
+        ),
+        DocumentIntakeFlow(
+          materialRepository: materials,
+          codec: LocalDocumentIntakeCodec(),
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
       );
       addTearDown(vm.dispose);
-      return (vm, imports, library);
+      return (vm, imports, library, materials);
     }
 
-    testWidgets('acquireForLearning fetches the article and adopts it', (
-      tester,
-    ) async {
-      final (vm, imports, _) = articleViewModel();
-      await tester.runAsync(() => vm.load());
-      await tester.pump(const Duration(milliseconds: 20));
+    testWidgets(
+      'acquireForLearning fetches the article and takes it in as a document',
+      (tester) async {
+        final (vm, imports, library, materials) = articleViewModel();
+        await tester.runAsync(() => vm.load());
+        await tester.pump(const Duration(milliseconds: 20));
 
-      final path = await tester.runAsync(
-        () => vm.acquireForLearning('i-doc-1'),
-      );
+        final target = await tester.runAsync(
+          () => vm.acquireForLearning('i-doc-1'),
+        );
 
-      expect(path, '/path/to/downloaded/[i-doc-1].html');
-      expect(imports.articleRequests, ['https://blog.example.com/i-doc-1']);
-      expect(imports.downloadedUrls, isEmpty);
-      expect(imports.enclosureRequests, isEmpty);
-      expect(
-        vm.state.acquisitionStateOf('i-doc-1'),
-        DiscoveryItemState.available,
-      );
-      expect(vm.localPathFor('i-doc-1'), path);
-    });
+        expect(target?.materialId, 'material-doc-1');
+        expect(imports.articleRequests, ['https://blog.example.com/i-doc-1']);
+        expect(imports.downloadedUrls, isEmpty);
+        expect(imports.enclosureRequests, isEmpty);
+        expect(
+          vm.state.acquisitionStateOf('i-doc-1'),
+          DiscoveryItemState.available,
+        );
+        // A document item is never media: no registration, no media row.
+        expect(await library.listMediaLibrary(), isEmpty);
+        expect(materials.createCalls, 1);
+        final created = materials.lastCreateInput!;
+        expect(created.documentRenditions, hasLength(1));
+        expect(created.sourceAssets, hasLength(1));
+        expect(created.mediaRenditions, isEmpty);
+        // Intake never implies retention.
+        expect(
+          materials.lastRetainDirective,
+          const MaterialRetainExplicit(false),
+        );
+        expect(vm.localPathFor('i-doc-1'), isNull);
+      },
+    );
+
+    testWidgets(
+      'a second read of the same article resolves the recorded material '
+      'without a second download',
+      (tester) async {
+        final identities = _TestSourceIdentityRepository();
+        identities.mappings['c-doc\u0000i-doc-1'] = SourceIdentityMapping(
+          sourceId: 'c-doc',
+          itemId: 'i-doc-1',
+          evidence: const [],
+          materialId: 'material-doc-1',
+          materialRevisionId: 'revision-1',
+          mappedAtMs: 0,
+        );
+        final materials = _TestMaterialRepository();
+        materials.material = materialDetails(
+          materialId: 'material-doc-1',
+          documentRenditions: [documentRendition(id: 'doc-1')],
+        );
+        final vm = DiscoveryViewModel(
+          TestDiscoveryRepository(
+            sources: [testContentSource('c-doc', name: 'Blog')],
+            entries: {
+              'c-doc': [testArticleItem('i-doc-1', 'c-doc')],
+            },
+          ),
+          TestMediaImportRepository(),
+          TestMediaLibraryRepository(),
+          null,
+          identities,
+          materials,
+          _TestDocumentIntakeFileService(
+            utf8.encode('<article><h1>The first article</h1></article>'),
+          ),
+          DocumentIntakeFlow(
+            materialRepository: materials,
+            codec: LocalDocumentIntakeCodec(),
+            store: FakeManagedAssetStoreService(),
+            referenceStore: FakeDocumentReferenceStore(),
+          ),
+        );
+        addTearDown(vm.dispose);
+        await tester.runAsync(() async {
+          await vm.load();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        });
+
+        expect(
+          vm.state.acquisitionStateOf('i-doc-1'),
+          DiscoveryItemState.available,
+          reason: 'the canonical key resolves to the recorded material, so a '
+              're-read of the same article never offers a second download',
+        );
+        // Opening resolves the material, not a media path.
+        final target = await tester.runAsync(
+          () => vm.acquireForLearning('i-doc-1'),
+        );
+        expect(target?.materialId, 'material-doc-1');
+      },
+    );
 
     testWidgets('subscription alone never acquires, retains or installs', (
       tester,
     ) async {
       // The catalog lists the item; nothing happens until the learner chooses.
-      final (vm, imports, library) = articleViewModel();
+      final (vm, imports, library, _) = articleViewModel();
       await tester.runAsync(() => vm.load());
       await tester.pump(const Duration(milliseconds: 20));
 
@@ -359,8 +457,29 @@ void main() {
   });
 }
 
-class _TestSourceIdentityRepository implements SourceIdentityRepository {
-  final mappings = <String, SourceIdentityMapping>{};
+/// Answers [readDocumentFile] with the fixed article bytes, so the intake
+/// path is exercised with a real file read shape.
+class _TestDocumentIntakeFileService implements DocumentIntakeFileService {
+  _TestDocumentIntakeFileService(this.bytes);
+
+  final List<int> bytes;
+  final readPaths = <String>[];
+
+  @override
+  Future<DocumentFileRead> readDocumentFile(String path) async {
+    readPaths.add(path);
+    return DocumentFileData(path: path, bytes: bytes);
+  }
+
+  @override
+  Future<DocumentFileRead> pickAndReadDocumentFile() async =>
+      const DocumentFileCancelled();
+
+  @override
+  String basename(String path) => path.split('/').last;
+}
+
+class _TestSourceIdentityRepository implements SourceIdentityRepository {  final mappings = <String, SourceIdentityMapping>{};
   final recorded = <SourceIdentityMapping>[];
   bool failResolve = false;
 
@@ -405,6 +524,10 @@ class _TestMaterialRepository implements LearningMaterialRepository {
   /// What [readLearningMaterial] returns.
   MaterialDetails? material;
 
+  int createCalls = 0;
+  CreateLearningMaterialInput? lastCreateInput;
+  MaterialRetainDirective? lastRetainDirective;
+
   @override
   bool get isAvailable => true;
 
@@ -419,7 +542,27 @@ class _TestMaterialRepository implements LearningMaterialRepository {
   Future<MaterialDetails> createLearningMaterial(
     CreateLearningMaterialInput input, {
     MaterialRetainDirective retain = const MaterialRetainOmitted(),
-  }) async => throw UnimplementedError();
+  }) async {
+    createCalls += 1;
+    lastCreateInput = input;
+    lastRetainDirective = retain;
+    return materialDetails(
+      materialId: 'material-doc-1',
+      title: input.title,
+      sourceAssets: [
+        for (final asset in input.sourceAssets)
+          sourceAsset(sha256Digest: asset.sha256Digest),
+      ],
+      documentRenditions: [
+        for (final rendition in input.documentRenditions)
+          documentRendition(
+            id: 'doc-1',
+            digest: rendition.digest,
+            byteSize: rendition.byteSize,
+          ),
+      ],
+    );
+  }
 
   @override
   Future<MaterialDetails> readLearningMaterial(String materialId) async {

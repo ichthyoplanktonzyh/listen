@@ -270,6 +270,11 @@ final class DocumentFileFailure extends DocumentFileRead {
 abstract interface class DocumentIntakeFileService {
   Future<DocumentFileRead> pickAndReadDocumentFile();
 
+  /// Reads an already-known document file (e.g. a downloaded article page),
+  /// with the same size cap and the same typed read failures as the picker
+  /// path. A path with no supported extension fails as unsupported.
+  Future<DocumentFileRead> readDocumentFile(String path);
+
   String basename(String path);
 }
 
@@ -293,19 +298,41 @@ final class LocalDocumentIntakeFileService
     );
     final file = await openFile(acceptedTypeGroups: [group]);
     if (file == null) return const DocumentFileCancelled();
+    return _read(file.path, file.length, file.readAsBytes);
+  }
+
+  @override
+  Future<DocumentFileRead> readDocumentFile(String path) async {
+    if (!File(path).existsSync()) {
+      return const DocumentFileFailure(
+        DocumentIntakeFailure(DocumentIntakeFailureKind.unreadable),
+      );
+    }
+    return _read(
+      path,
+      () => File(path).length(),
+      () => File(path).readAsBytes(),
+    );
+  }
+
+  Future<DocumentFileRead> _read(
+    String path,
+    Future<int> Function() length,
+    Future<List<int>> Function() readAsBytes,
+  ) async {
     try {
-      final format = formatForPath(file.path);
+      final format = formatForPath(path);
       final limit = format == null
           ? maxTextDocumentBytes
           : maxDocumentBytesFor(format);
-      final length = await file.length();
-      if (length > limit) {
+      final size = await length();
+      if (size > limit) {
         return const DocumentFileFailure(
           DocumentIntakeFailure(DocumentIntakeFailureKind.tooLarge),
         );
       }
-      final bytes = await file.readAsBytes();
-      return DocumentFileData(path: file.path, bytes: bytes);
+      final bytes = await readAsBytes();
+      return DocumentFileData(path: path, bytes: bytes);
     } on FileSystemException {
       return const DocumentFileFailure(
         DocumentIntakeFailure(DocumentIntakeFailureKind.unreadable),

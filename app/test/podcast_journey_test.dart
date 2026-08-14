@@ -134,7 +134,7 @@ void main() {
           () => vm.acquireForLearning('i-bbc-1'),
         );
 
-        expect(path, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(path?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
         expect(imports.enclosureRequests, hasLength(1));
         expect(imports.downloadedUrls, isEmpty);
         expect(

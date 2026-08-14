@@ -297,7 +297,10 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
   DiscoveryItem _itemFrom(ParsedFeedItem item, String sourceId) {
     final videoId = item.id;
     return DiscoveryItem(
-      id: videoId,
+      // A video id the feed declared is the canonical identity; an entry
+      // without one gets an explicitly marked source-scoped surrogate key —
+      // never the page URL dressed up as a video id.
+      id: videoId ?? sourceScopedSurrogateId(sourceId: sourceId, item: item),
       sourceId: sourceId,
       title: item.title,
       description: item.description,
@@ -312,7 +315,9 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
       viewCount: item.viewCount,
       acquisition: AcquisitionMode.externalTool,
       contentKind: ItemContentKind.video,
-      mediaUrl: 'https://www.youtube.com/watch?v=$videoId',
+      mediaUrl: videoId == null
+          ? null
+          : 'https://www.youtube.com/watch?v=$videoId',
       entryUrl: item.entryUrl,
     );
   }

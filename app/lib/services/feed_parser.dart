@@ -1,4 +1,9 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:xml/xml.dart';
+
+String _sha256Hex(String value) => sha256.convert(utf8.encode(value)).toString();
 
 /// Parses RSS and Atom feeds into a typed, format-agnostic feed.
 ///
@@ -45,9 +50,11 @@ class ParsedFeed {
 
 /// One item of a parsed feed.
 ///
-/// [id] is the source-scoped canonical item identity: the feed's `<guid>` or
-/// Atom `<id>` when present, otherwise the stable URL the feed offered. It is
-/// never treated as evidence about the bytes themselves.
+/// [id] is the publisher-declared item identity — the feed's `<guid>` or Atom
+/// `<id>` — when the feed offered one, and null when it did not. A null id is
+/// not an identity the parser may invent: the discovery layer turns it into an
+/// explicitly marked `source_scoped_surrogate` scoped to the feed it came
+/// from, never into the entry URL masquerading as a feed item id.
 class ParsedFeedItem {
   const ParsedFeedItem({
     required this.id,
@@ -64,7 +71,11 @@ class ParsedFeedItem {
     this.viewCount = 0,
   });
 
-  final String id;
+  /// The feed-declared GUID or Atom id, or null when the feed published none.
+  /// Null means the publisher gave this item no stable identity; the caller
+  /// must synthesize a source-scoped surrogate key (never reuse this field
+  /// for a URL).
+  final String? id;
   final String title;
   final String description;
 
@@ -126,7 +137,28 @@ const feedItemLimit = 200;
 String feedItemCloseTag(FeedFormat format) => switch (format) {
   FeedFormat.rss => '</item>',
   FeedFormat.atom => '</entry>',
-};ParsedFeed parseFeed(
+};
+
+/// The stable surrogate item key for a feed item that declared no GUID or
+/// Atom id.
+///
+/// A feed that omits its item ids leaves the app no honest identity to reuse,
+/// so the key is explicit about what it is — `source_scoped_surrogate:` — and
+/// about where it came from: it hashes the source plus the publisher's stable
+/// reference to the item (the entry URL, or the enclosure URL, or the
+/// title-and-date when neither URL exists). Scoping by source means the same
+/// URL in two feeds never collides; hashing the reference means a re-read of
+/// the same item produces the same key, while a publisher who changes the
+/// reference changes the key — the app then treats it as a different item,
+/// never as metadata drift on the same one.
+String sourceScopedSurrogateId({
+  required String sourceId,
+  required ParsedFeedItem item,
+}) {
+  final material = item.entryUrl ?? item.enclosureUrl;
+  final basis = material ?? '${item.title}\u0000${item.publishedOn}';
+  return 'source_scoped_surrogate:${_sha256Hex('$sourceId\u0000$basis')}';
+}ParsedFeed parseFeed(
   String body, {
   int maxItems = 0,
   FeedFormat? assumeFormat,
@@ -259,7 +291,7 @@ ParsedFeedItem _rssItemFrom(XmlElement item) {
   final link = _text(item, 'link');
 
   return ParsedFeedItem(
-    id: guid.isNotEmpty ? guid : (enclosureUrl ?? link),
+    id: guid.isNotEmpty ? guid : null,
     title: _text(item, 'title'),
     description: _firstText(item, const [
       'itunes:subtitle',
@@ -302,8 +334,9 @@ ParsedFeedItem _atomItemFrom(XmlElement entry) {
 
   return ParsedFeedItem(
     // YouTube's Atom ids are `yt:video:ABC123`; the `<yt:videoId>` is the
-    // canonical identity the rest of the app already speaks.
-    id: videoId.isNotEmpty ? videoId : (id.isNotEmpty ? id : link),
+    // canonical identity the rest of the app already speaks. Without either
+    // the entry declares no identity and the caller synthesizes a surrogate.
+    id: videoId.isNotEmpty ? videoId : (id.isNotEmpty ? id : null),
     title: _atomText(entry, 'title'),
     description: _atomText(entry, 'summary'),
     enclosureUrl: media?.url,

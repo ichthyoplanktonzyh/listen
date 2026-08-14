@@ -176,6 +176,18 @@ class ContentSource {
   final String? avatarUrl;
 }
 
+/// What acquiring an item's content lands on: registered media bytes, or a
+/// Material holding the document. Exactly one field is non-null; the surface
+/// opens accordingly.
+final class DiscoveryOpenTarget {
+  const DiscoveryOpenTarget.media(String this.mediaPath) : materialId = null;
+
+  const DiscoveryOpenTarget.document(String this.materialId) : mediaPath = null;
+
+  final String? mediaPath;
+  final String? materialId;
+}
+
 /// A discovered item of a [ContentSource].
 ///
 /// Every feed-derived field is typed and never substituted for another:

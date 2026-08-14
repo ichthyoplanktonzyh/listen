@@ -9,6 +9,7 @@ import 'package:llplayer_next/models/document_session.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/services/document_decoding/document_format.dart';
+import 'package:llplayer_next/services/document_intake_flow.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 
 import 'support/document_session_test_fakes.dart';
@@ -60,9 +61,12 @@ void main() {
             bytes: utf8.encode('First line\nSecond line'),
           ),
         ]),
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
@@ -96,9 +100,12 @@ void main() {
       final controller = DocumentSessionController(
         materialRepository: repo,
         fileService: FakeDocumentIntakeFileService(),
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
@@ -126,9 +133,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: files,
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -152,9 +162,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -177,9 +190,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -202,9 +218,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -227,9 +246,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -264,9 +286,12 @@ void main() {
         fileService: FakeDocumentIntakeFileService([
           DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
         ]),
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
@@ -313,9 +338,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -335,9 +363,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: files,
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -360,9 +391,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: files,
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
 
@@ -380,9 +414,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -401,9 +438,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/   .txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -425,9 +465,12 @@ void main() {
           bytes: utf8.encode('Body'),
         ),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -473,9 +516,12 @@ void main() {
         fileService: FakeDocumentIntakeFileService([
           DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
         ]),
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
@@ -517,9 +563,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -540,9 +589,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
       refreshLibrary: () async => refreshes += 1,
     );
@@ -568,9 +620,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
       refreshLibrary: () async => refreshes += 1,
     );
@@ -603,9 +658,12 @@ void main() {
         fileService: FakeDocumentIntakeFileService([
           DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
         ]),
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
@@ -635,9 +693,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -661,9 +722,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -690,9 +754,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -720,9 +787,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/old.txt', bytes: utf8.encode('Old body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -778,9 +848,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService([gated]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -810,9 +883,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -855,9 +931,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
 
@@ -902,9 +981,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: files,
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -924,9 +1006,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -949,9 +1034,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -968,9 +1056,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -995,9 +1086,12 @@ void main() {
       final controller = DocumentSessionController(
         materialRepository: repo,
         fileService: FakeDocumentIntakeFileService(),
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
@@ -1027,9 +1121,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
+      ),
         sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -1066,9 +1163,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -1093,9 +1193,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -1125,9 +1228,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);

@@ -8,10 +8,9 @@ import '../models/document_session.dart';
 import '../models/learning_material.dart';
 import '../models/personal_library.dart';
 import '../services/document_decoding/document_format.dart';
+import '../services/document_intake_flow.dart';
 import '../services/document_intake_service.dart';
-import '../services/document_reference_store.dart';
 import '../services/document_source_resolver.dart';
-import '../services/managed_asset_store.dart';
 
 /// Owns one direct document session (Slice 2): intake (file or pasted text),
 /// material creation through the Core 4.0 Source Asset / Document Rendition
@@ -19,18 +18,16 @@ import '../services/managed_asset_store.dart';
 /// exact-byte resolution backing the direct view.
 ///
 /// The controller holds no transport, file-system, or picker implementation:
-/// [DocumentIntakeFileService], [LearningMaterialRepository], the managed
-/// asset store, and the reference map are injected boundaries. Everything here
-/// is latest-request-wins: every open intent and [close] bumps a session
-/// generation, and an async result that arrives late — after a newer intent,
-/// after [close], or after [dispose] — never writes state.
+/// [DocumentIntakeFileService], [DocumentIntakeFlow], and the reference map
+/// are injected boundaries. Everything here is latest-request-wins: every
+/// open intent and [close] bumps a session generation, and an async result
+/// that arrives late — after a newer intent, after [close], or after
+/// [dispose] — never writes state.
 class DocumentSessionController extends ChangeNotifier {
   DocumentSessionController({
     required this.materialRepository,
     required this.fileService,
-    required this.codec,
-    required this.store,
-    required this.referenceStore,
+    required this.intakeFlow,
     required this.sourceResolver,
     this.refreshLibrary,
     this.referenceInPlace = false,
@@ -38,9 +35,10 @@ class DocumentSessionController extends ChangeNotifier {
 
   final LearningMaterialRepository materialRepository;
   final DocumentIntakeFileService fileService;
-  final DocumentIntakeCodec codec;
-  final ManagedAssetStoreService store;
-  final DocumentReferenceStore referenceStore;
+
+  /// The shared intake: decode, bind, create, exact rendition match — the
+  /// same path a discovered article travels.
+  final DocumentIntakeFlow intakeFlow;
 
   /// Resolves a Source Asset's exact bytes for the direct view.
   final DocumentSourceResolver sourceResolver;
@@ -376,12 +374,14 @@ class DocumentSessionController extends ChangeNotifier {
     required DocumentFormat format,
     String? sourcePath,
   }) async {
-    DocumentIntakeInput input;
+    final DocumentIntakeOutcome outcome;
     try {
-      input = await codec.decodeDocument(
-        bytes: bytes,
+      outcome = await intakeFlow.takeInDocument(
         title: title,
+        bytes: bytes,
         format: format,
+        sourcePath: sourcePath,
+        referenceInPlace: referenceInPlace,
       );
     } on DocumentIntakeFailure catch (failure) {
       if (_stale(generation)) return;
@@ -391,98 +391,12 @@ class DocumentSessionController extends ChangeNotifier {
         ),
       );
       return;
-    }
-
-    // Binding decision: the default Keep copies the exact bytes into the
-    // managed store (verified before the create); Reference in Place records
-    // the original location and binds by the app-owned reference key.
-    var binding = const SourceAssetBinding(
-      type: SourceAssetBindingType.managed,
-    );
-    String? createdStoreCopy;
-    try {
-      if (referenceInPlace && sourcePath != null) {
-        await referenceStore.save(input.sha256Digest, sourcePath);
-        binding = SourceAssetBinding(
-          type: SourceAssetBindingType.referenced,
-          reference: input.sha256Digest,
-        );
-      } else {
-        // Pasted text (or a file with no location) is always copied: there is
-        // no original location to reference.
-        referenceInPlace = false;
-        final copy = await store.copyBytesIntoStore(
-          bytes: bytes,
-          mediaKind: 'document',
-        );
-        createdStoreCopy = copy.createdNew ? copy.path : null;
-      }
-    } on Exception catch (error) {
-      if (_stale(generation)) return;
-      // The store or reference map is unavailable: the document must not
-      // appear to have been kept. The typed failure is honest and the raw
-      // error stays behind the disclosure.
-      _setState(
-        DocumentSessionFailed(
-          DocumentSessionFailure(
-            DocumentSessionFailureKind.apiFailure,
-            apiFailure: materialRepository.failureDetail(error),
-          ),
-        ),
-      );
-      return;
-    }
-
-    final MaterialDetails details;
-    try {
-      details = await materialRepository.createLearningMaterial(
-        CreateLearningMaterialInput(
-          title: input.title,
-          sourceAssets: [
-            SourceAssetInput(
-              mediaType: input.mediaType,
-              byteLength: input.byteLength,
-              sha256Digest: input.sha256Digest,
-              // The binding is an app-owned fact, never a file location the
-              // wire may dereference.
-              binding: binding,
-            ),
-          ],
-          documentRenditions: [
-            // The Source Document Rendition is the exact Source Asset bytes:
-            // same digest, same size, bound to the Source Asset. The material
-            // never carries a fabricated extracted-text body.
-            DocumentRenditionInput(
-              mediaType: input.mediaType,
-              digest: input.sha256Digest,
-              byteSize: input.byteLength,
-              sourceAssetIndex: 0,
-            ),
-          ],
-          mediaRenditions: const [],
-        ),
-        retain: const MaterialRetainExplicit(false),
-      );
     } catch (error) {
-      // The create failed: roll back the store copy only when this call
-      // created it (a deduplicated pre-existing target is shared and stays),
-      // and drop the reference mapping for a failed referenced create.
-      final copy = createdStoreCopy;
-      if (copy != null) {
-        try {
-          await store.deleteStoreCopy(copy);
-        } on Exception {
-          // Rollback is best effort; the failure surface stays typed.
-        }
-      }
-      if (binding.type == SourceAssetBindingType.referenced) {
-        try {
-          await referenceStore.remove(input.sha256Digest);
-        } on Exception {
-          // Best effort.
-        }
-      }
       if (_stale(generation)) return;
+      // A failed intake (store/reference map unavailable, Core rejected the
+      // create, a response without an exact byte match) has rolled back what
+      // it created. The typed failure is honest and the raw error stays
+      // behind the disclosure.
       _setState(
         DocumentSessionFailed(
           DocumentSessionFailure(
@@ -494,16 +408,15 @@ class DocumentSessionController extends ChangeNotifier {
       return;
     }
     if (_stale(generation)) return;
-    // The create succeeded; a fresh store copy is now owned by the material
-    // and must not be rolled back.
-    createdStoreCopy = null;
-    final rendition = matchingDocumentRendition(details, input.sha256Digest);
+    final details = outcome.details;
+    final rendition = DocumentIntakeFlow.matchingDocumentRendition(
+      details,
+      outcome.sha256Digest,
+    );
     if (rendition == null) {
-      // The response holds no source document rendition bound to the exact
-      // submitted bytes. Refuse to guess: showing another rendition's body as
-      // the picked document breaks direct-view integrity. The diagnostic
-      // travels only inside the typed ApiFailure, behind the explicit
-      // disclosure; ordinary prose stays localized and stable.
+      // Unreachable: the flow refuses a response without an exact match. Kept
+      // as a typed guard so a future caller change cannot render another
+      // rendition's body as the picked document.
       _setState(
         DocumentSessionFailed(
           DocumentSessionFailure(
@@ -542,24 +455,6 @@ class DocumentSessionController extends ChangeNotifier {
     DocumentIntakeFailureKind.encrypted =>
       DocumentSessionFailureKind.encrypted,
   };
-
-  /// The created material's source document rendition whose exact bytes are
-  /// the submitted Source Asset's, or null when no rendition matches.
-  ///
-  /// Core 4.0 may converge an equal-content create onto an already retained
-  /// material; its persisted revision then holds the same bytes, so an exact
-  /// digest match still exists. A response without an exact match must be
-  /// refused by the caller, never guessed.
-  static DocumentRendition? matchingDocumentRendition(
-    MaterialDetails details,
-    String sourceSha256,
-  ) {
-    for (final rendition in details.currentRevision.documentRenditions) {
-      if (rendition.origin != RenditionOrigin.source) continue;
-      if (rendition.digest == sourceSha256) return rendition;
-    }
-    return null;
-  }
 
   void _setState(DocumentSessionState next) {
     if (_disposed) return;

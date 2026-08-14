@@ -232,6 +232,71 @@ void main() {
   });
 
   test(
+    'an item without a guid gets an explicitly marked surrogate key, never a '
+    'URL pretending to be a feed item id',
+    () async {
+      handler = (request) async {
+        request.response.write(_feedWithoutGuids);
+        await request.response.close();
+      };
+
+      final entries = await repository.entriesFor(feedUrl());
+      expect(entries, hasLength(2));
+
+      final first = entries.first;
+      expect(first.id, startsWith('source_scoped_surrogate:'));
+      // The enclosure URL the surrogate was built from stays typed evidence.
+      expect(
+        first.evidence().where(
+          (field) => field.kind == SourceItemEvidenceKind.enclosureUrl,
+        ),
+        hasLength(1),
+      );
+
+      // Two items with equal bytes from the same feed still get distinct keys
+      // when their references differ, and the same item re-read gets the same
+      // key (identity stability) — asserted by re-fetching a second feed body
+      // that repeats the first item with the same link.
+      handler = (request) async {
+        request.response.write(_feedWithoutGuids);
+        await request.response.close();
+      };
+      repository.forget(feedUrl());
+      final reRead = await repository.entriesFor(feedUrl());
+      expect(reRead.first.id, first.id);
+    },
+  );
+
+  test(
+    'a mixed feed decides modality per item, not from its first item',
+    () async {
+      handler = (request) async {
+        request.response.write(_mixedFeed);
+        await request.response.close();
+      };
+
+      final entries = await repository.entriesFor(feedUrl());
+      expect(entries, hasLength(2));
+
+      // The first item carries an enclosure: it is media, whatever the
+      // channel is called.
+      final media = entries.first;
+      expect(media.acquisition, AcquisitionMode.enclosure);
+      expect(media.contentKind, ItemContentKind.audio);
+      expect(media.mediaUrl, 'https://cdn.example.com/ep001.mp3');
+      expect(media.entryUrl, isNull);
+
+      // The second item is an article link: it is a document, decided by its
+      // own shape, not by the channel's first item.
+      final article = entries.last;
+      expect(article.acquisition, AcquisitionMode.article);
+      expect(article.contentKind, ItemContentKind.article);
+      expect(article.mediaUrl, isNull);
+      expect(article.entryUrl, 'https://blog.example.com/posts/1');
+    },
+  );
+
+  test(
     'an article feed subscribes as a document source, not a podcast',
     () async {
       // The kind is the feed's own fact: enclosures are media, article links
@@ -344,6 +409,52 @@ const _documentFeed = '''
       <title>The first article</title>
       <guid>post-001</guid>
       <pubDate>Tue, 28 Jul 2026 09:00:00 GMT</pubDate>
+      <link>https://blog.example.com/posts/1</link>
+    </item>
+  </channel>
+</rss>
+''';
+
+/// Two items with no guids: an enclosure item and an article item, so both
+/// surrogate shapes and the mixed-feed rule are exercised from one fixture.
+const _feedWithoutGuids = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>No Guids Here</title>
+    <language>en</language>
+    <item>
+      <title>An episode</title>
+      <pubDate>Tue, 28 Jul 2026 09:00:00 GMT</pubDate>
+      <enclosure url="https://cdn.example.com/ep001.mp3" length="8123456" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>An article</title>
+      <pubDate>Wed, 29 Jul 2026 09:00:00 GMT</pubDate>
+      <link>https://blog.example.com/posts/1</link>
+    </item>
+  </channel>
+</rss>
+''';
+
+/// One enclosure item and one article item in the same channel: modality is
+/// each item's own fact.
+const _mixedFeed = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Mixed</title>
+    <language>en</language>
+    <item>
+      <title>An episode</title>
+      <guid>mix-1</guid>
+      <pubDate>Tue, 28 Jul 2026 09:00:00 GMT</pubDate>
+      <enclosure url="https://cdn.example.com/ep001.mp3" length="8123456" type="audio/mpeg"/>
+    </item>
+    <item>
+      <title>An article</title>
+      <guid>mix-2</guid>
+      <pubDate>Wed, 29 Jul 2026 09:00:00 GMT</pubDate>
       <link>https://blog.example.com/posts/1</link>
     </item>
   </channel>

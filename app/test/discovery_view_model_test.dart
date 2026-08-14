@@ -154,7 +154,7 @@ void main() {
           () => vm.acquireForLearning('i-bbc-1'),
         );
 
-        expect(path, '/library/[i-bbc-1].mp4');
+        expect(path?.mediaPath, '/library/[i-bbc-1].mp4');
         expect(imports.downloadedUrls, isEmpty);
         expect(imports.enclosureRequests, isEmpty);
       },
@@ -219,13 +219,13 @@ void main() {
           () => vm.acquireForLearning('i-bbc-1'),
         );
 
-        expect(path, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(path?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
         expect(imports.downloadedUrls, ['https://www.youtube.com/watch?v=i-bbc-1']);
         expect(
           vm.state.acquisitionStateOf('i-bbc-1'),
           DiscoveryItemState.available,
         );
-        expect(vm.localPathFor('i-bbc-1'), path);
+        expect(vm.localPathFor('i-bbc-1'), path?.mediaPath);
         expect(vm.durationMsFor('i-bbc-1'), 400660);
         expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
       },
@@ -329,7 +329,7 @@ void main() {
           return result;
         });
 
-        expect(path, '/path/to/[i-bbc-1].mp4');
+        expect(path?.mediaPath, '/path/to/[i-bbc-1].mp4');
         expect(imports.downloadedUrls, hasLength(1));
       expect(
         vm.state.acquisitionStateOf('i-bbc-1'),
@@ -356,7 +356,7 @@ void main() {
           return vm.acquireForLearning('i-bbc-1');
         });
 
-        expect(path, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(path?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
         expect(
           imports.downloadedUrls,
           hasLength(1),
@@ -418,7 +418,7 @@ void main() {
       final retry = await tester.runAsync(
         () => vm.acquireForLearning('i-bbc-1'),
       );
-      expect(retry, '/path/to/downloaded/[i-bbc-1].mp4');
+      expect(retry?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
       expect(imports.downloadedUrls, hasLength(2));
       expect(
         vm.state.acquisitionStateOf('i-bbc-1'),
@@ -465,11 +465,11 @@ void main() {
       );
 
       // Start Learning must not resurrect the stale path from an old answer.
-      final path = await tester.runAsync(
+      final target = await tester.runAsync(
         () => vm.acquireForLearning('i-bbc-1'),
       );
-      expect(path, isNotNull);
-      expect(path, isNot('/library/[i-bbc-1].mp4'));
+      expect(target, isNotNull);
+      expect(target?.mediaPath, isNot('/library/[i-bbc-1].mp4'));
       expect(
         vm.state.acquisitionStateOf('i-bbc-1'),
         DiscoveryItemState.available,

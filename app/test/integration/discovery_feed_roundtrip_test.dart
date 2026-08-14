@@ -135,7 +135,8 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 300));
 
       final localPath = await first.acquireForLearning('ep-001');
-      expect(localPath, isNotNull, reason: 'the enclosure must land locally');
+      expect(localPath?.mediaPath, isNotNull,
+          reason: 'the enclosure must land locally');
       expect(
         first.state.acquisitionStateOf('ep-001'),
         DiscoveryItemState.available,
@@ -146,7 +147,7 @@ void main() {
       // Re-registering the same bytes is Core's fingerprint convergence: it
       // returns the very media row adoption registered, now retained.
       final media = await mediaLibrary.registerMedia(
-        localPath!,
+        localPath!.mediaPath!,
         retain: true,
       );
       final mediaId = media.id;
@@ -201,7 +202,7 @@ void main() {
         DiscoveryItemState.available,
         reason: 'the reopened session recognises the acquired item',
       );
-      expect(second.localPathFor('ep-001'), localPath);
+      expect(second.localPathFor('ep-001'), localPath.mediaPath);
       expect(await materials.listLearningMaterials(), hasLength(1));
 
       // The canonical key now resolves through Core Source Identity: the

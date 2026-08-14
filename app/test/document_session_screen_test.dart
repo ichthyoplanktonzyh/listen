@@ -12,6 +12,7 @@ import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/personal_library.dart';
 import 'package:llplayer_next/screens/document_session_screen.dart';
+import 'package:llplayer_next/services/document_intake_flow.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/common/api_failure_disclosure.dart';
@@ -87,9 +88,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -117,9 +121,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: files,
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -143,9 +150,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
@@ -192,9 +202,12 @@ void main() {
           bytes: utf8.encode('第一段。\n\nSecond paragraph with trailing space. '),
         ),
       ]),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: _sourceResolver(const ['第一段。\n\nSecond paragraph with trailing space. ']),
     );
     addTearDown(controller.dispose);
@@ -223,9 +236,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
@@ -250,9 +266,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: repo,
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -289,9 +308,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
@@ -351,9 +373,12 @@ void main() {
     final controller = DocumentSessionController(
       materialRepository: FakeLearningMaterialRepository(),
       fileService: FakeDocumentIntakeFileService(),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: FakeLearningMaterialRepository(),
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: _sourceResolver(
         const ['English document body', '中文文档正文'],
       ),
@@ -393,12 +418,15 @@ void main() {
             bytes: utf8.encode('A long document line '.toUpperCase() * 40),
           ),
         ]),
-        codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
-      sourceResolver: _sourceResolver(
-        ['A LONG DOCUMENT LINE '.toUpperCase() * 40],
-      ),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
+        sourceResolver: _sourceResolver(
+          ['A LONG DOCUMENT LINE '.toUpperCase() * 40],
+        ),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_screen(controller));
@@ -419,9 +447,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);
@@ -464,9 +495,12 @@ void main() {
       fileService: FakeDocumentIntakeFileService([
         DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
       ]),
-      codec: codec,
-      store: FakeManagedAssetStoreService(),
-      referenceStore: FakeDocumentReferenceStore(),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
       sourceResolver: _sourceResolver(const ['Body']),
     );
     addTearDown(controller.dispose);

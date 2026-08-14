@@ -44,10 +44,14 @@ void main() {
       expect(item.durationMs, isNull);
     });
 
-    test('falls back to the enclosure URL when an item has no guid', () {
+    test('an item without a guid declares no identity at all', () {
       final item = parseFeed(_feed).items[2];
 
-      expect(item.id, 'https://cdn.example.com/ep003.mp3');
+      // A feed that omits its guid leaves the item with no stable identity;
+      // the parser must not invent one from the enclosure URL. The discovery
+      // layer synthesizes an explicitly marked surrogate key instead.
+      expect(item.id, isNull);
+      expect(item.enclosureUrl, 'https://cdn.example.com/ep003.mp3');
     });
 
     test(
@@ -150,6 +154,86 @@ void main() {
 
       expect(feed.format, FeedFormat.atom);
       expect(feed.items.single.id, 'e-1');
+    });
+  });
+
+  group('sourceScopedSurrogateId', () {
+    final itemWithoutId = ParsedFeedItem(
+      id: null,
+      title: 'No id here',
+      description: '',
+      publishedOn: '2026-08-01',
+      entryUrl: 'https://blog.example.com/posts/9',
+    );
+
+    test('marks the key and binds it to the source and the entry reference', () {
+      final key = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/blog.xml',
+        item: itemWithoutId,
+      );
+
+      expect(key, startsWith('source_scoped_surrogate:'));
+      expect(key.length, 'source_scoped_surrogate:'.length + 64);
+    });
+
+    test('the same item re-read yields the same key', () {
+      final first = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/blog.xml',
+        item: itemWithoutId,
+      );
+      final second = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/blog.xml',
+        item: itemWithoutId,
+      );
+
+      expect(second, first);
+    });
+
+    test('is scoped to the source: the same entry in two feeds never collides',
+        () {
+      final a = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/a.xml',
+        item: itemWithoutId,
+      );
+      final b = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/b.xml',
+        item: itemWithoutId,
+      );
+
+      expect(b, isNot(a));
+    });
+
+    test('a changed entry reference yields a new key, never a silent merge', () {
+      final original = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/blog.xml',
+        item: itemWithoutId,
+      );
+      final changed = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/blog.xml',
+        item: ParsedFeedItem(
+          id: null,
+          title: 'No id here',
+          description: '',
+          publishedOn: '2026-08-01',
+          entryUrl: 'https://blog.example.com/posts/10',
+        ),
+      );
+
+      expect(changed, isNot(original));
+    });
+
+    test('falls back to title and date when the item has no URL at all', () {
+      final key = sourceScopedSurrogateId(
+        sourceId: 'https://feeds.example.com/blog.xml',
+        item: ParsedFeedItem(
+          id: null,
+          title: 'Notes only',
+          description: '',
+          publishedOn: '2026-08-02',
+        ),
+      );
+
+      expect(key, startsWith('source_scoped_surrogate:'));
     });
   });
 

@@ -304,6 +304,13 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
     required bool retain,
   }) async {
     if (failRegister) throw StateError('register failed');
+    // A document must never be registered as media: the fake answers the way
+    // Core would refuse bytes it cannot probe as a media file. The article
+    // path never reaches here — a test that does reach it with an .html path
+    // has taken the wrong intake.
+    if (path.endsWith('.html') || path.endsWith('.htm')) {
+      throw StateError('refused: $path is a document, not media');
+    }
     final regExp = RegExp(r'\[([^\]]+)\]');
     final match = regExp.firstMatch(path);
     final entryId = match?.group(1) ?? 'i-bbc-1';

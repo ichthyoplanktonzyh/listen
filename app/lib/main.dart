@@ -101,6 +101,7 @@ import 'services/external_tools.dart';
 import 'services/file_transfer_service.dart';
 import 'services/fullscreen_window.dart';
 import 'services/acquisition_ledger.dart';
+import 'services/document_intake_flow.dart';
 import 'services/document_intake_service.dart';
 import 'services/document_reference_store.dart';
 import 'services/capability_file_resolver.dart';
@@ -334,6 +335,21 @@ class _PlayerScreenState extends State<PlayerScreen>
     // second download.
     coreRepositories.sourceIdentity,
     coreRepositories.learningMaterial,
+    // The article path shares the document intake a local file travels:
+    // decode, managed binding, Core create, exact rendition match.
+    const LocalDocumentIntakeFileService(),
+    DocumentIntakeFlow(
+      materialRepository: coreRepositories.learningMaterial,
+      codec: LocalDocumentIntakeCodec(
+        pdfTextExtractor: PdfRxPdfTextExtractor(),
+      ),
+      store: managedAssetStore,
+      referenceStore: DocumentReferenceStore(
+        file: DocumentReferenceStore.fileFor(
+          settingsController.settings.supportDirectory,
+        ),
+      ),
+    ),
   )..load();
   late final coreSessionRepository = LocalCoreSessionRepository(coreTransport);
   late final coreRepositories = LocalCoreRepositories(coreTransport);
@@ -1007,6 +1023,17 @@ class _PlayerScreenState extends State<PlayerScreen>
     _expandWorkbench();
   }
 
+  /// Opens an acquired article's Material in the document session: reads the
+  /// Material, projects it as a library row, and opens exactly that document.
+  Future<void> _openDocumentFromDiscovery(String materialId) async {
+    final details = await coreRepositories.learningMaterial.readLearningMaterial(
+      materialId,
+    );
+    await _openDocumentSession(
+      PersonalLibraryEntry(details: details, mediaEntries: const []),
+    );
+  }
+
   Future<void> _runSmokeIfConfigured() async {
     final configuration = widget.smokeLaunchConfiguration.read();
     if (configuration == null) return;
@@ -1183,25 +1210,25 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// entry. Pausing is the flow's job: a document must not play unrelated
   /// media behind itself, and nothing about the media is deleted or moved.
   Future<void> _openDocumentSession([PersonalLibraryEntry? entry]) async {
+    final referenceStore = DocumentReferenceStore(
+      file: DocumentReferenceStore.fileFor(
+        settingsController.settings.supportDirectory,
+      ),
+    );
     final controller = DocumentSessionController(
       materialRepository: coreRepositories.learningMaterial,
       fileService: const LocalDocumentIntakeFileService(),
-      codec: LocalDocumentIntakeCodec(
-        pdfTextExtractor: PdfRxPdfTextExtractor(),
-      ),
-      store: managedAssetStore,
-      referenceStore: DocumentReferenceStore(
-        file: DocumentReferenceStore.fileFor(
-          settingsController.settings.supportDirectory,
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: coreRepositories.learningMaterial,
+        codec: LocalDocumentIntakeCodec(
+          pdfTextExtractor: PdfRxPdfTextExtractor(),
         ),
+        store: managedAssetStore,
+        referenceStore: referenceStore,
       ),
       sourceResolver: LocalDocumentSourceResolver(
         store: managedAssetStore,
-        referenceStore: DocumentReferenceStore(
-          file: DocumentReferenceStore.fileFor(
-            settingsController.settings.supportDirectory,
-          ),
-        ),
+        referenceStore: referenceStore,
         resolveStoreRoot: managedAssetStore.resolveRoot,
       ),
       refreshLibrary: mediaLibraryActions.loadMediaLibrary,
@@ -2474,6 +2501,8 @@ class _PlayerScreenState extends State<PlayerScreen>
             viewModel: discoveryViewModel,
             onOpenMedia: mediaSession.openMedia,
             onPlayMedia: _startLearningFromDiscovery,
+            onOpenDocument: (materialId) =>
+                unawaited(_openDocumentFromDiscovery(materialId)),
           ),
         ),
       ],

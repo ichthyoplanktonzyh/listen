@@ -22,6 +22,7 @@ class DiscoveryHome extends StatelessWidget {
     required this.viewModel,
     required this.onOpenMedia,
     this.onPlayMedia,
+    this.onOpenDocument,
   });
 
   final DiscoveryViewModel viewModel;
@@ -32,24 +33,36 @@ class DiscoveryHome extends StatelessWidget {
 
   final ValueChanged<String>? onPlayMedia;
 
-  /// The single "start learning" intent: acquires local media when needed
-  /// (progress stays on this surface), then hands the path to the workbench
-  /// opener. Returns without opening on failure or cancel — the discovery
-  /// state carries the typed failure for a retry instead.
+  /// Opens an acquired article's Material in the document session. Required
+  /// for document items; without it a document item has nothing to open.
+  final ValueChanged<String>? onOpenDocument;
+
+  /// The single "start learning" intent: acquires local content when needed
+  /// (progress stays on this surface), then hands the openable target — a
+  /// media path or a document Material — to the matching opener. Returns
+  /// without opening on failure or cancel — the discovery state carries the
+  /// typed failure for a retry instead.
   Future<void> _startLearning(
     String entryId, {
     VoidCallback? beforeOpen,
   }) async {
     final play = onPlayMedia;
-    if (play == null) return;
-    final path = await viewModel.acquireForLearning(entryId);
-    if (path == null) return;
+    final openDocument = onOpenDocument;
+    if (play == null && openDocument == null) return;
+    final target = await viewModel.acquireForLearning(entryId);
+    if (target == null) return;
     beforeOpen?.call();
-    play(path);
+    final materialId = target.materialId;
+    if (materialId != null) {
+      openDocument?.call(materialId);
+      return;
+    }
+    play?.call(target.mediaPath!);
   }
 
   @override
   Widget build(BuildContext context) {
+    final canStart = onPlayMedia != null || onOpenDocument != null;
     return ListenableBuilder(
       listenable: viewModel,
       builder: (context, _) {
@@ -100,7 +113,7 @@ class DiscoveryHome extends StatelessWidget {
                     acquisitionFailure: state.acquisitionFailureOf(
                       state.selectedEntry!.id,
                     ),
-                    onStartLearning: onPlayMedia == null
+                    onStartLearning: !canStart
                         ? null
                         : () => _startLearning(state.selectedEntry!.id),
                     onCancelDownload: () =>
@@ -123,6 +136,7 @@ class DiscoveryHome extends StatelessWidget {
   }
 
   void _showDetailBottomSheet(BuildContext context) {
+    final canStart = onPlayMedia != null || onOpenDocument != null;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -174,7 +188,7 @@ class DiscoveryHome extends StatelessWidget {
                           acquisitionFailure: state.acquisitionFailureOf(
                             currentEntry.id,
                           ),
-                          onStartLearning: onPlayMedia == null
+                          onStartLearning: !canStart
                               ? null
                               : () => _startLearning(
                                   currentEntry.id,

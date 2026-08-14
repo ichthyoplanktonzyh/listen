@@ -137,8 +137,13 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
   /// network. The refresh affordance is the caller's to offer.
   void forget(String sourceId) => _feeds.remove(sourceId);
 
-  /// What the feed's items mean: enclosures are media (podcast), article
-  /// links are documents. Decided from the feed's own content, never assumed.
+  /// The channel-level kind, for subscription and shelf presentation.
+  ///
+  /// Items are decided per item (an enclosure is always media, an article
+  /// link is always a document, whatever the channel is called); the channel
+  /// kind is the feed's dominant shape — the first item that carries either,
+  /// or the subscribed kind once a subscription exists. It never stands in
+  /// for an item's own modality.
   ContentSourceKind _kindOf(String sourceId, ParsedFeed feed) {
     if (_customSources.any((source) => source.id == sourceId)) {
       final subscribed = _customSources.firstWhere(
@@ -191,9 +196,26 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
     String feedLanguage,
     ContentSourceKind kind,
   ) {
-    final enclosure = item.enclosureUrl;
+    // The canonical item identity is the feed-declared GUID/Atom id when the
+    // feed published one; an item without one gets an explicitly marked
+    // source-scoped surrogate key — never the entry or enclosure URL dressed
+    // up as a feed item id.
+    final itemId = item.id ?? sourceScopedSurrogateId(sourceId: sourceId, item: item);
+    // Modality is the item's own fact, decided per item: a feed may mix
+    // enclosures and article links, and one item's shape must not be decided
+    // by another item's. A mixed item carrying both prefers the enclosure —
+    // that is the bytes the publisher offered to fetch.
+    final hasEnclosure = item.enclosureUrl != null;
+    final acquisition = switch (kind) {
+      ContentSourceKind.youtube => AcquisitionMode.externalTool,
+      _ => hasEnclosure
+          ? AcquisitionMode.enclosure
+          : item.entryUrl == null
+          ? AcquisitionMode.none
+          : AcquisitionMode.article,
+    };
     return DiscoveryItem(
-      id: item.id,
+      id: itemId,
       sourceId: sourceId,
       title: item.title,
       description: item.description,
@@ -202,23 +224,9 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
       publishedOn: item.publishedOn,
       thumbnailUrl: item.imageUrl,
       viewCount: item.viewCount,
-      acquisition: switch (kind) {
-        ContentSourceKind.podcast => enclosure == null
-            ? AcquisitionMode.none
-            : AcquisitionMode.enclosure,
-        ContentSourceKind.document => item.entryUrl == null
-            ? AcquisitionMode.none
-            : AcquisitionMode.article,
-        ContentSourceKind.youtube => AcquisitionMode.externalTool,
-      },
-      contentKind: switch (kind) {
-        ContentSourceKind.podcast => _kindFor(enclosure == null
-            ? null
-            : item.enclosureType),
-        ContentSourceKind.document => ItemContentKind.article,
-        ContentSourceKind.youtube => ItemContentKind.video,
-      },
-      mediaUrl: kind == ContentSourceKind.podcast ? enclosure : null,
+      acquisition: acquisition,
+      contentKind: hasEnclosure ? _kindFor(item.enclosureType) : ItemContentKind.article,
+      mediaUrl: hasEnclosure ? item.enclosureUrl : null,
       entryUrl: item.entryUrl,
       publisherId: item.publisherId,
       mediaByteLength: item.enclosureBytes,

@@ -16,6 +16,9 @@ import '../models/types.dart';
 import '../models/api_failure.dart';
 import '../models/source_identity.dart';
 import '../services/acquisition_ledger.dart';
+import '../services/document_decoding/document_format.dart';
+import '../services/document_intake_flow.dart';
+import '../services/document_intake_service.dart';
 import '../models/embedded_subtitle.dart';
 import '../models/saved_vocabulary_count.dart';
 
@@ -170,17 +173,29 @@ final class DiscoveryViewModel extends ChangeNotifier {
     AcquisitionLedger? ledger,
     SourceIdentityRepository? sourceIdentity,
     LearningMaterialRepository? learningMaterial,
+    DocumentIntakeFileService? documentFileService,
+    DocumentIntakeFlow? documentIntake,
   ]) : _ledger = ledger ?? AcquisitionLedger.inMemory(),
        _importRepository =
            importRepository ?? const _FakeMediaImportRepository(),
        _mediaLibraryRepository =
            mediaLibraryRepository ?? const _FakeMediaLibraryRepository(),
        _sourceIdentity = sourceIdentity,
-       _learningMaterial = learningMaterial;
+       _learningMaterial = learningMaterial,
+       _documentFileService = documentFileService,
+       _documentIntake = documentIntake;
 
   final DiscoveryRepository _repository;
   final MediaImportRepository _importRepository;
   final MediaLibraryRepository _mediaLibraryRepository;
+
+  /// Reads downloaded article files for the document intake path. Absent in
+  /// widget previews; an article item then has no way to acquire its bytes.
+  final DocumentIntakeFileService? _documentFileService;
+
+  /// The shared document intake — the same decode/bind/create an article and
+  /// a locally picked file travel. Absent in widget previews.
+  final DocumentIntakeFlow? _documentIntake;
 
   /// The Core Source Identity boundary, when the composition root supplied
   /// one. Absent in widget previews; the ledger and the local-media lookup
@@ -212,13 +227,20 @@ final class DiscoveryViewModel extends ChangeNotifier {
   final Map<String, String> _localPaths = {};
   final Map<String, String> _mediaIds = {};
   final Map<String, String> _fingerprints = {};
+
+  /// The Material an article item converged on (taken in through the document
+  /// intake), keyed by entry id. A document item's content is a Material, not
+  /// a media file, so opening it never goes through the media path.
+  final Map<String, String> _documentMaterialIds = {};
+
   final Map<String, int?> _mediaDurations = {};
   final Map<String, DownloadController> _downloadControllers = {};
 
   /// Per-entry single-flight for the "start learning" intent: one intent owns
   /// one acquisition, and a second caller joins the same future instead of
   /// starting a second download.
-  final Map<String, Completer<String?>> _acquisitionCompleters = {};
+  final Map<String, Completer<DiscoveryOpenTarget?>> _acquisitionCompleters =
+      {};
 
   /// Per-entry in-flight local-media checks, so a reconnect recheck and a
   /// selection-triggered check share one lookup and callers can await it.
@@ -418,6 +440,12 @@ final class DiscoveryViewModel extends ChangeNotifier {
     }
     _setSnapshot(entryId, ItemAcquisitionSnapshot.checking);
 
+    final item = _state.entryById(entryId);
+    if (item?.acquisition == AcquisitionMode.article) {
+      await _refreshArticleAvailability(entryId, item!);
+      return;
+    }
+
     final MediaLibraryEntry? localEntry;
     try {
       localEntry = await _findLocalEntry(entryId);
@@ -486,6 +514,79 @@ final class DiscoveryViewModel extends ChangeNotifier {
       },
     );
     notifyListeners();
+  }
+
+  /// Reconciles a document item against Core's Source Identity: a recorded
+  /// mapping whose Material still holds a source Document Rendition is
+  /// content this machine owns, so the row reads available and opens through
+  /// the document session. A missing mapping — or a mapping whose Material no
+  /// longer carries the document — is the definitive not-on-this-machine
+  /// answer; the row falls back to its derived acquirable state.
+  Future<void> _refreshArticleAvailability(
+    String entryId,
+    DiscoveryItem item,
+  ) async {
+    final materialId = await _resolveArticleMaterial(item);
+    if (_disposed) return;
+    if (materialId == null) {
+      _documentMaterialIds.remove(entryId);
+      final snapshots = Map<String, ItemAcquisitionSnapshot>.of(
+        _state.acquisitionSnapshots,
+      );
+      final current = snapshots[entryId];
+      if (current == null ||
+          current.phase != ItemAcquisitionPhase.download) {
+        snapshots.remove(entryId);
+      }
+      _state = _state.copyWith(acquisitionSnapshots: snapshots);
+      notifyListeners();
+      return;
+    }
+    _documentMaterialIds[entryId] = materialId;
+    _setSnapshot(
+      entryId,
+      const ItemAcquisitionSnapshot(
+        DiscoveryItemState.available,
+        progress: 1,
+      ),
+    );
+  }
+
+  /// The Material a document item converged on, when the mapping resolves to
+  /// one that still holds a source document rendition.
+  Future<String?> _resolveArticleMaterial(DiscoveryItem item) async {
+    final sourceIdentity = _sourceIdentity;
+    final learningMaterial = _learningMaterial;
+    if (sourceIdentity == null || learningMaterial == null) return null;
+    if (!sourceIdentity.isAvailable) return null;
+
+    final SourceIdentityMapping? mapping;
+    try {
+      mapping = await sourceIdentity.resolveMapping(
+        sourceId: item.sourceId,
+        itemId: item.id,
+      );
+    } catch (error) {
+      // A lookup that failed is not "no mapping"; keep the answer honest by
+      // answering nothing rather than claiming this item was never acquired.
+      debugPrint('Error resolving source identity: $error');
+      return null;
+    }
+    if (mapping == null) return null;
+
+    final MaterialDetails details;
+    try {
+      details = await learningMaterial.readLearningMaterial(
+        mapping.materialId,
+      );
+    } catch (error) {
+      debugPrint('Error reading mapped material: $error');
+      return null;
+    }
+    final hasSourceRendition = details.currentRevision.documentRenditions.any(
+      (rendition) => rendition.origin == RenditionOrigin.source,
+    );
+    return hasSourceRendition ? mapping.materialId : null;
   }
 
   /// Recognises media this app downloaded for [entryId] in an earlier session.
@@ -769,12 +870,16 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// Acquires a document item: fetches the article page and takes it in
   /// through the same document intake path a local file would travel.
   ///
-  /// The article is treated like a downloaded file: adoption registers the
-  /// bytes and records the identity, and retention is never implied by
-  /// acquisition.
+  /// The article is never a media file: it is decoded, bound, and created as
+  /// a Document Material exactly as a picked file would be — no media
+  /// registration, no ffprobe of an HTML page. Intake never implies retention
+  /// (the create is explicit non-retained), and the canonical source identity
+  /// is recorded once the Material exists.
   Future<void> _launchArticleAcquisition(DiscoveryItem entry) async {
     final entryUrl = entry.entryUrl;
-    if (entryUrl == null) {
+    final intake = _documentIntake;
+    final files = _documentFileService;
+    if (entryUrl == null || intake == null || files == null) {
       _completeAcquisition(entry.id, null);
       return;
     }
@@ -805,11 +910,55 @@ final class DiscoveryViewModel extends ChangeNotifier {
         _downloadDirectory!,
       );
       if (_disposed || path == null) {
-        _completeAcquisition(entry.id, path);
+        _completeAcquisition(entry.id, null);
         return;
       }
       if (!_isCurrentLaunch(entry.id, token)) return;
-      await _adoptDownloadedMedia(entry.id, path);
+
+      final read = await files.readDocumentFile(path);
+      if (_disposed || !_isCurrentLaunch(entry.id, token)) return;
+      switch (read) {
+        case DocumentFileCancelled():
+          _completeAcquisition(entry.id, null);
+        case DocumentFileFailure(:final failure):
+          controller.fail(_importRepository.failureDetail(failure));
+        case DocumentFileData(:final bytes):
+          final format = formatForPath(path);
+          if (format == null) {
+            controller.fail(
+              _importRepository.failureDetail(
+                StateError('unsupported article format: $path'),
+              ),
+            );
+            return;
+          }
+          final outcome = await intake.takeInDocument(
+            title: entry.title,
+            bytes: bytes,
+            format: format,
+          );
+          if (_disposed || !_isCurrentLaunch(entry.id, token)) return;
+          _documentMaterialIds[entry.id] = outcome.details.material.id;
+          _setSnapshot(
+            entry.id,
+            const ItemAcquisitionSnapshot(
+              DiscoveryItemState.available,
+              progress: 1,
+            ),
+          );
+          _completeAcquisition(
+            entry.id,
+            DiscoveryOpenTarget.document(outcome.details.material.id),
+          );
+          unawaited(
+            _recordIdentity(
+              entry.id,
+              materialId: outcome.details.material.id,
+              materialRevisionId: outcome.details.material.currentRevisionId,
+              fileSha256: outcome.sha256Digest,
+            ),
+          );
+      }
     } catch (error) {
       debugPrint('Error acquiring article: $error');
       if (_disposed) return;
@@ -826,32 +975,41 @@ final class DiscoveryViewModel extends ChangeNotifier {
   bool _isCurrentLaunch(String entryId, int token) =>
       !_disposed && _launchTokens[entryId] == token;
 
-  /// The "start learning" intent, as a future that resolves to a local path.
+  /// The "start learning" intent, as a future that resolves to an openable
+  /// target.
   ///
   /// Semantics:
   ///
-  /// * content already local → returns the registered path without touching
-  ///   the acquisition machinery;
+  /// * content already local → returns the target without touching the
+  ///   acquisition machinery: registered media for a media item, the Material
+  ///   for a document item;
   /// * remote and acquirable → starts (or joins) one acquisition, waits for
-  ///   probe → Core registration → ledger, then returns the path;
+  ///   probe → Core registration (or document intake) → ledger/mapping, then
+  ///   returns the target;
   /// * cancelled / failed / unacquirable → null; the typed failure (if any)
   ///   is already in the acquisition state for the surface to show and retry.
   ///
   /// Workbench opening is the caller's decision: this only guarantees local
   /// content, and a non-null result is the signal to open it.
-  Future<String?> acquireForLearning(String entryId) async {
+  Future<DiscoveryOpenTarget?> acquireForLearning(String entryId) async {
     // Let an in-flight local-media check land first: content already on disk
     // must not be re-downloaded because the check lost the race.
     final inFlightCheck = _availabilityChecks[entryId];
     if (inFlightCheck != null) await inFlightCheck;
 
-    final localPath = _localPaths[entryId];
-    if (localPath != null) return localPath;
+    final item = _state.entryById(entryId);
+    if (item?.acquisition == AcquisitionMode.article) {
+      final materialId = _documentMaterialIds[entryId];
+      if (materialId != null) return DiscoveryOpenTarget.document(materialId);
+    } else {
+      final localPath = _localPaths[entryId];
+      if (localPath != null) return DiscoveryOpenTarget.media(localPath);
+    }
 
     final existing = _acquisitionCompleters[entryId];
     if (existing != null) return existing.future;
 
-    final completer = Completer<String?>();
+    final completer = Completer<DiscoveryOpenTarget?>();
     _acquisitionCompleters[entryId] = completer;
     unawaited(
       completer.future.then(
@@ -886,16 +1044,19 @@ final class DiscoveryViewModel extends ChangeNotifier {
     return completer.future;
   }
 
-  void _dropAcquisitionCompleter(String entryId, Completer<String?> completer) {
+  void _dropAcquisitionCompleter(
+    String entryId,
+    Completer<DiscoveryOpenTarget?> completer,
+  ) {
     if (identical(_acquisitionCompleters[entryId], completer)) {
       _acquisitionCompleters.remove(entryId);
     }
   }
 
-  void _completeAcquisition(String entryId, String? path) {
+  void _completeAcquisition(String entryId, DiscoveryOpenTarget? target) {
     final completer = _acquisitionCompleters[entryId];
     if (completer != null && !completer.isCompleted) {
-      completer.complete(path);
+      completer.complete(target);
     }
   }
 
@@ -931,8 +1092,8 @@ final class DiscoveryViewModel extends ChangeNotifier {
           progress: 1,
         ),
       );
-      _completeAcquisition(entryId, path);
-      unawaited(_recordIdentity(entryId));
+      _completeAcquisition(entryId, DiscoveryOpenTarget.media(path));
+      unawaited(_recordIdentity(entryId, fileSha256: _fingerprints[entryId]));
     } catch (error) {
       debugPrint('Error registering downloaded media: $error');
       if (_disposed) return;
@@ -949,35 +1110,51 @@ final class DiscoveryViewModel extends ChangeNotifier {
   /// the content opens — the mapping cannot be written before the Material
   /// exists. So this asks Core whether the media already resolved to a
   /// Material (an earlier session, a later refresh) and records the canonical
-  /// key only when there is a real Material to point at. Best-effort and
-  /// non-blocking: recognition falls back to the ledger until the mapping
-  /// lands.
-  Future<void> _recordIdentity(String entryId) async {
+  /// key only when there is a real Material to point at. The document intake
+  /// path knows its Material immediately and passes it in; the media path
+  /// resolves it through the media id. Best-effort and non-blocking:
+  /// recognition falls back to the ledger until the mapping lands.
+  Future<void> _recordIdentity(
+    String entryId, {
+    String? materialId,
+    String? materialRevisionId,
+    String? fileSha256,
+  }) async {
     final sourceIdentity = _sourceIdentity;
     final learningMaterial = _learningMaterial;
     final item = _state.entryById(entryId);
     if (sourceIdentity == null || learningMaterial == null) return;
     if (!sourceIdentity.isAvailable) return;
     if (item == null) return;
-    final mediaId = _mediaIds[entryId];
-    if (mediaId == null) return;
 
-    final MaterialDetails details;
-    try {
-      details = await learningMaterial.resolveMaterialForMedia(mediaId);
-    } catch (error) {
-      // Not converged on a Material yet (typed not-found); the workbench
-      // creates one when the content opens, and a later refresh records the
-      // mapping then.
-      return;
+    final effectiveSha = fileSha256 ?? _fingerprints[entryId];
+    final String effectiveMaterialId;
+    final String effectiveRevisionId;
+    if (materialId != null && materialRevisionId != null) {
+      effectiveMaterialId = materialId;
+      effectiveRevisionId = materialRevisionId;
+    } else {
+      final mediaId = _mediaIds[entryId];
+      if (mediaId == null) return;
+      final MaterialDetails details;
+      try {
+        details = await learningMaterial.resolveMaterialForMedia(mediaId);
+      } catch (error) {
+        // Not converged on a Material yet (typed not-found); the workbench
+        // creates one when the content opens, and a later refresh records the
+        // mapping then.
+        return;
+      }
+      effectiveMaterialId = details.material.id;
+      effectiveRevisionId = details.material.currentRevisionId;
     }
     try {
       await sourceIdentity.recordMapping(
         sourceId: item.sourceId,
         itemId: item.id,
-        evidence: item.evidence(fileSha256: _fingerprints[entryId]),
-        materialId: details.material.id,
-        materialRevisionId: details.material.currentRevisionId,
+        evidence: item.evidence(fileSha256: effectiveSha),
+        materialId: effectiveMaterialId,
+        materialRevisionId: effectiveRevisionId,
       );
     } catch (error) {
       debugPrint('Error recording source identity mapping: $error');

@@ -330,6 +330,22 @@ class FakeDocumentIntakeFileService implements DocumentIntakeFileService {
     return result;
   }
 
+  /// Answers [readDocumentFile] with the queued result (or a cancelled read
+  /// when the queue is empty), like the picker path serves its results.
+  @override
+  Future<DocumentFileRead> readDocumentFile(String path) async {
+    final readCalls = ++readCount;
+    readPaths[path] = readCalls;
+    if (results.isEmpty) return const DocumentFileCancelled();
+    final result = results.removeAt(0);
+    if (result is GatedDocumentFileRead) return result.completer.future;
+    return result;
+  }
+
+  /// Every path [readDocumentFile] was asked for, in call order.
+  final readPaths = <String, int>{};
+  int readCount = 0;
+
   @override
   String basename(String path) =>
       basenameFn?.call(path) ?? path.split('/').last;

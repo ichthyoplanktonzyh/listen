@@ -7,6 +7,7 @@ import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/document_session.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/services/document_decoding/document_format.dart';
+import 'package:llplayer_next/services/document_intake_flow.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 import 'package:llplayer_next/services/document_source_resolver.dart';
 
@@ -306,19 +307,28 @@ void main() {
     DocumentSessionController controllerWith({
       required FakeLearningMaterialRepository repo,
       required List<DocumentFileRead> results,
+      DocumentIntakeCodec? codec,
       FakeManagedAssetStoreService? store,
       FakeDocumentReferenceStore? references,
       FakeDocumentSourceResolver? resolver,
       bool referenceInPlace = false,
-    }) => DocumentSessionController(
-      materialRepository: repo,
-      fileService: FakeDocumentIntakeFileService(results),
-      codec: codec,
-      store: store ?? FakeManagedAssetStoreService(),
-      referenceStore: references ?? FakeDocumentReferenceStore(),
-      sourceResolver: resolver ?? FakeDocumentSourceResolver(),
-      referenceInPlace: referenceInPlace,
-    );
+    }) {
+      final referenceStore = references ?? FakeDocumentReferenceStore();
+      return DocumentSessionController(
+        materialRepository: repo,
+        fileService: FakeDocumentIntakeFileService(results),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec ?? LocalDocumentIntakeCodec(
+            pdfTextExtractor: _FakePdfTextExtractor(),
+          ),
+          store: store ?? FakeManagedAssetStoreService(),
+          referenceStore: referenceStore,
+        ),
+        sourceResolver: resolver ?? FakeDocumentSourceResolver(),
+        referenceInPlace: referenceInPlace,
+      );
+    }
 
     test(
       'a cancelled picker keeps the session idle, creating nothing',
@@ -565,9 +575,12 @@ void main() {
       final controller = DocumentSessionController(
         materialRepository: repo,
         fileService: files,
-        codec: textless,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: textless,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
         sourceResolver: FakeDocumentSourceResolver(),
       );
       addTearDown(controller.dispose);
