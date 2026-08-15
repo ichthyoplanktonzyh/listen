@@ -141,11 +141,110 @@ void main() {
       );
 
       expect(arguments.sublist(0, 2), ['--provider', 'whisper-cpp']);
-      expect(arguments, contains('--model'));
+      expect(arguments, contains('--whisper-model'));
+      // The deterministic rich baselines are in-generator stages with no
+      // external toolchain, so they are always on.
+      expect(arguments, containsAll(['--sense-groups', 'baseline']));
+      expect(arguments, containsAll(['--acoustics', 'baseline']));
+      expect(arguments, containsAll(['--prosody', 'baseline']));
       // The wrapper protocol this replaced is gone: no placeholder, no script,
       // no interpreter. If any reappears, it belongs in listen-gen instead.
       expect(arguments.any((item) => item.contains('{media}')), isFalse);
       expect(arguments.any((item) => item.endsWith('.py')), isFalse);
     },
   );
+
+  test(
+    'the forced-alignment toolchain is discovered in the listen-core checkout',
+    () async {
+      touch('listen-gen/.venv/bin/listen-gen');
+      touch('$modelDirectory/ggml-base.bin');
+      final python = touch('LLPlayerNext/.venv/bin/python');
+      final aligner = touch(
+        'listen-core/scripts/forced-align/align-cli.py',
+      );
+      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      Directory('${root.path}/Library/Application Support/LLPlayerNext/models/'
+              'wav2vec2-phoneme')
+          .createSync(recursive: true);
+
+      final setup = await locator().resolve();
+
+      expect(setup.alignerPython, python.path);
+      expect(setup.alignerScript, aligner.path);
+      expect(setup.phoneSidecar, isNotEmpty);
+      expect(setup.phoneModelDir, isNotEmpty);
+    },
+  );
+
+  test(
+    'a partial aligner toolchain resolves but contributes no argv',
+    () async {
+      touch('listen-gen/.venv/bin/listen-gen');
+      touch('$modelDirectory/ggml-base.bin');
+      // The venv python exists but no sidecar scripts are checked out.
+      touch('LLPlayerNext/.venv/bin/python');
+
+      final setup = await locator().resolve();
+      final arguments = contentGeneratorProviderArguments(setup);
+
+      expect(setup.state, ContentGeneratorState.ready);
+      expect(arguments, isNot(contains('--aligner')));
+      expect(arguments, isNot(contains('--phones')));
+    },
+  );
+
+  test(
+    'a complete toolchain contributes aligner and phoneme argv',
+    () async {
+      touch('listen-gen/.venv/bin/listen-gen');
+      touch('$modelDirectory/ggml-base.bin');
+      touch('LLPlayerNext/.venv/bin/python');
+      touch('listen-core/scripts/forced-align/align-cli.py');
+      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      Directory('${root.path}/Library/Application Support/LLPlayerNext/models/'
+              'wav2vec2-phoneme')
+          .createSync(recursive: true);
+
+      final arguments = contentGeneratorProviderArguments(
+        await locator().resolve(),
+      );
+
+      expect(arguments, containsAll([
+        '--aligner',
+        'torchaudio',
+        '--phones',
+        'wav2vec2',
+      ]));
+      expect(
+        arguments[arguments.indexOf('--aligner-python') + 1],
+        '${root.path}/LLPlayerNext/.venv/bin/python',
+      );
+      // Model identity is pinned to the sidecar contract, never guessed.
+      expect(arguments, contains('--phones-wav2vec2-model-id'));
+      expect(arguments, contains('facebook/wav2vec2-lv-60-espeak-cv-ft'));
+    },
+  );
+
+  test('the phoneme model directory honors the toolchain env override', () async {
+    touch('listen-gen/.venv/bin/listen-gen');
+    touch('$modelDirectory/ggml-base.bin');
+    touch('LLPlayerNext/.venv/bin/python');
+    touch('listen-core/scripts/forced-align/align-cli.py');
+    touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+    final modelDir = Directory('${root.path}/elsewhere/phoneme-model')
+      ..createSync(recursive: true);
+
+    final setup = await ContentGeneratorLocator(
+      whisperPath: touch('bin/whisper-cli').path,
+      ffprobePath: touch('bin/ffprobe').path,
+      ffmpegPath: touch('bin/ffmpeg').path,
+      environment: {
+        'HOME': root.path,
+        'LLPLAYERNEXT_PHONEME_MODEL_DIR': modelDir.path,
+      },
+    ).resolve();
+
+    expect(setup.phoneModelDir, modelDir.path);
+  });
 }

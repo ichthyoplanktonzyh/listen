@@ -1,29 +1,30 @@
 {
   "manifest_version": 1,
   "repository": "ichthyoplanktonzyh/listen-gen",
-  "source_git_sha": "a660946a4410c6c6b6e720ecdd02e7a88d16e5dc",
+  "source_git_sha": "c053697dd857a1a3ad8b9e2b17843df3399beae1",
   "release_manifest": {
     "schema": "listen_gen.release-bundle.v1",
-    "filename": "listen-gen-0.4.0.release.json",
-    "sha256": "sha256:ba82adce3004918d3e5b10975c47b51c35ba89ee6770460a6f296ebe68a59c7f"
+    "filename": "listen-gen-0.5.0.release.json",
+    "sha256": "sha256:49a8a42bfa047355f99bd5ae75ae46c6b59f6270b59b1085ec832375d0365ab5"
   },
   "tool": {
     "id": "listen-gen",
-    "version": "0.4.0"
+    "version": "0.5.0"
   },
   "machine_protocol": {
-    "schema": "listen_gen.machine-event.v1",
-    "version": 1
+    "schema": "listen_gen.machine-event.v2",
+    "version": 2
   },
   "content_package_contract": {
     "authority": {
-      "path": "contracts/content-package/v1",
+      "path": "contracts/content-package/v3",
       "repository": "ichthyoplanktonzyh/listen-core"
     },
-    "release_schema_id": "https://listen.dev/contracts/content-package/v1/manifest.schema.json",
-    "package_schema": "listen.resource-package.v1",
-    "schema_version": 1,
-    "canonical_sha256": "sha256:3a0c67c2e4498dbbe5ad5556bac41eff01e50c06c7d020bd5af1fdcbe46c5dc5"
+    "canonical_sha256": "sha256:a76486e344af7962d46c4708a53d4414f67cfa79dd08be30446e08792d62ff1d",
+    "contract_version": "4.0.0",
+    "package_schema": "listen.content-package.release.v3",
+    "release_schema_id": "listen.content-package.release.v3",
+    "schema_version": 3
   },
   "runtime": {
     "python_requires": ">=3.11"
@@ -38,12 +39,6 @@
       "schema": "listen_gen.toolchain-identity.v1",
       "tools": [
         {
-          "id": "acoustics-extractor",
-          "roles": [
-            "acoustics"
-          ]
-        },
-        {
           "id": "asr-wrapper",
           "roles": [
             "asr"
@@ -53,70 +48,26 @@
           "id": "ffmpeg",
           "roles": [
             "media",
-            "asr",
-            "alignment",
-            "acoustics",
-            "phone"
+            "asr"
           ]
         },
         {
           "id": "ffprobe",
           "roles": [
             "media",
-            "asr",
-            "alignment",
-            "acoustics",
-            "phone"
-          ]
-        },
-        {
-          "id": "phone-analyzer",
-          "roles": [
-            "phone"
-          ]
-        },
-        {
-          "id": "prosody-extractor",
-          "roles": [
-            "prosody"
-          ]
-        },
-        {
-          "id": "python",
-          "roles": [
-            "phone"
-          ]
-        },
-        {
-          "id": "sense-group-extractor",
-          "roles": [
-            "sense_groups"
-          ]
-        },
-        {
-          "id": "wav2vec2-phone-model",
-          "roles": [
-            "phone"
-          ]
-        },
-        {
-          "id": "wav2vec2-phone-sidecar",
-          "roles": [
-            "phone"
+            "asr"
           ]
         },
         {
           "id": "whisper-cli",
           "roles": [
-            "asr",
-            "alignment"
+            "asr"
           ]
         },
         {
           "id": "whisper-model",
           "roles": [
-            "asr",
-            "alignment"
+            "asr"
           ]
         }
       ],
@@ -126,9 +77,9 @@
   },
   "artifact": {
     "entrypoint": "__main__.py",
-    "filename": "listen-gen-0.4.0.pyz",
+    "filename": "listen-gen-0.5.0.pyz",
     "format": "python-zipapp",
-    "sha256": "sha256:47cef5bb9c1711432db1bcd285c1f0e4f637842d1ef199e13abeef83ca46cf63",
-    "size_bytes": 259730
+    "sha256": "sha256:73598dae7047b9ad1d168d72881999aed9e178f43026cfef3f5bda97ad8f5d53",
+    "size_bytes": 374027
   }
 }
