@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .align import AlignSegment, AlignmentResult, build_word_timeline_from_alignment
 from .asr import AsrAdapter, AsrTranscript, AsrWord, _tokens
 from .package import ConversionError
 from .package_v3 import (
@@ -59,9 +60,10 @@ class RichStages:
 
     ``sense_groups``, ``acoustics``, ``prosody``, and ``phone`` are the rich
     stage adapters (fixture/command/baseline); ``acoustics_preprocessor``
-    normalizes the media window the acoustics extractor receives; a
-    ``tts_aligner`` ASR adapter transcribes derived TTS audio into word
-    timings so the document path joins the same word timeline pipeline.
+    normalizes the media window the acoustics extractor receives; an
+    ``aligner`` forced-aligns known sentence text plus its time windows into
+    exact word timings; a ``tts_aligner`` ASR adapter re-transcribes derived
+    TTS audio when no aligner is configured (an honest fallback).
     """
 
     sense_groups: Any | None = None
@@ -69,6 +71,7 @@ class RichStages:
     acoustics_preprocessor: Any | None = None
     prosody: Any | None = None
     phone: Any | None = None
+    aligner: Any | None = None
     tts_aligner: AsrAdapter | None = None
 
 
@@ -279,6 +282,37 @@ def build_word_timeline_resource(
         required=False,
     )
     return resource, payload_bytes
+
+
+def alignment_segments_from(
+    sentences: tuple[AlignmentSentence, ...],
+) -> tuple[AlignSegment, ...]:
+    """Project aligned sentences into forced-alignment segment windows.
+
+    Each segment carries the exact word-token text of its sentence plus the
+    reading token index of every word, so the provider can anchor words while
+    the timeline keeps the reading's global coordinates. Sentences without
+    word tokens produce no segment (their timing is never fabricated).
+    """
+    segments: list[AlignSegment] = []
+    for sentence in sentences:
+        word_indexes = tuple(
+            token.index for token in sentence.tokens if token.kind == "word"
+        )
+        if not word_indexes:
+            continue
+        segments.append(
+            AlignSegment(
+                index=sentence.index,
+                words=tuple(
+                    token.text for token in sentence.tokens if token.kind == "word"
+                ),
+                word_indexes=word_indexes,
+                start_ms=sentence.start_ms,
+                end_ms=sentence.end_ms,
+            )
+        )
+    return tuple(segments)
 
 
 def _rich_words(

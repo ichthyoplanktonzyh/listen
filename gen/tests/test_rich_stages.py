@@ -271,5 +271,192 @@ class RichTtsPipelineTests(unittest.TestCase):
         self.assertTrue(any("acoustics" in code for code in codes), codes)
 
 
+class RichAlignedMediaTests(unittest.TestCase):
+    """Media -> reading, word timeline derived by forced alignment."""
+
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+
+    def _run(self, output: Path, request_path: Path, extra: list[str]) -> subprocess.CompletedProcess:
+        return run_cli([
+            "package", "from-capability", str(request_path),
+            "--output", str(output),
+            *extra,
+        ])
+
+    def test_media_aligner_produces_forced_aligned_timeline(self) -> None:
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_media(directory=self.directory)))
+        output = self.directory / "package.zip"
+        result = self._run(output, request_path, [
+            "--provider", "fixture", "--fixture", str(FIXTURES / "sample.asr.json"),
+            "--aligner", "fixture", "--aligner-fixture", str(FIXTURES / "sample.alignment.json"),
+            "--sense-groups", "baseline",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        resources = package_resources(output)
+        word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
+        payload = resource_payload(output, word_timeline)
+        self.assertEqual(
+            [(entry["sentence_id"], entry["token_index"]) for entry in payload["words"]],
+            [("sentence-0", 0), ("sentence-0", 3), ("sentence-1", 0), ("sentence-1", 2)],
+        )
+        self.assertTrue(
+            all(entry["timing_source"] == "forced_aligned" for entry in payload["words"])
+        )
+        provenance = word_timeline["descriptor"]["provenance"]
+        self.assertEqual(provenance["provider"], {"id": "fixture-aligner", "version": "1"})
+
+    def test_media_aligner_failure_falls_back_to_asr_words(self) -> None:
+        bad = self.directory / "bad-alignment.json"
+        bad.write_text("[1, 2]")
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_media(directory=self.directory)))
+        output = self.directory / "package.zip"
+        result = self._run(output, request_path, [
+            "--provider", "fixture", "--fixture", str(FIXTURES / "sample.asr.json"),
+            "--aligner", "fixture", "--aligner-fixture", str(bad),
+            "--machine-events",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        resources = package_resources(output)
+        word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
+        payload = resource_payload(output, word_timeline)
+        self.assertTrue(
+            all(entry["timing_source"] == "asr_reported" for entry in payload["words"])
+        )
+        events = [json.loads(line) for line in result.stdout.splitlines() if line]
+        warnings = [event for event in events if event.get("event") == "warning"]
+        codes = [event["code"] for event in warnings]
+        self.assertTrue(any("aligner_degraded" in code for code in codes), codes)
+
+    def test_subtitle_path_skips_asr_and_aligns(self) -> None:
+        srt = self.directory / "track.srt"
+        srt.write_text(
+            "1\n00:00:00,100 --> 00:00:01,200\nListen, carefully!\n\n"
+            "2\n00:00:01,300 --> 00:00:02,100\nWords matter.\n",
+            encoding="utf-8",
+        )
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_media(directory=self.directory)))
+        output = self.directory / "package.zip"
+        result = self._run(output, request_path, [
+            "--subtitle", str(srt),
+            "--aligner", "fixture", "--aligner-fixture", str(FIXTURES / "sample.alignment.json"),
+            "--sense-groups", "baseline",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        kinds = resource_kinds(output)
+        self.assertIn("structured_reading", kinds)
+        self.assertIn("anchor_time_alignment", kinds)
+        self.assertIn("word_timeline", kinds)
+        self.assertIn("sense_group_analysis", kinds)
+        resources = package_resources(output)
+        reading = next(r for r in resources if r["descriptor"]["kind"] == "structured_reading")
+        payload = resource_payload(output, reading)
+        self.assertEqual(payload["text"], "Listen, carefully!\nWords matter.")
+        word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
+        words = resource_payload(output, word_timeline)["words"]
+        self.assertTrue(
+            all(entry["timing_source"] == "forced_aligned" for entry in words)
+        )
+        self.assertEqual(words[0]["start_ms"], 100)
+
+    def test_subtitle_without_aligner_abstains_word_timeline(self) -> None:
+        srt = self.directory / "track.srt"
+        srt.write_text(
+            "1\n00:00:00,100 --> 00:00:01,200\nListen, carefully!\n\n"
+            "2\n00:00:01,300 --> 00:00:02,100\nWords matter.\n",
+            encoding="utf-8",
+        )
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_media(directory=self.directory)))
+        output = self.directory / "package.zip"
+        result = self._run(output, request_path, [
+            "--subtitle", str(srt),
+            "--machine-events",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        kinds = resource_kinds(output)
+        self.assertIn("structured_reading", kinds)
+        self.assertNotIn("word_timeline", kinds)
+        events = [json.loads(line) for line in result.stdout.splitlines() if line]
+        warnings = [event for event in events if event.get("event") == "warning"]
+        codes = [event["code"] for event in warnings]
+        self.assertIn("word_timeline_abstained", codes, codes)
+
+
+class RichTtsAlignedTests(unittest.TestCase):
+    """Document -> listen derives the word timeline by forced alignment."""
+
+    def setUp(self) -> None:
+        self.directory = Path(tempfile.mkdtemp())
+
+    def test_tts_forced_alignment_produces_word_timeline_and_rich_chain(self) -> None:
+        from test_produce import request_document
+
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_document(self.directory, capability="listen")))
+        output = self.directory / "package.zip"
+        result = run_cli([
+            "package", "from-capability", str(request_path),
+            "--output", str(output),
+            "--tts-provider", "fake",
+            "--aligner", "fixture", "--aligner-fixture", str(FIXTURES / "sample-document.alignment.json"),
+            "--sense-groups", "baseline",
+            "--acoustics", "baseline",
+            "--prosody", "baseline",
+            "--machine-events",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        kinds = resource_kinds(output)
+        for expected in (
+            "structured_reading",
+            "anchor_time_alignment",
+            "word_timeline",
+            "sense_group_analysis",
+            "word_acoustics",
+            "prosody_analysis",
+        ):
+            self.assertIn(expected, kinds, f"missing {expected} in {kinds}")
+        resources = package_resources(output)
+        word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
+        payload = resource_payload(output, word_timeline)
+        self.assertTrue(
+            all(entry["timing_source"] == "forced_aligned" for entry in payload["words"])
+        )
+        self.assertEqual(payload["words"][0]["start_ms"], 0)
+        events = [json.loads(line) for line in result.stdout.splitlines() if line]
+        warnings = [event for event in events if event.get("event") == "warning"]
+        self.assertEqual(warnings, [], [event["message"] for event in warnings])
+
+    def test_tts_aligner_failure_falls_back_to_retranscription(self) -> None:
+        from test_produce import request_document
+
+        bad = self.directory / "bad-alignment.json"
+        bad.write_text("[1, 2]")
+        request_path = self.directory / "request.json"
+        request_path.write_text(json.dumps(request_document(self.directory, capability="listen")))
+        output = self.directory / "package.zip"
+        result = run_cli([
+            "package", "from-capability", str(request_path),
+            "--output", str(output),
+            "--tts-provider", "fake",
+            "--provider", "fixture", "--fixture", str(FIXTURES / "sample.asr.json"),
+            "--aligner", "fixture", "--aligner-fixture", str(bad),
+            "--tts-aligner", "fixture",
+            "--machine-events",
+        ])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        kinds = resource_kinds(output)
+        self.assertIn("word_timeline", kinds)
+        resources = package_resources(output)
+        word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
+        payload = resource_payload(output, word_timeline)
+        self.assertTrue(
+            all(entry["timing_source"] == "asr_reported" for entry in payload["words"])
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

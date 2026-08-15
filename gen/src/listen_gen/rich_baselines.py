@@ -296,11 +296,15 @@ class WavWordAcousticsBaseline:
             raise _fail("acoustics", "failed") from error
         if sample_rate != NORMALIZED_SAMPLE_RATE_HZ:
             raise _fail("acoustics", "failed")
-        # Validate audio coverage: every word window must lie inside the audio.
+        # Validate audio coverage: every word window must start inside the
+        # audio. A window whose end merely overruns the final boundary is
+        # measured over the clamped window (audio edges are the norm for the
+        # last word); a window that never touches the audio is a failure.
         if not request.words:
             raise _fail("acoustics", "failed")
+        sample_count = len(samples)
         for word in request.words:
-            if word.end_ms * NORMALIZED_SAMPLE_RATE_HZ // 1000 > len(samples):
+            if word.start_ms * NORMALIZED_SAMPLE_RATE_HZ // 1000 >= sample_count:
                 raise _fail("acoustics", "failed")
         measurements = self._measure_words(request.words, samples)
         return AcousticsResult(

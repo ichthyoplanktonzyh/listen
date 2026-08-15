@@ -162,6 +162,30 @@ def parser(
         type=int,
         help="container stream index; required when the media has multiple audio streams",
     )
+    produce.add_argument(
+        "--subtitle",
+        type=Path,
+        help="srt/vtt subtitle track; the media reading then comes from the "
+        "subtitle text and word timings derive by forced alignment",
+    )
+    produce.add_argument(
+        "--aligner",
+        default="none",
+        choices=["none", "fixture", "command", "torchaudio"],
+        help="forced alignment provider (none/fixture/command/torchaudio)",
+    )
+    produce.add_argument("--aligner-fixture", type=Path, help="committed result fixture for the aligner provider")
+    produce.add_argument("--aligner-command", help="external aligner executable; no shell is used")
+    produce.add_argument(
+        "--aligner-command-arg",
+        action="append",
+        default=[],
+        help="one argv item for the command aligner provider; include {media} exactly once",
+    )
+    produce.add_argument("--aligner-command-timeout-seconds", type=float, default=600.0)
+    produce.add_argument("--aligner-python", type=Path, help="python interpreter for the torchaudio aligner sidecar")
+    produce.add_argument("--aligner-script", type=Path, help="torchaudio forced-alignment sidecar script")
+    produce.add_argument("--aligner-timeout-seconds", type=float, default=600.0)
     produce.add_argument("--ffprobe-command", default="ffprobe")
     produce.add_argument("--ffmpeg-command", default="ffmpeg")
     produce.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
@@ -309,6 +333,11 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         FixturePhoneAdapter,
         Wav2Vec2CtcPhoneAdapter,
     )
+    from .align import (
+        CommandAlignAdapter,
+        FixtureAlignAdapter,
+        TorchaudioAlignAdapter,
+    )
 
     sense_groups = None
     acoustics = None
@@ -393,15 +422,49 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
             args.phones_wav2vec2_timeout_seconds,
         )
 
-    aligner = args.tts_aligner
-    if aligner != "none":
-        tts_aligner = _build_asr_for_aligner(args, aligner, progress)
+    aligner = None
+    selector = args.aligner
+    if selector == "fixture":
+        if args.aligner_fixture is None:
+            raise ConversionError(
+                "--aligner-fixture is required for the fixture aligner provider"
+            )
+        aligner = FixtureAlignAdapter(args.aligner_fixture)
+    elif selector == "command":
+        if args.aligner_command is None:
+            raise ConversionError(
+                "--aligner-command is required for the command aligner provider"
+            )
+        aligner = CommandAlignAdapter(
+            args.aligner_command, args.aligner_command_arg,
+            args.aligner_command_timeout_seconds,
+        )
+    elif selector == "torchaudio":
+        missing = [
+            name for name, value in (
+                ("--aligner-python", args.aligner_python),
+                ("--aligner-script", args.aligner_script),
+            ) if not value
+        ]
+        if missing:
+            raise ConversionError(
+                f"{', '.join(missing)} are required for the torchaudio aligner provider"
+            )
+        aligner = TorchaudioAlignAdapter(
+            Path(args.aligner_python), Path(args.aligner_script),
+            args.aligner_timeout_seconds,
+        )
+
+    aligner_selector = args.tts_aligner
+    if aligner_selector != "none":
+        tts_aligner = _build_asr_for_aligner(args, aligner_selector, progress)
 
     if (
         sense_groups is None
         and acoustics is None
         and prosody is None
         and phone is None
+        and aligner is None
         and tts_aligner is None
     ):
         return None
@@ -416,6 +479,7 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         ) if args.acoustics in ("command", "baseline") else None,
         prosody=prosody,
         phone=phone,
+        aligner=aligner,
         tts_aligner=tts_aligner,
     )
 
@@ -492,6 +556,7 @@ def _run(
         asr=asr_adapter,
         asr_preprocessor=asr_preprocessor,
         rich=_build_rich(args, progress=progress),
+        subtitle=args.subtitle,
     )
     outcome = produce(
         request,

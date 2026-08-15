@@ -1,0 +1,12 @@
+{
+  "schema": "listen_gen.alignment-result.v1",
+  "provider": {"id": "fixture-aligner", "version": "1"},
+  "model": {"id": "fixture-align-model", "version": "1"},
+  "config_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "words": [
+    {"segment_index": 0, "word_index": 0, "text": "Listen", "start_ms": 100, "end_ms": 480, "score": 0.98},
+    {"segment_index": 0, "word_index": 1, "text": "carefully", "start_ms": 560, "end_ms": 1100, "score": 0.96},
+    {"segment_index": 1, "word_index": 0, "text": "Words", "start_ms": 1300, "end_ms": 1600, "score": 0.97},
+    {"segment_index": 1, "word_index": 1, "text": "matter", "start_ms": 1650, "end_ms": 2020, "score": 0.95}
+  ]
+}
