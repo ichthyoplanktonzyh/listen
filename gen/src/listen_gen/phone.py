@@ -313,10 +313,16 @@ def _anchor_phones(
         overlap, word = max(overlaps, key=lambda item: (item[0], -item[1].start_ms))
         if overlap <= 0 or overlap / (phone.end_ms - phone.start_ms) < 0.5:
             continue
+        # A phone anchored to a word is that word's sound: its time must lie
+        # inside the word's window, which itself lies inside the subtitle
+        # sentence window the package contract validates against. The overlap
+        # guard above already ensures the clamped window is non-empty.
+        start_ms = max(phone.start_ms, word.start_ms)
+        end_ms = min(phone.end_ms, word.end_ms)
         entry: dict[str, Any] = {
             "symbol": phone.symbol,
-            "start_ms": phone.start_ms,
-            "end_ms": phone.end_ms,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
             "word_ref": {"sentence_id": word.sentence_id, "token_index": word.token_index},
         }
         if phone.display_ipa is not None:

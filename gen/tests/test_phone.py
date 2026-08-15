@@ -81,6 +81,26 @@ class PhoneAnchoringTests(unittest.TestCase):
         )
         self.assertEqual([phone["symbol"] for phone in phones], ["t", "u", "v"])
 
+    def test_phone_time_is_clamped_into_its_anchored_word(self) -> None:
+        phones = _anchor_phones(
+            _result([
+                DetectedPhone("t", 150, 450),
+                DetectedPhone("u", 450, 750),
+            ]),
+            _words(),
+        )
+        self.assertEqual(
+            [(phone["symbol"], phone["start_ms"], phone["end_ms"]) for phone in phones],
+            [("t", 200, 400), ("u", 500, 700)],
+        )
+        self.assertEqual(
+            [phone["word_ref"] for phone in phones],
+            [
+                {"sentence_id": "s0", "token_index": 0},
+                {"sentence_id": "s0", "token_index": 1},
+            ],
+        )
+
     def test_low_anchoring_ratio_abstains(self) -> None:
         with self.assertRaises(RichStageFailure) as caught:
             _anchor_phones(

@@ -374,6 +374,7 @@ def build_word_timeline_from_alignment(
     result: AlignmentResult,
     segments: tuple[AlignSegment, ...],
     sentence_ids: tuple[str, ...],
+    subtitle_resource_id: str,
     context,
 ) -> tuple[PackageResource, bytes]:
     """Anchor aligned words into the reading sentence tokens.
@@ -416,7 +417,6 @@ def build_word_timeline_from_alignment(
     if not words:
         raise _failure("qualification_failed")
     payload: dict[str, Any] = {
-        "language": context.language,
         "words": words,
     }
     payload_bytes = canonical_json(payload)
@@ -429,7 +429,7 @@ def build_word_timeline_from_alignment(
             sha256_of_bytes(payload_bytes), len(payload_bytes), True
         ),
         subject=context.subject,
-        dependencies=(context.anchor_resource_id,),
+        dependencies=(subtitle_resource_id, context.anchor_resource_id),
         provenance=provenance(
             context.created_at_ms,
             input_rendition_ids=[context.rendition_id],

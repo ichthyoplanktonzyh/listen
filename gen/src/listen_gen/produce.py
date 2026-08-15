@@ -80,6 +80,7 @@ from .rich_stages import (
     RichStages,
     alignment_sentences_from,
     alignment_segments_from,
+    build_subtitle_text_track_resource,
     build_word_timeline_resource,
     run_rich_stages,
 )
@@ -688,6 +689,37 @@ def _attach_rich_resources(
     if stages is None:
         return [], {}, []
     warnings: list[Warning] = []
+    # The embedded subtitle track is the anchor Core requires for every
+    # word-level resource: word sentence/token references resolve against it,
+    # and word times must fall inside its sentence windows. It is built from
+    # the exact reading sentences and their alignment windows, so the token
+    # coordinates the timeline refers to are the ones the track carries.
+    # Without sentences the whole word-level chain abstains honestly.
+    sentences = alignment_sentences_from(
+        reading_payload=reading_payload,
+        sentence_times_ms=sentence_times_ms,
+        audio_duration_ms=audio_duration_ms,
+    )
+    subtitle_result = build_subtitle_text_track_resource(
+        sentences=sentences,
+        context=context,
+        producer=producer,
+    )
+    if subtitle_result is None:
+        warnings.append(
+            _warning(
+                "subtitle_track_abstained",
+                "no reading sentences to anchor word-level resources; "
+                "synchronized reading remains available without word-level "
+                "alignment",
+            )
+        )
+        return [], {}, warnings
+    subtitle_resource, subtitle_payload_bytes = subtitle_result
+    resources: list[PackageResource] = [subtitle_resource]
+    bytes_by_digest: dict[str, bytes] = {
+        subtitle_resource.payload_blob["digest"]: subtitle_payload_bytes
+    }
     word_timeline_result = None
     if aligned_result is not None:
         try:
@@ -695,6 +727,7 @@ def _attach_rich_resources(
                 result=aligned_result,
                 segments=align_segments,
                 sentence_ids=sentence_ids,
+                subtitle_resource_id=subtitle_resource.resource_id,
                 context=context,
             )
         except ConversionError:
@@ -710,6 +743,7 @@ def _attach_rich_resources(
             word_timeline_result = build_word_timeline_resource(
                 transcript=transcript,
                 sentence_ids=sentence_ids,
+                subtitle_resource_id=subtitle_resource.resource_id,
                 context=context,
                 producer=producer,
             )
@@ -732,12 +766,9 @@ def _attach_rich_resources(
             ends = [entry.get("end_ms") for entry in raw_words if isinstance(entry, dict)]
             if ends:
                 audio_duration_ms = max(ends)
-    sentences = alignment_sentences_from(
-        reading_payload=reading_payload,
-        sentence_times_ms=sentence_times_ms,
-        audio_duration_ms=audio_duration_ms,
-    )
-    resources, bytes_by_digest, rich_warnings = run_rich_stages(
+    resources.append(word_resource)
+    bytes_by_digest[word_resource.payload_blob["digest"]] = word_payload_bytes
+    rich_resources, rich_bytes, rich_warnings = run_rich_stages(
         stages=stages,
         context=context,
         sentences=sentences,
@@ -747,8 +778,8 @@ def _attach_rich_resources(
         audio_stream_index=audio_stream_index,
         progress=progress,
     )
-    resources.insert(0, word_resource)
-    bytes_by_digest[word_resource.payload_blob["digest"]] = word_payload_bytes
+    resources.extend(rich_resources)
+    bytes_by_digest.update(rich_bytes)
     warnings.extend(rich_warnings)
     return resources, bytes_by_digest, warnings
 

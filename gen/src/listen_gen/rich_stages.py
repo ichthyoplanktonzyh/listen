@@ -28,6 +28,7 @@ from .align import AlignSegment, AlignmentResult, build_word_timeline_from_align
 from .asr import AsrAdapter, AsrTranscript, AsrWord, _tokens
 from .package import ConversionError
 from .package_v3 import (
+    SUBTITLE_TEXT_TRACK_SCHEMA_V1,
     WORD_TIMELINE_SCHEMA_V1,
     PackageResource,
     blob_declaration,
@@ -50,6 +51,8 @@ from .rich import (
 
 WORD_TIMELINE_RESOURCE_KIND = "word_timeline"
 WORD_TIMELINE_WORD_TIMING_SOURCE = "asr_reported"
+SUBTITLE_TEXT_TRACK_RESOURCE_KIND = "subtitle_text_track"
+SUBTITLE_SOURCE_KIND_ASR = "asr"
 
 Warning = dict[str, str]
 
@@ -176,6 +179,80 @@ def alignment_sentences_from(
     return tuple(result)
 
 
+def build_subtitle_text_track_resource(
+    *,
+    sentences: tuple[AlignmentSentence, ...],
+    context: RichContext,
+    producer: dict[str, object],
+) -> tuple[PackageResource, bytes] | None:
+    """The exact subtitle track resource the word timeline anchors to.
+
+    The Core package contract requires every word-level resource (word
+    timeline, sense groups, acoustics, prosody, phone timeline) to anchor an
+    embedded ``subtitle_text_track``: word ``sentence_id``/``token_index``
+    references resolve against its sentences and tokens, and every word time
+    must fall inside its sentence window. The track is built from the exact
+    reading sentences and their alignment windows, so the same token
+    coordinates the timeline refers to are the ones the track carries.
+    Returns ``None`` when no sentence exists (the word-level chain then
+    abstains honestly: reading and alignment stay available).
+    """
+    if not sentences:
+        return None
+    payload: dict[str, object] = {
+        "language": context.language,
+        "source_kind": SUBTITLE_SOURCE_KIND_ASR,
+        "sentences": [
+            {
+                "id": sentence.id,
+                "index": sentence.index,
+                "start_ms": sentence.start_ms,
+                "end_ms": sentence.end_ms,
+                "original_text": sentence.original_text,
+                "display_text": sentence.display_text,
+                "tokens": [
+                    {
+                        "index": token.index,
+                        "kind": token.kind,
+                        "text": token.text,
+                        "normalized": token.normalized,
+                        "start_char": token.start_char,
+                        "end_char": token.end_char,
+                    }
+                    for token in sentence.tokens
+                ],
+            }
+            for sentence in sentences
+        ],
+    }
+    payload_bytes = canonical_json(payload)
+    provider = producer.get("provider")
+    model = producer.get("model")
+    config_sha256 = producer.get("config_sha256")
+    resource = PackageResource(
+        kind=SUBTITLE_TEXT_TRACK_RESOURCE_KIND,
+        schema=SUBTITLE_TEXT_TRACK_SCHEMA_V1,
+        role="base",
+        content_language=context.language,
+        payload_blob=blob_declaration(
+            sha256_of_bytes(payload_bytes), len(payload_bytes), True
+        ),
+        subject=context.subject,
+        dependencies=(context.anchor_resource_id,),
+        provenance=provenance(
+            context.created_at_ms,
+            input_rendition_ids=[context.rendition_id],
+            input_resource_ids=[context.anchor_resource_id],
+            provider=provider,
+            model=model,
+            config_sha256=config_sha256,
+        ),
+        quality=quality(),
+        required=False,
+    )
+    return resource, payload_bytes
+
+
 def _words_from_transcript(
     transcript: AsrTranscript,
     sentence_ids: tuple[str, ...],
@@ -244,6 +321,7 @@ def build_word_timeline_resource(
     *,
     transcript: AsrTranscript,
     sentence_ids: tuple[str, ...],
+    subtitle_resource_id: str,
     context: RichContext,
     producer: dict[str, object],
 ) -> tuple[PackageResource, bytes] | None:
@@ -253,7 +331,6 @@ def build_word_timeline_resource(
     if not words:
         return None
     payload: dict[str, object] = {
-        "language": transcript.language,
         "words": words,
     }
     payload_bytes = canonical_json(payload)
@@ -269,7 +346,7 @@ def build_word_timeline_resource(
             sha256_of_bytes(payload_bytes), len(payload_bytes), True
         ),
         subject=context.subject,
-        dependencies=(context.anchor_resource_id,),
+        dependencies=(subtitle_resource_id, context.anchor_resource_id),
         provenance=provenance(
             context.created_at_ms,
             input_rendition_ids=[context.rendition_id],

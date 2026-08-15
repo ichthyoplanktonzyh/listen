@@ -99,6 +99,7 @@ class AnchoringTests(unittest.TestCase):
             result=result,
             segments=_segments(),
             sentence_ids=("sentence-0", "sentence-1"),
+            subtitle_resource_id="sha256:subtitle-track",
             context=_context(),
         )
 

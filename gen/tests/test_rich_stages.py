@@ -81,6 +81,7 @@ class RichMediaPipelineTests(unittest.TestCase):
         for expected in (
             "structured_reading",
             "anchor_time_alignment",
+            "subtitle_text_track",
             "word_timeline",
             "sense_group_analysis",
             "word_acoustics",
@@ -89,6 +90,24 @@ class RichMediaPipelineTests(unittest.TestCase):
             self.assertIn(expected, kinds, f"missing {expected} in {kinds}")
         resources = package_resources(output)
         word_timeline = next(r for r in resources if r["descriptor"]["kind"] == "word_timeline")
+        subtitle = next(r for r in resources if r["descriptor"]["kind"] == "subtitle_text_track")
+        self.assertIn(
+            subtitle["resource_id"],
+            [d["resource_id"] for d in word_timeline["descriptor"]["dependencies"]],
+            "word_timeline must anchor the embedded subtitle track",
+        )
+        subtitle_payload = resource_payload(output, subtitle)
+        self.assertEqual(
+            [s["id"] for s in subtitle_payload["sentences"]],
+            ["sentence-0", "sentence-1"],
+        )
+        tokens = subtitle_payload["sentences"][0]["tokens"]
+        word_tokens = [t for t in tokens if t["kind"] == "word"]
+        self.assertEqual(
+            [t["index"] for t in word_tokens],
+            [0, 3],
+            "subtitle word tokens carry the timeline token coordinates",
+        )
         payload = resource_payload(output, word_timeline)
         words = payload["words"]
         self.assertEqual(
