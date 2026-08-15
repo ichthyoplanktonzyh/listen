@@ -286,6 +286,10 @@ class TestMediaLibraryRepository implements MediaLibraryRepository {
   }) async => const SavedVocabularyCount(total: 0, capped: false);
 
   @override
+  @override
+  Future<MediaItem> readMedia(String mediaId) async =>
+      throw StateError('not used in discovery tests');
+  @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() async {
     if (failListing) throw StateError('media library listing failed');
     return _entries;

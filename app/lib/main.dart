@@ -68,6 +68,7 @@ import 'screens/composition_session_screen.dart';
 import 'screens/discovery_home_screen.dart';
 import 'services/listen_gen_process_service.dart';
 import 'services/composition_session_service.dart';
+import 'services/composition_transcript_bridge.dart';
 import 'services/listen_gen_release_service.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
@@ -461,6 +462,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleAnalysis: subtitleAnalysisRepository,
     managedStore: managedAssetStore,
     materialRepository: coreRepositories.learningMaterial,
+    onLibraryChanged: mediaLibraryActions.loadMediaLibrary,
   );
   late final huntingActions = HuntingActionsCoordinator(
     huntingSession: huntingSessionController,
@@ -513,10 +515,24 @@ class _PlayerScreenState extends State<PlayerScreen>
     repository: coreRepositories.mediaLibrary,
     materialRepository: coreRepositories.learningMaterial,
   );
-  String? _mediaFilePathForRendition(MediaRendition rendition) {
-    for (final entry
-        in mediaLibraryActions.mediaLibrary ?? const <MediaLibraryEntry>[]) {
+  Future<String?> _mediaFilePathForRendition(MediaRendition rendition) async {
+    final snapshot =
+        mediaLibraryActions.mediaLibrary ?? const <MediaLibraryEntry>[];
+    for (final entry in snapshot) {
       if (entry.media.id == rendition.mediaId) return entry.media.path;
+    }
+    // The snapshot can lag a freshly registered media (opening a file
+    // registers it without entering any app-side list yet), and the media
+    // library list only contains Personal Library rows. Core's single-media
+    // read answers for every registered media, retained or not.
+    try {
+      final media = await coreRepositories.mediaLibrary.readMedia(
+        rendition.mediaId ?? '',
+      );
+      if (media.id == rendition.mediaId) return media.path;
+    } on Object {
+      // Honest miss: the rendition travels without a blob path and the run
+      // fails on the request rather than guessing.
     }
     return null;
   }
@@ -526,7 +542,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     generator: LocalListenGenProcessService(
       releaseService: LocalListenGenReleaseService(),
     ),
-    mediaFilePath: _mediaFilePathForRendition,
+    mediaPathResolver: _mediaFilePathForRendition,
     // Document source bytes for a Gen run come from the same places direct
     // rendering reads them: the content-addressed managed store copy for
     // managed bindings, the learner-chosen referenced location (re-verified
@@ -2059,6 +2075,13 @@ class _PlayerScreenState extends State<PlayerScreen>
             playerController.duration.inMilliseconds > 0,
         coordinator: capabilityCoordinator,
         currentMaterial: () => mediaSession.currentMaterial,
+        bridge: CompositionTranscriptBridge(
+          readComposition: coreRepositories.capability.readAdoptedComposition,
+          readResourcePayload:
+              coreRepositories.capability.readCompositionResourcePayload,
+          importSubtitle: (mediaId, path) =>
+              coreRepositories.mediaSession.importSubtitle(mediaId, path),
+        ),
         // The predicate reads core connectivity *and* live player readiness
         // (media id/path/duration). Both can arrive after the workbench first
         // builds — a core reconnect, or duration landing after open — so the

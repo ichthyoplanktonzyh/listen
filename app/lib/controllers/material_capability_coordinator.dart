@@ -33,12 +33,14 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     required this._repository,
     required this._generator,
     this.mediaFilePath,
+    this.mediaPathResolver,
     this.providerArguments = _noProviderArguments,
     this.generatorToolId = 'listen-gen',
     this.generatorToolVersion = '0.5.0',
     CapabilityFileResolver? fileResolver,
     ReusableResourceResolver? reusableResources,
-  }) : _fileResolver = fileResolver ?? _defaultFileResolver(mediaFilePath),
+  }) : _fileResolver = fileResolver ??
+            _defaultFileResolver(mediaFilePath, mediaPathResolver),
        _reusableResources = reusableResources ??
            ReusableResourceResolver(_repository);
 
@@ -49,7 +51,12 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
 
   /// Resolves the local file behind a media rendition, or null when the file
   /// is not available on this machine.
-  final String? Function(MediaRendition rendition)? mediaFilePath;
+  final Future<String?> Function(MediaRendition rendition)? mediaFilePath;
+
+  /// The authoritative media path resolver: snapshot misses (a freshly
+  /// registered media is not yet in any app-side list) round-trip to Core.
+  /// Defaults to the file resolver's own path resolution.
+  final Future<String?> Function(MediaRendition rendition)? mediaPathResolver;
 
   /// CLI arguments selecting the Gen providers for a run (e.g.
   /// `--tts-provider say`, `--provider whisper-cpp --model …`); provider
@@ -61,12 +68,24 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
 
   final Map<String, _CapabilitySession> _sessions = {};
 
+  /// Resolves the authoritative local file behind a media rendition: the
+  /// injected resolver when present, otherwise the file resolver's own path
+  /// resolution (which itself may round-trip).
+  Future<String?> _resolveMediaPath(MediaRendition rendition) async {
+    final resolver = mediaPathResolver;
+    if (resolver != null) return resolver(rendition);
+    return _fileResolver.mediaPath(rendition);
+  }
+
   static CapabilityFileResolver _defaultFileResolver(
-    String? Function(MediaRendition rendition)? mediaFilePath,
-  ) =>
-      mediaFilePath == null
-          ? const _UnresolvingCapabilityFileResolver()
-          : LocalCapabilityFileResolver(mediaFilePath: mediaFilePath);
+    Future<String?> Function(MediaRendition rendition)? mediaFilePath,
+    Future<String?> Function(MediaRendition rendition)? mediaPathResolver,
+  ) {
+    final pathResolver = mediaPathResolver ?? mediaFilePath;
+    return pathResolver == null
+        ? const _UnresolvingCapabilityFileResolver()
+        : LocalCapabilityFileResolver(mediaFilePath: pathResolver);
+  }
 
   bool get isConfigured => _generator.isConfigured;
 
@@ -242,9 +261,14 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
 
     // Core 4.0 media renditions carry no byte digest; when the rendition's
     // file is on this machine the file resolver computes the authoritative
-    // blob facts the request must declare.
+    // blob facts the request must declare. The path map feeds the Gen run;
+    // snapshot misses fall through to the authoritative resolver (a freshly
+    // registered media is not yet in any app-side list).
     final mediaBlobFacts = <String, MediaBlobFacts>{};
+    final mediaPaths = <String, String>{};
     for (final rendition in material.currentRevision.mediaRenditions) {
+      final path = await _resolveMediaPath(rendition);
+      if (path != null) mediaPaths[rendition.id] = path;
       final facts = await _fileResolver.mediaBlobFacts(rendition);
       if (facts != null) mediaBlobFacts[rendition.id] = facts;
     }
@@ -289,7 +313,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       documentSourcePaths: documentSourcePaths,
       documentSourceAssetIds: documentSourceAssetIds,
       mediaRenditions: material.currentRevision.mediaRenditions,
-      mediaFilePath: mediaFilePath,
+      mediaFilePath: (rendition) => mediaPaths[rendition.id],
       mediaBlobFacts: mediaBlobFacts,
       availableResources: availableResources,
     );
@@ -638,6 +662,9 @@ final class _UnresolvingCapabilityFileResolver implements CapabilityFileResolver
     DocumentRendition rendition,
     SourceAsset? sourceAsset,
   ) async => null;
+
+  @override
+  Future<String?> mediaPath(MediaRendition rendition) async => null;
 
   @override
   Future<MediaBlobFacts?> mediaBlobFacts(MediaRendition rendition) async =>

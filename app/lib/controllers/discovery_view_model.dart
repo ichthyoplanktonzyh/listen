@@ -1411,6 +1411,9 @@ class _FakeMediaLibraryRepository implements MediaLibraryRepository {
     required String language,
   }) async => const SavedVocabularyCount(total: 0, capped: false);
   @override
+  Future<MediaItem> readMedia(String mediaId) async =>
+      throw StateError('not used in discovery');
+  @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() async => [];
   @override
   Future<MediaLibraryEntry> setTriageIntent(

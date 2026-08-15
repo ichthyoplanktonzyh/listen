@@ -552,10 +552,14 @@ void main() {
     final adapter = _FakeAdapter();
     final repository = _FakeSessionRepository();
     final store = _FakeManagedStore();
+    var libraryRefreshes = 0;
     final harness = _harness(
       adapter: adapter,
       repository: repository,
       store: store,
+      onLibraryChanged: () async {
+        libraryRefreshes += 1;
+      },
     );
     harness.player.setMedia(
       id: 'media-1',
@@ -582,6 +586,9 @@ void main() {
     expect(harness.player.mediaRetained, isTrue);
     expect(harness.player.status, _en('statusMediaKept'));
     expect(harness.player.statusIsError, isFalse);
+    // The library list refreshes after membership changes instead of staying
+    // a stale snapshot.
+    expect(libraryRefreshes, 1);
     // The recent-media path follows the session to the managed copy.
     expect(harness.settings.lastRecordedPath, store.copyPath);
     expect(harness.player.retentionInFlight, isFalse);
@@ -1066,6 +1073,7 @@ _harness({
   _FakeManagedStore? store,
   LearningMaterialRepository? materials,
   void Function()? onMediaSwitched,
+  Future<void> Function()? onLibraryChanged,
 }) {
   final player = PlayerController();
   final subtitle = SubtitleController();
@@ -1098,6 +1106,7 @@ _harness({
         subtitleAnalysis: _FakeSubtitleAnalysisRepository(),
         managedStore: store ?? _FakeManagedStore(),
         materialRepository: materialRepository,
+        onLibraryChanged: onLibraryChanged,
         importFiles: _FixedImportFiles(),
       )..bind(
         isMounted: () => true,

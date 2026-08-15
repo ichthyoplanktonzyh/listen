@@ -25,6 +25,12 @@ abstract interface class CapabilityFileResolver {
     SourceAsset? sourceAsset,
   );
 
+  /// Resolves the local file behind a media rendition, or null when the
+  /// rendition's file is not known on this machine. Asynchronous because the
+  /// authoritative answer may require a round-trip (a freshly registered
+  /// media is not yet in any app-side snapshot).
+  Future<String?> mediaPath(MediaRendition rendition);
+
   /// Exact byte facts of a media rendition's local file, or null when the
   /// rendition's file is not available on this machine.
   Future<MediaBlobFacts?> mediaBlobFacts(MediaRendition rendition);
@@ -50,7 +56,7 @@ final class LocalCapabilityFileResolver implements CapabilityFileResolver {
   /// The app-owned reference map for `referenced` bindings.
   final DocumentReferenceStore? _referenceStore;
 
-  final String? Function(MediaRendition rendition)? _mediaFilePath;
+  final Future<String?> Function(MediaRendition rendition)? _mediaFilePath;
 
   @override
   Future<String?> documentSourcePath(
@@ -74,6 +80,10 @@ final class LocalCapabilityFileResolver implements CapabilityFileResolver {
     return location;
   }
 
+  @override
+  Future<String?> mediaPath(MediaRendition rendition) async =>
+      await _mediaFilePath?.call(rendition);
+
   /// Re-verifies a referenced location at use: the exact bytes must match the
   /// Source Asset's digest and size before a Gen run reads them.
   Future<bool> _verifies(String path, SourceAsset asset) async {
@@ -90,7 +100,7 @@ final class LocalCapabilityFileResolver implements CapabilityFileResolver {
 
   @override
   Future<MediaBlobFacts?> mediaBlobFacts(MediaRendition rendition) async {
-    final path = _mediaFilePath?.call(rendition);
+    final path = await mediaPath(rendition);
     if (path == null) return null;
     try {
       final file = File(path);

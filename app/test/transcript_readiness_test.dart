@@ -24,6 +24,7 @@ import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
+import 'package:llplayer_next/services/composition_transcript_bridge.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
@@ -267,6 +268,52 @@ void main() {
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
     });
+  group('composition to srt bridge', () {
+    test('builds srt from reading text and anchor times', () {
+      final srt = CompositionTranscriptBridge.compositionToSrt(
+        {
+          'text': 'Hello world. This is a test.',
+          'anchors': [
+            {'anchor_id': 'sentence-0', 'kind': 'sentence', 'start_offset': 0, 'end_offset': 12},
+            {'anchor_id': 'sentence-1', 'kind': 'sentence', 'start_offset': 13, 'end_offset': 28},
+          ],
+        },
+        {
+          'alignments': [
+            {'anchor_id': 'sentence-0', 'media_time_ms': 0},
+            {'anchor_id': 'sentence-1', 'media_time_ms': 4000},
+          ],
+        },
+      );
+
+      expect(srt, isNotNull);
+      expect(srt, contains('00:00:00,000 --> 00:00:04,000'));
+      expect(srt, contains('Hello world.'));
+      expect(srt, contains('This is a test.'));
+    });
+
+    test('drops sentences without times and empty text', () {
+      final srt = CompositionTranscriptBridge.compositionToSrt(
+        {
+          'text': 'A. B.',
+          'anchors': [
+            {'anchor_id': 'sentence-0', 'kind': 'sentence', 'start_offset': 0, 'end_offset': 2},
+            {'anchor_id': 'sentence-1', 'kind': 'sentence', 'start_offset': 3, 'end_offset': 5},
+          ],
+        },
+        {
+          'alignments': [
+            {'anchor_id': 'sentence-0', 'media_time_ms': 1000},
+          ],
+        },
+      );
+
+      expect(srt, isNotNull);
+      expect(srt, contains('A.'));
+      expect(srt, isNot(contains('B.')));
+    });
+  });
+
   });
 }
 
@@ -909,4 +956,6 @@ final class _NoopLearningMaterialRepository
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) => throw UnimplementedError();
+
+
 }

@@ -147,7 +147,7 @@ void main() {
         final coordinator = MaterialCapabilityCoordinator(
           repository: LocalCapabilityRepository(() => api),
           generator: generator,
-          mediaFilePath: (rendition) =>
+          mediaFilePath: (rendition) async =>
               rendition.mediaId == media.id ? mediaPath : null,
           providerArguments: () => providerArguments,
         );

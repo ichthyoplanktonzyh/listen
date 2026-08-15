@@ -95,7 +95,7 @@ void main() {
         final coordinator = MaterialCapabilityCoordinator(
           repository: LocalCapabilityRepository(() => api),
           generator: generator,
-          mediaFilePath: (rendition) =>
+          mediaFilePath: (rendition) async =>
               rendition.mediaId == media.id ? mediaPath : null,
           providerArguments: () => const [
             '--provider',
@@ -136,7 +136,7 @@ void main() {
           final replay = MaterialCapabilityCoordinator(
             repository: LocalCapabilityRepository(() => restarted),
             generator: generator,
-            mediaFilePath: (rendition) =>
+            mediaFilePath: (rendition) async =>
                 rendition.mediaId == mediaId ? mediaPath : null,
             providerArguments: () => const [
               '--provider',

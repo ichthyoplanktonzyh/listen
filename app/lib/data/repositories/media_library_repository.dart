@@ -9,6 +9,7 @@ abstract interface class MediaLibraryRepository {
 
   Future<SavedVocabularyCount> savedVocabularyCount({required String language});
   Future<List<MediaLibraryEntry>> listMediaLibrary();
+  Future<MediaItem> readMedia(String mediaId);
   Future<MediaLibraryEntry> setTriageIntent(String mediaId, String? intent);
   Future<MediaItem> registerMedia(
     String path, {
@@ -34,6 +35,8 @@ class LocalMediaLibraryRepository implements MediaLibraryRepository {
   }) => _api.savedVocabularyCount(language: language);
   @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() => _api.listMediaLibrary();
+  @override
+  Future<MediaItem> readMedia(String mediaId) => _api.readMedia(mediaId);
   @override
   Future<MediaLibraryEntry> setTriageIntent(String mediaId, String? intent) =>
       _api.setMediaTriageIntent(mediaId, intent);

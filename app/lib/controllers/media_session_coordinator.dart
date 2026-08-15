@@ -34,6 +34,7 @@ class MediaSessionCoordinator {
     required this.subtitleAnalysis,
     required this.managedStore,
     required this.materialRepository,
+    this.onLibraryChanged,
     this.importFiles = const LocalMediaImportFileService(),
   });
 
@@ -48,6 +49,12 @@ class MediaSessionCoordinator {
   final SubtitleAnalysisRepository subtitleAnalysis;
   final ManagedAssetStoreService managedStore;
   final MediaImportFileService importFiles;
+
+  /// Notified after membership or registration changes that affect the
+  /// library list (open, Keep, reference, unretain), so the library surface
+  /// can refresh itself instead of showing a stale snapshot. Best-effort:
+  /// a missing or failing refresh never fails the session flow.
+  final Future<void> Function()? onLibraryChanged;
 
   /// The learning material bound to the current media, when one was resolved
   /// from Core. Material retention is the session's membership authority:
@@ -202,6 +209,11 @@ class MediaSessionCoordinator {
         if (_isStale(sessionEpoch)) return;
         await resourceActions.loadSubtitleResources(updateStatus: false);
         if (_isStale(sessionEpoch)) return;
+        // A newly registered media changes the library; refresh it instead of
+        // leaving a stale snapshot behind. Never gating, never blocking the
+        // workbench.
+        unawaited(_notifyLibraryChanged());
+        if (_isStale(sessionEpoch)) return;
         try {
           // The workbench owns "does this media have a learning transcript".
           // After the resource list lands, pick the single obvious candidate —
@@ -277,6 +289,19 @@ class MediaSessionCoordinator {
       player.setMediaRetained(details.material.retainedAtMs != null);
     } catch (_) {
       if (!_isStale(sessionEpoch)) currentMaterial = null;
+    }
+  }
+
+  /// Best-effort library refresh after a membership or registration change.
+  /// A missing callback or a failing refresh never fails the caller.
+  Future<void> _notifyLibraryChanged() async {
+    final refresh = onLibraryChanged;
+    if (refresh == null) return;
+    try {
+      await refresh();
+    } on Object {
+      // Library refresh is a background concern; the session outcome is
+      // already reported.
     }
   }
 
@@ -372,6 +397,7 @@ class MediaSessionCoordinator {
         subtitleCount: subtitle.subtitleResources.length,
       );
       player.setStatus(text('statusMediaKept'), playback: true);
+      unawaited(_notifyLibraryChanged());
     } on ManagedStoreUnavailable {
       if (_isStale(sessionEpoch)) return;
       player.setStatus(text('statusManagedStoreUnavailable'), error: true);
@@ -431,6 +457,7 @@ class MediaSessionCoordinator {
       currentMaterial = updated;
       player.setMediaRetained(updated.material.retainedAtMs != null);
       player.setStatus(text('statusMediaKeptInPlace'), playback: true);
+      unawaited(_notifyLibraryChanged());
     } catch (error) {
       if (_isStale(sessionEpoch)) return;
       player.setStatus(
@@ -473,6 +500,7 @@ class MediaSessionCoordinator {
       currentMaterial = updated;
       player.setMediaRetained(updated.material.retainedAtMs != null);
       player.setStatus(text('statusMediaUnkept'), playback: true);
+      unawaited(_notifyLibraryChanged());
     } catch (error) {
       if (_isStale(sessionEpoch)) return;
       player.setStatus(

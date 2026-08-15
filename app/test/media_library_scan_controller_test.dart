@@ -59,6 +59,10 @@ class _FakeLibrary implements MediaLibraryRepository {
   }
 
   @override
+  @override
+  Future<MediaItem> readMedia(String mediaId) async =>
+      MediaItem.fromJson({});
+  @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() async {
     listCalls++;
     return const <MediaLibraryEntry>[];

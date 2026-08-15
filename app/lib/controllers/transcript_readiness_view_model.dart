@@ -6,6 +6,7 @@ import '../models/api_failure.dart';
 import '../models/learning_material.dart';
 import '../models/material_capability.dart';
 import '../models/timeline.dart';
+import '../services/composition_transcript_bridge.dart';
 import 'material_capability_coordinator.dart';
 import 'media_session_coordinator.dart';
 import 'subtitle_controller.dart';
@@ -92,6 +93,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     required this.canAutoPrepare,
     required this.coordinator,
     required this.currentMaterial,
+    this.bridge,
     Listenable? refreshTrigger,
   })
     // The public seam stays an explicit `refreshTrigger` parameter rather than
@@ -117,10 +119,17 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
 
   /// The current media's material, when one is registered.
   final MaterialDetails? Function() currentMaterial;
+
+  /// Bridges the adopted composition into the subtitle-track surface so a
+  /// prepared learning transcript appears in the workbench. Null on hosts
+  /// without the composition surface (tests, minimal hosts).
+  final CompositionTranscriptBridge? bridge;
+
   final Listenable? _refreshTrigger;
 
   late String Function(String key) text;
   bool _disposed = false;
+  bool _bridgeAttempted = false;
 
   TranscriptReadinessState _state = TranscriptReadinessState();
   TranscriptReadinessState get state => _state;
@@ -180,6 +189,29 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   Future<void> importSubtitle() =>
       mediaSession.openSubtitle(secondary: false);
 
+  /// Imports the adopted composition's structured reading as a subtitle
+  /// track, once, through [CompositionTranscriptBridge]. The Core package
+  /// surface and the subtitle-track surface do not share storage, so a
+  /// freshly prepared learning transcript would otherwise stay invisible to
+  /// the workbench transcript panel.
+  Future<void> _bridgePackageToTrack() async {
+    _bridgeAttempted = true;
+    final bridge = this.bridge;
+    final material = currentMaterial();
+    final mediaId = mediaSession.player.mediaId;
+    if (material == null || bridge == null || mediaId == null) return;
+    try {
+      final track = await bridge.bridge(material.material.id, mediaId);
+      if (track != null) {
+        await mediaSession.resourceActions.loadSubtitleResources(
+          updateStatus: false,
+        );
+      }
+    } on Object catch (error) {
+      debugPrint('transcript bridge failed: $error');
+    }
+  }
+
   void _recompute() {
     if (_disposed) return;
     final material = currentMaterial();
@@ -200,6 +232,14 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
       _ when canAutoPrepare() => TranscriptReadinessPhase.missing,
       _ => TranscriptReadinessPhase.unavailable,
     };
+    // A prepared learning transcript that never became a subtitle track
+    // (package install does not register tracks) is bridged once into the
+    // track surface so the workbench can show it.
+    if (phase == TranscriptReadinessPhase.ready &&
+        subtitle.primaryTrack == null &&
+        !_bridgeAttempted) {
+      unawaited(_bridgePackageToTrack());
+    }
     final next = TranscriptReadinessState(
       phase: phase,
       preparationStage: phase == TranscriptReadinessPhase.preparing
