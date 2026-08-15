@@ -1,0 +1,71 @@
+{
+  "schema": "listen_gen.prosody-result.v1",
+  "provider": {"id": "fixture-prosody", "version": "1"},
+  "model": {"id": "fixture-prosody-model", "version": "2026-08"},
+  "config_sha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "uses_sense_groups": true,
+  "anchors": [
+    {
+      "sentence_index": 0,
+      "token_index": 0,
+      "lexical_stress": "primary",
+      "realized_prominence": 0.8,
+      "utterance_role": "nucleus",
+      "evidence": ["energy", "pitch", "duration"],
+      "confidence": 0.75
+    },
+    {
+      "sentence_index": 0,
+      "token_index": 3,
+      "lexical_stress": "secondary",
+      "realized_prominence": 0.3,
+      "utterance_role": "postnuclear",
+      "evidence": ["energy", "duration"],
+      "confidence": 0.6
+    },
+    {
+      "sentence_index": 1,
+      "token_index": 0,
+      "lexical_stress": "primary",
+      "realized_prominence": 0.55,
+      "utterance_role": "prenuclear",
+      "evidence": ["energy", "pitch"],
+      "confidence": 0.7
+    },
+    {
+      "sentence_index": 1,
+      "token_index": 2,
+      "lexical_stress": "primary",
+      "realized_prominence": 0.72,
+      "utterance_role": "nucleus",
+      "evidence": ["energy", "pitch", "duration"],
+      "confidence": 0.72
+    }
+  ],
+  "chunks": [
+    {
+      "sentence_index": 0,
+      "chunk_index": 0,
+      "start_token_index": 0,
+      "end_token_index_exclusive": 2,
+      "nucleus_token_index": 0,
+      "confidence": 0.85
+    },
+    {
+      "sentence_index": 0,
+      "chunk_index": 1,
+      "start_token_index": 2,
+      "end_token_index_exclusive": 5,
+      "nucleus_token_index": 3,
+      "confidence": 0.82
+    },
+    {
+      "sentence_index": 1,
+      "chunk_index": 0,
+      "start_token_index": 0,
+      "end_token_index_exclusive": 4,
+      "nucleus_token_index": 2,
+      "confidence": 0.84
+    }
+  ]
+}

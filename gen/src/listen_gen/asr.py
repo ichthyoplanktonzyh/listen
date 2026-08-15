@@ -23,6 +23,32 @@ TOKEN_RE = re.compile(r"\w+(?:['\u2019]\w+)*|\s+|[^\w\s]", re.UNICODE)
 ASR_STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 
 
+def _tokens(text: str) -> list[dict[str, Any]]:
+    """Deterministically tokenize one sentence into word/whitespace/punct.
+
+    The emitted token indexes are the exact coordinates the word timeline
+    resource refers to; tokenization must be lossless or it is a failure.
+    """
+    tokens = []
+    for index, match in enumerate(TOKEN_RE.finditer(text)):
+        value = match.group(0)
+        if value.isspace():
+            kind, normalized = "whitespace", None
+        elif any(character.isalnum() or character == "_" for character in value):
+            kind, normalized = "word", unicodedata.normalize("NFKC", value).casefold()
+        elif all(unicodedata.category(character).startswith("P") for character in value):
+            kind, normalized = "punctuation", None
+        else:
+            kind, normalized = "other", None
+        tokens.append({
+            "index": index, "kind": kind, "text": value, "normalized": normalized,
+            "start_char": match.start(), "end_char": match.end(),
+        })
+    if not tokens or "".join(token["text"] for token in tokens) != text:
+        raise ConversionError("ASR segment could not be losslessly tokenized")
+    return tokens
+
+
 @dataclass(frozen=True)
 class AsrWord:
     start_char: int
@@ -230,8 +256,10 @@ def _parse_transcript(raw: Any) -> AsrTranscript:
         if not isinstance(text, str) or not text or not isinstance(display_text, str):
             raise ConversionError(f"{location} text fields must be strings and text must be non-empty")
         raw_words = segment.get("words")
-        if not isinstance(raw_words, list) or not raw_words:
-            raise ConversionError(f"{location}/words must be a non-empty array")
+        if raw_words is None:
+            raw_words = []
+        if not isinstance(raw_words, list):
+            raise ConversionError(f"{location}/words must be an array")
         words: list[AsrWord] = []
         previous_word_end = start_ms
         previous_char_end = 0

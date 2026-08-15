@@ -157,7 +157,13 @@ class AvailableDocumentRendition:
                 f"capability request rendition media_type is invalid: {media_type!r}"
             )
         language = _optional_string(document, "language")
-        if language is not None:
+        if not language:
+            # An empty tag is the same fact as an absent one: the rendition is
+            # untagged. Core projects an empty string for a material without a
+            # language fact, and the planner already treats both as "carries
+            # none".
+            language = None
+        else:
             language = _language_tag(language)
         source_asset_id = _optional_string(document, "source_asset_id")
         if source_asset_id is not None and not _SHA256_RE.match(source_asset_id):

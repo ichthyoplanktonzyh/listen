@@ -165,6 +165,38 @@ def parser(
     produce.add_argument("--ffprobe-command", default="ffprobe")
     produce.add_argument("--ffmpeg-command", default="ffmpeg")
     produce.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
+    for stage in ("sense-groups", "acoustics", "prosody"):
+        produce.add_argument(
+            f"--{stage}",
+            default="none",
+            choices=["none", "fixture", "command", "baseline"],
+            help=f"optional {stage} stage adapter (none/fixture/command/baseline)",
+        )
+    produce.add_argument(
+        "--phones",
+        default="none",
+        choices=["none", "fixture", "command", "baseline", "wav2vec2"],
+        help="optional phones stage adapter (none/fixture/command/baseline/wav2vec2)",
+    )
+    for option in ("python", "sidecar", "model-dir", "model-id", "model-revision"):
+        produce.add_argument(f"--phones-wav2vec2-{option}", help=f"wav2vec2 phone adapter {option} argument")
+    produce.add_argument("--phones-wav2vec2-timeout-seconds", type=float, default=600.0)
+    for stage, flag in (
+        ("sense-groups", "sense_groups"),
+        ("acoustics", "acoustics"),
+        ("prosody", "prosody"),
+        ("phones", "phones"),
+    ):
+        produce.add_argument(f"--{stage}-fixture", type=Path, help=f"committed result fixture for the {stage} stage")
+        produce.add_argument(f"--{stage}-command", help=f"external {stage} provider executable; no shell is used")
+        produce.add_argument(f"--{stage}-command-arg", action="append", default=[], help=f"one argv item for the {stage} command provider")
+        produce.add_argument(f"--{stage}-command-timeout-seconds", type=float, default=600.0)
+    produce.add_argument(
+        "--tts-aligner",
+        default="none",
+        choices=["none", "fixture", "command", "whisper-cpp"],
+        help="ASR provider that transcribes derived TTS audio into word timings",
+    )
     produce.add_argument(
         "--machine-events",
         action="store_true",
@@ -173,14 +205,19 @@ def parser(
     return root
 
 
-def _build_asr(args: argparse.Namespace, progress=None) -> Any | None:
-    """Resolve the optional ASR adapter for capability derivations."""
+def _build_asr(args: argparse.Namespace, progress=None) -> tuple[Any | None, Any | None]:
+    """Resolve the optional ASR adapter for capability derivations.
+
+    Returns ``(adapter, preprocessor)``; the preprocessor is the shared
+    ffmpeg/ffprobe normalization pipeline the adapter uses and that the
+    ``tts_aligner`` path reuses on derived audio.
+    """
     if getattr(args, "provider", "none") == "none":
-        return None
+        return None, None
     if args.provider == "fixture":
         if args.fixture is None:
             raise ConversionError("--fixture is required for the fixture ASR provider")
-        return FixtureAsrAdapter(args.fixture, progress=progress)
+        return FixtureAsrAdapter(args.fixture, progress=progress), None
     preprocessor = FfmpegAudioPreprocessor(
         ffprobe_executable=args.ffprobe_command,
         ffmpeg_executable=args.ffmpeg_command,
@@ -190,29 +227,35 @@ def _build_asr(args: argparse.Namespace, progress=None) -> Any | None:
     if args.provider == "command":
         if args.command is None:
             raise ConversionError("--command is required for the command ASR provider")
-        return PreprocessingAsrAdapter(
-            CommandAsrAdapter(
-                args.command,
-                args.command_arg,
-                args.command_timeout_seconds,
+        return (
+            PreprocessingAsrAdapter(
+                CommandAsrAdapter(
+                    args.command,
+                    args.command_arg,
+                    args.command_timeout_seconds,
+                    progress=progress,
+                ),
+                preprocessor,
+                audio_stream_index=args.audio_stream_index,
                 progress=progress,
+            ),
+            preprocessor,
+        )
+    return (
+        PreprocessingAsrAdapter(
+            WhisperCppAsrAdapter(
+                args.whisper_cli,
+                args.whisper_model,
+                args.whisper_model_id,
+                args.whisper_language,
+                args.whisper_translate_to_english,
+                args.whisper_timeout_seconds,
             ),
             preprocessor,
             audio_stream_index=args.audio_stream_index,
             progress=progress,
-        )
-    return PreprocessingAsrAdapter(
-        WhisperCppAsrAdapter(
-            args.whisper_cli,
-            args.whisper_model,
-            args.whisper_model_id,
-            args.whisper_language,
-            args.whisper_translate_to_english,
-            args.whisper_timeout_seconds,
         ),
         preprocessor,
-        audio_stream_index=args.audio_stream_index,
-        progress=progress,
     )
 
 
@@ -242,6 +285,168 @@ def _build_ocr(args: argparse.Namespace) -> Any | None:
     if not args.ocr_fixture.is_file():
         raise ConversionError("the OCR fixture must be a regular file")
     return FixtureOcrProvider(args.ocr_fixture)
+
+
+
+def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
+    """Resolve the optional rich stage adapters for capability derivations."""
+    from .rich import (
+        CommandAcousticsAdapter,
+        CommandProsodyAdapter,
+        CommandSenseGroupAdapter,
+        FixtureAcousticsAdapter,
+        FixtureProsodyAdapter,
+        FixtureSenseGroupAdapter,
+    )
+    from .rich_baselines import (
+        AcousticProsodyBaseline,
+        PunctuationSenseGroupBaseline,
+        WavWordAcousticsBaseline,
+    )
+    from .rich_stages import RichStages
+    from .phone import (
+        CommandPhoneAdapter,
+        FixturePhoneAdapter,
+        Wav2Vec2CtcPhoneAdapter,
+    )
+
+    sense_groups = None
+    acoustics = None
+    prosody = None
+    phone = None
+    tts_aligner = None
+
+    def stage_adapter(selector: str, stage: str, fixture, command, command_args, timeout):
+        if selector == "fixture":
+            if fixture is None:
+                raise ConversionError(f"--{stage.replace('_', '-')}-fixture is required for the fixture adapter")
+            return fixture
+        if selector == "command":
+            if command is None:
+                raise ConversionError(f"--{stage.replace('_', '-')}-command is required for the command adapter")
+            return command, command_args, timeout
+        if selector == "baseline":
+            return "baseline"
+        return None
+
+    selector = args.sense_groups
+    if selector == "fixture":
+        sense_groups = FixtureSenseGroupAdapter(args.sense_groups_fixture)
+    elif selector == "command":
+        sense_groups = CommandSenseGroupAdapter(
+            args.sense_groups_command, args.sense_groups_command_arg,
+            args.sense_groups_command_timeout_seconds, progress=progress,
+        )
+    elif selector == "baseline":
+        sense_groups = PunctuationSenseGroupBaseline()
+
+    selector = args.acoustics
+    if selector == "fixture":
+        acoustics = FixtureAcousticsAdapter(args.acoustics_fixture)
+    elif selector == "command":
+        acoustics = CommandAcousticsAdapter(
+            args.acoustics_command, args.acoustics_command_arg,
+            args.acoustics_command_timeout_seconds, progress=progress,
+        )
+    elif selector == "baseline":
+        acoustics = WavWordAcousticsBaseline()
+
+    selector = args.prosody
+    if selector == "fixture":
+        prosody = FixtureProsodyAdapter(args.prosody_fixture)
+    elif selector == "command":
+        prosody = CommandProsodyAdapter(
+            args.prosody_command, args.prosody_command_arg,
+            args.prosody_command_timeout_seconds, progress=progress,
+        )
+    elif selector == "baseline":
+        prosody = AcousticProsodyBaseline()
+
+    selector = args.phones
+    if selector == "fixture":
+        phone = FixturePhoneAdapter(args.phones_fixture)
+    elif selector == "command":
+        phone = CommandPhoneAdapter(
+            args.phones_command, args.phones_command_arg,
+            args.phones_command_timeout_seconds,
+        )
+    elif selector == "wav2vec2":
+        missing = [
+            name for name, value in (
+                ("--phones-wav2vec2-python", args.phones_wav2vec2_python),
+                ("--phones-wav2vec2-sidecar", args.phones_wav2vec2_sidecar),
+                ("--phones-wav2vec2-model-dir", args.phones_wav2vec2_model_dir),
+                ("--phones-wav2vec2-model-id", args.phones_wav2vec2_model_id),
+                ("--phones-wav2vec2-model-revision", args.phones_wav2vec2_model_revision),
+            ) if not value
+        ]
+        if missing:
+            raise ConversionError(
+                f"{', '.join(missing)} are required for the wav2vec2 phone adapter"
+            )
+        phone = Wav2Vec2CtcPhoneAdapter(
+            Path(args.phones_wav2vec2_python),
+            Path(args.phones_wav2vec2_sidecar),
+            Path(args.phones_wav2vec2_model_dir),
+            args.phones_wav2vec2_model_id,
+            args.phones_wav2vec2_model_revision,
+            args.phones_wav2vec2_timeout_seconds,
+        )
+
+    aligner = args.tts_aligner
+    if aligner != "none":
+        tts_aligner = _build_asr_for_aligner(args, aligner, progress)
+
+    if (
+        sense_groups is None
+        and acoustics is None
+        and prosody is None
+        and phone is None
+        and tts_aligner is None
+    ):
+        return None
+    return RichStages(
+        sense_groups=sense_groups,
+        acoustics=acoustics,
+        acoustics_preprocessor=FfmpegAudioPreprocessor(
+            ffprobe_executable=args.ffprobe_command,
+            ffmpeg_executable=args.ffmpeg_command,
+            timeout_seconds=args.media_command_timeout_seconds,
+            progress=progress,
+        ) if args.acoustics in ("command", "baseline") else None,
+        prosody=prosody,
+        phone=phone,
+        tts_aligner=tts_aligner,
+    )
+
+
+def _build_asr_for_aligner(args, selector: str, progress) -> Any:
+    """Resolve the ASR adapter that transcribes derived TTS audio."""
+    from .asr import FixtureAsrAdapter
+    from .whisper_cpp import WhisperCppAsrAdapter
+    if selector == "fixture":
+        if args.fixture is None:
+            raise ConversionError("--fixture is required for the fixture tts-aligner")
+        return FixtureAsrAdapter(args.fixture, progress=progress)
+    if selector == "command":
+        if args.command is None:
+            raise ConversionError("--command is required for the command tts-aligner")
+        return CommandAsrAdapter(
+            args.command, args.command_arg, args.command_timeout_seconds,
+            progress=progress,
+        )
+    if args.whisper_model is None or args.whisper_model_id is None:
+        raise ConversionError(
+            "--whisper-model and --whisper-model-id are required for the whisper-cpp tts-aligner"
+        )
+    return WhisperCppAsrAdapter(
+        args.whisper_cli,
+        args.whisper_model,
+        args.whisper_model_id,
+        args.whisper_language,
+        args.whisper_translate_to_english,
+        args.whisper_timeout_seconds,
+    )
 
 
 def _default_attempt_id(request: CapabilityRequest) -> str:
@@ -280,10 +485,13 @@ def _run(
     else:
         check_cancelled = None
         progress = None
+    asr_adapter, asr_preprocessor = _build_asr(args, progress=progress)
     config = ProduceConfig(
         tts=_build_tts(args),
         ocr=_build_ocr(args),
-        asr=_build_asr(args, progress=progress),
+        asr=asr_adapter,
+        asr_preprocessor=asr_preprocessor,
+        rich=_build_rich(args, progress=progress),
     )
     outcome = produce(
         request,

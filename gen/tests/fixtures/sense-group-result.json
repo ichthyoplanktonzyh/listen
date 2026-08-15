@@ -1,0 +1,37 @@
+{
+  "schema": "listen_gen.sense-group-result.v1",
+  "provider": {"id": "fixture-sense-groups", "version": "1"},
+  "model": {"id": "fixture-groups", "version": "2026-08"},
+  "config_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "groups": [
+    {
+      "sentence_index": 0,
+      "group_index": 0,
+      "start_token_index": 0,
+      "end_token_index_exclusive": 2,
+      "confidence": 0.9,
+      "label": "left",
+      "head_token_index": 0,
+      "sources": ["punctuation"]
+    },
+    {
+      "sentence_index": 0,
+      "group_index": 1,
+      "start_token_index": 2,
+      "end_token_index_exclusive": 5,
+      "confidence": 0.9,
+      "label": "right",
+      "head_token_index": 3,
+      "sources": ["punctuation"]
+    },
+    {
+      "sentence_index": 1,
+      "group_index": 0,
+      "start_token_index": 0,
+      "end_token_index_exclusive": 4,
+      "confidence": 0.85,
+      "head_token_index": 2,
+      "sources": ["rule"]
+    }
+  ]
+}

@@ -189,51 +189,86 @@ def _silence_window(ms: int) -> list[int]:
 # ---------------------------------------------------------------------------
 
 
+def _wav_data_chunk(path_or_bytes) -> tuple[int, int, int, bytes]:
+    """Locate the real PCM `data` chunk in a WAV by walking RIFF chunks.
+
+    afconvert writes a non-standard layout (`fmt`, then a zero-filled
+    `FLLR` chunk, then `data`), so a fixed 44-byte header offset is wrong.
+    Walking the chunks finds the authoritative sample rate, channels, bits,
+    and data bytes regardless of extra chunks.
+    """
+    data = path_or_bytes if isinstance(path_or_bytes, bytes) else path_or_bytes.read_bytes()
+    if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
+    pos = 12
+    sample_rate = channels = bits = 0
+    while pos + 8 <= len(data):
+        marker = data[pos : pos + 4]
+        size = struct.unpack_from("<I", data, pos + 4)[0]
+        body_start = pos + 8
+        if marker == b"fmt " and size >= 16:
+            sample_rate = struct.unpack_from("<I", data, body_start + 4)[0]
+            channels = struct.unpack_from("<H", data, body_start + 2)[0]
+            bits = struct.unpack_from("<H", data, body_start + 14)[0]
+        elif marker == b"data":
+            body = data[body_start : body_start + size]
+            if body:
+                return sample_rate, channels, bits, body
+        pos = body_start + size + (size & 1)
+    raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
+
+
 def _wav_duration_ms(path: Path) -> int:
     """Real media duration of a WAV file in milliseconds.
 
     The duration is derived from the file's own fmt/data chunks; this is a
     measurement of produced audio, never an estimate.
     """
-    data = path.read_bytes()
-    if len(data) < WAV_HEADER_SIZE or data[:4] != b"RIFF":
-        raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
-    try:
-        sample_rate = struct.unpack_from("<I", data, 24)[0]
-        channels = struct.unpack_from("<H", data, 22)[0]
-        bits = struct.unpack_from("<H", data, 34)[0]
-    except struct.error as error:
-        raise TtsProviderOutputInvalid(
-            "the TTS provider produced invalid WAV audio"
-        ) from error
-    data_size = struct.unpack_from("<I", data, 40)[0]
+    sample_rate, channels, bits, body = _wav_data_chunk(path)
     if sample_rate <= 0 or channels <= 0 or bits <= 0:
         raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
     byte_rate = sample_rate * channels * bits // 8
     if byte_rate <= 0:
         raise TtsProviderOutputInvalid("the TTS provider produced invalid WAV audio")
-    return data_size * 1000 // byte_rate
+    return len(body) * 1000 // byte_rate
 
 
 def _concat_wav(segments: Sequence[bytes]) -> bytes:
     """Concatenate same-format PCM WAV files into one WAV stream.
 
-    The header comes from the first segment; the data bodies follow in
-    order. All segments must share the format declaration.
+    The fmt header comes from the first segment; the `data` chunk bodies
+    follow in order. All segments must share the format declaration.
+    Segments that cannot be parsed as WAV (e.g. unmeasurable garbage from a
+    provider failure path) are preserved byte-for-byte: the audio still
+    succeeds and the missing measurement surfaces as an honest alignment
+    abstention, never as a fabrication.
     """
     if not segments:
         raise TtsProviderOutputInvalid("the TTS provider produced no audio")
-    header = segments[0][:WAV_HEADER_SIZE]
-    body = b"".join(segment[WAV_HEADER_SIZE:] for segment in segments)
-    data_size = len(body)
-    rewritten = (
-        header[:4]
-        + struct.pack("<I", 36 + data_size)
-        + header[8:40]
-        + struct.pack("<I", data_size)
-        + body
-    )
-    return rewritten
+    try:
+        first = segments[0]
+        sample_rate, channels, bits, first_body = _wav_data_chunk(first)
+        if sample_rate <= 0 or channels <= 0 or bits <= 0:
+            raise TtsProviderOutputInvalid(
+                "the TTS provider produced invalid WAV audio"
+            )
+        body = first_body + b"".join(
+            _wav_data_chunk(segment)[3] for segment in segments[1:]
+        )
+        byte_rate = sample_rate * channels * bits // 8
+        block_align = channels * bits // 8
+        header = b"RIFF" + struct.pack("<I", 36 + len(body)) + b"WAVE"
+        header += b"fmt " + struct.pack("<I", 16)
+        header += struct.pack("<H", 1)  # PCM
+        header += struct.pack("<H", channels)
+        header += struct.pack("<I", sample_rate)
+        header += struct.pack("<I", byte_rate)
+        header += struct.pack("<H", block_align)
+        header += struct.pack("<H", bits)
+        header += b"data" + struct.pack("<I", len(body))
+        return header + body
+    except TtsProviderError:
+        return b"".join(segments)
 
 
 class SayTtsAdapter:
@@ -298,6 +333,11 @@ class SayTtsAdapter:
         with tempfile.TemporaryDirectory(prefix="listen-gen-tts-") as directory:
             directory_path = Path(directory)
             for index, (anchor_id, sentence) in enumerate(sentence_anchors):
+                if not sentence.strip():
+                    # A blank sentence (e.g. whitespace residue from source
+                    # segmentation) has nothing to speak; skipping it keeps
+                    # the segment audio non-empty without fabricating speech.
+                    continue
                 input_path = directory_path / f"segment-{index}.txt"
                 input_path.write_text(sentence, encoding="utf-8")
                 aiff_path = directory_path / f"segment-{index}.aiff"

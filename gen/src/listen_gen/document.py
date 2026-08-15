@@ -225,18 +225,23 @@ def segment_text(text: str) -> tuple[tuple[Paragraph, ...], tuple[Sentence, ...]
 
 
 def _split_single_line(line: str) -> list[tuple[int, int]]:
-    """Sentence bounds within one line (no trailing newline)."""
+    """Sentence bounds within one line (no trailing newline).
+
+    Trailing whitespace after terminal punctuation is not a sentence: bounds
+    whose slice is blank (e.g. the space after ``"end. "``) are dropped, so
+    the sentence units never carry empty residue.
+    """
     starts = [match.start() for match in _SENTENCE_END.finditer(line)]
     bounds: list[tuple[int, int]] = []
     if starts:
         cursor = 0
         for end in starts:
-            if end > cursor:
+            if end > cursor and line[cursor:end].strip():
                 bounds.append((cursor, end))
             cursor = end
-        if cursor < len(line):
+        if cursor < len(line) and line[cursor:].strip():
             bounds.append((cursor, len(line)))
-    else:
+    elif line.strip():
         bounds = [(0, len(line))]
     return bounds
 

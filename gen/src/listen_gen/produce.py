@@ -70,6 +70,13 @@ from .production_input_projection import (
     project_plain_text_for_speech,
     sentences_from_structured_reading,
 )
+from .rich import RichContext
+from .rich_stages import (
+    RichStages,
+    alignment_sentences_from,
+    build_word_timeline_resource,
+    run_rich_stages,
+)
 from .tts import AnchorAlignment, TtsAdapter, TtsProviderError
 
 
@@ -125,6 +132,7 @@ class ProduceConfig:
     ocr: OcrProvider | None = None
     asr: AsrAdapter | None = None
     asr_preprocessor: FfmpegAudioPreprocessor | None = None
+    rich: "RichStages | None" = None
 
 
 def _blob_source_bytes(blob) -> bytes:
@@ -360,7 +368,7 @@ def _run_media_derivation(
             ),
         )
         alignment = _transcript_alignment(transcript)
-    return derived, alignment, producer
+    return derived, alignment, producer, transcript, raw
 
 
 def _transcript_document(transcript: AsrTranscript) -> DecodedDocument:
@@ -511,6 +519,96 @@ def _alignment_resource(
     return resource, payload_bytes
 
 
+
+def _sentence_ids_and_times(
+    reading_payload: dict[str, object],
+    alignments: tuple[AnchorAlignment, ...] | None,
+) -> tuple[tuple[str, ...], dict[str, int]]:
+    """The reading's sentence ids in order, and anchor id -> start ms."""
+    sentence_ids: list[str] = []
+    anchors = reading_payload.get("anchors")
+    if isinstance(anchors, list):
+        for entry in anchors:
+            if (
+                isinstance(entry, dict)
+                and entry.get("kind") == "sentence"
+                and isinstance(entry.get("anchor_id"), str)
+            ):
+                sentence_ids.append(entry["anchor_id"])
+    times: dict[str, int] = {}
+    if alignments is not None:
+        for alignment in alignments:
+            times[alignment.anchor_id] = alignment.media_time_ms
+    return tuple(sentence_ids), times
+
+
+def _attach_rich_resources(
+    *,
+    config: ProduceConfig,
+    context: RichContext,
+    reading_payload: dict[str, object],
+    sentence_ids: tuple[str, ...],
+    sentence_times_ms: dict[str, int],
+    transcript: AsrTranscript | None,
+    producer: dict[str, object],
+    audio_path: Path | None,
+    audio_stream_index: int | None,
+    progress: Progress | None,
+) -> tuple[list[PackageResource], dict[str, bytes], list[Warning]]:
+    """The word timeline plus the optional rich chain, or nothing when no
+    word timings exist (an honest abstention, never a fabrication)."""
+    stages = config.rich
+    if stages is None:
+        return [], {}, []
+    if transcript is None or not transcript.segments:
+        return [], {}, []
+    try:
+        word_timeline_result = build_word_timeline_resource(
+            transcript=transcript,
+            sentence_ids=sentence_ids,
+            context=context,
+            producer=producer,
+        )
+    except ConversionError:
+        # Word timings that do not resolve exactly against the emitted
+        # sentence tokens abstain honestly; the reading and alignment stay.
+        return [], {}, [
+            _warning(
+                "word_timeline_abstained",
+                "exact word timings could not be qualified; synchronized "
+                "reading remains available without word-level alignment",
+            )
+        ]
+    if word_timeline_result is None:
+        return [], {}, []
+    word_resource, word_payload_bytes = word_timeline_result
+    word_payload = json.loads(word_payload_bytes.decode("utf-8"))
+    audio_duration_ms = None
+    raw_words = word_payload.get("words")
+    if isinstance(raw_words, list) and raw_words:
+        ends = [entry.get("end_ms") for entry in raw_words if isinstance(entry, dict)]
+        if ends:
+            audio_duration_ms = max(ends)
+    sentences = alignment_sentences_from(
+        reading_payload=reading_payload,
+        sentence_times_ms=sentence_times_ms,
+        audio_duration_ms=audio_duration_ms,
+    )
+    resources, bytes_by_digest, warnings = run_rich_stages(
+        stages=stages,
+        context=context,
+        sentences=sentences,
+        word_timeline_payload=word_payload,
+        word_timeline_id=word_resource.resource_id,
+        audio_path=audio_path,
+        audio_stream_index=audio_stream_index,
+        progress=progress,
+    )
+    resources.insert(0, word_resource)
+    bytes_by_digest[word_resource.payload_blob["digest"]] = word_payload_bytes
+    return resources, bytes_by_digest, warnings
+
+
 def _available_reading_payload(
     request: CapabilityRequest, resource_id: str
 ) -> tuple[dict[str, object], str]:
@@ -538,6 +636,129 @@ def _available_reading_payload(
             "the available resource is not a qualified structured reading",
         )
     return payload, entry.content_language or request.edition.target_language
+
+
+
+
+def _tts_rich_stages(
+    *,
+    request: CapabilityRequest,
+    config: ProduceConfig,
+    audio_bytes: bytes,
+    reading_payload: dict[str, object],
+    alignments: tuple[AnchorAlignment, ...],
+    producer: dict[str, object],
+    anchor_resource_id: str,
+    language: str,
+    subject: dict[str, object],
+    rendition_id: str,
+    created_at_ms: int,
+    progress: Progress | None,
+) -> tuple[list[PackageResource], dict[str, bytes], list[Warning]]:
+    """Derived TTS audio joins the same rich pipeline when a tts_aligner ASR
+    adapter is configured: the audio is transcribed into word timings and the
+    word timeline plus rich stages derive exactly as for source media.
+
+    Without a tts_aligner the document path produces no word-level resources
+    (an honest abstention — timing is never fabricated from text).
+    """
+    stages = config.rich
+    if stages is None or stages.tts_aligner is None:
+        return [], {}, []
+    sentence_ids, sentence_times = _sentence_ids_and_times(
+        reading_payload, alignments
+    )
+    context = RichContext(
+        language=language,
+        subject=subject,
+        anchor_resource_id=anchor_resource_id,
+        rendition_id=rendition_id,
+        created_at_ms=created_at_ms,
+    )
+    with tempfile.TemporaryDirectory(prefix="listen-gen-rich-") as directory:
+        audio_path = Path(directory) / "tts-audio.bin"
+        audio_path.write_bytes(audio_bytes)
+        asr_input: Path = audio_path
+        stream_index: int | None = None
+        if config.asr_preprocessor is not None:
+            with config.asr_preprocessor.prepare(
+                audio_path, audio_stream_index=None
+            ) as prepared:
+                transcript = stages.tts_aligner.transcribe(prepared.path)
+            stream_index = prepared.stream_index
+            asr_input = prepared.path
+        else:
+            transcript = stages.tts_aligner.transcribe(audio_path)
+        if transcript.segments:
+            transcript = AsrTranscript(
+                language=transcript.language or language,
+                segments=transcript.segments,
+                provider_id=transcript.provider_id,
+                provider_version=transcript.provider_version,
+                model_id=transcript.model_id,
+                model_version=transcript.model_version,
+                config_sha256=transcript.config_sha256,
+            )
+        else:
+            return [], {}, []
+        return _attach_rich_resources(
+            config=config,
+            context=context,
+            reading_payload=reading_payload,
+            sentence_ids=sentence_ids,
+            sentence_times_ms=sentence_times,
+            transcript=transcript,
+            producer=producer,
+            audio_path=asr_input,
+            audio_stream_index=stream_index,
+            progress=progress,
+        )
+
+
+def _media_rich_stages(
+    *,
+    request: CapabilityRequest,
+    config: ProduceConfig,
+    derived: DerivedStructuredReading,
+    alignment: tuple[AnchorAlignment, ...],
+    transcript: AsrTranscript,
+    producer: dict[str, object],
+    media_bytes: bytes,
+    rendition_id: str,
+    created_at_ms: int,
+    progress: Progress | None,
+) -> tuple[list[PackageResource], dict[str, bytes], list[Warning]]:
+    """The word timeline and optional rich stages for a media derivation."""
+    reading_payload = json.loads(derived.bytes.decode("utf-8"))
+    sentence_ids, sentence_times = _sentence_ids_and_times(
+        reading_payload, alignment
+    )
+    context = RichContext(
+        language=derived.resource.content_language,
+        subject=_subject(
+            request,
+            rendition_ids=(rendition_id,),
+            anchor_resource_ids=(derived.resource.resource_id,),
+        ),
+        anchor_resource_id=derived.resource.resource_id,
+        rendition_id=rendition_id,
+        created_at_ms=created_at_ms,
+    )
+    with tempfile.TemporaryDirectory(prefix="listen-gen-rich-") as directory:
+        audio_path = Path(directory) / "media-audio.bin"
+        audio_path.write_bytes(media_bytes)
+        return _attach_rich_resources(
+            config=config,
+            context=context,
+            reading_payload=reading_payload,
+            sentence_ids=sentence_ids,
+            sentence_times_ms=sentence_times,
+            transcript=transcript,
+            producer=producer,
+            audio_path=audio_path,
+            audio_stream_index=None,
+            progress=progress,
+        )
 
 
 def produce(
@@ -699,6 +920,23 @@ def produce(
                 resource_bytes[alignment_resource.payload_blob["digest"]] = (
                     alignment_bytes
                 )
+                rich_resources, rich_bytes, rich_warnings = _tts_rich_stages(
+                    request=request,
+                    config=config,
+                    audio_bytes=audio.bytes,
+                    reading_payload=reading_payload,
+                    alignments=audio.alignment,
+                    producer=audio.provider,
+                    anchor_resource_id=anchor_resource_id,
+                    language=language,
+                    subject=subject,
+                    rendition_id=audio_rendition.rendition_id,
+                    created_at_ms=created_at_ms,
+                    progress=progress,
+                )
+                resources.extend(rich_resources)
+                resource_bytes.update(rich_bytes)
+                warnings.extend(rich_warnings)
             else:
                 warnings.append(
                     _warning(
@@ -708,13 +946,17 @@ def produce(
                     )
                 )
         elif derivation.kind == DerivationKind.MEDIA_READ:
-            derived, alignment, producer = _run_media_derivation(
-                request,
-                derivation,
-                config=config,
-                created_at_ms=created_at_ms,
-                package_rendition_id=media_id_map[derivation.input_rendition_ids[0]],
-                progress=progress,
+            derived, alignment, producer, transcript, source_media_bytes = (
+                _run_media_derivation(
+                    request,
+                    derivation,
+                    config=config,
+                    created_at_ms=created_at_ms,
+                    package_rendition_id=media_id_map[
+                        derivation.input_rendition_ids[0]
+                    ],
+                    progress=progress,
+                )
             )
             resources.append(derived.resource)
             resource_bytes[derived.resource.payload_blob["digest"]] = derived.bytes
@@ -736,6 +978,24 @@ def produce(
                 resource_bytes[alignment_resource.payload_blob["digest"]] = (
                     alignment_bytes
                 )
+                if config.rich is not None:
+                    rich_resources, rich_bytes, rich_warnings = _media_rich_stages(
+                        request=request,
+                        config=config,
+                        derived=derived,
+                        alignment=alignment,
+                        transcript=transcript,
+                        producer=producer,
+                        media_bytes=source_media_bytes,
+                        rendition_id=media_id_map[
+                            derivation.input_rendition_ids[0]
+                        ],
+                        created_at_ms=created_at_ms,
+                        progress=progress,
+                    )
+                    resources.extend(rich_resources)
+                    resource_bytes.update(rich_bytes)
+                    warnings.extend(rich_warnings)
             else:
                 warnings.append(
                     _warning(
