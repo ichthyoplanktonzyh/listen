@@ -178,6 +178,8 @@ class MediaSessionCoordinator {
     }
     if (_isStale(sessionEpoch)) return;
     Object? coreError;
+    Duration? saved;
+    final coreAvailable = repository.isAvailable;
     try {
       await previousProgressSave;
       if (_isStale(sessionEpoch)) return;
@@ -188,7 +190,7 @@ class MediaSessionCoordinator {
         final media = await repository.registerMedia(path, retain: false);
         if (_isStale(sessionEpoch)) return;
         final id = media.id;
-        final saved = await repository.readProgress(id);
+        saved = await repository.readProgress(id);
         if (_isStale(sessionEpoch)) return;
         player.setMedia(
           id: id,
@@ -197,11 +199,27 @@ class MediaSessionCoordinator {
           fingerprint: media.fingerprint,
         );
         player.setMediaRetained(media.retainedAtMs != null);
-        if (saved != null && saved > Duration.zero) {
-          await adapter.seek(saved);
-          if (_isStale(sessionEpoch)) return;
-          player.setPosition(saved);
-        }
+      }
+    } catch (error) {
+      if (_isStale(sessionEpoch)) return;
+      coreError = error;
+    }
+    if (_isStale(sessionEpoch)) return;
+    try {
+      // Playback starts before the restore seek, and the restore seek runs
+      // before the subtitle auto-select. A paused seek is applied by the
+      // player but its position is not observable until playback renders, and
+      // the auto-select's disableNativeSubtitles() (setActiveTracks([]))
+      // resets a paused seek to zero — the same call during playback does
+      // not. (Real incident: progress restore always restarted at 0:00.)
+      await adapter.play();
+      if (_isStale(sessionEpoch)) return;
+      if (saved != null && saved > Duration.zero) {
+        await adapter.seek(saved);
+        if (_isStale(sessionEpoch)) return;
+        player.setPosition(saved);
+      }
+      if (coreAvailable && coreError == null) {
         // Registration creates (or resolves) the deterministic material graph,
         // so the media resolves to a material immediately. Material retention
         // is the session's membership authority from here on.
@@ -227,13 +245,6 @@ class MediaSessionCoordinator {
         }
         if (_isStale(sessionEpoch)) return;
       }
-    } catch (error) {
-      if (_isStale(sessionEpoch)) return;
-      coreError = error;
-    }
-    if (_isStale(sessionEpoch)) return;
-    try {
-      await adapter.play();
       if (isMounted() && !_isStale(sessionEpoch)) {
         // Only the healthy branch is playback chatter; the degraded one
         // reports on the core, so health indicators must keep showing it.

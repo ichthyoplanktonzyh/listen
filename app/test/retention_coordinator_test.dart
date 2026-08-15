@@ -83,6 +83,28 @@ void main() {
     expect(harness.player.status, isNot(contains('core refused')));
   });
 
+  test('progress restore seeks only after playback starts', () async {
+    final adapter = _FakeAdapter();
+    final repository = _FakeSessionRepository()
+      ..savedProgress = const Duration(seconds: 14);
+    final harness = _harness(adapter: adapter, repository: repository);
+
+    await harness.session.openMediaPath('/media/original.mp3');
+
+    // Real incident: the restore seek ran while paused, then the subtitle
+    // auto-select's disableNativeSubtitles() (setActiveTracks([])) reset the
+    // paused seek to zero and playback restarted at 0:00. The coordinator
+    // must therefore play first and seek second, and only report the saved
+    // position after the seek.
+    expect(adapter.calls, contains('play'));
+    expect(adapter.calls, contains('seek'));
+    expect(
+      adapter.calls.indexOf('play'),
+      lessThan(adapter.calls.indexOf('seek')),
+    );
+    expect(harness.player.position, const Duration(seconds: 14));
+  });
+
   test('an already-retained media reopens without losing membership', () async {
     final adapter = _FakeAdapter();
     final repository = _FakeSessionRepository()
@@ -1137,6 +1159,9 @@ class _FakeAdapter extends DesktopPlayerAdapter {
   final opened = <String>[];
   bool played = false;
 
+  /// Playback call order, for restore-ordering assertions.
+  final calls = <String>[];
+
   @override
   Future<void> open(String path, {bool play = true}) async {
     opened.add(path);
@@ -1145,10 +1170,13 @@ class _FakeAdapter extends DesktopPlayerAdapter {
   @override
   Future<void> play() async {
     played = true;
+    calls.add('play');
   }
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    calls.add('seek');
+  }
 }
 
 class _FakeSessionRepository implements MediaSessionRepository {
@@ -1238,8 +1266,12 @@ class _FakeSessionRepository implements MediaSessionRepository {
   @override
   Future<void> saveProgress(String mediaId, Duration position) async {}
 
+  /// When set, [readProgress] returns it — the seam for restore-ordering
+  /// tests.
+  Duration? savedProgress;
+
   @override
-  Future<Duration?> readProgress(String mediaId) async => null;
+  Future<Duration?> readProgress(String mediaId) async => savedProgress;
 
   @override
   Future<SubtitleTrack> importSubtitle(String mediaId, String path) async =>
