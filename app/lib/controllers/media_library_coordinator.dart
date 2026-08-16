@@ -208,7 +208,7 @@ class MediaLibraryCoordinator {
     final media = entry.primaryMedia;
     if (media == null) return;
     if (!fileService.exists(media.media.path)) {
-      player.setStatus(text('mediaFileMissing'));
+      player.setStatus(text('mediaFileMissing'), error: true);
       return;
     }
     await openMediaPath(media.media.path);
@@ -220,7 +220,7 @@ class MediaLibraryCoordinator {
     final media = entry.primaryMedia;
     if (media == null) return;
     if (!fileService.exists(media.media.path)) {
-      player.setStatus(text('mediaFileMissing'));
+      player.setStatus(text('mediaFileMissing'), error: true);
       return;
     }
     await openMediaPath(media.media.path);
@@ -240,7 +240,7 @@ class MediaLibraryCoordinator {
     final media = entry.primaryMedia;
     if (media == null) return;
     if (!fileService.exists(media.media.path)) {
-      player.setStatus(text('mediaFileMissing'));
+      player.setStatus(text('mediaFileMissing'), error: true);
       return;
     }
     await openMediaPath(media.media.path);

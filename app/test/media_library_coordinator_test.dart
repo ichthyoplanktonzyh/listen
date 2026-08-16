@@ -925,6 +925,9 @@ void main() {
     await w.coordinator.openLibraryEntry(_personalEntry(_libraryEntry()));
 
     expect(w.player.status, 'mediaFileMissing');
+    // The missing file is an error report, not an idle hint — it must render
+    // in the error style wherever the status line exists.
+    expect(w.player.statusIsError, isTrue);
     expect(w.openedPaths, isEmpty);
   });
 
@@ -967,6 +970,7 @@ void main() {
     );
 
     expect(w.player.status, 'mediaFileMissing');
+    expect(w.player.statusIsError, isTrue);
     expect(w.openedPaths, isEmpty);
   });
 
