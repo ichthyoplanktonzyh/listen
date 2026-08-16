@@ -1030,8 +1030,16 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   void _collapseWorkbench() {
+    debugPrint(
+      '[_collapseWorkbench] called; anim status='
+      '${_workbenchAnimController.status} value=${_workbenchAnimController.value}',
+    );
     unawaited(practiceActions.closePracticeWindow());
     _workbenchAnimController.reverse().then((_) {
+      debugPrint(
+        '[_collapseWorkbench] reverse settled; expanded=false; status='
+        '${_workbenchAnimController.status}',
+      );
       if (mounted) setState(() => _workbenchExpanded = false);
     });
   }

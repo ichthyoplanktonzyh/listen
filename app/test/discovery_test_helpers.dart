@@ -458,6 +458,14 @@ class TestDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
+  Future<void> refreshSource(String sourceId) async {
+    await gates[sourceId]?.future;
+    if (failingSources.contains(sourceId)) {
+      throw StateError('feed for $sourceId unavailable');
+    }
+  }
+
+  @override
   Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,

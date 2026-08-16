@@ -334,6 +334,22 @@ final class DiscoveryViewModel extends ChangeNotifier {
     await _loadEntriesFor(sourceId);
   }
 
+  /// Refreshes the selected source: drops its cached feed state and re-reads
+  /// the items from the source. A feed that changed since the last read (new
+  /// items, edited metadata) is what the next shelf shows.
+  Future<void> refreshSource() async {
+    final sourceId = _state.selectedSourceId;
+    if (sourceId == null) return;
+    try {
+      await _repository.refreshSource(sourceId);
+    } catch (error) {
+      // A refresh that fails to drop is not a refresh that failed to show:
+      // the entries reload below either way, and its failure is theirs.
+      debugPrint('Error refreshing source $sourceId: $error');
+    }
+    await _loadEntriesFor(sourceId);
+  }
+
   Future<void> _loadEntriesFor(String sourceId) async {
     // The old channel's cards stop standing in for the new one's while its
     // header is already on screen.

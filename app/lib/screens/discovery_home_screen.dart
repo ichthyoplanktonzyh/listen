@@ -86,6 +86,7 @@ class DiscoveryHome extends StatelessWidget {
               onSelectSource: viewModel.selectChannel,
               onRetrySources: viewModel.load,
               onRetryEntries: viewModel.retryEntries,
+              onRefreshSource: viewModel.refreshSource,
               onOpenMedia: onOpenMedia,
               isGrid: constraints.maxWidth >= ListenBreakpoints.discoveryGrid,
             );
@@ -341,6 +342,7 @@ class _DiscoveryShelf extends StatelessWidget {
     required this.onSelectSource,
     required this.onRetrySources,
     required this.onRetryEntries,
+    required this.onRefreshSource,
     required this.onOpenMedia,
     required this.isGrid,
   });
@@ -354,6 +356,7 @@ class _DiscoveryShelf extends StatelessWidget {
   final void Function(String) onSelectSource;
   final VoidCallback onRetrySources;
   final VoidCallback onRetryEntries;
+  final VoidCallback onRefreshSource;
   final VoidCallback onOpenMedia;
   final bool isGrid;
 
@@ -388,11 +391,23 @@ class _DiscoveryShelf extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      sourceDisplayName(l, source),
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            sourceDisplayName(l, source),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: l.text('refresh'),
+                          onPressed: onRefreshSource,
+                          icon: const Icon(Icons.refresh),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: ListenSpacing.gap4),
                     Text(

@@ -298,6 +298,9 @@ class _RecordingDiscoveryRepository implements DiscoveryRepository {
   Future<List<DiscoveryItem>> entriesFor(String sourceId) async => const [];
 
   @override
+  Future<void> refreshSource(String sourceId) async {}
+
+  @override
   Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,

@@ -919,6 +919,9 @@ class _FeedRepositoryWithDurations implements DiscoveryRepository {
   ];
 
   @override
+  Future<void> refreshSource(String sourceId) async {}
+
+  @override
   Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,

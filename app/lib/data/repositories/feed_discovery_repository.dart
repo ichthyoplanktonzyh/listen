@@ -137,6 +137,9 @@ final class FeedDiscoveryRepository implements DiscoveryRepository {
   /// network. The refresh affordance is the caller's to offer.
   void forget(String sourceId) => _feeds.remove(sourceId);
 
+  @override
+  Future<void> refreshSource(String sourceId) async => forget(sourceId);
+
   /// The channel-level kind, for subscription and shelf presentation.
   ///
   /// Items are decided per item (an enclosure is always media, an article

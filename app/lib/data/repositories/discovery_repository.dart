@@ -19,6 +19,10 @@ abstract interface class DiscoveryRepository {
 
   Future<List<DiscoveryItem>> entriesFor(String sourceId);
 
+  /// Drops any cached state for [sourceId] so the next [entriesFor] read goes
+  /// back to the source. A family with no cache answers nothing.
+  Future<void> refreshSource(String sourceId) async {}
+
   Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
@@ -73,6 +77,12 @@ final class FixtureDiscoveryRepository implements DiscoveryRepository {
     return List.unmodifiable(
       _entries!.where((entry) => entry.sourceId == sourceId),
     );
+  }
+
+  @override
+  Future<void> refreshSource(String sourceId) async {
+    // The fixture catalog is a bundled asset; there is no remote state to
+    // drop and nothing to refetch.
   }
 
   @override
@@ -292,6 +302,12 @@ final class YoutubeDiscoveryRepository implements DiscoveryRepository {
     return [
       for (final item in feed.items) _itemFrom(item, sourceId),
     ];
+  }
+
+  @override
+  Future<void> refreshSource(String sourceId) async {
+    // YouTube's per-channel feed is fetched on every entriesFor read; there
+    // is no session cache to drop.
   }
 
   DiscoveryItem _itemFrom(ParsedFeedItem item, String sourceId) {

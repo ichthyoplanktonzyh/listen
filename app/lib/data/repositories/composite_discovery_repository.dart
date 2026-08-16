@@ -36,6 +36,10 @@ final class CompositeDiscoveryRepository implements DiscoveryRepository {
       _ownerOf(sourceId).entriesFor(sourceId);
 
   @override
+  Future<void> refreshSource(String sourceId) =>
+      _ownerOf(sourceId).refreshSource(sourceId);
+
+  @override
   Future<DiscoveryItem> resolveCustomVideo(
     String url,
     MediaImportRepository importRepo,
