@@ -1,17 +1,15 @@
 {
   "manifest_version": 1,
   "core_repository": "ichthyoplanktonzyh/listen-core",
-  "core_git_sha": "5a65b2735325aac18f1eacb736b8d9676adf59a9",
+  "core_git_sha": "ee3997275eb2786469e428310908f0b181e1e872",
   "contract": {
-    "version": "3.2.0",
-    "sha256": "43e3aaf69b2182f0b434d022d7620f26c8b97eaef4b9c40e4d74a910483b0491",
-    "url": "https://github.com/ichthyoplanktonzyh/listen-core/releases/download/v0.7.0-phase1.2/listen-contracts-3.2.0.tar.gz"
+    "version": "4.0.0",
+    "sha256": "6abcf4d97887beb8c9eab8a09621b12c5dbdcdccb24efacc2acb48cb8542e46a"
   },
   "runtime": {
     "version": "0.7.0",
     "platform": "macos",
     "arch": "arm64",
-    "sha256": "8130e336d73da0590c68393a379941a42788abdb178e8a3bfd6d15787ce4a7d5",
-    "url": "https://github.com/ichthyoplanktonzyh/listen-core/releases/download/v0.7.0-phase1.2/listen-core-runtime-0.7.0-macos-arm64.tar.gz"
+    "sha256": "5ede443276ce0c912c36f704d127c746db39244fc6260cbf60d75ce558ba83ff"
   }
 }
