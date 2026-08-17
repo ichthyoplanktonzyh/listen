@@ -502,6 +502,13 @@ mod tests {
         ) -> Result<Option<Vec<u8>>, ApplicationError> {
             unreachable!("not used in these tests")
         }
+        fn delete_installation(
+            &self,
+            _material_id: &LearningMaterialId,
+            _release_id: &domain::PackageReleaseId,
+        ) -> Result<bool, ApplicationError> {
+            unreachable!("not used in these tests")
+        }
     }
 
     fn setup() -> (MaterialCapabilityUseCases, FakeMaterials) {

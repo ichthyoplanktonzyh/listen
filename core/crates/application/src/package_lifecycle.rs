@@ -195,6 +195,14 @@ pub trait PackageLifecycleRepository: Send + Sync {
         release_id: &PackageReleaseId,
         rendition_id: &str,
     ) -> Result<Option<Vec<u8>>, ApplicationError>;
+
+    /// Deletes one installed candidate release for `material_id`. Returns true
+    /// if a release was found and deleted, false if no such installation existed.
+    fn delete_installation(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+    ) -> Result<bool, ApplicationError>;
 }
 
 /// Without configured persistence every package lifecycle operation errors
@@ -254,6 +262,14 @@ impl PackageLifecycleRepository for DisabledPackageLifecycleRepository {
         _release_id: &PackageReleaseId,
         _rendition_id: &str,
     ) -> Result<Option<Vec<u8>>, ApplicationError> {
+        Err(Self::disabled())
+    }
+
+    fn delete_installation(
+        &self,
+        _material_id: &LearningMaterialId,
+        _release_id: &PackageReleaseId,
+    ) -> Result<bool, ApplicationError> {
         Err(Self::disabled())
     }
 }
@@ -435,6 +451,36 @@ impl PackageLifecycleUseCases {
         let plan = adoption_commit_plan(&installation, now_ms())?;
         let committed = self.package_lifecycle.commit_adoption(&plan)?;
         Ok(edition_view(installation, Some(&committed)))
+    }
+
+    /// Deletes one installed Learning Edition candidate for the Material.
+    ///
+    /// The material must exist, and the release must not be currently adopted.
+    /// Deleting an adopted edition fails closed with `ApplicationError::Conflict`.
+    pub fn delete_for_material(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+    ) -> Result<(), ApplicationError> {
+        let _material = self
+            .materials
+            .get_material(material_id)?
+            .ok_or(ApplicationError::NotFound("material"))?;
+        let adoption = self.package_lifecycle.get_adoption(material_id)?;
+        if let Some(adopted) = adoption {
+            if adopted.release_id == *release_id {
+                return Err(ApplicationError::Conflict(
+                    "cannot delete currently adopted package release; switch adoption first".into(),
+                ));
+            }
+        }
+        let deleted = self
+            .package_lifecycle
+            .delete_installation(material_id, release_id)?;
+        if !deleted {
+            return Err(ApplicationError::NotFound("package release installation"));
+        }
+        Ok(())
     }
 
     /// Loads the Material's actual current revision from the repository and
@@ -1532,6 +1578,26 @@ mod tests {
                 ))
                 .and_then(|stored| stored.rendition_blobs.get(rendition_id))
                 .map(|blob| blob.bytes.clone()))
+        }
+
+        fn delete_installation(
+            &self,
+            material_id: &LearningMaterialId,
+            release_id: &PackageReleaseId,
+        ) -> Result<bool, ApplicationError> {
+            let mut state = self.state.lock().unwrap();
+            if let Some(adoption) = state.adoptions.get(material_id.as_str()) {
+                if adoption.release_id == *release_id {
+                    return Err(ApplicationError::Conflict(
+                        "cannot delete currently adopted package release; switch adoption first".into(),
+                    ));
+                }
+            }
+            let key = (
+                material_id.as_str().to_owned(),
+                release_id.as_str().to_owned(),
+            );
+            Ok(state.installations.remove(&key).is_some())
         }
     }
 

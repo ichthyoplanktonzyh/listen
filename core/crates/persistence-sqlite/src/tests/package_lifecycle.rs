@@ -1693,3 +1693,61 @@ fn package_lifecycle_seam_survives_a_database_reopen() {
     assert_eq!(view.adopted_at_ms, Some(adopted_at_ms));
     assert_eq!(view.installed_at_ms, installed_at_ms);
 }
+
+#[test]
+fn delete_installation_deletes_facts_payloads_and_rejects_adopted() {
+    let repo = Arc::new(SqliteRepository::in_memory().unwrap());
+    let (material, revision) = seed_material(&repo, "Hello world.");
+    let release_a = text_prepared(&material, &revision, "sha256:release-a", "edition-a");
+    let release_b = text_prepared(&material, &revision, "sha256:release-b", "edition-b");
+    PackageLifecycleRepository::save_installation(repo.as_ref(), &release_a).unwrap();
+    PackageLifecycleRepository::save_installation(repo.as_ref(), &release_b).unwrap();
+
+    let plan = text_adoption(&repo, &material, "sha256:release-a");
+    PackageLifecycleRepository::commit_adoption(repo.as_ref(), &plan).unwrap();
+
+    let release_a_id = PackageReleaseId::parse("sha256:release-a").unwrap();
+    let release_b_id = PackageReleaseId::parse("sha256:release-b").unwrap();
+
+    // Deleting adopted release fails closed with Conflict.
+    let err = PackageLifecycleRepository::delete_installation(
+        repo.as_ref(),
+        &material.id,
+        &release_a_id,
+    )
+    .unwrap_err();
+    assert!(matches!(err, ApplicationError::Conflict(_)));
+
+    // Deleting unadopted candidate release succeeds and removes payloads too.
+    let deleted = PackageLifecycleRepository::delete_installation(
+        repo.as_ref(),
+        &material.id,
+        &release_b_id,
+    )
+    .unwrap();
+    assert!(deleted);
+
+    let listed =
+        PackageLifecycleRepository::list_installations(repo.as_ref(), &material.id).unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].release_id, release_a_id);
+
+    let payload = PackageLifecycleRepository::read_resource_payload(
+        repo.as_ref(),
+        &material.id,
+        &release_b_id,
+        "resource-document",
+    )
+    .unwrap();
+    assert_eq!(payload, None);
+
+    // Deleting already deleted release returns false.
+    let deleted_again = PackageLifecycleRepository::delete_installation(
+        repo.as_ref(),
+        &material.id,
+        &release_b_id,
+    )
+    .unwrap();
+    assert!(!deleted_again);
+}
+

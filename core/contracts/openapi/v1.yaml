@@ -541,6 +541,75 @@ paths:
                     retryable: true
         default:
           $ref: "#/components/responses/Error"
+  /v1/materials/{material_id}/editions/{release_id}:
+    parameters:
+      - $ref: "#/components/parameters/MaterialId"
+      - $ref: "#/components/parameters/PackageReleaseId"
+    delete:
+      operationId: deleteLearningEdition
+      description: >
+        Deletes one installed Learning Edition candidate for the Material,
+        including its immutable installation facts, resource payloads, and
+        rendition blobs. A candidate currently adopted by the Material cannot
+        be deleted (returns typed 409 conflict); the caller must switch or
+        reject adoption before deleting. Unknown material or uninstalled
+        release is a typed 404; repository/internal failure is a typed 500.
+      responses:
+        "204":
+          description: Candidate Learning Edition successfully deleted
+        "404":
+          description: >
+            Typed not-found: unknown material, or the release was not
+            installed for this material. `code` is `not_found`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notFound:
+                  summary: Unknown material or release
+                  value:
+                    code: not_found
+                    message: package release installation was not found
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "409":
+          description: >
+            Typed conflict: cannot delete a currently adopted Learning
+            Edition. `code` is `cannot_delete_adopted_edition`, the public
+            message is `cannot delete currently adopted package release; switch
+            adoption first`, and `retryable` is `false`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                adoptedConflict:
+                  summary: Currently adopted edition
+                  value:
+                    code: cannot_delete_adopted_edition
+                    message: cannot delete currently adopted package release; switch adoption first
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: false
+        "500":
+          description: >
+            Typed repository/internal failure. `code` is
+            `package_lifecycle_failed`, the public message is `local package
+            lifecycle operation failed`, and `retryable` is `true`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                lifecycleFailed:
+                  summary: Local package lifecycle failure
+                  value:
+                    code: package_lifecycle_failed
+                    message: local package lifecycle operation failed
+                    correlation_id: "00000000-0000-0000-0000-000000000000"
+                    retryable: true
+        default:
+          $ref: "#/components/responses/Error"
   /v1/materials/{material_id}/edition-adoption:
     parameters:
       - $ref: "#/components/parameters/MaterialId"
@@ -4282,6 +4351,11 @@ components:
       schema: { type: string }
     MaterialRevisionId:
       name: revision_id
+      in: path
+      required: true
+      schema: { type: string }
+    PackageReleaseId:
+      name: release_id
       in: path
       required: true
       schema: { type: string }

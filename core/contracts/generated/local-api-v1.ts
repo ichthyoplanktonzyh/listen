@@ -1556,6 +1556,15 @@ export class LocalApiV1 {
     return this.request(`/v1/materials/${encodeURIComponent(materialId)}/editions`);
   }
 
+  deleteLearningEdition(materialId: string, releaseId: string): Promise<void> {
+    return this.request(
+      `/v1/materials/${encodeURIComponent(materialId)}/editions/${encodeURIComponent(releaseId)}`,
+      {
+        method: "DELETE",
+      },
+    );
+  }
+
   adoptLearningEdition(
     materialId: string,
     input: AdoptLearningEditionRequest,

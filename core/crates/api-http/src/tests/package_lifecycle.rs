@@ -352,6 +352,27 @@ async fn adopt_edition(app: &Router, material_id: &str, release_id: &str) -> (St
     (status, value)
 }
 
+async fn delete_edition(app: &Router, material_id: &str, release_id: &str) -> (StatusCode, Value) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/v1/materials/{material_id}/editions/{release_id}"))
+                .header(AUTHORIZATION, format!("Bearer {TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let value: Value = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+    };
+    (status, value)
+}
+
 fn test_app() -> Router {
     let repo = Arc::new(SqliteRepository::in_memory().unwrap());
     let services = AppServices::new(
@@ -652,6 +673,67 @@ async fn two_editions_list_independently_and_adoption_switches() {
         true,
         "only edition B is adopted"
     );
+}
+
+#[tokio::test]
+async fn candidate_edition_can_be_deleted_and_adopted_cannot() {
+    let app = test_app();
+    let material = create_text_material(&app, "Delete lifecycle text.").await;
+    let material_id = material["material"]["id"].as_str().unwrap().to_owned();
+    let revision_id = material["current_revision"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let (dir_a, _, _) = text_release_carrier(
+        &material_id,
+        &revision_id,
+        "edition-del-a",
+        "Delete lifecycle text.",
+        "unreviewed",
+    );
+    let (status, installed_a) = install_package(&app, &material_id, dir_a.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed_a}");
+    let release_a = installed_a["release_id"].as_str().unwrap().to_owned();
+
+    let (dir_b, _, _) = text_release_carrier(
+        &material_id,
+        &revision_id,
+        "edition-del-b",
+        "Delete lifecycle text.",
+        "unreviewed",
+    );
+    let (status, installed_b) = install_package(&app, &material_id, dir_b.path()).await;
+    assert_eq!(status, StatusCode::OK, "{installed_b}");
+    let release_b = installed_b["release_id"].as_str().unwrap().to_owned();
+
+    // Adopt release A.
+    let (status, adopted) = adopt_edition(&app, &material_id, &release_a).await;
+    assert_eq!(status, StatusCode::OK, "{adopted}");
+
+    // Attempting to delete adopted release A fails with 409 Conflict.
+    let (status, error) = delete_edition(&app, &material_id, &release_a).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{error}");
+    assert_eq!(error["code"], "cannot_delete_adopted_edition");
+    assert_eq!(
+        error["message"],
+        "cannot delete currently adopted package release; switch adoption first"
+    );
+
+    // Deleting candidate release B succeeds with 204 No Content.
+    let (status, _) = delete_edition(&app, &material_id, &release_b).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    // Listing only shows release A now.
+    let (status, editions) = list_editions(&app, &material_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(editions.as_array().unwrap().len(), 1);
+    assert_eq!(editions[0]["release_id"], release_a);
+
+    // Deleting already deleted release B returns 404 Not Found.
+    let (status, error) = delete_edition(&app, &material_id, &release_b).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error}");
+    assert_eq!(error["code"], "not_found");
 }
 
 // ---------------------------------------------------------------------
@@ -1161,6 +1243,7 @@ fn package_lifecycle_routes_match_openapi_and_client() {
     for (method, path) in [
         ("post", "/v1/materials/{material_id}/package-installations"),
         ("get", "/v1/materials/{material_id}/editions"),
+        ("delete", "/v1/materials/{material_id}/editions/{release_id}"),
         ("put", "/v1/materials/{material_id}/edition-adoption"),
     ] {
         assert!(
@@ -1179,6 +1262,7 @@ fn package_lifecycle_routes_match_openapi_and_client() {
         "not_found",
         "package_installation_invalid",
         "edition_adoption_conflict",
+        "cannot_delete_adopted_edition",
         "package_lifecycle_failed",
     ] {
         assert!(
@@ -1188,6 +1272,7 @@ fn package_lifecycle_routes_match_openapi_and_client() {
     }
     let install = super::openapi::operation_response_block(openapi, "installMaterialPackage");
     let editions = super::openapi::operation_response_block(openapi, "listLearningEditions");
+    let delete_edition = super::openapi::operation_response_block(openapi, "deleteLearningEdition");
     let adoption = super::openapi::operation_response_block(openapi, "adoptLearningEdition");
     for status in ["\"404\"", "\"422\"", "\"500\""] {
         assert!(
@@ -1201,6 +1286,12 @@ fn package_lifecycle_routes_match_openapi_and_client() {
             "listLearningEditions must declare {status} responses"
         );
     }
+    for status in ["\"204\"", "\"404\"", "\"409\"", "\"500\""] {
+        assert!(
+            delete_edition.contains(status),
+            "deleteLearningEdition must declare {status} responses"
+        );
+    }
     for status in ["\"404\"", "\"409\"", "\"500\""] {
         assert!(
             adoption.contains(status),
@@ -1212,8 +1303,9 @@ fn package_lifecycle_routes_match_openapi_and_client() {
     assert!(
         client.contains("installMaterialPackage(")
             && client.contains("listLearningEditions(")
+            && client.contains("deleteLearningEdition(")
             && client.contains("adoptLearningEdition("),
-        "generated client must expose the three package lifecycle operations"
+        "generated client must expose the package lifecycle operations"
     );
 }
 

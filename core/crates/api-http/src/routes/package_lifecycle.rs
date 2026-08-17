@@ -256,6 +256,42 @@ pub(crate) async fn adopt_learning_edition(
         .map_err(package_adoption_error)
 }
 
+/// DELETE /v1/materials/{material_id}/editions/{release_id} — deletes one
+/// installed Learning Edition candidate for the Material. A candidate
+/// currently adopted cannot be deleted (typed 409 conflict).
+pub(crate) async fn delete_learning_edition(
+    State(state): State<ApiState>,
+    Path((material_id, release_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    let material_id = LearningMaterialId::parse(material_id).map_err(ApplicationError::from)?;
+    let release_id =
+        domain::PackageReleaseId::parse(release_id).map_err(ApplicationError::from)?;
+    state
+        .application
+        .execute("package_lifecycle.delete", move |services| {
+            services
+                .package_lifecycle()
+                .delete_for_material(&material_id, &release_id)
+        })
+        .await
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(package_deletion_error)
+}
+
+fn package_deletion_error(error: ApplicationError) -> ApiError {
+    match error {
+        ApplicationError::NotFound(entity) => ApiError::not_found(entity),
+        ApplicationError::Conflict(message) => ApiError::internal(
+            StatusCode::CONFLICT,
+            "cannot_delete_adopted_edition",
+            "cannot delete currently adopted package release; switch adoption first",
+            message,
+            false,
+        ),
+        other => package_lifecycle_failed(other),
+    }
+}
+
 /// Maps Package Installation failures. Invalid carriers, unreadable or
 /// malformed packages, incompatibility, and Material/Revision mismatches are
 /// typed 422 `package_installation_invalid` with a stable public message; the

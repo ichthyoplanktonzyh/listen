@@ -975,6 +975,41 @@ impl PackageLifecycleRepository for SqliteRepository {
         }
         Ok(Some(blob.bytes))
     }
+
+    fn delete_installation(
+        &self,
+        material_id: &LearningMaterialId,
+        release_id: &PackageReleaseId,
+    ) -> Result<bool, ApplicationError> {
+        let mut conn = self.connection.lock();
+        let tx = conn.transaction().map_err(repo)?;
+        if let Some(adoption) = query_adoption(&tx, material_id.as_str())? {
+            if adoption.release_id == *release_id {
+                return Err(ApplicationError::Conflict(
+                    "cannot delete currently adopted package release; switch adoption first".into(),
+                ));
+            }
+        }
+        tx.execute(
+            "DELETE FROM package_resource_payloads WHERE material_id=?1 AND release_id=?2",
+            params![material_id.as_str(), release_id.as_str()],
+        )
+        .map_err(repo)?;
+        tx.execute(
+            "DELETE FROM package_rendition_blobs WHERE material_id=?1 AND release_id=?2",
+            params![material_id.as_str(), release_id.as_str()],
+        )
+        .map_err(repo)?;
+        let rows = tx
+            .execute(
+                "DELETE FROM package_installations WHERE material_id=?1 AND release_id=?2",
+                params![material_id.as_str(), release_id.as_str()],
+            )
+            .map_err(repo)?;
+        tx.commit().map_err(repo)?;
+        drop(conn);
+        Ok(rows > 0)
+    }
 }
 
 fn json_string<T: serde::Serialize>(value: &T) -> Result<String, ApplicationError> {

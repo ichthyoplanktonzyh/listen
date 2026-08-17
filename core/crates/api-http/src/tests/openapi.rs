@@ -139,6 +139,7 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
         "not_found",
         "package_installation_invalid",
         "edition_adoption_conflict",
+        "cannot_delete_adopted_edition",
         "package_lifecycle_failed",
     ] {
         assert!(
@@ -151,6 +152,7 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
     for message in [
         "package release is invalid or incompatible",
         "learning edition cannot be adopted",
+        "cannot delete currently adopted package release; switch adoption first",
         "local package lifecycle operation failed",
     ] {
         assert!(
@@ -162,6 +164,7 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
     // Each operation must formally declare its exact error responses.
     let install = operation_response_block(openapi, "installMaterialPackage");
     let editions = operation_response_block(openapi, "listLearningEditions");
+    let delete_edition = operation_response_block(openapi, "deleteLearningEdition");
     let adoption = operation_response_block(openapi, "adoptLearningEdition");
     for status in ["\"404\"", "\"422\"", "\"500\""] {
         assert!(
@@ -173,6 +176,12 @@ fn package_lifecycle_error_contract_is_recorded_in_openapi() {
         assert!(
             editions.contains(status),
             "listLearningEditions must declare {status} responses"
+        );
+    }
+    for status in ["\"204\"", "\"404\"", "\"409\"", "\"500\""] {
+        assert!(
+            delete_edition.contains(status),
+            "deleteLearningEdition must declare {status} responses"
         );
     }
     for status in ["\"404\"", "\"409\"", "\"500\""] {

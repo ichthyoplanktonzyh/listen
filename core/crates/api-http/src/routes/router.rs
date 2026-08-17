@@ -32,7 +32,7 @@ use super::media::{
     update_track_language,
 };
 use super::package_lifecycle::{
-    adopt_learning_edition, install_material_package, list_learning_editions,
+    adopt_learning_edition, delete_learning_edition, install_material_package, list_learning_editions,
 };
 use super::personal_expression::{
     create_pattern, delete_pattern, export_patterns, get_pattern, list_pattern_attempts,
@@ -190,6 +190,10 @@ fn material_routes() -> Router<ApiState> {
         .route(
             "/v1/materials/{material_id}/editions",
             get(list_learning_editions),
+        )
+        .route(
+            "/v1/materials/{material_id}/editions/{release_id}",
+            delete(delete_learning_edition),
         )
         .route(
             "/v1/materials/{material_id}/edition-adoption",
