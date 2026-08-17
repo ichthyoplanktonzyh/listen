@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Listen Gen - Model Providers & Generation Workbench</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      
+      /* Dark Theme (Default) */
+      --bg-base: #0f1117;
+      --bg-surface: #171923;
+      --bg-surface-raised: #1f2333;
+      --bg-surface-hover: #272c40;
+      --border-subtle: #2d3348;
+      --border-focus: #3b82f6;
+      
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-glow: rgba(37, 99, 235, 0.2);
+      
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.15);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.15);
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+    }
+
+    [data-theme="light"] {
+      --bg-base: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-surface-raised: #f1f5f9;
+      --bg-surface-hover: #e2e8f0;
+      --border-subtle: #e2e8f0;
+      --border-focus: #2563eb;
+      
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-dim: #94a3b8;
+      
+      --shadow-card: 0 4px 16px -2px rgba(0, 0, 0, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    header {
+      background-color: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #3b82f6, #10b981);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 700;
+      font-size: 1.1rem;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-badge {
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    /* Main Container */
+    .app-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      width: 240px;
+      background-color: var(--bg-surface);
+      border-right: 1px solid var(--border-subtle);
+      padding: 1.25rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0.9rem;
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.92rem;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-item:hover {
+      background-color: var(--bg-surface-hover);
+      color: var(--text-main);
+    }
+
+    .nav-item.active {
+      background-color: var(--primary-glow);
+      color: #60a5fa;
+      font-weight: 600;
+    }
+
+    .nav-item svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    /* Content Area */
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.75rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Typography & Sections */
+    .section-header {
+      margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    /* Cards */
+    .card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow-card);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Form Controls */
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.4rem;
+      color: var(--text-muted);
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      padding: 0.55rem 0.85rem;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 0.9rem;
+      font-family: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    .form-textarea {
+      resize: vertical;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.55rem 1.1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: var(--bg-surface-raised);
+      border-color: var(--border-subtle);
+      color: var(--text-main);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--bg-surface-hover);
+    }
+
+    .btn-success {
+      background-color: var(--success);
+      color: white;
+    }
+
+    .btn-sm {
+      padding: 0.35rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
+    .btn-danger-link {
+      background: transparent;
+      border: none;
+      color: var(--danger);
+      font-size: 0.82rem;
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+    }
+    .btn-danger-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Pill Tabs */
+    .pill-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+      background-color: var(--bg-surface-raised);
+      padding: 0.35rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+      overflow-x: auto;
+    }
+
+    .pill-tab {
+      padding: 0.4rem 0.9rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+    }
+
+    .pill-tab:hover {
+      color: var(--text-main);
+    }
+
+    .pill-tab.active {
+      background-color: var(--bg-surface);
+      color: var(--text-main);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    }
+
+    /* File Dropzone & Chosen Card */
+    .dropzone {
+      border: 2px dashed var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 1.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      background-color: var(--bg-surface-raised);
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background-color: var(--bg-surface-hover);
+    }
+
+    .dropzone-icon {
+      font-size: 1.8rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .dropzone-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 0.2rem;
+    }
+
+    .dropzone-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .file-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      margin-top: 0.6rem;
+    }
+
+    .file-card-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      overflow: hidden;
+    }
+
+    .file-card-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .file-card-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 450px;
+    }
+
+    .file-card-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Status Badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 9999px;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    .badge-success {
+      background-color: var(--success-bg);
+      color: #34d399;
+    }
+
+    .badge-warning {
+      background-color: var(--warning-bg);
+      color: #fbbf24;
+    }
+
+    .badge-danger {
+      background-color: var(--danger-bg);
+      color: #f87171;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    /* Test Result Box */
+    .test-feedback {
+      margin-top: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      display: none;
+    }
+
+    .test-feedback.active {
+      display: block;
+    }
+
+    .test-feedback.success {
+      background-color: var(--success-bg);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+
+    .test-feedback.error {
+      background-color: var(--danger-bg);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+
+    /* Terminal / Log Output */
+    .terminal-box {
+      background-color: #0b0c10;
+      border: 1px solid #1f2333;
+      border-radius: var(--radius-sm);
+      padding: 0.85rem 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      height: 240px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+
+    .terminal-line {
+      margin-bottom: 2px;
+    }
+    .terminal-line.info { color: #60a5fa; }
+    .terminal-line.success { color: #34d399; }
+    .terminal-line.warning { color: #fbbf24; }
+    .terminal-line.error { color: #f87171; }
+
+    /* Checkbox / Toggle */
+    .checkbox-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+    }
+
+    .checkbox-item input {
+      margin-top: 0.2rem;
+      cursor: pointer;
+    }
+
+    .checkbox-label-title {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .checkbox-label-desc {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1.25rem;
+      font-size: 0.88rem;
+      z-index: 1000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">L</div>
+      <div>
+        <div class="brand-title">Listen Gen</div>
+      </div>
+      <span class="brand-badge">Open Producer v0.5.0</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" id="btn-theme-toggle" title="切换主题">
+        🌓 主题
+      </button>
+      <button class="btn btn-primary btn-sm" id="btn-save-all-config">
+        💾 保存全局配置
+      </button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <button class="nav-item active" data-tab="providers">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span>Model Providers</span>
+      </button>
+      <button class="nav-item" data-tab="workbench">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>生成工作台</span>
+      </button>
+      <button class="nav-item" data-tab="toolchain">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span>系统工具链</span>
+      </button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- TAB 1: Model Providers -->
+      <section id="tab-providers" class="tab-pane active">
+        <div class="section-header">
+          <h2 class="section-title">⚙️ 模型与 Provider 管理中心</h2>
+          <p class="section-desc">配置与测试用于意群分析、语音识别、音素提取和强制对齐的多模态 AI 模型与 Provider 凭据。</p>
+        </div>
+
+        <!-- 1. LLM Profiles -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🧠 大语言模型 (LLM) — 意群分析与语义切分</h3>
+            <span class="badge badge-success" id="active-llm-badge"><span class="badge-dot"></span> 当前默认: DeepSeek</span>
+          </div>
+
+          <div class="pill-tabs" id="llm-pill-tabs">
+            <button class="pill-tab active" data-llm-key="deepseek">DeepSeek</button>
+            <button class="pill-tab" data-llm-key="openai">OpenAI</button>
+            <button class="pill-tab" data-llm-key="anthropic">Claude (Anthropic)</button>
+            <button class="pill-tab" data-llm-key="gemini">Google Gemini</button>
+            <button class="pill-tab" data-llm-key="custom">自定义 / 本地 Ollama</button>
+          </div>
+
+          <div id="llm-form-container">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">协议类型 (Adapter Kind)</label>
+                <select class="form-select" id="llm-adapter-kind">
+                  <option value="openai_chat">OpenAI Chat 兼容</option>
+                  <option value="anthropic_messages">Anthropic Messages</option>
+                  <option value="gemini">Google Gemini</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">模型标识 (Model ID)</label>
+                <input type="text" class="form-input" id="llm-model-id" placeholder="e.g. deepseek-chat">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">接口地址 (Base URL)</label>
+              <input type="text" class="form-input" id="llm-base-url" placeholder="https://api.deepseek.com/v1">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">API Key / 访问令牌</label>
+              <input type="password" class="form-input" id="llm-api-key" placeholder="sk-...">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">请求超时 (秒)</label>
+                <input type="number" class="form-input" id="llm-timeout" value="30">
+              </div>
+              <div class="form-group">
+                <label class="form-label">并发工作线程数</label>
+                <input type="number" class="form-input" id="llm-concurrency" value="100">
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; margin-top: 1rem;">
+              <button class="btn btn-secondary btn-sm" id="btn-test-llm">⚡ 测试连通性 (Test Connection)</button>
+              <button class="btn btn-primary btn-sm" id="btn-set-active-llm">⭐ 设为默认意群模型</button>
+            </div>
+
+            <div class="test-feedback" id="llm-test-feedback"></div>
+          </div>
+        </div>
+
+        <!-- 2. Local ASR (Whisper.cpp) -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🎙️ 语音识别 (ASR) — Whisper.cpp 本地模型</h3>
+            <span class="badge badge-warning" id="asr-status-badge"><span class="badge-dot"></span> 待检测</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Whisper CLI 可执行文件路径</label>
+              <input type="text" class="form-input" id="asr-whisper-cli" value="whisper-cli">
+            </div>
+            <div class="form-group">
+              <label class="form-label">本地 GGML 模型文件路径 (.bin)</label>
+              <input type="text" class="form-input" id="asr-whisper-model" placeholder="/path/to/ggml-base.en.bin">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">识别语言</label>
+              <input type="text" class="form-input" id="asr-whisper-lang" value="auto">
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; margin-top: 1.5rem;">
+              <label class="checkbox-item">
+                <input type="checkbox" id="asr-whisper-translate">
+                <span class="checkbox-label-title">翻译为英文 (Translate to English)</span>
+              </label>
+            </div>
+          </div>
+
+          <button class="btn btn-secondary btn-sm" id="btn-test-whisper">🔍 检测 Whisper CLI 与模型文件</button>
+          <div class="test-feedback" id="whisper-test-feedback"></div>
+        </div>
+
+        <!-- 3. Phones & Aligner -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🗣️ 音素与强制对齐分析 (Phones & Aligner)</h3>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Wav2Vec2 CTC Sidecar 脚本路径</label>
+              <input type="text" class="form-input" id="phones-sidecar" placeholder="/path/to/wav2vec2_sidecar.py">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Wav2Vec2 模型目录 / Model ID</label>
+              <input type="text" class="form-input" id="phones-model-id" value="facebook/wav2vec2-base-960h">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">TorchAudio 强制对齐脚本路径</label>
+              <input type="text" class="form-input" id="aligner-script" placeholder="/path/to/aligner_sidecar.py">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Sidecar 独立 Python 解释器</label>
+              <input type="text" class="form-input" id="phones-python" value="python3">
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. TTS Adapter -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🔊 语音合成 (TTS) — 朗读生成</h3>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">TTS Provider</label>
+              <select class="form-select" id="tts-provider">
+                <option value="say">macOS say (系统原生)</option>
+                <option value="fake">Fake (测试用虚拟生成器)</option>
+                <option value="none">None (禁用)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">macOS Voice 发音人</label>
+              <input type="text" class="form-input" id="tts-voice" placeholder="e.g. Samantha, Daniel (留空使用系统默认)">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Generation Workbench -->
+      <section id="tab-workbench" class="tab-pane">
+        <div class="section-header">
+          <h2 class="section-title">🚀 内容生成流水线工作台</h2>
+          <p class="section-desc">选择或输入原材料（文档、音视频、字幕）并选定目标能力，一键生成符合 Content Package v3 规范的学习资源包。</p>
+        </div>
+
+        <!-- Material Metadata -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">1. 素材元信息 (Material Info)</h3>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">素材唯一 ID (Material ID)</label>
+              <input type="text" class="form-input" id="work-material-id" value="demo-lesson-01">
+            </div>
+            <div class="form-group">
+              <label class="form-label">素材标题 (Title)</label>
+              <input type="text" class="form-input" id="work-title" value="Climate Scientists Predictions">
+            </div>
+            <div class="form-group">
+              <label class="form-label">目标语言 (Target Language)</label>
+              <input type="text" class="form-input" id="work-target-lang" value="en-US">
+            </div>
+          </div>
+        </div>
+
+        <!-- Document Input -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">2. 文档素材 (Document Input)</h3>
+            <div class="pill-tabs" style="margin-bottom: 0; padding: 0.2rem;">
+              <button class="pill-tab active" id="doc-tab-file" onclick="switchDocMode('file')">📂 选择本机文件</button>
+              <button class="pill-tab" id="doc-tab-text" onclick="switchDocMode('text')">✍️ 手动编辑文本</button>
+            </div>
+          </div>
+
+          <!-- File Upload Mode -->
+          <div id="doc-file-section">
+            <div class="dropzone" id="doc-dropzone" onclick="document.getElementById('doc-file-input').click()">
+              <div class="dropzone-icon">📄</div>
+              <div class="dropzone-title">点击选择或拖拽本机文档文件</div>
+              <div class="dropzone-desc">支持格式: Markdown (.md), 纯文本 (.txt), PDF (.pdf), EPUB (.epub), HTML (.html)</div>
+              <input type="file" id="doc-file-input" style="display: none;" accept=".md,.markdown,.txt,.pdf,.epub,.html,.htm">
+            </div>
+
+            <div id="doc-file-card" class="file-card" style="display: none;">
+              <div class="file-card-left">
+                <span class="file-card-icon">📄</span>
+                <div>
+                  <div class="file-card-title" id="doc-file-name">filename.md</div>
+                  <div class="file-card-meta" id="doc-file-meta">12.5 KB · text/markdown</div>
+                </div>
+              </div>
+              <button class="btn-danger-link" onclick="removeDocFile()">✕ 移除</button>
+            </div>
+          </div>
+
+          <!-- Direct Text Mode -->
+          <div id="doc-text-section" style="display: none;">
+            <textarea class="form-textarea" id="work-doc-text" rows="6" placeholder="# Heading&#10;&#10;Climate change is one of the most pressing challenges of our time. Scientists use mathematical models to predict future trends."></textarea>
+          </div>
+        </div>
+
+        <!-- Media & Subtitle Input -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">3. 音视频与字幕素材 (Media & Subtitles)</h3>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">本机音视频文件 (用于媒体语音转写或视听同步)</label>
+            <div class="dropzone" id="media-dropzone" onclick="document.getElementById('media-file-input').click()">
+              <div class="dropzone-icon">🎵</div>
+              <div class="dropzone-title">点击选择或拖拽本机音视频文件</div>
+              <div class="dropzone-desc">支持格式: MP4 (.mp4), MP3 (.mp3), WAV (.wav), M4A (.m4a), MKV (.mkv), MOV (.mov)</div>
+              <input type="file" id="media-file-input" style="display: none;" accept=".mp4,.m4v,.mov,.mkv,.mp3,.wav,.m4a,.flac">
+            </div>
+
+            <div id="media-file-card" class="file-card" style="display: none;">
+              <div class="file-card-left">
+                <span class="file-card-icon">🎵</span>
+                <div>
+                  <div class="file-card-title" id="media-file-name">audio.mp4</div>
+                  <div class="file-card-meta" id="media-file-meta">5.2 MB · audio/mp4</div>
+                </div>
+              </div>
+              <button class="btn-danger-link" onclick="removeMediaFile()">✕ 移除</button>
+            </div>
+
+            <div style="margin-top: 0.6rem;">
+              <input type="text" class="form-input" id="work-media-path" placeholder="或直接输入/粘贴本机绝对路径: /Users/.../video.mp4">
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 1.25rem;">
+            <label class="form-label">独立字幕文件 (可选，用于音文强制对齐)</label>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <input type="file" id="sub-file-input" style="display: none;" accept=".srt,.vtt">
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('sub-file-input').click()">
+                💬 选择字幕文件 (.srt / .vtt)
+              </button>
+              <span id="sub-file-name" style="font-size: 0.85rem; color: var(--text-muted);">未选择字幕</span>
+              <button id="btn-remove-sub" class="btn-danger-link" style="display: none;" onclick="removeSubFile()">✕ 移除</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Capability & Stages -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">4. 目标能力与分析阶段 (Capability & Stages)</h3>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">请求能力 (Requested Material Capability)</label>
+            <select class="form-select" id="work-capability">
+              <option value="read">read — 纯阅读 (提取排版与段落句子锚点)</option>
+              <option value="listen">listen — 朗读音频 (TTS 合成与句子时长对齐)</option>
+              <option value="synchronized_read_listen">synchronized_read_listen — 视听同步阅读</option>
+            </select>
+          </div>
+
+          <div style="margin-top: 1rem;">
+            <label class="checkbox-item">
+              <input type="checkbox" id="stage-sense-groups" checked>
+              <div>
+                <div class="checkbox-label-title">意群切分 (Sense Groups)</div>
+                <div class="checkbox-label-desc">使用当前激活的 LLM 模型智能划分英文/中文意群语义块</div>
+              </div>
+            </label>
+
+            <label class="checkbox-item">
+              <input type="checkbox" id="stage-phones">
+              <div>
+                <div class="checkbox-label-title">音素特征提取 (Phones)</div>
+                <div class="checkbox-label-desc">使用 Wav2Vec2 CTC 声学模型提取单词级音素发音证据</div>
+              </div>
+            </label>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <button class="btn btn-primary" id="btn-start-produce" style="padding: 0.75rem 1.75rem; font-size: 0.95rem;">
+              🚀 开始生成 Content Package v3
+            </button>
+          </div>
+        </div>
+
+        <!-- Task Logs & Progress -->
+        <div class="card" id="task-monitor-card" style="display: none;">
+          <div class="card-header">
+            <h3 class="card-title">📡 实时流水线事件 (Machine Events v2)</h3>
+            <span class="badge badge-warning" id="task-status-badge">运行中...</span>
+          </div>
+
+          <div class="terminal-box" id="task-terminal"></div>
+
+          <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between;">
+            <div id="task-result-info" style="font-size: 0.88rem; color: var(--text-muted);"></div>
+            <a id="btn-download-pkg" class="btn btn-success btn-sm" style="display: none;" target="_blank">
+              📦 下载 Content Package v3 (.zip)
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Toolchain Health -->
+      <section id="tab-toolchain" class="tab-pane">
+        <div class="section-header">
+          <h2 class="section-title">🩺 系统工具链与环境诊断</h2>
+          <p class="section-desc">检测音视频处理 (FFmpeg)、系统朗读 (macOS say) 以及 Python 依赖状态。</p>
+        </div>
+
+        <div id="toolchain-grid" class="form-row">
+          <!-- Populated by JS -->
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <button class="btn btn-secondary btn-sm" id="btn-refresh-toolchain">🔄 重新检测工具链</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // Global State
+    let state = {
+      config: null,
+      currentLlmTab: 'deepseek',
+      activeTab: 'providers',
+      docMode: 'file', // 'file' | 'text'
+      selectedDoc: null, // { path, filename, size_bytes, media_type, preview_text }
+      selectedMedia: null, // { path, filename, size_bytes, media_type }
+      selectedSubtitle: null, // { path, filename }
+    };
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2600);
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Tab Navigation
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        state.activeTab = tab;
+      });
+    });
+
+    // Theme Toggle
+    document.getElementById('btn-theme-toggle').addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = current === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+    });
+
+    // Document Mode Switching
+    function switchDocMode(mode) {
+      state.docMode = mode;
+      document.getElementById('doc-tab-file').classList.toggle('active', mode === 'file');
+      document.getElementById('doc-tab-text').classList.toggle('active', mode === 'text');
+      document.getElementById('doc-file-section').style.display = mode === 'file' ? 'block' : 'none';
+      document.getElementById('doc-text-section').style.display = mode === 'text' ? 'block' : 'none';
+    }
+
+    // Helper: Upload File to Backend
+    async function uploadFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const base64 = reader.result.split(',')[1];
+            const res = await fetch('/api/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                filename: file.name,
+                size: file.size,
+                type: file.type,
+                content_base64: base64,
+              }),
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'ok') {
+              resolve(data);
+            } else {
+              reject(new Error(data.error || 'Upload failed'));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Document File Handling
+    document.getElementById('doc-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast(`正在载入文档: ${file.name}...`);
+        const info = await uploadFile(file);
+        state.selectedDoc = info;
+        renderDocCard();
+        
+        // Auto-fill material id and title if empty
+        const titleInput = document.getElementById('work-title');
+        const idInput = document.getElementById('work-material-id');
+        if (titleInput.value === 'Climate Scientists Predictions' || !titleInput.value) {
+          const baseName = file.name.replace(/\.[^/.]+$/, "");
+          titleInput.value = baseName;
+          idInput.value = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        }
+
+        // If preview text available, populate text area as well
+        if (info.preview_text) {
+          document.getElementById('work-doc-text').value = info.preview_text;
+        }
+        showToast(`✅ 文档 ${file.name} 就绪`);
+      } catch (err) {
+        showToast('❌ 加载文档失败: ' + err.message);
+      }
+    });
+
+    function renderDocCard() {
+      const card = document.getElementById('doc-file-card');
+      const dropzone = document.getElementById('doc-dropzone');
+      if (state.selectedDoc) {
+        document.getElementById('doc-file-name').textContent = state.selectedDoc.filename;
+        document.getElementById('doc-file-meta').textContent = `${formatBytes(state.selectedDoc.size_bytes)} · ${state.selectedDoc.media_type}`;
+        card.style.display = 'flex';
+        dropzone.style.display = 'none';
+      } else {
+        card.style.display = 'none';
+        dropzone.style.display = 'block';
+      }
+    }
+
+    function removeDocFile() {
+      state.selectedDoc = null;
+      document.getElementById('doc-file-input').value = '';
+      renderDocCard();
+    }
+
+    // Media File Handling
+    document.getElementById('media-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast(`正在载入音视频: ${file.name}...`);
+        const info = await uploadFile(file);
+        state.selectedMedia = info;
+        document.getElementById('work-media-path').value = info.path;
+        renderMediaCard();
+
+        // Auto-fill title if default
+        const titleInput = document.getElementById('work-title');
+        const idInput = document.getElementById('work-material-id');
+        if (titleInput.value === 'Climate Scientists Predictions' || !titleInput.value) {
+          const baseName = file.name.replace(/\.[^/.]+$/, "");
+          titleInput.value = baseName;
+          idInput.value = baseName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        }
+
+        showToast(`✅ 音视频 ${file.name} 就绪`);
+      } catch (err) {
+        showToast('❌ 加载音视频失败: ' + err.message);
+      }
+    });
+
+    function renderMediaCard() {
+      const card = document.getElementById('media-file-card');
+      const dropzone = document.getElementById('media-dropzone');
+      if (state.selectedMedia) {
+        document.getElementById('media-file-name').textContent = state.selectedMedia.filename;
+        document.getElementById('media-file-meta').textContent = `${formatBytes(state.selectedMedia.size_bytes)} · ${state.selectedMedia.media_type}`;
+        card.style.display = 'flex';
+        dropzone.style.display = 'none';
+      } else {
+        card.style.display = 'none';
+        dropzone.style.display = 'block';
+      }
+    }
+
+    function removeMediaFile() {
+      state.selectedMedia = null;
+      document.getElementById('media-file-input').value = '';
+      document.getElementById('work-media-path').value = '';
+      renderMediaCard();
+    }
+
+    // Subtitle File Handling
+    document.getElementById('sub-file-input').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const info = await uploadFile(file);
+        state.selectedSubtitle = info;
+        document.getElementById('sub-file-name').textContent = `${file.name} (${formatBytes(file.size)})`;
+        document.getElementById('btn-remove-sub').style.display = 'inline-block';
+        showToast(`✅ 字幕 ${file.name} 已加载`);
+      } catch (err) {
+        showToast('❌ 加载字幕失败: ' + err.message);
+      }
+    });
+
+    function removeSubFile() {
+      state.selectedSubtitle = null;
+      document.getElementById('sub-file-input').value = '';
+      document.getElementById('sub-file-name').textContent = '未选择字幕';
+      document.getElementById('btn-remove-sub').style.display = 'none';
+    }
+
+    // Drag & drop listeners for dropzones
+    ['doc-dropzone', 'media-dropzone'].forEach(id => {
+      const el = document.getElementById(id);
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        el.classList.add('dragover');
+      });
+      el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+      el.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        el.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+          const inputId = id === 'doc-dropzone' ? 'doc-file-input' : 'media-file-input';
+          const input = document.getElementById(inputId);
+          // Trigger change manually
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change'));
+        }
+      });
+    });
+
+    // Load initial config
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        state.config = await res.json();
+        renderConfig();
+      } catch (err) {
+        showToast('无法连接后端 API: ' + err.message);
+      }
+    }
+
+    function renderConfig() {
+      if (!state.config) return;
+
+      const selected = state.config.selected_llm || 'deepseek';
+      const prof = (state.config.llm_profiles || {})[selected] || {};
+      document.getElementById('active-llm-badge').innerHTML = `<span class="badge-dot"></span> 当前默认: ${prof.name || selected}`;
+
+      renderLlmForm(state.currentLlmTab);
+
+      const asr = state.config.asr || {};
+      document.getElementById('asr-whisper-cli').value = asr.whisper_cli || 'whisper-cli';
+      document.getElementById('asr-whisper-model').value = asr.whisper_model || '';
+      document.getElementById('asr-whisper-lang').value = asr.whisper_language || 'auto';
+      document.getElementById('asr-whisper-translate').checked = !!asr.whisper_translate_to_english;
+
+      const phones = state.config.phones || {};
+      document.getElementById('phones-sidecar').value = phones.wav2vec2_sidecar || '';
+      document.getElementById('phones-model-id').value = phones.wav2vec2_model_id || '';
+      document.getElementById('phones-python').value = phones.wav2vec2_python || 'python3';
+
+      const aligner = state.config.aligner || {};
+      document.getElementById('aligner-script').value = aligner.aligner_script || '';
+
+      const tts = state.config.tts || {};
+      document.getElementById('tts-provider').value = tts.provider || 'say';
+      document.getElementById('tts-voice').value = tts.voice || '';
+    }
+
+    function renderLlmForm(key) {
+      state.currentLlmTab = key;
+      const profiles = state.config.llm_profiles || {};
+      const prof = profiles[key] || {};
+
+      document.getElementById('llm-adapter-kind').value = prof.adapter_kind || 'openai_chat';
+      document.getElementById('llm-model-id').value = prof.model_id || '';
+      document.getElementById('llm-base-url').value = prof.base_url || '';
+      document.getElementById('llm-api-key').value = prof.api_key || '';
+      document.getElementById('llm-timeout').value = prof.timeout_seconds || 30;
+      document.getElementById('llm-concurrency').value = prof.concurrency || 50;
+
+      document.querySelectorAll('#llm-pill-tabs .pill-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.llmKey === key);
+      });
+
+      const fb = document.getElementById('llm-test-feedback');
+      fb.className = 'test-feedback';
+      fb.style.display = 'none';
+    }
+
+    document.querySelectorAll('#llm-pill-tabs .pill-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        saveCurrentLlmForm();
+        renderLlmForm(btn.dataset.llmKey);
+      });
+    });
+
+    function saveCurrentLlmForm() {
+      const key = state.currentLlmTab;
+      if (!state.config.llm_profiles) state.config.llm_profiles = {};
+      const current = state.config.llm_profiles[key] || {};
+
+      state.config.llm_profiles[key] = {
+        ...current,
+        adapter_kind: document.getElementById('llm-adapter-kind').value,
+        model_id: document.getElementById('llm-model-id').value,
+        base_url: document.getElementById('llm-base-url').value,
+        api_key: document.getElementById('llm-api-key').value,
+        timeout_seconds: parseFloat(document.getElementById('llm-timeout').value) || 30.0,
+        concurrency: parseInt(document.getElementById('llm-concurrency').value, 10) || 50,
+      };
+    }
+
+    document.getElementById('btn-set-active-llm').addEventListener('click', () => {
+      saveCurrentLlmForm();
+      state.config.selected_llm = state.currentLlmTab;
+      renderConfig();
+      showToast(`已将 ${state.currentLlmTab} 设为默认意群分析模型`);
+    });
+
+    document.getElementById('btn-save-all-config').addEventListener('click', async () => {
+      saveCurrentLlmForm();
+
+      state.config.asr = {
+        ...(state.config.asr || {}),
+        whisper_cli: document.getElementById('asr-whisper-cli').value,
+        whisper_model: document.getElementById('asr-whisper-model').value,
+        whisper_language: document.getElementById('asr-whisper-lang').value,
+        whisper_translate_to_english: document.getElementById('asr-whisper-translate').checked,
+      };
+
+      state.config.phones = {
+        ...(state.config.phones || {}),
+        wav2vec2_sidecar: document.getElementById('phones-sidecar').value,
+        wav2vec2_model_id: document.getElementById('phones-model-id').value,
+        wav2vec2_python: document.getElementById('phones-python').value,
+      };
+      state.config.aligner = {
+        ...(state.config.aligner || {}),
+        aligner_script: document.getElementById('aligner-script').value,
+      };
+
+      state.config.tts = {
+        ...(state.config.tts || {}),
+        provider: document.getElementById('tts-provider').value,
+        voice: document.getElementById('tts-voice').value,
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state.config),
+        });
+        if (res.ok) {
+          showToast('✅ 全局 Provider 配置已保存到 ~/.listen-gen/profiles.json');
+        } else {
+          showToast('❌ 保存失败');
+        }
+      } catch (err) {
+        showToast('保存出错: ' + err.message);
+      }
+    });
+
+    document.getElementById('btn-test-llm').addEventListener('click', async () => {
+      saveCurrentLlmForm();
+      const prof = state.config.llm_profiles[state.currentLlmTab];
+      const fb = document.getElementById('llm-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.textContent = '正在发起测试请求...';
+
+      try {
+        const res = await fetch('/api/test/llm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(prof),
+        });
+        const result = await res.json();
+        if (result.success) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ 连通性测试成功！响应耗时: ${result.latency_ms}ms`;
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `❌ 测试失败: ${result.message}`;
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求错误: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btn-test-whisper').addEventListener('click', async () => {
+      const payload = {
+        whisper_cli: document.getElementById('asr-whisper-cli').value,
+        whisper_model: document.getElementById('asr-whisper-model').value,
+      };
+      const fb = document.getElementById('whisper-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.textContent = '正在检测本地二进制与模型...';
+
+      try {
+        const res = await fetch('/api/test/whisper', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.cli_available && result.model_exists) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ Whisper CLI (${result.cli_path}) 与模型文件均就绪！`;
+          document.getElementById('asr-status-badge').className = 'badge badge-success';
+          document.getElementById('asr-status-badge').innerHTML = '<span class="badge-dot"></span> 就绪';
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `⚠️ 检测结果: ${result.message} (CLI: ${result.cli_available ? '可用' : '未找到'}, 模型: ${result.model_exists ? '存在' : '未找到'})`;
+          document.getElementById('asr-status-badge').className = 'badge badge-warning';
+          document.getElementById('asr-status-badge').innerHTML = '<span class="badge-dot"></span> 未就绪';
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求出错: ${err.message}`;
+      }
+    });
+
+    async function loadToolchain() {
+      try {
+        const res = await fetch('/api/toolchain/status');
+        const tools = await res.json();
+        const grid = document.getElementById('toolchain-grid');
+        grid.innerHTML = '';
+
+        for (const [name, info] of Object.entries(tools)) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `
+            <div class="card-header">
+              <h3 class="card-title">${name}</h3>
+              <span class="badge ${info.available ? 'badge-success' : 'badge-danger'}">
+                <span class="badge-dot"></span> ${info.available ? '可用' : '缺失'}
+              </span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-muted);">
+              <div>路径: ${info.path || '未找到'}</div>
+              ${info.version ? `<div>版本: ${info.version}</div>` : ''}
+              ${info.voices ? `<div>检测到声音数: ${info.voices.length} 个</div>` : ''}
+              ${info.installed_models ? `<div>已装模型: ${info.installed_models.join(', ') || '无'}</div>` : ''}
+            </div>
+          `;
+          grid.appendChild(card);
+        }
+      } catch (err) {
+        console.error('Failed to load toolchain', err);
+      }
+    }
+
+    document.getElementById('btn-refresh-toolchain').addEventListener('click', () => {
+      loadToolchain();
+      showToast('已重新检测工具链');
+    });
+
+    // Production Execution & SSE Event Stream
+    document.getElementById('btn-start-produce').addEventListener('click', async () => {
+      const materialId = document.getElementById('work-material-id').value.trim() || 'demo-material';
+      const title = document.getElementById('work-title').value.trim() || 'Untitled Material';
+      const targetLang = document.getElementById('work-target-lang').value.trim() || 'en-US';
+      const docText = document.getElementById('work-doc-text').value;
+      const mediaPath = document.getElementById('work-media-path').value.trim();
+      const capability = document.getElementById('work-capability').value;
+
+      const enableSenseGroups = document.getElementById('stage-sense-groups').checked;
+      const enablePhones = document.getElementById('stage-phones').checked;
+
+      const monitorCard = document.getElementById('task-monitor-card');
+      const terminal = document.getElementById('task-terminal');
+      const statusBadge = document.getElementById('task-status-badge');
+      const resultInfo = document.getElementById('task-result-info');
+      const downloadBtn = document.getElementById('btn-download-pkg');
+
+      monitorCard.style.display = 'block';
+      terminal.innerHTML = '<div class="terminal-line info">[SYS] 正在准备生成请求...</div>';
+      statusBadge.className = 'badge badge-warning';
+      statusBadge.textContent = '运行中...';
+      downloadBtn.style.display = 'none';
+      resultInfo.textContent = '';
+
+      const requestDoc = {
+        schema: "listen_gen.capability-request.v2",
+        material_id: materialId,
+        material_revision_id: `rev-${Date.now()}`,
+        edition_id: `ed-${materialId}`,
+        title: title,
+        target_language: targetLang,
+        support_languages: [],
+        requested_capability: capability,
+        document_renditions: [],
+        media_renditions: [],
+        available_resources: [],
+      };
+
+      const payload = {
+        request: requestDoc,
+        document_path: state.selectedDoc ? state.selectedDoc.path : null,
+        document_text: (state.docMode === 'text' || !state.selectedDoc) ? docText : null,
+        document_media_type: state.selectedDoc ? state.selectedDoc.media_type : 'text/markdown',
+        media_path: state.selectedMedia ? state.selectedMedia.path : (mediaPath || null),
+        subtitle_path: state.selectedSubtitle ? state.selectedSubtitle.path : null,
+        config: {
+          ...state.config,
+          enable_sense_groups: enableSenseGroups,
+          enable_phones: enablePhones,
+        }
+      };
+
+      try {
+        const res = await fetch('/api/produce', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const taskInfo = await res.json();
+
+        if (taskInfo.error) {
+          terminal.innerHTML += `<div class="terminal-line error">[ERR] ${taskInfo.error}</div>`;
+          statusBadge.className = 'badge badge-danger';
+          statusBadge.textContent = '启动失败';
+          return;
+        }
+
+        terminal.innerHTML += `<div class="terminal-line info">[SYS] 任务已启动: ${taskInfo.task_id}</div>`;
+
+        const eventSource = new EventSource(taskInfo.events_url);
+
+        eventSource.onmessage = (e) => {
+          try {
+            const event = JSON.parse(e.data);
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+
+            if (event.event === 'started') {
+              line.className += ' info';
+              line.textContent = `[EVENT: started] capability=${event.requested_capability} material=${event.material_id}`;
+            } else if (event.event === 'step_started') {
+              line.className += ' info';
+              line.textContent = `[STEP: ${event.step}] ${event.detail || ''}`;
+            } else if (event.event === 'warning') {
+              line.className += ' warning';
+              line.textContent = `[WARN: ${event.code}] ${event.message}`;
+            } else if (event.event === 'committed') {
+              line.className += ' success';
+              line.textContent = `[EVENT: committed] package_sha256=${event.package_sha256}`;
+            } else if (event.event === 'completed') {
+              line.className += ' success';
+              line.textContent = `[EVENT: completed] package ready!`;
+            } else if (event.type === 'terminal') {
+              eventSource.close();
+              if (event.status === 'completed') {
+                statusBadge.className = 'badge badge-success';
+                statusBadge.textContent = '生成完成';
+                downloadBtn.href = taskInfo.download_url;
+                downloadBtn.style.display = 'inline-flex';
+                resultInfo.textContent = `✅ 产物 Content Package v3 构建成功！`;
+              } else {
+                statusBadge.className = 'badge badge-danger';
+                statusBadge.textContent = '生成失败';
+                resultInfo.textContent = `❌ 失败原因: ${event.error || '未知错误'}`;
+              }
+            } else {
+              line.textContent = `[EVENT] ${JSON.stringify(event)}`;
+            }
+
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+          } catch (err) {
+            console.error(err);
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+        };
+
+      } catch (err) {
+        terminal.innerHTML += `<div class="terminal-line error">[ERR] ${err.message}</div>`;
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadConfig();
+      loadToolchain();
+    });
+  </script>
+</body>
+</html>

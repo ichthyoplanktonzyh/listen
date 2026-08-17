@@ -105,6 +105,10 @@ def parser(
 ) -> argparse.ArgumentParser:
     root = parser_class(prog="listen-gen")
     commands = root.add_subparsers(dest="command", required=True)
+    gui = commands.add_parser("gui", help="launch the Listen Gen management GUI")
+    gui.add_argument("--host", default="127.0.0.1", help="host address to bind GUI server")
+    gui.add_argument("--port", type=int, default=8420, help="port number to bind GUI server")
+    gui.add_argument("--no-browser", action="store_true", help="do not automatically open browser")
     package = commands.add_parser("package", help="build a Listen content package")
     package_commands = package.add_subparsers(dest="package_command", required=True)
     produce = package_commands.add_parser(
@@ -718,6 +722,10 @@ def _main_machine(
 
 
 def _main_ordinary(args: argparse.Namespace) -> int:
+    if args.command == "gui":
+        from .gui import run_gui_server
+        run_gui_server(host=args.host, port=args.port, open_browser=not args.no_browser)
+        return 0
     state = _CancellationState()
     try:
         result = _run(args, state, None)

@@ -57,8 +57,17 @@ python -m listen_gen package from-capability request.json \
   --machine-events
 ```
 
-See [docs/machine-event-protocol-v2.md](docs/machine-event-protocol-v2.md)
-for the request schema, the event contract, and the failure codes.
+## Model Providers & Generation GUI
+
+Launch the local GUI management workbench:
+
+```bash
+./run_gui.sh
+# or using the virtualenv:
+source .venv/bin/activate && listen-gen gui
+```
+
+The GUI workbench is served at `http://127.0.0.1:8420` and allows managing LLM, ASR (Whisper.cpp), phonetic models (Wav2Vec2), alignment, TTS, running connectivity tests, and launching generation pipelines.
 
 ## Deterministic release bundle
 
