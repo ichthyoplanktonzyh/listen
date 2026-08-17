@@ -216,5 +216,8 @@ class _FakeFolderPicker implements MediaImportFileService {
   Future<String?> pickSubtitle() async => null;
 
   @override
+  Future<String?> pickLearningPackage() async => null;
+
+  @override
   Future<TimelineFileDocument?> pickTimeline() async => null;
 }

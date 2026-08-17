@@ -1223,8 +1223,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// capability for the current media's material through the deep completion
   /// coordinator (resolve → derive through the pinned listen-gen bundle →
   /// install → adopt), and the readiness surface reflects the run.
-  Future<void> _generateSubtitles() async {
-    await _readinessViewModel.prepareLearningTranscript();
+  Future<void> _generateSubtitles({bool forceRegenerate = false}) async {
+    await _readinessViewModel.prepareLearningTranscript(
+      forceRegenerate: forceRegenerate,
+    );
   }
 
   Future<void> _refreshAdoptedLearningEdition() async {
@@ -1388,6 +1390,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                   capability: MaterialCapability.listen,
                   onGenerate: () =>
                       _generateListenForDocument(controller, material),
+                  onRegenerate: () => _generateListenForDocument(
+                    controller,
+                    material,
+                    forceRegenerate: true,
+                  ),
                 ),
         );
       },
@@ -1502,11 +1509,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// there is nothing for the learner to open.
   Future<void> _generateListenForDocument(
     DocumentSessionController controller,
-    MaterialDetails material,
-  ) async {
+    MaterialDetails material, {
+    bool forceRegenerate = false,
+  }) async {
     await capabilityCoordinator.requestCapability(
       material,
       MaterialCapability.listen,
+      forceProduce: forceRegenerate,
     );
     if (!mounted || !identical(_documentSession, controller)) return;
     await controller.refreshComposition();
@@ -2503,6 +2512,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     required String materialId,
     required MaterialCapability capability,
     required Future<void> Function() onGenerate,
+    Future<void> Function()? onRegenerate,
   }) => LearningEditionAction(
     onPressed: () => unawaited(
       showLearningEditionPanel(
@@ -2510,10 +2520,14 @@ class _PlayerScreenState extends State<PlayerScreen>
         controller: learningEditionController,
         materialId: materialId,
         onGenerate: onGenerate,
+        onRegenerate: onRegenerate,
         generationListenable: capabilityCoordinator,
         isGenerating: () =>
             capabilityCoordinator.runViewFor(materialId, capability)?.busy ??
             false,
+        runView: () => capabilityCoordinator.runViewFor(materialId, capability),
+        onCancelGeneration: () =>
+            capabilityCoordinator.cancel(materialId, capability),
       ),
     ),
   );
@@ -3015,6 +3029,11 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                                       .read,
                                                               onGenerate:
                                                                   _generateSubtitles,
+                                                              onRegenerate:
+                                                                  () => _generateSubtitles(
+                                                                    forceRegenerate:
+                                                                        true,
+                                                                  ),
                                                             ),
                                                           null => null,
                                                         },

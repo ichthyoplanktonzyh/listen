@@ -195,7 +195,9 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> prepareLearningTranscript() async {
+  Future<void> prepareLearningTranscript({
+    bool forceRegenerate = false,
+  }) async {
     final material = currentMaterial();
     if (material == null) {
       mediaSession.player.setStatus(
@@ -207,7 +209,11 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
       );
       return;
     }
-    await coordinator.requestCapability(material, MaterialCapability.read);
+    await coordinator.requestCapability(
+      material,
+      MaterialCapability.read,
+      forceProduce: forceRegenerate,
+    );
     _recompute();
   }
 

@@ -781,6 +781,14 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     adoptedReleases.add(releaseId);
     return _edition;
   }
+
+  @override
+  Future<void> deleteEdition(
+    String materialId,
+    String releaseId,
+  ) async {
+    editions.removeWhere((e) => e.releaseId == releaseId);
+  }
 }
 
 const _projectionDerivableRead = MaterialCapabilityProjection(

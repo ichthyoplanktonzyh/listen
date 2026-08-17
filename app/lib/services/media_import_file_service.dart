@@ -12,6 +12,7 @@ class TimelineFileDocument {
 abstract interface class MediaImportFileService {
   Future<String?> pickMedia();
   Future<String?> pickSubtitle();
+  Future<String?> pickLearningPackage();
   Future<TimelineFileDocument?> pickTimeline();
   String basename(String path);
   Future<String?> pickDownloadDirectory({required String confirmButtonText});
@@ -31,6 +32,15 @@ class LocalMediaImportFileService implements MediaImportFileService {
   @override
   Future<String?> pickSubtitle() async {
     const group = XTypeGroup(label: 'subtitles', extensions: ['srt', 'vtt']);
+    return (await openFile(acceptedTypeGroups: [group]))?.path;
+  }
+
+  @override
+  Future<String?> pickLearningPackage() async {
+    const group = XTypeGroup(
+      label: 'learningPackage',
+      extensions: ['listenpkg', 'zip'],
+    );
     return (await openFile(acceptedTypeGroups: [group]))?.path;
   }
 

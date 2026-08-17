@@ -21,6 +21,10 @@ class AppLocalizations {
       _values['en']![key] ??
       key;
 
+  bool hasKey(String key) =>
+      (_values[locale.languageCode] ?? _values['en']!).containsKey(key) ||
+      _values['en']!.containsKey(key);
+
   String status(String? value) => text(value ?? 'clear');
   String diagnosis(String kind) => text('diagnosis_$kind');
 
@@ -1435,6 +1439,8 @@ class AppLocalizations {
           'Could not select learning transcript',
       'backToCurrentSentence': 'Back to current',
       'learningEdition': 'Learning package',
+      'learningEditionSubtitle':
+          'Multimodal AI Learning Package · Text, timing & deep linguistics',
       'learningEditionCurrent': 'Current package',
       'learningEditionInUse': 'In use',
       'useLearningEdition': 'Use this package',
@@ -1444,6 +1450,43 @@ class AppLocalizations {
       'learningEditionAdoptFailed':
           'This package could not be selected. The current package is unchanged.',
       'learningEditionResourceSummary': 'learning resources available',
+      'learningEditionReadinessSummary':
+          '{ready} of {total} learning resources ready',
+      'learningEditionGeneratingTitle': 'Gen pipeline is active',
+      'learningResourceSection_foundation': 'Text & Subtitles',
+      'learningResourceSection_timing': 'Time Alignment',
+      'learningResourceSection_linguistics': 'Deep Linguistics',
+      'learningEditionFooterNote':
+          'Learning packages are produced by listen-gen to power intensive listening, pronunciation diagnostics, and sense-group reading.',
+      'regenerateLearningEdition': 'Re-generate with Gen',
+      'regenerateLearningEditionTooltip':
+          'Re-run listen-gen pipeline to generate a fresh learning package',
+      'importLearningPackage': 'Import package (.listenpkg)',
+      'importLearningPackageTooltip': 'Import a local .listenpkg carrier file',
+      'importLearningPackageFailed': 'Failed to import the learning package.',
+      'deleteLearningEdition': 'Delete version',
+      'deleteLearningEditionTooltip': 'Delete this candidate learning package version',
+      'deleteLearningEditionConfirmTitle': 'Delete this package version?',
+      'deleteLearningEditionConfirmMessage':
+          'This candidate version will be permanently removed. This action cannot be undone.',
+      'cannotDeleteAdoptedEdition':
+          'Cannot delete the version currently in use. Please switch to another version first.',
+      'deleteLearningEditionFailed': 'Failed to delete this package version.',
+      'generationStage_resolving': 'Resolving material facts...',
+      'generationStage_generating': 'Generating package with listen-gen...',
+      'generationStage_installing': 'Installing candidate package...',
+      'generationStage_adopting': 'Adopting learning edition...',
+      'cancelGeneration': 'Cancel generation',
+      'generationCancelled': 'Generation cancelled',
+      'generationFailed': 'Generation failed',
+      'learningResourceHelp_phone_timeline':
+          'Phoneme alignment requires phoneme tools in the active toolchain.',
+      'learningResourceHelp_word_acoustics':
+          'Word acoustics require pitch and energy analysis tools.',
+      'learningResourceHelp_prosody_analysis':
+          'Prosody analysis requires prosodic modeling tools.',
+      'learningResourceHelp_sense_group_analysis':
+          'Sense group analysis requires syntactic parsing tools.',
       'learningResourceContent': 'Content',
       'learningResourceTiming': 'Timing',
       'learningResourceAnalysis': 'Speech analysis',
@@ -3536,6 +3579,7 @@ class AppLocalizations {
       'statusLearningTranscriptSelectionFailed': '无法选择学习文稿',
       'backToCurrentSentence': '回到当前句',
       'learningEdition': '学习包',
+      'learningEditionSubtitle': '多模态 AI 学习包 · 全量文本、时序与语言学解析',
       'learningEditionCurrent': '当前学习包',
       'learningEditionInUse': '正在使用',
       'useLearningEdition': '使用这份学习包',
@@ -3543,6 +3587,35 @@ class AppLocalizations {
       'learningEditionLoadFailed': '无法加载学习包。',
       'learningEditionAdoptFailed': '无法选择这份学习包，当前学习包未改变。',
       'learningEditionResourceSummary': '类学习资源可用',
+      'learningEditionReadinessSummary': '已就绪 {ready} / {total} 项核心学习资源',
+      'learningEditionGeneratingTitle': 'Gen 正在生成学习包...',
+      'learningResourceSection_foundation': '基础阅读与字幕',
+      'learningResourceSection_timing': '时序与时间对齐',
+      'learningResourceSection_linguistics': '语言学与深度解析',
+      'learningEditionFooterNote':
+          '学习包由 listen-gen 多模态流水线生成，用于支持精听、发音诊断与意群阅读。',
+      'regenerateLearningEdition': '重新生成学习包',
+      'regenerateLearningEditionTooltip': '重新调用 listen-gen 流程生成全新学习包',
+      'importLearningPackage': '导入学习包',
+      'importLearningPackageTooltip': '导入本地 .listenpkg 学习包文件',
+      'importLearningPackageFailed': '导入学习包失败。',
+      'deleteLearningEdition': '删除此版本',
+      'deleteLearningEditionTooltip': '删除当前候选学习包版本',
+      'deleteLearningEditionConfirmTitle': '确定删除此学习包版本？',
+      'deleteLearningEditionConfirmMessage': '删除后将移除该候选版本数据，此操作不可恢复。',
+      'cannotDeleteAdoptedEdition': '无法删除正在使用的学习包版本，请先切换至其他版本。',
+      'deleteLearningEditionFailed': '删除学习包版本失败。',
+      'generationStage_resolving': '正在解析材料...',
+      'generationStage_generating': '正在使用 listen-gen 生成学习包...',
+      'generationStage_installing': '正在安装候选学习包...',
+      'generationStage_adopting': '正在采纳学习包...',
+      'cancelGeneration': '取消生成',
+      'generationCancelled': '生成已取消',
+      'generationFailed': '生成失败',
+      'learningResourceHelp_phone_timeline': '音素时间轴需要生成工具链中包含音素对齐组件。',
+      'learningResourceHelp_word_acoustics': '单词声学特征需要音频音高与能量分析组件。',
+      'learningResourceHelp_prosody_analysis': '韵律分析需要韵律建模分析组件。',
+      'learningResourceHelp_sense_group_analysis': '意群分析需要句法切分与语义建模组件。',
       'learningResourceContent': '内容',
       'learningResourceTiming': '时间轴',
       'learningResourceAnalysis': '语音分析',

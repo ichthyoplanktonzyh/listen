@@ -50,6 +50,17 @@ extension PackageLifecycleApi on LocalApi {
         ))
         as Map<String, dynamic>,
   );
+
+  /// Deletes one installed Learning Edition candidate for the material.
+  Future<void> deleteLearningEdition(
+    String materialId,
+    String releaseId,
+  ) async {
+    await _request(
+      'DELETE',
+      '/v1/materials/${Uri.encodeComponent(materialId)}/editions/${Uri.encodeComponent(releaseId)}',
+    );
+  }
 }
 
 LearningEdition decodeLearningEdition(Map<String, dynamic> json) =>

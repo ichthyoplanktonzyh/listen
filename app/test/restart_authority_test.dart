@@ -373,6 +373,12 @@ final class _CompositionRepository implements CapabilityRepository {
     String materialId,
     String releaseId,
   ) async => throw StateError('unexpected adoptEdition');
+
+  @override
+  Future<void> deleteEdition(
+    String materialId,
+    String releaseId,
+  ) async => throw StateError('unexpected deleteEdition');
 }
 
 /// Composition tests that never reach Core's subtitle/analysis endpoints.

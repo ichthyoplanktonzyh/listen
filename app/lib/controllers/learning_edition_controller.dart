@@ -18,7 +18,9 @@ class LearningEditionController extends ChangeNotifier {
   List<LearningEdition> _editions = const [];
   bool _loading = false;
   bool _failed = false;
+  bool _importing = false;
   String? _adoptingReleaseId;
+  String? _deletingReleaseId;
   int _generation = 0;
   bool _disposed = false;
 
@@ -26,7 +28,14 @@ class LearningEditionController extends ChangeNotifier {
   List<LearningEdition> get editions => List.unmodifiable(_editions);
   bool get loading => _loading;
   bool get failed => _failed;
+  bool get importing => _importing;
   String? get adoptingReleaseId => _adoptingReleaseId;
+  String? get deletingReleaseId => _deletingReleaseId;
+  bool get busy =>
+      _loading ||
+      _importing ||
+      _adoptingReleaseId != null ||
+      _deletingReleaseId != null;
 
   LearningEdition? get adoptedEdition {
     for (final edition in _editions) {
@@ -40,7 +49,9 @@ class LearningEditionController extends ChangeNotifier {
     _materialId = materialId;
     _loading = true;
     _failed = false;
+    _importing = false;
     _adoptingReleaseId = null;
+    _deletingReleaseId = null;
     _editions = const [];
     _publish();
     await _readEditions(materialId, generation);
@@ -78,6 +89,65 @@ class LearningEditionController extends ChangeNotifier {
     } finally {
       if (_isCurrent(materialId, generation)) {
         _adoptingReleaseId = null;
+        _loading = false;
+        _publish();
+      }
+    }
+  }
+
+  Future<bool> importPackage(String packagePath) async {
+    final materialId = _materialId;
+    if (materialId == null || _importing) return false;
+    final generation = ++_generation;
+    _importing = true;
+    _failed = false;
+    _publish();
+    try {
+      final installed = await repository.installPackage(
+        materialId,
+        packagePath,
+      );
+      if (!_isCurrent(materialId, generation)) return false;
+      await repository.adoptEdition(materialId, installed.releaseId);
+      if (!_isCurrent(materialId, generation)) return false;
+      await onAdopted?.call();
+      if (!_isCurrent(materialId, generation)) return false;
+      _editions = await repository.listEditions(materialId);
+      if (!_isCurrent(materialId, generation)) return false;
+      return true;
+    } on Object {
+      if (!_isCurrent(materialId, generation)) return false;
+      _failed = true;
+      return false;
+    } finally {
+      if (_isCurrent(materialId, generation)) {
+        _importing = false;
+        _loading = false;
+        _publish();
+      }
+    }
+  }
+
+  Future<bool> deleteEdition(LearningEdition edition) async {
+    final materialId = _materialId;
+    if (materialId == null || _deletingReleaseId != null) return false;
+    final generation = ++_generation;
+    _deletingReleaseId = edition.releaseId;
+    _failed = false;
+    _publish();
+    try {
+      await repository.deleteEdition(materialId, edition.releaseId);
+      if (!_isCurrent(materialId, generation)) return false;
+      _editions = await repository.listEditions(materialId);
+      if (!_isCurrent(materialId, generation)) return false;
+      return true;
+    } on Object {
+      if (!_isCurrent(materialId, generation)) return false;
+      _failed = true;
+      return false;
+    } finally {
+      if (_isCurrent(materialId, generation)) {
+        _deletingReleaseId = null;
         _loading = false;
         _publish();
       }

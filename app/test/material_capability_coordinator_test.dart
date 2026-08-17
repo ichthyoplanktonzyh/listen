@@ -48,6 +48,33 @@ void main() {
     },
   );
 
+  test(
+    'forceProduce forces a fresh gen run even when an adopted edition exists',
+    () async {
+      harness.repo.editions = [_editionCopy(adopted: true)];
+      harness.repo.capabilities = const [];
+
+      final requestFuture = harness.request(
+        MaterialCapability.read,
+        forceProduce: true,
+      );
+      await _settle();
+
+      expect(harness.gen.startCount, 1);
+      harness.gen.lastRun!
+        ..emitProtocol()
+        ..emitAccepted(attemptId: 'attempt-1');
+      await _settle();
+      harness.gen.lastRun!.emitCompleted();
+      await _settle();
+      await _settle();
+
+      final outcome = await requestFuture;
+      expect(outcome, isA<CapabilityAvailable>());
+      expect(harness.runView!.phase, CapabilityRunPhase.completed);
+    },
+  );
+
   test('an installed candidate is adopted explicitly', () async {
     harness.repo.editions = [_editionCopy(adopted: false)];
 
@@ -662,10 +689,12 @@ final class _Harness {
     MaterialCapability capability, {
     MaterialDetails? material,
     String? localPackagePath,
+    bool forceProduce = false,
   }) => coordinator.requestCapability(
     material ?? _mediaOnlyMaterial,
     capability,
     localPackagePath: localPackagePath,
+    forceProduce: forceProduce,
   );
 
   CapabilityRunView? get runView =>
@@ -914,6 +943,11 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     }
     adoptedReleases.add(releaseId);
     return _satisfyingEdition;
+  }
+
+  @override
+  Future<void> deleteEdition(String materialId, String releaseId) async {
+    editions.removeWhere((edition) => edition.releaseId == releaseId);
   }
 
   @override

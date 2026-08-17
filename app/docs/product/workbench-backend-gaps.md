@@ -68,9 +68,17 @@ app 任务里不动它们——需要新数据就先用 typed fixture 顶着把 
   2. **解析按 cue 缓存契约**：语音层面现走 `onRequestDiagnosis` 每次可能重取；文字层面接入后也需按 `cue.id` 缓存，避免切句/重开重算。
 - **诚实降级**：文字层面只呈现句子/译文骨架 + 占位卡；接契约后再填 语法/搭配 两节并按 cue 缓存。
 
+## 8. 学习包候选版本删除契约（Delete Learning Edition）[已解决 ✅]
+
+- **参考**：工作台学习包管理面板支持版本生命周期管理，需要能够删除旧的或不满意的候选版本。
+- **前端现状**：`learning_edition_panel.dart` 已实现完整的删除交互、防误删确认对话框及对「正在使用版本」的保护逻辑；`LearningEditionController` 与 `CapabilityRepository` 接入 `DELETE /v1/materials/{id}/editions/{releaseId}`。
+- **后端现状**：`listen-core` 4.0 契约与运行时已实现 `DELETE /v1/materials/{material_id}/editions/{release_id}` 路由、应用层 `delete_for_material` 与 SQLite 持久化 `delete_installation`，原子删除安装事实及关联 payloads/rendition blobs，对已激活版本严格执行 409 保护。全量契约与集成测试已通过。
+
+
 ---
 
 ## 待记（随 P1 逐条补）
 
 - **听写「先选句」多选队列**：先做当前句听写，选句队列做 UI + 禁用或后置（P1）。
 - **播放列表 queue model**：底栏播放列表入口依赖它（P2）。
+

@@ -39,6 +39,8 @@ abstract interface class CapabilityRepository {
 
   Future<LearningEdition> adoptEdition(String materialId, String releaseId);
 
+  Future<void> deleteEdition(String materialId, String releaseId);
+
   /// The resolved current adopted composition of a Material, re-read through
   /// Core. A Material with no adopted composition is a typed not-found.
   Future<AdoptedComposition> readAdoptedComposition(String materialId);
@@ -140,6 +142,13 @@ final class LocalCapabilityRepository implements CapabilityRepository {
     final api = _api;
     if (api == null) throw const ApiFailure(raw: 'core unavailable');
     return api.adoptLearningEdition(materialId, releaseId);
+  }
+
+  @override
+  Future<void> deleteEdition(String materialId, String releaseId) async {
+    final api = _api;
+    if (api == null) throw const ApiFailure(raw: 'core unavailable');
+    return api.deleteLearningEdition(materialId, releaseId);
   }
 
   @override

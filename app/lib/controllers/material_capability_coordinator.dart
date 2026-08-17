@@ -108,11 +108,16 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   ///
   /// [localPackagePath] selects the explicit local package import branch:
   /// when present, it is installed and adopted before Gen production is
-  /// considered. Returns the outcome after the full resolution.
+  /// considered.
+  ///
+  /// When [forceProduce] is true, already installed and adopted editions are
+  /// bypassed and a fresh production run with `listen-gen` is forced.
+  /// Returns the outcome after the full resolution.
   Future<CapabilityOutcome> requestCapability(
     MaterialDetails material,
     MaterialCapability capability, {
     String? localPackagePath,
+    bool forceProduce = false,
   }) async {
     final session = _sessions.putIfAbsent(
       _sessionKey(material.material.id, capability),
@@ -127,6 +132,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         session,
         run,
         localPackagePath,
+        forceProduce: forceProduce,
       );
     } finally {
       run.finished = true;
@@ -166,8 +172,13 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     MaterialCapability capability,
     _CapabilitySession session,
     _CapabilityRun run,
-    String? localPackagePath,
-  ) async {
+    String? localPackagePath, {
+    bool forceProduce = false,
+  }) async {
+    if (forceProduce) {
+      return _produce(material, capability, run);
+    }
+
     // 1. Already adopted compatible composition.
     final editions = await _guard(
       run,
