@@ -1381,6 +1381,118 @@ fn sparse_v58_fixture_without_media_items_upgrades_to_v59_learning_material_sche
     }
 }
 
+#[test]
+fn v63_repairs_bound_media_revision_and_repoints_legacy_identity() {
+    let connection = Connection::open_in_memory().unwrap();
+    migrate(&connection).unwrap();
+
+    let media_id = MediaId::parse("media-v63-repair").unwrap();
+    let rendition = MediaRendition::new(
+        RenditionOrigin::Source,
+        MediaKind::Video,
+        "video/mp4",
+        "fingerprint-v63-repair",
+        MediaAvailability::Available,
+        Some(media_id.clone()),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let material_id = initial_material_id(&[], &[Rendition::Media(rendition.clone())]).unwrap();
+    let revision = MaterialRevision::new(
+        material_id.clone(),
+        "Repairable media",
+        Vec::new(),
+        vec![Rendition::Media(rendition.clone())],
+        100,
+    )
+    .unwrap();
+    let material = LearningMaterial::new(&revision, None, 100, 100).unwrap();
+    let legacy_revision_id = MaterialRevisionId::parse("legacy-revision-v63").unwrap();
+
+    let tx = connection.unchecked_transaction().unwrap();
+    tx.execute(
+        "INSERT INTO media_items
+           (id,path,fingerprint,title,kind,duration_ms,created_at_ms,updated_at_ms,
+            availability,retained_at_ms)
+         VALUES (?1,'/tmp/repair.mp4',?2,?3,'\"video\"',NULL,100,100,
+                 '\"available\"',NULL)",
+        params![
+            media_id.as_str(),
+            "fingerprint-v63-repair",
+            "Repairable media"
+        ],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO learning_materials
+           (id,current_revision_id,retained_at_ms,created_at_ms,updated_at_ms)
+         VALUES (?1,?2,NULL,100,100)",
+        params![material.id.as_str(), legacy_revision_id.as_str()],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO material_revisions (id,material_id,title,created_at_ms)
+         VALUES (?1,?2,?3,100)",
+        params![
+            legacy_revision_id.as_str(),
+            material.id.as_str(),
+            revision.title
+        ],
+    )
+    .unwrap();
+    tx.execute(
+        "INSERT INTO material_media_bindings (media_id,material_id) VALUES (?1,?2)",
+        params![media_id.as_str(), material.id.as_str()],
+    )
+    .unwrap();
+    tx.pragma_update(None, "user_version", 62).unwrap();
+    tx.commit().unwrap();
+
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM material_media_renditions WHERE revision_id=?1",
+                [legacy_revision_id.as_str()],
+                |row| row.get::<_, u32>(0),
+            )
+            .unwrap(),
+        0,
+        "the fixture must reproduce the empty revision seen in the user database"
+    );
+
+    migrate(&connection).unwrap();
+
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT current_revision_id FROM learning_materials WHERE id=?1",
+                [material.id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        revision.id.as_str()
+    );
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT rendition_id FROM material_media_renditions WHERE revision_id=?1",
+                [revision.id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+        rendition.id.as_str()
+    );
+    assert_eq!(
+        connection
+            .query_row("PRAGMA user_version", [], |row| row.get::<_, u32>(0))
+            .unwrap(),
+        MIGRATION_VERSION
+    );
+}
+
 /// Rebuilds the historical v58 fixture shape inside an already-migrated
 /// database: the full latest schema minus the v59 learning-material tables
 /// (including the v61 canonical renditions built on top of them).

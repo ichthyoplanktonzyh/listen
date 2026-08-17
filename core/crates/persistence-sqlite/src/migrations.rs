@@ -1,13 +1,16 @@
 use domain::{
-    CapabilityDimensionState, CapabilityStateChangeKind, LearningStatus, LexicalCapability,
-    LexicalCapabilityHistory, LexicalCapabilityHistoryId, LexicalCapabilityProfile, LexicalEntryId,
-    ObservationOrigin, ObservationResult, learning_observation_id, observation_spec_for_marking,
+    CapabilityDimensionState, CapabilityStateChangeKind, LearningMaterialId, LearningStatus,
+    LexicalCapability, LexicalCapabilityHistory, LexicalCapabilityHistoryId,
+    LexicalCapabilityProfile, LexicalEntryId, MaterialRevision, MaterialRevisionId,
+    MediaAvailability, MediaId, MediaKind, MediaRendition, ObservationOrigin, ObservationResult,
+    Rendition, RenditionOrigin, initial_material_id, learning_observation_id,
+    observation_spec_for_marking,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, Transaction, params};
 use sha2::{Digest as _, Sha256};
 
-use super::PersistenceError;
 use super::learning_material::backfill_legacy_media_materials;
+use super::{PersistenceError, domain_sql, from_json};
 
 // v25 is reserved by Phase 3.4.2 (independent branch); this repository jumps
 // 24 -> 26 per the "later lander renumbers" rule recorded in the 3.5 plan.
@@ -45,8 +48,12 @@ use super::learning_material::backfill_legacy_media_materials;
 // terminal states plus a per-attempt sequence so same-millisecond retries
 // never collide, and `package_rendition_blobs` stores every present
 // Document/Media Rendition blob so adopted content stays readable after the
-// source carrier is deleted.
-pub const MIGRATION_VERSION: u32 = 62;
+// source carrier is deleted. v63 repairs a narrow interrupted-development
+// migration shape: a bound legacy media material whose current revision row
+// survived but whose canonical component tables are all empty. The existing
+// media snapshot deterministically reconstructs the missing Source Media
+// Rendition; unrelated or non-matching corrupt rows remain untouched.
+pub const MIGRATION_VERSION: u32 = 63;
 pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
     connection.execute_batch("PRAGMA foreign_keys = ON;")?;
     let current: u32 = connection.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -668,6 +675,185 @@ pub fn migrate(connection: &Connection) -> Result<(), PersistenceError> {
         }
         tx.pragma_update(None, "user_version", 62)?;
         tx.commit()?;
+    }
+    if current < 63 {
+        let tx = connection.unchecked_transaction()?;
+        repair_empty_bound_media_revisions(&tx)?;
+        tx.pragma_update(None, "user_version", 63)?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
+/// Restores only empty current revisions that can be proven to be the exact
+/// deterministic initial revision of an already-bound registered media item.
+///
+/// The v59 graph and binding are durable learner-owned facts. A development
+/// cutover to the v61 canonical component tables could leave those rows behind
+/// after the old union table was dropped. Re-deriving the Source Media
+/// Rendition from `media_items` is lossless because the graph deliberately
+/// snapshots only media id, kind, fingerprint, and availability. The material
+/// id must match the reconstructed domain identity. A differing revision id is
+/// the known pre-canonical identity shape: it is preserved as history while a
+/// canonical current revision is created beside it. Other mismatches remain
+/// untouched and visible.
+fn repair_empty_bound_media_revisions(
+    transaction: &Transaction<'_>,
+) -> Result<(), PersistenceError> {
+    for table in [
+        "media_items",
+        "learning_materials",
+        "material_revisions",
+        "material_media_bindings",
+        "material_source_assets",
+        "material_document_renditions",
+        "material_media_renditions",
+    ] {
+        if !table_exists(transaction, table)? {
+            return Ok(());
+        }
+    }
+    let rows = {
+        let mut statement = transaction.prepare(
+            "SELECT lm.id, mr.id, mr.title, mr.created_at_ms,
+                    mi.id, mi.fingerprint, mi.kind, mi.availability
+             FROM learning_materials lm
+             JOIN material_revisions mr ON mr.id=lm.current_revision_id
+             JOIN material_media_bindings binding ON binding.material_id=lm.id
+             JOIN media_items mi ON mi.id=binding.media_id
+             WHERE NOT EXISTS (
+                       SELECT 1 FROM material_source_assets source
+                       WHERE source.revision_id=mr.id
+                   )
+               AND NOT EXISTS (
+                       SELECT 1 FROM material_document_renditions document
+                       WHERE document.revision_id=mr.id
+                   )
+               AND NOT EXISTS (
+                       SELECT 1 FROM material_media_renditions media
+                       WHERE media.revision_id=mr.id
+                   )
+             ORDER BY lm.id, mi.id",
+        )?;
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, u64>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?
+    };
+
+    for (
+        stored_material_id,
+        stored_revision_id,
+        title,
+        created_at_ms,
+        stored_media_id,
+        fingerprint,
+        kind_json,
+        availability_json,
+    ) in rows
+    {
+        let material_id = LearningMaterialId::parse(&stored_material_id).map_err(domain_sql)?;
+        let revision_id = MaterialRevisionId::parse(&stored_revision_id).map_err(domain_sql)?;
+        let media_id = MediaId::parse(&stored_media_id).map_err(domain_sql)?;
+        let kind: MediaKind = from_json(&kind_json)?;
+        let availability: MediaAvailability = from_json(&availability_json)?;
+        let media_type = match kind {
+            MediaKind::Video => "video/mp4",
+            MediaKind::Audio => "audio/mpeg",
+        };
+        let rendition = MediaRendition::new(
+            RenditionOrigin::Source,
+            kind,
+            media_type,
+            fingerprint,
+            availability,
+            Some(media_id),
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(domain_sql)?;
+        let renditions = vec![Rendition::Media(rendition.clone())];
+        let expected_material_id = initial_material_id(&[], &renditions).map_err(domain_sql)?;
+        let expected_revision = MaterialRevision::new(
+            expected_material_id.clone(),
+            title,
+            Vec::new(),
+            renditions,
+            created_at_ms,
+        )
+        .map_err(domain_sql)?;
+
+        if expected_material_id != material_id {
+            continue;
+        }
+
+        let target_revision_id = if expected_revision.id == revision_id {
+            revision_id.clone()
+        } else {
+            // The pre-canonical v59 model used a different rendition/revision
+            // identity vocabulary. Preserve that historical row for any
+            // package/source-identity references, create the canonical
+            // revision beside it, and advance only the material's current
+            // pointer. No learner record is deleted or rewritten.
+            transaction.execute(
+                "INSERT INTO material_revisions (id,material_id,title,created_at_ms)
+                 VALUES (?1,?2,?3,?4)
+                 ON CONFLICT(id) DO NOTHING",
+                params![
+                    expected_revision.id.as_str(),
+                    expected_revision.material_id.as_str(),
+                    expected_revision.title,
+                    expected_revision.created_at_ms,
+                ],
+            )?;
+            transaction.execute(
+                "UPDATE learning_materials
+                 SET current_revision_id=?2
+                 WHERE id=?1 AND current_revision_id=?3",
+                params![
+                    material_id.as_str(),
+                    expected_revision.id.as_str(),
+                    revision_id.as_str(),
+                ],
+            )?;
+            expected_revision.id.clone()
+        };
+
+        transaction.execute(
+            "INSERT OR IGNORE INTO material_media_renditions
+               (revision_id, rendition_id, origin, kind, media_type, fingerprint,
+                availability, media_sha256, media_byte_size, media_id, producer_json,
+                compatibility_json)
+             VALUES (?1,?2,'source',?3,?4,?5,?6,NULL,NULL,?7,NULL,NULL)",
+            params![
+                target_revision_id.as_str(),
+                rendition.id.as_str(),
+                match rendition.kind {
+                    MediaKind::Video => "video",
+                    MediaKind::Audio => "audio",
+                },
+                rendition.media_type,
+                rendition.fingerprint,
+                match rendition.availability {
+                    MediaAvailability::Available => "available",
+                    MediaAvailability::Missing => "missing",
+                    MediaAvailability::Archived => "archived",
+                },
+                rendition.media_id.as_ref().map(MediaId::as_str),
+            ],
+        )?;
     }
     Ok(())
 }
