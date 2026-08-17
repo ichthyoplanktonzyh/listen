@@ -366,7 +366,8 @@ fn test_app() -> Router {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_material_repository(repo.clone())
-    .with_package_lifecycle_repository(repo.clone());
+    .with_package_lifecycle_repository(repo.clone())
+    .with_content_package_candidate_import_repository(repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 
@@ -757,7 +758,8 @@ async fn file_database_keeps_editions_and_adoption_evidence_after_reopen() {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_material_repository(repo.clone())
-    .with_package_lifecycle_repository(repo.clone());
+    .with_package_lifecycle_repository(repo.clone())
+    .with_content_package_candidate_import_repository(repo.clone());
     let app = router(ApiState::new(services, repo, TOKEN));
     let (status, editions) = list_editions(&app, &material_id).await;
     assert_eq!(status, StatusCode::OK, "{editions}");
@@ -855,7 +857,8 @@ async fn tampered_stored_adoption_fails_closed_with_typed_500() {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_material_repository(repo.clone())
-    .with_package_lifecycle_repository(repo.clone());
+    .with_package_lifecycle_repository(repo.clone())
+    .with_content_package_candidate_import_repository(repo.clone());
     let app = router(ApiState::new(services, repo, TOKEN));
 
     // Re-adopting the same release fails closed: the recomputed plan is valid
@@ -1327,7 +1330,8 @@ fn file_app(database_path: &Path) -> Router {
     )
     .with_learning_loop_repositories(repo.clone(), repo.clone(), repo.clone(), repo.clone())
     .with_material_repository(repo.clone())
-    .with_package_lifecycle_repository(repo.clone());
+    .with_package_lifecycle_repository(repo.clone())
+    .with_content_package_candidate_import_repository(repo.clone());
     router(ApiState::new(services, repo, TOKEN))
 }
 

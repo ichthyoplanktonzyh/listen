@@ -75,6 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_realtime_conversation_repository(repository.clone())
     .with_material_repository(repository.clone())
     .with_package_lifecycle_repository(repository.clone())
+    .with_content_package_candidate_import_repository(repository.clone())
     .with_capability_attempt_repository(repository.clone())
     .with_source_identity_repository(repository.clone());
     let services = services

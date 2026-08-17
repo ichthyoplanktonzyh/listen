@@ -944,3 +944,149 @@ fn lltimeline_cross_source_resource_id_reuse_rolls_back() {
         original.id
     );
 }
+
+fn content_package_candidate_fixture(
+    track: &SubtitleTrack,
+    media: &MediaItem,
+) -> ContentPackageCandidateImport {
+    let mut document = lltimeline_fixture();
+    let timeline = word_timeline(
+        "package-word-candidate",
+        track,
+        TimelineStatus::Candidate,
+        "package-aligner",
+        120,
+        400,
+    );
+    document.metadata.media = LLTimelineMedia {
+        id: media.id.clone(),
+        fingerprint: media.fingerprint.clone(),
+        path: None,
+        title: media.title.clone(),
+        duration_ms: media.duration.map(TimeMs::get),
+    };
+    document.metadata.language = track.language.clone();
+    document.metadata.extra = serde_json::json!({
+        "track_id": track.id.as_str(),
+        "track_fingerprint": track.fingerprint,
+        "track_source": "package:subtitle_text_track",
+    });
+    document.artifacts = vec![LLTimelineArtifact {
+        kind: "rhythm_word_acoustic_cues".into(),
+        provider_id: Some("package-acoustics".into()),
+        provider_version: Some("v1".into()),
+        payload: serde_json::json!({
+            "resource_id": "package-acoustics-1",
+            "timeline_id": timeline.id.as_str(),
+            "cues": [{
+                "sentence_id": track.sentences[0].id.as_str(),
+                "token_index": 0
+            }]
+        }),
+    }];
+    ContentPackageCandidateImport {
+        track: track.clone(),
+        metadata: document.metadata,
+        artifacts: document.artifacts,
+        word_timelines: vec![timeline],
+        phone_timelines: Vec::new(),
+        sense_group_analyses: Vec::new(),
+        prosody_analyses: Vec::new(),
+        corpus_occurrences: Vec::new(),
+    }
+}
+
+#[test]
+fn content_package_candidate_import_is_idempotent_and_never_activates() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let media = transcription_media();
+    MediaRepository::upsert(&repo, &media).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let import = content_package_candidate_fixture(&track, &media);
+
+    repo.import_content_package_candidates(&import).unwrap();
+    repo.import_content_package_candidates(&import).unwrap();
+
+    assert_eq!(repo.list_word_timelines(&track.id).unwrap().len(), 1);
+    assert_eq!(
+        repo.list_word_timelines(&track.id).unwrap()[0].status,
+        TimelineStatus::Candidate
+    );
+    assert!(repo.active_word_timeline(&track.id).unwrap().is_none());
+    let (metadata, artifacts) = repo
+        .get_lltimeline_resource(&track.id)
+        .unwrap()
+        .expect("metadata attached to the already landed track");
+    assert_eq!(
+        metadata.extra["track_source"],
+        serde_json::json!("package:subtitle_text_track")
+    );
+    assert_eq!(artifacts.len(), 1);
+}
+
+#[test]
+fn content_package_candidate_import_rejects_non_candidate_status() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let media = transcription_media();
+    MediaRepository::upsert(&repo, &media).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let mut import = content_package_candidate_fixture(&track, &media);
+    import.word_timelines[0].status = TimelineStatus::Active;
+
+    let result = repo.import_content_package_candidates(&import);
+    assert!(result.is_err());
+    assert!(
+        repo.list_word_timelines(&track.id).unwrap().is_empty(),
+        "a rejected import must not write any candidate row"
+    );
+}
+
+#[test]
+fn content_package_candidate_import_rolls_back_on_cross_source_conflict() {
+    let repo = SqliteRepository::in_memory().unwrap();
+    let media = transcription_media();
+    MediaRepository::upsert(&repo, &media).unwrap();
+    let track = word_timeline_track();
+    repo.save_track(&track).unwrap();
+    let import = content_package_candidate_fixture(&track, &media);
+    repo.import_content_package_candidates(&import).unwrap();
+
+    let other_media = MediaItem {
+        id: MediaId::parse("media-other").unwrap(),
+        path: "/tmp/other.mp4".into(),
+        fingerprint: "other-fp".into(),
+        title: "Other".into(),
+        kind: MediaKind::Video,
+        duration: None,
+        availability: MediaAvailability::Available,
+        retained_at_ms: None,
+        created_at_ms: 2,
+        updated_at_ms: 2,
+    };
+    MediaRepository::upsert(&repo, &other_media).unwrap();
+    let other_track = SubtitleTrack {
+        id: SubtitleTrackId::parse("track-other").unwrap(),
+        media_id: other_media.id.clone(),
+        fingerprint: "other-track-fp".into(),
+        language: None,
+        source: "test".into(),
+        status: SubtitleTrackStatus::Available,
+        sentences: Vec::new(),
+    };
+    let mut conflicting = import;
+    conflicting.track = other_track;
+    conflicting.word_timelines[0].track_id = conflicting.track.id.clone();
+    conflicting.word_timelines[0].media_id = other_media.id.clone();
+
+    assert!(
+        repo.import_content_package_candidates(&conflicting)
+            .is_err()
+    );
+    assert!(
+        repo.get_track(&conflicting.track.id).unwrap().is_none(),
+        "the conflicting track write must roll back"
+    );
+    assert_eq!(repo.list_word_timelines(&track.id).unwrap().len(), 1);
+}

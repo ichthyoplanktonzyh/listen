@@ -335,6 +335,36 @@ pub trait LLTimelineImportRepository: Send + Sync {
     fn import_lltimeline(&self, import: &LLTimelineImport) -> Result<(), ApplicationError>;
 }
 
+/// Atomic persistence boundary for one adopted Resource Package's projected
+/// analysis candidates.
+///
+/// Unlike [`LLTimelineImportRepository`], the package subtitle track has
+/// already been landed by [`crate::AppServices::land_adopted_subtitle_track`];
+/// this seam only attaches immutable candidate analysis resources to that
+/// track. It must never activate, archive, or replace any existing resource.
+pub trait ContentPackageCandidateImportRepository: Send + Sync {
+    fn import_content_package_candidates(
+        &self,
+        import: &ContentPackageCandidateImport,
+    ) -> Result<(), ApplicationError>;
+}
+
+/// Without configured persistence every package-candidate landing errors with
+/// the same not-configured message, so an unconfigured `AppServices` never
+/// silently drops candidate resources.
+pub(crate) struct DisabledContentPackageCandidateImportRepository;
+
+impl ContentPackageCandidateImportRepository for DisabledContentPackageCandidateImportRepository {
+    fn import_content_package_candidates(
+        &self,
+        _import: &ContentPackageCandidateImport,
+    ) -> Result<(), ApplicationError> {
+        Err(ApplicationError::Repository(
+            "content package candidate import repository is not configured".into(),
+        ))
+    }
+}
+
 /// A validated Resource Package projected into Core-owned records.
 ///
 /// This input is deliberately distinct from [`LLTimelineImport`]: package

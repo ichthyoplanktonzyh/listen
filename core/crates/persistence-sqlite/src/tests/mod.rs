@@ -1,7 +1,8 @@
 use super::*;
 use application::{
-    AppServices, ApplicationError, CoachDashboardRepository, DictionaryProvider,
-    DictionaryProviderError, ImportSubtitle, LLTimelineResourceRepository, LearningEventRepository,
+    AppServices, ApplicationError, CoachDashboardRepository, ContentPackageCandidateImport,
+    ContentPackageCandidateImportRepository, DictionaryProvider, DictionaryProviderError,
+    ImportSubtitle, LLTimelineResourceRepository, LearningEventRepository,
     LearningObservationRepository, LexicalCapabilityRepository, LexicalEntryRepository,
     ListeningInboxRepository, MediaRepository, PhoneTimelineRepository, PhoneticAnalysisRepository,
     PracticeRepository, PronunciationRepository, ProsodyAnalysisRepository,
