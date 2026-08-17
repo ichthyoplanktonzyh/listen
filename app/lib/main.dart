@@ -29,7 +29,6 @@ import 'controllers/media_session_coordinator.dart';
 import 'controllers/occurrence_media_resolver.dart';
 import 'controllers/playback_actions_coordinator.dart';
 import 'controllers/player_controller.dart';
-import 'controllers/phonetic_analysis_view_model.dart';
 import 'controllers/practice_actions_coordinator.dart';
 import 'controllers/practice_controller.dart';
 import 'controllers/provider_settings_view_models.dart';
@@ -1237,14 +1236,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
     await _readinessViewModel.refreshAdoptedComposition();
   }
-
-  Future<void> _openPhoneticAnalysisCenter() => openPhoneticAnalysisCenterFlow(
-    context: context,
-    viewModel: !coreSessionController.state.isConnected
-        ? null
-        : PhoneticAnalysisViewModel(coreRepositories.phoneticAnalysis),
-    playerController: playerController,
-  );
 
   Future<void> _openOnline() => openOnlineMediaFlow(
     context: context,
@@ -2483,8 +2474,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _toolsMenu() => ShellToolsMenu(
     onOpenLearningAssets: () => unawaited(_openLearningAssets()),
     onOpenLearningResources: () => unawaited(_openLearningResources()),
-    onOpenPhoneticAnalysisCenter: () =>
-        unawaited(_openPhoneticAnalysisCenter()),
     onExportLogs: () => unawaited(_exportLogs()),
     onExportVocabulary: () => unawaited(playbackActions.exportVocabulary()),
     onImportVocabulary: () => unawaited(playbackActions.importVocabulary()),
@@ -3224,8 +3213,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       onOpenVocabulary: _openVocabulary,
       onOpenReview: () => _openReviewQueue(),
       onOpenCoach: () => currentRoute.value = AppRoute.coach,
-      onOpenPhoneticAnalysisCenter: () =>
-          unawaited(_openPhoneticAnalysisCenter()),
       child: child,
     );
   }

@@ -77,7 +77,6 @@ void main() {
             toolsMenu: ShellToolsMenu(
               onOpenLearningAssets: () {},
               onOpenLearningResources: () {},
-              onOpenPhoneticAnalysisCenter: () {},
               onExportLogs: () {},
               onExportVocabulary: () {},
               onImportVocabulary: () {},

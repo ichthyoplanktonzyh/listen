@@ -46,7 +46,6 @@ void main() {
   Widget toolsMenu() => ShellToolsMenu(
     onOpenLearningAssets: () => fired.add('learning-assets'),
     onOpenLearningResources: () => fired.add('learning-resources'),
-    onOpenPhoneticAnalysisCenter: () => fired.add('phonetic-analysis'),
     onExportLogs: () => fired.add('logs'),
     onExportVocabulary: () => fired.add('export-vocabulary'),
     onImportVocabulary: () => fired.add('import-vocabulary'),
@@ -92,7 +91,6 @@ void main() {
       expect(await openMenu(tester, 'Tools'), [
         'learning-assets',
         'learning-resources',
-        'phonetic-analysis',
         'export-vocabulary',
         'import-vocabulary',
         'import-word-list',
@@ -135,7 +133,6 @@ void main() {
       for (final value in const [
         'learning-assets',
         'learning-resources',
-        'phonetic-analysis',
         'export-vocabulary',
         'import-vocabulary',
         'import-word-list',

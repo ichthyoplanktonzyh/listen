@@ -26,7 +26,6 @@ class ShellToolsMenu extends StatelessWidget {
     super.key,
     required this.onOpenLearningAssets,
     required this.onOpenLearningResources,
-    required this.onOpenPhoneticAnalysisCenter,
     required this.onExportLogs,
     required this.onExportVocabulary,
     required this.onImportVocabulary,
@@ -35,7 +34,6 @@ class ShellToolsMenu extends StatelessWidget {
 
   final VoidCallback onOpenLearningAssets;
   final VoidCallback onOpenLearningResources;
-  final VoidCallback onOpenPhoneticAnalysisCenter;
   final VoidCallback onExportLogs;
   final VoidCallback onExportVocabulary;
   final VoidCallback onImportVocabulary;
@@ -55,8 +53,6 @@ class ShellToolsMenu extends StatelessWidget {
             onOpenLearningAssets();
           case 'learning-resources':
             onOpenLearningResources();
-          case 'phonetic-analysis':
-            onOpenPhoneticAnalysisCenter();
           case 'logs':
             onExportLogs();
           case 'export-vocabulary':
@@ -81,13 +77,6 @@ class ShellToolsMenu extends StatelessWidget {
           child: ListenMenuRow(
             icon: Icons.storage_outlined,
             title: l.text('resources'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'phonetic-analysis',
-          child: ListenMenuRow(
-            icon: Icons.graphic_eq,
-            title: l.text('phoneticAnalysisCenter'),
           ),
         ),
         const PopupMenuDivider(),

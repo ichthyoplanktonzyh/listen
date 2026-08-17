@@ -35,7 +35,6 @@ void main() {
     onOpenVocabulary: () {},
     onOpenReview: () {},
     onOpenCoach: () {},
-    onOpenPhoneticAnalysisCenter: () {},
   );
 
   Iterable<PlatformMenuItem> flatten(List<PlatformMenuItem> items) sync* {
@@ -179,7 +178,6 @@ void main() {
       l.text('vocabulary'),
       l.text('review'),
       l.text('coachDashboard'),
-      l.text('phoneticAnalysisCenter'),
     ]) {
       expect(
         byLabel(noCore, label).onSelected,
