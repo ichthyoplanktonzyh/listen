@@ -123,6 +123,7 @@ class DerivedAudio:
     bytes: bytes
     media_type: str
     alignment: tuple[AnchorAlignment, ...] | None
+    duration_ms: int | None
     provider: dict[str, object]
 
 
@@ -312,6 +313,7 @@ def _run_tts_derivation(
         bytes=result.audio_bytes,
         media_type=result.media_type,
         alignment=result.alignment,
+        duration_ms=result.duration_ms,
         provider=provider,
     )
 
@@ -633,7 +635,7 @@ def _alignment_resource(
             config_sha256=producer.get("config_sha256"),
         ),
         quality=quality(),
-        producer=producer,
+        producer=producer or None,
     )
     return resource, payload_bytes
 
@@ -820,6 +822,7 @@ def _tts_rich_stages(
     request: CapabilityRequest,
     config: ProduceConfig,
     audio_bytes: bytes,
+    audio_duration_ms: int | None,
     reading_payload: dict[str, object],
     alignments: tuple[AnchorAlignment, ...],
     producer: dict[str, object],
@@ -857,15 +860,15 @@ def _tts_rich_stages(
         warnings: list[Warning] = []
         aligned_result = None
         align_segments: tuple[AlignSegment, ...] = ()
-        audio_duration_ms: int | None = None
         transcript: AsrTranscript | None = None
         asr_input: Path | None = audio_path
         stream_index: int | None = None
         if stages.aligner is not None:
-            try:
-                audio_duration_ms = _wav_duration_ms(audio_path)
-            except ConversionError:
-                audio_duration_ms = None
+            if audio_duration_ms is None:
+                try:
+                    audio_duration_ms = _wav_duration_ms(audio_path)
+                except ConversionError:
+                    audio_duration_ms = None
             sentences = alignment_sentences_from(
                 reading_payload=reading_payload,
                 sentence_times_ms=sentence_times,
@@ -1211,6 +1214,7 @@ def produce(
                     request=request,
                     config=config,
                     audio_bytes=audio.bytes,
+                    audio_duration_ms=audio.duration_ms,
                     reading_payload=reading_payload,
                     alignments=audio.alignment,
                     producer=audio.provider,

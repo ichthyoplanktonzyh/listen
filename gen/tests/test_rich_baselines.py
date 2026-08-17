@@ -179,7 +179,6 @@ def _groups_for(*spans: tuple[int, int, int]) -> tuple[dict, ...]:
     return tuple(groups)
 
 
-class BaselineSenseGroupTests(unittest.TestCase):
     def test_partition_matches_punctuation_and_sentence_boundaries(self) -> None:
         result = PunctuationSenseGroupBaseline().analyze(
             SenseGroupRequest(language="en-US", sentences=fixture_sentences())
@@ -188,16 +187,28 @@ class BaselineSenseGroupTests(unittest.TestCase):
             (group.sentence_index, group.start_token_index, group.end_token_index_exclusive)
             for group in result.groups
         ]
-        self.assertEqual(spans, [(0, 0, 2), (0, 2, 5), (1, 0, 4)])
+        # Short sentences (< 4 words) remain intact
+        self.assertEqual(spans, [(0, 0, 5), (1, 0, 4)])
         self.assertEqual(
             [group.sources for group in result.groups],
-            [("punctuation",), ("punctuation",), ("punctuation",)],
+            [("rule",), ("rule",)],
         )
         for group in result.groups:
-            self.assertEqual(group.confidence, 1.0)
+            self.assertEqual(group.confidence, 0.5)
             self.assertIn(group.head_token_index, range(
                 group.start_token_index, group.end_token_index_exclusive
             ))
+
+    def test_longer_sentence_partitions_at_clause_punctuation(self) -> None:
+        # A sentence with 6 words and a comma: "Listen carefully to this, and tell me."
+        tokens = _tokens("Listen", " ", "carefully", " ", "to", " ", "this", ",", " ", "and", " ", "tell", " ", "me", ".")
+        sentence = AlignmentSentence("s_long", 0, 0, 2000, "Listen carefully to this, and tell me.", "Listen carefully to this, and tell me.", tokens)
+        result = PunctuationSenseGroupBaseline().analyze(
+            SenseGroupRequest(language="en-US", sentences=(sentence,))
+        )
+        spans = [(g.start_token_index, g.end_token_index_exclusive) for g in result.groups]
+        self.assertEqual(spans, [(0, 8), (8, 15)])
+        self.assertEqual([g.sources for g in result.groups], [("punctuation",), ("rule",)])
 
     def test_full_partition_and_rule_evidence(self) -> None:
         sentence = AlignmentSentence(

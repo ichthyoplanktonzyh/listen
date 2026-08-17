@@ -112,6 +112,7 @@ class SayTtsAdapterTests(unittest.TestCase):
             AnchorAlignment("sentence-0", 0),
             AnchorAlignment("sentence-1", 1000),
         ))
+        self.assertEqual(result.duration_ms, 2000)
         self.assertEqual(result.provider_id, "say")
         self.assertIsNotNone(result.config_sha256)
 

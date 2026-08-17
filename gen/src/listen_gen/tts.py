@@ -64,6 +64,7 @@ class TtsResult:
     audio_bytes: bytes
     media_type: str
     alignment: tuple[AnchorAlignment, ...] | None
+    duration_ms: int | None
     provider_id: str
     provider_version: str
     model_id: str | None
@@ -142,6 +143,7 @@ class FakeTtsAdapter:
             audio_bytes=audio,
             media_type="audio/wav",
             alignment=tuple(alignments),
+            duration_ms=cursor_ms,
             provider_id="fake",
             provider_version="0.0.0",
             model_id=None,
@@ -367,6 +369,7 @@ class SayTtsAdapter:
             audio_bytes=audio,
             media_type="audio/mp4",
             alignment=tuple(alignments) if measured else None,
+            duration_ms=cursor_ms if measured else None,
             provider_id="say",
             provider_version=self._say_version,
             model_id=self.voice,
@@ -445,6 +448,10 @@ class FixtureTtsAdapter:
         sentence_anchors: Sequence[tuple[str, str]],
     ) -> TtsResult:
         audio = self.audio_path.read_bytes()
+        try:
+            duration_ms = _wav_duration_ms(self.audio_path)
+        except TtsProviderError:
+            duration_ms = None
         alignment: tuple[AnchorAlignment, ...] | None = None
         if self.alignment_path is not None:
             try:
@@ -464,6 +471,7 @@ class FixtureTtsAdapter:
             audio_bytes=audio,
             media_type="audio/wav",
             alignment=alignment,
+            duration_ms=duration_ms,
             provider_id="fixture",
             provider_version="0.0.0",
             model_id=None,

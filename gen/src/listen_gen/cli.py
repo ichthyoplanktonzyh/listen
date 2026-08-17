@@ -189,7 +189,26 @@ def parser(
     produce.add_argument("--ffprobe-command", default="ffprobe")
     produce.add_argument("--ffmpeg-command", default="ffmpeg")
     produce.add_argument("--media-command-timeout-seconds", type=float, default=300.0)
-    for stage in ("sense-groups", "acoustics", "prosody"):
+    produce.add_argument(
+        "--sense-groups",
+        default="none",
+        choices=["none", "fixture", "command", "baseline", "syntax", "llm"],
+        help="optional sense-groups stage adapter (none/fixture/command/baseline/syntax/llm)",
+    )
+    produce.add_argument(
+        "--sense-groups-llm-adapter",
+        choices=["openai_chat", "anthropic_messages", "gemini"],
+        help="LLM wire protocol adapter kind (openai_chat/anthropic_messages/gemini)",
+    )
+    produce.add_argument("--sense-groups-llm-base-url", help="custom base URL for LLM sense group analyzer")
+    produce.add_argument("--sense-groups-llm-api-key", help="API key for LLM sense group analyzer")
+    produce.add_argument("--sense-groups-llm-model", help="model name for LLM sense group analyzer")
+    produce.add_argument("--sense-groups-llm-profile", type=Path, help="JSON profile file path containing LlmProviderProfile")
+    produce.add_argument("--sense-groups-llm-timeout-seconds", type=float, default=30.0, help="timeout for LLM sense group requests")
+    produce.add_argument("--sense-groups-llm-concurrency", type=int, default=300, help="concurrency worker count for LLM sense group requests")
+    produce.add_argument("--sense-groups-syntax-backend", choices=["spacy", "stanza"], default="spacy", help="syntax backend for sense group analyzer")
+    produce.add_argument("--sense-groups-syntax-model", help="model name for syntax sense group analyzer")
+    for stage in ("acoustics", "prosody"):
         produce.add_argument(
             f"--{stage}",
             default="none",
@@ -368,6 +387,23 @@ def _build_rich(args: argparse.Namespace, progress=None) -> "RichStages | None":
         )
     elif selector == "baseline":
         sense_groups = PunctuationSenseGroupBaseline()
+    elif selector == "syntax":
+        from .sense_groups import SyntaxSenseGroupAnalyzer
+        sense_groups = SyntaxSenseGroupAnalyzer(
+            backend=args.sense_groups_syntax_backend,
+            model=args.sense_groups_syntax_model,
+        )
+    elif selector == "llm":
+        from .sense_groups import LlmSenseGroupAnalyzer
+        sense_groups = LlmSenseGroupAnalyzer(
+            adapter_kind=args.sense_groups_llm_adapter,
+            base_url=args.sense_groups_llm_base_url,
+            api_key=args.sense_groups_llm_api_key,
+            model=args.sense_groups_llm_model,
+            profile_path=args.sense_groups_llm_profile,
+            timeout_seconds=args.sense_groups_llm_timeout_seconds,
+            concurrency=args.sense_groups_llm_concurrency,
+        )
 
     selector = args.acoustics
     if selector == "fixture":

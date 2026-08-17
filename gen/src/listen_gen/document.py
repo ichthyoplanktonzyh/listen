@@ -180,6 +180,20 @@ def segment_text(text: str) -> tuple[tuple[Paragraph, ...], tuple[Sentence, ...]
                 bounds.append((cursor, len(raw_line)))
         else:
             bounds = [(0, len(raw_line))]
+        # A terminal-punctuation match starts before the whitespace it
+        # consumes. When that whitespace reaches the end of the line the
+        # raw bounds above contain a second, whitespace-only "sentence".
+        # Keep those exact source characters on the preceding sentence so
+        # sentence anchors remain non-empty while still covering the source
+        # text byte-for-byte.
+        qualified_bounds: list[tuple[int, int]] = []
+        for start, end in bounds:
+            if raw_line[start:end].strip():
+                qualified_bounds.append((start, end))
+            elif qualified_bounds:
+                previous_start, _ = qualified_bounds[-1]
+                qualified_bounds[-1] = (previous_start, end)
+        bounds = qualified_bounds
         sentence_ids: list[str] = []
         for index, (start, end) in enumerate(bounds):
             is_last = index == len(bounds) - 1

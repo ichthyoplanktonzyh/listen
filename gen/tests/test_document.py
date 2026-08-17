@@ -50,6 +50,14 @@ class SegmentTextTests(unittest.TestCase):
         self.assertEqual(sentences[0].start_char, 0)
         self.assertEqual(sentences[0].end_char, 18)
 
+    def test_trailing_space_after_punctuation_stays_with_sentence(self) -> None:
+        text = "First sentence. \nSecond sentence."
+        _, sentences = segment_text(text)
+        self.assertEqual(len(sentences), 2)
+        self.assertEqual(sentences[0].text, "First sentence. \n")
+        self.assertEqual("".join(sentence.text for sentence in sentences), text)
+        self.assertTrue(all(sentence.text.strip() for sentence in sentences))
+
     def test_paragraph_offsets_are_contiguous(self) -> None:
         paragraphs, _ = segment_text("One.\nTwo!\n\nThree?")
         self.assertEqual([(p.start_char, p.end_char) for p in paragraphs],

@@ -371,6 +371,11 @@ class RichAlignedMediaTests(unittest.TestCase):
         self.assertIn("word_timeline", kinds)
         self.assertIn("sense_group_analysis", kinds)
         resources = package_resources(output)
+        alignment = next(
+            r for r in resources
+            if r["descriptor"]["kind"] == "anchor_time_alignment"
+        )
+        self.assertIsNone(alignment["descriptor"]["producer"])
         reading = next(r for r in resources if r["descriptor"]["kind"] == "structured_reading")
         payload = resource_payload(output, reading)
         self.assertEqual(payload["text"], "Listen, carefully!\nWords matter.")
