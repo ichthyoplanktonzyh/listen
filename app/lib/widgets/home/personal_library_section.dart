@@ -20,24 +20,28 @@ import '../common/listen_loading.dart';
 /// and Listen/Watch are capabilities of the same retained material, not
 /// separate library objects. Queue grouping is a pure suggestion derived from
 /// the row's primary media; text-only rows carry no media facts and land
-/// unsorted. Every row states its capabilities explicitly — a mixed row shows
-/// both Read and Listen/Watch and never guesses intent from a bare tap.
+/// unsorted.
+///
+/// Every row has exactly one primary action: Open. Which projection of the
+/// material that lands on — the document, the media, the adopted composition —
+/// is the workbench's business, not a question the library asks first.
 class PersonalLibrarySection extends StatelessWidget {
   const PersonalLibrarySection({
     super.key,
     required this.entries,
     required this.familiarSupplyEnabled,
     this.sidecarSubtitlePaths = const <String>{},
-    required this.onOpenDocument,
-    required this.onOpenMedia,
+    required this.onOpen,
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
     required this.onToggleFamiliarSupply,
+    this.showHeader = true,
+    this.groupByQueue = true,
+    this.simplifiedRows = false,
     this.capabilityCoordinator,
     this.onRequestCapability,
     this.onCancelCapability,
-    this.onOpenComposition,
   });
 
   /// Null while the first load is in flight; empty when the library is empty.
@@ -48,12 +52,18 @@ class PersonalLibrarySection extends StatelessWidget {
   /// as a fact about the folder — pairing them into a learnable resource is a
   /// separate step, so no row promises anything because of it.
   final Set<String> sidecarSubtitlePaths;
-  final void Function(PersonalLibraryEntry entry) onOpenDocument;
-  final void Function(PersonalLibraryEntry entry) onOpenMedia;
+
+  /// Activates the material's workbench session. The library's single
+  /// primary action: it states no opinion about which projection of the
+  /// material the learner wanted.
+  final void Function(PersonalLibraryEntry entry) onOpen;
   final void Function(PersonalLibraryEntry entry) onStartExtensive;
   final void Function(PersonalLibraryEntry entry) onStartIntensive;
   final void Function(PersonalLibraryEntry entry, String? intent) onSetIntent;
   final void Function(bool enabled) onToggleFamiliarSupply;
+  final bool showHeader;
+  final bool groupByQueue;
+  final bool simplifiedRows;
 
   /// When present, rows surface the capability completion states (derivable,
   /// generating with progress, failed attempt) and their request/retry/
@@ -62,59 +72,61 @@ class PersonalLibrarySection extends StatelessWidget {
   final void Function(
     PersonalLibraryEntry entry,
     MaterialCapability capability,
-  )? onRequestCapability;
+  )?
+  onRequestCapability;
   final void Function(
     PersonalLibraryEntry entry,
     MaterialCapability capability,
-  )? onCancelCapability;
-  final void Function(PersonalLibraryEntry entry)? onOpenComposition;
+  )?
+  onCancelCapability;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final loaded = entries;
     if (loaded == null) return const SizedBox.shrink();
-    final groups = _groupEntries(loaded);
+    final groups = groupByQueue ? _groupEntries(loaded) : const <_QueueGroup>[];
     final requestCapability = onRequestCapability;
     final cancelCapability = onCancelCapability;
-    final openComposition = onOpenComposition;
     final coordinator = capabilityCoordinator;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                l.text('personalLibrary'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            PopupMenuButton<String>(
-              tooltip: l.text('settings'),
-              icon: Icon(
-                Icons.tune_outlined,
-                size: ListenIconSize.control,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-              onSelected: (value) {
-                if (value == 'familiar_supply') {
-                  onToggleFamiliarSupply(!familiarSupplyEnabled);
-                }
-              },
-              itemBuilder: (context) => [
-                CheckedPopupMenuItem(
-                  value: 'familiar_supply',
-                  checked: familiarSupplyEnabled,
-                  child: Text(l.text('familiarSuggestionsToggle')),
+        if (showHeader) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l.text('personalLibrary'),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: ListenSpacing.gap8),
+              ),
+              PopupMenuButton<String>(
+                tooltip: l.text('settings'),
+                icon: Icon(
+                  Icons.tune_outlined,
+                  size: ListenIconSize.control,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                onSelected: (value) {
+                  if (value == 'familiar_supply') {
+                    onToggleFamiliarSupply(!familiarSupplyEnabled);
+                  }
+                },
+                itemBuilder: (context) => [
+                  CheckedPopupMenuItem(
+                    value: 'familiar_supply',
+                    checked: familiarSupplyEnabled,
+                    child: Text(l.text('familiarSuggestionsToggle')),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: ListenSpacing.gap8),
+        ],
         if (loaded.isEmpty)
           Text(
             l.text('personalLibraryEmpty'),
@@ -122,6 +134,20 @@ class PersonalLibrarySection extends StatelessWidget {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           )
+        else if (simplifiedRows)
+          for (final entry in loaded) ...[
+            _UnifiedLibraryRow(
+              entry: entry,
+              hasSidecarSubtitle:
+                  entry.primaryMedia != null &&
+                  sidecarSubtitlePaths.contains(entry.primaryMedia!.media.path),
+              onOpen: () => onOpen(entry),
+              onStartExtensive: () => onStartExtensive(entry),
+              onStartIntensive: () => onStartIntensive(entry),
+              onSetIntent: (intent) => onSetIntent(entry, intent),
+            ),
+            const SizedBox(height: ListenSpacing.gap8),
+          ]
         else
           for (final group in groups) ...[
             _QueueHeader(queue: group.queue, count: group.entries.length),
@@ -135,8 +161,7 @@ class PersonalLibrarySection extends StatelessWidget {
                     sidecarSubtitlePaths.contains(
                       entry.primaryMedia!.media.path,
                     ),
-                onOpenDocument: () => onOpenDocument(entry),
-                onOpenMedia: () => onOpenMedia(entry),
+                onOpen: () => onOpen(entry),
                 onStartExtensive: () => onStartExtensive(entry),
                 onStartIntensive: () => onStartIntensive(entry),
                 onSetIntent: (intent) => onSetIntent(entry, intent),
@@ -154,9 +179,6 @@ class PersonalLibrarySection extends StatelessWidget {
                 onCancelCapability: cancelCapability == null
                     ? null
                     : (capability) => cancelCapability(entry, capability),
-                onOpenComposition: openComposition == null
-                    ? null
-                    : () => openComposition(entry),
               ),
               const SizedBox(height: ListenSpacing.gap6),
             ],
@@ -195,6 +217,153 @@ class PersonalLibrarySection extends StatelessWidget {
       groups.add(_QueueGroup(queue: queue, entries: [...golden, ...rest]));
     }
     return groups;
+  }
+}
+
+class _UnifiedLibraryRow extends StatelessWidget {
+  const _UnifiedLibraryRow({
+    required this.entry,
+    required this.hasSidecarSubtitle,
+    required this.onOpen,
+    required this.onStartExtensive,
+    required this.onStartIntensive,
+    required this.onSetIntent,
+  });
+
+  final PersonalLibraryEntry entry;
+  final bool hasSidecarSubtitle;
+  final VoidCallback onOpen;
+  final VoidCallback onStartExtensive;
+  final VoidCallback onStartIntensive;
+  final ValueChanged<String?> onSetIntent;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final (icon, typeLabel) = entry.shape == MaterialShape.mixed
+        ? (Icons.layers_outlined, l.text('libraryTypeMixed'))
+        : entry.canWatch
+        ? (Icons.movie_outlined, l.text('libraryTypeVideo'))
+        : entry.canListen
+        ? (Icons.audiotrack_outlined, l.text('libraryTypeAudio'))
+        : (Icons.article_outlined, l.text('libraryTypeArticle'));
+
+    return Material(
+      color: colors.surfaceContainerLowest,
+      shape: RoundedRectangleBorder(
+        borderRadius: ListenRadii.controlBorder,
+        side: BorderSide(color: colors.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpen,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            ListenSpacing.gap12,
+            ListenSpacing.gap8,
+            ListenSpacing.gap6,
+            ListenSpacing.gap8,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: ListenIconSize.control),
+              const SizedBox(width: ListenSpacing.gap12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap2),
+                    Wrap(
+                      spacing: ListenSpacing.gap6,
+                      runSpacing: ListenSpacing.gap4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          typeLabel,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: colors.onSurfaceVariant),
+                        ),
+                        if (hasSidecarSubtitle)
+                          _Badge(
+                            icon: Icons.subtitles_outlined,
+                            label: l.text('sidecarSubtitleBadge'),
+                            color: colors.secondary,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              FilledButton.tonal(
+                onPressed: onOpen,
+                child: Text(l.text('libraryContinueLearning')),
+              ),
+              if (entry.canListenOrWatch)
+                PopupMenuButton<String>(
+                  tooltip: l.text('moreActions'),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    size: ListenIconSize.control,
+                  ),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'extensive':
+                        onStartExtensive();
+                      case 'intensive':
+                        onStartIntensive();
+                      case 'pin_extensive':
+                      case 'pin_intensive':
+                      case 'defer':
+                        onSetIntent(value);
+                      case 'clear':
+                        onSetIntent(null);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (entry.canListenOrWatch) ...[
+                      PopupMenuItem(
+                        value: 'extensive',
+                        child: Text(l.text('startExtensiveAction')),
+                      ),
+                      PopupMenuItem(
+                        value: 'intensive',
+                        child: Text(l.text('startIntensiveAction')),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'pin_extensive',
+                        child: Text(l.text('pinExtensiveAction')),
+                      ),
+                      PopupMenuItem(
+                        value: 'pin_intensive',
+                        child: Text(l.text('pinIntensiveAction')),
+                      ),
+                      PopupMenuItem(
+                        value: 'defer',
+                        child: Text(l.text('deferMediaAction')),
+                      ),
+                      if (entry.triageIntent != null)
+                        PopupMenuItem(
+                          value: 'clear',
+                          child: Text(l.text('clearTriageAction')),
+                        ),
+                    ],
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -259,8 +428,7 @@ class _LibraryRow extends StatelessWidget {
     required this.entry,
     required this.familiarSupplyEnabled,
     required this.hasSidecarSubtitle,
-    required this.onOpenDocument,
-    required this.onOpenMedia,
+    required this.onOpen,
     required this.onStartExtensive,
     required this.onStartIntensive,
     required this.onSetIntent,
@@ -268,14 +436,15 @@ class _LibraryRow extends StatelessWidget {
     this.listenRun,
     this.onRequestCapability,
     this.onCancelCapability,
-    this.onOpenComposition,
   });
 
   final PersonalLibraryEntry entry;
   final bool familiarSupplyEnabled;
   final bool hasSidecarSubtitle;
-  final VoidCallback onOpenDocument;
-  final VoidCallback onOpenMedia;
+
+  /// Activates this material's workbench session. One action for every shape
+  /// of material — text, media, mixed, and generated-edition alike.
+  final VoidCallback onOpen;
   final VoidCallback onStartExtensive;
   final VoidCallback onStartIntensive;
   final void Function(String? intent) onSetIntent;
@@ -283,7 +452,6 @@ class _LibraryRow extends StatelessWidget {
   final CapabilityRunView? listenRun;
   final void Function(MaterialCapability capability)? onRequestCapability;
   final void Function(MaterialCapability capability)? onCancelCapability;
-  final VoidCallback? onOpenComposition;
 
   @override
   Widget build(BuildContext context) {
@@ -294,16 +462,6 @@ class _LibraryRow extends StatelessWidget {
     final duration = primaryMedia?.media.durationMs;
     final requestCapability = onRequestCapability;
     final cancelCapability = onCancelCapability;
-    final openComposition = onOpenComposition;
-    // A mixed row never guesses from a bare tap: its capabilities are the
-    // explicit buttons. Single-capability rows keep the row tap as a shortcut.
-    final VoidCallback? onRowTap = entry.canRead && entry.canListenOrWatch
-        ? null
-        : entry.canRead
-        ? onOpenDocument
-        : entry.canListenOrWatch
-        ? onOpenMedia
-        : null;
     return Material(
       color: colors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(
@@ -312,7 +470,11 @@ class _LibraryRow extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onRowTap,
+        // Every row taps into the same workbench session. The row used to
+        // refuse the tap on a mixed material because it could not guess
+        // between Read and Listen — but the workbench does not need that
+        // guess: it mounts whatever the material can actually do.
+        onTap: onOpen,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
           child: Row(
@@ -395,24 +557,24 @@ class _LibraryRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: ListenSpacing.gap6),
-              // Explicit capability buttons: Read and Listen/Watch are stated,
-              // never guessed. Media triage only exists for the primary media;
-              // text-only rows get no triage menu.
+              // One primary action. The row used to offer Read, Open media and
+              // "open the generated result" side by side, which made the
+              // learner decide up front which projection of a material they
+              // wanted — a decision the workbench is better placed to make,
+              // and the reason several different routes existed at all. The
+              // study modes stay as secondary shortcuts, and they open the
+              // same session before starting.
               Wrap(
                 spacing: ListenSpacing.gap6,
                 runSpacing: ListenSpacing.gap4,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  if (entry.canRead)
-                    TextButton(
-                      onPressed: onOpenDocument,
-                      child: Text(l.text('documentReadAction')),
-                    ),
+                  FilledButton.tonal(
+                    key: const Key('library-open'),
+                    onPressed: onOpen,
+                    child: Text(l.text('libraryOpenAction')),
+                  ),
                   if (entry.canListenOrWatch) ...[
-                    TextButton(
-                      onPressed: onOpenMedia,
-                      child: Text(l.text('mediaOpenAction')),
-                    ),
                     TextButton(
                       onPressed: onStartExtensive,
                       child: Text(l.text('startExtensiveAction')),
@@ -460,12 +622,12 @@ class _LibraryRow extends StatelessWidget {
                     _CapabilityAction(
                       run: readRun,
                       requestLabel: l.text('capabilityRequestRead'),
-                      onRequest: () => requestCapability(MaterialCapability.read),
+                      onRequest: () =>
+                          requestCapability(MaterialCapability.read),
                       onCancel: cancelCapability == null
                           ? null
                           : () => cancelCapability(MaterialCapability.read),
                       onRetry: () => requestCapability(MaterialCapability.read),
-                      onOpen: openComposition,
                     ),
                   if (requestCapability != null &&
                       !entry.canListen &&
@@ -477,11 +639,9 @@ class _LibraryRow extends StatelessWidget {
                           requestCapability(MaterialCapability.listen),
                       onCancel: cancelCapability == null
                           ? null
-                          : () =>
-                                cancelCapability(MaterialCapability.listen),
+                          : () => cancelCapability(MaterialCapability.listen),
                       onRetry: () =>
                           requestCapability(MaterialCapability.listen),
-                      onOpen: openComposition,
                     ),
                 ],
               ),
@@ -494,9 +654,14 @@ class _LibraryRow extends StatelessWidget {
 }
 
 /// One capability completion action on a library row: request when derivable,
-/// progress + cancel while generating, retry after a failed attempt, open the
-/// adopted composition when complete. Rendered only for derivable directions
-/// (a media-only row's Read, a document-only row's Listen).
+/// progress + cancel while generating, retry after a failed attempt. Rendered
+/// only for derivable directions (a media-only row's Read, a document-only
+/// row's Listen).
+///
+/// A completed run shows nothing. It used to offer "open the generated
+/// result", which was a second door to a material the learner could already
+/// open: adoption refreshes the workbench in place, and the row's own
+/// capabilities are what change.
 class _CapabilityAction extends StatelessWidget {
   const _CapabilityAction({
     required this.run,
@@ -504,7 +669,6 @@ class _CapabilityAction extends StatelessWidget {
     required this.onRequest,
     this.onCancel,
     this.onRetry,
-    this.onOpen,
   });
 
   final CapabilityRunView? run;
@@ -512,7 +676,6 @@ class _CapabilityAction extends StatelessWidget {
   final VoidCallback onRequest;
   final VoidCallback? onCancel;
   final VoidCallback? onRetry;
-  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -527,9 +690,9 @@ class _CapabilityAction extends StatelessWidget {
     }
     switch (run.phase) {
       case CapabilityRunPhase.resolving ||
-            CapabilityRunPhase.generating ||
-            CapabilityRunPhase.installing ||
-            CapabilityRunPhase.adopting:
+          CapabilityRunPhase.generating ||
+          CapabilityRunPhase.installing ||
+          CapabilityRunPhase.adopting:
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -562,12 +725,7 @@ class _CapabilityAction extends StatelessWidget {
           child: Text(l.text('retry')),
         );
       case CapabilityRunPhase.completed:
-        if (onOpen == null) return const SizedBox.shrink();
-        return TextButton(
-          key: const Key('capability-open-composition'),
-          onPressed: onOpen,
-          child: Text(l.text('capabilityOpenComposition')),
-        );
+        return const SizedBox.shrink();
       case CapabilityRunPhase.cancelled:
       case CapabilityRunPhase.idle:
         return TextButton(

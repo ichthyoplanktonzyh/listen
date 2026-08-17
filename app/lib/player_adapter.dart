@@ -98,6 +98,28 @@ class DesktopPlayerAdapter {
     }
   }
 
+  /// Releases the active playback source without disposing the adapter.
+  ///
+  /// A workbench material can have no playable rendition at all (a document
+  /// before TTS). Switching to it must remove the previous material's decoder
+  /// and transport state, but the adapter's streams still belong to the app
+  /// shell and must remain usable when this material later gains derived
+  /// audio. [dispose] is therefore too strong for a material switch.
+  Future<void> close() async {
+    final value = _controller;
+    _stopPositionTimer();
+    _lastPublishedPosition = null;
+    if (value != null) {
+      value.removeListener(_notify);
+      await value.dispose();
+      if (_controller == value) controller.value = null;
+    }
+    if (!_position.isClosed) _position.add(Duration.zero);
+    if (!_duration.isClosed) _duration.add(Duration.zero);
+    if (!_playing.isClosed) _playing.add(false);
+    if (!_tracks.isClosed) _tracks.add(const PlayerTracks());
+  }
+
   /// Called when [VideoPlayerController] publishes state changes.
   void _notify() {
     final value = _controller?.value;
@@ -248,12 +270,7 @@ class DesktopPlayerAdapter {
       _controller?.setSubtitleTracks(const []);
 
   Future<void> dispose() async {
-    _stopPositionTimer();
-    final value = _controller;
-    if (value != null) {
-      value.removeListener(_notify);
-      await value.dispose();
-    }
+    await close();
     controller.dispose();
     await Future.wait([
       _position.close(),

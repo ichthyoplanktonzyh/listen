@@ -324,15 +324,22 @@ class _PlayerStageState extends State<PlayerStage> {
                                       subtitleController.currentPrimaryCue!.id;
                                   final analysis = subtitleController
                                       .phoneticAnalysisBySentence[cueId];
+                                  final observedPhones =
+                                      analysis?.detectedPhones.isNotEmpty ==
+                                          true
+                                      ? analysis!.detectedPhones
+                                      : subtitleController
+                                                .phonesBySentence[cueId] ??
+                                            const <DetectedPhone>[];
                                   final phones = buildLearningPhones(
                                     pronunciation: subtitleController
                                         .pronunciationBySentence[cueId]
                                         ?.toJson(),
                                     wordTimings: subtitleController
                                         .timingsBySentence[cueId],
-                                    observedPhones:
-                                        analysis?.detectedPhones ?? const [],
-                                    allowObservedOnlyFallback: false,
+                                    observedPhones: observedPhones,
+                                    allowObservedOnlyFallback:
+                                        observedPhones.isNotEmpty,
                                   );
                                   if (phones.isEmpty) {
                                     return const SizedBox.shrink();

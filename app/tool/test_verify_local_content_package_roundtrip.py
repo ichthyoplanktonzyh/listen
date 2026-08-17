@@ -7,6 +7,7 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("verify_local_content_package_roundtrip.sh")
 NAME = "local Gen bundle to local Core round trips through capability production, installation, and adoption"
+DOCUMENT_NAME = "a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -50,7 +51,8 @@ class ScriptSemanticsTests(unittest.TestCase):
             "if stage == 'flutter-test':\n"
             " p = os.environ['VERIFY_ROUNDTRIP_REPORT_PATH']\n"
             f" n = {NAME!r}\n"
-            " e = [{'type':'testStart','test':{'id':1,'name':n}}, {'type':'testDone','testID':1,'result':'success','skipped':False}, {'type':'done','success':True}]\n"
+            f" d = {DOCUMENT_NAME!r}\n"
+            " e = [{'type':'testStart','test':{'id':1,'name':n}}, {'type':'testDone','testID':1,'result':'success','skipped':False}, {'type':'testStart','test':{'id':2,'name':d}}, {'type':'testDone','testID':2,'result':'success','skipped':False}, {'type':'done','success':True}]\n"
             " open(p, 'w').write(''.join(json.dumps(x) + '\\n' for x in e))\n"
         )
         runner.chmod(0o755)

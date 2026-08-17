@@ -51,6 +51,16 @@ PersonalLibraryEntry _row(MediaLibraryEntry entry) => PersonalLibraryEntry(
   mediaEntries: [entry],
 );
 
+PersonalLibraryEntry _documentRow() => PersonalLibraryEntry(
+  details: materialDetails(
+    materialId: 'material-document-1',
+    title: 'Saved text material',
+    documentRenditions: [documentRenditionForText('Saved body')],
+    shape: MaterialShape.text,
+  ),
+  mediaEntries: const [],
+);
+
 Widget _wrap(Widget child) => MaterialApp(
   theme: ListenTheme.light(),
   locale: const Locale('zh'),
@@ -67,20 +77,21 @@ Widget _wrap(Widget child) => MaterialApp(
 Widget _home({
   required MediaLibraryScanState scan,
   List<PersonalLibraryEntry>? library,
+  ApiFailure? libraryFailure,
   VoidCallback? onChooseFolder,
 }) => _wrap(
   ListeningHome(
     onOpenMedia: () {},
     onOpenOnline: () {},
     personalLibrary: library,
+    personalLibraryFailure: libraryFailure,
     offlineEntries: library,
     scan: scan,
     onScanRefresh: () {},
     onScanCancel: () {},
     onRetryScanRegistrations: () {},
     onChooseManagedStoreLocation: onChooseFolder ?? () {},
-    onOpenLibraryDocument: (_) {},
-    onOpenLibraryMedia: (_) {},
+    onOpenLibraryEntry: (_) {},
     onStartExtensiveEntry: (_) {},
     onStartIntensiveEntry: (_) {},
     onSetLibraryIntent: (_, _) {},
@@ -109,6 +120,54 @@ void main() {
 
     expect(find.text('本地内核未连接，媒体库里有什么无法确认——这不等于库是空的。'), findsOneWidget);
     expect(find.text('打开过的媒体会出现在这里。'), findsNothing);
+  });
+
+  testWidgets('a failed library load is explicit and precedes scan details', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _home(
+        scan: MediaLibraryScanState(
+          status: MediaLibraryScanStatus.completed,
+          folderPath: '/media',
+        ),
+        libraryFailure: const ApiFailure(
+          raw: 'failed',
+          correlationId: 'api-141',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('资料库加载失败，但材料没有被删除。'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('资料库加载失败，但材料没有被删除。')).dy,
+      lessThan(tester.getTopLeft(find.text('存储位置与文件夹扫描')).dy),
+    );
+  });
+
+  testWidgets('a retained text material is visible on the library first view', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      _home(
+        scan: MediaLibraryScanState(
+          status: MediaLibraryScanStatus.completed,
+          folderPath: '/media',
+        ),
+        library: [_documentRow()],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved text material'), findsOneWidget);
+    expect(find.text('Saved text material').hitTestable(), findsOneWidget);
   });
 
   testWidgets(

@@ -8,7 +8,7 @@ LISTEN_{APP,CORE,GEN}_REPO environment variables and discovery.
 
 The report separates two facts that are easy to conflate:
 
-- Published lock integrity: does each committed lock pin an identity that
+- Pinned lock integrity: does each committed lock pin an identity that
   really exists and is internally consistent (resolvable commits, a
   content-package contract lock matching the pinned Gen commit, a Core pin
   whose own contract/OpenAPI versions agree)?
@@ -171,13 +171,6 @@ def read_json(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def canonical_contract_sha(lock: dict[str, Any]) -> str:
-    encoded = json.dumps(
-        lock, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return "sha256:" + hashlib.sha256(encoded).hexdigest()
-
-
 def contract_version_at(core: Repo, sha: str) -> str | None:
     source = core.file_at(sha, "crates/api-http/src/lib.rs")
     found = CONTRACT_CONST.search(source or "")
@@ -188,6 +181,30 @@ def openapi_version_at(core: Repo, sha: str) -> str | None:
     source = core.file_at(sha, "contracts/openapi/v1.yaml")
     found = OPENAPI_VERSION.search(source or "")
     return found.group(1) if found else None
+
+
+def content_package_schema_sha_at(core: Repo, sha: str) -> str | None:
+    """Digest the canonical v3 release schema at the exact pinned Core commit.
+
+    Gen's release manifest records the SHA-256 of Core's
+    ``release.schema.json`` artifact entry.  ``contracts.lock.json`` only
+    names the authority and schema generation; hashing that lock is a
+    different identity and would reject a valid Gen release.
+    """
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(core.path),
+            "show",
+            f"{sha}:contracts/content-package/v3/release.schema.json",
+        ],
+        capture_output=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        return None
+    return "sha256:" + hashlib.sha256(result.stdout).hexdigest()
 
 
 def compare_contract_locks(
@@ -210,12 +227,6 @@ def compare_contract_locks(
     ):
         problems.append(
             "App listen_gen.lock.json 与钉住 Gen commit 的 contracts.lock.json 的 release_schema_id 不一致"
-        )
-    expected_digest = canonical_contract_sha(gen_contract)
-    if app_contract.get("canonical_sha256") != expected_digest:
-        problems.append(
-            "App listen_gen.lock.json 的 canonical_sha256 与钉住 Gen commit 的 "
-            f"contracts.lock.json 规范化摘要不一致（应为 {expected_digest}）"
         )
     return problems
 
@@ -340,6 +351,28 @@ def inspect(
             integrity.extend(
                 compare_contract_locks(app_contract, pinned_contract_lock)
             )
+            if core_pin and core.present and core.commit_date(core_pin.sha) is not None:
+                if app_contract.get("contract_version") != core_pin.contract_version:
+                    integrity.append(
+                        "App listen_gen.lock.json 的 contract_version 与 "
+                        "backend.lock.json 钉住的 Core contract 不一致"
+                    )
+                expected_schema_digest = content_package_schema_sha_at(
+                    core, core_pin.sha
+                )
+                if expected_schema_digest is None:
+                    integrity.append(
+                        "钉住 Core commit 的 Content Package v3 release schema 缺失"
+                    )
+                elif (
+                    app_contract.get("canonical_sha256")
+                    != expected_schema_digest
+                ):
+                    integrity.append(
+                        "App listen_gen.lock.json 的 canonical_sha256 与钉住 "
+                        "Core commit 的 Content Package v3 release schema 摘要不一致"
+                        f"（应为 {expected_schema_digest}）"
+                    )
 
     if core_pin:
         required = requirements.core_contract
@@ -421,7 +454,7 @@ def render(
         lines.append(
             f"  Gen release source_git_sha: {gen_pin.sha}  tool {gen_pin.tool_version}"
         )
-    lines += ["", "Published lock integrity"]
+    lines += ["", "Pinned lock integrity"]
     if integrity:
         lines.extend(f"  ⚠ {problem}" for problem in integrity)
     else:

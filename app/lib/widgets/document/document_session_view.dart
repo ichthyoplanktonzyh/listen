@@ -27,9 +27,17 @@ import 'document_pdf_view.dart';
 /// Renders the current [DocumentSessionState]. Reusable and pure: it emits
 /// intent through the controller's methods and renders nothing but state.
 class DocumentSessionView extends StatelessWidget {
-  const DocumentSessionView({super.key, required this.controller});
+  const DocumentSessionView({
+    super.key,
+    required this.controller,
+    this.sourceOnly = false,
+  });
 
   final DocumentSessionController controller;
+
+  /// Shows the exact imported file for provenance/verification. This is a
+  /// secondary source view, not the workbench's learning surface.
+  final bool sourceOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -48,11 +56,12 @@ class DocumentSessionView extends StatelessWidget {
         DocumentSessionChoosingAsset(
           :final details,
           :final documentRenditions,
-        ) => _ChoosingAssetPane(
-          title: details.currentRevision.title,
-          documentRenditions: documentRenditions,
-          onChoose: controller.chooseDocumentAsset,
-        ),
+        ) =>
+          _ChoosingAssetPane(
+            title: details.currentRevision.title,
+            documentRenditions: documentRenditions,
+            onChoose: controller.chooseDocumentAsset,
+          ),
         DocumentSessionReady(
           :final details,
           :final sourceAsset,
@@ -61,18 +70,20 @@ class DocumentSessionView extends StatelessWidget {
           :final isRetained,
           :final retentionInFlight,
           :final retentionFailure,
-        ) => _ReadyPane(
-          title: details.currentRevision.title,
-          format: format,
-          sourceAsset: sourceAsset,
-          capabilities: capabilities,
-          resolveBytes: controller.resolveSourceBytes,
-          isRetained: isRetained,
-          retentionInFlight: retentionInFlight,
-          retentionFailure: retentionFailure,
-          onKeep: () => unawaited(controller.retain()),
-          onUnkeep: () => unawaited(controller.unretain()),
-        ),
+        ) =>
+          _ReadyPane(
+            title: details.currentRevision.title,
+            format: format,
+            sourceAsset: sourceAsset,
+            capabilities: capabilities,
+            sourceOnly: sourceOnly,
+            resolveBytes: controller.resolveSourceBytes,
+            isRetained: isRetained,
+            retentionInFlight: retentionInFlight,
+            retentionFailure: retentionFailure,
+            onKeep: () => unawaited(controller.retain()),
+            onUnkeep: () => unawaited(controller.unretain()),
+          ),
         DocumentSessionFailed(:final failure) => _FailedPane(
           failure: failure,
           onRetry: () => unawaited(controller.retry()),
@@ -302,6 +313,7 @@ class _ReadyPane extends StatefulWidget {
     required this.format,
     required this.sourceAsset,
     required this.capabilities,
+    required this.sourceOnly,
     required this.resolveBytes,
     required this.isRetained,
     required this.retentionInFlight,
@@ -319,6 +331,8 @@ class _ReadyPane extends StatefulWidget {
 
   /// The durable capability projection, or null while loading/absent.
   final List<MaterialCapabilityProjection>? capabilities;
+
+  final bool sourceOnly;
   final Future<DocumentSourceBytes> Function(SourceAsset asset) resolveBytes;
 
   final bool isRetained;
@@ -382,84 +396,55 @@ class _ReadyPaneState extends State<_ReadyPane> {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final failure = widget.retentionFailure;
-    return SingleChildScrollView(
-      padding: ListenPadding.pageCompact,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          // A reading measure, not a media column: the cap is `contentColumnMax`
-          // so lines stay legible on a wide window (charter principle 5).
-          constraints: const BoxConstraints(
-            maxWidth: ListenBreakpoints.contentColumnMax,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: ListenSpacing.gap4),
-                        Text(
-                          widget.isRetained
-                              ? l.text('retentionRetainedLabel')
-                              : l.text('documentTemporary'),
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(color: colors.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: ListenSpacing.gap12),
-                  if (widget.retentionInFlight)
-                    const ListenLoading.inline()
-                  else if (widget.isRetained)
-                    OutlinedButton(
-                      onPressed: widget.onUnkeep,
-                      child: Text(l.text('retentionUnkeepAction')),
-                    )
-                  else
-                    FilledButton(
-                      onPressed: widget.onKeep,
-                      child: Text(l.text('retentionKeepAction')),
-                    ),
+    // The text region of the workbench, not a page of its own.
+    //
+    // The material's name and its membership control live in the workbench
+    // header, exactly where a media session puts them — repeating them here
+    // is what made a document read as a second page stacked inside the first.
+    // What stays is what is genuinely about this text: what can be done with
+    // it, and the text.
+    return Material(
+      // Same ground as the transcript region ([SidePanel]), so text materials
+      // and timed ones are visibly the same surface.
+      color: colors.surfaceContainerLowest,
+      child: SingleChildScrollView(
+        padding: ListenPadding.pageCompact,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            // A reading measure, not a media column: the cap is
+            // `contentColumnMax` so lines stay legible on a wide window
+            // (charter principle 5).
+            constraints: const BoxConstraints(
+              maxWidth: ListenBreakpoints.contentColumnMax,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (failure != null) ...[
+                  ListenErrorNotice(message: l.text('documentRetentionFailed')),
+                  ApiFailureDisclosure(failure: failure),
+                  const SizedBox(height: ListenSpacing.gap8),
                 ],
-              ),
-              if (failure != null) ...[
-                const SizedBox(height: ListenSpacing.gap8),
-                ListenErrorNotice(message: l.text('documentRetentionFailed')),
-                ApiFailureDisclosure(failure: failure),
+                if (!widget.sourceOnly && widget.capabilities != null) ...[
+                  _CapabilityStrip(capabilities: widget.capabilities!),
+                  const SizedBox(height: ListenSpacing.gap16),
+                ],
+                ..._body(l),
               ],
-              if (widget.capabilities != null) ...[
-                const SizedBox(height: ListenSpacing.gap12),
-                _CapabilityStrip(
-                  capabilities: widget.capabilities!,
-                ),
-              ],
-              const SizedBox(height: ListenSpacing.gap16),
-              ..._body(l),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// The direct document view, dispatched by format. Every format renders the
-  /// exact Source Asset bytes of the open document — text-family formats
-  /// decode them, container formats render them directly. A missing
-  /// referenced location is an honest unavailable fact, never a fabricated
-  /// text and never a reason to remove the Material.
+  /// The exact source-file region. It is only reached through the workbench's
+  /// secondary "View source file" action; generated learning content is owned
+  /// by the existing transcript panel instead. Text-family formats
+  /// decode them, container formats render them directly. A missing referenced
+  /// location is an honest unavailable fact, never a fabricated text and never
+  /// a reason to remove the Material.
   List<Widget> _body(AppLocalizations l) {
     if (_bytesLoading) return const [Center(child: ListenLoading.inline())];
     final bytes = _bytes;
@@ -477,9 +462,7 @@ class _ReadyPaneState extends State<_ReadyPane> {
         DocumentBlockView(document: const MarkdownParser().parse(decoded)),
       ],
       DocumentFormat.html => [
-        DocumentBlockView(
-          document: RestrictedHtmlParser().parse(decoded),
-        ),
+        DocumentBlockView(document: RestrictedHtmlParser().parse(decoded)),
       ],
       DocumentFormat.epub => [
         DocumentEpubView(epub: EpubDecoder().decode(bytes.bytes)),
@@ -518,7 +501,9 @@ class _CapabilityStrip extends StatelessWidget {
       children: [
         for (final projection in ordered)
           _CapabilityChip(
-            label: l.text('capability${_capabilityName(projection.capability)}'),
+            label: l.text(
+              'capability${_capabilityName(projection.capability)}',
+            ),
             status: l.text('capabilityStatus${_statusName(projection.status)}'),
             failed: projection.status == MaterialCapabilityStatus.failedAttempt,
             colors: colors,
@@ -535,13 +520,14 @@ class _CapabilityStrip extends StatelessWidget {
         MaterialCapability.synchronizedReadListen => 'SynchronizedReadListen',
       };
 
-  static String _statusName(MaterialCapabilityStatus status) => switch (status) {
-    MaterialCapabilityStatus.available => 'Available',
-    MaterialCapabilityStatus.derivable => 'Derivable',
-    MaterialCapabilityStatus.generating => 'Generating',
-    MaterialCapabilityStatus.unavailable => 'Unavailable',
-    MaterialCapabilityStatus.failedAttempt => 'FailedAttempt',
-  };
+  static String _statusName(MaterialCapabilityStatus status) =>
+      switch (status) {
+        MaterialCapabilityStatus.available => 'Available',
+        MaterialCapabilityStatus.derivable => 'Derivable',
+        MaterialCapabilityStatus.generating => 'Generating',
+        MaterialCapabilityStatus.unavailable => 'Unavailable',
+        MaterialCapabilityStatus.failedAttempt => 'FailedAttempt',
+      };
 }
 
 class _CapabilityChip extends StatelessWidget {
@@ -608,9 +594,7 @@ class _FailedPane extends StatelessWidget {
         'documentFailedUnsupported',
       ),
       DocumentSessionFailureKind.corrupt => l.text('documentFailedCorrupt'),
-      DocumentSessionFailureKind.encrypted => l.text(
-        'documentFailedEncrypted',
-      ),
+      DocumentSessionFailureKind.encrypted => l.text('documentFailedEncrypted'),
       DocumentSessionFailureKind.missingTitle => l.text(
         'documentFailedMissingTitle',
       ),

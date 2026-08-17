@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../data/repositories/learning_material_repository.dart';
 import '../data/repositories/media_library_repository.dart';
+import '../models/api_failure.dart';
+import '../models/learning_material.dart';
 import '../models/personal_library.dart';
 import '../models/saved_vocabulary_count.dart';
 import '../models/types.dart';
@@ -55,6 +57,7 @@ class MediaLibraryCoordinator {
   /// coordinator keeps internally for media join, scanning, and path
   /// resolution — it is not a library authority for the UI.
   List<PersonalLibraryEntry>? personalLibrary;
+  ApiFailure? personalLibraryFailure;
 
   void bind({
     required bool Function() isMounted,
@@ -171,11 +174,36 @@ class MediaLibraryCoordinator {
         mediaLibrary = nextMediaLibrary;
       }
       personalLibrary = nextPersonalLibrary;
+      personalLibraryFailure = null;
       requestRebuild();
-    } catch (_) {
-      // Material listing failed: keep the previous personalLibrary and
-      // mediaLibrary; the home must not fail on a summary.
+    } catch (error) {
+      // Keep any previously published rows, but never turn a failed initial
+      // load into a blank page. The surface needs the typed failure so it can
+      // explain why the library is unavailable.
+      if (generation != _libraryLoadGeneration || !isMounted()) return;
+      personalLibraryFailure = materialRepository.failureDetail(error);
+      requestRebuild();
     }
+  }
+
+  /// Publishes the membership result of a document session immediately, then
+  /// reconciles with Core's authoritative list. This keeps the material the
+  /// learner just saved visible even when an unrelated corrupt legacy row
+  /// makes the all-materials query fail.
+  Future<void> reconcileMembership(MaterialDetails details) async {
+    final current = personalLibrary ?? const <PersonalLibraryEntry>[];
+    final next = <PersonalLibraryEntry>[
+      for (final entry in current)
+        if (entry.materialId != details.material.id) entry,
+      if (details.material.retainedAtMs != null)
+        PersonalLibraryEntry(
+          details: details,
+          mediaEntries: mediaLibrary ?? const <MediaLibraryEntry>[],
+        ),
+    ];
+    personalLibrary = List.unmodifiable(next);
+    requestRebuild();
+    await loadMediaLibrary();
   }
 
   /// Paths Core already holds, or null while that answer is unknown. Feeds the

@@ -26,6 +26,7 @@ class DiscoveryContentCard extends StatelessWidget {
     required this.onTap,
     required this.onDownload,
     required this.onCancel,
+    this.onStartLearning,
     this.axis = Axis.horizontal,
   });
 
@@ -40,6 +41,7 @@ class DiscoveryContentCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDownload;
   final VoidCallback onCancel;
+  final VoidCallback? onStartLearning;
   final Axis axis;
 
   @override
@@ -137,13 +139,12 @@ class DiscoveryContentCard extends StatelessWidget {
                 ),
               ),
               DiscoveryItemState.acquirable ||
-              DiscoveryItemState.unavailable =>
-                _DownloadControl(
-                  state: acquisitionState,
-                  progress: downloadProgress,
-                  onDownload: onDownload,
-                  onCancel: onCancel,
-                ),
+              DiscoveryItemState.unavailable => _DownloadControl(
+                state: acquisitionState,
+                progress: downloadProgress,
+                onDownload: onDownload,
+                onCancel: onCancel,
+              ),
               DiscoveryItemState.acquiring => _DownloadControl(
                 state: acquisitionState,
                 progress: downloadProgress,
@@ -157,6 +158,18 @@ class DiscoveryContentCard extends StatelessWidget {
                 onCancel: onCancel,
               ),
             },
+            if (onStartLearning != null &&
+                (acquisitionState == DiscoveryItemState.acquirable ||
+                    acquisitionState == DiscoveryItemState.available ||
+                    acquisitionState == DiscoveryItemState.failed))
+              FilledButton.tonalIcon(
+                onPressed: onStartLearning,
+                icon: const Icon(
+                  Icons.school_outlined,
+                  size: ListenIconSize.control,
+                ),
+                label: Text(l.text('discoveryStartLearning')),
+              ),
           ],
         ),
       ],
@@ -172,7 +185,6 @@ class DiscoveryContentCard extends StatelessWidget {
     }
     return '$count $viewsText';
   }
-
 }
 
 String _coverInitial(String text) {
@@ -433,8 +445,8 @@ class _DownloadControl extends StatelessWidget {
           style: const TextStyle(fontSize: 12),
         ),
       ),
-      DiscoveryItemState.available || DiscoveryItemState.discoverable =>
-        const SizedBox.shrink(),
+      DiscoveryItemState.available ||
+      DiscoveryItemState.discoverable => const SizedBox.shrink(),
     };
   }
 }

@@ -241,19 +241,37 @@ class _TokenLineState extends State<TokenLine> {
   }
 
   @override
-  Widget build(BuildContext context) => Text.rich(
-    TextSpan(
-      children: [
-        ..._spans(context),
-        if (widget.trailing != null)
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: widget.trailing!,
-          ),
-      ],
-    ),
-    textAlign: widget.textAlign,
-  );
+  Widget build(BuildContext context) {
+    // `timed_text_track` states exact segment text and time but no token
+    // boundaries. Render the stated text as text — an empty token list must
+    // not become an empty sentence, and splitting it here would fabricate the
+    // indices used by word timing, sense groups and prosody.
+    if (cue.tokens.isEmpty) {
+      return Text(
+        cue.text,
+        textAlign: widget.textAlign,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontFamily: fontFamily,
+          height: lineHeight,
+          color: baseColor,
+        ),
+      );
+    }
+    return Text.rich(
+      TextSpan(
+        children: [
+          ..._spans(context),
+          if (widget.trailing != null)
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: widget.trailing!,
+            ),
+        ],
+      ),
+      textAlign: widget.textAlign,
+    );
+  }
 
   List<InlineSpan> _spans(BuildContext context) => switch (groupingMode) {
     'prosodic' => _chunkCapsuleSpans(context, divergenceBoundaries: const {}),

@@ -118,7 +118,9 @@ void main() {
     // backend.lock verifies the Core runtime artifact, and the release
     // assembly ships and smoke-checks the same bundled tools beside api-http.
     final build = File('tool/build-macos-release.sh').readAsStringSync();
-    expect(build, contains('.backend/runtime'));
+    expect(build, contains('stage-macos-runtime.sh'));
+    final staging = File('tool/stage-macos-runtime.sh').readAsStringSync();
+    expect(staging, contains('.backend/runtime'));
     final smoke = File('tool/verify-macos-release.sh').readAsStringSync();
     for (final tool in ['whisper-cli', 'ffmpeg', 'ffprobe']) {
       expect(

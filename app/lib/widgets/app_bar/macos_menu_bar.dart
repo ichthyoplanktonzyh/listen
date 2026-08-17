@@ -37,7 +37,6 @@ class MacosMenuBar extends StatelessWidget {
     required this.onImportSecondarySubtitle,
     required this.onImportEmbeddedSubtitle,
     required this.onArchiveMedia,
-    required this.onOpenSubtitleResources,
     required this.onOpenVocabulary,
     required this.onOpenReview,
     required this.onOpenCoach,
@@ -58,7 +57,6 @@ class MacosMenuBar extends StatelessWidget {
   final VoidCallback onImportSecondarySubtitle;
   final VoidCallback onImportEmbeddedSubtitle;
   final VoidCallback onArchiveMedia;
-  final VoidCallback onOpenSubtitleResources;
   final VoidCallback onOpenVocabulary;
   final VoidCallback onOpenReview;
   final VoidCallback onOpenCoach;
@@ -78,7 +76,6 @@ class MacosMenuBar extends StatelessWidget {
       onImportSecondarySubtitle: onImportSecondarySubtitle,
       onImportEmbeddedSubtitle: onImportEmbeddedSubtitle,
       onArchiveMedia: onArchiveMedia,
-      onOpenSubtitleResources: onOpenSubtitleResources,
       onOpenVocabulary: onOpenVocabulary,
       onOpenReview: onOpenReview,
       onOpenCoach: onOpenCoach,
@@ -100,7 +97,6 @@ List<PlatformMenu> buildMacosMenus({
   required VoidCallback onImportSecondarySubtitle,
   required VoidCallback onImportEmbeddedSubtitle,
   required VoidCallback onArchiveMedia,
-  required VoidCallback onOpenSubtitleResources,
   required VoidCallback onOpenVocabulary,
   required VoidCallback onOpenReview,
   required VoidCallback onOpenCoach,
@@ -329,12 +325,6 @@ List<PlatformMenu> buildMacosMenus({
       menus: [
         PlatformMenuItemGroup(
           members: [
-            PlatformMenuItem(
-              label: l.text('subtitleResources'),
-              onSelected: capabilities.coreReady
-                  ? onOpenSubtitleResources
-                  : null,
-            ),
             PlatformMenuItem(
               label: l.text('vocabulary'),
               onSelected: capabilities.coreReady ? onOpenVocabulary : null,

@@ -120,5 +120,7 @@ assert_sqlite_value 'SELECT count(*) FROM media_items;' "2" "audio media item co
 [[ -x "$app/Contents/Resources/runtime/whisper-cli" ]]
 [[ -x "$app/Contents/Resources/runtime/ffmpeg" ]]
 [[ -x "$app/Contents/Resources/runtime/ffprobe" ]]
+python3 "$root/tool/listen_gen_artifacts.py" verify \
+  --bundle-dir "$app/Contents/Resources/runtime/listen-gen"
 codesign --verify --deep --strict "$app"
 echo "Packaged macOS MVP smoke test passed."

@@ -176,8 +176,9 @@ class _SidePanelState extends State<SidePanel> {
   /// Opens or closes the floating analysis window. The window itself fetches
   /// the diagnosis when its voice layer is opened, so opening it need only flip
   /// the flag [SentenceAnalysisWindow] reads.
-  void _toggleAnalysis() =>
-      learningController.setDiagnosisExpanded(!learningController.diagnosisExpanded);
+  void _toggleAnalysis() => learningController.setDiagnosisExpanded(
+    !learningController.diagnosisExpanded,
+  );
 
   @override
   Widget build(BuildContext context) => Material(
@@ -241,6 +242,7 @@ class _SidePanelState extends State<SidePanel> {
           canCancel: readiness.canCancel,
           canRetry: readiness.canRetry,
           fingerprintMismatch: readiness.fingerprintMismatch,
+          unavailableReason: readiness.unavailableReason,
           onPrepare: widget.transcriptReadiness.prepareLearningTranscript,
           onSelectTrack: widget.transcriptReadiness.selectTrack,
           onImportSubtitle: () => mediaSession.openSubtitle(secondary: false),
@@ -326,7 +328,6 @@ class _SidePanelState extends State<SidePanel> {
       ],
     );
   }
-
 }
 
 class _PanelEmptyState extends StatelessWidget {

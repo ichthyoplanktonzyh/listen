@@ -5,7 +5,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/controllers/download_controller.dart';
 import 'package:llplayer_next/controllers/learning_controller.dart';
-import 'package:llplayer_next/controllers/manual_review_flow_controller.dart';
 import 'package:llplayer_next/controllers/media_import_flow_controller.dart';
 import 'package:llplayer_next/controllers/media_session_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
@@ -17,11 +16,9 @@ import 'package:llplayer_next/data/repositories/speech_enhancement_repository.da
 import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
-import 'package:llplayer_next/data/repositories/manual_review_repository.dart';
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/localization.dart';
-import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/media_download.dart';
@@ -30,10 +27,9 @@ import 'package:llplayer_next/services/api_service.dart';
 import 'package:llplayer_next/services/external_tools.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
 import 'package:llplayer_next/services/media_import_file_service.dart';
-import 'package:llplayer_next/widgets/flows/manual_review_flow.dart';
 import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
 
-/// The import and review flows, driven by failures that really happen.
+/// Import flows, driven by failures that really happen.
 ///
 /// These sites all read `'${l.text('statusX')}: $error'` and handed the
 /// result to `playerController.setStatus`, so the status line printed either a
@@ -54,14 +50,7 @@ import 'package:llplayer_next/widgets/flows/media_import_flows.dart';
 ///   real `ExternalToolError` really carries
 ///   `'/usr/bin/false exited with status 1.'`. Offline and deterministic,
 ///   unlike letting a real ffprobe or yt-dlp loose;
-/// - the review flow fails a real request through the real transport, served
-///   from `127.0.0.1:62645` — the address the field report used — so the
-///   assertion covers `describeApiFailure` and the exception's own `toString`.
 void main() {
-  const envelope =
-      '{"code":"validation_error","message":"recording metadata must not be '
-      'empty","correlation_id":"api-853","retryable":false}';
-
   /// Transport and tool detail. A status line is not a place for any of it.
   const leaks = [
     'HttpException',
@@ -178,94 +167,6 @@ void main() {
     expect(controller.state.failure?.raw, contains('/usr/bin/false'));
   });
 
-  testWidgets('a manual review whose timeline will not load says so, not the '
-      'exception', (tester) async {
-    // The track and its word-timeline summary read fine; the timeline itself
-    // 500s. That ordering matters: an assertion on the summary call alone
-    // would stay green against the leaking code, because the flow returns
-    // early with "no timeline" before it ever reaches the leaking catch.
-    final harness = _harness(
-      api(
-        fail: (method, path) =>
-            path.startsWith('/v1/word-timelines/') && !path.contains('/summary')
-            ? (statusCode: 500, body: envelope)
-            : null,
-        ok: {'/word-timelines/summary': '[$_activeSummary]'},
-      ),
-    );
-    harness.player.setMedia(
-      id: 'media-1',
-      path: '/tmp/a.mkv',
-      title: 'a',
-      fingerprint: 'fp',
-    );
-    harness.subtitle.setPrimaryTrack(
-      const SubtitleTrack(id: 'track-1', cues: []),
-    );
-
-    final context = await host(tester);
-    final controller = ManualReviewFlowController(
-      LocalManualReviewRepository(harness.api),
-      harness.adapter,
-      harness.resourceActions,
-      harness.mediaSession,
-      playerController: harness.player,
-      subtitleController: harness.subtitle,
-    );
-    final flow = openManualReviewFlow(context: context, controller: controller);
-    await tester.pumpAndSettle();
-    await flow;
-
-    expectNoLeak(harness.player.status, from: 'the status line');
-    expect(harness.player.status, enText('statusManualReviewFailed'));
-    expect(harness.player.statusIsError, isTrue);
-    expect(harness.player.statusFailure?.correlationId, 'api-853');
-    expect(controller.state.phase, ManualReviewPhase.failed);
-    expect(controller.state.failure?.correlationId, 'api-853');
-  });
-
-  test(
-    'manual review ignores stale and post-dispose load completions',
-    () async {
-      final harness = _harness(api());
-      harness.subtitle.setPrimaryTrack(_reviewTrack);
-      harness.subtitle.setTimelineResource(
-        summaries: const [_activeTimelineSummary],
-        phoneSummaries: const [],
-        document: null,
-      );
-      final repository = _DelayedManualReviewRepository();
-      final controller = ManualReviewFlowController(
-        repository,
-        harness.adapter,
-        harness.resourceActions,
-        harness.mediaSession,
-        playerController: harness.player,
-        subtitleController: harness.subtitle,
-        loadTimelineResource: (_) async {},
-        reloadSpeechEnhancements: (_) async {},
-      );
-
-      final first = controller.prepare();
-      await Future<void>.delayed(Duration.zero);
-      final second = controller.prepare();
-      await Future<void>.delayed(Duration.zero);
-      repository.timelineRequests[1].complete(_reviewTimeline);
-      expect(await second, isA<ManualReviewReady>());
-      repository.timelineRequests[0].complete(_reviewTimeline);
-      expect(await first, isA<ManualReviewSuperseded>());
-      expect(controller.state.phase, ManualReviewPhase.ready);
-
-      final afterDispose = controller.prepare();
-      await Future<void>.delayed(Duration.zero);
-      final frozenState = controller.state;
-      controller.dispose();
-      repository.timelineRequests[2].complete(_reviewTimeline);
-      expect(await afterDispose, isA<ManualReviewSuperseded>());
-      expect(controller.state, same(frozenState));
-    },
-  );
-
   test(
     'media import ignores stale and post-dispose probe completions',
     () async {
@@ -306,66 +207,6 @@ void main() {
   );
 }
 
-/// One active word-timeline summary, so the review flow gets past its
-/// "no timeline" guard and reaches the request that fails.
-const _activeSummary =
-    '{"id":"tl-1","track_id":"track-1","media_id":"media-1",'
-    '"algorithm_id":"whisperx","algorithm_version":"1","created_by":"core",'
-    '"status":"active","lifecycle_stage":"active","word_count":3,'
-    '"provider_ids":[],"timing_sources":[],"can_activate":false,'
-    '"can_archive":true,"can_delete":true}';
-
-const _reviewCue = Cue(
-  id: 'sentence-1',
-  index: 0,
-  start: Duration(seconds: 1),
-  end: Duration(seconds: 2),
-  text: 'Hello',
-  tokens: [
-    SubtitleToken(index: 0, kind: 'word', text: 'Hello', normalized: 'hello'),
-  ],
-);
-const _reviewTrack = SubtitleTrack(id: 'track-1', cues: [_reviewCue]);
-const _activeTimelineSummary = WordTimelineSummary(
-  id: 'tl-1',
-  trackId: 'track-1',
-  mediaId: 'media-1',
-  algorithmId: 'test',
-  algorithmVersion: '1',
-  createdBy: 'core',
-  status: 'active',
-  lifecycleStage: 'active',
-  wordCount: 1,
-  providerIds: [],
-  timingSources: [],
-  canActivate: false,
-  canArchive: true,
-  canDelete: true,
-);
-const _reviewTimeline = WordTimeline(
-  id: 'tl-1',
-  trackId: 'track-1',
-  mediaId: 'media-1',
-  algorithmId: 'test',
-  algorithmVersion: '1',
-  configHash: 'hash',
-  createdBy: 'core',
-  status: 'active',
-  metricsJson: TimelineMetrics.empty(),
-  words: [
-    WordTiming(
-      sentenceId: 'sentence-1',
-      tokenIndex: 0,
-      text: 'Hello',
-      start: Duration(milliseconds: 1100),
-      end: Duration(milliseconds: 1700),
-      source: 'test',
-      provider: 'test',
-    ),
-  ],
-  createdAt: Duration.zero,
-  updatedAt: Duration.zero,
-);
 const _embeddedSubtitle = EmbeddedSubtitle(
   ordinal: 0,
   codec: 'srt',
@@ -373,26 +214,6 @@ const _embeddedSubtitle = EmbeddedSubtitle(
   language: 'en',
   isText: true,
 );
-
-final class _DelayedManualReviewRepository implements ManualReviewRepository {
-  final timelineRequests = <Completer<WordTimeline>>[];
-
-  @override
-  ApiFailure failureDetail(Object error) => ApiFailure(raw: error.toString());
-
-  @override
-  Future<void> saveTimeline(
-    String trackId,
-    Map<String, dynamic> payload,
-  ) async {}
-
-  @override
-  Future<WordTimeline> wordTimeline(String id) {
-    final request = Completer<WordTimeline>();
-    timelineRequests.add(request);
-    return request.future;
-  }
-}
 
 final class _DelayedMediaImportRepository implements MediaImportRepository {
   final probeRequests = <Completer<List<EmbeddedSubtitle>>>[];

@@ -51,6 +51,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a material without video gives the text panel the whole body', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      localized(
+        const MediaWorkbench(
+          mediaTitle: 'An article',
+          playerStage: ColoredBox(
+            key: Key('forbidden-video-stage'),
+            color: Colors.black,
+          ),
+          learningPanel: SizedBox.expand(
+            key: Key('full-width-text-panel'),
+            child: ColoredBox(color: Colors.white),
+          ),
+          mediaFraction: 0.42,
+          onMediaFractionChanged: _noopFraction,
+          showMediaPane: false,
+          showShadowAction: false,
+        ),
+      ),
+    );
+
+    expect(find.byKey(const Key('forbidden-video-stage')), findsNothing);
+    expect(find.byKey(const Key('media-workbench-splitter')), findsNothing);
+    expect(find.byKey(const Key('workbench-media-title')), findsNothing);
+    expect(find.byKey(const Key('full-width-text-panel')), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('full-width-text-panel'))).width,
+      1400,
+    );
+    expect(find.byKey(const Key('workbench-shadow')), findsNothing);
+  });
+
   testWidgets('session header shows the title and keeps the file name', (
     tester,
   ) async {
@@ -299,82 +336,83 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('full transport shows a now-playing tile, title, and speed pill', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 260));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final adapter = DesktopPlayerAdapter();
-    addTearDown(adapter.dispose);
+  testWidgets(
+    'full transport shows a now-playing tile, title, and speed pill',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 260));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final adapter = DesktopPlayerAdapter();
+      addTearDown(adapter.dispose);
 
-    await tester.pumpWidget(
-      localized(
-        PlaybackControls(
-          adapter: adapter,
-          position: const AlwaysStoppedAnimation<Duration>(
-            Duration(seconds: 19),
+      await tester.pumpWidget(
+        localized(
+          PlaybackControls(
+            adapter: adapter,
+            position: const AlwaysStoppedAnimation<Duration>(
+              Duration(seconds: 19),
+            ),
+            duration: const Duration(minutes: 6, seconds: 36),
+            playing: false,
+            loopCue: false,
+            statusStylesVisible: true,
+            subtitlesVisible: true,
+            secondarySubtitlesVisible: false,
+            secondarySubtitlesAvailable: false,
+            rate: 1,
+            volume: 80,
+            muted: false,
+            audioTracks: const [],
+            selectedAudioId: null,
+            embeddedSubtitleTracks: const [],
+            selectedEmbeddedSubtitleId: null,
+            primarySubtitleOffset: Duration.zero,
+            secondarySubtitleOffset: Duration.zero,
+            status: 'Ready',
+            taskStatuses: const [],
+            chunkControlsEnabled: true,
+            chunkLoopActive: false,
+            onSeek: (_) {},
+            onSeekToPreviousCue: () {},
+            onSeekToZero: () {},
+            onPlayPause: () {},
+            onStop: () {},
+            onSeekToNextCue: () {},
+            onSeekToPreviousChunk: () {},
+            onSeekToNextChunk: () {},
+            onLoopCurrentChunk: () {},
+            onLoopExpandedChunk: () {},
+            onLoopCueChanged: (_) {},
+            onStopSourceLoop: () {},
+            onStatusStylesChanged: (_) {},
+            onSubtitlesVisibleChanged: (_) {},
+            onSecondaryVisibleChanged: (_) {},
+            onRateChanged: (_) {},
+            onVolumeChanged: (_) {},
+            onMuteToggle: () {},
+            onAudioTrackChanged: (_) {},
+            onEmbeddedSubtitleTrackChanged: (_) {},
+            onPrimaryOffsetChanged: (_) {},
+            onSecondaryOffsetChanged: (_) {},
+            onMarkAbPoint: () {},
+            mediaTitle: 'How a Super El Nino affects the global climate.mp4',
           ),
-          duration: const Duration(minutes: 6, seconds: 36),
-          playing: false,
-          loopCue: false,
-          statusStylesVisible: true,
-          subtitlesVisible: true,
-          secondarySubtitlesVisible: false,
-          secondarySubtitlesAvailable: false,
-          rate: 1,
-          volume: 80,
-          muted: false,
-          audioTracks: const [],
-          selectedAudioId: null,
-          embeddedSubtitleTracks: const [],
-          selectedEmbeddedSubtitleId: null,
-          primarySubtitleOffset: Duration.zero,
-          secondarySubtitleOffset: Duration.zero,
-          status: 'Ready',
-          taskStatuses: const [],
-          chunkControlsEnabled: true,
-          chunkLoopActive: false,
-          onSeek: (_) {},
-          onSeekToPreviousCue: () {},
-          onSeekToZero: () {},
-          onPlayPause: () {},
-          onStop: () {},
-          onSeekToNextCue: () {},
-          onSeekToPreviousChunk: () {},
-          onSeekToNextChunk: () {},
-          onLoopCurrentChunk: () {},
-          onLoopExpandedChunk: () {},
-          onLoopCueChanged: (_) {},
-          onStopSourceLoop: () {},
-          onStatusStylesChanged: (_) {},
-          onSubtitlesVisibleChanged: (_) {},
-          onSecondaryVisibleChanged: (_) {},
-          onRateChanged: (_) {},
-          onVolumeChanged: (_) {},
-          onMuteToggle: () {},
-          onAudioTrackChanged: (_) {},
-          onEmbeddedSubtitleTrackChanged: (_) {},
-          onPrimaryOffsetChanged: (_) {},
-          onSecondaryOffsetChanged: (_) {},
-          onMarkAbPoint: () {},
-          mediaTitle: 'How a Super El Nino affects the global climate.mp4',
         ),
-      ),
-    );
+      );
 
-    // Middle section: honest thumbnail tile + the reading title (extension
-    // stripped by displayMediaTitle).
-    expect(find.byKey(const Key('playback-media-title')), findsOneWidget);
-    expect(
-      find.text('How a Super El Nino affects the global climate'),
-      findsOneWidget,
-    );
-    // Right cluster: the rate now reads as a `1x` pill, not `1.0x`.
-    expect(find.byKey(const Key('playback-speed-pill')), findsOneWidget);
-    expect(find.text('1x'), findsOneWidget);
-    expect(find.byType(SingleChildScrollView), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
+      // Middle section: honest thumbnail tile + the reading title (extension
+      // stripped by displayMediaTitle).
+      expect(find.byKey(const Key('playback-media-title')), findsOneWidget);
+      expect(
+        find.text('How a Super El Nino affects the global climate'),
+        findsOneWidget,
+      );
+      // Right cluster: the rate now reads as a `1x` pill, not `1.0x`.
+      expect(find.byKey(const Key('playback-speed-pill')), findsOneWidget);
+      expect(find.text('1x'), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('compact playback uses a three-part player layout', (
     tester,

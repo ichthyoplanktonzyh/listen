@@ -60,11 +60,20 @@ LocalListenGenProcessService _service(
   String artifactPath, {
   String toolVersion = _toolVersion,
 }) => LocalListenGenProcessService(
+  pythonExecutable: _python3Executable,
   releaseService: _FakeReleaseService(
     artifactPath: artifactPath,
     toolVersion: toolVersion,
   ),
 );
+
+String _python3Executable() {
+  for (final directory in (Platform.environment['PATH'] ?? '').split(':')) {
+    final candidate = File('$directory/python3');
+    if (candidate.existsSync()) return candidate.path;
+  }
+  throw StateError('python3 is required to run the process-service tests');
+}
 
 /// A minimal v2 capability request. The process service never inspects the
 /// document — it is written to disk and handed to `package from-capability` —
@@ -73,7 +82,8 @@ const _request = CapabilityGenerationRequest(
   requestJson: {
     'schema': 'listen_gen.capability-request.v2',
     'version': 2,
-    'request_id': 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'request_id':
+        'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     'material_id': 'material-1',
     'material_revision_id':
         'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
@@ -106,7 +116,9 @@ void main() {
       );
       expect(
         () => parseListenGenMachineEventV2(
-          decode(line.replaceFirst('"protocol_version":2', '"protocol_version":1')),
+          decode(
+            line.replaceFirst('"protocol_version":2', '"protocol_version":1'),
+          ),
           expectedToolVersion: _toolVersion,
         ),
         throwsFormatException,
@@ -120,7 +132,9 @@ void main() {
       );
       expect(
         () => parseListenGenMachineEventV2(
-          decode(line.replaceFirst('"version":"$_toolVersion"', '"version":"9.9.9"')),
+          decode(
+            line.replaceFirst('"version":"$_toolVersion"', '"version":"9.9.9"'),
+          ),
           expectedToolVersion: _toolVersion,
         ),
         throwsFormatException,
@@ -138,21 +152,30 @@ void main() {
       final base = decode(_event(1, 'accepted'));
       base.remove('attempt_id');
       expect(
-        () => parseListenGenMachineEventV2(base, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          base,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
 
       final planned = decode(_event(2, 'planned'));
       planned.remove('plan');
       expect(
-        () => parseListenGenMachineEventV2(planned, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          planned,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
 
       final running = decode(_event(3, 'running'));
       running.remove('stage');
       expect(
-        () => parseListenGenMachineEventV2(running, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          running,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
 
@@ -161,14 +184,22 @@ void main() {
       );
       completed.remove('resources');
       expect(
-        () => parseListenGenMachineEventV2(completed, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          completed,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
 
-      final failed = decode(_event(1, 'failed', extra: ',"code":"x","message":"y"'));
+      final failed = decode(
+        _event(1, 'failed', extra: ',"code":"x","message":"y"'),
+      );
       failed.remove('code');
       expect(
-        () => parseListenGenMachineEventV2(failed, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          failed,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
     });
@@ -178,7 +209,10 @@ void main() {
         _event(4, 'completed', extra: ',"package_sha256":"md5:abc"'),
       );
       expect(
-        () => parseListenGenMachineEventV2(badDigest, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          badDigest,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
 
@@ -189,7 +223,10 @@ void main() {
         {'rendition_id': 'not-a-digest'},
       ];
       expect(
-        () => parseListenGenMachineEventV2(badRendition, expectedToolVersion: _toolVersion),
+        () => parseListenGenMachineEventV2(
+          badRendition,
+          expectedToolVersion: _toolVersion,
+        ),
         throwsFormatException,
       );
     });
@@ -211,7 +248,10 @@ void main() {
         expectedToolVersion: _toolVersion,
       );
       expect(event.packageSha256, xDigest);
-      expect(event.producedRenditions, ['sha256:${'a' * 64}', 'sha256:${'b' * 64}']);
+      expect(event.producedRenditions, [
+        'sha256:${'a' * 64}',
+        'sha256:${'b' * 64}',
+      ]);
       expect(event.producedResources, ['sha256:${'c' * 64}']);
       expect(event.completedWarnings, ['w1: m1']);
     });
@@ -235,7 +275,13 @@ void main() {
       expect(completed.terminal!.packageSha256, xDigest);
 
       final failed = parseListenGenMachineEventV2(
-        decode(_event(1, 'failed', extra: ',"code":"provider_timeout","message":"t"')),
+        decode(
+          _event(
+            1,
+            'failed',
+            extra: ',"code":"provider_timeout","message":"t"',
+          ),
+        ),
         expectedToolVersion: _toolVersion,
       );
       expect(failed.terminal!.kind, GenEventKind.failed);
@@ -256,8 +302,86 @@ void main() {
   });
 
   group('process lifecycle', () {
-    test('waits for a valid completed terminal before exposing output', () async {
-      final script = await _script('''
+    test(
+      'launches through the resolved interpreter, not Finder PATH',
+      () async {
+        final script = await _script('''
+$_parseOutput
+open(out, 'w').write('x')
+${_emit(_event(0, 'protocol'))}
+${_emit(_event(1, 'accepted'))}
+${_emit(_completedEvent(2))}
+''');
+        addTearDown(() => script.parent.delete(recursive: true));
+        final wrapperDirectory = await Directory.systemTemp.createTemp(
+          'listen-gen-python-wrapper-',
+        );
+        addTearDown(() => wrapperDirectory.delete(recursive: true));
+        final marker = File('${wrapperDirectory.path}/used');
+        final wrapper = File('${wrapperDirectory.path}/python3')
+          ..writeAsStringSync(
+            '#!/bin/sh\nprintf used > "${marker.path}"\n'
+            'exec "${_python3Executable()}" "\$@"\n',
+          );
+        Process.runSync('/bin/chmod', ['755', wrapper.path]);
+        final service = LocalListenGenProcessService(
+          pythonExecutable: () => wrapper.path,
+          releaseService: _FakeReleaseService(artifactPath: script.path),
+        );
+
+        final run = await service.start(_request);
+        expect(await run.packagePath, isNotEmpty);
+        expect(marker.readAsStringSync(), 'used');
+        await run.cleanUp();
+      },
+    );
+
+    test('a missing compatible interpreter fails before launch', () async {
+      final script = await _script('raise AssertionError("must not run")');
+      addTearDown(() => script.parent.delete(recursive: true));
+      final service = LocalListenGenProcessService(
+        pythonExecutable: () => '',
+        releaseService: _FakeReleaseService(artifactPath: script.path),
+      );
+
+      await expectLater(
+        service.start(_request),
+        _failsWith('generator_python_unavailable', retryable: false),
+      );
+    });
+
+    test(
+      'materializes a selected subtitle and passes its run-owned path',
+      () async {
+        final script = await _script('''
+$_parseOutput
+subtitle_index = _args.index('--subtitle')
+subtitle_path = _args[subtitle_index + 1]
+assert open(subtitle_path).read() == '1\\n00:00:00,100 --> 00:00:01,200\\nHello.\\n\\n'
+open(out, 'w').write('x')
+${_emit(_event(0, 'protocol'))}
+${_emit(_event(1, 'accepted'))}
+${_emit(_completedEvent(2))}
+''');
+        addTearDown(() => script.parent.delete(recursive: true));
+        final run = await _service(script.path).start(
+          CapabilityGenerationRequest(
+            requestJson: _request.requestJson,
+            providerArguments: _request.providerArguments,
+            subtitleSrt: '1\n00:00:00,100 --> 00:00:01,200\nHello.\n\n',
+          ),
+        );
+        run.events.listen((_) {});
+
+        expect(await run.packagePath, isNotEmpty);
+        await run.cleanUp();
+      },
+    );
+
+    test(
+      'waits for a valid completed terminal before exposing output',
+      () async {
+        final script = await _script('''
 $_parseOutput
 ${_emit(_event(0, 'protocol'))}
 ${_emit(_event(1, 'accepted'))}
@@ -266,24 +390,25 @@ ${_emit(_event(3, 'running', extra: ',"stage":"building_package"'))}
 open(out, 'w').write('x')
 ${_emit(_completedEvent(4))}
 ''');
-      addTearDown(() => script.parent.delete(recursive: true));
-      final run = await _service(script.path).start(_request);
-      final eventsFuture = run.events.toList();
-      final path = await run.packagePath;
+        addTearDown(() => script.parent.delete(recursive: true));
+        final run = await _service(script.path).start(_request);
+        final eventsFuture = run.events.toList();
+        final path = await run.packagePath;
 
-      expect(await File(path).readAsString(), 'x');
-      final events = await eventsFuture;
-      expect(events.last.kind, GenEventKind.completed);
-      expect(events.map((event) => event.kind), [
-        GenEventKind.protocol,
-        GenEventKind.accepted,
-        GenEventKind.planned,
-        GenEventKind.running,
-        GenEventKind.completed,
-      ]);
-      await run.cleanUp();
-      expect(await File(path).exists(), isFalse);
-    });
+        expect(await File(path).readAsString(), 'x');
+        final events = await eventsFuture;
+        expect(events.last.kind, GenEventKind.completed);
+        expect(events.map((event) => event.kind), [
+          GenEventKind.protocol,
+          GenEventKind.accepted,
+          GenEventKind.planned,
+          GenEventKind.running,
+          GenEventKind.completed,
+        ]);
+        await run.cleanUp();
+        expect(await File(path).exists(), isFalse);
+      },
+    );
 
     test(
       'rejects non-contiguous sequence even when exit and output look valid',
@@ -388,22 +513,25 @@ sys.exit(2)
       await run.cleanUp();
     });
 
-    test('a completed event without a package digest is an empty plan', () async {
-      final script = await _script('''
+    test(
+      'a completed event without a package digest is an empty plan',
+      () async {
+        final script = await _script('''
 ${_emit(_event(0, 'protocol'))}
 ${_emit(_event(1, 'accepted'))}
 ${_emit(_event(2, 'completed'))}
 ''');
-      addTearDown(() => script.parent.delete(recursive: true));
-      final run = await _service(script.path).start(_request);
-      run.events.listen((_) {});
+        addTearDown(() => script.parent.delete(recursive: true));
+        final run = await _service(script.path).start(_request);
+        run.events.listen((_) {});
 
-      await expectLater(
-        run.packagePath,
-        _failsWith('generator_plan_was_empty', retryable: true),
-      );
-      await run.cleanUp();
-    });
+        await expectLater(
+          run.packagePath,
+          _failsWith('generator_plan_was_empty', retryable: true),
+        );
+        await run.cleanUp();
+      },
+    );
 
     test('rejects a completed event with the wrong archive digest', () async {
       final script = await _script('''
@@ -536,6 +664,7 @@ while True:
           ..writeAsStringSync('open(r"$marker", "w").write("x")\n');
 
         final service = LocalListenGenProcessService(
+          pythonExecutable: _python3Executable,
           releaseService: _FakeReleaseService(
             artifactPath: script.path,
             failure: const ListenGenProcessFailure(
@@ -555,7 +684,9 @@ while True:
     );
 
     test('does not execute an artifact swapped after verification', () async {
-      final directory = await Directory.systemTemp.createTemp('listen-gen-test-');
+      final directory = await Directory.systemTemp.createTemp(
+        'listen-gen-test-',
+      );
       addTearDown(() => directory.delete(recursive: true));
       final marker = '${directory.path}/executed';
       // The verified artifact A is replaced with B (which would create a marker
@@ -565,6 +696,7 @@ while True:
       final swapped = 'open(r"$marker", "w").write("x")\n';
 
       final service = LocalListenGenProcessService(
+        pythonExecutable: _python3Executable,
         releaseService: _FakeReleaseService(
           artifactPath: artifact.path,
           onVerify: () async => artifact.writeAsStringSync(swapped),
@@ -623,6 +755,7 @@ ${_emit(_completedEvent(2))}
     test('configuration needs a configured release', () {
       LocalListenGenProcessService build({required bool releaseConfigured}) =>
           LocalListenGenProcessService(
+            pythonExecutable: _python3Executable,
             releaseService: _FakeReleaseService(
               artifactPath: '/unused',
               configured: releaseConfigured,
@@ -667,7 +800,8 @@ String _defaults(String event, String extra) {
   if (extra.isNotEmpty) return '';
   return switch (event) {
     'protocol' => ',"capabilities":{}',
-    'accepted' => ',"attempt_id":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"',
+    'accepted' =>
+      ',"attempt_id":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"',
     'planned' => ',"plan":{"steps":[]}',
     'running' => ',"stage":"transcribing"',
     'completed' =>
@@ -686,7 +820,8 @@ String _completedEvent(int sequence) => _event(
 );
 
 /// Writes a python stand-in generator. It is launched by the process service
-/// with `/usr/bin/env python3 <copy>`, so no executable bit is required.
+/// through the resolved Python executable, so no artifact executable bit is
+/// required.
 Future<File> _script(String body) async {
   final directory = await Directory.systemTemp.createTemp('listen-gen-test-');
   final file = File('${directory.path}/listen-gen.py')

@@ -28,7 +28,8 @@
 #
 set -euo pipefail
 
-readonly EXPECTED_TEST="local Gen bundle to local Core round trips through capability production, installation, and adoption"
+readonly EXPECTED_MEDIA_TEST="local Gen bundle to local Core round trips through capability production, installation, and adoption"
+readonly EXPECTED_DOCUMENT_TEST="a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core"
 
 app_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -192,7 +193,9 @@ echo "verify-roundtrip: running focused integration tests"
       --file-reporter "json:$tmp/flutter-report.jsonl" )
 
 python3 "$app_root/tool/verify_flutter_test_report.py" \
-  "$tmp/flutter-report.jsonl" "$EXPECTED_TEST"
+  "$tmp/flutter-report.jsonl" "$EXPECTED_MEDIA_TEST"
+python3 "$app_root/tool/verify_flutter_test_report.py" \
+  "$tmp/flutter-report.jsonl" "$EXPECTED_DOCUMENT_TEST"
 
 # The run must leave both external checkouts untouched. Reusing check_repo also
 # fails closed if Git itself becomes unreadable during the run.

@@ -25,14 +25,22 @@ void main() {
     return file;
   }
 
+  File compatiblePython(String relative) {
+    final file = File('${root.path}/$relative');
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync('#!/bin/sh\nexit 0\n');
+    Process.runSync('/bin/chmod', ['755', file.path]);
+    return file;
+  }
+
   const modelDirectory = 'Library/Application Support/listen/models/whisper';
 
   ContentGeneratorLocator locator({
-    String generatorPath = '',
     String modelPath = '',
   }) => ContentGeneratorLocator(
-    generatorPath: generatorPath,
     modelPath: modelPath,
+    pythonPath: compatiblePython('bin/python3').path,
+    pythonCompatibilityProbe: (_) async => true,
     // Pinned so a resolution never silently depends on the machine running
     // the suite; the fallbacks under /opt and /usr are unreachable from here.
     whisperPath: touch('bin/whisper-cli').path,
@@ -42,22 +50,46 @@ void main() {
   );
 
   test(
-    'a checked-out working copy is found without any configuration',
+    'a Finder launch resolves a compatible Python directly instead of using its PATH',
     () async {
-      // How this is actually developed today: the console script lives in the
-      // repository's virtualenv, which is on no PATH a GUI launch would see.
-      final generator = touch('listen-gen/.venv/bin/listen-gen');
       touch('$modelDirectory/ggml-base.bin');
+      final python = compatiblePython('runtime/python3');
 
-      final setup = await locator().resolve();
+      final setup = await ContentGeneratorLocator(
+        pythonPath: python.path,
+        pythonCompatibilityProbe: (candidate) async => candidate == python.path,
+        whisperPath: touch('bin/whisper-cli').path,
+        ffprobePath: touch('bin/ffprobe').path,
+        ffmpegPath: touch('bin/ffmpeg').path,
+        environment: {
+          'HOME': root.path,
+          'PATH': '/usr/bin:/bin:/usr/sbin:/sbin',
+        },
+      ).resolve();
 
+      expect(setup.pythonPath, python.path);
       expect(setup.state, ContentGeneratorState.ready);
-      expect(setup.generatorPath, generator.path);
     },
   );
 
+  test('Python older than 3.11 is an unavailable prerequisite', () async {
+    touch('$modelDirectory/ggml-base.bin');
+    final oldPython = compatiblePython('bin/python3');
+
+    final setup = await ContentGeneratorLocator(
+      pythonPath: oldPython.path,
+      pythonCompatibilityProbe: (_) async => false,
+      whisperPath: touch('bin/whisper-cli').path,
+      ffprobePath: touch('bin/ffprobe').path,
+      ffmpegPath: touch('bin/ffmpeg').path,
+      environment: {'HOME': root.path, 'PATH': '/usr/bin:/bin:/usr/sbin:/sbin'},
+    ).resolve();
+
+    expect(setup.pythonPath, isEmpty);
+    expect(setup.state, ContentGeneratorState.pythonMissing);
+  });
+
   test('the whisper model is found in the shared models directory', () async {
-    touch('listen-gen/.venv/bin/listen-gen');
     final model = touch('$modelDirectory/ggml-base.bin');
 
     final setup = await locator().resolve();
@@ -68,7 +100,6 @@ void main() {
   test('the largest installed model wins', () async {
     // Model files grow with capability, so someone who downloaded a bigger one
     // meant to use it. Sizes are deliberately not in directory order.
-    touch('listen-gen/.venv/bin/listen-gen');
     touch('$modelDirectory/ggml-base.bin', bytes: 200);
     final large = touch('$modelDirectory/ggml-large.bin', bytes: 900);
     touch('$modelDirectory/ggml-tiny.bin', bytes: 50);
@@ -79,7 +110,6 @@ void main() {
   });
 
   test('a configured path overrides the lookup', () async {
-    touch('listen-gen/.venv/bin/listen-gen');
     touch('$modelDirectory/ggml-base.bin', bytes: 900);
     final chosen = touch('elsewhere/ggml-small.bin', bytes: 10);
 
@@ -93,7 +123,6 @@ void main() {
   test(
     'a configured path that no longer exists falls back to the lookup',
     () async {
-      touch('listen-gen/.venv/bin/listen-gen');
       final present = touch('$modelDirectory/ggml-base.bin');
 
       final setup = await locator(
@@ -106,13 +135,7 @@ void main() {
     },
   );
 
-  test('a missing generator and a missing model are told apart', () async {
-    touch('$modelDirectory/ggml-base.bin');
-    final noGenerator = await locator().resolve();
-    expect(noGenerator.state, ContentGeneratorState.generatorMissing);
-
-    File('${root.path}/$modelDirectory/ggml-base.bin').deleteSync();
-    touch('listen-gen/.venv/bin/listen-gen');
+  test('a missing whisper model is reported by the tool locator', () async {
     final noModel = await locator().resolve();
     expect(noModel.state, ContentGeneratorState.modelMissing);
   });
@@ -120,7 +143,6 @@ void main() {
   test(
     'an empty model directory is not mistaken for an installed model',
     () async {
-      touch('listen-gen/.venv/bin/listen-gen');
       Directory('${root.path}/$modelDirectory').createSync(recursive: true);
 
       final setup = await locator().resolve();
@@ -133,7 +155,6 @@ void main() {
   test(
     'the provider argv names whisper-cpp and carries no app internals',
     () async {
-      touch('listen-gen/.venv/bin/listen-gen');
       touch('$modelDirectory/ggml-base.bin');
 
       final arguments = contentGeneratorProviderArguments(
@@ -157,16 +178,14 @@ void main() {
   test(
     'the forced-alignment toolchain is discovered in the listen-core checkout',
     () async {
-      touch('listen-gen/.venv/bin/listen-gen');
       touch('$modelDirectory/ggml-base.bin');
       final python = touch('LLPlayerNext/.venv/bin/python');
-      final aligner = touch(
-        'listen-core/scripts/forced-align/align-cli.py',
-      );
+      final aligner = touch('listen-core/scripts/forced-align/align-cli.py');
       touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
-      Directory('${root.path}/Library/Application Support/LLPlayerNext/models/'
-              'wav2vec2-phoneme')
-          .createSync(recursive: true);
+      Directory(
+        '${root.path}/Library/Application Support/LLPlayerNext/models/'
+        'wav2vec2-phoneme',
+      ).createSync(recursive: true);
 
       final setup = await locator().resolve();
 
@@ -180,7 +199,6 @@ void main() {
   test(
     'a partial aligner toolchain resolves but contributes no argv',
     () async {
-      touch('listen-gen/.venv/bin/listen-gen');
       touch('$modelDirectory/ggml-base.bin');
       // The venv python exists but no sidecar scripts are checked out.
       touch('LLPlayerNext/.venv/bin/python');
@@ -194,57 +212,54 @@ void main() {
     },
   );
 
-  test(
-    'a complete toolchain contributes aligner and phoneme argv',
-    () async {
-      touch('listen-gen/.venv/bin/listen-gen');
-      touch('$modelDirectory/ggml-base.bin');
-      touch('LLPlayerNext/.venv/bin/python');
-      touch('listen-core/scripts/forced-align/align-cli.py');
-      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
-      Directory('${root.path}/Library/Application Support/LLPlayerNext/models/'
-              'wav2vec2-phoneme')
-          .createSync(recursive: true);
-
-      final arguments = contentGeneratorProviderArguments(
-        await locator().resolve(),
-      );
-
-      expect(arguments, containsAll([
-        '--aligner',
-        'torchaudio',
-        '--phones',
-        'wav2vec2',
-      ]));
-      expect(
-        arguments[arguments.indexOf('--aligner-python') + 1],
-        '${root.path}/LLPlayerNext/.venv/bin/python',
-      );
-      // Model identity is pinned to the sidecar contract, never guessed.
-      expect(arguments, contains('--phones-wav2vec2-model-id'));
-      expect(arguments, contains('facebook/wav2vec2-lv-60-espeak-cv-ft'));
-    },
-  );
-
-  test('the phoneme model directory honors the toolchain env override', () async {
-    touch('listen-gen/.venv/bin/listen-gen');
+  test('a complete toolchain contributes aligner and phoneme argv', () async {
     touch('$modelDirectory/ggml-base.bin');
     touch('LLPlayerNext/.venv/bin/python');
     touch('listen-core/scripts/forced-align/align-cli.py');
     touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
-    final modelDir = Directory('${root.path}/elsewhere/phoneme-model')
-      ..createSync(recursive: true);
+    Directory(
+      '${root.path}/Library/Application Support/LLPlayerNext/models/'
+      'wav2vec2-phoneme',
+    ).createSync(recursive: true);
 
-    final setup = await ContentGeneratorLocator(
-      whisperPath: touch('bin/whisper-cli').path,
-      ffprobePath: touch('bin/ffprobe').path,
-      ffmpegPath: touch('bin/ffmpeg').path,
-      environment: {
-        'HOME': root.path,
-        'LLPLAYERNEXT_PHONEME_MODEL_DIR': modelDir.path,
-      },
-    ).resolve();
+    final arguments = contentGeneratorProviderArguments(
+      await locator().resolve(),
+    );
 
-    expect(setup.phoneModelDir, modelDir.path);
+    expect(
+      arguments,
+      containsAll(['--aligner', 'torchaudio', '--phones', 'wav2vec2']),
+    );
+    expect(
+      arguments[arguments.indexOf('--aligner-python') + 1],
+      '${root.path}/LLPlayerNext/.venv/bin/python',
+    );
+    // Model identity is pinned to the sidecar contract, never guessed.
+    expect(arguments, contains('--phones-wav2vec2-model-id'));
+    expect(arguments, contains('facebook/wav2vec2-lv-60-espeak-cv-ft'));
   });
+
+  test(
+    'the phoneme model directory honors the toolchain env override',
+    () async {
+      touch('$modelDirectory/ggml-base.bin');
+      touch('LLPlayerNext/.venv/bin/python');
+      touch('listen-core/scripts/forced-align/align-cli.py');
+      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      final modelDir = Directory('${root.path}/elsewhere/phoneme-model')
+        ..createSync(recursive: true);
+
+      final setup = await ContentGeneratorLocator(
+        whisperPath: touch('bin/whisper-cli').path,
+        ffprobePath: touch('bin/ffprobe').path,
+        ffmpegPath: touch('bin/ffmpeg').path,
+        environment: {
+          'HOME': root.path,
+          'LLPLAYERNEXT_PHONEME_MODEL_DIR': modelDir.path,
+        },
+      ).resolve();
+
+      expect(setup.phoneModelDir, modelDir.path);
+    },
+  );
 }

@@ -8,8 +8,13 @@ import 'dart:io';
 enum ContentGeneratorState {
   ready,
 
-  /// `listen-gen` itself was not found in any known location.
+  /// The separately verified `listen-gen` release bundle is unavailable.
+  /// This state is reported by the Gen process service, not the tool locator.
   generatorMissing,
+
+  /// The pinned Gen zipapp is installed, but this machine has no compatible
+  /// Python runtime. Gen 0.5.0 requires Python 3.11 or newer.
+  pythonMissing,
 
   /// The generator is present but no whisper model is installed, so it has
   /// nothing to transcribe with.
@@ -17,6 +22,12 @@ enum ContentGeneratorState {
 
   /// `whisper-cli` was not found; the model cannot be run.
   whisperMissing,
+
+  /// `ffprobe` was not found; Gen cannot inspect the source media.
+  ffprobeMissing,
+
+  /// `ffmpeg` was not found; Gen cannot prepare source audio.
+  ffmpegMissing,
 }
 
 /// Everything needed to launch a generation, resolved together.
@@ -30,7 +41,7 @@ enum ContentGeneratorState {
 /// generator honestly degrades (whisper word timings, no phone timeline)
 /// rather than refusing to run.
 typedef ContentGeneratorSetup = ({
-  String generatorPath,
+  String pythonPath,
   String modelPath,
   String whisperPath,
   String ffprobePath,
@@ -43,7 +54,7 @@ typedef ContentGeneratorSetup = ({
 });
 
 const ContentGeneratorSetup unresolvedContentGeneratorSetup = (
-  generatorPath: '',
+  pythonPath: '',
   modelPath: '',
   whisperPath: '',
   ffprobePath: '',
@@ -65,7 +76,7 @@ const ContentGeneratorSetup unresolvedContentGeneratorSetup = (
 /// lookup rather than replacing it.
 class ContentGeneratorLocator {
   const ContentGeneratorLocator({
-    this.generatorPath = '',
+    this.pythonPath = '',
     this.modelPath = '',
     this.whisperPath = '',
     this.ffprobePath = '',
@@ -75,10 +86,11 @@ class ContentGeneratorLocator {
     this.phoneSidecar = '',
     this.phoneModelDir = '',
     this.environment = const {},
+    this.pythonCompatibilityProbe,
   });
 
   /// Configured overrides; empty means "look for it".
-  final String generatorPath;
+  final String pythonPath;
   final String modelPath;
   final String whisperPath;
   final String ffprobePath;
@@ -91,18 +103,23 @@ class ContentGeneratorLocator {
   /// Injected so tests never read the developer's own environment.
   final Map<String, String> environment;
 
+  /// Test seam for the Python >=3.11 probe. Production executes the candidate
+  /// with a version-only command; it never imports Gen or starts a run here.
+  final Future<bool> Function(String path)? pythonCompatibilityProbe;
+
   String get _home => environment['HOME'] ?? Platform.environment['HOME'] ?? '';
 
   /// Alongside the app bundle, for a future release that ships the toolchain.
   String get _bundledRuntime =>
       '${File(Platform.resolvedExecutable).parent.parent.path}/Resources/runtime';
 
+  /// `flutter run` executes from the repository root, where the same pinned
+  /// Core artifact used by release packaging already owns the shared media
+  /// tools. Finder/release launches use [_bundledRuntime] instead.
+  String get _developmentRuntime =>
+      '${Directory.current.absolute.path}/.backend/runtime/runtime';
+
   Future<ContentGeneratorSetup> resolve() async {
-    final generator = await _resolveExecutable(generatorPath, 'listen-gen', [
-      // A working copy checked out beside the app is how this is developed
-      // today, and its console script lives in the virtualenv.
-      '$_home/listen-gen/.venv/bin/listen-gen',
-    ]);
     final whisper = await _resolveExecutable(
       whisperPath,
       'whisper-cli',
@@ -115,36 +132,31 @@ class ContentGeneratorLocator {
     // The acoustic aligner and phoneme sidecars are a research toolchain
     // living in the listen-core working copy, driven by the same virtualenv.
     // Each side is only complete when every piece it needs is present.
-    final alignerPython = await _resolveExecutable(
-      this.alignerPython,
-      '',
-      ['$_home/LLPlayerNext/.venv/bin/python'],
-      wantDirectory: false,
-    );
-    final alignerScript = await _resolveExecutable(
-      this.alignerScript,
-      '',
-      ['$_home/listen-core/scripts/forced-align/align-cli.py'],
-      wantDirectory: false,
-    );
-    final phoneSidecar = await _resolveExecutable(
-      this.phoneSidecar,
-      '',
-      ['$_home/listen-core/scripts/wav2vec2-phoneme-cli.py'],
-      wantDirectory: false,
-    );
+    final alignerPython = await _resolveExecutable(this.alignerPython, '', [
+      '$_home/LLPlayerNext/.venv/bin/python',
+    ], wantDirectory: false);
+    final alignerScript = await _resolveExecutable(this.alignerScript, '', [
+      '$_home/listen-core/scripts/forced-align/align-cli.py',
+    ], wantDirectory: false);
+    final phoneSidecar = await _resolveExecutable(this.phoneSidecar, '', [
+      '$_home/listen-core/scripts/wav2vec2-phoneme-cli.py',
+    ], wantDirectory: false);
     final phoneModelDir = await _resolveModelDirectory();
+    final python = await _resolvePython(alignerPython);
 
-    // Ordered by what the user would fix first: without the generator the
-    // rest is moot.
+    // The pinned Gen bundle is resolved and verified separately by
+    // LocalListenGenReleaseService. This locator owns only the external media
+    // toolchain required by that release.
     final state = switch (null) {
-      _ when generator == null => ContentGeneratorState.generatorMissing,
+      _ when python == null => ContentGeneratorState.pythonMissing,
       _ when whisper == null => ContentGeneratorState.whisperMissing,
       _ when model == null => ContentGeneratorState.modelMissing,
+      _ when ffprobe == null => ContentGeneratorState.ffprobeMissing,
+      _ when ffmpeg == null => ContentGeneratorState.ffmpegMissing,
       _ => ContentGeneratorState.ready,
     };
     return (
-      generatorPath: generator ?? '',
+      pythonPath: python ?? '',
       modelPath: model ?? '',
       whisperPath: whisper ?? '',
       ffprobePath: ffprobe ?? '',
@@ -155,6 +167,49 @@ class ContentGeneratorLocator {
       phoneModelDir: phoneModelDir ?? '',
       state: state,
     );
+  }
+
+  /// Resolves the interpreter as an absolute path and verifies the release's
+  /// declared Python floor. Finder's PATH commonly resolves `python3` to the
+  /// macOS 3.9 runtime, so the launched process must never repeat that lookup.
+  Future<String?> _resolvePython(String? resolvedAlignerPython) async {
+    final candidates = <String>[
+      if (pythonPath.isNotEmpty) pythonPath,
+      '$_bundledRuntime/python3',
+      '$_developmentRuntime/python3',
+      ?resolvedAlignerPython,
+      '/opt/homebrew/bin/python3',
+      '/usr/local/bin/python3',
+      ..._pathCandidates('python3'),
+    ];
+    final visited = <String>{};
+    for (final candidate in candidates) {
+      if (candidate.isEmpty || !visited.add(candidate)) continue;
+      if (!await File(candidate).exists()) continue;
+      if (await _isCompatiblePython(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  Iterable<String> _pathCandidates(String name) sync* {
+    final path = environment['PATH'] ?? Platform.environment['PATH'] ?? '';
+    for (final directory in path.split(':')) {
+      if (directory.isNotEmpty) yield '$directory/$name';
+    }
+  }
+
+  Future<bool> _isCompatiblePython(String path) async {
+    final probe = pythonCompatibilityProbe;
+    if (probe != null) return probe(path);
+    try {
+      final result = await Process.run(path, const [
+        '-c',
+        'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)',
+      ]);
+      return result.exitCode == 0;
+    } on ProcessException {
+      return false;
+    }
   }
 
   Future<String?> _resolveExecutable(
@@ -171,6 +226,7 @@ class ContentGeneratorLocator {
     }
     for (final candidate in [
       '$_bundledRuntime/$name',
+      '$_developmentRuntime/$name',
       ...extraCandidates,
       if (name.isNotEmpty) '/opt/homebrew/bin/$name',
       if (name.isNotEmpty) '/usr/local/bin/$name',
@@ -204,17 +260,12 @@ class ContentGeneratorLocator {
     final configured = phoneModelDir.isNotEmpty
         ? phoneModelDir
         : environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
-            Platform.environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
-            '';
-    return _resolveExecutable(
-      configured,
-      '',
-      [
-        '$_home/Library/Application Support/LLPlayerNext/models/'
-            'wav2vec2-phoneme',
-      ],
-      wantDirectory: true,
-    );
+              Platform.environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
+              '';
+    return _resolveExecutable(configured, '', [
+      '$_home/Library/Application Support/LLPlayerNext/models/'
+          'wav2vec2-phoneme',
+    ], wantDirectory: true);
   }
 
   /// The whisper model, from the shared location the project already uses.

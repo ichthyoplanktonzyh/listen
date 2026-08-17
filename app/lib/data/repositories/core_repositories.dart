@@ -10,7 +10,6 @@ import 'learning_material_repository.dart';
 import 'learning_repository.dart';
 import 'lexical_repository.dart';
 import 'listening_repository.dart';
-import 'manual_review_repository.dart';
 import 'media_library_repository.dart';
 import 'media_session_repository.dart';
 import 'phonetic_analysis_repository.dart';
@@ -104,7 +103,6 @@ final class LocalCoreRepositories {
       LocalLearningAssetsRepository(_api);
   PersonalExpressionRepository get personalExpression =>
       LocalPersonalExpressionRepository(_api);
-  ManualReviewRepository get manualReview => LocalManualReviewRepository(_api);
   TranscriptionRepository get transcription =>
       LocalTranscriptionRepository(_api);
   PhoneticAnalysisRepository get phoneticAnalysis =>

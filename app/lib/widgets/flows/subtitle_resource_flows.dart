@@ -2,24 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../controllers/learning_controller.dart';
-import '../../controllers/media_session_coordinator.dart';
 import '../../controllers/cold_start_marking_view_model.dart';
 import '../../controllers/phonetic_analysis_view_model.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/resource_actions_coordinator.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
-import '../../models/timeline.dart';
 import '../../phonetic_analysis_ui.dart';
-import '../../screens/subtitle_resources_screen.dart';
 import '../panels/cold_start_marking_sheet.dart';
 
-/// Dialog-driven subtitle-resource flows extracted from the composition root:
-/// delete/export confirmation, the phonetic-analysis center, the resources
-/// screen, and cold-start marking. Whole-media subtitle generation through
-/// content packages is gone: transcript preparation runs through the material
-/// capability completion flow in the workbench.
+/// Dialog-driven analysis flows shared by the workbench.
 /// Parameter names mirror the host's controller fields.
 
 typedef ColdStartMarkingViewModelFactory =
@@ -47,79 +39,6 @@ class _OwnedNotifierRouteState extends State<_OwnedNotifierRoute> {
 
   @override
   Widget build(BuildContext context) => widget.child;
-}
-
-Future<void> deleteSubtitleResourceFlow({
-  required BuildContext context,
-  required ResourceActionsCoordinator resourceActions,
-  required SubtitleTrack track,
-}) async {
-  final l = AppLocalizations.of(context);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(l.text('deleteResource')),
-      content: Text(l.text('deleteSubtitleResourceBody')),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(l.text('cancel')),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(l.text('deleteResource')),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true) return;
-  await resourceActions.deleteSubtitleResource(track);
-}
-
-Future<void> exportSubtitleResourceFlow({
-  required BuildContext context,
-  required PlayerController playerController,
-  required ResourceActionsCoordinator resourceActions,
-  required SubtitleTrack track,
-}) async {
-  final l = AppLocalizations.of(context);
-  if (!resourceActions.repository.isAvailable) {
-    // Unavailable State (CONTEXT.md): exporting is a user row action; report
-    // the missing core instead of swallowing the click.
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  final format = await showDialog<String>(
-    context: context,
-    builder: (context) => SimpleDialog(
-      title: Text(l.text('exportSubtitleFormat')),
-      children: [
-        SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, 'srt'),
-          child: ListTile(
-            leading: const Icon(Icons.subtitles_outlined),
-            title: Text(l.text('exportSrt')),
-            subtitle: const Text('.srt'),
-          ),
-        ),
-        SimpleDialogOption(
-          onPressed: () => Navigator.pop(context, 'lltimeline'),
-          child: ListTile(
-            leading: const Icon(Icons.timeline),
-            title: Text(l.text('exportLLTimelineJson')),
-            subtitle: const Text('.lltimeline.json'),
-          ),
-        ),
-      ],
-    ),
-  );
-  // Legitimate silence: the user dismissed the format chooser themselves.
-  if (format == null) return;
-  if (format == 'lltimeline') {
-    await resourceActions.exportLLTimelineResource(track);
-  } else {
-    await resourceActions.exportSubtitleSrt(track);
-  }
 }
 
 Future<void> openPhoneticAnalysisCenterFlow({
@@ -177,67 +96,4 @@ void openColdStartMarkingFlow({
       onDone: () => resourceActions.loadContentFit(trackId),
     ),
   ).whenComplete(viewModel.dispose);
-}
-
-Future<void> openSubtitleResourcesFlow({
-  required BuildContext context,
-  required bool backendAvailable,
-  required ColdStartMarkingViewModelFactory? createColdStartViewModel,
-  required PlayerController playerController,
-  required SubtitleController subtitleController,
-  required LearningController learningController,
-  required ResourceActionsCoordinator resourceActions,
-  required MediaSessionCoordinator mediaSession,
-  required Future<void> Function() onManualReviewTimeline,
-}) async {
-  if (!backendAvailable) {
-    // Unavailable State (CONTEXT.md): the resources screen is a user
-    // destination; report the missing core instead of swallowing the click.
-    final l = AppLocalizations.of(context);
-    playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-    return;
-  }
-  await resourceActions.loadSubtitleResources(updateStatus: false);
-  if (!context.mounted) return;
-  await Navigator.push<void>(
-    context,
-    MaterialPageRoute(
-      builder: (_) => SubtitleResourcesScreen(
-        playerController: playerController,
-        subtitleController: subtitleController,
-        onImportSubtitle: () => mediaSession.openSubtitle(secondary: false),
-        onImportLLTimeline: mediaSession.openLLTimelineResource,
-        onRefreshResources: resourceActions.refreshSubtitleResources,
-        onActivateSubtitle: resourceActions.activateSubtitleResource,
-        onArchiveSubtitle: resourceActions.archiveSubtitleResource,
-        onRestoreSubtitle: resourceActions.restoreSubtitleResource,
-        onDeleteSubtitle: (track) => deleteSubtitleResourceFlow(
-          context: context,
-          resourceActions: resourceActions,
-          track: track,
-        ),
-        onExportSubtitle: (track) => exportSubtitleResourceFlow(
-          context: context,
-          playerController: playerController,
-          resourceActions: resourceActions,
-          track: track,
-        ),
-        onLanguageChanged: resourceActions.changeTrackLanguage,
-        availableLanguages: learningController.availableLanguages,
-        onExportLLTimeline: resourceActions.exportLLTimelineResource,
-        onActivateWordTimeline: resourceActions.activateWordTimeline,
-        onManualReviewTimeline: onManualReviewTimeline,
-        onActivatePhoneTimeline: resourceActions.activatePhoneTimeline,
-        onArchivePhoneTimeline: resourceActions.archivePhoneTimeline,
-        onDeletePhoneTimeline: resourceActions.deletePhoneTimeline,
-        onStartColdStart: () => openColdStartMarkingFlow(
-          context: context,
-          createViewModel: createColdStartViewModel,
-          playerController: playerController,
-          subtitleController: subtitleController,
-          resourceActions: resourceActions,
-        ),
-      ),
-    ),
-  );
 }

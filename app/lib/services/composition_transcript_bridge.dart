@@ -14,9 +14,11 @@ import '../models/timeline.dart';
 /// track-import API Core already owns — sentence text plus per-sentence anchor
 /// times become an srt file and then a durable subtitle track.
 ///
-/// Word-level timelines and phoneme resources from the package stay on the
-/// composition surface for now; this bridge only makes the transcript itself
-/// visible and sentence-followable.
+/// The package's optional word-level resources ride along: [bridge] reports
+/// which imported cue each package sentence became, so word timings, sense
+/// groups and prosodic chunks — which are keyed by the *package's* sentence
+/// ids — can be re-keyed onto the cues the workbench actually renders. Without
+/// that mapping they would key on ids no cue has and silently render nothing.
 class CompositionTranscriptBridge {
   const CompositionTranscriptBridge({
     required this.readComposition,
@@ -36,26 +38,55 @@ class CompositionTranscriptBridge {
   importSubtitle;
 
   /// Imports the adopted composition's structured reading as a subtitle
-  /// track. Returns the imported track, or null when the composition has no
-  /// reading or no sentence times to bridge.
-  Future<SubtitleTrack?> bridge(String materialId, String mediaId) async {
+  /// track. Returns the imported track together with the package-sentence →
+  /// cue-id mapping, or null when the composition has no reading or no
+  /// sentence times to bridge.
+  Future<BridgedTranscript?> bridge(String materialId, String mediaId) async {
     final composition = await readComposition(materialId);
     final reading = composition.resourceOfKind('structured_reading');
     final anchors = composition.resourceOfKind('anchor_time_alignment');
     if (reading == null || anchors == null) return null;
-    final readingBytes = await readResourcePayload(materialId, reading.resourceId);
-    final anchorBytes = await readResourcePayload(materialId, anchors.resourceId);
-    final srt = compositionToSrt(
+    final readingBytes = await readResourcePayload(
+      materialId,
+      reading.resourceId,
+    );
+    final anchorBytes = await readResourcePayload(
+      materialId,
+      anchors.resourceId,
+    );
+    final written = compositionToSrtLines(
       jsonDecode(utf8.decode(readingBytes)) as Map<String, dynamic>,
       jsonDecode(utf8.decode(anchorBytes)) as Map<String, dynamic>,
     );
-    if (srt == null) return null;
+    if (written == null) return null;
     final directory = Directory.systemTemp.createTempSync(
       'listen-learning-transcript-',
     );
     final path = '${directory.path}/learning-transcript.srt';
-    await File(path).writeAsString(srt, flush: true);
-    return importSubtitle(mediaId, path);
+    await File(path).writeAsString(written.srt, flush: true);
+    final track = await importSubtitle(mediaId, path);
+    return BridgedTranscript(
+      track: track,
+      cueIdBySentenceId: _pairSentencesToCues(written.sentenceIds, track.cues),
+    );
+  }
+
+  /// Pairs each written sentence with the cue it became, by position.
+  ///
+  /// This is not a guess about Core's id scheme: the srt above was written in
+  /// exactly this order, one entry per sentence, so entry *n* is sentence *n*.
+  /// A count mismatch means that correspondence did not survive the round
+  /// trip, and pairing anyway would attach one sentence's word timings to a
+  /// different sentence's words — so the mapping is dropped whole instead.
+  static Map<String, String> _pairSentencesToCues(
+    List<String> sentenceIds,
+    List<Cue> cues,
+  ) {
+    if (cues.length != sentenceIds.length) return const {};
+    return {
+      for (var index = 0; index < sentenceIds.length; index += 1)
+        sentenceIds[index]: cues[index].id,
+    };
   }
 
   /// Builds srt text from the structured reading and its anchor alignments.
@@ -66,6 +97,13 @@ class CompositionTranscriptBridge {
   /// start; the final sentence gets a nominal tail. Sentences without a time
   /// anchor are dropped — an unanchored line would be a fabrication.
   static String? compositionToSrt(
+    Map<String, dynamic> reading,
+    Map<String, dynamic> alignment,
+  ) => compositionToSrtLines(reading, alignment)?.srt;
+
+  /// As [compositionToSrt], but also reports which package sentences were
+  /// written, in the order they were written.
+  static ({String srt, List<String> sentenceIds})? compositionToSrtLines(
     Map<String, dynamic> reading,
     Map<String, dynamic> alignment,
   ) {
@@ -100,6 +138,7 @@ class CompositionTranscriptBridge {
       ..sort((a, b) => (times[a] ?? 0).compareTo(times[b] ?? 0));
     if (ordered.isEmpty) return null;
     final buffer = StringBuffer();
+    final written = <String>[];
     var index = 1;
     for (var i = 0; i < ordered.length; i += 1) {
       final id = ordered[i];
@@ -116,9 +155,11 @@ class CompositionTranscriptBridge {
         ..writeln('${_srtTime(startMs)} --> ${_srtTime(endMs)}')
         ..writeln(body)
         ..writeln();
+      written.add(id);
       index += 1;
     }
-    return buffer.isEmpty || index == 1 ? null : buffer.toString();
+    if (buffer.isEmpty || written.isEmpty) return null;
+    return (srt: buffer.toString(), sentenceIds: written);
   }
 
   static String _srtTime(int ms) {
@@ -130,4 +171,19 @@ class CompositionTranscriptBridge {
         value.toString().padLeft(width, '0');
     return '${pad(h)}:${pad(m)}:${pad(s)},${pad(millis, 3)}';
   }
+}
+
+/// One bridged transcript: the imported track, and which cue each package
+/// sentence became.
+class BridgedTranscript {
+  const BridgedTranscript({
+    required this.track,
+    required this.cueIdBySentenceId,
+  });
+
+  final SubtitleTrack track;
+
+  /// Package sentence id → imported cue id. Empty when the correspondence
+  /// could not be established; callers must then not re-key anything.
+  final Map<String, String> cueIdBySentenceId;
 }

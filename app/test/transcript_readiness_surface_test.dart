@@ -24,8 +24,8 @@ void main() {
         ),
       );
 
-      expect(find.text('还没有学习文稿'), findsOneWidget);
-      expect(find.text('准备学习文稿'), findsOneWidget);
+      expect(find.text('学习材料尚未准备'), findsOneWidget);
+      expect(find.text('生成学习材料'), findsOneWidget);
       expect(find.text('导入字幕文件'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('prepare-learning-transcript')));
@@ -43,8 +43,8 @@ void main() {
         ),
       );
 
-      expect(find.text('No learning transcript yet'), findsOneWidget);
-      expect(find.text('Prepare learning transcript'), findsOneWidget);
+      expect(find.text('Learning materials are not ready'), findsOneWidget);
+      expect(find.text('Generate learning materials'), findsOneWidget);
       expect(find.text('Import subtitle file'), findsOneWidget);
     });
   });
@@ -127,8 +127,7 @@ void main() {
         TranscriptPreparationStage.preparingAudio: 'Preparing audio…',
         TranscriptPreparationStage.transcribing:
             'Generating learning transcript…',
-        TranscriptPreparationStage.organizing:
-            'Organizing learning resources…',
+        TranscriptPreparationStage.organizing: 'Organizing learning resources…',
         TranscriptPreparationStage.importing: 'Importing learning transcript…',
       };
       for (final entry in stageLabels.entries) {
@@ -192,10 +191,7 @@ void main() {
       await tester.pumpWidget(
         _harness(
           locale: 'en',
-          view: _view(
-            phase: TranscriptReadinessPhase.failed,
-            canRetry: true,
-          ),
+          view: _view(phase: TranscriptReadinessPhase.failed, canRetry: true),
         ),
       );
 
@@ -208,34 +204,85 @@ void main() {
   });
 
   group('unavailable surface', () {
-    testWidgets('says automatic preparation is unavailable and keeps import', (
-      tester,
-    ) async {
+    testWidgets('names an incompatible local Python runtime', (tester) async {
       await tester.pumpWidget(
         _harness(
           locale: 'zh',
-          view: _view(phase: TranscriptReadinessPhase.unavailable),
+          view: _view(
+            phase: TranscriptReadinessPhase.unavailable,
+            unavailableReason:
+                TranscriptPreparationAvailability.pythonUnavailable,
+          ),
         ),
       );
 
-      expect(find.text('当前无法自动准备学习文稿'), findsOneWidget);
+      expect(find.textContaining('Python 3.11'), findsOneWidget);
+    });
+
+    testWidgets('keeps generation primary and manual import secondary', (
+      tester,
+    ) async {
+      var prepared = 0;
+      await tester.pumpWidget(
+        _harness(
+          locale: 'zh',
+          view: _view(
+            phase: TranscriptReadinessPhase.unavailable,
+            unavailableReason:
+                TranscriptPreparationAvailability.generatorUnavailable,
+            onPrepare: () async => prepared++,
+          ),
+        ),
+      );
+
+      expect(find.text('学习材料尚未准备'), findsOneWidget);
+      expect(find.textContaining('锁定的本地 Gen 发布包尚未安装'), findsOneWidget);
+      expect(find.textContaining('本地 Core 与 Gen'), findsNothing);
+      expect(find.text('生成学习材料'), findsOneWidget);
       expect(find.text('导入字幕文件'), findsOneWidget);
-      expect(find.text('准备学习文稿'), findsNothing);
+      await tester.tap(find.byKey(const Key('prepare-learning-transcript')));
+      await tester.pump();
+      expect(prepared, 1);
     });
 
     testWidgets('en copy matches the unavailable surface', (tester) async {
       await tester.pumpWidget(
         _harness(
           locale: 'en',
-          view: _view(phase: TranscriptReadinessPhase.unavailable),
+          view: _view(
+            phase: TranscriptReadinessPhase.unavailable,
+            unavailableReason:
+                TranscriptPreparationAvailability.coreUnavailable,
+          ),
         ),
       );
 
+      expect(find.text('Learning materials are not ready'), findsOneWidget);
       expect(
-        find.text('Automatic transcript preparation is unavailable right now'),
+        find.textContaining('Local Core is not connected'),
         findsOneWidget,
       );
+      expect(find.text('Generate learning materials'), findsOneWidget);
     });
+
+    testWidgets(
+      'opened media with failed Core registration is not called missing',
+      (tester) async {
+        await tester.pumpWidget(
+          _harness(
+            locale: 'zh',
+            view: _view(
+              phase: TranscriptReadinessPhase.unavailable,
+              unavailableReason: TranscriptPreparationAvailability
+                  .mediaRegistrationUnavailable,
+            ),
+          ),
+        );
+
+        expect(find.textContaining('媒体文件已经在本机打开'), findsOneWidget);
+        expect(find.textContaining('当前媒体文件在本机不可用'), findsNothing);
+      },
+    );
   });
 }
 
@@ -246,6 +293,7 @@ TranscriptReadinessView _view({
   bool canCancel = false,
   bool canRetry = false,
   bool fingerprintMismatch = false,
+  TranscriptPreparationAvailability? unavailableReason,
   Future<void> Function()? onPrepare,
   Future<void> Function(SubtitleTrack)? onSelectTrack,
   Future<void> Function()? onImportSubtitle,
@@ -258,6 +306,7 @@ TranscriptReadinessView _view({
   canCancel: canCancel,
   canRetry: canRetry,
   fingerprintMismatch: fingerprintMismatch,
+  unavailableReason: unavailableReason,
   onPrepare: onPrepare ?? () async {},
   onSelectTrack: onSelectTrack ?? (_) async {},
   onImportSubtitle: onImportSubtitle ?? () async {},

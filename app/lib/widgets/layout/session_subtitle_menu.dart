@@ -27,7 +27,6 @@ class SessionSubtitleMenu extends StatelessWidget {
     required this.onImportSecondarySubtitle,
     required this.onSearchSecondarySubtitles,
     required this.onImportEmbeddedSubtitle,
-    required this.onOpenResources,
     required this.onArchiveMedia,
   });
 
@@ -38,11 +37,6 @@ class SessionSubtitleMenu extends StatelessWidget {
   final VoidCallback onSearchSecondarySubtitles;
   final VoidCallback onImportEmbeddedSubtitle;
 
-  /// Opens the subtitle and timeline resource manager. It used to be one of
-  /// the side panel's five tabs, where it could replace the transcript — a
-  /// technical inventory standing in for the text being studied. It belongs
-  /// with the other actions on this media instead.
-  final VoidCallback onOpenResources;
   final VoidCallback onArchiveMedia;
 
   @override
@@ -66,8 +60,6 @@ class SessionSubtitleMenu extends StatelessWidget {
             onSearchSecondarySubtitles();
           case 'import-embedded':
             onImportEmbeddedSubtitle();
-          case 'open-resources':
-            onOpenResources();
           case 'archive-media':
             onArchiveMedia();
         }
@@ -117,13 +109,6 @@ class SessionSubtitleMenu extends StatelessWidget {
           child: ListenMenuRow(
             icon: Icons.closed_caption_outlined,
             title: l.text('importEmbeddedText'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'open-resources',
-          child: ListenMenuRow(
-            icon: Icons.inventory_2_outlined,
-            title: l.text('subtitleResources'),
           ),
         ),
         PopupMenuItem(

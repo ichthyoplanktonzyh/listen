@@ -165,4 +165,3 @@ class MediaBlobFacts {
   final String sha256Hex;
   final int sizeBytes;
 }
-

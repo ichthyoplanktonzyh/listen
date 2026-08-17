@@ -115,13 +115,12 @@ contract and app migration instead of bypassing that check.
 The package journey runs exactly one generator: the `listen-gen` release
 bundle pinned by the committed `listen_gen.lock.json`. The App does **not**
 accept a source checkout, a `PYTHONPATH`, or an arbitrary `listen-gen`
-executable. Point it at the release manifest and pass the non-secret provider
-argv as a JSON string:
+executable. It automatically resolves the exact hash-pinned release from the
+app bundle, `.listen-gen`, or the standard sibling repository release folder:
 
 ```sh
-LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.2.0.release.json \
-LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","fixture","--fixture","/path/to/sample.asr.json","--aligner","fixture","--alignment-fixture","/path/to/alignment-result.json"]' \
-  flutter run -d macos
+python3 tool/listen_gen_artifacts.py verify
+flutter run -d macos
 ```
 
 Requirements and behavior:
@@ -131,13 +130,13 @@ Requirements and behavior:
 - before every run the App verifies the committed lock, the manifest's file
   hash, and the artifact's size and hash against the lock — any mismatch fails
   the run with a stable, non-retryable code and never launches anything;
-- the `.pyz` still requires Python 3.11+ on the machine;
-- do not place API keys or other credentials in
-  `LISTEN_GEN_PROVIDER_ARGUMENTS`; the configured provider wrapper owns secret
-  retrieval. These variables are not written to settings or
+- the `.pyz` still requires Python 3.11+ on the machine; the App probes fixed
+  local locations and launches the compatible interpreter by absolute path so
+  Finder's system-only `PATH` cannot select macOS Python 3.9;
+- tool and provider arguments are resolved by the App and are never stored in
   `backend.lock.json`;
-- without a connected Core, a provider argument set, and a local media path
-  with positive duration, the UI keeps local generation unavailable;
+- without a connected Core, pinned Gen bundle, complete local media toolchain,
+  and a local media path, the UI names the one missing prerequisite;
 - cleanup of descendants during a valid cancellation remains part of the
   generator contract.
 
@@ -146,28 +145,35 @@ To produce the bundle locally, build it from the pinned `listen-gen` source:
 ```sh
 cd /path/to/listen-gen
 python3 tools/release_bundle.py build \
-  --source-commit c3564c357ecd46c3a52326f1362b78874379a56f \
-  --output-parent /path/to/.listen-gen
+  --source-commit c05369770d7f4af98d62d0407f67767c905bbb9d \
+  --output-parent dist
+
+cd /path/to/listen-app
+python3 tool/listen_gen_artifacts.py verify
+```
+
+When the repositories are not siblings, install the built bundle into the
+App's ignored local artifact directory once:
+
+```sh
+python3 tool/listen_gen_artifacts.py install \
+  --manifest /path/to/listen-gen-0.5.0.release.json
 ```
 
 ### Real ASR with the whisper.cpp command provider
 
-Real ASR uses the whisper.cpp command provider through the same pinned
-bundle — only the provider argv changes; there is no executable override.
-The wrapper lives at a stable path outside any repository
-(`~/Library/Application Support/listen/tools/`), so generation keeps working
-regardless of which `listen-gen` branch is checked out:
+Real ASR uses the whisper.cpp provider through the same pinned bundle. The App
+resolves `whisper-cli`, `ffmpeg`, and `ffprobe` from the bundled pinned runtime
+or standard local tool locations, and selects the largest installed Whisper
+model from `~/Library/Application Support/listen/models/whisper/`:
 
 ```sh
-LISTEN_GEN_RELEASE_MANIFEST=/path/to/listen-gen-0.2.0.release.json \
-LISTEN_GEN_PROVIDER_ARGUMENTS='["--provider","command","--command","python3","--command-arg=/Users/shadow/Library/Application Support/listen/tools/whisper_cpp_wrapper.py","--command-arg={media}","--command-arg=--model","--command-arg=/Users/shadow/Library/Application Support/listen/models/whisper/ggml-base.bin"]' \
-  flutter run -d macos
+python3 tool/backend_artifacts.py verify
+python3 tool/listen_gen_artifacts.py verify
+flutter run -d macos
 ```
 
-The wrapper source is maintained in the `listen-gen` `pre-experiment` branch
-under `tools/whisper_cpp_wrapper.py`; refresh the stable copy from there when
-the wrapper changes. The model file is a whisper.cpp GGML download
-(e.g. `ggml-base.bin` from https://huggingface.co/ggerganov/whisper.cpp).
+The model file is a whisper.cpp GGML model such as `ggml-base.bin`.
 
 ### R1 tool ownership: whisper-cli, ffmpeg, ffprobe
 

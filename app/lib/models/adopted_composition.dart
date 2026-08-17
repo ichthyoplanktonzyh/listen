@@ -173,4 +173,18 @@ class AdoptedComposition {
     }
     return null;
   }
+
+  /// The media id of the composition's source media rendition, when one is
+  /// bound. This is the anchor Core lands the package `subtitle_text_track`
+  /// under, so it is the id to call `mediaSubtitles` with to read back the
+  /// subtitle track whose sentence ids are real `SubtitleSentenceId`s.
+  String? get sourceMediaId {
+    for (final rendition in _renditions) {
+      if (rendition.kind == 'media' && rendition.origin == 'source') {
+        final binding = rendition.binding;
+        if (binding is AdoptedCompositionMediaBinding) return binding.mediaId;
+      }
+    }
+    return null;
+  }
 }

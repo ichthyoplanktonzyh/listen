@@ -15,7 +15,8 @@ final RegExp _sha256Reference = RegExp(r'^sha256:[0-9a-f]{64}$');
 /// Parses one v2 machine event line. Any schema, protocol, tool identity, or
 /// shape violation is a protocol failure, not something to trust and continue
 /// on.
-GenMachineEvent parseListenGenMachineEventV2(Map<String, dynamic> json, {
+GenMachineEvent parseListenGenMachineEventV2(
+  Map<String, dynamic> json, {
   required String expectedToolVersion,
 }) {
   if (json['schema'] != 'listen_gen.machine-event.v2') {
@@ -86,23 +87,22 @@ GenMachineEvent parseListenGenMachineEventV2(Map<String, dynamic> json, {
     warningMessage: json['message'] as String?,
     packageSha256: json['package_sha256'] as String?,
     producedRenditions: [
-      ...(json['document_renditions'] as List<dynamic>? ?? const [])
-          .map(
-            (value) => _validatedSha256((value as Map)['rendition_id']),
-          ),
-      ...(json['media_renditions'] as List<dynamic>? ?? const [])
-          .map(
-            (value) => _validatedSha256((value as Map)['rendition_id']),
-          ),
+      ...(json['document_renditions'] as List<dynamic>? ?? const []).map(
+        (value) => _validatedSha256((value as Map)['rendition_id']),
+      ),
+      ...(json['media_renditions'] as List<dynamic>? ?? const []).map(
+        (value) => _validatedSha256((value as Map)['rendition_id']),
+      ),
     ],
     producedResources: (json['resources'] as List<dynamic>? ?? const [])
         .map((value) => _validatedSha256((value as Map)['resource_id']))
         .toList(growable: false),
-    completedWarnings:
-        (json['warnings'] as List<dynamic>? ?? const []).map((value) {
+    completedWarnings: (json['warnings'] as List<dynamic>? ?? const [])
+        .map((value) {
           final map = value as Map;
           return '${map['code']}: ${map['message']}';
-        }).toList(growable: false),
+        })
+        .toList(growable: false),
     code: json['code'] as String?,
     message: json['message'] as String?,
   );
@@ -116,7 +116,8 @@ String _validatedSha256(Object? value) {
 }
 
 class ListenGenProcessFailure implements Exception {
-  const ListenGenProcessFailure(this.code, {
+  const ListenGenProcessFailure(
+    this.code, {
     this.message,
     this.retryable = true,
   });
@@ -154,27 +155,33 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
   /// no executable override — an arbitrary `listen-gen` on the machine is not
   /// something this app is willing to launch.
   LocalListenGenProcessService({
+    required this.pythonExecutable,
     ListenGenReleaseService? releaseService,
   }) : _releaseService = releaseService ?? LocalListenGenReleaseService();
 
   final ListenGenReleaseService _releaseService;
+  final String Function() pythonExecutable;
 
   @override
   bool get isConfigured => _releaseService.isConfigured;
 
   @override
-  ContentGeneratorState get state =>
-      isConfigured
-          ? ContentGeneratorState.ready
-          : ContentGeneratorState.generatorMissing;
+  ContentGeneratorState get state => isConfigured
+      ? ContentGeneratorState.ready
+      : ContentGeneratorState.generatorMissing;
 
   @override
-  Future<ListenGenProcessRun> start(
-    CapabilityGenerationRequest request,
-  ) async {
+  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) async {
     if (!isConfigured) {
       throw const ListenGenProcessFailure(
         'generator_not_configured',
+        retryable: false,
+      );
+    }
+    final resolvedPython = pythonExecutable();
+    if (resolvedPython.isEmpty || !await File(resolvedPython).exists()) {
+      throw const ListenGenProcessFailure(
+        'generator_python_unavailable',
         retryable: false,
       );
     }
@@ -210,22 +217,27 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
     // The capability request is caller-owned data: write it next to the run
     // and launch the pinned bundle against that exact document.
     final requestPath = '${directory.path}/capability-request.json';
+    String? subtitlePath;
     try {
-      await File(requestPath).writeAsString(
-        jsonEncode(request.requestJson),
-        flush: true,
-      );
+      await File(
+        requestPath,
+      ).writeAsString(jsonEncode(request.requestJson), flush: true);
+      final subtitle = request.subtitleSrt;
+      if (subtitle != null) {
+        subtitlePath = '${directory.path}/selected-subtitle.srt';
+        await File(subtitlePath).writeAsString(subtitle, flush: true);
+      }
     } catch (_) {
       await directory.delete(recursive: true);
       throw const ListenGenProcessFailure('generator_start_failed');
     }
 
     try {
-      // `/usr/bin/env python3 <copy>` matches the zipapp's own
-      // `#!/usr/bin/env python3` shebang without depending on an executable
-      // bit the copy does not carry. No shell is involved.
-      final process = await Process.start('/usr/bin/env', [
-        'python3',
+      // Launch the already-probed Python >=3.11 runtime by absolute path.
+      // Finder's PATH resolves python3 to macOS Python 3.9 on supported hosts,
+      // which exits before Gen can emit its machine protocol. No shell or
+      // second PATH lookup is involved here.
+      final process = await Process.start(resolvedPython, [
         verifiedCopyPath,
         'package',
         'from-capability',
@@ -234,6 +246,7 @@ final class LocalListenGenProcessService implements ListenGenProcessService {
         outputPath,
         '--machine-events',
         ...request.providerArguments,
+        if (subtitlePath != null) ...['--subtitle', subtitlePath],
       ]);
       return _LocalListenGenProcessRun(
         process: process,
@@ -365,17 +378,25 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
         }
       case GenEventKind.accepted:
         if (_nextSequence <= 1) {
-          throw const FormatException('listen-gen accepted must follow protocol');
+          throw const FormatException(
+            'listen-gen accepted must follow protocol',
+          );
         }
         if (_terminal != null) {
-          throw const FormatException('listen-gen emitted events after terminal');
+          throw const FormatException(
+            'listen-gen emitted events after terminal',
+          );
         }
       case GenEventKind.planned:
         if (_nextSequence <= 2) {
-          throw const FormatException('listen-gen planned must follow accepted');
+          throw const FormatException(
+            'listen-gen planned must follow accepted',
+          );
         }
         if (_terminal != null) {
-          throw const FormatException('listen-gen emitted events after terminal');
+          throw const FormatException(
+            'listen-gen emitted events after terminal',
+          );
         }
       case GenEventKind.running || GenEventKind.warning:
         if (_nextSequence <= 3) {
@@ -384,23 +405,33 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
           );
         }
         if (_terminal != null) {
-          throw const FormatException('listen-gen emitted events after terminal');
+          throw const FormatException(
+            'listen-gen emitted events after terminal',
+          );
         }
       case GenEventKind.failed:
         // Allowed right after protocol (sequence 1) or later.
         if (_nextSequence < 1) {
-          throw const FormatException('listen-gen failed event is out of place');
+          throw const FormatException(
+            'listen-gen failed event is out of place',
+          );
         }
         if (_terminal != null) {
-          throw const FormatException('listen-gen emitted events after terminal');
+          throw const FormatException(
+            'listen-gen emitted events after terminal',
+          );
         }
         _terminal = event.terminal;
       case GenEventKind.completed || GenEventKind.cancelled:
         if (_nextSequence < 2) {
-          throw const FormatException('listen-gen terminal event is out of place');
+          throw const FormatException(
+            'listen-gen terminal event is out of place',
+          );
         }
         if (_terminal != null) {
-          throw const FormatException('listen-gen emitted events after terminal');
+          throw const FormatException(
+            'listen-gen emitted events after terminal',
+          );
         }
         _terminal = event.terminal;
     }

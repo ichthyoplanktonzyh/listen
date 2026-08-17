@@ -126,6 +126,46 @@ class MediaSessionCoordinator {
     currentMaterial = null;
   }
 
+  /// Leaves the current registered-media session for a different kind of
+  /// material on the same workbench.
+  ///
+  /// A document is not a modal laid over the current video: it replaces the
+  /// active material. The old decoder, media identity, transcript, timeline
+  /// and analysis therefore all have to leave together. If the document later
+  /// gains TTS, the shell can open that derived rendition on the same adapter
+  /// without registering a second Material.
+  Future<void> deactivateForMaterialSwitch() async {
+    ++_sessionEpoch;
+    final previousMediaId = player.mediaId;
+    final previousPosition = player.position;
+    currentMaterial = null;
+
+    player.clearMedia();
+    player.setPosition(Duration.zero);
+    player.setDuration(Duration.zero);
+    player.setPlaying(false);
+    player.setStatus('');
+    player.setSourceLoop(null, null);
+    subtitle.setPrimaryTrack(null);
+    subtitle.setSecondaryTrack(null);
+    subtitle.setCurrentPrimaryCue(null);
+    subtitle.setCurrentSecondaryCue(null);
+    subtitle.setSubtitleResources(const []);
+    subtitle.setSubtitleResourceCapabilities(const {});
+    subtitle.clearSpeechEnhancements();
+
+    await adapter.close();
+    if (previousMediaId != null && repository.isAvailable) {
+      try {
+        await repository.saveProgress(previousMediaId, previousPosition);
+      } on Object {
+        // Progress persistence is best-effort during a material switch. The
+        // new document must remain openable even when Core cannot save the old
+        // playback position.
+      }
+    }
+  }
+
   // ── Media open ──
 
   Future<void> openMedia() async {
@@ -153,7 +193,7 @@ class MediaSessionCoordinator {
     currentMaterial = null;
     onMediaSwitched();
     player.clearMedia();
-    player.setMediaPath(path);
+    player.setMediaPath(path, kind: _mediaKindFromPath(path));
     player.setPosition(Duration.zero);
     player.setDuration(Duration.zero);
     subtitle.setPrimaryTrack(null);
@@ -197,6 +237,7 @@ class MediaSessionCoordinator {
           path: path,
           title: media.title,
           fingerprint: media.fingerprint,
+          kind: media.kind,
         );
         player.setMediaRetained(media.retainedAtMs != null);
       }
@@ -391,6 +432,7 @@ class MediaSessionCoordinator {
         path: copy.path,
         title: media.title,
         fingerprint: media.fingerprint,
+        kind: media.kind,
       );
       player.setMediaRetained(media.retainedAtMs != null);
       // The managed rebind keeps the same fingerprint-derived media id, so
@@ -430,6 +472,19 @@ class MediaSessionCoordinator {
       // into a session, so it is always reset.
       player.setRetentionInFlight(false);
     }
+  }
+
+  static String? _mediaKindFromPath(String path) {
+    final dot = path.lastIndexOf('.');
+    if (dot < 0) return null;
+    final extension = path.substring(dot + 1).toLowerCase();
+    if (const {'m4a', 'mp3', 'wav', 'flac', 'aac', 'ogg'}.contains(extension)) {
+      return 'audio';
+    }
+    if (const {'mp4', 'mkv', 'mov', 'webm', 'avi'}.contains(extension)) {
+      return 'video';
+    }
+    return null;
   }
 
   /// The secondary Keep: retain the current media without copying it. The

@@ -4,8 +4,13 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 import '../data/repositories/capability_repository.dart';
+import '../data/repositories/resource_repository.dart';
 import '../models/adopted_composition.dart';
+import '../models/composition.dart';
+import '../models/timeline.dart';
+import 'composition_core_projection.dart';
 import 'composition_resolution.dart';
+import 'composition_resource_projection.dart';
 
 /// Resolves what the adopted-composition surface needs to render: the adopted
 /// composition (through Core's single composition interface) and its learner
@@ -15,9 +20,13 @@ import 'composition_resolution.dart';
 /// payload and blob comes back through Core, re-verified by it. Package
 /// identity, manifest, and provider raw output stay out of this surface.
 class CompositionSessionService {
-  CompositionSessionService({required this.repository});
+  CompositionSessionService({
+    required this.repository,
+    required this.resources,
+  });
 
   final CapabilityRepository repository;
+  final ResourceRepository resources;
 
   /// The resolved learner content of the currently adopted composition, or
   /// null when nothing is adopted (a typed not-found) or when the required
@@ -44,8 +53,8 @@ class CompositionSessionService {
         alignment.resourceId,
       );
     }
-    final structuredReadingPayload =
-        await repository.readCompositionResourcePayload(
+    final structuredReadingPayload = await repository
+        .readCompositionResourcePayload(
           materialId,
           structuredReading.resourceId,
         );
@@ -62,12 +71,100 @@ class CompositionSessionService {
       derivedMediaPath = _writeMediaBlob(media, blob);
     }
 
+    final projected = await _readWorkbenchResources(materialId, adopted);
+
     return resolveCompositionContent(
       composition: adopted,
       structuredReadingPayload: structuredReadingPayload,
       alignmentPayload: alignmentPayload,
       derivedMediaPath: derivedMediaPath,
+      transcript: projected.transcript,
+      enhancements: projected.enhancements,
     );
+  }
+
+  /// Reads the composition's workbench resources from Core, never from the
+  /// package payload.
+  ///
+  /// The adopted `subtitle_text_track` is a real subtitle track under the
+  /// composition's source media; its sentence ids are global
+  /// `SubtitleSentenceId`s. Its five analysis resource families are read back
+  /// through the track's LLTimeline export, already re-keyed by Core. The
+  /// tokenless `timed_text_track` has no Core landing and remains the honest
+  /// display-only fallback.
+  ///
+  /// Every one of these is optional by contract, so this never fails the
+  /// composition: a resource that is absent, unreadable, or unresolvable
+  /// simply contributes nothing.
+  Future<
+    ({CompositionResourceProjection enhancements, SubtitleTrack? transcript})
+  >
+  _readWorkbenchResources(String materialId, AdoptedComposition adopted) async {
+    try {
+      final sourceMediaId = adopted.sourceMediaId;
+      if (sourceMediaId != null) {
+        final tracks = await resources.mediaSubtitles(sourceMediaId);
+        final track = _packageSubtitleTrack(tracks);
+        if (track != null) {
+          final document = await resources.exportTimelineJson(track.id);
+          return (
+            enhancements: projectCompositionResourcesFromCore(
+              track: track,
+              documentJson: document.json,
+            ),
+            transcript: track,
+          );
+        }
+      }
+      final timedTrackPayload = await _payloadOfKind(
+        materialId,
+        adopted,
+        'timed_text_track',
+      );
+      return (
+        enhancements: const CompositionResourceProjection(),
+        transcript: projectCompositionTimedTranscript(
+          timedTrackPayload,
+          trackId: 'composition:${adopted.editionId}',
+        ),
+      );
+    } on Object {
+      return (
+        enhancements: const CompositionResourceProjection(),
+        transcript: null,
+      );
+    }
+  }
+
+  /// The package subtitle track Core landed for this composition, when it is
+  /// still available and still carries sentences.
+  SubtitleTrack? _packageSubtitleTrack(List<SubtitleTrack> tracks) {
+    for (final track in tracks) {
+      if (track.source == 'package:subtitle_text_track' &&
+          track.usableForLearning) {
+        return track;
+      }
+    }
+    return null;
+  }
+
+  /// The exact payload of one resource kind, or null when the composition
+  /// does not carry it or the read fails.
+  Future<List<int>?> _payloadOfKind(
+    String materialId,
+    AdoptedComposition adopted,
+    String kind,
+  ) async {
+    final resource = adopted.resourceOfKind(kind);
+    if (resource == null) return null;
+    try {
+      return await repository.readCompositionResourcePayload(
+        materialId,
+        resource.resourceId,
+      );
+    } on Object {
+      return null;
+    }
   }
 
   /// Writes the exact derived audio bytes to a temporary file for the player.
@@ -79,8 +176,9 @@ class CompositionSessionService {
       'audio/mp4' => 'm4a',
       'audio/mpeg' => 'mp3',
       'audio/wav' => 'wav',
-      final other when other.startsWith('audio/') =>
-        other.substring('audio/'.length),
+      final other when other.startsWith('audio/') => other.substring(
+        'audio/'.length,
+      ),
       _ => 'bin',
     };
     final directory = Directory(

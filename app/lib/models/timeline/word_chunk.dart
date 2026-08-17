@@ -39,6 +39,7 @@ class WordTiming {
   final String providerVersion;
 
   WordTiming copyWith({
+    String? sentenceId,
     Duration? start,
     Duration? end,
     String? source,
@@ -46,7 +47,7 @@ class WordTiming {
     String? providerVersion,
     double? confidence,
   }) => WordTiming(
-    sentenceId: sentenceId,
+    sentenceId: sentenceId ?? this.sentenceId,
     tokenIndex: tokenIndex,
     text: text,
     start: start ?? this.start,
@@ -225,20 +226,23 @@ class ProsodyAnalysis {
     this.parentWordTimelineId,
   });
 
-  factory ProsodyAnalysis.fromJson(Map<String, dynamic> json) => ProsodyAnalysis(
-    id: json['id'] as String,
-    trackId: json['track_id'] as String,
-    mediaId: json['media_id'] as String,
-    parentWordTimelineId: json['parent_word_timeline_id'] as String?,
-    providerId: json['provider_id'] as String,
-    providerVersion: json['provider_version'] as String,
-    algorithm: json['algorithm'] as String,
-    status: json['status'] as String,
-    chunks: ((json['chunks'] as List<dynamic>?) ?? const [])
-        .map((value) => ProsodicChunk.fromJson(value as Map<String, dynamic>))
-        .toList(growable: false),
-    anchorCount: ((json['anchors'] as List<dynamic>?) ?? const []).length,
-  );
+  factory ProsodyAnalysis.fromJson(Map<String, dynamic> json) =>
+      ProsodyAnalysis(
+        id: json['id'] as String,
+        trackId: json['track_id'] as String,
+        mediaId: json['media_id'] as String,
+        parentWordTimelineId: json['parent_word_timeline_id'] as String?,
+        providerId: json['provider_id'] as String,
+        providerVersion: json['provider_version'] as String,
+        algorithm: json['algorithm'] as String,
+        status: json['status'] as String,
+        chunks: ((json['chunks'] as List<dynamic>?) ?? const [])
+            .map(
+              (value) => ProsodicChunk.fromJson(value as Map<String, dynamic>),
+            )
+            .toList(growable: false),
+        anchorCount: ((json['anchors'] as List<dynamic>?) ?? const []).length,
+      );
 
   final String id;
   final String trackId;

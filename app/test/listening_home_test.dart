@@ -12,7 +12,12 @@ import 'package:llplayer_next/widgets/home/listening_home.dart';
 
 import 'support/learning_material_fixtures.dart';
 
-MediaItem _media(String id, String title, int updatedAtMs, {String kind = 'video'}) => MediaItem(
+MediaItem _media(
+  String id,
+  String title,
+  int updatedAtMs, {
+  String kind = 'video',
+}) => MediaItem(
   id: id,
   path: '/media/$id.mp4',
   fingerprint: 'fp-$id',
@@ -65,10 +70,8 @@ MaterialDetails _details(
   shape: shape,
 );
 
-DocumentRendition _textAsset(String id) => documentRenditionForText(
-  'Readable text',
-  id: '$id-text',
-);
+DocumentRendition _textAsset(String id) =>
+    documentRenditionForText('Readable text', id: '$id-text');
 
 MediaRendition _mediaAsset(String id) => mediaRendition(
   id: '$id-media',
@@ -136,8 +139,7 @@ void main() {
     VoidCallback? onOpenDocument,
     List<PersonalLibraryEntry>? personalLibrary,
     List<PersonalLibraryEntry>? offlineEntries,
-    void Function(PersonalLibraryEntry entry)? onOpenLibraryDocument,
-    void Function(PersonalLibraryEntry entry)? onOpenLibraryMedia,
+    void Function(PersonalLibraryEntry entry)? onOpenLibraryEntry,
   }) => MaterialApp(
     theme: ListenTheme.light(),
     locale: const Locale('zh'),
@@ -156,8 +158,7 @@ void main() {
         personalLibrary: personalLibrary,
         offlineEntries: offlineEntries,
         familiarSupplyEnabled: true,
-        onOpenLibraryDocument: onOpenLibraryDocument ?? (_) {},
-        onOpenLibraryMedia: onOpenLibraryMedia ?? (_) {},
+        onOpenLibraryEntry: onOpenLibraryEntry ?? (_) {},
         onStartExtensiveEntry: (_) {},
         onStartIntensiveEntry: (_) {},
         onSetLibraryIntent: (_, _) {},
@@ -182,21 +183,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('添加内容来源'), findsOneWidget);
-    // The library is a segment of "listen" now: it carries no page title of
-    // its own, and no longer answers "what should I do now" — the continue
-    // card and the status strip moved to the today pane.
+    expect(find.text('资料库'), findsOneWidget);
+    expect(find.text('导入材料'), findsOneWidget);
+    // The library no longer answers "what should I do now" — the continue
+    // card belongs to Home, while this page manages retained materials.
     expect(find.text('继续当前内容会话'), findsNothing);
 
-    // The document entry is a first-class primary action beside the existing
-    // media and URL entries.
+    // One import action accepts every supported material source.
+    await tester.tap(find.text('导入材料'));
+    await tester.pumpAndSettle();
     expect(find.text('打开文档'), findsOneWidget);
     expect(find.text('打开视频或音频'), findsOneWidget);
     expect(find.text('打开网址'), findsOneWidget);
 
     await tester.tap(find.text('打开文档'));
+    await tester.pumpAndSettle();
     expect(openDocumentCalls, 1);
+    await tester.tap(find.text('导入材料'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('打开视频或音频'));
+    await tester.pumpAndSettle();
     expect(openMediaCalls, 1);
     expect(tester.takeException(), isNull);
   });
@@ -219,7 +225,7 @@ void main() {
           .widget<SingleChildScrollView>(
             find
                 .ancestor(
-                  of: find.text('添加内容来源'),
+                  of: find.text('资料库'),
                   matching: find.byType(SingleChildScrollView),
                 )
                 .first,
@@ -240,7 +246,7 @@ void main() {
           .widget<ConstrainedBox>(
             find
                 .ancestor(
-                  of: find.text('添加内容来源'),
+                  of: find.text('资料库'),
                   matching: find.byType(ConstrainedBox),
                 )
                 .first,
@@ -258,7 +264,7 @@ void main() {
     await tester.pumpWidget(app(onOpenMedia: () {}));
     await tester.pumpAndSettle();
 
-    expect(find.text('添加内容来源'), findsOneWidget);
+    expect(find.text('资料库'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -274,7 +280,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('导入材料'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('打开网址'));
+    await tester.pumpAndSettle();
     expect(openOnlineCalls, 1);
     expect(tester.takeException(), isNull);
   });
@@ -308,9 +317,8 @@ void main() {
     expect(find.text('Online Media One'), findsNothing);
     expect(find.text('Offline Media One'), findsOneWidget);
 
-    // The filter is a view, not a destination: clearing it restores the full
-    // library.
-    await tester.tap(find.text('离线下载'));
+    // The filter is a view, not a destination: All restores the full library.
+    await tester.tap(find.widgetWithText(ChoiceChip, '全部'));
     await tester.pumpAndSettle();
 
     expect(find.text('Online Media One'), findsOneWidget);
@@ -348,9 +356,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('capability filters are views: All, Read, Listen/Watch', (
-    tester,
-  ) async {
+  testWidgets('material type filters are views of one library', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -367,24 +373,24 @@ void main() {
     expect(find.text('A Media File'), findsOneWidget);
     expect(find.text('A Mixed Material'), findsOneWidget);
 
-    // Read keeps text and mixed; media-only disappears.
-    await tester.tap(find.widgetWithText(ChoiceChip, '阅读'));
+    // Articles keeps readable text and mixed materials; media-only disappears.
+    await tester.tap(find.widgetWithText(ChoiceChip, '文章'));
     await tester.pumpAndSettle();
 
     expect(find.text('A Text Document'), findsOneWidget);
     expect(find.text('A Mixed Material'), findsOneWidget);
     expect(find.text('A Media File'), findsNothing);
 
-    // Listen keeps audio media and mixed; text-only disappears.
-    await tester.tap(find.widgetWithText(ChoiceChip, '听'));
+    // Audio keeps audio and mixed materials; text-only disappears.
+    await tester.tap(find.widgetWithText(ChoiceChip, '音频'));
     await tester.pumpAndSettle();
 
     expect(find.text('A Media File'), findsOneWidget);
     expect(find.text('A Mixed Material'), findsOneWidget);
     expect(find.text('A Text Document'), findsNothing);
 
-    // Watch keeps only materials with a usable video media.
-    await tester.tap(find.widgetWithText(ChoiceChip, '看'));
+    // Video keeps only materials with a usable video rendition.
+    await tester.tap(find.widgetWithText(ChoiceChip, '视频'));
     await tester.pumpAndSettle();
 
     expect(find.text('A Media File'), findsNothing);
@@ -392,7 +398,7 @@ void main() {
     expect(find.text('A Text Document'), findsNothing);
 
     // Clearing the view restores the full library.
-    await tester.tap(find.widgetWithText(ChoiceChip, '全部'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '全部类型'));
     await tester.pumpAndSettle();
 
     expect(find.text('A Text Document'), findsOneWidget);
@@ -401,36 +407,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a mixed row states Read and Listen/Watch explicitly', (
-    tester,
-  ) async {
+  testWidgets('a mixed row enters the one workbench session', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    var documentOpens = 0;
-    var mediaOpens = 0;
+    var opens = 0;
     await tester.pumpWidget(
       app(
         onOpenMedia: () {},
         personalLibrary: [_mixedEntry('mixed-1', 'A Mixed Material')],
-        onOpenLibraryDocument: (_) => documentOpens += 1,
-        onOpenLibraryMedia: (_) => mediaOpens += 1,
+        onOpenLibraryEntry: (_) => opens += 1,
       ),
     );
     await tester.pumpAndSettle();
 
-    // Both capabilities are named — the row never guesses from a bare tap.
-    expect(find.widgetWithText(TextButton, '阅读'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, '打开媒体'), findsOneWidget);
+    // One primary entry, and no second "read it instead" door hiding in the
+    // overflow: the workbench decides what a mixed material shows.
+    expect(find.text('混合材料'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '继续学习'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '继续学习'));
+    expect(opens, 1);
 
-    await tester.tap(find.widgetWithText(TextButton, '阅读'));
-    expect(documentOpens, 1);
-    await tester.tap(find.widgetWithText(TextButton, '打开媒体'));
-    expect(mediaOpens, 1);
+    await tester.tap(find.byTooltip('更多操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('阅读'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('text-only rows open the document, not media actions', (
+  testWidgets('text-only rows open the material, not media actions', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 900));
@@ -441,20 +445,19 @@ void main() {
       app(
         onOpenMedia: () {},
         personalLibrary: [_textEntry('text-1', 'A Text Document')],
-        onOpenLibraryDocument: (_) => documentOpens += 1,
+        onOpenLibraryEntry: (_) => documentOpens += 1,
       ),
     );
     await tester.pumpAndSettle();
 
-    // Read is present; no media action, no media triage menu, no extensive or
-    // intensive buttons for a row with nothing to play.
-    expect(find.widgetWithText(TextButton, '阅读'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, '打开媒体'), findsNothing);
+    // The same primary wording enters the document workspace for text-only
+    // material; media-only secondary controls are absent.
+    expect(find.widgetWithText(FilledButton, '继续学习'), findsOneWidget);
     expect(find.text('泛听'), findsNothing);
     expect(find.text('精听'), findsNothing);
     expect(find.byTooltip('更多操作'), findsNothing);
 
-    await tester.tap(find.widgetWithText(TextButton, '阅读'));
+    await tester.tap(find.widgetWithText(FilledButton, '继续学习'));
     expect(documentOpens, 1);
     expect(tester.takeException(), isNull);
   });

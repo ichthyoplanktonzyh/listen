@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -10,6 +11,10 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import repo_status as status
+
+
+RELEASE_SCHEMA = '{"title":"content package v3 release"}\n'
+RELEASE_SCHEMA_SHA = "sha256:" + hashlib.sha256(RELEASE_SCHEMA.encode()).hexdigest()
 
 
 def make_repo(root: Path) -> None:
@@ -33,11 +38,10 @@ def commit(root: Path, files: dict[str, str], message: str = "fixture") -> str:
 
 def contract_lock() -> dict:
     return {
-        "authority": {"path": "contracts/content-package/v1", "repository": "owner/listen-core"},
-        "manifest_schema_id": "https://listen.dev/manifest.json",
-        "package_schema": "listen.resource-package.v1",
-        "resource_schema_id": "https://listen.dev/resource.json",
-        "schema_version": 1,
+        "authority": {"path": "contracts/content-package/v3", "repository": "owner/listen-core"},
+        "package_schema": "listen.content-package.release.v3",
+        "release_schema_id": "listen.content-package.release.v3",
+        "schema_version": 3,
     }
 
 
@@ -52,7 +56,8 @@ def write_locks(app: Path, core_sha: str, gen_sha: str, contract: dict) -> None:
         "tool": {"version": "0.2.0"},
         "content_package_contract": {
             **contract,
-            "canonical_sha256": status.canonical_contract_sha(contract),
+            "contract_version": "1.1.0",
+            "canonical_sha256": RELEASE_SCHEMA_SHA,
         },
     }))
 
@@ -102,19 +107,17 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class ContractTests(unittest.TestCase):
-    def test_canonical_digest_is_over_gen_lock_not_app_wrapper(self):
+    def test_gen_contract_lock_fields_match_without_conflating_schema_digest(self):
         lock = contract_lock()
-        self.assertTrue(status.canonical_contract_sha(lock).startswith("sha256:"))
         self.assertEqual(status.compare_contract_locks({
-            **lock, "canonical_sha256": status.canonical_contract_sha(lock)
+            **lock, "canonical_sha256": RELEASE_SCHEMA_SHA
         }, lock), [])
 
-    def test_contract_lock_field_and_digest_mismatches_are_reported(self):
+    def test_contract_lock_field_mismatches_are_reported(self):
         gen = contract_lock()
-        app = {**gen, "schema_version": 2, "canonical_sha256": "sha256:" + "0" * 64}
+        app = {**gen, "schema_version": 2, "canonical_sha256": RELEASE_SCHEMA_SHA}
         problems = status.compare_contract_locks(app, gen)
         self.assertTrue(any("schema_version" in problem for problem in problems))
-        self.assertTrue(any("canonical_sha256" in problem for problem in problems))
 
     def test_real_shaped_locks_and_resolvable_pins_are_consistent(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -128,6 +131,7 @@ class ContractTests(unittest.TestCase):
             core_sha = commit(core, {
                 "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
                 "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+                "contracts/content-package/v3/release.schema.json": RELEASE_SCHEMA,
             })
             make_repo(gen)
             lock = contract_lock()
@@ -152,6 +156,7 @@ class ContractTests(unittest.TestCase):
             core_sha = commit(core, {
                 "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
                 "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+                "contracts/content-package/v3/release.schema.json": RELEASE_SCHEMA,
             })
             make_repo(gen)
             pinned_lock = contract_lock()
@@ -175,6 +180,7 @@ class ContractTests(unittest.TestCase):
             core_sha = commit(core, {
                 "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
                 "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+                "contracts/content-package/v3/release.schema.json": RELEASE_SCHEMA,
             })
             make_repo(gen)
             pinned_lock = contract_lock()
@@ -200,6 +206,7 @@ class ContractTests(unittest.TestCase):
             core_sha = commit(core, {
                 "crates/api-http/src/lib.rs": 'pub const CONTRACT_VERSION: &str = "1.1.0";\n',
                 "contracts/openapi/v1.yaml": "info:\n  version: 1.1.0\n",
+                "contracts/content-package/v3/release.schema.json": RELEASE_SCHEMA,
             })
             make_repo(gen)
             lock = contract_lock()

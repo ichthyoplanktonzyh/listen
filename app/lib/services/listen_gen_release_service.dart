@@ -51,8 +51,18 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
   LocalListenGenReleaseService({
     String? manifestPath,
     ListenGenLockBytesLoader? loadLockBytes,
-  }) : _manifestPath =
-           manifestPath ?? Platform.environment[_manifestEnvironmentKey],
+    Map<String, String>? environment,
+    String? resolvedExecutablePath,
+    Directory? workingDirectory,
+    bool discoverDefaultLocations = true,
+  }) : _manifestPath = _resolveManifestPath(
+         manifestPath: manifestPath,
+         environment: environment ?? Platform.environment,
+         resolvedExecutablePath:
+             resolvedExecutablePath ?? Platform.resolvedExecutable,
+         workingDirectory: workingDirectory ?? Directory.current.absolute,
+         discoverDefaultLocations: discoverDefaultLocations,
+       ),
        _loadLockBytes = loadLockBytes ?? _loadLockFromBundle;
 
   static const _manifestEnvironmentKey = 'LISTEN_GEN_RELEASE_MANIFEST';
@@ -102,6 +112,123 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
 
   final String? _manifestPath;
   final ListenGenLockBytesLoader _loadLockBytes;
+
+  /// Finds the pinned release without requiring a terminal-only environment
+  /// variable. Release and Finder launches read the bundle staged beside the
+  /// app; local development reads either the ignored `.listen-gen` install or
+  /// the exact hash-pinned bundle produced by the sibling `listen-gen` repo.
+  ///
+  /// Discovery never makes a bundle trusted. [verify] still re-reads the
+  /// committed Flutter asset and hashes both discovered files before every
+  /// launch. An explicit environment override remains first so integration
+  /// tests can point at a run-owned bundle.
+  static String? _resolveManifestPath({
+    required String? manifestPath,
+    required Map<String, String> environment,
+    required String resolvedExecutablePath,
+    required Directory workingDirectory,
+    required bool discoverDefaultLocations,
+  }) {
+    if (manifestPath != null) return manifestPath;
+    final configured = environment[_manifestEnvironmentKey];
+    if (configured != null) return configured;
+    if (!discoverDefaultLocations) return null;
+
+    final executable = File(resolvedExecutablePath);
+    final contents = executable.parent.parent;
+    final bundled = _singleReleaseManifest(
+      Directory(
+        '${contents.path}${Platform.pathSeparator}Resources'
+        '${Platform.pathSeparator}runtime${Platform.pathSeparator}listen-gen',
+      ),
+    );
+    if (bundled != null) return bundled;
+
+    final developmentLock = _readDevelopmentLock(workingDirectory);
+    if (developmentLock == null) return null;
+    final installed = _matchingManifest(
+      Directory('${workingDirectory.path}${Platform.pathSeparator}.listen-gen'),
+      developmentLock,
+    );
+    if (installed != null) return installed;
+
+    final siblingRelease = Directory(
+      '${workingDirectory.parent.path}${Platform.pathSeparator}listen-gen'
+      '${Platform.pathSeparator}dist${Platform.pathSeparator}listen-gen-'
+      '${developmentLock.toolVersion}',
+    );
+    return _matchingManifest(siblingRelease, developmentLock);
+  }
+
+  static String? _singleReleaseManifest(Directory directory) {
+    if (!directory.existsSync()) return null;
+    final matches = directory
+        .listSync(followLinks: false)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.release.json'))
+        .where(
+          (file) =>
+              FileSystemEntity.typeSync(file.path, followLinks: false) ==
+              FileSystemEntityType.file,
+        )
+        .toList(growable: false);
+    return matches.length == 1 ? matches.single.path : null;
+  }
+
+  static _DevelopmentLock? _readDevelopmentLock(Directory workingDirectory) {
+    final file = File(
+      '${workingDirectory.path}${Platform.pathSeparator}listen_gen.lock.json',
+    );
+    if (FileSystemEntity.typeSync(file.path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(file.readAsStringSync());
+      if (decoded is! Map<String, dynamic>) return null;
+      final tool = decoded['tool'];
+      final releaseManifest = decoded['release_manifest'];
+      if (tool is! Map<String, dynamic> ||
+          releaseManifest is! Map<String, dynamic>) {
+        return null;
+      }
+      final toolVersion = tool['version'];
+      final filename = releaseManifest['filename'];
+      final digest = releaseManifest['sha256'];
+      if (toolVersion is! String ||
+          toolVersion.isEmpty ||
+          filename is! String ||
+          filename.isEmpty ||
+          _basename(filename) != filename ||
+          digest is! String ||
+          !digest.startsWith('sha256:')) {
+        return null;
+      }
+      return _DevelopmentLock(
+        toolVersion: toolVersion,
+        manifestFilename: filename,
+        manifestSha256: digest,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  static String? _matchingManifest(Directory directory, _DevelopmentLock lock) {
+    final path =
+        '${directory.path}${Platform.pathSeparator}${lock.manifestFilename}';
+    if (FileSystemEntity.typeSync(path, followLinks: false) !=
+        FileSystemEntityType.file) {
+      return null;
+    }
+    try {
+      return _digest(File(path).readAsBytesSync()) == lock.manifestSha256
+          ? path
+          : null;
+    } on Object {
+      return null;
+    }
+  }
 
   static Future<List<int>> _loadLockFromBundle() async {
     final data = await rootBundle.load(_lockAssetKey);
@@ -179,7 +306,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'canonical_sha256',
       'contract_version',
     });
-    read.string(contract, 'contract_version');
+    final contractVersion = read.string(contract, 'contract_version');
     final authority = read.object(contract['authority']);
     read.exactKeys(authority, const {'repository', 'path'});
     final authorityRepository = read.string(authority, 'repository');
@@ -196,6 +323,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       releaseSchemaId: read.string(contract, 'release_schema_id'),
       packageSchema: packageSchema,
       schemaVersion: contractSchemaVersion,
+      contractVersion: contractVersion,
       canonicalSha256: read.sha256(contract, 'canonical_sha256'),
     );
 
@@ -205,10 +333,12 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     read.expect(pythonRequires == _pythonRequires);
 
     final runtimeIdentity = read.object(root['runtime_identity']);
-    read.exactKeys(
-      runtimeIdentity,
-      const {'schema', 'version', 'runtime', 'toolchain'},
-    );
+    read.exactKeys(runtimeIdentity, const {
+      'schema',
+      'version',
+      'runtime',
+      'toolchain',
+    });
     final runtimeIdentitySchema = read.string(runtimeIdentity, 'schema');
     read.expect(runtimeIdentitySchema == _runtimeIdentitySchema);
     final runtimeIdentityVersion = read.integer(runtimeIdentity, 'version');
@@ -389,7 +519,10 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       'canonical_sha256',
       'contract_version',
     });
-    read.string(contract, 'contract_version');
+    read.expect(
+      read.string(contract, 'contract_version') ==
+          lock.contract.contractVersion,
+    );
     final authority = read.object(contract['authority']);
     read.exactKeys(authority, const {'repository', 'path'});
     read.expect(
@@ -420,16 +553,17 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
     // immutable record: schema/version, python runtime, and the external
     // toolchain (every tool id with its Gen stage-family roles).
     final runtimeIdentity = read.object(root['runtime_identity']);
-    read.exactKeys(
-      runtimeIdentity,
-      const {'schema', 'version', 'runtime', 'toolchain'},
-    );
+    read.exactKeys(runtimeIdentity, const {
+      'schema',
+      'version',
+      'runtime',
+      'toolchain',
+    });
     read.expect(
       read.string(runtimeIdentity, 'schema') == lock.runtimeIdentitySchema,
     );
     read.expect(
-      read.integer(runtimeIdentity, 'version') ==
-          lock.runtimeIdentityVersion,
+      read.integer(runtimeIdentity, 'version') == lock.runtimeIdentityVersion,
     );
     final identityRuntime = read.object(runtimeIdentity['runtime']);
     read.exactKeys(identityRuntime, const {'family', 'requires'});
@@ -437,8 +571,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       read.string(identityRuntime, 'family') == lock.identityRuntimeFamily,
     );
     read.expect(
-      read.string(identityRuntime, 'requires') ==
-          lock.identityRuntimeRequires,
+      read.string(identityRuntime, 'requires') == lock.identityRuntimeRequires,
     );
     final toolchain = read.object(runtimeIdentity['toolchain']);
     read.exactKeys(toolchain, const {'schema', 'version', 'tools'});
@@ -450,9 +583,7 @@ final class LocalListenGenReleaseService implements ListenGenReleaseService {
       read.exactKeys(tool, const {'id', 'roles'});
       final id = read.string(tool, 'id');
       final roles = read.stringList(tool, 'roles');
-      read.expect(
-        roles.length == (lock.toolchainTools[id]?.length ?? -1),
-      );
+      read.expect(roles.length == (lock.toolchainTools[id]?.length ?? -1));
       final expected = lock.toolchainTools[id];
       if (expected != null) {
         for (var i = 0; i < roles.length; i++) {
@@ -576,10 +707,7 @@ final class _StrictReader {
     return value;
   }
 
-  List<Map<String, dynamic>> objectList(
-    Map<String, dynamic> map,
-    String key,
-  ) {
+  List<Map<String, dynamic>> objectList(Map<String, dynamic> map, String key) {
     final value = map[key];
     if (value is! List) _fail();
     final result = <Map<String, dynamic>>[];
@@ -632,6 +760,7 @@ final class _ContractIdentity {
     required this.releaseSchemaId,
     required this.packageSchema,
     required this.schemaVersion,
+    required this.contractVersion,
     required this.canonicalSha256,
   });
 
@@ -640,6 +769,7 @@ final class _ContractIdentity {
   final String releaseSchemaId;
   final String packageSchema;
   final int schemaVersion;
+  final String contractVersion;
   final String canonicalSha256;
 }
 
@@ -691,4 +821,18 @@ final class _ListenGenLock {
   final String artifactEntrypoint;
   final int artifactSize;
   final String artifactSha256;
+}
+
+/// Minimal on-disk lock identity used only to select a development artifact.
+/// The authoritative lock is still loaded from the Flutter asset by [verify].
+final class _DevelopmentLock {
+  const _DevelopmentLock({
+    required this.toolVersion,
+    required this.manifestFilename,
+    required this.manifestSha256,
+  });
+
+  final String toolVersion;
+  final String manifestFilename;
+  final String manifestSha256;
 }

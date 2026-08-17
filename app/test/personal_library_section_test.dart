@@ -78,7 +78,7 @@ PersonalLibraryEntry _textRow(String id, String title) => PersonalLibraryEntry(
     revisionId: 'revision-$id',
     title: title,
     documentRenditions: [
-      documentRenditionForText('A readable document.', id: 'text-$id', ),
+      documentRenditionForText('A readable document.', id: 'text-$id'),
     ],
     shape: MaterialShape.text,
   ),
@@ -96,7 +96,7 @@ PersonalLibraryEntry _mixedRow(
     revisionId: 'revision-$id',
     title: title,
     documentRenditions: [
-      documentRenditionForText('A readable document.', id: 'text-$id', ),
+      documentRenditionForText('A readable document.', id: 'text-$id'),
     ],
     mediaRenditions: [
       mediaRendition(
@@ -114,8 +114,7 @@ PersonalLibraryEntry _mixedRow(
 Widget _host(
   List<PersonalLibraryEntry> entries, {
   bool familiarSupplyEnabled = true,
-  void Function(PersonalLibraryEntry)? onOpenDocument,
-  void Function(PersonalLibraryEntry)? onOpenMedia,
+  void Function(PersonalLibraryEntry)? onOpen,
   void Function(PersonalLibraryEntry)? onStartExtensive,
   void Function(PersonalLibraryEntry)? onStartIntensive,
   void Function(PersonalLibraryEntry, String?)? onSetIntent,
@@ -129,8 +128,7 @@ Widget _host(
       child: PersonalLibrarySection(
         entries: entries,
         familiarSupplyEnabled: familiarSupplyEnabled,
-        onOpenDocument: onOpenDocument ?? (_) {},
-        onOpenMedia: onOpenMedia ?? (_) {},
+        onOpen: onOpen ?? (_) {},
         onStartExtensive: onStartExtensive ?? (_) {},
         onStartIntensive: onStartIntensive ?? (_) {},
         onSetIntent: onSetIntent ?? (_, _) {},
@@ -247,31 +245,34 @@ void main() {
     expect(intentSet?.$2, 'defer');
   });
 
-  testWidgets('a text-only row opens the document and offers no media triage', (
+  testWidgets('a text-only row opens the material and offers no media triage', (
     tester,
   ) async {
     PersonalLibraryEntry? opened;
     await tester.pumpWidget(
       _host([
         _textRow('text-1', 'Text document'),
-      ], onOpenDocument: (entry) => opened = entry),
+      ], onOpen: (entry) => opened = entry),
     );
 
-    expect(find.text('Read'), findsOneWidget);
-    expect(find.text('Open media'), findsNothing);
+    expect(find.text('Open'), findsOneWidget);
     expect(find.text('Listen'), findsNothing);
     expect(find.text('Work on it'), findsNothing);
     expect(find.byIcon(Icons.more_vert), findsNothing);
 
-    await tester.tap(find.text('Read'));
+    await tester.tap(find.text('Open'));
     expect(opened?.materialId, 'text-1');
   });
 
   testWidgets(
-    'a mixed row shows Read and Listen/Watch and dispatches each intent',
+    'a mixed row opens through the one door and keeps the study shortcuts',
     (tester) async {
-      PersonalLibraryEntry? documentOpened;
-      PersonalLibraryEntry? mediaOpened;
+      // A mixed material used to force the choice up front — Read here, Open
+      // media there — which is what made several routes into the same
+      // material exist at all. One Open now hands it to the workbench, which
+      // mounts whatever the material can do.
+      PersonalLibraryEntry? opened;
+      var rowTapOpens = 0;
       await tester.pumpWidget(
         _host(
           [
@@ -281,21 +282,27 @@ void main() {
               title: 'Mixed material',
             ),
           ],
-          onOpenDocument: (entry) => documentOpened = entry,
-          onOpenMedia: (entry) => mediaOpened = entry,
+          onOpen: (entry) {
+            opened = entry;
+            rowTapOpens += 1;
+          },
         ),
       );
 
-      // Both capabilities are named on the same row; the row never guesses
-      // from a bare tap.
-      expect(find.text('Read'), findsOneWidget);
-      expect(find.text('Open media'), findsOneWidget);
+      expect(find.text('Read'), findsNothing);
+      expect(find.text('Open media'), findsNothing);
+      expect(find.text('Open'), findsOneWidget);
+      // The study modes survive as secondary shortcuts.
       expect(find.text('Listen'), findsOneWidget);
+      expect(find.text('Work on it'), findsOneWidget);
 
-      await tester.tap(find.text('Read'));
-      expect(documentOpened?.materialId, 'mixed-1');
-      await tester.tap(find.text('Open media'));
-      expect(mediaOpened?.materialId, 'mixed-1');
+      await tester.tap(find.text('Open'));
+      expect(opened?.materialId, 'mixed-1');
+
+      // A mixed row used to refuse the bare row tap because it could not
+      // guess; there is nothing left to guess.
+      await tester.tap(find.text('Mixed material'));
+      expect(rowTapOpens, 2);
     },
   );
 
@@ -321,13 +328,13 @@ void main() {
     await tester.pumpWidget(
       _host([
         _mixedRow(missing, 'mixed-gone', title: 'Mixed with missing media'),
-      ], onOpenDocument: (entry) => opened = entry),
+      ], onOpen: (entry) => opened = entry),
     );
 
-    // The document capability is intact even though the media is gone: Read
-    // must never be gated on media availability.
-    expect(find.text('Read'), findsOneWidget);
-    await tester.tap(find.text('Read'));
+    // The document capability is intact even though the media is gone:
+    // opening must never be gated on media availability.
+    expect(find.text('Open'), findsOneWidget);
+    await tester.tap(find.text('Open'));
     expect(opened?.materialId, 'mixed-gone');
     expect(tester.takeException(), isNull);
   });

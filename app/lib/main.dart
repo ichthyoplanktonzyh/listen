@@ -17,11 +17,11 @@ import 'controllers/hunting_controller.dart';
 import 'controllers/hunting_session_controller.dart';
 import 'controllers/immersive_mode_controller.dart';
 import 'controllers/learning_controller.dart';
+import 'controllers/learning_edition_controller.dart';
 import 'controllers/learning_assets_view_models.dart';
 import 'controllers/learning_flow_view_models.dart';
 import 'controllers/learning_workflow_controller.dart';
 import 'controllers/listening_inbox_coordinator.dart';
-import 'controllers/manual_review_flow_controller.dart';
 import 'controllers/media_import_flow_controller.dart';
 import 'controllers/media_library_coordinator.dart';
 import 'controllers/media_library_scan_controller.dart';
@@ -64,8 +64,6 @@ import 'data/repositories/core_repositories.dart';
 import 'data/repositories/composite_discovery_repository.dart';
 import 'data/repositories/discovery_repository.dart';
 import 'data/repositories/feed_discovery_repository.dart';
-import 'screens/composition_session_screen.dart';
-import 'screens/discovery_home_screen.dart';
 import 'services/listen_gen_process_service.dart';
 import 'services/composition_session_service.dart';
 import 'services/composition_transcript_bridge.dart';
@@ -74,8 +72,7 @@ import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
 import 'widgets/navigation/shell_tools_menu.dart';
 import 'widgets/layout/session_subtitle_menu.dart';
-import 'widgets/home/today_pane.dart';
-import 'controllers/review_due_controller.dart';
+import 'widgets/home/home_pane.dart';
 import 'widgets/flows/shell_learning_routes.dart';
 import 'data/repositories/core_session_repository.dart';
 import 'data/repositories/media_import_repository.dart';
@@ -83,6 +80,8 @@ import 'localization.dart';
 import 'models/backend_event.dart';
 import 'models/content_activity.dart';
 import 'models/content_channel.dart';
+import 'models/composition.dart';
+import 'models/document_session.dart';
 import 'models/workbench_study_mode.dart';
 import 'models/personal_expression.dart';
 import 'models/practice.dart';
@@ -127,9 +126,7 @@ import 'widgets/channels/speaking_channel.dart';
 import 'widgets/channels/writing_channel.dart';
 import 'widgets/common/listen_loading.dart';
 import 'widgets/flows/content_speaking_activity_dialog.dart';
-import 'widgets/flows/document_flows.dart';
 import 'widgets/flows/learning_flows.dart';
-import 'widgets/flows/manual_review_flow.dart';
 import 'widgets/flows/media_import_flows.dart';
 import 'widgets/flows/reading_flows.dart';
 import 'widgets/flows/speaking_flows.dart';
@@ -138,6 +135,7 @@ import 'widgets/flows/writing_flows.dart';
 import 'widgets/home/listening_home.dart';
 import 'widgets/layout/content_channel_availability.dart';
 import 'widgets/layout/desktop_drop_surface.dart';
+import 'widgets/layout/document_workbench.dart';
 import 'widgets/layout/media_workbench.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/player_overlays.dart';
@@ -149,6 +147,7 @@ import 'widgets/layout/study_menu.dart';
 import 'widgets/layout/translation_mode_button.dart';
 import 'widgets/panels/conversation_stage_shell.dart';
 import 'widgets/panels/l1_specialty_dialog.dart';
+import 'widgets/panels/learning_edition_panel.dart';
 import 'widgets/panels/listening_inbox_panel.dart';
 import 'widgets/panels/realtime_conversation_panel.dart';
 import 'widgets/panels/sentence_analysis_window.dart';
@@ -287,7 +286,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   final subscriptions = <StreamSubscription<dynamic>>[];
   Timer? syntaxCapabilityTimer;
   final coreTransport = LocalCoreTransportService();
-  final currentRoute = ValueNotifier<AppRoute>(AppRoute.today);
+  final currentRoute = ValueNotifier<AppRoute>(AppRoute.home);
 
   /// The resolved generation toolchain (whisper model, whisper-cli, ffprobe,
   /// ffmpeg), refreshed once after launch and re-read at every run through
@@ -302,21 +301,46 @@ class _PlayerScreenState extends State<PlayerScreen>
     ).resolve();
     if (!mounted) return;
     setState(() => _generatorSetup = setup);
+    _transcriptReadiness?.refreshAvailability();
   }
 
-  // Segment selections live beside the route because they have to be settable
-  // from outside the pane that draws them: the coach's suggestions land on a
-  // specific segment, not just on a destination.
-  final listenSegment = ValueNotifier<ListenSegment>(ListenSegment.library);
+  TranscriptPreparationAvailability _preparationAvailability() {
+    if (!coreSessionController.state.isConnected) {
+      return TranscriptPreparationAvailability.coreUnavailable;
+    }
+    if (!capabilityCoordinator.isConfigured) {
+      return TranscriptPreparationAvailability.generatorUnavailable;
+    }
+    final toolchainBlocker = switch (_generatorSetup.state) {
+      ContentGeneratorState.ready => null,
+      ContentGeneratorState.generatorMissing =>
+        TranscriptPreparationAvailability.generatorUnavailable,
+      ContentGeneratorState.pythonMissing =>
+        TranscriptPreparationAvailability.pythonUnavailable,
+      ContentGeneratorState.whisperMissing =>
+        TranscriptPreparationAvailability.whisperUnavailable,
+      ContentGeneratorState.modelMissing =>
+        TranscriptPreparationAvailability.whisperModelUnavailable,
+      ContentGeneratorState.ffprobeMissing ||
+      ContentGeneratorState.ffmpegMissing =>
+        TranscriptPreparationAvailability.mediaToolsUnavailable,
+    };
+    if (toolchainBlocker != null) return toolchainBlocker;
+    if (!(playerController.mediaPath?.isNotEmpty ?? false)) {
+      return TranscriptPreparationAvailability.mediaUnavailable;
+    }
+    if (playerController.mediaId == null) {
+      return TranscriptPreparationAvailability.mediaRegistrationUnavailable;
+    }
+    return TranscriptPreparationAvailability.ready;
+  }
+
+  // Segment selection lives beside the route because it has to be settable
+  // from outside the pane that draws it: coach suggestions land on a specific
+  // language segment, not just on the destination.
   final languageSegment = ValueNotifier<LanguageSegment>(
     LanguageSegment.vocabulary,
   );
-
-  /// The shell's own read of the due count, for the today pane. Separate from
-  /// the review route's [ReviewDeckController] on purpose: that one only
-  /// exists while the review surface is open, and today has to answer before
-  /// the learner has been anywhere.
-  late final reviewDueController = ReviewDueController(coreRepositories.review);
   late final SubscriptionStore subscriptionStore =
       SubscriptionStore.forCurrentUser();
   late final DiscoveryViewModel discoveryViewModel = DiscoveryViewModel(
@@ -359,6 +383,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// Resolves adopted composition content for the composition session surface.
   late final compositionSessionService = CompositionSessionService(
     repository: coreRepositories.capability,
+    resources: coreRepositories.resource,
   );
   late final coreSessionController = CoreSessionController(
     repository: coreSessionRepository,
@@ -540,9 +565,19 @@ class _PlayerScreenState extends State<PlayerScreen>
   late final capabilityCoordinator = MaterialCapabilityCoordinator(
     repository: coreRepositories.capability,
     generator: LocalListenGenProcessService(
+      pythonExecutable: () => _generatorSetup.pythonPath,
       releaseService: LocalListenGenReleaseService(),
     ),
     mediaPathResolver: _mediaFilePathForRendition,
+    subtitleTrackForMedia: (rendition) {
+      final selected = subtitleController.primaryTrack;
+      if (selected == null ||
+          !selected.usableForLearning ||
+          selected.mediaId != rendition.mediaId) {
+        return null;
+      }
+      return selected;
+    },
     // Document source bytes for a Gen run come from the same places direct
     // rendering reads them: the content-addressed managed store copy for
     // managed bindings, the learner-chosen referenced location (re-verified
@@ -568,6 +603,10 @@ class _PlayerScreenState extends State<PlayerScreen>
       '--tts-provider',
       'say',
     ],
+  );
+  late final learningEditionController = LearningEditionController(
+    repository: coreRepositories.capability,
+    onAdopted: _refreshAdoptedLearningEdition,
   );
   late final mediaLibraryScan = MediaLibraryScanController(
     scanner: MediaLibraryScanner(
@@ -660,6 +699,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   String get status => playerController.status;
   final taskStatuses = <UserTaskKind, UserTaskStatus>{};
   bool _workbenchExpanded = false;
+  DocumentSessionController? _documentSession;
+  VoidCallback? _documentSessionListener;
+  String? _projectedDocumentReleaseId;
+  String? _openedDocumentAudioReleaseId;
+  String? _openingDocumentAudioReleaseId;
   TranscriptReadinessViewModel? _transcriptReadiness;
 
   /// How the listening transcript presents itself. A workbench-level display
@@ -709,23 +753,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// the surface brings the library up to date, leaving it stops the walk
   /// rather than letting it run behind a screen nobody is looking at.
   void _scanLibraryWhileVisible() {
-    if (currentRoute.value == AppRoute.listen) {
+    if (currentRoute.value == AppRoute.library) {
       unawaited(mediaLibraryScan.enterLibrary());
     } else {
       mediaLibraryScan.leaveLibrary();
     }
-  }
-
-  /// Today reads the due count on arrival rather than holding a subscription:
-  /// the number only has to be right when it is on screen, and a poll would
-  /// be the pushy kind of presence the charter rules out.
-  void _refreshDueCountWhileVisible() {
-    if (currentRoute.value != AppRoute.today) return;
-    if (!coreSessionController.state.isConnected) {
-      reviewDueController.reset();
-      return;
-    }
-    unawaited(reviewDueController.load());
   }
 
   /// The media surface sends the user to the same picker Settings uses; a
@@ -757,7 +789,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController.addListener(_surfaceErrorStatus);
     playerController.addListener(_trackExtensivePlayback);
     currentRoute.addListener(_scanLibraryWhileVisible);
-    currentRoute.addListener(_refreshDueCountWhileVisible);
     mediaLibraryScan.addListener(_onMediaLibraryScanChanged);
     playerController.addListener(_exitImmersiveWhenMediaCloses);
     coreSessionController.addListener(_onCoreSessionStateChanged);
@@ -807,10 +838,21 @@ class _PlayerScreenState extends State<PlayerScreen>
           unawaited(speakingActions.close(restorePosition: false));
         }
         huntingSessionController.stop();
+        final documentSession = _documentSession;
+        final documentListener = _documentSessionListener;
+        if (documentSession != null && documentListener != null) {
+          documentSession.removeListener(documentListener);
+        }
         setState(() {
+          _documentSession = null;
+          _documentSessionListener = null;
+          _projectedDocumentReleaseId = null;
+          _openedDocumentAudioReleaseId = null;
+          _openingDocumentAudioReleaseId = null;
           taskStatuses.clear();
           _workbenchExpanded = true;
         });
+        documentSession?.dispose();
         _workbenchAnimController.forward();
       },
       reloadLearningEntries: () async {
@@ -1018,9 +1060,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       // "undetermined"; a fresh connected generation is a meaningful
       // invalidation, so re-ask for whatever entry is selected. No polling.
       unawaited(discoveryViewModel.refreshSelectedMediaAvailability());
-      _refreshDueCountWhileVisible();
     }
-    if (!state.isConnected) reviewDueController.reset();
     setState(() {});
   }
 
@@ -1052,12 +1092,13 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   /// Opens an acquired article's Material in the document session: reads the
-  /// Material, projects it as a library row, and opens exactly that document.
-  Future<void> _openDocumentFromDiscovery(String materialId) async {
-    final details = await coreRepositories.learningMaterial.readLearningMaterial(
-      materialId,
-    );
-    await _openDocumentSession(
+  /// Material, projects it as a library row, and hands it to the workbench
+  /// through the same door the library uses — a discovered article is not a
+  /// different kind of material, so it must not get a different entry.
+  Future<void> _openMaterialFromDiscovery(String materialId) async {
+    final details = await coreRepositories.learningMaterial
+        .readLearningMaterial(materialId);
+    await _openMaterialEntry(
       PersonalLibraryEntry(details: details, mediaEntries: const []),
     );
   }
@@ -1171,24 +1212,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     return confirmed ?? false;
   }
 
-  Future<void> _openManualReviewTimeline() async {
-    final controller = ManualReviewFlowController(
-      coreSessionController.state.isConnected
-          ? coreRepositories.manualReview
-          : null,
-      adapter,
-      resourceActions,
-      mediaSession,
-      playerController: playerController,
-      subtitleController: subtitleController,
-    );
-    try {
-      await openManualReviewFlow(context: context, controller: controller);
-    } finally {
-      controller.dispose();
-    }
-  }
-
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
@@ -1201,17 +1224,16 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// coordinator (resolve → derive through the pinned listen-gen bundle →
   /// install → adopt), and the readiness surface reflects the run.
   Future<void> _generateSubtitles() async {
-    final readiness = _readinessViewModel;
-    if (!readiness.state.canRetry &&
-        !readiness.state.canCancel &&
-        !readiness.canAutoPrepare()) {
-      // Unavailable State (CONTEXT.md): a preparation needs a connected core
-      // with a registered media session; report the missing prerequisite
-      // instead of swallowing the click.
-      playerController.setStatus(l.text('statusOpenMediaAndCoreFirst'));
+    await _readinessViewModel.prepareLearningTranscript();
+  }
+
+  Future<void> _refreshAdoptedLearningEdition() async {
+    final document = _documentSession;
+    if (document != null) {
+      await document.refreshComposition();
       return;
     }
-    await readiness.prepareLearningTranscript();
+    await _readinessViewModel.refreshAdoptedComposition();
   }
 
   Future<void> _openPhoneticAnalysisCenter() => openPhoneticAnalysisCenterFlow(
@@ -1234,9 +1256,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     },
   );
 
-  /// Opens the direct document session, optionally on a retained library
-  /// entry. Pausing is the flow's job: a document must not play unrelated
-  /// media behind itself, and nothing about the media is deleted or moved.
+  /// Opens a document in the app's existing workbench layer. This deliberately
+  /// does not push a route: text, audio, and video now differ only in what the
+  /// workbench body mounts, not in which page hierarchy owns the session.
   Future<void> _openDocumentSession([PersonalLibraryEntry? entry]) async {
     final referenceStore = DocumentReferenceStore(
       file: DocumentReferenceStore.fileFor(
@@ -1259,18 +1281,235 @@ class _PlayerScreenState extends State<PlayerScreen>
         referenceStore: referenceStore,
         resolveStoreRoot: managedAssetStore.resolveRoot,
       ),
-      refreshLibrary: mediaLibraryActions.loadMediaLibrary,
+      // The generated edition is part of this material's session, not a
+      // separate destination: the workbench resolves it alongside the original
+      // document and refreshes in place when a generation finishes.
+      resolveComposition: compositionSessionService.resolveComposition,
+      refreshLibrary: mediaLibraryActions.reconcileMembership,
     );
     if (entry != null) controller.openLibraryEntry(entry);
-    try {
-      await openDocumentSessionFlow(
-        context: context,
-        controller: controller,
-        pausePlayback: adapter.pause,
-      );
-    } finally {
+    await mediaSession.deactivateForMaterialSwitch();
+    if (!mounted) {
       controller.dispose();
+      return;
     }
+    final previous = _documentSession;
+    final previousListener = _documentSessionListener;
+    if (previous != null && previousListener != null) {
+      previous.removeListener(previousListener);
+    }
+    void documentListener() => _syncDocumentComposition(controller);
+    controller.addListener(documentListener);
+    setState(() {
+      _documentSession = controller;
+      _documentSessionListener = documentListener;
+      _projectedDocumentReleaseId = null;
+      _openedDocumentAudioReleaseId = null;
+      _openingDocumentAudioReleaseId = null;
+      _workbenchExpanded = true;
+    });
+    previous?.dispose();
+    _workbenchAnimController.forward();
+    _syncDocumentComposition(controller);
+  }
+
+  /// The one door into the workbench for a retained material.
+  ///
+  /// Which body the workbench mounts follows the material's real capabilities
+  /// rather than a choice the library forced on the learner: a material with
+  /// playable media opens its media session, a text-only material opens its
+  /// document, and either way the adopted composition rides along inside that
+  /// same session. Nothing is pushed and the material id never changes.
+  Future<void> _openMaterialEntry(PersonalLibraryEntry entry) =>
+      entry.canListenOrWatch
+      ? mediaLibraryActions.openLibraryEntry(entry)
+      : _openDocumentSession(entry);
+
+  void _closeDocumentWorkbench() {
+    final closing = _documentSession;
+    if (closing == null) return;
+    _workbenchAnimController.reverse().then((_) {
+      if (!mounted || !identical(_documentSession, closing)) return;
+      final listener = _documentSessionListener;
+      if (listener != null) closing.removeListener(listener);
+      unawaited(mediaSession.deactivateForMaterialSwitch());
+      setState(() {
+        _documentSession = null;
+        _documentSessionListener = null;
+        _projectedDocumentReleaseId = null;
+        _openedDocumentAudioReleaseId = null;
+        _openingDocumentAudioReleaseId = null;
+        _workbenchExpanded = false;
+      });
+      closing.dispose();
+    });
+  }
+
+  Widget _documentWorkbench(DocumentSessionController controller) {
+    // Gen progress is not document state. Listen to both sources so resolving,
+    // generation, install, adoption, cancellation and failure all update the
+    // header while the source document remains untouched underneath.
+    return ListenableBuilder(
+      listenable: Listenable.merge([controller, capabilityCoordinator]),
+      builder: (context, _) {
+        final material = switch (controller.state) {
+          DocumentSessionReady(:final details) => details,
+          _ => null,
+        };
+        return DocumentWorkbench(
+          controller: controller,
+          mediaFraction: settingsController.workbenchMediaFraction,
+          onMediaFractionChanged: _setWorkbenchMediaFraction,
+          onCollapse: _closeDocumentWorkbench,
+          onOpenSettings: () => unawaited(_openSettings()),
+          timedLearningPanel: _sidePanel(),
+          listenRun: material == null
+              ? null
+              : capabilityCoordinator.runViewFor(
+                  material.material.id,
+                  MaterialCapability.listen,
+                ),
+          onRequestListen: material == null
+              ? null
+              : () =>
+                    unawaited(_generateListenForDocument(controller, material)),
+          onCancelListen: material == null
+              ? null
+              : () => unawaited(
+                  capabilityCoordinator.cancel(
+                    material.material.id,
+                    MaterialCapability.listen,
+                  ),
+                ),
+          learningEditionAction: material == null
+              ? null
+              : _learningEditionAction(
+                  materialId: material.material.id,
+                  capability: MaterialCapability.listen,
+                  onGenerate: () =>
+                      _generateListenForDocument(controller, material),
+                ),
+        );
+      },
+    );
+  }
+
+  /// Projects an adopted document composition onto the same transcript and
+  /// transport state used by audio/video sessions.
+  void _syncDocumentComposition(DocumentSessionController controller) {
+    if (!mounted || !identical(_documentSession, controller)) return;
+    final ready = controller.state;
+    if (ready is! DocumentSessionReady) return;
+    final composition = ready.composition;
+    if (composition == null) return;
+
+    // Edition identity is stable across repeated generation for one Material;
+    // release identity changes with the adopted package. Keying this refresh
+    // by edition would leave a supplemented transcript/audio invisible.
+    if (_projectedDocumentReleaseId != composition.releaseId) {
+      _projectedDocumentReleaseId = composition.releaseId;
+      final track = composition.transcript;
+      if (track != null) {
+        subtitleController.setPrimaryTrack(track);
+        subtitleController.setSubtitleResources([track]);
+        final enhancements = composition.enhancements;
+        subtitleController.setSpeechEnhancements(
+          pronunciationBySentence: const {},
+          timingsBySentence: enhancements.timingsBySentence,
+          pronunciationProviders: const [],
+          chunkPartitionsBySentence: enhancements.chunkPartitionsBySentence,
+          senseGroupsBySentence: enhancements.senseGroupsBySentence,
+          acousticsBySentence: enhancements.acousticsBySentence,
+          prosodyAnchorsBySentence: enhancements.prosodyAnchorsBySentence,
+          phonesBySentence: enhancements.phonesBySentence,
+        );
+        subtitleController.setSubtitleResourceCapabilities({
+          track.id: SubtitleResourceCapabilities.fromCounts(
+            sentenceCount: track.cues.length,
+            wordTimingCount: enhancements.timingsBySentence.values.fold(
+              0,
+              (total, values) => total + values.length,
+            ),
+            chunkCount: enhancements.chunkPartitionsBySentence.values.fold(
+              0,
+              (total, value) => total + value.chunks.length,
+            ),
+            phoneCount: enhancements.phonesBySentence.values.fold(
+              0,
+              (total, values) => total + values.length,
+            ),
+          ),
+        });
+        subtitleController.updatePosition(playerController.position);
+      }
+    }
+
+    final path = composition.derivedMediaPath;
+    if (path == null ||
+        _openedDocumentAudioReleaseId == composition.releaseId ||
+        _openingDocumentAudioReleaseId == composition.releaseId) {
+      return;
+    }
+    _openingDocumentAudioReleaseId = composition.releaseId;
+    unawaited(_openDocumentCompositionAudio(controller, ready, composition));
+  }
+
+  Future<void> _openDocumentCompositionAudio(
+    DocumentSessionController controller,
+    DocumentSessionReady ready,
+    ResolvedComposition composition,
+  ) async {
+    final path = composition.derivedMediaPath;
+    if (path == null) return;
+    try {
+      await adapter.open(path, play: false);
+      final current = controller.state;
+      if (!mounted ||
+          !identical(_documentSession, controller) ||
+          current is! DocumentSessionReady ||
+          current.composition?.releaseId != composition.releaseId) {
+        return;
+      }
+      playerController.setMaterialPlaybackSource(
+        path: path,
+        title: ready.details.currentRevision.title,
+        kind: 'audio',
+      );
+      playerController.setPosition(Duration.zero);
+      _openedDocumentAudioReleaseId = composition.releaseId;
+    } on Object catch (error) {
+      if (mounted && identical(_documentSession, controller)) {
+        playerController.setStatus(
+          l.text('statusPlaybackFailed'),
+          error: true,
+          failure: coreRepositories.capability.failureDetail(error),
+        );
+      }
+    } finally {
+      if (_openingDocumentAudioReleaseId == composition.releaseId) {
+        _openingDocumentAudioReleaseId = null;
+      }
+    }
+  }
+
+  /// Generates the Listen capability for the document on the workbench and
+  /// refreshes that same session in place.
+  ///
+  /// The material id is the one already open and does not change: the produced
+  /// speech is adopted as this material's composition, never registered as a
+  /// second media. When the run finishes the session re-reads its adopted
+  /// composition, so the audio and its sentence alignment simply appear —
+  /// there is nothing for the learner to open.
+  Future<void> _generateListenForDocument(
+    DocumentSessionController controller,
+    MaterialDetails material,
+  ) async {
+    await capabilityCoordinator.requestCapability(
+      material,
+      MaterialCapability.listen,
+    );
+    if (!mounted || !identical(_documentSession, controller)) return;
+    await controller.refreshComposition();
   }
 
   Future<void> _importEmbeddedSubtitle() => importEmbeddedSubtitleFlow(
@@ -1848,10 +2087,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     currentRoute.value = AppRoute.language;
   }
 
-  void _openListen(ListenSegment segment) {
-    listenSegment.value = segment;
-    currentRoute.value = AppRoute.listen;
-  }
+  void _openLibrary() => currentRoute.value = AppRoute.library;
 
   Future<void> _openListeningDictionaryEntry(String entryId) =>
       _showVocabulary(initialEntryId: entryId);
@@ -2030,57 +2266,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     },
   );
 
-  Future<void> _openSubtitleResources() {
-    return openSubtitleResourcesFlow(
-      context: context,
-      backendAvailable: coreSessionController.state.isConnected,
-      createColdStartViewModel: !coreSessionController.state.isConnected
-          ? null
-          : ({required trackId, required language}) =>
-                ColdStartMarkingViewModel(
-                  coreRepositories.coldStartMarking,
-                  trackId: trackId,
-                  language: language,
-                ),
-      playerController: playerController,
-      subtitleController: subtitleController,
-      learningController: learningController,
-      resourceActions: resourceActions,
-      mediaSession: mediaSession,
-      onManualReviewTimeline: _openManualReviewTimeline,
-    );
-  }
-
   /// Opens the adopted composition view of a library material: the produced
   /// reading structure with derived audio and alignment.
-  Future<void> _openComposition(PersonalLibraryEntry entry) async {
-    if (!coreSessionController.state.isConnected) {
-      playerController.setStatus(l.text('statusConnectLocalCoreFirst'));
-      return;
-    }
-    if (!context.mounted) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => CompositionSessionScreen(
-          materialId: entry.materialId,
-          materialTitle: entry.title,
-          session: compositionSessionService,
-          coordinator: capabilityCoordinator,
-        ),
-      ),
-    );
-  }
-
   TranscriptReadinessViewModel get _readinessViewModel =>
       _transcriptReadiness ??= TranscriptReadinessViewModel(
         subtitle: subtitleController,
         mediaSession: mediaSession,
-        canAutoPrepare: () =>
-            coreSessionController.state.isConnected &&
-            capabilityCoordinator.isConfigured &&
-            playerController.mediaId != null &&
-            (playerController.mediaPath?.isNotEmpty ?? false) &&
-            playerController.duration.inMilliseconds > 0,
+        preparationAvailability: _preparationAvailability,
         coordinator: capabilityCoordinator,
         currentMaterial: () => mediaSession.currentMaterial,
         bridge: CompositionTranscriptBridge(
@@ -2090,10 +2282,13 @@ class _PlayerScreenState extends State<PlayerScreen>
           importSubtitle: (mediaId, path) =>
               coreRepositories.mediaSession.importSubtitle(mediaId, path),
         ),
-        // The predicate reads core connectivity *and* live player readiness
-        // (media id/path/duration). Both can arrive after the workbench first
-        // builds — a core reconnect, or duration landing after open — so the
-        // projection must be invalidated by either source.
+        // Same resolver the document workbench uses: one material, one
+        // adopted composition, whichever body the workbench has mounted.
+        resolveComposition: compositionSessionService.resolveComposition,
+        // The predicate reads core connectivity *and* live player identity.
+        // Both can arrive after the workbench first builds, so the projection
+        // must be invalidated by either source. Duration is deliberately not
+        // a gate: Gen probes the source file itself.
         refreshTrigger: Listenable.merge([
           coreSessionController,
           playerController,
@@ -2212,12 +2407,18 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     unawaited(coreSessionController.shutdown());
+    final documentSession = _documentSession;
+    final documentListener = _documentSessionListener;
+    if (documentSession != null && documentListener != null) {
+      documentSession.removeListener(documentListener);
+    }
+    _documentSession?.dispose();
     _transcriptReadiness?.dispose();
+    learningEditionController.dispose();
     coreSessionController.removeListener(_onCoreSessionStateChanged);
     playerController.removeListener(_surfaceErrorStatus);
     playerController.removeListener(_trackExtensivePlayback);
     currentRoute.removeListener(_scanLibraryWhileVisible);
-    currentRoute.removeListener(_refreshDueCountWhileVisible);
     mediaLibraryScan.removeListener(_onMediaLibraryScanChanged);
     mediaLibraryScan.dispose();
     _workbenchAnimController.dispose();
@@ -2252,8 +2453,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     huntingSessionController.dispose();
     settingsController.dispose();
     immersiveMode.dispose();
-    reviewDueController.dispose();
-    listenSegment.dispose();
     languageSegment.dispose();
     currentRoute.dispose();
     discoveryViewModel.dispose();
@@ -2273,7 +2472,6 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// The homeless tools, at the foot of the rail. Everything else the shell
   /// app bar used to carry had another owner already.
   Widget _toolsMenu() => ShellToolsMenu(
-    onOpenSubtitleResources: () => unawaited(_openSubtitleResources()),
     onOpenLearningAssets: () => unawaited(_openLearningAssets()),
     onOpenLearningResources: () => unawaited(_openLearningResources()),
     onOpenPhoneticAnalysisCenter: () =>
@@ -2298,8 +2496,26 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSearchSecondarySubtitles: () =>
         unawaited(_searchOpenSubtitles(secondary: true)),
     onImportEmbeddedSubtitle: () => unawaited(_importEmbeddedSubtitle()),
-    onOpenResources: () => unawaited(_openSubtitleResources()),
     onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
+  );
+
+  Widget _learningEditionAction({
+    required String materialId,
+    required MaterialCapability capability,
+    required Future<void> Function() onGenerate,
+  }) => LearningEditionAction(
+    onPressed: () => unawaited(
+      showLearningEditionPanel(
+        context: context,
+        controller: learningEditionController,
+        materialId: materialId,
+        onGenerate: onGenerate,
+        generationListenable: capabilityCoordinator,
+        isGenerating: () =>
+            capabilityCoordinator.runViewFor(materialId, capability)?.busy ??
+            false,
+      ),
+    ),
   );
 
   /// What each channel can and cannot do with the material that is loaded.
@@ -2429,49 +2645,39 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   // ── Shell panes ──
   //
-  // Four destinations, two of which hold several surfaces as segments. The
+  // Four destinations, one of which holds several surfaces as segments. The
   // segments are page state, not addresses: they do not belong in [AppRoute],
   // because nothing outside the shell should be able to link to "the review
   // tab" as though it were a place. What *does* need to reach them — the
-  // coach's suggestions — goes through [_openLanguage] / [_openListen].
+  // coach's suggestions — goes through [_openLanguage].
 
   Widget _routePane(AppRoute route) => switch (route) {
-    AppRoute.today => _todayPane(),
-    AppRoute.listen => _listenPane(),
+    AppRoute.home => _homePane(),
+    AppRoute.library => _libraryPane(),
     AppRoute.language => _languagePane(),
     AppRoute.coach => _coachPane(),
   };
 
-  Widget _todayPane() => ListenableBuilder(
-    listenable: reviewDueController,
-    builder: (context, _) => TodayPane(
-      recentMediaTitle: settingsController.lastMediaTitle.isEmpty
-          ? null
-          : settingsController.lastMediaTitle,
-      recentMediaPath: settingsController.lastMediaPath.isEmpty
-          ? null
-          : settingsController.lastMediaPath,
-      recentPosition: Duration(
-        milliseconds: settingsController.lastMediaPositionMs,
-      ),
-      recentDuration: Duration(
-        milliseconds: settingsController.lastMediaDurationMs,
-      ),
-      recentSubtitleCount: settingsController.lastMediaSubtitleCount,
-      onContinue: _continueRecentMedia,
-      onOpenMedia: mediaSession.openMedia,
-      reviewDue: reviewDueController.state,
-      onOpenReview: () => _openLanguage(LanguageSegment.review),
-      onRetryReviewDue: () => unawaited(reviewDueController.load()),
-      onOpenVocabulary: _openVocabulary,
-      vocabularyCount: mediaLibraryActions.savedVocabulary?.total ?? 0,
-      vocabularyCapped: mediaLibraryActions.savedVocabulary?.capped ?? false,
-      vocabularyKnown: mediaLibraryActions.savedVocabulary != null,
-      listeningInboxCount: extensiveListeningController.activeItemCount,
-      coreStatusText: playerController.statusIsPlayback
-          ? ''
-          : playerController.status,
+  Widget _homePane() => HomePane(
+    discovery: discoveryViewModel,
+    recentMediaTitle: settingsController.lastMediaTitle.isEmpty
+        ? null
+        : settingsController.lastMediaTitle,
+    recentMediaPath: settingsController.lastMediaPath.isEmpty
+        ? null
+        : settingsController.lastMediaPath,
+    recentPosition: Duration(
+      milliseconds: settingsController.lastMediaPositionMs,
     ),
+    recentDuration: Duration(
+      milliseconds: settingsController.lastMediaDurationMs,
+    ),
+    recentSubtitleCount: settingsController.lastMediaSubtitleCount,
+    onContinue: _continueRecentMedia,
+    onOpenMedia: mediaSession.openMedia,
+    onPlayMedia: _startLearningFromDiscovery,
+    onOpenDocument: (materialId) =>
+        unawaited(_openMaterialFromDiscovery(materialId)),
   );
 
   void _continueRecentMedia() {
@@ -2482,66 +2688,37 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  Widget _listenPane() => ValueListenableBuilder<ListenSegment>(
-    valueListenable: listenSegment,
-    builder: (context, segment, _) => SegmentedPane<ListenSegment>(
-      selected: segment,
-      onSelected: (value) => listenSegment.value = value,
-      segments: [
-        PaneSegment(
-          value: ListenSegment.library,
-          label: l.text('segmentMyMedia'),
-          builder: (context) => ListeningHome(
-            onOpenMedia: mediaSession.openMedia,
-            onOpenOnline: _openOnline,
-            onOpenDocument: () => unawaited(_openDocumentSession()),
-            personalLibrary: mediaLibraryActions.personalLibrary,
-            offlineEntries: mediaLibraryActions.offlineLibrary,
-            familiarSupplyEnabled:
-                settingsController.familiarMaterialSuggestions,
-            scan: mediaLibraryScan.state,
-            onScanRefresh: () => unawaited(mediaLibraryScan.refresh()),
-            onScanCancel: mediaLibraryScan.cancel,
-            onRetryScanRegistrations: () =>
-                unawaited(mediaLibraryScan.retryFailedRegistrations()),
-            onChooseManagedStoreLocation: () =>
-                unawaited(_chooseManagedStoreLocation()),
-            onOpenLibraryDocument: (entry) =>
-                unawaited(_openDocumentSession(entry)),
-            onOpenLibraryMedia: (entry) =>
-                unawaited(mediaLibraryActions.openLibraryEntry(entry)),
-            onStartExtensiveEntry: (entry) =>
-                unawaited(mediaLibraryActions.startExtensiveFromLibrary(entry)),
-            onStartIntensiveEntry: (entry) =>
-                unawaited(mediaLibraryActions.startIntensiveFromLibrary(entry)),
-            onSetLibraryIntent: (entry, intent) => unawaited(
-              mediaLibraryActions.setLibraryTriageIntent(entry, intent),
-            ),
-            onToggleFamiliarSupply: (enabled) =>
-                unawaited(mediaLibraryActions.toggleFamiliarSupply(enabled)),
-            capabilityCoordinator: capabilityCoordinator,
-            onRequestCapability: (entry, capability) => unawaited(
-              capabilityCoordinator.requestCapability(entry.details, capability),
-            ),
-            onCancelCapability: (entry, capability) => unawaited(
-              capabilityCoordinator.cancel(entry.materialId, capability),
-            ),
-            onOpenComposition: (entry) => unawaited(_openComposition(entry)),
-          ),
-        ),
-        PaneSegment(
-          value: ListenSegment.discover,
-          label: l.text('segmentDiscover'),
-          builder: (context) => DiscoveryHome(
-            viewModel: discoveryViewModel,
-            onOpenMedia: mediaSession.openMedia,
-            onPlayMedia: _startLearningFromDiscovery,
-            onOpenDocument: (materialId) =>
-                unawaited(_openDocumentFromDiscovery(materialId)),
-          ),
-        ),
-      ],
+  Widget _libraryPane() => ListeningHome(
+    onOpenMedia: mediaSession.openMedia,
+    onOpenOnline: _openOnline,
+    onOpenDocument: () => unawaited(_openDocumentSession()),
+    personalLibrary: mediaLibraryActions.personalLibrary,
+    personalLibraryFailure: mediaLibraryActions.personalLibraryFailure,
+    onRetryLibrary: () => unawaited(mediaLibraryActions.loadMediaLibrary()),
+    offlineEntries: mediaLibraryActions.offlineLibrary,
+    familiarSupplyEnabled: settingsController.familiarMaterialSuggestions,
+    scan: mediaLibraryScan.state,
+    onScanRefresh: () => unawaited(mediaLibraryScan.refresh()),
+    onScanCancel: mediaLibraryScan.cancel,
+    onRetryScanRegistrations: () =>
+        unawaited(mediaLibraryScan.retryFailedRegistrations()),
+    onChooseManagedStoreLocation: () =>
+        unawaited(_chooseManagedStoreLocation()),
+    onOpenLibraryEntry: (entry) => unawaited(_openMaterialEntry(entry)),
+    onStartExtensiveEntry: (entry) =>
+        unawaited(mediaLibraryActions.startExtensiveFromLibrary(entry)),
+    onStartIntensiveEntry: (entry) =>
+        unawaited(mediaLibraryActions.startIntensiveFromLibrary(entry)),
+    onSetLibraryIntent: (entry, intent) =>
+        unawaited(mediaLibraryActions.setLibraryTriageIntent(entry, intent)),
+    onToggleFamiliarSupply: (enabled) =>
+        unawaited(mediaLibraryActions.toggleFamiliarSupply(enabled)),
+    capabilityCoordinator: capabilityCoordinator,
+    onRequestCapability: (entry, capability) => unawaited(
+      capabilityCoordinator.requestCapability(entry.details, capability),
     ),
+    onCancelCapability: (entry, capability) =>
+        unawaited(capabilityCoordinator.cancel(entry.materialId, capability)),
   );
 
   String get _routeLanguage => settingsController.resolveLearningLanguage(
@@ -2621,7 +2798,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         case 'personal_expression':
           _openLanguage(LanguageSegment.expressions);
         case 'content_home':
-          _openListen(ListenSegment.library);
+          _openLibrary();
       }
       return Future<void>.value();
     },
@@ -2801,12 +2978,46 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                   ),
                                                 ],
                                               ),
-                                              if (playerController.mediaPath !=
+                                              // One workbench layer, two
+                                              // bodies. A document and a media
+                                              // session are mutually exclusive
+                                              // by construction (opening media
+                                              // clears the document session),
+                                              // so this is a choice of body,
+                                              // not a second surface.
+                                              if (_documentSession
+                                                  case final document?)
+                                                SlideTransition(
+                                                  position:
+                                                      _workbenchSlideAnimation,
+                                                  child: _documentWorkbench(
+                                                    document,
+                                                  ),
+                                                )
+                                              else if (playerController
+                                                      .mediaPath !=
                                                   null)
                                                 SlideTransition(
                                                   position:
                                                       _workbenchSlideAnimation,
                                                   child: MediaWorkbench(
+                                                    learningEditionAction:
+                                                        switch (mediaSession
+                                                            .currentMaterial) {
+                                                          final material? =>
+                                                            _learningEditionAction(
+                                                              materialId:
+                                                                  material
+                                                                      .material
+                                                                      .id,
+                                                              capability:
+                                                                  MaterialCapability
+                                                                      .read,
+                                                              onGenerate:
+                                                                  _generateSubtitles,
+                                                            ),
+                                                          null => null,
+                                                        },
                                                     subtitleMenu:
                                                         _sessionSubtitleMenu(),
                                                     studyMenu: _studyMenu(),
@@ -2834,6 +3045,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                           playerController
                                                               .mediaPath!,
                                                         ),
+                                                    showMediaPane:
+                                                        playerController
+                                                            .mediaKind !=
+                                                        'audio',
                                                     playerStage: _playerStage(),
                                                     learningPanel: _sidePanel(),
                                                     selectedChannel:
@@ -2915,20 +3130,24 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           );
                                         },
                                       ),
-                                      PlayerOverlays(
-                                        practiceController: practiceController,
-                                        slicePlayerController:
-                                            slicePlayerController,
-                                        huntingSessionController:
-                                            huntingSessionController,
-                                        subtitleController: subtitleController,
-                                        playerController: playerController,
-                                        practiceActions: practiceActions,
-                                        huntingActions: huntingActions,
-                                        onCloseSlicePlayback:
-                                            _closeSlicePlayback,
-                                      ),
-                                      _analysisWindow(),
+                                      if (_documentSession == null) ...[
+                                        PlayerOverlays(
+                                          practiceController:
+                                              practiceController,
+                                          slicePlayerController:
+                                              slicePlayerController,
+                                          huntingSessionController:
+                                              huntingSessionController,
+                                          subtitleController:
+                                              subtitleController,
+                                          playerController: playerController,
+                                          practiceActions: practiceActions,
+                                          huntingActions: huntingActions,
+                                          onCloseSlicePlayback:
+                                              _closeSlicePlayback,
+                                        ),
+                                        _analysisWindow(),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -2936,10 +3155,19 @@ class _PlayerScreenState extends State<PlayerScreen>
                                   _downloadStatusBar(
                                     downloadController.snapshot!,
                                   ),
-                                ShellFade(
-                                  visible: shellVisible,
-                                  child: _controls(),
-                                ),
+                                // The transport belongs to whatever is on the
+                                // workbench. A document that took the
+                                // workbench paused the previous media and
+                                // kept its state — but leaving that media's
+                                // transport under an unrelated document
+                                // advertises a session the workbench is not
+                                // showing. It comes back with the media.
+                                if (_documentSession == null ||
+                                    playerController.mediaPath != null)
+                                  ShellFade(
+                                    visible: shellVisible,
+                                    child: _controls(),
+                                  ),
                               ],
                             ),
                           ),
@@ -2974,7 +3202,6 @@ class _PlayerScreenState extends State<PlayerScreen>
           unawaited(mediaSession.openSubtitle(secondary: true)),
       onImportEmbeddedSubtitle: () => unawaited(_importEmbeddedSubtitle()),
       onArchiveMedia: () => unawaited(playbackActions.archiveCurrentMedia()),
-      onOpenSubtitleResources: () => unawaited(_openSubtitleResources()),
       onOpenVocabulary: _openVocabulary,
       onOpenReview: () => _openReviewQueue(),
       onOpenCoach: () => currentRoute.value = AppRoute.coach,
@@ -3108,10 +3335,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         !immersiveMode.immersive,
     mediaTitle: playerController.mediaPath == null
         ? null
-        : widget.pathHelper.basename(playerController.mediaPath!),
+        : playerController.mediaTitle ??
+              widget.pathHelper.basename(playerController.mediaPath!),
     onExpand: _expandWorkbench,
     isFullscreen: immersiveMode.immersive,
-    onToggleFullscreen: playerController.mediaPath == null
+    onToggleFullscreen:
+        playerController.mediaPath == null ||
+            playerController.mediaKind != 'video'
         ? null
         : () => unawaited(immersiveMode.toggle()),
   );

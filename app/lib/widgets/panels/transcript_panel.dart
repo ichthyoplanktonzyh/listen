@@ -287,7 +287,8 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                           ? _AnalysisControl(
                                               expanded: widget.analysisExpanded,
                                               label: l.text('analyseSentence'),
-                                              onPressed: widget.onToggleAnalysis!,
+                                              onPressed:
+                                                  widget.onToggleAnalysis!,
                                             )
                                           : null,
                                     ),
@@ -1024,7 +1025,9 @@ class _AnalysisControl extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: ListenRadii.pillBorder,
-              border: Border.all(color: expanded ? colors.primary : colors.outlineVariant),
+              border: Border.all(
+                color: expanded ? colors.primary : colors.outlineVariant,
+              ),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -1123,6 +1126,7 @@ class TranscriptReadinessView {
     this.canCancel = false,
     this.canRetry = false,
     this.fingerprintMismatch = false,
+    this.unavailableReason,
   }) : _usableTracks = List.unmodifiable(usableTracks);
 
   final TranscriptReadinessPhase phase;
@@ -1132,6 +1136,7 @@ class TranscriptReadinessView {
   final bool canCancel;
   final bool canRetry;
   final bool fingerprintMismatch;
+  final TranscriptPreparationAvailability? unavailableReason;
   final Future<void> Function() onPrepare;
   final Future<void> Function(SubtitleTrack track) onSelectTrack;
   final Future<void> Function() onImportSubtitle;
@@ -1179,9 +1184,7 @@ class _MissingTranscriptState extends StatelessWidget {
       OutlinedButton(
         key: const Key('import-subtitle-file'),
         onPressed: () => view.onImportSubtitle(),
-        child: Text(
-          AppLocalizations.of(context).text('importSubtitleFile'),
-        ),
+        child: Text(AppLocalizations.of(context).text('importSubtitleFile')),
       ),
     ],
   );
@@ -1193,24 +1196,46 @@ class _UnavailableTranscriptState extends StatelessWidget {
   final TranscriptReadinessView view;
 
   @override
-  Widget build(BuildContext context) => _ReadinessNotice(
-    icon: Icons.cloud_off_outlined,
-    title: AppLocalizations.of(
-      context,
-    ).text('transcriptPreparationUnavailableTitle'),
-    body: AppLocalizations.of(
-      context,
-    ).text('transcriptPreparationUnavailableBody'),
-    actions: [
-      OutlinedButton(
-        key: const Key('import-subtitle-file'),
-        onPressed: () => view.onImportSubtitle(),
-        child: Text(
-          AppLocalizations.of(context).text('importSubtitleFile'),
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final bodyKey = switch (view.unavailableReason) {
+      TranscriptPreparationAvailability.coreUnavailable =>
+        'transcriptPreparationCoreUnavailableBody',
+      TranscriptPreparationAvailability.generatorUnavailable =>
+        'transcriptPreparationGenUnavailableBody',
+      TranscriptPreparationAvailability.pythonUnavailable =>
+        'transcriptPreparationPythonUnavailableBody',
+      TranscriptPreparationAvailability.whisperUnavailable =>
+        'transcriptPreparationWhisperUnavailableBody',
+      TranscriptPreparationAvailability.whisperModelUnavailable =>
+        'transcriptPreparationWhisperModelUnavailableBody',
+      TranscriptPreparationAvailability.mediaToolsUnavailable =>
+        'transcriptPreparationMediaToolsUnavailableBody',
+      TranscriptPreparationAvailability.mediaRegistrationUnavailable =>
+        'transcriptPreparationMediaRegistrationUnavailableBody',
+      TranscriptPreparationAvailability.mediaUnavailable =>
+        'transcriptPreparationMediaUnavailableBody',
+      _ => 'transcriptPreparationUnavailableBody',
+    };
+    return _ReadinessNotice(
+      icon: Icons.cloud_off_outlined,
+      title: l.text('transcriptPreparationUnavailableTitle'),
+      body: l.text(bodyKey),
+      actions: [
+        FilledButton.icon(
+          key: const Key('prepare-learning-transcript'),
+          onPressed: () => view.onPrepare(),
+          icon: const Icon(Icons.auto_awesome_outlined),
+          label: Text(l.text('prepareLearningTranscript')),
         ),
-      ),
-    ],
-  );
+        OutlinedButton(
+          key: const Key('import-subtitle-file'),
+          onPressed: () => view.onImportSubtitle(),
+          child: Text(l.text('importSubtitleFile')),
+        ),
+      ],
+    );
+  }
 }
 
 class _ChooseTranscriptState extends StatelessWidget {
@@ -1518,9 +1543,8 @@ String _preparationLabel(
   TranscriptPreparationStage.importing => l.text(
     'transcriptPreparationImporting',
   ),
-  TranscriptPreparationStage.starting || null => l.text(
-    'transcriptPreparationStarting',
-  ),
+  TranscriptPreparationStage.starting ||
+  null => l.text('transcriptPreparationStarting'),
 };
 
 String _languageLabel(AppLocalizations l, String? language) =>
@@ -1531,9 +1555,8 @@ String _languageLabel(AppLocalizations l, String? language) =>
       _ => language ?? l.text('transcriptLanguageUnknown'),
     };
 
-String _sourceLabel(AppLocalizations l, String source) =>
-    switch (source) {
-      'subtitle' || 'imported' => l.text('transcriptSourceImported'),
-      'generated' => l.text('transcriptSourceGenerated'),
-      _ => l.text('transcriptSourceOther'),
-    };
+String _sourceLabel(AppLocalizations l, String source) => switch (source) {
+  'subtitle' || 'imported' => l.text('transcriptSourceImported'),
+  'generated' => l.text('transcriptSourceGenerated'),
+  _ => l.text('transcriptSourceOther'),
+};

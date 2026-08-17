@@ -6,6 +6,7 @@ import '../models/api_failure.dart';
 import '../models/learning_material.dart';
 import '../models/material_capability.dart';
 import '../models/timeline.dart';
+import '../models/composition.dart';
 import '../services/composition_transcript_bridge.dart';
 import 'material_capability_coordinator.dart';
 import 'media_session_coordinator.dart';
@@ -38,6 +39,23 @@ enum TranscriptReadinessPhase {
   unavailable,
 }
 
+/// The one prerequisite currently preventing automatic preparation.
+///
+/// This stays product-shaped and specific enough to act on: the UI no longer
+/// claims Core and Gen are both unavailable when only one local component is
+/// missing.
+enum TranscriptPreparationAvailability {
+  ready,
+  coreUnavailable,
+  generatorUnavailable,
+  pythonUnavailable,
+  whisperUnavailable,
+  whisperModelUnavailable,
+  mediaToolsUnavailable,
+  mediaRegistrationUnavailable,
+  mediaUnavailable,
+}
+
 /// User-facing stage of an in-flight preparation, derived from the coordinator
 /// run stage. Kept product-shaped: the UI never sees stage identifiers.
 enum TranscriptPreparationStage {
@@ -59,6 +77,7 @@ class TranscriptReadinessState {
     this.fingerprintMismatch = false,
     this.canCancel = false,
     this.canRetry = false,
+    this.unavailableReason,
     List<SubtitleTrack> usableTracks = const [],
   }) : _usableTracks = List.unmodifiable(usableTracks);
 
@@ -76,6 +95,7 @@ class TranscriptReadinessState {
   final bool fingerprintMismatch;
   final bool canCancel;
   final bool canRetry;
+  final TranscriptPreparationAvailability? unavailableReason;
   final List<SubtitleTrack> _usableTracks;
   List<SubtitleTrack> get usableTracks => List.unmodifiable(_usableTracks);
 }
@@ -90,10 +110,11 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   TranscriptReadinessViewModel({
     required this.subtitle,
     required this.mediaSession,
-    required this.canAutoPrepare,
+    required this.preparationAvailability,
     required this.coordinator,
     required this.currentMaterial,
     this.bridge,
+    this.resolveComposition,
     Listenable? refreshTrigger,
   })
     // The public seam stays an explicit `refreshTrigger` parameter rather than
@@ -110,9 +131,11 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   final SubtitleController subtitle;
   final MediaSessionCoordinator mediaSession;
 
-  /// Whether a preparation run can start right now: the generator is
-  /// configured and the current media is registered with the core.
-  final bool Function() canAutoPrepare;
+  /// Resolves the complete local preparation chain to one actionable state.
+  /// This selects the explanatory copy; it does not hide or disable the
+  /// learner's generation intent. A request may still resolve an already
+  /// installed edition, or produce a precise typed failure.
+  final TranscriptPreparationAvailability Function() preparationAvailability;
 
   /// The deep completion coordinator.
   final MaterialCapabilityCoordinator coordinator;
@@ -125,11 +148,19 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   /// without the composition surface (tests, minimal hosts).
   final CompositionTranscriptBridge? bridge;
 
+  /// Resolves the material's adopted composition, so the optional analysis
+  /// resources it carries can ride onto the bridged transcript. Null on hosts
+  /// without the composition surface.
+  final Future<ResolvedComposition?> Function(String materialId)?
+  resolveComposition;
+
   final Listenable? _refreshTrigger;
 
   late String Function(String key) text;
   bool _disposed = false;
   bool _bridgeAttempted = false;
+  bool _bridgeInFlight = false;
+  String? _bridgeMaterialId;
 
   TranscriptReadinessState _state = TranscriptReadinessState();
   TranscriptReadinessState get state => _state;
@@ -165,9 +196,17 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   }
 
   Future<void> prepareLearningTranscript() async {
-    if (!canAutoPrepare()) return;
     final material = currentMaterial();
-    if (material == null) return;
+    if (material == null) {
+      mediaSession.player.setStatus(
+        text(
+          mediaSession.player.mediaPath?.isNotEmpty ?? false
+              ? 'statusMediaMaterialRegistrationUnavailable'
+              : 'statusOpenMediaAndCoreFirst',
+        ),
+      );
+      return;
+    }
     await coordinator.requestCapability(material, MaterialCapability.read);
     _recompute();
   }
@@ -175,19 +214,38 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   void cancel() {
     final material = currentMaterial();
     if (material == null) return;
-    unawaited(coordinator.cancel(material.material.id, MaterialCapability.read));
+    unawaited(
+      coordinator.cancel(material.material.id, MaterialCapability.read),
+    );
     _recompute();
   }
 
   Future<void> retry() async {
     final material = currentMaterial();
     if (material == null) return;
+    _bridgeAttempted = false;
     await coordinator.requestCapability(material, MaterialCapability.read);
     _recompute();
   }
 
-  Future<void> importSubtitle() =>
-      mediaSession.openSubtitle(secondary: false);
+  Future<void> importSubtitle() => mediaSession.openSubtitle(secondary: false);
+
+  /// Re-evaluates local prerequisites after the asynchronous tool locator
+  /// completes without manufacturing a media or Core change event.
+  void refreshAvailability() => _recompute();
+
+  /// Re-projects the newly adopted immutable package onto the open media.
+  /// Adoption may change every one of the eight resources while the Material
+  /// identity stays the same, so the workbench must not wait for a media
+  /// switch before reading the new composition.
+  Future<void> refreshAdoptedComposition() async {
+    final materialId = currentMaterial()?.material.id;
+    if (materialId == null || _bridgeInFlight) return;
+    _bridgeMaterialId = materialId;
+    _bridgeAttempted = false;
+    _bridgeInFlight = true;
+    await _bridgePackageToTrack();
+  }
 
   /// Imports the adopted composition's structured reading as a subtitle
   /// track, once, through [CompositionTranscriptBridge]. The Core package
@@ -195,60 +253,223 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   /// freshly prepared learning transcript would otherwise stay invisible to
   /// the workbench transcript panel.
   Future<void> _bridgePackageToTrack() async {
-    _bridgeAttempted = true;
     final bridge = this.bridge;
     final material = currentMaterial();
     final mediaId = mediaSession.player.mediaId;
-    if (material == null || bridge == null || mediaId == null) return;
+    final materialId = material?.material.id;
     try {
-      final track = await bridge.bridge(material.material.id, mediaId);
-      if (track != null) {
+      if (material == null || mediaId == null || materialId == null) return;
+      // Prefer the package's exact tokenized timed-text resource. It already
+      // has the cue ids consumed by word lookup, word timing, sense groups and
+      // prosody, so routing it through SRT would throw those identities away.
+      final composition = await resolveComposition?.call(materialId);
+      if (!_isCurrentProjectionTarget(materialId, mediaId)) return;
+      final exact = composition?.transcript;
+      if (exact != null && _hasLookupTokens(exact)) {
+        subtitle.setPrimaryTrack(exact);
+        subtitle.setSubtitleResources([exact]);
+        final enhancements = composition!.enhancements;
+        subtitle.setSpeechEnhancements(
+          pronunciationBySentence: const {},
+          timingsBySentence: enhancements.timingsBySentence,
+          pronunciationProviders: const [],
+          chunkPartitionsBySentence: enhancements.chunkPartitionsBySentence,
+          senseGroupsBySentence: enhancements.senseGroupsBySentence,
+          acousticsBySentence: enhancements.acousticsBySentence,
+          prosodyAnchorsBySentence: enhancements.prosodyAnchorsBySentence,
+          phonesBySentence: enhancements.phonesBySentence,
+        );
+        subtitle.setSubtitleResourceCapabilities({
+          exact.id: SubtitleResourceCapabilities.fromCounts(
+            sentenceCount: exact.cues.length,
+            wordTimingCount: enhancements.timingsBySentence.values.fold(
+              0,
+              (total, values) => total + values.length,
+            ),
+            chunkCount: enhancements.chunkPartitionsBySentence.values.fold(
+              0,
+              (total, value) => total + value.chunks.length,
+            ),
+            phoneCount: enhancements.phonesBySentence.values.fold(
+              0,
+              (total, values) => total + values.length,
+            ),
+          ),
+        });
+        subtitle.updatePosition(mediaSession.player.position);
+        return;
+      }
+
+      // Older/partial editions may only have Structured Reading plus anchor
+      // alignment. Keep the established Core import bridge for that honest
+      // fallback; Core tokenizes the imported lines before the learning panel
+      // receives them.
+      if (bridge == null) return;
+      final bridged = await bridge.bridge(materialId, mediaId);
+      if (!_isCurrentProjectionTarget(materialId, mediaId)) return;
+      if (bridged != null) {
         await mediaSession.resourceActions.loadSubtitleResources(
           updateStatus: false,
         );
+        subtitle.setPrimaryTrack(bridged.track);
+        if (!subtitle.subtitleResources.any(
+          (track) => track.id == bridged.track.id,
+        )) {
+          subtitle.setSubtitleResources([
+            ...subtitle.subtitleResources,
+            bridged.track,
+          ]);
+        }
+        await _applyCompositionEnhancements(materialId, bridged);
       }
     } on Object catch (error) {
       debugPrint('transcript bridge failed: $error');
+    } finally {
+      if (_bridgeMaterialId == materialId) {
+        _bridgeAttempted = true;
+        _bridgeInFlight = false;
+        _recompute();
+      }
     }
+  }
+
+  bool _isCurrentProjectionTarget(String materialId, String mediaId) =>
+      currentMaterial()?.material.id == materialId &&
+      mediaSession.player.mediaId == mediaId;
+
+  static bool _hasLookupTokens(SubtitleTrack track) =>
+      track.cues.isNotEmpty &&
+      track.cues.every(
+        (cue) => cue.tokens.any((token) => token.kind == 'word'),
+      );
+
+  /// Re-keys the composition's optional analysis resources onto the cues the
+  /// bridge just created, and hands them to the transcript surface.
+  ///
+  /// The package keys these by *its* sentence ids; the workbench looks them up
+  /// by cue id. Without the bridge's mapping they would key on ids no cue has
+  /// and render nothing at all — silently, which is the worst version of it.
+  /// So an absent mapping applies nothing, exactly like an absent resource.
+  Future<void> _applyCompositionEnhancements(
+    String materialId,
+    BridgedTranscript bridged,
+  ) async {
+    final resolve = resolveComposition;
+    if (resolve == null || bridged.cueIdBySentenceId.isEmpty) return;
+    final composition = await resolve(materialId);
+    final enhancements = composition?.enhancements;
+    if (enhancements == null || enhancements.isEmpty) return;
+    if (_disposed) return;
+    subtitle.applyCompositionEnhancements(
+      timingsBySentence: _rekey(
+        enhancements.timingsBySentence,
+        bridged.cueIdBySentenceId,
+        (cueId, timings) => [
+          for (final timing in timings) timing.copyWith(sentenceId: cueId),
+        ],
+      ),
+      senseGroupsBySentence: _rekey(
+        enhancements.senseGroupsBySentence,
+        bridged.cueIdBySentenceId,
+        (cueId, groups) => groups,
+      ),
+      chunkPartitionsBySentence: _rekey(
+        enhancements.chunkPartitionsBySentence,
+        bridged.cueIdBySentenceId,
+        (cueId, partition) => partition,
+      ),
+      acousticsBySentence: _rekey(
+        enhancements.acousticsBySentence,
+        bridged.cueIdBySentenceId,
+        (cueId, acoustics) => acoustics,
+      ),
+      prosodyAnchorsBySentence: _rekey(
+        enhancements.prosodyAnchorsBySentence,
+        bridged.cueIdBySentenceId,
+        (cueId, anchors) => anchors,
+      ),
+      phonesBySentence: _rekey(
+        enhancements.phonesBySentence,
+        bridged.cueIdBySentenceId,
+        (cueId, phones) => phones,
+      ),
+    );
+  }
+
+  /// Moves [source] from package sentence ids to cue ids, dropping anything
+  /// the mapping does not cover.
+  static Map<String, T> _rekey<T>(
+    Map<String, T> source,
+    Map<String, String> cueIdBySentenceId,
+    T Function(String cueId, T value) adapt,
+  ) {
+    final result = <String, T>{};
+    for (final entry in source.entries) {
+      final cueId = cueIdBySentenceId[entry.key];
+      if (cueId == null) continue;
+      result[cueId] = adapt(cueId, entry.value);
+    }
+    return result;
   }
 
   void _recompute() {
     if (_disposed) return;
     final material = currentMaterial();
+    final materialId = material?.material.id;
+    if (_bridgeMaterialId != materialId) {
+      _bridgeMaterialId = materialId;
+      _bridgeAttempted = false;
+      _bridgeInFlight = false;
+    }
     final run = material == null
         ? null
         : coordinator.runViewFor(material.material.id, MaterialCapability.read);
     final runFailure = run?.failureCode;
+    final projectionAvailable = bridge != null || resolveComposition != null;
+    final completedNeedsProjection =
+        subtitle.primaryTrack == null &&
+        run?.phase == CapabilityRunPhase.completed &&
+        projectionAvailable;
+    if (completedNeedsProjection && !_bridgeAttempted && !_bridgeInFlight) {
+      _bridgeInFlight = true;
+      unawaited(_bridgePackageToTrack());
+    }
+    final projectionFailed =
+        completedNeedsProjection && _bridgeAttempted && !_bridgeInFlight;
+    final availability = preparationAvailability();
     final phase = switch (subtitle.primaryTrack) {
       != null => TranscriptReadinessPhase.ready,
-      // A completed production run leaves the transcript available as the
-      // adopted composition, even before any subtitle track selection.
+      _ when completedNeedsProjection && !projectionFailed =>
+        TranscriptReadinessPhase.preparing,
+      _ when projectionFailed => TranscriptReadinessPhase.failed,
+      // Minimal hosts without a composition bridge retain the old completion
+      // projection; production always supplies a resolver and bridge.
       _ when run?.phase == CapabilityRunPhase.completed =>
         TranscriptReadinessPhase.ready,
       _ when run?.busy ?? false => TranscriptReadinessPhase.preparing,
       _ when run?.phase == CapabilityRunPhase.failed =>
         TranscriptReadinessPhase.failed,
       _ when _usableTracks.isNotEmpty => TranscriptReadinessPhase.choosing,
-      _ when canAutoPrepare() => TranscriptReadinessPhase.missing,
+      _ when availability == TranscriptPreparationAvailability.ready =>
+        TranscriptReadinessPhase.missing,
       _ => TranscriptReadinessPhase.unavailable,
     };
-    // A prepared learning transcript that never became a subtitle track
-    // (package install does not register tracks) is bridged once into the
-    // track surface so the workbench can show it.
-    if (phase == TranscriptReadinessPhase.ready &&
-        subtitle.primaryTrack == null &&
-        !_bridgeAttempted) {
-      unawaited(_bridgePackageToTrack());
-    }
     final next = TranscriptReadinessState(
       phase: phase,
       preparationStage: phase == TranscriptReadinessPhase.preparing
           ? _preparationStageOf(run?.stage)
           : null,
-      failure: runFailure == null ? null : ApiFailure(raw: runFailure),
+      failure: projectionFailed
+          ? const ApiFailure(raw: 'learning_material_projection_failed')
+          : runFailure == null
+          ? null
+          : ApiFailure(raw: runFailure),
       fingerprintMismatch: false,
       canCancel: run?.busy ?? false,
-      canRetry: run?.phase == CapabilityRunPhase.failed,
+      canRetry: projectionFailed || run?.phase == CapabilityRunPhase.failed,
+      unavailableReason: phase == TranscriptReadinessPhase.unavailable
+          ? availability
+          : null,
       usableTracks: _usableTracks,
     );
     if (identical(next, _state) ||
@@ -257,6 +478,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
             next.fingerprintMismatch == _state.fingerprintMismatch &&
             next.canCancel == _state.canCancel &&
             next.canRetry == _state.canRetry &&
+            next.unavailableReason == _state.unavailableReason &&
             next.failure?.raw == _state.failure?.raw &&
             _sameTracks(next.usableTracks, _state.usableTracks))) {
       return;
@@ -268,7 +490,9 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   TranscriptPreparationStage? _preparationStageOf(String? stage) {
     if (stage == null) return TranscriptPreparationStage.starting;
     final lower = stage.toLowerCase();
-    if (lower.contains('transcrib')) return TranscriptPreparationStage.transcribing;
+    if (lower.contains('transcrib')) {
+      return TranscriptPreparationStage.transcribing;
+    }
     if (lower.contains('decoding') || lower.contains('read')) {
       return TranscriptPreparationStage.readingMedia;
     }

@@ -16,6 +16,7 @@ import 'package:llplayer_next/data/repositories/learning_material_repository.dar
 import 'package:llplayer_next/data/repositories/media_import_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
+import 'package:llplayer_next/services/core_timeline_export.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
@@ -1077,7 +1078,7 @@ MaterialDetails _materialDetails({
 }) => materialDetails(
   materialId: materialId,
   retainedAtMs: retained ? 42 : null,
-  documentRenditions: [documentRenditionForText('Hello', )],
+  documentRenditions: [documentRenditionForText('Hello')],
   shape: MaterialShape.audio,
 );
 
@@ -1582,6 +1583,9 @@ class _FakeResourceRepository implements ResourceRepository {
       throw UnimplementedError();
   @override
   Future<LLTimelineDocument> exportTimeline(String trackId) async =>
+      throw UnimplementedError();
+  @override
+  Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
       throw UnimplementedError();
   @override
   Future<void> updateTrackLanguage(String trackId, String language) async {}

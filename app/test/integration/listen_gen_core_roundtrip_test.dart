@@ -17,6 +17,14 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 import 'e2e_database.dart';
 
+String _python3Executable() {
+  for (final directory in (Platform.environment['PATH'] ?? '').split(':')) {
+    final candidate = File('$directory/python3');
+    if (candidate.existsSync()) return candidate.path;
+  }
+  throw StateError('python3 is required for the Gen integration tests');
+}
+
 /// Real three-repository round trip: a locally built listen-gen release
 /// bundle produces a Content Package v3 from a capability request, and a
 /// locally built Core installs it as a candidate and then adopts it as the
@@ -50,13 +58,15 @@ void main() {
     );
     final manifestFile = File(manifestPath!);
     final manifestBytes = await manifestFile.readAsBytes();
-    final manifest = jsonDecode(utf8.decode(manifestBytes))
-        as Map<String, dynamic>;
+    final manifest =
+        jsonDecode(utf8.decode(manifestBytes)) as Map<String, dynamic>;
     final artifact = manifest['artifact'] as Map<String, dynamic>;
     final source = manifest['source'] as Map<String, dynamic>;
     final tool = manifest['tool'] as Map<String, dynamic>;
-    final machineProtocol = manifest['machine_protocol'] as Map<String, dynamic>;
-    final contract = manifest['content_package_contract'] as Map<String, dynamic>;
+    final machineProtocol =
+        manifest['machine_protocol'] as Map<String, dynamic>;
+    final contract =
+        manifest['content_package_contract'] as Map<String, dynamic>;
     final runtime = manifest['runtime'] as Map<String, dynamic>;
     final lock = <String, dynamic>{
       'manifest_version': 1,
@@ -70,9 +80,7 @@ void main() {
       'tool': tool,
       'machine_protocol': machineProtocol,
       'content_package_contract': contract,
-      'runtime': {
-        'python_requires': runtime['python_requires'],
-      },
+      'runtime': {'python_requires': runtime['python_requires']},
       'runtime_identity': manifest['runtime_identity'],
       'artifact': artifact,
     };
@@ -116,7 +124,10 @@ void main() {
       final verified = await release.verify();
       expect(verified.toolVersion, '0.5.0');
 
-      final generator = LocalListenGenProcessService(releaseService: release);
+      final generator = LocalListenGenProcessService(
+        pythonExecutable: _python3Executable,
+        releaseService: release,
+      );
       expect(
         generator.isConfigured,
         isTrue,
@@ -126,16 +137,17 @@ void main() {
 
       // Provider argv comes from the gate script (fixture ASR against the
       // pinned sample.asr.json); a local fallback keeps the test self-contained.
-      final providerArguments = Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS'] == null
+      final providerArguments =
+          Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS'] == null
           ? [
               '--provider',
               'fixture',
               '--fixture',
               '$fixtureRoot/sample.asr.json',
             ]
-          : (jsonDecode(
-                  Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS']!) as List<dynamic>)
-              .cast<String>();
+          : (jsonDecode(Platform.environment['LISTEN_GEN_PROVIDER_ARGUMENTS']!)
+                    as List<dynamic>)
+                .cast<String>();
 
       final api = await LocalApi.connect(databasePath: dbPath);
       try {
@@ -181,8 +193,9 @@ void main() {
           edition.renditions.map((rendition) => rendition.kind),
           contains('media'),
         );
-        final resourceKinds =
-            edition.resources.map((resource) => resource.kind).toSet();
+        final resourceKinds = edition.resources
+            .map((resource) => resource.kind)
+            .toSet();
         expect(
           resourceKinds,
           containsAll(const ['structured_reading', 'anchor_time_alignment']),
@@ -231,11 +244,15 @@ void main() {
       final verified = await release.verify();
       expect(verified.toolVersion, '0.5.0');
 
-      final generator = LocalListenGenProcessService(releaseService: release);
+      final generator = LocalListenGenProcessService(
+        pythonExecutable: _python3Executable,
+        releaseService: release,
+      );
       final dbPath = scratchDatabasePath('roundtrip-listen');
       final api = await LocalApi.connect(databasePath: dbPath);
-      final managedRoot =
-          await Directory.systemTemp.createTemp('roundtrip-managed');
+      final managedRoot = await Directory.systemTemp.createTemp(
+        'roundtrip-managed',
+      );
       final coordinator = MaterialCapabilityCoordinator(
         repository: LocalCapabilityRepository(() => api),
         generator: generator,
@@ -316,8 +333,8 @@ void main() {
           created.material.id,
           sr!.resourceId,
         );
-        final srJson = jsonDecode(utf8.decode(srPayload))
-            as Map<String, dynamic>;
+        final srJson =
+            jsonDecode(utf8.decode(srPayload)) as Map<String, dynamic>;
         expect(srJson['text'], isNotEmpty);
         final media = adopted.derivedMediaRendition;
         expect(media, isNotNull);

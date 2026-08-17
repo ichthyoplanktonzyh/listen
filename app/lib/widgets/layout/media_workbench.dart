@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../../localization.dart';
 import '../../models/content_channel.dart';
-import '../../theme/icon_size.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../../utils/media_title.dart';
 import '../common/content_settle.dart';
 
 class MediaWorkbench extends StatefulWidget {
+  static const defaultMediaFraction = 0.42;
+
   const MediaWorkbench({
     super.key,
     required this.mediaTitle,
@@ -23,10 +25,13 @@ class MediaWorkbench extends StatefulWidget {
     this.studyMenu,
     this.translationMenu,
     this.listeningMenu,
+    this.learningEditionAction,
     this.onShadow,
     this.canShadow = false,
     this.onOpenSettings,
     this.retentionMenu,
+    this.showMediaPane = true,
+    this.showShadowAction = true,
   });
 
   final String mediaTitle;
@@ -59,6 +64,11 @@ class MediaWorkbench extends StatefulWidget {
   /// The extensive-listening session for this sitting.
   final Widget? listeningMenu;
 
+  /// Opens the immutable package and eight-resource status for this Material.
+  /// This is material-scoped, so it lives on the workbench rather than in a
+  /// global tools menu.
+  final Widget? learningEditionAction;
+
   /// Shadows the sentence being played — the high-frequency entry the
   /// reference product keeps in the top bar, distinct from the same mode buried
   /// in [studyMenu]. Null-safe: when there is no current sentence the header
@@ -81,13 +91,21 @@ class MediaWorkbench extends StatefulWidget {
   /// current media. Null on surfaces that have none wired.
   final Widget? retentionMenu;
 
+  /// Whether this material has a visual stream. Audio and document materials
+  /// keep the existing learning/text panel, expanded to the full workbench;
+  /// only video materials pay for the visual pane and splitter.
+  final bool showMediaPane;
+
+  /// Pure documents have no current timed sentence until a TTS rendition is
+  /// adopted, so their workbench does not advertise a dead shadow action.
+  final bool showShadowAction;
+
   @override
   State<MediaWorkbench> createState() => _MediaWorkbenchState();
 }
 
 class _MediaWorkbenchState extends State<MediaWorkbench> {
   static const splitterWidth = 9.0;
-  static const defaultMediaFraction = 0.42;
   late double _mediaFraction;
 
   @override
@@ -114,119 +132,139 @@ class _MediaWorkbenchState extends State<MediaWorkbench> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      _SessionHeader(
-        mediaTitle: widget.mediaTitle,
-        onCollapse: widget.onCollapse,
-        subtitleMenu: widget.subtitleMenu,
-        studyMenu: widget.studyMenu,
-        translationMenu: widget.translationMenu,
-        listeningMenu: widget.listeningMenu,
-        onShadow: widget.onShadow,
-        canShadow: widget.canShadow,
-        onOpenSettings: widget.onOpenSettings,
-        retentionMenu: widget.retentionMenu,
-      ),
-      Expanded(
-        // Channel surfaces settle in (#46): switching channels fades the new
-        // surface in with an 8px rise instead of hard-cutting.
-        child: widget.immersiveStage != null
-            ? ContentSettle(
-                settleKey: widget.selectedChannel,
-                child: widget.immersiveStage!,
-              )
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth <
-                      ListenBreakpoints.workbenchStacked) {
-                    final availableHeight =
-                        constraints.maxHeight - splitterWidth;
-                    final minimumFraction = (240 / availableHeight).clamp(
+  Widget build(BuildContext context) => Material(
+    // The workbench is a full-bleed layer stacked over the shell, not a page
+    // in a route — nothing behind it is supposed to be visible. Without its
+    // own opaque ground the rail and whichever page is underneath show
+    // straight through the body.
+    //
+    // This was invisible while every body happened to paint its own surface
+    // (the media pane's ColoredBox, SidePanel's Material). A document body
+    // paints none, so opening a document rendered the reading pane on top of
+    // a fully legible library page.
+    color: Theme.of(context).colorScheme.surface,
+    child: Column(
+      children: [
+        _SessionHeader(
+          mediaTitle: widget.mediaTitle,
+          onCollapse: widget.onCollapse,
+          subtitleMenu: widget.subtitleMenu,
+          studyMenu: widget.studyMenu,
+          translationMenu: widget.translationMenu,
+          listeningMenu: widget.listeningMenu,
+          learningEditionAction: widget.learningEditionAction,
+          onShadow: widget.onShadow,
+          canShadow: widget.canShadow,
+          onOpenSettings: widget.onOpenSettings,
+          retentionMenu: widget.retentionMenu,
+          showShadowAction: widget.showShadowAction,
+        ),
+        Expanded(
+          // Channel surfaces settle in (#46): switching channels fades the new
+          // surface in with an 8px rise instead of hard-cutting.
+          child: widget.immersiveStage != null
+              ? ContentSettle(
+                  settleKey: widget.selectedChannel,
+                  child: widget.immersiveStage!,
+                )
+              : !widget.showMediaPane
+              ? ContentSettle(
+                  settleKey: widget.selectedChannel,
+                  child: widget.learningPanel,
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth <
+                        ListenBreakpoints.workbenchStacked) {
+                      final availableHeight =
+                          constraints.maxHeight - splitterWidth;
+                      final minimumFraction = (240 / availableHeight).clamp(
+                        0.28,
+                        0.7,
+                      );
+                      final maximumFraction =
+                          ((availableHeight - 260) / availableHeight).clamp(
+                            minimumFraction,
+                            0.72,
+                          );
+                      final effectiveFraction = _mediaFraction.clamp(
+                        minimumFraction,
+                        maximumFraction,
+                      );
+                      return Column(
+                        children: [
+                          SizedBox(
+                            height: availableHeight * effectiveFraction,
+                            child: _MediaPane(
+                              mediaTitle: widget.mediaTitle,
+                              playerStage: widget.playerStage,
+                            ),
+                          ),
+                          _WorkbenchSplitter.horizontal(
+                            onReset: () => _setMediaFraction(
+                              MediaWorkbench.defaultMediaFraction,
+                            ),
+                            onDrag: (delta) {
+                              _setMediaFraction(
+                                (_mediaFraction + delta / availableHeight)
+                                    .clamp(minimumFraction, maximumFraction),
+                              );
+                            },
+                          ),
+                          Expanded(
+                            child: ContentSettle(
+                              settleKey: widget.selectedChannel,
+                              child: widget.learningPanel,
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    final availableWidth = constraints.maxWidth - splitterWidth;
+                    final minimumFraction = (320 / availableWidth).clamp(
                       0.28,
                       0.7,
                     );
                     final maximumFraction =
-                        ((availableHeight - 260) / availableHeight).clamp(
+                        ((availableWidth - 420) / availableWidth).clamp(
                           minimumFraction,
-                          0.72,
+                          0.7,
                         );
                     final effectiveFraction = _mediaFraction.clamp(
                       minimumFraction,
                       maximumFraction,
                     );
-                    return Column(
+                    return Row(
                       children: [
                         SizedBox(
-                          height: availableHeight * effectiveFraction,
+                          width: availableWidth * effectiveFraction,
                           child: _MediaPane(
                             mediaTitle: widget.mediaTitle,
                             playerStage: widget.playerStage,
                           ),
                         ),
-                        _WorkbenchSplitter.horizontal(
-                          onReset: () =>
-                              _setMediaFraction(defaultMediaFraction),
+                        _WorkbenchSplitter(
+                          onReset: () => _setMediaFraction(
+                            MediaWorkbench.defaultMediaFraction,
+                          ),
                           onDrag: (delta) {
                             _setMediaFraction(
-                              (_mediaFraction + delta / availableHeight).clamp(
+                              (_mediaFraction + delta / availableWidth).clamp(
                                 minimumFraction,
                                 maximumFraction,
                               ),
                             );
                           },
                         ),
-                        Expanded(
-                          child: ContentSettle(
-                            settleKey: widget.selectedChannel,
-                            child: widget.learningPanel,
-                          ),
-                        ),
+                        Expanded(child: widget.learningPanel),
                       ],
                     );
-                  }
-
-                  final availableWidth = constraints.maxWidth - splitterWidth;
-                  final minimumFraction = (320 / availableWidth).clamp(
-                    0.28,
-                    0.7,
-                  );
-                  final maximumFraction =
-                      ((availableWidth - 420) / availableWidth).clamp(
-                        minimumFraction,
-                        0.7,
-                      );
-                  final effectiveFraction = _mediaFraction.clamp(
-                    minimumFraction,
-                    maximumFraction,
-                  );
-                  return Row(
-                    children: [
-                      SizedBox(
-                        width: availableWidth * effectiveFraction,
-                        child: _MediaPane(
-                          mediaTitle: widget.mediaTitle,
-                          playerStage: widget.playerStage,
-                        ),
-                      ),
-                      _WorkbenchSplitter(
-                        onReset: () => _setMediaFraction(defaultMediaFraction),
-                        onDrag: (delta) {
-                          _setMediaFraction(
-                            (_mediaFraction + delta / availableWidth).clamp(
-                              minimumFraction,
-                              maximumFraction,
-                            ),
-                          );
-                        },
-                      ),
-                      Expanded(child: widget.learningPanel),
-                    ],
-                  );
-                },
-              ),
-      ),
-    ],
+                  },
+                ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -238,45 +276,26 @@ class _SessionHeader extends StatelessWidget {
     required this.studyMenu,
     required this.translationMenu,
     required this.listeningMenu,
+    required this.learningEditionAction,
     required this.onShadow,
     required this.canShadow,
     required this.onOpenSettings,
     required this.retentionMenu,
+    required this.showShadowAction,
   });
 
-  /// The media on the workbench, for the breadcrumb. It reads the title, not
-  /// the download artefact — same rule as the media pane heading.
   final String mediaTitle;
-
   final VoidCallback? onCollapse;
-
-  /// Actions on *this* media (subtitle sourcing, archiving). They used to sit
-  /// on a shell app bar, gated by `canActOnMedia` and therefore dead on every
-  /// screen that had no media; here the gate is this header's own existence.
   final Widget? subtitleMenu;
-
-  /// Ways of working this material. Like [subtitleMenu] it acts on *this*
-  /// media, so it is gated by this header's own existence.
   final Widget? studyMenu;
-
-  /// Which of the two subtitle tracks the transcript shows.
   final Widget? translationMenu;
-
-  /// The extensive-listening session for this sitting.
   final Widget? listeningMenu;
-
-  /// Shadows the sentence being played, [canShadow] gating it.
+  final Widget? learningEditionAction;
   final VoidCallback? onShadow;
   final bool canShadow;
-
-  /// App settings. The rail that used to carry this is behind the workbench.
   final VoidCallback? onOpenSettings;
-
-  /// Retention for the current media (Keep / unretain). Shown in the
-  /// take-away band: moving material in or out of the Personal Library is a
-  /// keep-or-release decision, the same class as the export/share chrome
-  /// beside it.
   final Widget? retentionMenu;
+  final bool showShadowAction;
 
   @override
   Widget build(BuildContext context) {
@@ -293,32 +312,27 @@ class _SessionHeader extends StatelessWidget {
           children: [
             if (onCollapse != null)
               IconButton(
+                key: const Key('workbench-close'),
                 tooltip: l.text('backToHome'),
                 onPressed: onCollapse,
-                icon: const Icon(Icons.home_outlined),
+                icon: const Icon(Icons.arrow_back),
               ),
-            // Where the learner is. The reference top bar leads with a source
-            // breadcrumb; we have no source hierarchy yet (a backend gap — see
-            // workbench-backend-gaps.md), so the honest path is the library and
-            // this media's title, never an invented channel name.
-            Expanded(child: _Breadcrumb(mediaTitle: mediaTitle)),
-            // A labelled, tooltipped tool band — not an anonymous menu cluster.
-            // Order runs low-commitment to high: session, shadow, how the text
-            // reads, how to work it, its subtitles, then take-away and app
-            // chrome. Unwired take-away entries are shown disabled with the
-            // reason, never as a clickable promise.
+            Expanded(child: _Breadcrumb(materialTitle: mediaTitle)),
+            ?learningEditionAction,
             ?listeningMenu,
-            _gap,
-            IconButton(
-              key: const Key('workbench-shadow'),
-              tooltip: canShadow
-                  ? l.text('workbenchShadowTooltip')
-                  : l.text('workbenchShadowNoCue'),
-              onPressed: canShadow ? onShadow : null,
-              iconSize: ListenIconSize.chrome,
-              color: colors.onSurfaceVariant,
-              icon: const Icon(Icons.mic_none_outlined),
-            ),
+            if (showShadowAction) ...[
+              _gap,
+              IconButton(
+                key: const Key('workbench-shadow'),
+                tooltip: canShadow
+                    ? l.text('workbenchShadowTooltip')
+                    : l.text('workbenchShadowNoCue'),
+                onPressed: canShadow ? onShadow : null,
+                iconSize: ListenIconSize.chrome,
+                color: colors.onSurfaceVariant,
+                icon: const Icon(Icons.mic_none_outlined),
+              ),
+            ],
             if (translationMenu != null) ...[_gap, translationMenu!],
             if (studyMenu != null) ...[_gap, studyMenu!],
             if (subtitleMenu != null) ...[_gap, subtitleMenu!],
@@ -358,15 +372,10 @@ class _SessionHeader extends StatelessWidget {
   static const _gap = SizedBox(width: ListenSpacing.gap8);
 }
 
-/// The media breadcrumb: `Media library / <title>`. It reads the display title
-/// (extension, provider id and trailing date stripped) and keeps the raw file
-/// name a hover away, so nothing is hidden. When space runs out the title
-/// ellipsizes; the library root and separator hold their width so the learner
-/// never loses the sense of place.
 class _Breadcrumb extends StatelessWidget {
-  const _Breadcrumb({required this.mediaTitle});
+  const _Breadcrumb({required this.materialTitle});
 
-  final String mediaTitle;
+  final String materialTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -378,7 +387,7 @@ class _Breadcrumb extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(l.text('mediaLibrary'), style: quiet),
+        Text(l.text('sidebarLibrary'), style: quiet),
         Icon(
           Icons.chevron_right,
           size: ListenIconSize.control,
@@ -386,9 +395,9 @@ class _Breadcrumb extends StatelessWidget {
         ),
         Flexible(
           child: Tooltip(
-            message: mediaTitle,
+            message: materialTitle,
             child: Text(
-              displayMediaTitle(mediaTitle),
+              displayMediaTitle(materialTitle),
               key: const Key('workbench-breadcrumb-title'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

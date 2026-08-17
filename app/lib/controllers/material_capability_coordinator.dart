@@ -8,6 +8,7 @@ import '../models/gen_machine_event.dart';
 import '../models/learning_edition.dart';
 import '../models/learning_material.dart';
 import '../models/material_capability.dart';
+import '../models/timeline.dart';
 import '../services/capability_file_resolver.dart';
 import '../services/capability_generation_request.dart';
 import '../services/capability_request_encoder.dart';
@@ -34,15 +35,17 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     required this._generator,
     this.mediaFilePath,
     this.mediaPathResolver,
+    this.subtitleTrackForMedia,
     this.providerArguments = _noProviderArguments,
     this.generatorToolId = 'listen-gen',
     this.generatorToolVersion = '0.5.0',
     CapabilityFileResolver? fileResolver,
     ReusableResourceResolver? reusableResources,
-  }) : _fileResolver = fileResolver ??
-            _defaultFileResolver(mediaFilePath, mediaPathResolver),
-       _reusableResources = reusableResources ??
-           ReusableResourceResolver(_repository);
+  }) : _fileResolver =
+           fileResolver ??
+           _defaultFileResolver(mediaFilePath, mediaPathResolver),
+       _reusableResources =
+           reusableResources ?? ReusableResourceResolver(_repository);
 
   final CapabilityRepository _repository;
   final ListenGenProcessService _generator;
@@ -57,6 +60,12 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   /// registered media is not yet in any app-side list) round-trip to Core.
   /// Defaults to the file resolver's own path resolution.
   final Future<String?> Function(MediaRendition rendition)? mediaPathResolver;
+
+  /// The currently selected learning subtitle for a media rendition. The
+  /// coordinator serializes its exact cue text and timing into a run-owned
+  /// SRT input so Gen can skip ASR and force-align the authoritative text.
+  final SubtitleTrack? Function(MediaRendition rendition)?
+  subtitleTrackForMedia;
 
   /// CLI arguments selecting the Gen providers for a run (e.g.
   /// `--tts-provider say`, `--provider whisper-cpp --model …`); provider
@@ -112,7 +121,13 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     final run = session.replaceRun();
     _emit();
     try {
-      return await _resolve(material, capability, session, run, localPackagePath);
+      return await _resolve(
+        material,
+        capability,
+        session,
+        run,
+        localPackagePath,
+      );
     } finally {
       run.finished = true;
       _emit();
@@ -297,6 +312,9 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     // of being regenerated. The payload is materialized to a run-owned
     // temporary file so the generator can verify the exact bytes it reuses.
     final availableResources = await _reusableResources.resolve(material);
+    final subtitleSrt = _selectedSubtitleSrt(
+      material.currentRevision.mediaRenditions,
+    );
 
     final requestJson = CapabilityRequestEncoder.encode(
       materialId: material.material.id,
@@ -324,6 +342,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         CapabilityGenerationRequest(
           requestJson: requestJson,
           providerArguments: providerArguments(),
+          subtitleSrt: subtitleSrt,
         ),
       );
     } on Object catch (error) {
@@ -348,7 +367,8 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
           case GenEventKind.accepted:
             // The accepted attempt id must name the attempt this run opened;
             // a mismatch is a protocol violation.
-            if (event.attemptId != null && event.attemptId != attempt.attemptId) {
+            if (event.attemptId != null &&
+                event.attemptId != attempt.attemptId) {
               run.warnings.add(
                 'attempt_id_mismatch: generator accepted a different attempt',
               );
@@ -357,10 +377,12 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
           case GenEventKind.protocol:
           case GenEventKind.planned:
           case GenEventKind.completed ||
-                GenEventKind.cancelled ||
-                GenEventKind.failed:
+              GenEventKind.cancelled ||
+              GenEventKind.failed:
             final value = event.terminal;
-            if (value != null && !terminal.isCompleted) terminal.complete(value);
+            if (value != null && !terminal.isCompleted) {
+              terminal.complete(value);
+            }
         }
       },
       onError: (Object _) {
@@ -369,17 +391,30 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         }
       },
     );
-    unawaited(processRun.packagePath.then<void>((path) {
-      // The terminal outcome is driven by the machine events: a real Gen run
-      // emits `completed` before it resolves the artifact path. A success
-      // here never fabricates an empty-plan completion; only a failed
-      // artifact handoff (process died without a terminal event, protocol
-      // violation, digest mismatch) completes the run as failed.
-    }).catchError((Object _) {
-      if (!terminal.isCompleted) {
-        terminal.complete(GenEventTerminal(GenEventKind.failed));
-      }
-    }));
+    unawaited(
+      processRun.packagePath
+          .then<void>((path) {
+            // The terminal outcome is driven by the machine events: a real Gen run
+            // emits `completed` before it resolves the artifact path. A success
+            // here never fabricates an empty-plan completion; only a failed
+            // artifact handoff (process died without a terminal event, protocol
+            // violation, digest mismatch) completes the run as failed.
+          })
+          .catchError((Object error) {
+            if (!terminal.isCompleted) {
+              final failure = error is ListenGenProcessFailure
+                  ? error
+                  : const ListenGenProcessFailure('generation_failed');
+              terminal.complete(
+                GenEventTerminal(
+                  GenEventKind.failed,
+                  code: failure.code,
+                  message: failure.message,
+                ),
+              );
+            }
+          }),
+    );
 
     final awaited = await terminal.future;
     await subscription.cancel();
@@ -397,7 +432,10 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       final code = awaited.code ?? 'generation_failed';
       await _finalizeFailure(run, code);
       unawaited(processRun.cleanUp());
-      return _fail(run, ListenGenProcessFailure(code, message: awaited.message));
+      return _fail(
+        run,
+        ListenGenProcessFailure(code, message: awaited.message),
+      );
     }
 
     final packagePath = awaited.packageSha256 == null
@@ -434,7 +472,10 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     _emit();
     final LearningEdition installed;
     try {
-      installed = await _repository.installPackage(material.material.id, packagePath);
+      installed = await _repository.installPackage(
+        material.material.id,
+        packagePath,
+      );
     } on Object catch (error) {
       await _finalizeFailure(run, _stableCode(error));
       unawaited(processRun.cleanUp());
@@ -444,7 +485,10 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     _emit();
     final LearningEdition adopted;
     try {
-      adopted = await _repository.adoptEdition(material.material.id, installed.releaseId);
+      adopted = await _repository.adoptEdition(
+        material.material.id,
+        installed.releaseId,
+      );
     } on Object catch (error) {
       await _finalizeFailure(run, _stableCode(error));
       unawaited(processRun.cleanUp());
@@ -468,6 +512,40 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     _emit();
     unawaited(processRun.cleanUp());
     return CapabilityAvailable(edition: adopted);
+  }
+
+  String? _selectedSubtitleSrt(List<MediaRendition> renditions) {
+    SubtitleTrack? track;
+    for (final rendition in renditions) {
+      final candidate = subtitleTrackForMedia?.call(rendition);
+      if (candidate != null && candidate.usableForLearning) {
+        track = candidate;
+        break;
+      }
+    }
+    if (track == null) return null;
+    final buffer = StringBuffer();
+    for (var index = 0; index < track.cues.length; index += 1) {
+      final cue = track.cues[index];
+      buffer
+        ..writeln(index + 1)
+        ..writeln(
+          '${_srtTimestamp(cue.start.inMilliseconds)} --> '
+          '${_srtTimestamp(cue.end.inMilliseconds)}',
+        )
+        ..writeln(cue.text)
+        ..writeln();
+    }
+    return buffer.toString();
+  }
+
+  static String _srtTimestamp(int milliseconds) {
+    final hours = milliseconds ~/ 3600000;
+    final minutes = (milliseconds % 3600000) ~/ 60000;
+    final seconds = (milliseconds % 60000) ~/ 1000;
+    final millis = milliseconds % 1000;
+    String pad(int value, int width) => value.toString().padLeft(width, '0');
+    return '${pad(hours, 2)}:${pad(minutes, 2)}:${pad(seconds, 2)},${pad(millis, 3)}';
   }
 
   /// The language the generation must produce: the exact language of the
@@ -572,8 +650,12 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
       case MaterialCapability.read:
         return edition.providesRead;
       case MaterialCapability.listen:
-        if (!edition.hasAvailableMediaRendition) return false;
-        return _materialHasMediaKind(material, MediaRenditionKind.audio);
+        // The playable rendition may be derived by Gen (document -> TTS) and
+        // therefore need not exist on the source Material revision. The
+        // adopted Edition is the authority for whether listen is now
+        // available; requiring a source audio rendition would make every
+        // generated document-audio Edition look permanently unsatisfied.
+        return edition.hasAvailableMediaRendition;
       case MaterialCapability.watch:
         if (!edition.hasAvailableMediaRendition) return false;
         return _materialHasMediaKind(material, MediaRenditionKind.video);
@@ -654,7 +736,8 @@ final class _CoordinatorUnavailable implements Exception {
 /// Default file resolver when no real one is wired: resolves nothing. The
 /// coordinator is testable without a file system; production wiring injects
 /// the local resolver at the composition root.
-final class _UnresolvingCapabilityFileResolver implements CapabilityFileResolver {
+final class _UnresolvingCapabilityFileResolver
+    implements CapabilityFileResolver {
   const _UnresolvingCapabilityFileResolver();
 
   @override
@@ -673,9 +756,6 @@ final class _UnresolvingCapabilityFileResolver implements CapabilityFileResolver
   @override
   Future<void> dispose() async {}
 }
-
-
-
 
 extension _FirstOrNull<T> on Iterable<T> {
   T? get _firstOrNull {

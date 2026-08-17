@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../data/repositories/learning_material_repository.dart';
+import '../models/composition.dart';
 import '../models/document_session.dart';
 import '../models/learning_material.dart';
 import '../models/personal_library.dart';
@@ -29,6 +30,7 @@ class DocumentSessionController extends ChangeNotifier {
     required this.fileService,
     required this.intakeFlow,
     required this.sourceResolver,
+    this.resolveComposition,
     this.refreshLibrary,
     this.referenceInPlace = false,
   });
@@ -43,7 +45,13 @@ class DocumentSessionController extends ChangeNotifier {
   /// Resolves a Source Asset's exact bytes for the direct view.
   final DocumentSourceResolver sourceResolver;
 
-  final Future<void> Function()? refreshLibrary;
+  /// Resolves the material's adopted composition, when one exists. Injected so
+  /// the controller keeps no transport: null in tests and on hosts that have
+  /// no composition surface wired.
+  final Future<ResolvedComposition?> Function(String materialId)?
+  resolveComposition;
+
+  final Future<void> Function(MaterialDetails details)? refreshLibrary;
 
   /// Whether intake references the picked file in place instead of copying
   /// into the managed store. Explicit only: never auto-selected, and the
@@ -262,14 +270,7 @@ class DocumentSessionController extends ChangeNotifier {
     if (current.isRetained == retain) return;
     final materialId = current.details.material.id;
     final generation = _generation;
-    _setState(
-      DocumentSessionReady(
-        details: current.details,
-        documentRendition: current.documentRendition,
-        sourceAsset: current.sourceAsset,
-        retentionInFlight: true,
-      ),
-    );
+    _setState(current.copyWith(retentionInFlight: true));
     try {
       final details = retain
           ? await materialRepository.retainLearningMaterial(materialId)
@@ -278,16 +279,13 @@ class DocumentSessionController extends ChangeNotifier {
       if (_state is! DocumentSessionReady) return;
       final ready = _state as DocumentSessionReady;
       if (ready.details.material.id != materialId) return;
-      // Keep the chosen rendition: membership changes do not touch revisions,
-      // and the text on screen must not flicker.
-      _setState(
-        DocumentSessionReady(
-          details: details,
-          documentRendition: ready.documentRendition,
-          sourceAsset: ready.sourceAsset,
-        ),
-      );
-      await refreshLibrary?.call();
+      // Rebuilt from `ready`, not from the pre-flight snapshot: a capability
+      // projection or an adopted composition can land while the round trip is
+      // in flight, and rebuilding from the older state would drop it. Keeps
+      // the chosen rendition too — membership never touches revisions, so the
+      // text on screen must not flicker.
+      _setState(ready.copyWith(details: details, retentionInFlight: false));
+      await refreshLibrary?.call(details);
     } catch (error) {
       if (_stale(generation)) return;
       if (_state is! DocumentSessionReady) return;
@@ -295,10 +293,8 @@ class DocumentSessionController extends ChangeNotifier {
       if (ready.details.material.id != materialId) return;
       // The document stays readable; only the typed detail is surfaced.
       _setState(
-        DocumentSessionReady(
-          details: ready.details,
-          documentRendition: ready.documentRendition,
-          sourceAsset: ready.sourceAsset,
+        ready.copyWith(
+          retentionInFlight: false,
           retentionFailure: materialRepository.failureDetail(error),
         ),
       );
@@ -329,12 +325,8 @@ class DocumentSessionController extends ChangeNotifier {
       if (current is! DocumentSessionReady) return;
       if (current.details.material.id != materialId) return;
       _setState(
-        DocumentSessionReady(
-          details: current.details,
-          documentRendition: current.documentRendition,
-          sourceAsset: current.sourceAsset,
+        current.copyWith(
           capabilities: projections,
-          retentionInFlight: current.retentionInFlight,
           retentionFailure: current.retentionFailure,
         ),
       );
@@ -344,7 +336,43 @@ class DocumentSessionController extends ChangeNotifier {
     }
   }
 
-  /// Enters the ready state and starts the capability load.
+  /// Re-reads the adopted composition of the open document and attaches it to
+  /// the ready state.
+  ///
+  /// This is what a finished generation calls: the workbench refreshes in
+  /// place, on the same material, instead of sending the learner to a separate
+  /// "open the result" surface. Same latest-request-wins rules as every other
+  /// load, and the same honesty — nothing adopted, an unresolvable payload, or
+  /// a failed read all leave the original document exactly as it was.
+  Future<void> refreshComposition() async {
+    final current = _state;
+    if (current is! DocumentSessionReady) return;
+    await _loadComposition(_generation, current.details.material.id);
+  }
+
+  Future<void> _loadComposition(int generation, String materialId) async {
+    final resolve = resolveComposition;
+    if (resolve == null) return;
+    try {
+      final composition = await resolve(materialId);
+      if (composition == null || _stale(generation)) return;
+      final current = _state;
+      if (current is! DocumentSessionReady) return;
+      if (current.details.material.id != materialId) return;
+      _setState(
+        current.copyWith(
+          composition: composition,
+          retentionFailure: current.retentionFailure,
+        ),
+      );
+    } catch (_) {
+      // The adopted edition is additive detail. Its absence — nothing adopted,
+      // an unreadable payload, an unreachable core — never takes the original
+      // document away.
+    }
+  }
+
+  /// Enters the ready state and starts the progressive loads.
   void _enterReady({
     required MaterialDetails details,
     required DocumentRendition? rendition,
@@ -359,6 +387,7 @@ class DocumentSessionController extends ChangeNotifier {
       ),
     );
     unawaited(_loadCapabilities(generation, details.material.id));
+    unawaited(_loadComposition(generation, details.material.id));
   }
 
   int _beginOpen() {
@@ -452,8 +481,7 @@ class DocumentSessionController extends ChangeNotifier {
     DocumentIntakeFailureKind.unsupported =>
       DocumentSessionFailureKind.unsupported,
     DocumentIntakeFailureKind.corrupt => DocumentSessionFailureKind.corrupt,
-    DocumentIntakeFailureKind.encrypted =>
-      DocumentSessionFailureKind.encrypted,
+    DocumentIntakeFailureKind.encrypted => DocumentSessionFailureKind.encrypted,
   };
 
   void _setState(DocumentSessionState next) {

@@ -7,8 +7,15 @@ final class CapabilityGenerationRequest {
   const CapabilityGenerationRequest({
     required this.requestJson,
     required this.providerArguments,
+    this.subtitleSrt,
   });
 
   final Map<String, dynamic> requestJson;
   final List<String> providerArguments;
+
+  /// The currently selected learning subtitle, serialized as SRT for this
+  /// one run. [LocalListenGenProcessService] materializes it beside the
+  /// capability request and passes that run-owned path through `--subtitle`,
+  /// which selects Gen's subtitle-authoritative forced-alignment branch.
+  final String? subtitleSrt;
 }

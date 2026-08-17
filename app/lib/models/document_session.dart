@@ -1,3 +1,4 @@
+import 'composition.dart';
 import 'api_failure.dart';
 import 'learning_material.dart';
 import 'document_format.dart';
@@ -49,9 +50,35 @@ final class DocumentSessionReady extends DocumentSessionState {
     required this.documentRendition,
     required this.sourceAsset,
     this.capabilities,
+    this.composition,
     this.retentionFailure,
     this.retentionInFlight = false,
   });
+
+  /// Rebuilds this state with selected fields replaced.
+  ///
+  /// Every progressive load (capabilities, composition) and every membership
+  /// result rebuilds the ready state, and each one used to re-list the fields
+  /// it wanted to keep. A load that forgot one silently dropped it — the
+  /// composition disappearing the moment Keep was pressed is exactly that bug.
+  DocumentSessionReady copyWith({
+    MaterialDetails? details,
+    List<MaterialCapabilityProjection>? capabilities,
+    ResolvedComposition? composition,
+    ApiFailure? retentionFailure,
+    bool? retentionInFlight,
+  }) => DocumentSessionReady(
+    details: details ?? this.details,
+    documentRendition: documentRendition,
+    sourceAsset: sourceAsset,
+    capabilities: capabilities ?? this.capabilities,
+    composition: composition ?? this.composition,
+    // Unlike the others, a failure is cleared by the next attempt rather than
+    // carried forward: passing null means "no failure now", not "keep the old
+    // one". Callers that want to keep it pass it explicitly.
+    retentionFailure: retentionFailure,
+    retentionInFlight: retentionInFlight ?? this.retentionInFlight,
+  );
 
   final MaterialDetails details;
 
@@ -67,6 +94,14 @@ final class DocumentSessionReady extends DocumentSessionState {
   /// Null while loading or when the projection is unavailable. A failed
   /// attempt is honest evidence — it never invalidates the direct view.
   final List<MaterialCapabilityProjection>? capabilities;
+
+  /// The material's adopted composition, once resolved — the same material
+  /// seen through its generated edition rather than its original bytes.
+  ///
+  /// Null while loading and whenever nothing is adopted, which is the ordinary
+  /// state of a document that has never been sent to Gen. It is additive: the
+  /// original document stays exactly as it was underneath.
+  final ResolvedComposition? composition;
 
   /// The format of the open document, for renderer dispatch. Media types
   /// outside the supported family degrade to plain text rendering.

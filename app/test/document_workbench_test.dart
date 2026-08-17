@@ -10,12 +10,14 @@ import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/api_failure.dart';
 
 import 'package:llplayer_next/models/learning_material.dart';
+import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/personal_library.dart';
-import 'package:llplayer_next/screens/document_session_screen.dart';
+import 'package:llplayer_next/widgets/layout/document_workbench.dart';
 import 'package:llplayer_next/services/document_intake_flow.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/common/api_failure_disclosure.dart';
+import 'package:llplayer_next/widgets/layout/media_workbench.dart';
 
 import 'support/document_session_test_fakes.dart';
 import 'support/learning_material_fixtures.dart';
@@ -55,7 +57,10 @@ MaterialDetails _detailsFor(
   shape: documentRenditions.isEmpty ? MaterialShape.text : MaterialShape.mixed,
 );
 
-Widget _screen(DocumentSessionController controller) => MaterialApp(
+Widget _screen(
+  DocumentSessionController controller, {
+  CapabilityRunView? listenRun,
+}) => MaterialApp(
   theme: ListenTheme.light(),
   locale: const Locale('zh'),
   supportedLocales: AppLocalizations.supportedLocales,
@@ -65,8 +70,28 @@ Widget _screen(DocumentSessionController controller) => MaterialApp(
     GlobalWidgetsLocalizations.delegate,
     GlobalCupertinoLocalizations.delegate,
   ],
-  home: DocumentSessionScreen(controller: controller),
+  home: Scaffold(
+    body: DocumentWorkbench(
+      controller: controller,
+      mediaFraction: MediaWorkbench.defaultMediaFraction,
+      onMediaFractionChanged: _ignoreFraction,
+      // Mounted the way the shell mounts it: collapsing the workbench is how
+      // a document is left, since there is no route to pop.
+      onCollapse: _ignoreCollapse,
+      listenRun: listenRun,
+      onRequestListen: () {},
+    ),
+  ),
 );
+
+void _ignoreFraction(double value) {}
+
+void _ignoreCollapse() {}
+
+Future<void> _showSource(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('document-view-source')));
+  await tester.pumpAndSettle();
+}
 
 /// A source resolver that answers each text's exact UTF-8 bytes under its
 /// digest, so the direct view renders the exact source text.
@@ -81,6 +106,43 @@ FakeDocumentSourceResolver _sourceResolver(List<String> texts) {
 String _digestOf(String text) => sha256.convert(utf8.encode(text)).toString();
 
 void main() {
+  testWidgets('a missing Gen Python runtime is named on the document surface', (
+    tester,
+  ) async {
+    final repo = FakeLearningMaterialRepository();
+    final controller = DocumentSessionController(
+      materialRepository: repo,
+      fileService: FakeDocumentIntakeFileService([
+        DocumentFileData(path: '/tmp/a.txt', bytes: utf8.encode('Body')),
+      ]),
+      intakeFlow: DocumentIntakeFlow(
+        materialRepository: repo,
+        codec: codec,
+        store: FakeManagedAssetStoreService(),
+        referenceStore: FakeDocumentReferenceStore(),
+      ),
+      sourceResolver: _sourceResolver(const ['Body']),
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _screen(
+        controller,
+        listenRun: const CapabilityRunView(
+          materialId: 'material-1',
+          capability: MaterialCapability.listen,
+          phase: CapabilityRunPhase.failed,
+          failureCode: 'generator_python_unavailable',
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('选择纯文本文件'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Python 3.11'), findsOneWidget);
+    expect(find.textContaining('请检查本地 Core 与 Gen 配置'), findsNothing);
+  });
+
   testWidgets('idle offers the file action as primary and paste as secondary', (
     tester,
   ) async {
@@ -100,6 +162,12 @@ void main() {
     await tester.pumpWidget(_screen(controller));
     await tester.pumpAndSettle();
 
+    // Documents reuse the existing workbench. With no video rendition the
+    // document view owns the whole body; no media pane or splitter is mounted.
+    expect(find.byType(MediaWorkbench), findsOneWidget);
+    expect(find.byKey(const Key('workbench-close')), findsOneWidget);
+    expect(find.byKey(const Key('workbench-media-title')), findsNothing);
+    expect(find.byKey(const Key('media-workbench-splitter')), findsNothing);
     expect(find.text('选择纯文本文件'), findsOneWidget);
     expect(find.text('粘贴文本'), findsOneWidget);
 
@@ -181,16 +249,19 @@ void main() {
             sha256Digest: _digestOf('Body'),
           ),
         ],
-        documentRenditions: [
-          documentRenditionForText('Body', id: 'a1', ),
-        ],
+        documentRenditions: [documentRenditionForText('Body', id: 'a1')],
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Body'), findsOneWidget);
+    expect(
+      find.byKey(const Key('document-learning-preparation')),
+      findsOneWidget,
+    );
+    expect(find.text('生成学习材料'), findsOneWidget);
+    expect(find.text('Body'), findsNothing);
   });
 
-  testWidgets('ready shows the exact text selectable with Temporary and Keep', (
+  testWidgets('source text is secondary, exact, selectable, and retained', (
     tester,
   ) async {
     final repo = FakeLearningMaterialRepository();
@@ -208,13 +279,24 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-      sourceResolver: _sourceResolver(const ['第一段。\n\nSecond paragraph with trailing space. ']),
+      sourceResolver: _sourceResolver(const [
+        '第一段。\n\nSecond paragraph with trailing space. ',
+      ]),
     );
     addTearDown(controller.dispose);
     await tester.pumpWidget(_screen(controller));
 
     await tester.tap(find.text('选择纯文本文件'));
     await tester.pumpAndSettle();
+
+    // Import success enters the learning-material preparation state. Raw
+    // bytes are provenance, not the primary learning surface.
+    expect(find.text('生成学习材料'), findsOneWidget);
+    expect(
+      find.text('第一段。\n\nSecond paragraph with trailing space. '),
+      findsNothing,
+    );
+    await _showSource(tester);
 
     // The exact source text, line breaks and trailing space included, inside
     // a SelectionArea-backed SelectableText — no cue split, no fabricated
@@ -225,8 +307,11 @@ void main() {
     );
     expect(find.byType(SelectableText), findsOneWidget);
     expect(find.byType(SelectionArea), findsOneWidget);
-    expect(find.text('临时'), findsOneWidget);
-    expect(find.text('保留'), findsOneWidget);
+    // Membership lives in the workbench's tool strip, not repeated in the
+    // body under a second copy of the title. Temporary reads as the unfilled
+    // bookmark, with Keep as its action.
+    expect(find.byTooltip('保留'), findsOneWidget);
+    expect(find.byIcon(Icons.bookmark_border), findsOneWidget);
   });
 
   testWidgets('Keep flips the header to Kept and Unkeep', (tester) async {
@@ -249,14 +334,19 @@ void main() {
     await tester.tap(find.text('选择纯文本文件'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('保留'));
+    await tester.tap(find.byKey(const Key('document-retention')));
     await tester.pumpAndSettle();
 
-    expect(find.text('已在个人资料库'), findsOneWidget);
-    expect(find.text('从个人资料库移除'), findsOneWidget);
-    expect(find.text('保留'), findsNothing);
-    // The document itself is untouched by membership.
-    expect(find.text('Body'), findsOneWidget);
+    // Kept flips the same control to the filled bookmark, whose action is now
+    // Unkeep — one control, two honest states.
+    expect(find.byIcon(Icons.bookmark), findsOneWidget);
+    expect(find.byTooltip('从个人资料库移除'), findsOneWidget);
+    expect(find.byTooltip('保留'), findsNothing);
+    // Membership does not turn the source into a learning surface.
+    expect(
+      find.byKey(const Key('document-learning-preparation')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a failed paste is a stable localized message with retry/back', (
@@ -379,9 +469,10 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-      sourceResolver: _sourceResolver(
-        const ['English document body', '中文文档正文'],
-      ),
+      sourceResolver: _sourceResolver(const [
+        'English document body',
+        '中文文档正文',
+      ]),
     );
     addTearDown(controller.dispose);
     controller.openLibraryEntry(entry);
@@ -400,6 +491,8 @@ void main() {
     await tester.tap(find.text('语言：zh'));
     await tester.pumpAndSettle();
 
+    expect(find.text('中文文档正文'), findsNothing);
+    await _showSource(tester);
     expect(find.text('中文文档正文'), findsOneWidget);
     expect(find.text('English document body'), findsNothing);
   });
@@ -424,9 +517,9 @@ void main() {
           store: FakeManagedAssetStoreService(),
           referenceStore: FakeDocumentReferenceStore(),
         ),
-        sourceResolver: _sourceResolver(
-          ['A LONG DOCUMENT LINE '.toUpperCase() * 40],
-        ),
+        sourceResolver: _sourceResolver([
+          'A LONG DOCUMENT LINE '.toUpperCase() * 40,
+        ]),
       );
       addTearDown(controller.dispose);
       await tester.pumpWidget(_screen(controller));
@@ -470,11 +563,13 @@ void main() {
     await tester.tap(find.text('选择纯文本文件'));
     await tester.pumpAndSettle();
 
-    // Ready keeps named actions (Keep here) — nothing reachable by icon alone.
-    expect(find.text('保留'), findsOneWidget);
+    // Ready keeps its actions named: the tool strip is icons, but every one
+    // of them carries a tooltip and a Semantics label, so nothing is reachable
+    // by shape alone.
+    expect(find.byTooltip('保留'), findsOneWidget);
   });
 
-  testWidgets('ready shows capability status chips from the projection', (
+  testWidgets('raw capability chips do not replace learning preparation', (
     tester,
   ) async {
     final repo = FakeLearningMaterialRepository()
@@ -509,8 +604,13 @@ void main() {
     await tester.tap(find.text('选择纯文本文件'));
     await tester.pumpAndSettle();
 
-    expect(find.text('阅读 · 可用'), findsOneWidget);
-    expect(find.text('聆听 · 上次尝试失败'), findsOneWidget);
-    expect(find.text('Body'), findsOneWidget);
+    expect(
+      find.byKey(const Key('document-learning-preparation')),
+      findsOneWidget,
+    );
+    expect(find.text('生成学习材料'), findsOneWidget);
+    expect(find.text('阅读 · 可用'), findsNothing);
+    expect(find.text('聆听 · 上次尝试失败'), findsNothing);
+    expect(find.text('Body'), findsNothing);
   });
 }

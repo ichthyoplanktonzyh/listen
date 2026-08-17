@@ -1,74 +1,8 @@
 import 'dart:convert';
 
 import '../models/adopted_composition.dart';
-
-/// One sentence of the adopted composition's reading structure: an exact
-/// byte window into the Structured Reading's logical text.
-class CompositionSentence {
-  const CompositionSentence({
-    required this.id,
-    required this.index,
-    required this.text,
-    required this.startByte,
-    required this.endByte,
-  });
-
-  final String id;
-  final int index;
-  final String text;
-  final int startByte;
-  final int endByte;
-}
-
-/// One anchor of the structured reading: a block, a sentence, or a span,
-/// addressed by byte offsets into the logical text.
-class CompositionAnchor {
-  const CompositionAnchor({
-    required this.anchorId,
-    required this.kind,
-    required this.startOffset,
-    required this.endOffset,
-  });
-
-  final String anchorId;
-
-  /// 'block' | 'sentence' | 'span'.
-  final String kind;
-  final int startOffset;
-  final int endOffset;
-}
-
-/// The learner-facing content of one adopted Composition, resolved through
-/// Core's composition interface: the exact logical text and sentence
-/// structure, the reading anchors, the anchor-to-time alignment, and the
-/// derived audio (when the composition carries one).
-class ResolvedComposition {
-  ResolvedComposition({
-    required this.releaseId,
-    required this.editionId,
-    required this.logicalText,
-    required List<CompositionSentence> sentences,
-    required List<CompositionAnchor> anchors,
-    required this.alignments,
-    this.derivedMediaPath,
-  }) : _sentences = List.unmodifiable(sentences),
-       _anchors = List.unmodifiable(anchors);
-
-  final String releaseId;
-  final String editionId;
-  final String logicalText;
-  final List<CompositionSentence> _sentences;
-  List<CompositionSentence> get sentences => List.unmodifiable(_sentences);
-  final List<CompositionAnchor> _anchors;
-  List<CompositionAnchor> get anchors => List.unmodifiable(_anchors);
-
-  /// anchor id → media time in milliseconds.
-  final Map<String, int> alignments;
-
-  /// Local path of the downloaded derived audio, when the composition carries
-  /// one with embedded bytes.
-  final String? derivedMediaPath;
-}
+import '../models/composition.dart';
+import '../models/timeline.dart';
 
 /// Resolves the learner content of an adopted composition from its exact
 /// payload bytes. Pure over the Core facts: transport and file ownership stay
@@ -84,6 +18,9 @@ ResolvedComposition? resolveCompositionContent({
   required List<int> structuredReadingPayload,
   List<int>? alignmentPayload,
   String? derivedMediaPath,
+  SubtitleTrack? transcript,
+  CompositionResourceProjection enhancements =
+      const CompositionResourceProjection(),
 }) {
   final structuredReading = _decodePayload(structuredReadingPayload);
   if (structuredReading == null) return null;
@@ -149,6 +86,8 @@ ResolvedComposition? resolveCompositionContent({
     anchors: anchors,
     alignments: alignments,
     derivedMediaPath: derivedMediaPath,
+    transcript: transcript,
+    enhancements: enhancements,
   );
 }
 

@@ -16,6 +16,14 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 import 'e2e_database.dart';
 
+String _python3Executable() {
+  for (final directory in (Platform.environment['PATH'] ?? '').split(':')) {
+    final candidate = File('$directory/python3');
+    if (candidate.existsSync()) return candidate.path;
+  }
+  throw StateError('python3 is required for the Gen integration tests');
+}
+
 /// Real-media (fixture-ASR) journey against the real local stack, driven by
 /// `REAL_MEDIA_PATH` pointing at a local audio/video file (for example a file
 /// from the read-only desktop sample folder). The path is never committed:
@@ -78,12 +86,18 @@ void main() {
       HttpOverrides.global = null;
       expect(realMediaPath, isNotNull, reason: 'REAL_MEDIA_PATH is required');
       final mediaPath = File(realMediaPath!).absolute.path;
-      expect(File(mediaPath).existsSync(), isTrue,
-          reason: 'REAL_MEDIA_PATH must exist');
+      expect(
+        File(mediaPath).existsSync(),
+        isTrue,
+        reason: 'REAL_MEDIA_PATH must exist',
+      );
 
       final dbPath = scratchDatabasePath('real-media');
       final release = await releaseForProbeManifest();
-      final generator = LocalListenGenProcessService(releaseService: release);
+      final generator = LocalListenGenProcessService(
+        pythonExecutable: _python3Executable,
+        releaseService: release,
+      );
 
       final api = await LocalApi.connect(databasePath: dbPath);
       late String mediaId;
@@ -108,8 +122,11 @@ void main() {
           material,
           MaterialCapability.read,
         );
-        expect(outcome, isA<CapabilityAvailable>(),
-            reason: 'real media must gain a read capability');
+        expect(
+          outcome,
+          isA<CapabilityAvailable>(),
+          reason: 'real media must gain a read capability',
+        );
         final edition = (outcome as CapabilityAvailable).edition!;
         expect(edition.adopted, isTrue);
         expect(edition.providesRead, isTrue);
@@ -125,8 +142,7 @@ void main() {
             material2.material.id,
           );
           final read = projections.singleWhere(
-            (projection) =>
-                projection.capability == MaterialCapability.read,
+            (projection) => projection.capability == MaterialCapability.read,
           );
           expect(read.status, MaterialCapabilityStatus.available);
           expect(read.latestAttempt?.status, 'succeeded');

@@ -26,6 +26,7 @@ void main() {
         path: '/tmp/media.mp4',
         title: 'Media',
         fingerprint: 'fingerprint',
+        kind: 'video',
       )
       ..setSourceLoop(Duration.zero, const Duration(seconds: 1));
 
@@ -34,8 +35,51 @@ void main() {
 
     expect(controller.mediaId, isNull);
     expect(controller.mediaPath, isNull);
+    expect(controller.mediaKind, isNull);
     expect(controller.sourceLoopStart, isNull);
     expect(controller.sourceLoopEnd, isNull);
+  });
+
+  test('player controller carries audio versus video presentation truth', () {
+    final controller = PlayerController();
+    addTearDown(controller.dispose);
+
+    controller.setMediaPath('/tmp/material.mp3', kind: 'audio');
+    expect(controller.mediaKind, 'audio');
+
+    controller.setMedia(
+      id: 'media-1',
+      path: '/tmp/material.mp4',
+      title: 'Material',
+      fingerprint: 'fingerprint',
+      kind: 'video',
+    );
+    expect(controller.mediaKind, 'video');
+  });
+
+  test('derived document audio has transport state but no media identity', () {
+    final controller = PlayerController()
+      ..setMedia(
+        id: 'old-media',
+        path: '/tmp/old.mp4',
+        title: 'Old media',
+        fingerprint: 'old-fingerprint',
+        kind: 'video',
+      );
+    addTearDown(controller.dispose);
+
+    controller.setMaterialPlaybackSource(
+      path: '/tmp/generated.m4a',
+      title: 'The document',
+      kind: 'audio',
+    );
+
+    expect(controller.mediaPath, '/tmp/generated.m4a');
+    expect(controller.mediaTitle, 'The document');
+    expect(controller.mediaKind, 'audio');
+    expect(controller.mediaId, isNull);
+    expect(controller.mediaFingerprint, isNull);
+    expect(controller.mediaRetained, isNull);
   });
 
   test('player controller exposes strongly typed track lists from startup', () {
@@ -303,6 +347,40 @@ void main() {
       controller.dispose();
     },
   );
+
+  test('composition phone timeline drives the detected-phone cursor', () {
+    final controller = SubtitleController()
+      ..setPrimaryTrack(track)
+      ..setCurrentPrimaryCue(cue)
+      ..setSpeechEnhancements(
+        pronunciationBySentence: const {},
+        pronunciationProviders: const [],
+        timingsBySentence: const {},
+        phonesBySentence: const {
+          'sentence-1': [
+            DetectedPhone(
+              symbol: 'h',
+              displayIpa: 'h',
+              phoneSet: 'ipa',
+              start: Duration(milliseconds: 100),
+              end: Duration(milliseconds: 220),
+              confidence: 0.9,
+              tokenIndex: 0,
+              provider: 'composition',
+              modelRevision: 'v1',
+            ),
+          ],
+        },
+      );
+
+    controller.updateCurrentDetectedPhone(
+      const Duration(milliseconds: 150),
+      enabled: true,
+    );
+
+    expect(controller.currentDetectedPhone?.symbol, 'h');
+    controller.dispose();
+  });
 
   test('subtitle controller stores resource capabilities separately', () {
     final controller = SubtitleController()

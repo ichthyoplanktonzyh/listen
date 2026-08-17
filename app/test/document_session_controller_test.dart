@@ -139,7 +139,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -168,7 +168,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -196,7 +196,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -224,7 +224,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -252,7 +252,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -344,7 +344,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -369,7 +369,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -397,7 +397,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
 
     final open = controller.openFile();
@@ -420,7 +420,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -444,7 +444,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -471,7 +471,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -569,7 +569,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -595,8 +595,8 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
-      refreshLibrary: () async => refreshes += 1,
+      sourceResolver: FakeDocumentSourceResolver(),
+      refreshLibrary: (_) async => refreshes += 1,
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -626,8 +626,8 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
-      refreshLibrary: () async => refreshes += 1,
+      sourceResolver: FakeDocumentSourceResolver(),
+      refreshLibrary: (_) async => refreshes += 1,
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -675,7 +675,7 @@ void main() {
       // The document is still fully readable and still Temporary.
       expect(ready.isRetained, isFalse);
       expect(ready.documentRendition!.digest, _digestOf('Body'));
-    expect(ready.documentRendition!.byteSize, 'Body'.length);
+      expect(ready.documentRendition!.byteSize, 'Body'.length);
       expect(ready.retentionFailure?.correlationId, 'api-2');
       // Ordinary state text never carries the raw transport text.
       expect(ready.retentionFailure?.raw, contains('nope'));
@@ -699,7 +699,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -728,7 +728,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -760,7 +760,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
     await controller.openFile();
@@ -793,7 +793,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -854,7 +854,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -889,7 +889,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -937,7 +937,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
 
     final open = controller.openFile();
@@ -987,7 +987,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -1012,7 +1012,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -1040,7 +1040,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -1062,7 +1062,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -1127,7 +1127,7 @@ void main() {
         store: FakeManagedAssetStoreService(),
         referenceStore: FakeDocumentReferenceStore(),
       ),
-        sourceResolver: FakeDocumentSourceResolver(),
+      sourceResolver: FakeDocumentSourceResolver(),
     );
     addTearDown(controller.dispose);
 
@@ -1174,15 +1174,19 @@ void main() {
     addTearDown(controller.dispose);
 
     controller.openLibraryEntry(
-      _libraryEntry(materialId: 'm1', documentRenditions: [_textAsset('a1', 'Hi')]),
+      _libraryEntry(
+        materialId: 'm1',
+        documentRenditions: [_textAsset('a1', 'Hi')],
+      ),
     );
     await _settle();
 
     final ready = controller.state as DocumentSessionReady;
     expect(ready.capabilities, isNotNull);
     expect(ready.capabilities, hasLength(2));
-    final read = ready.capabilities!
-        .firstWhere((p) => p.capability == MaterialCapability.read);
+    final read = ready.capabilities!.firstWhere(
+      (p) => p.capability == MaterialCapability.read,
+    );
     expect(read.status, MaterialCapabilityStatus.available);
   });
 
@@ -1204,7 +1208,10 @@ void main() {
     addTearDown(controller.dispose);
 
     controller.openLibraryEntry(
-      _libraryEntry(materialId: 'm1', documentRenditions: [_textAsset('a1', 'Hi')]),
+      _libraryEntry(
+        materialId: 'm1',
+        documentRenditions: [_textAsset('a1', 'Hi')],
+      ),
     );
     await _settle();
     // A newer intent closes the session before the capability load lands.
@@ -1221,32 +1228,37 @@ void main() {
     expect(controller.state, isA<DocumentSessionIdle>());
   });
 
-  test('a failed capability load leaves the ready document untouched',
-      () async {
-    final repo = FakeLearningMaterialRepository()
-      ..onListCapabilities = (materialId) async => throw StateError('boom');
-    final controller = DocumentSessionController(
-      materialRepository: repo,
-      fileService: FakeDocumentIntakeFileService(),
-      intakeFlow: DocumentIntakeFlow(
+  test(
+    'a failed capability load leaves the ready document untouched',
+    () async {
+      final repo = FakeLearningMaterialRepository()
+        ..onListCapabilities = (materialId) async => throw StateError('boom');
+      final controller = DocumentSessionController(
         materialRepository: repo,
-        codec: codec,
-        store: FakeManagedAssetStoreService(),
-        referenceStore: FakeDocumentReferenceStore(),
-      ),
-      sourceResolver: FakeDocumentSourceResolver(),
-    );
-    addTearDown(controller.dispose);
+        fileService: FakeDocumentIntakeFileService(),
+        intakeFlow: DocumentIntakeFlow(
+          materialRepository: repo,
+          codec: codec,
+          store: FakeManagedAssetStoreService(),
+          referenceStore: FakeDocumentReferenceStore(),
+        ),
+        sourceResolver: FakeDocumentSourceResolver(),
+      );
+      addTearDown(controller.dispose);
 
-    controller.openLibraryEntry(
-      _libraryEntry(materialId: 'm1', documentRenditions: [_textAsset('a1', 'Hi')]),
-    );
-    await _settle();
+      controller.openLibraryEntry(
+        _libraryEntry(
+          materialId: 'm1',
+          documentRenditions: [_textAsset('a1', 'Hi')],
+        ),
+      );
+      await _settle();
 
-    final ready = controller.state as DocumentSessionReady;
-    expect(ready.documentRendition?.digest, _digestOf('Hi'));
-    expect(ready.capabilities, isNull);
-  });
+      final ready = controller.state as DocumentSessionReady;
+      expect(ready.documentRendition?.digest, _digestOf('Hi'));
+      expect(ready.capabilities, isNull);
+    },
+  );
 }
 
 Future<void> _settle() async {

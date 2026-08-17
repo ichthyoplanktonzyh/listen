@@ -17,6 +17,14 @@ import 'package:llplayer_next/services/listen_gen_release_service.dart';
 
 import 'e2e_database.dart';
 
+String _python3Executable() {
+  for (final directory in (Platform.environment['PATH'] ?? '').split(':')) {
+    final candidate = File('$directory/python3');
+    if (candidate.existsSync()) return candidate.path;
+  }
+  throw StateError('python3 is required for the Gen integration tests');
+}
+
 /// Failure injection against the real local stack: a live Core `api-http`
 /// binary and, for the provider failure case, the locally built listen-gen
 /// release bundle. Every injected failure must surface as a clean, retryable
@@ -89,15 +97,13 @@ void main() {
         final notPackage = File('${temp.path}/not-a-package.txt')
           ..writeAsStringSync('this is not a content package');
         // A syntactically valid JSON document that is not a package manifest.
-        final badJson = File('${temp.path}/bad.json')
-          ..writeAsStringSync('{"schema": "listen.content-package.release.v3"}');
+        final badJson = File(
+          '${temp.path}/bad.json',
+        )..writeAsStringSync('{"schema": "listen.content-package.release.v3"}');
 
         for (final candidate in [notPackage, badJson]) {
           await expectLater(
-            api.installMaterialPackage(
-              material.material.id,
-              candidate.path,
-            ),
+            api.installMaterialPackage(material.material.id, candidate.path),
             throwsA(anyOf(isA<HttpException>(), isA<ApiFailure>())),
             reason: '${candidate.path} must be rejected before any mutation',
           );
@@ -143,10 +149,7 @@ void main() {
         final material = await api.resolveMaterialForMedia(media.id);
 
         await expectLater(
-          api.adoptLearningEdition(
-            material.material.id,
-            'sha256:${'0' * 64}',
-          ),
+          api.adoptLearningEdition(material.material.id, 'sha256:${'0' * 64}'),
           throwsA(anyOf(isA<HttpException>(), isA<ApiFailure>())),
         );
 
@@ -173,7 +176,10 @@ void main() {
       final verified = await release.verify();
       expect(verified.toolVersion, '0.5.0');
 
-      final generator = LocalListenGenProcessService(releaseService: release);
+      final generator = LocalListenGenProcessService(
+        pythonExecutable: _python3Executable,
+        releaseService: release,
+      );
       final dbPath = scratchDatabasePath('fault-provider');
 
       final api = await LocalApi.connect(databasePath: dbPath);

@@ -11,6 +11,7 @@ import 'package:llplayer_next/models/gen_machine_event.dart';
 import 'package:llplayer_next/models/learning_edition.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
+import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/capability_generation_request.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
@@ -159,6 +160,75 @@ void main() {
   );
 
   test(
+    'the selected media subtitle becomes Gen forced-alignment input',
+    () async {
+      harness.selectedSubtitle = const SubtitleTrack(
+        id: 'track-1',
+        mediaId: 'media-1',
+        language: 'en',
+        cues: [
+          Cue(
+            id: 'cue-1',
+            index: 0,
+            start: Duration(milliseconds: 120),
+            end: Duration(milliseconds: 1450),
+            text: 'Use the selected subtitle.',
+            tokens: [],
+          ),
+        ],
+      );
+
+      final baseRevision = _mediaOnlyMaterial.currentRevision;
+      final material = MaterialDetails(
+        material: _mediaOnlyMaterial.material,
+        currentRevision: MaterialRevision(
+          id: baseRevision.id,
+          materialId: baseRevision.materialId,
+          title: baseRevision.title,
+          sourceAssets: baseRevision.sourceAssets,
+          documentRenditions: baseRevision.documentRenditions,
+          mediaRenditions: [
+            const MediaRendition(
+              id: 'media-rendition-2',
+              origin: RenditionOrigin.source,
+              kind: MediaRenditionKind.audio,
+              mediaType: 'audio/wav',
+              fingerprint: 'other-fingerprint',
+              availability: MediaRenditionAvailability.available,
+              mediaId: 'media-2',
+              mediaSha256: null,
+              mediaByteSize: null,
+            ),
+            ...baseRevision.mediaRenditions,
+          ],
+          createdAtMs: baseRevision.createdAtMs,
+        ),
+        shape: MaterialShape.audio,
+      );
+
+      final requestFuture = harness.request(
+        MaterialCapability.read,
+        material: material,
+      );
+      await _settle();
+
+      expect(
+        harness.gen.lastRun!.request.subtitleSrt,
+        '1\n00:00:00,120 --> 00:00:01,450\n'
+        'Use the selected subtitle.\n\n',
+      );
+
+      harness.gen.lastRun!
+        ..emitProtocol()
+        ..emitAccepted(attemptId: 'attempt-1')
+        ..emitCompleted();
+      await _settle();
+      await _settle();
+      await requestFuture;
+    },
+  );
+
+  test(
     'a generator failure finalizes the attempt and reports the code',
     () async {
       final requestFuture = harness.request(MaterialCapability.read);
@@ -177,6 +247,23 @@ void main() {
       expect(harness.repo.finalizedFailures, ['provider_timeout']);
       expect(harness.runView!.phase, CapabilityRunPhase.failed);
       expect(harness.runView!.failureCode, 'provider_timeout');
+    },
+  );
+
+  test(
+    'a process failure before machine events keeps its stable code',
+    () async {
+      final requestFuture = harness.request(MaterialCapability.read);
+      await _settle();
+
+      harness.gen.lastRun!.failProcess('generator_python_unavailable');
+      await _settle();
+      await _settle();
+
+      final outcome = await requestFuture;
+      expect(outcome, isA<CapabilityFailed>());
+      expect(harness.repo.finalizedFailures, ['generator_python_unavailable']);
+      expect(harness.runView!.failureCode, 'generator_python_unavailable');
     },
   );
 
@@ -312,24 +399,47 @@ void main() {
     },
   );
 
-  test('an empty-plan completion is a satisfied outcome, not a failure', () async {
-    final requestFuture = harness.request(MaterialCapability.read);
-    await _settle();
-    harness.gen.lastRun!
-      ..emitProtocol()
-      ..emitAccepted(attemptId: 'attempt-1');
-    await _settle();
-    harness.gen.lastRun!.emitCompletedWithoutSha();
-    await _settle();
-    await _settle();
+  test(
+    'derived document audio satisfies listen without source audio',
+    () async {
+      harness.repo.editions = [_mediaEdition];
+      harness.repo.capabilities = const [];
 
-    final outcome = await requestFuture;
-    expect(outcome, isA<CapabilityAvailable>());
-    expect(harness.repo.finalizedFailures, isEmpty);
-    expect(harness.repo.finalizedSucceeded, 1,
-        reason: 'an empty plan is a successful attempt');
-    expect(harness.runView!.phase, CapabilityRunPhase.completed);
-  });
+      final outcome = await harness.request(
+        MaterialCapability.listen,
+        material: _documentMaterial(language: 'en'),
+      );
+
+      expect(outcome, isA<CapabilityAvailable>());
+      expect(harness.gen.startCount, 0);
+      expect(harness.repo.attemptCount, 0);
+    },
+  );
+
+  test(
+    'an empty-plan completion is a satisfied outcome, not a failure',
+    () async {
+      final requestFuture = harness.request(MaterialCapability.read);
+      await _settle();
+      harness.gen.lastRun!
+        ..emitProtocol()
+        ..emitAccepted(attemptId: 'attempt-1');
+      await _settle();
+      harness.gen.lastRun!.emitCompletedWithoutSha();
+      await _settle();
+      await _settle();
+
+      final outcome = await requestFuture;
+      expect(outcome, isA<CapabilityAvailable>());
+      expect(harness.repo.finalizedFailures, isEmpty);
+      expect(
+        harness.repo.finalizedSucceeded,
+        1,
+        reason: 'an empty plan is a successful attempt',
+      );
+      expect(harness.runView!.phase, CapabilityRunPhase.completed);
+    },
+  );
 
   test('warnings surface on the run view', () async {
     final requestFuture = harness.request(MaterialCapability.read);
@@ -536,10 +646,15 @@ void main() {
 final class _Harness {
   final repo = _FakeCapabilityRepository();
   final gen = _FakeGenService();
+  SubtitleTrack? selectedSubtitle;
   late final MaterialCapabilityCoordinator coordinator =
       MaterialCapabilityCoordinator(
         repository: repo,
         generator: gen,
+        subtitleTrackForMedia: (rendition) =>
+            selectedSubtitle?.mediaId == rendition.mediaId
+            ? selectedSubtitle
+            : null,
         providerArguments: () => const ['--tts-provider', 'say'],
       );
 
@@ -665,6 +780,10 @@ final class _FakeGenRun implements ListenGenProcessRun {
       ),
     );
     _packagePath.completeError(_FakeGenFailure(code));
+  }
+
+  void failProcess(String code) {
+    _packagePath.completeError(ListenGenProcessFailure(code, retryable: false));
   }
 }
 

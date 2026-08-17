@@ -14,9 +14,11 @@ import 'package:llplayer_next/data/repositories/capability_repository.dart';
 import 'package:llplayer_next/data/repositories/learning_material_repository.dart';
 import 'package:llplayer_next/data/repositories/media_session_repository.dart';
 import 'package:llplayer_next/data/repositories/resource_repository.dart';
+import 'package:llplayer_next/services/core_timeline_export.dart';
 import 'package:llplayer_next/data/repositories/subtitle_analysis_repository.dart';
 import 'package:llplayer_next/models/adopted_composition.dart';
 import 'package:llplayer_next/models/api_failure.dart';
+import 'package:llplayer_next/models/composition.dart';
 import 'package:llplayer_next/models/gen_machine_event.dart';
 import 'package:llplayer_next/services/capability_generation_request.dart';
 import 'package:llplayer_next/models/learning_edition.dart';
@@ -116,7 +118,34 @@ void main() {
       addTearDown(subject.vm.dispose);
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.unavailable);
+      expect(
+        subject.vm.state.unavailableReason,
+        TranscriptPreparationAvailability.generatorUnavailable,
+      );
     });
+
+    test(
+      'unavailable state still forwards an explicit generation intent',
+      () async {
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: false,
+        );
+        addTearDown(subject.vm.dispose);
+
+        final request = subject.vm.prepareLearningTranscript();
+        await _waitForRun(subject.coordinator, subject.repository.genService);
+        final run = subject.repository.genService.lastRun;
+        expect(run, isNotNull);
+        run!
+          ..emitProtocol()
+          ..emitAccepted(attemptId: run.attemptId)
+          ..emitFailed(code: 'generator_not_configured');
+        await request;
+
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.failed);
+      },
+    );
 
     test('several usable tracks show the chooser and select on tap', () async {
       final subject = _readinessViewModel(
@@ -180,12 +209,110 @@ void main() {
           'material-1',
           MaterialCapability.read,
         );
-        expect(view?.phase, CapabilityRunPhase.completed,
-            reason: 'failure=${view?.failureCode}');
+        expect(
+          view?.phase,
+          CapabilityRunPhase.completed,
+          reason: 'failure=${view?.failureCode}',
+        );
         expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
         expect(subject.repository.finalizedSucceeded, 1);
         expect(subject.repository.adoptedReleases, [_edition.releaseId]);
         expect(subject.vm.state.failure, isNull);
+      },
+    );
+
+    test(
+      'completed Gen projects tokenized composition into the workbench',
+      () async {
+        final composition = ResolvedComposition(
+          releaseId: 'release-1',
+          editionId: 'edition-1',
+          logicalText: 'Hello',
+          sentences: const [
+            CompositionSentence(
+              id: 'cue-a',
+              index: 0,
+              text: 'Hello',
+              startByte: 0,
+              endByte: 5,
+            ),
+          ],
+          anchors: const [],
+          alignments: const {'cue-a': 0},
+          transcript: _usableTrackA,
+        );
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: true,
+          resolveComposition: (_) async => composition,
+        );
+        addTearDown(subject.vm.dispose);
+
+        final request = subject.vm.prepareLearningTranscript();
+        await _waitForRun(subject.coordinator, subject.repository.genService);
+        final run = subject.repository.genService.lastRun!;
+        run
+          ..emitProtocol()
+          ..emitAccepted(attemptId: run.attemptId)
+          ..emitCompleted();
+        await request;
+        await _settle();
+
+        expect(subject.subtitle.primaryTrack?.id, _usableTrackA.id);
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
+      },
+    );
+
+    test(
+      'adopting another package re-projects it without switching media',
+      () async {
+        var composition = ResolvedComposition(
+          releaseId: 'release-1',
+          editionId: 'edition-1',
+          logicalText: 'Hello',
+          sentences: const [
+            CompositionSentence(
+              id: 'cue-a',
+              index: 0,
+              text: 'Hello',
+              startByte: 0,
+              endByte: 5,
+            ),
+          ],
+          anchors: const [],
+          alignments: const {'cue-a': 0},
+          transcript: _usableTrackA,
+        );
+        final subject = _readinessViewModel(
+          tracks: const [_usableTrackA],
+          canAutoPrepare: true,
+          resolveComposition: (_) async => composition,
+        );
+        addTearDown(subject.vm.dispose);
+        subject.subtitle.setPrimaryTrack(_usableTrackA);
+
+        composition = ResolvedComposition(
+          releaseId: 'release-2',
+          editionId: 'edition-1',
+          logicalText: 'World',
+          sentences: const [
+            CompositionSentence(
+              id: 'cue-b',
+              index: 0,
+              text: 'World',
+              startByte: 0,
+              endByte: 5,
+            ),
+          ],
+          anchors: const [],
+          alignments: const {'cue-b': 0},
+          transcript: _usableTrackB,
+        );
+
+        await subject.vm.refreshAdoptedComposition();
+
+        expect(subject.subtitle.primaryTrack?.id, _usableTrackB.id);
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
       },
     );
 
@@ -237,10 +364,7 @@ void main() {
       await request;
 
       expect(run.cancelled, isTrue);
-      expect(
-        subject.repository.finalizedFailures,
-        contains('cancelled'),
-      );
+      expect(subject.repository.finalizedFailures, contains('cancelled'));
       expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
     });
 
@@ -268,61 +392,95 @@ void main() {
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
     });
-  group('composition to srt bridge', () {
-    test('builds srt from reading text and anchor times', () {
-      final srt = CompositionTranscriptBridge.compositionToSrt(
-        {
-          'text': 'Hello world. This is a test.',
-          'anchors': [
-            {'anchor_id': 'sentence-0', 'kind': 'sentence', 'start_offset': 0, 'end_offset': 12},
-            {'anchor_id': 'sentence-1', 'kind': 'sentence', 'start_offset': 13, 'end_offset': 28},
-          ],
-        },
-        {
-          'alignments': [
-            {'anchor_id': 'sentence-0', 'media_time_ms': 0},
-            {'anchor_id': 'sentence-1', 'media_time_ms': 4000},
-          ],
-        },
-      );
+    group('composition to srt bridge', () {
+      test('builds srt from reading text and anchor times', () {
+        final srt = CompositionTranscriptBridge.compositionToSrt(
+          {
+            'text': 'Hello world. This is a test.',
+            'anchors': [
+              {
+                'anchor_id': 'sentence-0',
+                'kind': 'sentence',
+                'start_offset': 0,
+                'end_offset': 12,
+              },
+              {
+                'anchor_id': 'sentence-1',
+                'kind': 'sentence',
+                'start_offset': 13,
+                'end_offset': 28,
+              },
+            ],
+          },
+          {
+            'alignments': [
+              {'anchor_id': 'sentence-0', 'media_time_ms': 0},
+              {'anchor_id': 'sentence-1', 'media_time_ms': 4000},
+            ],
+          },
+        );
 
-      expect(srt, isNotNull);
-      expect(srt, contains('00:00:00,000 --> 00:00:04,000'));
-      expect(srt, contains('Hello world.'));
-      expect(srt, contains('This is a test.'));
+        expect(srt, isNotNull);
+        expect(srt, contains('00:00:00,000 --> 00:00:04,000'));
+        expect(srt, contains('Hello world.'));
+        expect(srt, contains('This is a test.'));
+      });
+
+      test('drops sentences without times and empty text', () {
+        final srt = CompositionTranscriptBridge.compositionToSrt(
+          {
+            'text': 'A. B.',
+            'anchors': [
+              {
+                'anchor_id': 'sentence-0',
+                'kind': 'sentence',
+                'start_offset': 0,
+                'end_offset': 2,
+              },
+              {
+                'anchor_id': 'sentence-1',
+                'kind': 'sentence',
+                'start_offset': 3,
+                'end_offset': 5,
+              },
+            ],
+          },
+          {
+            'alignments': [
+              {'anchor_id': 'sentence-0', 'media_time_ms': 1000},
+            ],
+          },
+        );
+
+        expect(srt, isNotNull);
+        expect(srt, contains('A.'));
+        expect(srt, isNot(contains('B.')));
+      });
     });
-
-    test('drops sentences without times and empty text', () {
-      final srt = CompositionTranscriptBridge.compositionToSrt(
-        {
-          'text': 'A. B.',
-          'anchors': [
-            {'anchor_id': 'sentence-0', 'kind': 'sentence', 'start_offset': 0, 'end_offset': 2},
-            {'anchor_id': 'sentence-1', 'kind': 'sentence', 'start_offset': 3, 'end_offset': 5},
-          ],
-        },
-        {
-          'alignments': [
-            {'anchor_id': 'sentence-0', 'media_time_ms': 1000},
-          ],
-        },
-      );
-
-      expect(srt, isNotNull);
-      expect(srt, contains('A.'));
-      expect(srt, isNot(contains('B.')));
-    });
-  });
-
   });
 }
 
-({TranscriptReadinessViewModel vm, SubtitleController subtitle, MaterialCapabilityCoordinator coordinator, _FakeCapabilityRepository repository})
+({
+  TranscriptReadinessViewModel vm,
+  SubtitleController subtitle,
+  MaterialCapabilityCoordinator coordinator,
+  _FakeCapabilityRepository repository,
+})
 _readinessViewModel({
   required List<SubtitleTrack> tracks,
   required bool canAutoPrepare,
+  Future<ResolvedComposition?> Function(String materialId)? resolveComposition,
 }) {
   final harness = _coordinatorHarness(tracks);
+  if (resolveComposition != null) {
+    harness.mediaSession.player.setMedia(
+      id: 'media-1',
+      path: '/tmp/media.wav',
+      title: 'Lesson',
+      fingerprint: 'fingerprint',
+      kind: 'audio',
+    );
+  }
   harness.subtitle.setSubtitleResources(tracks);
   final repository = _FakeCapabilityRepository();
   final generator = repository.genService;
@@ -333,9 +491,12 @@ _readinessViewModel({
   final vm = TranscriptReadinessViewModel(
     subtitle: harness.subtitle,
     mediaSession: harness.mediaSession,
-    canAutoPrepare: () => canAutoPrepare,
+    preparationAvailability: () => canAutoPrepare
+        ? TranscriptPreparationAvailability.ready
+        : TranscriptPreparationAvailability.generatorUnavailable,
     coordinator: coordinator,
     currentMaterial: () => _mediaOnlyMaterial,
+    resolveComposition: resolveComposition,
   )..bind(text: (key) => key);
   return (
     vm: vm,
@@ -358,10 +519,7 @@ Future<void> _waitForRun(
   _FakeGenService service,
 ) async {
   for (var attempt = 0; attempt < 200; attempt++) {
-    final view = coordinator.runViewFor(
-      'material-1',
-      MaterialCapability.read,
-    );
+    final view = coordinator.runViewFor('material-1', MaterialCapability.read);
     if (view?.phase == CapabilityRunPhase.generating) return;
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
@@ -425,9 +583,7 @@ final class _FakeGenService implements ListenGenProcessService {
   ContentGeneratorState get state => ContentGeneratorState.ready;
 
   @override
-  Future<ListenGenProcessRun> start(
-    CapabilityGenerationRequest request,
-  ) async {
+  Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) async {
     final run = _FakeGenRun(request);
     lastRun = run;
     return run;
@@ -470,10 +626,7 @@ final class _FakeGenRun implements ListenGenProcessRun {
   }
 
   void emitProtocol() => _events.add(
-    GenMachineEvent(
-      sequence: _sequence++,
-      kind: GenEventKind.protocol,
-    ),
+    GenMachineEvent(sequence: _sequence++, kind: GenEventKind.protocol),
   );
 
   void emitAccepted({required String attemptId}) => _events.add(
@@ -506,10 +659,7 @@ final class _FakeGenRun implements ListenGenProcessRun {
 
   void emitCompletedWithoutSha() {
     _events.add(
-      GenMachineEvent(
-        sequence: _sequence++,
-        kind: GenEventKind.completed,
-      ),
+      GenMachineEvent(sequence: _sequence++, kind: GenEventKind.completed),
     );
   }
 
@@ -547,8 +697,7 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   final List<String> adoptedReleases = [];
 
   @override
-  ApiFailure failureDetail(Object error) =>
-      ApiFailure(raw: '', code: '$error');
+  ApiFailure failureDetail(Object error) => ApiFailure(raw: '', code: '$error');
 
   @override
   Future<MaterialDetails> readMaterial(String materialId) async =>
@@ -599,9 +748,8 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   }
 
   @override
-  Future<AdoptedComposition> readAdoptedComposition(
-    String materialId,
-  ) async => throw const ApiFailure(raw: 'not found', code: 'not_found');
+  Future<AdoptedComposition> readAdoptedComposition(String materialId) async =>
+      throw const ApiFailure(raw: 'not found', code: 'not_found');
 
   @override
   Future<List<int>> readCompositionResourcePayload(
@@ -645,7 +793,8 @@ final _edition = LearningEdition(
   materialId: 'material-1',
   materialRevisionId: 'revision-1',
   editionId: 'edition:material-1',
-  releaseId: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  releaseId:
+      'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
   title: 'Lesson',
   targetLanguage: 'en',
   supportLanguages: [],
@@ -798,6 +947,9 @@ final class _FakeResourceRepository implements ResourceRepository {
       throw UnimplementedError();
   @override
   Future<LLTimelineDocument> exportTimeline(String trackId) async =>
+      throw UnimplementedError();
+  @override
+  Future<CoreTimelineExport> exportTimelineJson(String trackId) async =>
       throw UnimplementedError();
   @override
   Future<void> updateTrackLanguage(String trackId, String language) async =>
@@ -956,6 +1108,4 @@ final class _NoopLearningMaterialRepository
   Future<List<MaterialCapabilityProjection>> listMaterialCapabilities(
     String materialId,
   ) => throw UnimplementedError();
-
-
 }
