@@ -241,9 +241,14 @@ pub(crate) async fn adopt_learning_edition(
     state
         .application
         .execute("package_lifecycle.adopt", move |services| {
-            services
+            let view = services
                 .package_lifecycle()
-                .adopt_for_material(&material_id, &release_id)
+                .adopt_for_material(&material_id, &release_id)?;
+            // Land the just-adopted subtitle_text_track (when present) as a real
+            // subtitle track. Best-effort and post-commit: it must not make an
+            // already committed adoption appear to have failed.
+            let _ = services.land_adopted_subtitle_track(&material_id, &release_id);
+            Ok(view)
         })
         .await
         .map(LearningEditionDetails::from)

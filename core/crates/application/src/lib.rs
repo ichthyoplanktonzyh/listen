@@ -293,6 +293,78 @@ impl AppServices {
         SemanticEmbeddingUseCases::from_services(self)
     }
 
+    /// Lands an adopted package's `subtitle_text_track` resource as a real
+    /// subtitle track, so the workbench faces one sentence-identity space
+    /// whether the text came from a subtitle file or a generated package.
+    ///
+    /// Runs after adoption commits. Best-effort by design: it is a derived
+    /// projection and never decides the authoritative learner action. A
+    /// package with no timed sentences, or a material with no source media to
+    /// anchor a timed track against, is a no-op, not an error.
+    pub fn land_adopted_subtitle_track(
+        &self,
+        material_id: &domain::LearningMaterialId,
+        release_id: &domain::PackageReleaseId,
+    ) -> Result<(), ApplicationError> {
+        let material = self
+            .materials
+            .get_material(material_id)?
+            .ok_or(ApplicationError::NotFound("material"))?;
+        let revision = self
+            .materials
+            .get_revision(&material.current_revision_id)?
+            .ok_or(ApplicationError::NotFound("material revision"))?;
+        let installation = self
+            .package_lifecycle
+            .get_installation(material_id, release_id)?
+            .ok_or(ApplicationError::NotFound("package release installation"))?;
+        let Some(resource) = installation
+            .resources
+            .iter()
+            .find(|resource| resource.kind == "subtitle_text_track")
+        else {
+            return Ok(());
+        };
+        let Some(media_id) = revision
+            .renditions
+            .iter()
+            .find_map(|rendition| match rendition {
+                domain::Rendition::Media(media)
+                    if media.origin == domain::RenditionOrigin::Source =>
+                {
+                    media.media_id.clone()
+                }
+                _ => None,
+            })
+        else {
+            return Ok(());
+        };
+        let Some(bytes) = self.package_lifecycle.read_resource_payload(
+            material_id,
+            release_id,
+            &resource.resource_id,
+        )?
+        else {
+            return Ok(());
+        };
+        let payload: content_package::SubtitleTextTrack =
+            serde_json::from_slice(&bytes).map_err(|error| {
+                ApplicationError::Repository(format!(
+                    "subtitle_text_track payload is not decodable: {error}"
+                ))
+            })?;
+        let language = LanguageCode::parse(&payload.language)?;
+        let identity_fingerprint = format!(
+            "{}:{}:{}",
+            material.id.as_str(),
+            revision.id.as_str(),
+            resource.resource_id
+        );
+        self.media_analysis()
+            .adopt_package_subtitle_track(&media_id, &identity_fingerprint, &language, &payload)
+            .map(|_| ())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<R, L>(
         media: Arc<dyn MediaRepository>,
