@@ -418,6 +418,11 @@ class _PlayerScreenState extends State<PlayerScreen>
     repository: coreRepositories.practice,
   );
   final slicePlayerController = SlicePlayerController();
+
+  /// The sentence-analysis panel's own single-sentence player, so its
+  /// sound-reference ribbons can play and highlight the current sentence
+  /// independently of the main stage.
+  final voiceClipPlayer = SlicePlayerController();
   late final auxiliaryAudioController = AuxiliaryAudioController(
     speechRepository: coreRepositories.speechSynthesis,
   );
@@ -1153,9 +1158,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
     subtitleController.updateCurrentDetectedPhone(
       value,
-      enabled:
-          settingsController.settings.phonemeRibbonVisible ||
-          settingsController.settings.soundPatternRibbonVisible,
+      enabled: settingsController.settings.phonemeHighlightVisible,
     );
 
     final primaryCue = subtitleController.currentPrimaryCue;
@@ -2309,35 +2312,22 @@ class _PlayerScreenState extends State<PlayerScreen>
     resourceActions: resourceActions,
   );
 
-  Future<void> _loopSoundRibbonFinding(
-    PhonemeRibbonFinding finding,
-    List<DetectedPhone> phones,
-  ) async {
-    if (phones.isEmpty) return;
-    final startIndex = finding.phoneStart.clamp(0, phones.length - 1).toInt();
-    final endIndex = finding.phoneEnd
-        .clamp(startIndex, phones.length - 1)
-        .toInt();
-    final start = phones[startIndex].start.inMilliseconds;
-    final end = phones[endIndex].end.inMilliseconds;
-    await playbackActions.loopRange(
-      start,
-      end,
-      'Looping sound-line evidence',
-      labelKey: 'loopEvidence',
-    );
-  }
-
-  Future<void> _loopRhythmCue(
-    Duration start,
-    Duration end,
-    String label,
-  ) async {
-    await playbackActions.loopRange(
-      start.inMilliseconds,
-      end.inMilliseconds,
-      'Looping listening rhythm: $label',
-      labelKey: 'loopRhythm',
+  /// (Re)opens the sentence-analysis panel's own player on the current
+  /// sentence and starts playback, so the panel's sound-reference ribbons can
+  /// highlight against a playback the reader drives there — without moving the
+  /// main stage.
+  Future<void> _playVoiceClip() async {
+    final cue = subtitleController.currentPrimaryCue;
+    final path = playerController.mediaPath;
+    if (cue == null || path == null) return;
+    final cursor = subtitleController.primaryCursor;
+    await voiceClipPlayer.open(
+      occurrence: {
+        'start_ms_snapshot': cursor.mediaStart(cue).inMilliseconds,
+        'end_ms_snapshot': cursor.mediaEnd(cue).inMilliseconds,
+        'sentence_id': cue.id,
+      },
+      path: path,
     );
   }
 
@@ -2424,6 +2414,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     _workbenchAnimController.dispose();
     downloadController.dispose();
     mediaImportController.dispose();
+    voiceClipPlayer.dispose();
     unawaited(_saveSettings());
     for (final subscription in subscriptions) {
       unawaited(subscription.cancel());
@@ -3258,14 +3249,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     onSeekChunk: playbackActions.seekChunk,
     onOpenWord: vocabularyActions.openWord,
     onOpenPhrase: _openPhrase,
-    onLoopSoundRibbonFinding: _loopSoundRibbonFinding,
-    onLoopRhythmCue: _loopRhythmCue,
-    onSetSoundPatternDisplayMode: _setSoundPatternDisplayMode,
     onSaveSettings: _saveSettings,
     onOpenMedia: mediaSession.openMedia,
-    onLoadSoundReference: settingsController.phoneticAnalysisPreference == 'off'
-        ? null
-        : subtitleSources.analyzePhonetics,
     onToggleFullscreen: () => unawaited(immersiveMode.toggle()),
   );
 
@@ -3316,7 +3301,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         learningController: learningController,
         settingsController: settingsController,
         playbackActions: playbackActions,
+        voiceClipPlayer: voiceClipPlayer,
         onRequestDiagnosis: _refreshDiagnosis,
+        onPlayVoiceClip: _playVoiceClip,
+        onSetSoundPatternDisplayMode: _setSoundPatternDisplayMode,
         onClose: () => learningController.setDiagnosisExpanded(false),
         onOpenListeningDictionary: _openListeningDictionaryEntry,
         onOpenL1Specialty: _openL1Specialty,

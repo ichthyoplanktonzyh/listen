@@ -72,8 +72,6 @@ class SettingsController extends ChangeNotifier {
   double get wordAnimationIntensity => _settings.wordAnimationIntensity;
   String get ruleHintsLevel => _settings.ruleHintsLevel;
   String get phoneticAnalysisPreference => _settings.phoneticAnalysisPreference;
-  bool get phonemeRibbonVisible => _settings.phonemeRibbonVisible;
-  bool get soundPatternRibbonVisible => _settings.soundPatternRibbonVisible;
   String get soundPatternDisplayMode => _settings.soundPatternDisplayMode;
   String get phonemeRibbonStyle => _settings.phonemeRibbonStyle;
   String get learningLanguage => _settings.learningLanguage;

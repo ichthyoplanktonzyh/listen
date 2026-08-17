@@ -7,20 +7,12 @@ import '../../controllers/player_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../controllers/subtitle_controller.dart';
 import '../../localization.dart';
-import '../../models/capability_readiness.dart'
-    show canDisplayActualRhythmFrame;
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../player_adapter.dart';
-import '../../theme/icon_size.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
 import '../../utils/subtitle_style.dart';
-import '../subtitle/connected_speech_reference_ribbon.dart';
-import '../subtitle/expected_pronunciation_reference.dart';
-import '../subtitle/phoneme_ribbon.dart';
-import '../subtitle/rhythm_frame_ribbon.dart';
-import '../subtitle/sound_pattern_mode_toggle.dart';
 import '../subtitle/token_line.dart';
 
 /// The media stage: video surface plus every playback overlay (primary and
@@ -41,12 +33,8 @@ class PlayerStage extends StatefulWidget {
     required this.onSeekChunk,
     required this.onOpenWord,
     required this.onOpenPhrase,
-    required this.onLoopSoundRibbonFinding,
-    required this.onLoopRhythmCue,
-    required this.onSetSoundPatternDisplayMode,
     required this.onSaveSettings,
     required this.onOpenMedia,
-    this.onLoadSoundReference,
     this.onToggleFullscreen,
   });
 
@@ -59,21 +47,8 @@ class PlayerStage extends StatefulWidget {
   final Future<void> Function(DisplayChunk chunk) onSeekChunk;
   final Future<void> Function(SubtitleToken token, Cue cue) onOpenWord;
   final Future<void> Function(PhraseCandidate candidate, Cue cue) onOpenPhrase;
-  final Future<void> Function(
-    PhonemeRibbonFinding finding,
-    List<DetectedPhone> phones,
-  )
-  onLoopSoundRibbonFinding;
-  final Future<void> Function(Duration start, Duration end, String label)
-  onLoopRhythmCue;
-  final Future<void> Function(String mode) onSetSoundPatternDisplayMode;
   final Future<void> Function() onSaveSettings;
   final Future<void> Function() onOpenMedia;
-
-  /// Loads the "this audio" (C) sound reference on demand. [wholeTrack] true
-  /// runs forced alignment across the whole subtitle track; false only the
-  /// current sentence. Null when phonetic analysis is unavailable.
-  final Future<void> Function({required bool wholeTrack})? onLoadSoundReference;
 
   /// #25-A: double-clicking the bare video surface toggles the fullscreen
   /// immersive state. The gesture lives on the surface only — never as an
@@ -86,9 +61,6 @@ class PlayerStage extends StatefulWidget {
 }
 
 class _PlayerStageState extends State<PlayerStage> {
-  bool _phoneEvidenceExpanded = false;
-  String? _lastCueId;
-
   DesktopPlayerAdapter get adapter => widget.adapter;
   PlayerController get playerController => widget.playerController;
   SubtitleController get subtitleController => widget.subtitleController;
@@ -102,26 +74,11 @@ class _PlayerStageState extends State<PlayerStage> {
       widget.onOpenWord(token, cue);
   Future<void> _openPhrase(PhraseCandidate candidate, Cue cue) =>
       widget.onOpenPhrase(candidate, cue);
-  Future<void> _loopSoundRibbonFinding(
-    PhonemeRibbonFinding finding,
-    List<DetectedPhone> phones,
-  ) => widget.onLoopSoundRibbonFinding(finding, phones);
-  Future<void> _loopRhythmCue(Duration start, Duration end, String label) =>
-      widget.onLoopRhythmCue(start, end, label);
-  Future<void> _setSoundPatternDisplayMode(String mode) =>
-      widget.onSetSoundPatternDisplayMode(mode);
   Future<void> _saveSettings() => widget.onSaveSettings();
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      // Phone-evidence expansion is ephemeral overlay state; it only exists
-      // inside Rhythm reference C ("actual"), so leaving that mode drops it.
-      if (settingsController.soundPatternDisplayMode != 'actual' ||
-          subtitleController.currentPrimaryCue?.id != _lastCueId) {
-        _lastCueId = subtitleController.currentPrimaryCue?.id;
-        _phoneEvidenceExpanded = false;
-      }
       final primarySize = responsiveSubtitleSize(
         width: constraints.maxWidth,
         scale: subtitleController.primaryFontSize,
@@ -314,358 +271,6 @@ class _PlayerStageState extends State<PlayerStage> {
                                   },
                                 ),
                               ),
-                            if (settingsController.phonemeRibbonVisible &&
-                                subtitleController.currentPrimaryCue != null)
-                              ValueListenableBuilder<Duration>(
-                                valueListenable:
-                                    playerController.positionListenable,
-                                builder: (context, livePosition, _) {
-                                  final cueId =
-                                      subtitleController.currentPrimaryCue!.id;
-                                  final analysis = subtitleController
-                                      .phoneticAnalysisBySentence[cueId];
-                                  final observedPhones =
-                                      analysis?.detectedPhones.isNotEmpty ==
-                                          true
-                                      ? analysis!.detectedPhones
-                                      : subtitleController
-                                                .phonesBySentence[cueId] ??
-                                            const <DetectedPhone>[];
-                                  final phones = buildLearningPhones(
-                                    pronunciation: subtitleController
-                                        .pronunciationBySentence[cueId]
-                                        ?.toJson(),
-                                    wordTimings: subtitleController
-                                        .timingsBySentence[cueId],
-                                    observedPhones: observedPhones,
-                                    allowObservedOnlyFallback:
-                                        observedPhones.isNotEmpty,
-                                  );
-                                  if (phones.isEmpty) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: PhonemeRibbon(
-                                      phones: phones,
-                                      position: livePosition,
-                                      fontSize: primarySize * 0.45,
-                                      height: primarySize * 1.1,
-                                      style:
-                                          settingsController.phonemeRibbonStyle,
-                                      tooltip: l.text('textPhonemeRibbonHint'),
-                                    ),
-                                  );
-                                },
-                              ),
-                            if (settingsController.soundPatternRibbonVisible &&
-                                subtitleController.currentPrimaryCue != null)
-                              ListenableBuilder(
-                                listenable: Listenable.merge([
-                                  playerController.positionListenable,
-                                  subtitleController.currentWordTokenListenable,
-                                ]),
-                                builder: (context, _) {
-                                  final livePosition =
-                                      playerController.position;
-                                  final cueId =
-                                      subtitleController.currentPrimaryCue!.id;
-                                  final analysis = subtitleController
-                                      .phoneticAnalysisBySentence[cueId];
-                                  final pronunciation = subtitleController
-                                      .pronunciationBySentence[cueId];
-                                  final soundAnalysis = analysis?.soundAnalysis;
-                                  final rhythmFrame =
-                                      subtitleController.llTimelineDocument
-                                          ?.rhythmFrameForSentence(cueId) ??
-                                      soundAnalysis?.rhythmFrame;
-                                  final phones = soundAnalysis == null
-                                      ? const <DetectedPhone>[]
-                                      : buildSoundPatternPhones(soundAnalysis);
-                                  final findings = soundAnalysis == null
-                                      ? const <PhonemeRibbonFinding>[]
-                                      : buildPhonemeRibbonFindings(
-                                          rawFindings:
-                                              analysis?.findings
-                                                  .map(
-                                                    (value) => value.toJson(),
-                                                  )
-                                                  .toList(growable: false) ??
-                                              const [],
-                                          phones: phones,
-                                          soundAnalysis: soundAnalysis,
-                                        );
-                                  final hasPhoneEvidence = phones.isNotEmpty;
-                                  Widget soundPatternLayer(
-                                    Widget child, {
-                                    bool offerPhoneEvidence = false,
-                                  }) => Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Flexible(
-                                          fit: FlexFit.loose,
-                                          child: child,
-                                        ),
-                                        if (offerPhoneEvidence) ...[
-                                          const SizedBox(
-                                            width: ListenSpacing.gap4,
-                                          ),
-                                          Tooltip(
-                                            message: hasPhoneEvidence
-                                                ? l.text(
-                                                    _phoneEvidenceExpanded
-                                                        ? 'hidePhoneEvidence'
-                                                        : 'showPhoneEvidence',
-                                                  )
-                                                : l.text(
-                                                    'soundPatternUnavailableTooltip',
-                                                  ),
-                                            child: IconButton(
-                                              onPressed: hasPhoneEvidence
-                                                  ? () => setState(
-                                                      () => _phoneEvidenceExpanded =
-                                                          !_phoneEvidenceExpanded,
-                                                    )
-                                                  : null,
-                                              icon: Icon(
-                                                _phoneEvidenceExpanded
-                                                    ? Icons.graphic_eq
-                                                    : Icons.graphic_eq_outlined,
-                                              ),
-                                              isSelected:
-                                                  _phoneEvidenceExpanded,
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              constraints:
-                                                  BoxConstraints.tightFor(
-                                                    width: primarySize * 0.95,
-                                                    height: primarySize * 0.95,
-                                                  ),
-                                              padding: EdgeInsets.zero,
-                                              iconSize: primarySize * 0.52,
-                                            ),
-                                          ),
-                                        ],
-                                        const SizedBox(
-                                          width: ListenSpacing.gap4,
-                                        ),
-                                        RhythmReferenceToggle(
-                                          mode: settingsController
-                                              .soundPatternDisplayMode,
-                                          citationTooltip: l.text(
-                                            'rhythmReferenceCitationTooltip',
-                                          ),
-                                          connectedTooltip: l.text(
-                                            'rhythmReferenceConnectedTooltip',
-                                          ),
-                                          actualTooltip: l.text(
-                                            'rhythmReferenceActualTooltip',
-                                          ),
-                                          semanticsLabel: l.text(
-                                            'soundPatternDisplayMode',
-                                          ),
-                                          size: primarySize * 0.95,
-                                          onChanged: (value) => unawaited(
-                                            _setSoundPatternDisplayMode(value),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-
-                                  final mode = settingsController
-                                      .soundPatternDisplayMode;
-                                  if (mode == 'citation') {
-                                    return soundPatternLayer(
-                                      pronunciation == null
-                                          ? SoundPatternUnavailableRibbon(
-                                              message: l.text(
-                                                'citationPronunciationUnavailable',
-                                              ),
-                                              fontSize: primarySize * 0.34,
-                                              height: primarySize * 0.9,
-                                            )
-                                          : ExpectedPronunciationReference(
-                                              analysis: pronunciation,
-                                              title: l.text(
-                                                'rhythmReferenceCitation',
-                                              ),
-                                              currentTokenIndex:
-                                                  subtitleController
-                                                      .currentWordToken,
-                                              fontSize: primarySize * 0.34,
-                                              height: primarySize * 0.86,
-                                              tooltip: l.text(
-                                                'expectedPronunciationTooltip',
-                                              ),
-                                              expandTooltip: l.text(
-                                                'showFullSoundStructure',
-                                              ),
-                                              collapseTooltip: l.text(
-                                                'collapseSoundStructure',
-                                              ),
-                                            ),
-                                    );
-                                  }
-
-                                  final connectedReferences =
-                                      rhythmFrame?.connectedSpeechRefs
-                                          .where(
-                                            (reference) => reference
-                                                .signalSources
-                                                .contains('text_prior'),
-                                          )
-                                          .toList(growable: false) ??
-                                      const <RhythmConnectedSpeechRef>[];
-                                  if (mode == 'connected') {
-                                    return soundPatternLayer(
-                                      connectedReferences.isEmpty
-                                          ? SoundPatternUnavailableRibbon(
-                                              message: l.text(
-                                                'connectedSpeechUnavailable',
-                                              ),
-                                              fontSize: primarySize * 0.34,
-                                              height: primarySize * 0.9,
-                                            )
-                                          : ConnectedSpeechReferenceRibbon(
-                                              references: connectedReferences,
-                                              tokens: subtitleController
-                                                  .currentPrimaryCue!
-                                                  .tokens,
-                                              title: l.text(
-                                                'connectedSpeechReference',
-                                              ),
-                                              currentTokenIndex:
-                                                  subtitleController
-                                                      .currentWordToken,
-                                              fontSize: primarySize * 0.44,
-                                              height: primarySize * 1.1,
-                                              tooltip: l.text(
-                                                'connectedSpeechReferenceTooltip',
-                                              ),
-                                              expandTooltip: l.text(
-                                                'showFullSoundStructure',
-                                              ),
-                                              collapseTooltip: l.text(
-                                                'collapseSoundStructure',
-                                              ),
-                                            ),
-                                    );
-                                  }
-
-                                  if (!canDisplayActualRhythmFrame(
-                                    rhythmFrame,
-                                    hasPhoneEvidence: hasPhoneEvidence,
-                                  )) {
-                                    // C ("this audio") is phone-observed only.
-                                    // A text/word-timeline RhythmFrame belongs
-                                    // to A/B and must never be shown here as a
-                                    // predicted substitute for actual evidence.
-                                    final canLoad =
-                                        widget.onLoadSoundReference != null &&
-                                        settingsController
-                                                .phoneticAnalysisPreference !=
-                                            'off';
-                                    return soundPatternLayer(
-                                      canLoad
-                                          ? _SoundReferenceLoadPrompt(
-                                              fontSize: primarySize * 0.32,
-                                              onLoadSentence: () => unawaited(
-                                                widget.onLoadSoundReference!(
-                                                  wholeTrack: false,
-                                                ),
-                                              ),
-                                              onLoadTrack: () => unawaited(
-                                                widget.onLoadSoundReference!(
-                                                  wholeTrack: true,
-                                                ),
-                                              ),
-                                            )
-                                          : SoundPatternUnavailableRibbon(
-                                              message: l.text(
-                                                'rhythmFrameUnavailable',
-                                              ),
-                                              tooltip: l.text(
-                                                'soundPatternUnavailableTooltip',
-                                              ),
-                                              fontSize: primarySize * 0.34,
-                                              height: primarySize * 0.9,
-                                            ),
-                                      offerPhoneEvidence: true,
-                                    );
-                                  }
-                                  final actualView = RhythmFrameRibbon(
-                                    frame: rhythmFrame!,
-                                    pronunciation: pronunciation,
-                                    position: livePosition,
-                                    title: l.text('rhythmReferenceActual'),
-                                    anchorLabel: l.text('stressAnchors'),
-                                    weakGroupLabel: l.text('weakGroups'),
-                                    compressionLabel: l.text('compressedSpans'),
-                                    hotspotLabel: l.text('listeningHotspots'),
-                                    fontSize: primarySize * 0.44,
-                                    height: primarySize * 1.15,
-                                    tooltip: l.text('rhythmRibbonHint'),
-                                    predicted: false,
-                                    predictedLabel: l.text(
-                                      'listeningPredictedBadge',
-                                    ),
-                                    expandTooltip: l.text(
-                                      'showFullSoundStructure',
-                                    ),
-                                    collapseTooltip: l.text(
-                                      'collapseSoundStructure',
-                                    ),
-                                    onLoopCue: (start, end, label) => unawaited(
-                                      _loopRhythmCue(start, end, label),
-                                    ),
-                                  );
-                                  return soundPatternLayer(
-                                    _phoneEvidenceExpanded &&
-                                            hasPhoneEvidence &&
-                                            soundAnalysis != null
-                                        ? Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              actualView,
-                                              const SizedBox(
-                                                height: ListenSpacing.gap4,
-                                              ),
-                                              PhonemeRibbon(
-                                                phones: phones,
-                                                position: livePosition,
-                                                fontSize: primarySize * 0.42,
-                                                height: primarySize,
-                                                style: settingsController
-                                                    .phonemeRibbonStyle,
-                                                syllables:
-                                                    soundAnalysis.syllables,
-                                                prosodicPhrases: soundAnalysis
-                                                    .prosodicPhrases,
-                                                findings: findings,
-                                                lane: PhonemeRibbonLane.sound,
-                                                tooltip: l.text(
-                                                  'soundPatternRibbonHint',
-                                                ),
-                                                onLoopFinding: (finding) =>
-                                                    unawaited(
-                                                      _loopSoundRibbonFinding(
-                                                        finding,
-                                                        phones,
-                                                      ),
-                                                    ),
-                                              ),
-                                            ],
-                                          )
-                                        : actualView,
-                                    offerPhoneEvidence: true,
-                                  );
-                                },
-                              ),
                             if (subtitleController.secondaryVisible &&
                                 subtitleController.currentSecondaryCue != null)
                               GestureDetector(
@@ -738,95 +343,4 @@ class _PlayerStageState extends State<PlayerStage> {
     'monospace' => 'Menlo',
     _ => null,
   };
-}
-
-/// In-place prompt shown in the C ("this audio") sound-reference position when
-/// no forced-alignment data exists yet. Offers a fast per-sentence load and a
-/// whole-track load, framed as an effort choice rather than a technical action.
-class _SoundReferenceLoadPrompt extends StatelessWidget {
-  const _SoundReferenceLoadPrompt({
-    required this.fontSize,
-    required this.onLoadSentence,
-    required this.onLoadTrack,
-  });
-
-  final double fontSize;
-  final VoidCallback onLoadSentence;
-  final VoidCallback onLoadTrack;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: ListenRadii.controlBorder,
-      ),
-      child: Padding(
-        padding: ListenPadding.row,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.graphic_eq,
-                  size: fontSize * 1.1,
-                  color: Colors.white70,
-                ),
-                const SizedBox(width: ListenSpacing.gap6),
-                Flexible(
-                  child: Text(
-                    l.text('soundReferenceNoData'),
-                    style: TextStyle(fontSize: fontSize, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: ListenSpacing.gap6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: onLoadSentence,
-                  icon: const Icon(
-                    Icons.graphic_eq,
-                    size: ListenIconSize.control,
-                  ),
-                  label: Text(l.text('loadCurrentSentence')),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ),
-                OutlinedButton.icon(
-                  onPressed: onLoadTrack,
-                  icon: const Icon(
-                    Icons.library_music_outlined,
-                    size: ListenIconSize.control,
-                  ),
-                  label: Text(l.text('loadWholeTrack')),
-                  style: OutlinedButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white38),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: ListenSpacing.gap4),
-            Text(
-              l.text('soundReferenceLoadHint'),
-              style: TextStyle(
-                fontSize: fontSize * 0.82,
-                color: Colors.white60,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

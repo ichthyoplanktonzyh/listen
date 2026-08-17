@@ -774,9 +774,7 @@ class MediaSessionCoordinator {
     );
     subtitle.updateCurrentDetectedPhone(
       player.position,
-      enabled:
-          settings.settings.phonemeRibbonVisible ||
-          settings.settings.soundPatternRibbonVisible,
+      enabled: settings.settings.phonemeHighlightVisible,
     );
     if (result.errors.isNotEmpty && isMounted()) {
       // This one was invisible to the source gate: the exceptions reached the

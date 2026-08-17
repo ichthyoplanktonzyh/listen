@@ -76,8 +76,6 @@ class AppSettings {
     this.phoneticAnalysisPreference = 'on_demand',
     this.showExperimentalPhoneticResults = false,
     this.phonemeHighlightVisible = true,
-    this.phonemeRibbonVisible = false,
-    this.soundPatternRibbonVisible = false,
     this.soundPatternDisplayMode = 'actual',
     this.phonemeRibbonStyle = 'window',
     this.phoneticCachePolicy = 'keep_completed',
@@ -200,9 +198,6 @@ class AppSettings {
           json['show_experimental_phonetic_results'] as bool? ?? false,
       phonemeHighlightVisible:
           json['phoneme_highlight_visible'] as bool? ?? true,
-      phonemeRibbonVisible: json['phoneme_ribbon_visible'] as bool? ?? false,
-      soundPatternRibbonVisible:
-          json['sound_pattern_ribbon_visible'] as bool? ?? false,
       soundPatternDisplayMode: _soundPatternDisplayMode(
         json['sound_pattern_display_mode'],
       ),
@@ -293,8 +288,6 @@ class AppSettings {
   final String phoneticAnalysisPreference;
   final bool showExperimentalPhoneticResults;
   final bool phonemeHighlightVisible;
-  final bool phonemeRibbonVisible;
-  final bool soundPatternRibbonVisible;
   final String soundPatternDisplayMode;
   final String phonemeRibbonStyle;
   final String phoneticCachePolicy;
@@ -429,8 +422,6 @@ class AppSettings {
     'phonetic_analysis_preference': phoneticAnalysisPreference,
     'show_experimental_phonetic_results': showExperimentalPhoneticResults,
     'phoneme_highlight_visible': phonemeHighlightVisible,
-    'phoneme_ribbon_visible': phonemeRibbonVisible,
-    'sound_pattern_ribbon_visible': soundPatternRibbonVisible,
     'sound_pattern_display_mode': soundPatternDisplayMode,
     'phoneme_ribbon_style': phonemeRibbonStyle,
     'phonetic_cache_policy': phoneticCachePolicy,
@@ -489,8 +480,6 @@ class AppSettings {
     String? phoneticAnalysisPreference,
     bool? showExperimentalPhoneticResults,
     bool? phonemeHighlightVisible,
-    bool? phonemeRibbonVisible,
-    bool? soundPatternRibbonVisible,
     String? soundPatternDisplayMode,
     String? phonemeRibbonStyle,
     String? phoneticCachePolicy,
@@ -559,9 +548,6 @@ class AppSettings {
         showExperimentalPhoneticResults ?? this.showExperimentalPhoneticResults,
     phonemeHighlightVisible:
         phonemeHighlightVisible ?? this.phonemeHighlightVisible,
-    phonemeRibbonVisible: phonemeRibbonVisible ?? this.phonemeRibbonVisible,
-    soundPatternRibbonVisible:
-        soundPatternRibbonVisible ?? this.soundPatternRibbonVisible,
     soundPatternDisplayMode:
         soundPatternDisplayMode ?? this.soundPatternDisplayMode,
     phonemeRibbonStyle: phonemeRibbonStyle ?? this.phonemeRibbonStyle,

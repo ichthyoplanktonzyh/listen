@@ -5,6 +5,7 @@ import 'package:llplayer_next/controllers/learning_controller.dart';
 import 'package:llplayer_next/controllers/playback_actions_coordinator.dart';
 import 'package:llplayer_next/controllers/player_controller.dart';
 import 'package:llplayer_next/controllers/settings_controller.dart';
+import 'package:llplayer_next/controllers/slice_player_controller.dart';
 import 'package:llplayer_next/controllers/subtitle_controller.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/models/timeline.dart';
@@ -61,9 +62,12 @@ _harness({bool withCurrentCue = true}) {
               learningController: learning,
               settingsController: SettingsController(),
               playbackActions: playback,
+              voiceClipPlayer: SlicePlayerController(),
               onRequestDiagnosis: () async {
                 diagnosisCalls += 1;
               },
+              onPlayVoiceClip: () async {},
+              onSetSoundPatternDisplayMode: (_) async {},
               onClose: () => closes += 1,
             ),
           ],

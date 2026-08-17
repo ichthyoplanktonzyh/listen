@@ -168,7 +168,7 @@ void main() {
     expect(settings.phoneticAnalysisPreference, 'on_demand');
     expect(settings.showExperimentalPhoneticResults, isFalse);
     expect(settings.phonemeHighlightVisible, isTrue);
-    expect(settings.soundPatternRibbonVisible, isFalse);
+    expect(settings.soundPatternDisplayMode, 'actual');
     expect(settings.phoneticCachePolicy, 'keep_completed');
   });
 
@@ -185,12 +185,12 @@ void main() {
       wordAnimationIntensity: 0.8,
       ruleHintsLevel: 'all',
       precomputePronunciation: false,
-      soundPatternRibbonVisible: false,
+      soundPatternDisplayMode: 'actual',
     );
 
     final updated = settings.copyWith(
       wordSyncVisible: true,
-      soundPatternRibbonVisible: true,
+      soundPatternDisplayMode: 'citation',
     );
 
     expect(updated.pronunciationVisible, isFalse);
@@ -204,7 +204,7 @@ void main() {
     expect(updated.wordAnimationIntensity, 0.8);
     expect(updated.ruleHintsLevel, 'all');
     expect(updated.precomputePronunciation, isFalse);
-    expect(updated.soundPatternRibbonVisible, isTrue);
+    expect(updated.soundPatternDisplayMode, 'citation');
   });
 
   test('falls back from an unsupported word highlight style', () {
@@ -333,7 +333,7 @@ void main() {
     );
   });
 
-  test('loads independent sound pattern ribbon visibility v8', () {
+  test('ignores retired ribbon-visibility flags and keeps display mode', () {
     final settings = AppSettings.fromJson({
       'version': 8,
       'phoneme_ribbon_visible': false,
@@ -341,8 +341,9 @@ void main() {
       'sound_pattern_display_mode': 'phones',
     });
 
-    expect(settings.phonemeRibbonVisible, isFalse);
-    expect(settings.soundPatternRibbonVisible, isTrue);
+    // The per-ribbon visibility toggles were retired when the sound reference
+    // moved into the analysis panel; the unknown keys are ignored and the
+    // display mode still validates (an unsupported mode falls back to actual).
     expect(settings.soundPatternDisplayMode, 'actual');
   });
 

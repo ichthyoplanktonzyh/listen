@@ -51,8 +51,6 @@ class SettingsDialog extends StatefulWidget {
     required this.wordHighlightStyle,
     required this.wordAnimationIntensity,
     required this.ruleHintsLevel,
-    required this.phonemeRibbonVisible,
-    required this.soundPatternRibbonVisible,
     required this.soundPatternDisplayMode,
     required this.phonemeRibbonStyle,
     required this.phoneticAnalysisPreference,
@@ -84,8 +82,6 @@ class SettingsDialog extends StatefulWidget {
     required this.onWordHighlightStyleChanged,
     required this.onWordAnimationIntensityChanged,
     required this.onRuleHintsLevelChanged,
-    required this.onPhonemeRibbonVisibleChanged,
-    required this.onSoundPatternRibbonVisibleChanged,
     required this.onSoundPatternDisplayModeChanged,
     required this.onPhonemeRibbonStyleChanged,
     required this.onPhoneticAnalysisPreferenceChanged,
@@ -131,8 +127,6 @@ class SettingsDialog extends StatefulWidget {
   final String wordHighlightStyle;
   final double wordAnimationIntensity;
   final String ruleHintsLevel;
-  final bool phonemeRibbonVisible;
-  final bool soundPatternRibbonVisible;
   final String soundPatternDisplayMode;
   final String phonemeRibbonStyle;
   final String phoneticAnalysisPreference;
@@ -169,8 +163,6 @@ class SettingsDialog extends StatefulWidget {
   final ValueChanged<String> onWordHighlightStyleChanged;
   final ValueChanged<double> onWordAnimationIntensityChanged;
   final ValueChanged<String> onRuleHintsLevelChanged;
-  final ValueChanged<bool> onPhonemeRibbonVisibleChanged;
-  final ValueChanged<bool> onSoundPatternRibbonVisibleChanged;
   final ValueChanged<String> onSoundPatternDisplayModeChanged;
   final ValueChanged<String> onPhonemeRibbonStyleChanged;
   final ValueChanged<String> onPhoneticAnalysisPreferenceChanged;
@@ -213,8 +205,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late String wordHighlightStyle;
   late double wordAnimationIntensity;
   late String ruleHintsLevel;
-  late bool phonemeRibbonVisible;
-  late bool soundPatternRibbonVisible;
   late String soundPatternDisplayMode;
   late String phonemeRibbonStyle;
   late String phoneticAnalysisPreference;
@@ -284,8 +274,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
     wordHighlightStyle = widget.wordHighlightStyle;
     wordAnimationIntensity = widget.wordAnimationIntensity;
     ruleHintsLevel = widget.ruleHintsLevel;
-    phonemeRibbonVisible = widget.phonemeRibbonVisible;
-    soundPatternRibbonVisible = widget.soundPatternRibbonVisible;
     soundPatternDisplayMode = widget.soundPatternDisplayMode;
     phonemeRibbonStyle = widget.phonemeRibbonStyle;
     phoneticAnalysisPreference = widget.phoneticAnalysisPreference;
@@ -637,24 +625,6 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       l.text('phoneticAnalysis'),
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    SwitchListTile(
-                      value: phonemeRibbonVisible,
-                      title: Text(l.text('phonemeRibbonVisible')),
-                      onChanged: (value) {
-                        phonemeRibbonVisible = value;
-                        widget.onPhonemeRibbonVisibleChanged(value);
-                        refresh(() {});
-                      },
-                    ),
-                    SwitchListTile(
-                      value: soundPatternRibbonVisible,
-                      title: Text(l.text('soundPatternRibbonVisible')),
-                      onChanged: (value) {
-                        soundPatternRibbonVisible = value;
-                        widget.onSoundPatternRibbonVisibleChanged(value);
-                        refresh(() {});
-                      },
-                    ),
                     DropdownButtonFormField<String>(
                       initialValue: soundPatternDisplayMode,
                       decoration: InputDecoration(
@@ -674,14 +644,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           child: Text(l.text('rhythmReferenceActual')),
                         ),
                       ],
-                      onChanged: soundPatternRibbonVisible
-                          ? (value) {
-                              if (value == null) return;
-                              soundPatternDisplayMode = value;
-                              widget.onSoundPatternDisplayModeChanged(value);
-                              refresh(() {});
-                            }
-                          : null,
+                      onChanged: (value) {
+                        if (value == null) return;
+                        soundPatternDisplayMode = value;
+                        widget.onSoundPatternDisplayModeChanged(value);
+                        refresh(() {});
+                      },
                     ),
                     DropdownButtonFormField<String>(
                       initialValue: phonemeRibbonStyle,
@@ -698,14 +666,12 @@ class _SettingsDialogState extends State<SettingsDialog> {
                           child: Text(l.text('phonemeRibbonWave')),
                         ),
                       ],
-                      onChanged: phonemeRibbonVisible
-                          ? (value) {
-                              if (value == null) return;
-                              phonemeRibbonStyle = value;
-                              widget.onPhonemeRibbonStyleChanged(value);
-                              refresh(() {});
-                            }
-                          : null,
+                      onChanged: (value) {
+                        if (value == null) return;
+                        phonemeRibbonStyle = value;
+                        widget.onPhonemeRibbonStyleChanged(value);
+                        refresh(() {});
+                      },
                     ),
                     DropdownButtonFormField<String>(
                       initialValue: phoneticAnalysisPreference,

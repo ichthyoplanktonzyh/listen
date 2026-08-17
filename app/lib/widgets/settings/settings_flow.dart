@@ -78,8 +78,6 @@ Future<void> showAppSettings({
       wordAnimationIntensity: settingsController.wordAnimationIntensity,
       ruleHintsLevel: settingsController.ruleHintsLevel,
       phoneticAnalysisPreference: settingsController.phoneticAnalysisPreference,
-      phonemeRibbonVisible: settingsController.phonemeRibbonVisible,
-      soundPatternRibbonVisible: settingsController.soundPatternRibbonVisible,
       soundPatternDisplayMode: settingsController.soundPatternDisplayMode,
       phonemeRibbonStyle: settingsController.phonemeRibbonStyle,
       learningLanguage: settingsController.learningLanguage,
@@ -231,32 +229,6 @@ Future<void> showAppSettings({
       onPhonemeRibbonStyleChanged: (v) {
         settingsController.update(
           settingsController.settings.copyWith(phonemeRibbonStyle: v),
-        );
-      },
-      onPhonemeRibbonVisibleChanged: (v) {
-        settingsController.update(
-          settingsController.settings.copyWith(
-            phonemeRibbonVisible: v,
-            phonemeHighlightVisible:
-                v || settingsController.settings.soundPatternRibbonVisible,
-          ),
-        );
-        subtitleController.updateCurrentDetectedPhone(
-          playerController.position,
-          enabled: v || settingsController.settings.soundPatternRibbonVisible,
-        );
-      },
-      onSoundPatternRibbonVisibleChanged: (v) {
-        settingsController.update(
-          settingsController.settings.copyWith(
-            soundPatternRibbonVisible: v,
-            phonemeHighlightVisible:
-                v || settingsController.settings.phonemeRibbonVisible,
-          ),
-        );
-        subtitleController.updateCurrentDetectedPhone(
-          playerController.position,
-          enabled: v || settingsController.settings.phonemeRibbonVisible,
         );
       },
       onSoundPatternDisplayModeChanged: (v) {

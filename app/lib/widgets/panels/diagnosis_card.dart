@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../localization.dart';
-import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
@@ -17,11 +16,7 @@ class DiagnosisCard extends StatelessWidget {
     this.ruleHintsLevel = 'likely',
     this.pronunciationProviders = const [],
     this.timingQuality,
-    this.rhythmFrame,
     this.phoneticAnalysis,
-    this.currentDetectedPhone,
-    this.onLoopDetectedPhone,
-    this.onLoopHotspot,
     this.onLoopFinding,
     this.onFindingFeedback,
     this.onOpenListeningDictionary,
@@ -34,11 +29,7 @@ class DiagnosisCard extends StatelessWidget {
   final String ruleHintsLevel;
   final List<PronunciationProvider> pronunciationProviders;
   final String? timingQuality;
-  final RhythmFrame? rhythmFrame;
   final PhoneticAnalysis? phoneticAnalysis;
-  final DetectedPhone? currentDetectedPhone;
-  final ValueChanged<DetectedPhone>? onLoopDetectedPhone;
-  final ValueChanged<ListeningHotspot>? onLoopHotspot;
   final ValueChanged<PhoneticFinding>? onLoopFinding;
   final void Function(PhoneticFinding finding, String value)? onFindingFeedback;
   final Future<void> Function(String lexicalEntryId)? onOpenListeningDictionary;
@@ -52,8 +43,6 @@ class DiagnosisCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final activeRhythmFrame =
-        rhythmFrame ?? phoneticAnalysis?.soundAnalysis?.rhythmFrame;
     // A column, not a scroll view. This card opens inside the sentence it
     // describes, as one item of the transcript's list, where height is
     // unbounded — a viewport there fails to lay out, and a render box whose
@@ -179,8 +168,6 @@ class DiagnosisCard extends StatelessWidget {
                             l.text('canonicalPronunciation'),
                             '${l.text('pronunciationCache')}: ${l.text('cacheReusable')}',
                           ),
-                        if (activeRhythmFrame != null)
-                          _rhythmFrame(context, activeRhythmFrame),
                         if (phoneticAnalysis != null) ...[
                           _section(
                             l.text('audioDetectionExperimental'),
@@ -188,32 +175,6 @@ class DiagnosisCard extends StatelessWidget {
                             '${phoneticAnalysis!.modelRevision} · '
                             '${phoneticAnalysis!.phoneSet}',
                           ),
-                          Wrap(
-                            spacing: 4,
-                            runSpacing: 4,
-                            children: [
-                              for (final phone
-                                  in phoneticAnalysis!.detectedPhones)
-                                ActionChip(
-                                  label: Text(
-                                    '${phone.displayIpa} '
-                                    '${((phone.confidence ?? 0) * 100).round()}%',
-                                  ),
-                                  onPressed: onLoopDetectedPhone == null
-                                      ? null
-                                      : () => onLoopDetectedPhone!(phone),
-                                ),
-                            ],
-                          ),
-                          if (currentDetectedPhone != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                '${l.text('currentDetectedPhone')}: '
-                                '${currentDetectedPhone!.displayIpa} '
-                                '(${((currentDetectedPhone!.confidence ?? 0) * 100).round()}%)',
-                              ),
-                            ),
                           for (final finding in phoneticAnalysis!.findings)
                             _finding(
                               context,
@@ -354,172 +315,6 @@ class DiagnosisCard extends StatelessWidget {
       ],
     ),
   );
-
-  Widget _rhythmFrame(BuildContext context, RhythmFrame frame) {
-    final l = AppLocalizations.of(context);
-    final quality = (frame.quality.rhythmConfidence * 100).round();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l.text('listeningRhythm'),
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          if (frame.nuclei.isNotEmpty)
-            _chipLine(
-              'Nucleus',
-              frame.nuclei.map(
-                (nucleus) => _confidenceLabel(
-                  nucleus.label,
-                  nucleus.confidence,
-                  nucleus.claimStatus,
-                ),
-              ),
-              Theme.of(context).colorScheme.error,
-            ),
-          if (frame.stressAnchors.isNotEmpty)
-            _chipLine(
-              l.text('stressAnchors'),
-              frame.stressAnchors.map(
-                (anchor) => _confidenceLabel(
-                  anchor.label,
-                  anchor.confidence,
-                  anchor.claimStatus,
-                ),
-              ),
-              Theme.of(context).colorScheme.tertiary,
-            ),
-          if (frame.weakGroups.isNotEmpty)
-            _chipLine(
-              l.text('weakGroups'),
-              frame.weakGroups.map(
-                (group) => _confidenceLabel(
-                  group.label,
-                  group.confidence,
-                  group.claimStatus,
-                ),
-              ),
-              Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          if (frame.compressionSpans.isNotEmpty)
-            _chipLine(
-              l.text('compressedSpans'),
-              frame.compressionSpans.map(
-                (span) => _confidenceLabel(
-                  span.label,
-                  span.confidence,
-                  span.claimStatus,
-                ),
-              ),
-              Theme.of(context).colorScheme.secondary,
-            ),
-          if (frame.listeningHotspots.isNotEmpty)
-            _hotspotLine(context, frame.listeningHotspots.take(4)),
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              '${l.text('rhythmQuality')}: $quality% · '
-              '${frame.quality.timingSource.replaceAll('_', ' ')} · '
-              'prominence ${_sourceLabel(frame.quality.prominenceSources)} · '
-              'boundary ${_sourceLabel(frame.quality.boundarySources)}',
-              style: ListenType.body.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chipLine(String label, Iterable<String> values, Color color) {
-    final chips = values
-        .where((value) => value.trim().isNotEmpty)
-        .map(
-          (value) => Chip(
-            visualDensity: VisualDensity.compact,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            backgroundColor: color.withAlpha(42),
-            side: BorderSide(color: color.withAlpha(115)),
-            label: Text(
-              value,
-              style: ListenType.body,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        )
-        .toList(growable: false);
-    if (chips.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: ListenSpacing.gap4),
-      child: Wrap(
-        spacing: 5,
-        runSpacing: 5,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text('$label:', style: ListenType.body),
-          ...chips,
-        ],
-      ),
-    );
-  }
-
-  Widget _hotspotLine(BuildContext context, Iterable<ListeningHotspot> values) {
-    final l = AppLocalizations.of(context);
-    final hotspots = values.toList(growable: false);
-    if (hotspots.isEmpty) return const SizedBox.shrink();
-    final color = Theme.of(context).colorScheme.secondary;
-    return Padding(
-      padding: const EdgeInsets.only(top: ListenSpacing.gap4),
-      child: Wrap(
-        spacing: 5,
-        runSpacing: 5,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text('${l.text('listeningHotspots')}:', style: ListenType.body),
-          for (final hotspot in hotspots)
-            Tooltip(
-              message: [
-                if (hotspot.hint.isNotEmpty) hotspot.hint,
-                '${hotspot.kind.replaceAll('_', ' ')} · '
-                    '${(hotspot.confidence * 100).round()}%',
-              ].join('\n'),
-              child: ActionChip(
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                backgroundColor: color.withAlpha(42),
-                side: BorderSide(color: color.withAlpha(115)),
-                label: Text(
-                  _confidenceLabel(
-                    hotspot.label,
-                    hotspot.confidence,
-                    hotspot.claimStatus,
-                  ),
-                  style: ListenType.body,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onPressed: onLoopHotspot == null
-                    ? null
-                    : () => onLoopHotspot!(hotspot),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _confidenceLabel(String label, double confidence, String claimStatus) {
-    final percent = (confidence * 100).round();
-    final status = claimStatus == 'audio_supported' ? 'audible' : 'predicted';
-    return '$label $percent% $status';
-  }
-
-  String _sourceLabel(List<String> values) {
-    if (values.isEmpty) return 'unknown';
-    return values.map((value) => value.replaceAll('_', ' ')).join('/');
-  }
 
   Widget _finding(
     BuildContext context,
