@@ -12,6 +12,15 @@ import '../common/listen_loading.dart';
 const openAiRealtimeBaselineModel = 'gpt-realtime-2.1';
 const qwenRealtimeBaselineModel = 'qwen3.5-omni-plus-realtime';
 
+/// Local Speech-to-Speech defaults (`local_cascade_realtime`). The service is
+/// a loopback-only process (huggingface/speech-to-speech) that owns the actual
+/// STT/LLM/TTS models; listen-core appends `?model=<model_id>` to this URL and
+/// the backend treats the model and voice values as identifiers for the wire,
+/// not as model selectors (the service side configures its own engines).
+const localRealtimeBaselineEndpoint = 'ws://127.0.0.1:8765/v1/realtime';
+const localRealtimeBaselineModel = 'local-speech-to-speech';
+const localRealtimeBaselineVoice = 'default';
+
 /// Realtime speech provider management (#87 / S10). The endpoint, workspace,
 /// region and API key used to live inside the conversation panel, which made
 /// the first screen of a *conversation* a configuration form. Configuration
@@ -48,6 +57,8 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
   var _adapter = 'qwen_omni_realtime';
   var _qwenRegion = 'cn';
   String? _workspaceError;
+
+  bool get _isLocal => _adapter == 'local_cascade_realtime';
 
   @override
   void initState() {
@@ -251,14 +262,18 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
       DropdownButtonFormField<String>(
         initialValue: _adapter,
         decoration: InputDecoration(labelText: l.text('realtimeProtocol')),
-        items: const [
-          DropdownMenuItem(
+        items: [
+          const DropdownMenuItem(
             value: 'open_ai_realtime',
             child: Text('OpenAI Realtime'),
           ),
-          DropdownMenuItem(
+          const DropdownMenuItem(
             value: 'qwen_omni_realtime',
             child: Text('Qwen Omni Realtime'),
+          ),
+          DropdownMenuItem(
+            value: 'local_cascade_realtime',
+            child: Text(l.text('realtimeProtocolLocalCascade')),
           ),
         ],
         onChanged: (value) {
@@ -270,6 +285,10 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
               _model.text = qwenRealtimeBaselineModel;
               _voice.text = 'Tina';
               _applyQwenEndpoint();
+            } else if (value == 'local_cascade_realtime') {
+              _model.text = localRealtimeBaselineModel;
+              _voice.text = localRealtimeBaselineVoice;
+              _endpoint.text = localRealtimeBaselineEndpoint;
             } else {
               _model.text = openAiRealtimeBaselineModel;
               _endpoint.text = 'wss://api.openai.com/v1/realtime';
@@ -322,12 +341,16 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
           // otherwise the endpoint field itself does, so the save guard is
           // never silent.
           errorText: _adapter == 'qwen_omni_realtime' ? null : _workspaceError,
+          helperText: _isLocal ? l.text('realtimeLocalEndpointHint') : null,
         ),
         onChanged: (_) => setState(() => _workspaceError = null),
       ),
       TextField(
         controller: _model,
-        decoration: InputDecoration(labelText: l.text('realtimeModel')),
+        decoration: InputDecoration(
+          labelText: l.text('realtimeModel'),
+          helperText: _isLocal ? l.text('realtimeLocalModelHint') : null,
+        ),
       ),
       TextField(
         controller: _voice,
@@ -338,7 +361,9 @@ class _RealtimeProviderSettingsState extends State<RealtimeProviderSettings> {
         obscureText: true,
         decoration: InputDecoration(
           labelText: l.text('realtimeApiKey'),
-          helperText: l.text('realtimeApiKeyHint'),
+          helperText: _isLocal
+              ? l.text('realtimeApiKeyOptionalHint')
+              : l.text('realtimeApiKeyHint'),
         ),
       ),
       const SizedBox(height: ListenSpacing.gap8),

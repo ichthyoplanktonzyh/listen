@@ -83,6 +83,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(deleted, ['profile-1']);
   });
+
+  testWidgets(
+    'local Speech-to-Speech protocol autofills loopback defaults, drops the '
+    'Qwen-only fields, and saves without an API key',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final registerBodies = <Map<String, dynamic>>[];
+      final api = _api(registerBodies);
+
+      await tester.pumpWidget(_host(api));
+      await tester.pumpAndSettle();
+
+      // The default protocol is Qwen, so its workspace scaffolding is present.
+      expect(find.text('Workspace ID'), findsOneWidget);
+
+      await tester.tap(find.text('Qwen Omni Realtime'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Local voice (Speech-to-Speech)').last);
+      await tester.pumpAndSettle();
+
+      // Qwen-only fields disappear; the thin loopback defaults fill the form.
+      expect(find.text('Workspace ID'), findsNothing);
+      expect(
+        find.widgetWithText(TextField, localRealtimeBaselineEndpoint),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextField, localRealtimeBaselineModel),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(TextField, localRealtimeBaselineVoice),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Optional for local services; the backend skips the keychain.'),
+        findsOneWidget,
+      );
+
+      // Saving with the empty key is allowed and lands on the wire as-is:
+      // the backend owns the credential-free branch for this adapter kind.
+      await tester.tap(find.text('Save securely'));
+      await tester.pumpAndSettle();
+      expect(registerBodies, hasLength(1));
+      final body = registerBodies.single;
+      expect(body['adapter_kind'], 'local_cascade_realtime');
+      expect(body['base_url'], localRealtimeBaselineEndpoint);
+      expect(body['model_id'], localRealtimeBaselineModel);
+      expect(body['voice'], localRealtimeBaselineVoice);
+      expect(body['secret'], '');
+    },
+  );
 }
 
 Widget _host(LocalApi api) => MaterialApp(

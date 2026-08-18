@@ -117,6 +117,7 @@ class RealtimeConversationState {
     List<RealtimeConversationItem> items = const [],
     this.postProcessingCount = 0,
     this.sessionDuration,
+    this.thinkingSinceMs,
     List<RealtimeConversationSessionView> historySessions = const [],
     List<RealtimeConversationItem> historyItems = const [],
     this.selectedHistorySessionId,
@@ -146,6 +147,13 @@ class RealtimeConversationState {
   /// only states a duration the session actually recorded — never a guess
   /// from a clock that kept running after the voice went away.
   final Duration? sessionDuration;
+
+  /// Wall-clock instant the provider's thinking started, set on the
+  /// speech_stopped→thinking transition and cleared (or normalized away) once
+  /// the stage leaves Thinking. The stage uses it to show how long the wait
+  /// has been — liveness for a reply that can take tens of seconds on a local
+  /// first turn — without pretending to know when the reply will arrive.
+  final int? thinkingSinceMs;
 
   final List<RealtimeConversationSessionView> _historySessions;
   List<RealtimeConversationSessionView> get historySessions =>
@@ -204,6 +212,7 @@ class RealtimeConversationState {
     List<RealtimeConversationItem>? items,
     int? postProcessingCount,
     Object? sessionDuration = _unset,
+    Object? thinkingSinceMs = _unset,
     List<RealtimeConversationSessionView>? historySessions,
     List<RealtimeConversationItem>? historyItems,
     Object? selectedHistorySessionId = _unset,
@@ -223,6 +232,12 @@ class RealtimeConversationState {
     sessionDuration: identical(sessionDuration, _unset)
         ? this.sessionDuration
         : sessionDuration as Duration?,
+    thinkingSinceMs: identical(thinkingSinceMs, _unset)
+        ? ((activity ?? this.activity) ==
+                  RealtimeConversationActivity.thinking
+              ? this.thinkingSinceMs
+              : null)
+        : thinkingSinceMs as int?,
     historySessions: historySessions ?? this.historySessions,
     historyItems: historyItems ?? this.historyItems,
     selectedHistorySessionId: identical(selectedHistorySessionId, _unset)
@@ -250,6 +265,7 @@ class RealtimeConversationController extends ChangeNotifier {
     Future<void> Function(Duration)? delay,
     int Function()? nowMs,
     this.providerDrainTimeout = const Duration(seconds: 15),
+    this.idleTimeout = const Duration(minutes: 5),
   }) : assert(transport == null || connect == null),
        // Repository is deliberately named publicly while stored privately.
        // ignore: prefer_initializing_formals
@@ -266,7 +282,14 @@ class RealtimeConversationController extends ChangeNotifier {
   final int Function() _nowMs;
   final Duration providerDrainTimeout;
 
+  /// How long a live cloud conversation may sit silent before it is closed
+  /// gracefully. Local cascades are exempt — they cost nothing to leave open
+  /// and a learner may legitimately pause to think.
+  final Duration idleTimeout;
+
   RealtimeConversationState state = RealtimeConversationState();
+  Timer? _idleTimer;
+  bool _idleCloseEnabled = false;
   RealtimeConnection? _connection;
   StreamSubscription<Uint8List>? _audioSubscription;
   StreamSubscription<Object?>? _connectionSubscription;
@@ -466,7 +489,9 @@ class RealtimeConversationController extends ChangeNotifier {
           unawaited(
             _failAndCleanup(
               RealtimeConversationNotice(
-                kind: 'connection_failed',
+                kind: _isLocalProfile(profileId)
+                    ? 'connection_failed_local'
+                    : 'connection_failed',
                 detail: _transport.describeFailure(error),
               ),
             ),
@@ -504,6 +529,8 @@ class RealtimeConversationController extends ChangeNotifier {
         phase: RealtimeConversationPhase.live,
         activity: RealtimeConversationActivity.listening,
       );
+      _idleCloseEnabled = !_isLocalProfile(profileId);
+      _armIdleClose();
       notifyListeners();
     } catch (error) {
       await _cleanup(discard: true);
@@ -511,12 +538,44 @@ class RealtimeConversationController extends ChangeNotifier {
         phase: RealtimeConversationPhase.failed,
         activity: RealtimeConversationActivity.inactive,
         error: RealtimeConversationNotice(
-          kind: 'start_failed',
+          kind: _isLocalProfile(profileId)
+              ? 'connection_failed_local'
+              : 'start_failed',
           detail: _transport.describeFailure(error),
         ),
       );
       notifyListeners();
     }
+  }
+
+  /// Whether the selected voice is the local cascade provider. Its failures
+  /// have a recovery story (start the local service) that cloud providers do
+  /// not, so connect failures get a distinct, actionable sentence.
+  bool _isLocalProfile(String profileId) => state.profiles.any(
+    (profile) =>
+        profile.id == profileId &&
+        profile.adapterKind == 'local_cascade_realtime',
+  );
+
+  /// (Re)arms the idle close timer for the current live moment.
+  ///
+  /// Every piece of live activity re-arms it; while the learner is speaking
+  /// it stays disarmed entirely, so a long monologue never trips it
+  /// mid-sentence. When it does fire, the conversation closes the same way
+  /// the learner leaving does — graceful drain, saved recording and terminal
+  /// session — but the debrief says why.
+  void _armIdleClose() {
+    if (state.phase != RealtimeConversationPhase.live ||
+        !_idleCloseEnabled ||
+        state.activity == RealtimeConversationActivity.learnerSpeaking) {
+      _idleTimer?.cancel();
+      _idleTimer = null;
+      return;
+    }
+    _idleTimer?.cancel();
+    _idleTimer = Timer(idleTimeout, () {
+      unawaited(finish(autoClosed: true));
+    });
   }
 
   String _instructions(RealtimeConversationLaunch launch) {
@@ -531,6 +590,21 @@ class RealtimeConversationController extends ChangeNotifier {
     try {
       final event = _transport.decode(message);
       if (event case RealtimeAudioEvent(:final bytes)) {
+        // The stage follows the voice, not the transcript: the first audio
+        // chunk is the earliest honest sign that the other voice is speaking.
+        // Waiting for a transcript delta left the stage behind the sound —
+        // TTS audio can lead streaming transcription, especially on local
+        // cascade pipelines.
+        if (state.phase == RealtimeConversationPhase.live &&
+            state.activity !=
+                RealtimeConversationActivity.learnerSpeaking &&
+            state.activity !=
+                RealtimeConversationActivity.assistantSpeaking) {
+          state = state.copyWith(
+            activity: RealtimeConversationActivity.assistantSpeaking,
+          );
+        }
+        _armIdleClose();
         unawaited(_audio.play(bytes));
         return;
       }
@@ -550,6 +624,7 @@ class RealtimeConversationController extends ChangeNotifier {
         case 'speech_stopped':
           state = state.copyWith(
             activity: RealtimeConversationActivity.thinking,
+            thinkingSinceMs: _nowMs(),
           );
           _providerResponseActive = true;
           _responseDone = Completer<void>();
@@ -612,6 +687,7 @@ class RealtimeConversationController extends ChangeNotifier {
         ),
       );
     }
+    _armIdleClose();
     notifyListeners();
   }
 
@@ -1035,11 +1111,13 @@ class RealtimeConversationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> finish() async {
+  Future<void> finish({bool autoClosed = false}) async {
     final launch = _launch;
     if (state.phase != RealtimeConversationPhase.live || launch == null) {
       return;
     }
+    _idleTimer?.cancel();
+    _idleTimer = null;
     state = state.copyWith(
       phase: RealtimeConversationPhase.draining,
       activity: RealtimeConversationActivity.inactive,
@@ -1104,6 +1182,14 @@ class RealtimeConversationController extends ChangeNotifier {
         phase: RealtimeConversationPhase.done,
         sessionDuration: duration,
       );
+      if (autoClosed) {
+        // The debrief already renders state.error; an idle close is not a
+        // failure, but it did happen without the learner pressing anything —
+        // so the debrief must say why the conversation is over.
+        state = state.copyWith(
+          error: const RealtimeConversationNotice(kind: 'idle_closed'),
+        );
+      }
       await loadHistory();
     } catch (error) {
       final endedAt = _nowMs();
@@ -1130,6 +1216,8 @@ class RealtimeConversationController extends ChangeNotifier {
 
   Future<void> cancel() async {
     ++_generation;
+    _idleTimer?.cancel();
+    _idleTimer = null;
     final activeLearner = _turns.activeLearnerSequence;
     if (activeLearner != null) {
       await _audio.discardTurn();
@@ -1303,6 +1391,8 @@ class RealtimeConversationController extends ChangeNotifier {
   }
 
   Future<void> _failAndCleanup(RealtimeConversationNotice notice) async {
+    _idleTimer?.cancel();
+    _idleTimer = null;
     await _cleanup(discard: true);
     final endedAtMs = _nowMs();
     final duration = _sessionStartedAtMs == null
@@ -1349,6 +1439,9 @@ class RealtimeConversationController extends ChangeNotifier {
   /// silently dropped by this method.
   void resetToIdle() {
     if (!state.canConfigure) return;
+    _idleTimer?.cancel();
+    _idleTimer = null;
+    _idleCloseEnabled = false;
     final profiles = state.profiles;
     final selectedProfileId = state.selectedProfileId;
     _resetConversationState();
@@ -1371,6 +1464,8 @@ class RealtimeConversationController extends ChangeNotifier {
   @override
   void dispose() {
     ++_generation;
+    _idleTimer?.cancel();
+    _idleTimer = null;
     unawaited(_disposeActiveSession());
     super.dispose();
   }

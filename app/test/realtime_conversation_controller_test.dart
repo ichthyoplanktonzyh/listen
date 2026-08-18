@@ -229,6 +229,164 @@ void main() {
     });
 
     test(
+      'audio drives the speaking stage before any transcript delta',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.listening,
+        );
+
+        // A committed learner turn leaves the stage on "thinking".
+        harness.connection.emit(_event('speech_started', 'user-1'));
+        await _settle();
+        harness.connection.emit(_event('speech_stopped', 'user-1'));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.thinking,
+        );
+
+        // The first audio chunk is the voice itself: the stage must move
+        // with the sound, not wait for a transcript delta that can trail
+        // TTS output (notably on local cascade pipelines).
+        harness.connection.emit(Uint8List.fromList([0, 1, 2, 3]));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.assistantSpeaking,
+        );
+
+        // A learner who barges in still owns the stage.
+        harness.connection.emit(_event('speech_started', 'user-2'));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.learnerSpeaking,
+        );
+        await harness.controller.cancel();
+      },
+    );
+
+    test(
+      'thinking records its start and clears when the reply lands',
+      () async {
+        final harness = _Harness(transcripts: const []);
+        await harness.start();
+        expect(harness.controller.state.thinkingSinceMs, isNull);
+
+        harness.connection.emit(_event('speech_started', 'user-1'));
+        await _settle();
+        harness.connection.emit(_event('speech_stopped', 'user-1'));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.thinking,
+        );
+        expect(harness.controller.state.thinkingSinceMs, isNotNull);
+
+        harness.connection.emit(jsonEncode({'type': 'response_done'}));
+        await _settle();
+        expect(
+          harness.controller.state.activity,
+          RealtimeConversationActivity.listening,
+        );
+        expect(harness.controller.state.thinkingSinceMs, isNull);
+        await harness.controller.cancel();
+      },
+    );
+
+    test(
+      'a cloud conversation closes itself after idle silence',
+      () async {
+        final harness = _Harness(
+          transcripts: const [],
+          idleTimeout: const Duration(milliseconds: 80),
+        );
+        await harness.start();
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.live,
+        );
+
+        // Far past the idle window: the conversation must have closed itself
+        // the same way leaving does — and told the learner why.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        await _settle();
+        await _settle();
+
+        expect(
+          harness.controller.state.phase,
+          RealtimeConversationPhase.done,
+        );
+        expect(harness.controller.state.error?.kind, 'idle_closed');
+        expect(
+          harness.savedSessions.any(
+            (session) => session['status'] == 'completed',
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test('local conversations never auto-close on silence', () async {
+      final harness = _Harness(
+        transcripts: const [],
+        adapterKind: 'local_cascade_realtime',
+        idleTimeout: const Duration(milliseconds: 80),
+      );
+      await harness.start();
+
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await _settle();
+
+      expect(
+        harness.controller.state.phase,
+        RealtimeConversationPhase.live,
+      );
+      expect(harness.controller.state.error, isNull);
+      await harness.controller.cancel();
+    });
+
+    test('live activity resets the idle close window', () async {
+      final harness = _Harness(
+        transcripts: const [],
+        idleTimeout: const Duration(milliseconds: 200),
+      );
+      await harness.start();
+
+      // Activity pulses just past the halfway mark re-arm the timer.
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      harness.connection.emit(_event('speech_started', 'user-1'));
+      await _settle();
+      harness.connection.emit(_event('speech_stopped', 'user-1'));
+      await _settle();
+
+      // 150ms after the reset is still inside the fresh window.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(
+        harness.controller.state.phase,
+        RealtimeConversationPhase.live,
+      );
+
+      // Resolve the provider response so the eventual idle close drains
+      // promptly instead of waiting out the drain timeout.
+      harness.connection.emit(jsonEncode({'type': 'response_done'}));
+      await _settle();
+
+      // Past the fresh window it closes after all.
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      await _settle();
+      await _settle();
+      expect(
+        harness.controller.state.phase,
+        RealtimeConversationPhase.done,
+      );
+      expect(harness.controller.state.error?.kind, 'idle_closed');
+    });
+
+    test(
       'barge-in interrupts and persists the active assistant item',
       () async {
         final harness = _Harness(transcripts: ['first learner']);
@@ -541,6 +699,7 @@ class _Harness {
     this.audioStartFailures = 0,
     this.holdTranscription = false,
     this.providerDrainTimeout = const Duration(seconds: 15),
+    this.idleTimeout = const Duration(minutes: 5),
   }) : _transcripts = List<String?>.from(transcripts) {
     audio = _FakeAudio(
       onStart: () => lifecycle.add('audio_start'),
@@ -561,6 +720,7 @@ class _Harness {
           holdTranscription ? transcriptionGate.future : Future<void>.value(),
       nowMs: _clock,
       providerDrainTimeout: providerDrainTimeout,
+      idleTimeout: idleTimeout,
     );
     api = LocalApi.withTransport(
       baseUrl: 'http://127.0.0.1:4321',
@@ -578,6 +738,7 @@ class _Harness {
   final int audioStartFailures;
   final bool holdTranscription;
   final Duration providerDrainTimeout;
+  final Duration idleTimeout;
   final Completer<void> transcriptionGate = Completer<void>();
   late final RealtimeConversationController controller;
   late final _FakeAudio audio;

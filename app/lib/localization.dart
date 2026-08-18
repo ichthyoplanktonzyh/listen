@@ -1788,6 +1788,16 @@ class AppLocalizations {
       'realtimeApiKey': 'API key (write-only)',
       'realtimeApiKeyHint':
           'Stored in the system keychain by the backend. Not shown again.',
+      // ── Local Speech-to-Speech (local_cascade_realtime) ──
+      'realtimeProtocolLocalCascade': 'Local voice (Speech-to-Speech)',
+      'realtimeApiKeyOptionalHint':
+          'Optional for local services; the backend skips the keychain.',
+      'realtimeLocalEndpointHint':
+          'A local Speech-to-Speech service on this machine (loopback only). '
+          'Start the service before conversing.',
+      'realtimeLocalModelHint':
+          'The engine model is configured on the service side; this is only '
+          'an identifier.',
       'realtimeSaveProvider': 'Save securely',
       'realtimeKeyStored': 'Key stored',
       'realtimeRemove': 'Remove',
@@ -1803,6 +1813,12 @@ class AppLocalizations {
       'realtimeLobbyLiveSubtitle': 'Immersive realtime voice conversation',
       'realtimeVoiceLabel': 'Voice persona',
       'realtimeVoiceDesc': 'The style of the speaking voice',
+      'realtimeProviderLocalTag': 'local',
+      'realtimeProviderCloudTag': 'cloud',
+      'realtimeLocalPrivacyHint':
+          'Local voice stays on this machine — no key, no cloud, fully offline.',
+      'realtimeCloudBillingHint':
+          'Cloud voices process audio on the provider side and bill by usage.',
       'realtimeCaptionLabel': 'Afterglow Captions',
       'realtimeCaptionDesc':
           'Show fading captions when the other person speaks',
@@ -1836,6 +1852,7 @@ class AppLocalizations {
       'realtimeCancelAndDiscard': 'Cancel and discard',
       'realtimeActivityYouSpeaking': 'You are speaking',
       'realtimeActivityThinking': 'Thinking',
+      'realtimeActivityThinkingElapsed': 'Thinking · {seconds}s',
       'realtimeActivityOtherSpeaking': 'The other voice is speaking',
       'realtimeActivityListening': 'Listening',
       'realtimeActivityPreparing': 'Preparing',
@@ -1891,6 +1908,12 @@ class AppLocalizations {
       'realtimeNoticeStartFailed': 'The conversation could not be started.',
       'realtimeNoticeConnectionFailed':
           'The connection to the voice service failed.',
+      'realtimeNoticeConnectionFailedLocal':
+          'The local voice service on this machine is not reachable. Start it, '
+          'then try again.',
+      'realtimeNoticeIdleClosed':
+          'This conversation ended after a quiet pause. The recording and '
+          'transcript were saved.',
       'realtimeNoticeProviderDisconnected': 'The voice service disconnected.',
       'realtimeNoticeProviderError':
           'The voice service reported a problem with this conversation.',
@@ -3888,6 +3911,11 @@ class AppLocalizations {
       'realtimeVoice': '声音',
       'realtimeApiKey': 'API 密钥（只写）',
       'realtimeApiKeyHint': '由后端保存到系统钥匙串，不再回显。',
+      // ── 本地语音（local_cascade_realtime）──
+      'realtimeProtocolLocalCascade': '本地语音（语音转语音）',
+      'realtimeApiKeyOptionalHint': '本地服务可留空；后端不会写入钥匙串。',
+      'realtimeLocalEndpointHint': '本机运行的本地语音服务（仅回环地址）。开始对话前请先启动。',
+      'realtimeLocalModelHint': '引擎模型由服务端配置决定，这里只是一个标识。',
       'realtimeSaveProvider': '安全保存',
       'realtimeKeyStored': '已存密钥',
       'realtimeRemove': '删除',
@@ -3901,6 +3929,10 @@ class AppLocalizations {
       'realtimeLobbyLiveSubtitle': '全屏沉浸式实时语音对话',
       'realtimeVoiceLabel': '对话角色音色',
       'realtimeVoiceDesc': '对方说话的声音风格',
+      'realtimeProviderLocalTag': '本地',
+      'realtimeProviderCloudTag': '云端',
+      'realtimeLocalPrivacyHint': '本地音色全程在本机处理——免密钥、不联网、离线可用。',
+      'realtimeCloudBillingHint': '云端音色在服务方处理音频，按用量计费。',
       'realtimeCaptionLabel': '余音字幕',
       'realtimeCaptionDesc': '对方说话时显示淡出字幕',
       'realtimeLobbyReady': '准备好了就说话',
@@ -3931,6 +3963,7 @@ class AppLocalizations {
       'realtimeCancelAndDiscard': '取消并丢弃',
       'realtimeActivityYouSpeaking': '你在说',
       'realtimeActivityThinking': '正在思考',
+      'realtimeActivityThinkingElapsed': '思考中 · {seconds} 秒',
       'realtimeActivityOtherSpeaking': '对方在说',
       'realtimeActivityListening': '在听你说',
       'realtimeActivityPreparing': '准备中',
@@ -3974,6 +4007,8 @@ class AppLocalizations {
       'realtimeNoticeNoTopicSelected': '开始之前先选一个话题。',
       'realtimeNoticeStartFailed': '这次对话没能开始。',
       'realtimeNoticeConnectionFailed': '与语音服务的连接失败了。',
+      'realtimeNoticeConnectionFailedLocal': '本机的本地语音服务没有运行。请先启动它，再重试。',
+      'realtimeNoticeIdleClosed': '对话因长时间没有声音而自动结束。录音与转写均已保存。',
       'realtimeNoticeProviderDisconnected': '语音服务断开了连接。',
       'realtimeNoticeProviderError': '语音服务报告这次对话出了问题。',
       'realtimeNoticeProviderEventInvalid': '语音服务发来了本应用读不懂的内容。',

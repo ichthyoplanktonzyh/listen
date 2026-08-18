@@ -766,6 +766,7 @@ class _CapabilityMatrix extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -773,7 +774,7 @@ class _CapabilityMatrix extends StatelessWidget {
         _CapabilitySection(
           title: l.text('learningResourceSection_foundation'),
           icon: Icons.article_outlined,
-          iconColor: Colors.teal,
+          iconColor: scheme.primary,
           kinds: const ['structured_reading', 'subtitle_text_track'],
           edition: edition,
         ),
@@ -781,7 +782,7 @@ class _CapabilityMatrix extends StatelessWidget {
         _CapabilitySection(
           title: l.text('learningResourceSection_timing'),
           icon: Icons.timer_outlined,
-          iconColor: Colors.blueAccent,
+          iconColor: scheme.secondary,
           kinds: const [
             'anchor_time_alignment',
             'word_timeline',
@@ -793,7 +794,7 @@ class _CapabilityMatrix extends StatelessWidget {
         _CapabilitySection(
           title: l.text('learningResourceSection_linguistics'),
           icon: Icons.psychology_outlined,
-          iconColor: Colors.orangeAccent,
+          iconColor: scheme.tertiary,
           kinds: const [
             'sense_group_analysis',
             'word_acoustics',
