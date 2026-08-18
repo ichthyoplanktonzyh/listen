@@ -34,8 +34,9 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final viewModel = DiscoveryViewModel(
       repository ?? FixtureDiscoveryRepository(),
-      TestMediaImportRepository(),
-      libraryRepository ?? TestMediaLibraryRepository(),
+      importRepository: TestMediaImportRepository(),
+      mediaLibraryRepository: libraryRepository ?? TestMediaLibraryRepository(),
+      fileService: TestMediaFileService(),
     );
     addTearDown(viewModel.dispose);
     await tester.runAsync(() => viewModel.load());
@@ -203,6 +204,7 @@ void main() {
           TestMediaLibraryRepository.entry(
             id: 'media-i-bbc-1',
             path: '/library/[i-bbc-1].mp4',
+            retained: true,
           ),
         ],
       ),

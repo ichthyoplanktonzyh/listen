@@ -72,6 +72,13 @@ abstract interface class ManagedAssetStoreService {
     required String mediaKind,
   });
 
+  /// Whether [path] already lives inside the store.
+  ///
+  /// The store owns this answer because it owns the root. A caller that
+  /// reassembled the root from settings would be re-deriving a fact the
+  /// service already holds — and would need the file system to do it.
+  bool contains(String path);
+
   /// Reads a store copy back for direct rendering, or null when the file is
   /// missing, unreadable, or outside the managed root. Callers treat null as
   /// an unavailable Source Asset fact, never a crash.
@@ -296,6 +303,19 @@ final class LocalManagedAssetStoreService implements ManagedAssetStoreService {
     } on FileSystemException {
       throw const ManagedStoreCopyFailed();
     }
+  }
+
+  /// A plain prefix test is exact here because the store is flat and
+  /// content-addressed: every managed file is `<root>/<sha256>`, so nothing
+  /// below the root can be anything but a store entry.
+  @override
+  bool contains(String path) {
+    final root = _root;
+    if (root == null) return false;
+    final prefix = root.endsWith(Platform.pathSeparator)
+        ? root
+        : '$root${Platform.pathSeparator}';
+    return path.startsWith(prefix);
   }
 
   @override

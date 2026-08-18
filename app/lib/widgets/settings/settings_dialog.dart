@@ -37,6 +37,9 @@ class SettingsDialog extends StatefulWidget {
     required this.managedStoreLocation,
     required this.onChooseManagedStoreLocation,
     required this.onClearManagedStoreLocation,
+    required this.downloadsLocation,
+    required this.onChooseDownloadsLocation,
+    required this.onClearDownloadsLocation,
     required this.ffmpegPath,
     required this.ffprobePath,
     required this.ytDlpPath,
@@ -113,6 +116,9 @@ class SettingsDialog extends StatefulWidget {
   final ManagedStoreLocation managedStoreLocation;
   final Future<ManagedStoreLocation> Function() onChooseManagedStoreLocation;
   final Future<ManagedStoreLocation> Function() onClearManagedStoreLocation;
+  final DownloadsLocation downloadsLocation;
+  final Future<DownloadsLocation> Function() onChooseDownloadsLocation;
+  final Future<DownloadsLocation> Function() onClearDownloadsLocation;
   final String ffmpegPath;
   final String ffprobePath;
   final String ytDlpPath;
@@ -196,6 +202,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late Color primaryColor;
   late Color secondaryColor;
   late ManagedStoreLocation managedStoreLocation;
+  late DownloadsLocation downloadsLocation;
   late bool wordSyncVisible;
   late bool markKeysEnabled;
   late String groupingMode;
@@ -265,6 +272,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     primaryColor = widget.primaryColor;
     secondaryColor = widget.secondaryColor;
     managedStoreLocation = widget.managedStoreLocation;
+    downloadsLocation = widget.downloadsLocation;
     wordSyncVisible = widget.wordSyncVisible;
     markKeysEnabled = widget.markKeysEnabled;
     groupingMode = widget.groupingMode;
@@ -300,6 +308,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
     final location = await action();
     if (!mounted) return;
     setState(() => managedStoreLocation = location);
+  }
+
+  /// The same for the downloads folder.
+  Future<void> _updateDownloadsLocation(
+    Future<DownloadsLocation> Function() action,
+  ) async {
+    final location = await action();
+    if (!mounted) return;
+    setState(() => downloadsLocation = location);
   }
 
   @override
@@ -920,6 +937,26 @@ class _SettingsDialogState extends State<SettingsDialog> {
                       onClear: () => unawaited(
                         _updateManagedStoreLocation(
                           widget.onClearManagedStoreLocation,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap16),
+                    Text(
+                      l.text('downloadsLocationTitle'),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: ListenSpacing.gap8),
+                    ManagedStoreSettings(
+                      location: downloadsLocation,
+                      copy: downloadsLocationCopy,
+                      onChoose: () => unawaited(
+                        _updateDownloadsLocation(
+                          widget.onChooseDownloadsLocation,
+                        ),
+                      ),
+                      onClear: () => unawaited(
+                        _updateDownloadsLocation(
+                          widget.onClearDownloadsLocation,
                         ),
                       ),
                     ),

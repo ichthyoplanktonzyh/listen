@@ -11,6 +11,7 @@ import 'controllers/discovery_view_model.dart';
 import 'controllers/document_session_controller.dart';
 import 'controllers/core_session_controller.dart';
 import 'controllers/download_controller.dart';
+import 'controllers/downloads_controller.dart';
 import 'controllers/extensive_listening_controller.dart';
 import 'controllers/hunting_actions_coordinator.dart';
 import 'controllers/hunting_controller.dart';
@@ -342,6 +343,20 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
   late final SubscriptionStore subscriptionStore =
       SubscriptionStore.forCurrentUser();
+  /// The composition root is the only place that hands out a ledger backed by
+  /// a real directory; everything else defaults to remembering nothing.
+  ///
+  /// One instance, because two would disagree: Discovery writes what it
+  /// acquired and the downloads shelf reads it back, and a second in-memory
+  /// copy would show an empty shelf beside a feed row that says "downloaded".
+  late final AcquisitionLedger acquisitionLedger =
+      AcquisitionLedger.forCurrentUser();
+
+  late final DownloadsController downloadsController = DownloadsController(
+    ledger: acquisitionLedger,
+    repository: coreRepositories.mediaLibrary,
+  );
+
   late final DiscoveryViewModel discoveryViewModel = DiscoveryViewModel(
     CompositeDiscoveryRepository(
       // One store across both sides: a subscription is a subscription, and
@@ -349,21 +364,24 @@ class _PlayerScreenState extends State<PlayerScreen>
       FeedDiscoveryRepository(subscriptions: subscriptionStore),
       YoutubeDiscoveryRepository(subscriptions: subscriptionStore),
     ),
-    mediaImportRepository,
-    coreRepositories.mediaLibrary,
-    // The composition root is the only place that hands out a ledger backed by
-    // a real directory; everything else defaults to remembering nothing.
-    AcquisitionLedger.forCurrentUser(),
+    importRepository: mediaImportRepository,
+    mediaLibraryRepository: coreRepositories.mediaLibrary,
+    ledger: acquisitionLedger,
     // Source Identity and the material boundary: intake records the canonical
     // key once a discovered item converges on a Material, and a later refresh
     // of the same feed item resolves the same Material instead of offering a
     // second download.
-    coreRepositories.sourceIdentity,
-    coreRepositories.learningMaterial,
+    sourceIdentity: coreRepositories.sourceIdentity,
+    learningMaterial: coreRepositories.learningMaterial,
     // The article path shares the document intake a local file travels:
     // decode, managed binding, Core create, exact rendition match.
-    const LocalDocumentIntakeFileService(),
-    DocumentIntakeFlow(
+    // One persisted downloads location instead of a folder chooser that
+    // reopened on the first acquisition of every launch.
+    downloadsDirectory: () => settingsController.resolveDownloadsDirectory(
+      confirmButtonText: 'Select',
+    ),
+    documentFileService: const LocalDocumentIntakeFileService(),
+    documentIntake: DocumentIntakeFlow(
       materialRepository: coreRepositories.learningMaterial,
       codec: LocalDocumentIntakeCodec(
         pdfTextExtractor: PdfRxPdfTextExtractor(),
@@ -404,9 +422,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// location resolves to null and the store reports itself unavailable.
   late final managedAssetStore = LocalManagedAssetStoreService(
     resolveRoot: () => switch (settingsController.managedStoreLocation.state) {
-      ManagedStoreState.appManaged ||
-      ManagedStoreState.ready => settingsController.managedStoreLocation.path,
-      ManagedStoreState.missing => null,
+      StorageLocationState.appManaged ||
+      StorageLocationState.ready => settingsController.managedStoreLocation.path,
+      StorageLocationState.missing => null,
     },
   );
 
@@ -491,7 +509,13 @@ class _PlayerScreenState extends State<PlayerScreen>
     subtitleAnalysis: subtitleAnalysisRepository,
     managedStore: managedAssetStore,
     materialRepository: coreRepositories.learningMaterial,
-    onLibraryChanged: mediaLibraryActions.loadMediaLibrary,
+    // Keeping a download moves it off the downloads shelf and into the
+    // library: both lists have to be re-read, or the same file shows up in
+    // two places that mean opposite things.
+    onLibraryChanged: () async {
+      await mediaLibraryActions.loadMediaLibrary();
+      await downloadsController.refresh();
+    },
   );
   late final huntingActions = HuntingActionsCoordinator(
     huntingSession: huntingSessionController,
@@ -624,12 +648,12 @@ class _PlayerScreenState extends State<PlayerScreen>
       // default store is an empty store, never the missing-folder story.
       await settingsController.refreshManagedStoreState();
       final location = settingsController.managedStoreLocation;
-      if (location.state == ManagedStoreState.appManaged) {
+      if (location.state == StorageLocationState.appManaged) {
         final defaultStore = Directory(location.path);
         if (!await defaultStore.exists()) {
           await defaultStore.create(recursive: true);
         }
-        return (path: location.path, state: ManagedStoreState.ready);
+        return (path: location.path, state: StorageLocationState.ready);
       }
       return location;
     },
@@ -759,6 +783,10 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _scanLibraryWhileVisible() {
     if (currentRoute.value == AppRoute.library) {
       unawaited(mediaLibraryScan.enterLibrary());
+      // A download that landed while the learner was in Discovery has to be
+      // on the shelf by the time they look at it. Arriving at the page is the
+      // meaningful moment to re-ask; nothing polls.
+      unawaited(downloadsController.refresh());
     } else {
       mediaLibraryScan.leaveLibrary();
     }
@@ -794,6 +822,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     playerController.addListener(_trackExtensivePlayback);
     currentRoute.addListener(_scanLibraryWhileVisible);
     mediaLibraryScan.addListener(_onMediaLibraryScanChanged);
+    downloadsController.addListener(_onMediaLibraryScanChanged);
     playerController.addListener(_exitImmersiveWhenMediaCloses);
     coreSessionController.addListener(_onCoreSessionStateChanged);
     speakingActions.text = (key) => l.text(key);
@@ -1059,6 +1088,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       );
       unawaited(subtitleSources.checkSyntaxCapability());
       unawaited(mediaLibraryActions.prefetchHomeSummary());
+      unawaited(downloadsController.refresh());
       unawaited(_runSmokeIfConfigured());
       // The first load may have run before Core was reachable and answered
       // "undetermined"; a fresh connected generation is a meaningful
@@ -2713,7 +2743,43 @@ class _PlayerScreenState extends State<PlayerScreen>
     ),
     onCancelCapability: (entry, capability) =>
         unawaited(capabilityCoordinator.cancel(entry.materialId, capability)),
+    downloads: downloadsController.entries,
+    downloadsFailure: downloadsController.failure,
+    onOpenDownload: (entry) =>
+        unawaited(mediaSession.openMediaPath(entry.path)),
+    onDeleteDownload: (entry) => unawaited(_deleteDownload(entry)),
   );
+
+  /// Deleting a download removes a real file, so it asks first and reports
+  /// when the disk did not cooperate.
+  Future<void> _deleteDownload(DownloadedMedia entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.text('downloadsDeleteTitle')),
+        content: Text('${entry.title}\n\n${l.text('downloadsDeleteBody')}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.text('cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.text('downloadsDeleteConfirm')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final removed = await downloadsController.deleteDownload(entry);
+    if (!mounted) return;
+    if (!removed) {
+      _showSnackBar(l.text('downloadsDeleteFailed'));
+      return;
+    }
+    // The feed row for this item must stop saying "on this device".
+    unawaited(discoveryViewModel.refreshSelectedMediaAvailability());
+  }
 
   String get _routeLanguage => settingsController.resolveLearningLanguage(
     subtitleController.primaryTrack?.language,

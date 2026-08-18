@@ -45,13 +45,13 @@ void main() {
     // No custom path: the default store, which is a real location.
     expect(controller.managedStoreLocation, (
       path: AppSettings.defaultManagedStorePath,
-      state: ManagedStoreState.appManaged,
+      state: StorageLocationState.appManaged,
     ));
 
     await controller.setManagedStorePath(directory.path);
     expect(controller.managedStoreLocation, (
       path: directory.path,
-      state: ManagedStoreState.ready,
+      state: StorageLocationState.ready,
     ));
     expect(controller.settings.mediaLibraryPath, directory.path);
     expect(controller.saves, 1);
@@ -59,7 +59,7 @@ void main() {
     await controller.clearManagedStoreLocation();
     expect(controller.managedStoreLocation, (
       path: AppSettings.defaultManagedStorePath,
-      state: ManagedStoreState.appManaged,
+      state: StorageLocationState.appManaged,
     ));
     expect(controller.settings.mediaLibraryPath, isEmpty);
     expect(controller.saves, 2);
@@ -78,7 +78,7 @@ void main() {
 
       expect(controller.managedStoreLocation, (
         path: directory.path,
-        state: ManagedStoreState.missing,
+        state: StorageLocationState.missing,
       ));
       // The path is kept: the user chose it, and the drive may come back.
       expect(controller.settings.mediaLibraryPath, directory.path);
@@ -96,21 +96,134 @@ void main() {
     final chosen = await controller.chooseManagedStoreLocation(
       confirmButtonText: 'Use this folder',
     );
-    expect(chosen, (path: directory.path, state: ManagedStoreState.ready));
+    expect(chosen, (path: directory.path, state: StorageLocationState.ready));
     expect(picker.confirmButtonTexts, ['Use this folder']);
 
     picker.next = null;
     final afterCancel = await controller.chooseManagedStoreLocation(
       confirmButtonText: 'Use this folder',
     );
-    expect(afterCancel, (path: directory.path, state: ManagedStoreState.ready));
+    expect(afterCancel, (path: directory.path, state: StorageLocationState.ready));
     expect(controller.saves, 1);
+  });
+
+  test('the downloads path survives the persisted shape', () {
+    const settings = AppSettings(downloadsPath: '/Volumes/Study/downloads');
+
+    final reloaded = AppSettings.fromJson(settings.toJson());
+
+    expect(reloaded.downloadsPath, '/Volumes/Study/downloads');
+    // A settings file written before this setting existed has no custom path,
+    // and falls to the app-managed default rather than to "ask every launch".
+    expect(AppSettings.fromJson({'version': 8}).downloadsPath, isEmpty);
+    expect(const AppSettings().downloadsPath, isEmpty);
+  });
+
+  test('the app-managed downloads folder is beside the store, not in it', () {
+    final home = Platform.environment['HOME'];
+    expect(
+      AppSettings.defaultDownloadsPath,
+      '$home/Library/Application Support/listen/downloads',
+    );
+    // Two folders, because they mean two things: the store is
+    // content-addressed and holds what was kept; downloads keep the
+    // publisher's filenames and are not library membership.
+    expect(
+      AppSettings.defaultDownloadsPath,
+      isNot(AppSettings.defaultManagedStorePath),
+    );
+  });
+
+  test('an acquisition writes to the remembered folder without asking',
+      () async {
+    // The picker used to reopen on the first download of every launch,
+    // because the answer lived in a field on the view model and died with it.
+    final directory = await Directory.systemTemp.createTemp('downloads');
+    addTearDown(() => directory.delete(recursive: true));
+    final picker = _FakeFolderPicker();
+    final controller = _InMemorySettingsController(files: picker);
+    addTearDown(controller.dispose);
+    await controller.setDownloadsPath(directory.path);
+
+    expect(
+      await controller.resolveDownloadsDirectory(confirmButtonText: 'Select'),
+      directory.path,
+    );
+    expect(
+      await controller.resolveDownloadsDirectory(confirmButtonText: 'Select'),
+      directory.path,
+    );
+    expect(picker.confirmButtonTexts, isEmpty);
+  });
+
+  test('a downloads folder that went off disk is asked about once', () async {
+    // Silently falling back to the default would scatter a learner's episodes
+    // across two folders without telling them the drive is gone.
+    final directory = await Directory.systemTemp.createTemp('downloads');
+    final replacement = await Directory.systemTemp.createTemp('downloads-2');
+    addTearDown(() => replacement.delete(recursive: true));
+    final picker = _FakeFolderPicker();
+    final controller = _InMemorySettingsController(files: picker);
+    addTearDown(controller.dispose);
+    await controller.setDownloadsPath(directory.path);
+    await directory.delete(recursive: true);
+
+    picker.next = replacement.path;
+    expect(
+      await controller.resolveDownloadsDirectory(confirmButtonText: 'Select'),
+      replacement.path,
+    );
+    expect(picker.confirmButtonTexts, ['Select']);
+    expect(controller.downloadsLocation, (
+      path: replacement.path,
+      state: StorageLocationState.ready,
+    ));
+
+    // Remembered: the next acquisition does not ask again.
+    expect(
+      await controller.resolveDownloadsDirectory(confirmButtonText: 'Select'),
+      replacement.path,
+    );
+    expect(picker.confirmButtonTexts, ['Select']);
+  });
+
+  test('a declined chooser leaves the acquisition without a folder', () async {
+    final directory = await Directory.systemTemp.createTemp('downloads');
+    final picker = _FakeFolderPicker();
+    final controller = _InMemorySettingsController(files: picker);
+    addTearDown(controller.dispose);
+    await controller.setDownloadsPath(directory.path);
+    await directory.delete(recursive: true);
+
+    picker.next = null;
+    expect(
+      await controller.resolveDownloadsDirectory(confirmButtonText: 'Select'),
+      isNull,
+    );
+    // The path they chose is kept: the drive may come back.
+    expect(controller.settings.downloadsPath, directory.path);
+  });
+
+  testWidgets('the downloads location speaks its own sentences', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      (path: '/Volumes/Study/downloads', state: StorageLocationState.ready),
+      copy: downloadsLocationCopy,
+    );
+
+    // The shape is shared with the managed store; the words are not. A learner
+    // reading "kept material is copied here" under Downloads would conclude
+    // downloading is keeping.
+    expect(find.textContaining('Downloading is not keeping'), findsOneWidget);
+    expect(find.textContaining('Kept material is copied'), findsNothing);
   });
 
   testWidgets('the default store offers a choice and no clear', (tester) async {
     await _pump(tester, (
       path: AppSettings.defaultManagedStorePath,
-      state: ManagedStoreState.appManaged,
+      state: StorageLocationState.appManaged,
     ));
 
     expect(find.text('Default app-managed folder'), findsOneWidget);
@@ -124,7 +237,7 @@ void main() {
   ) async {
     await _pump(tester, (
       path: '/Volumes/Study/media',
-      state: ManagedStoreState.missing,
+      state: StorageLocationState.missing,
     ));
 
     expect(find.text('/Volumes/Study/media'), findsOneWidget);
@@ -144,7 +257,7 @@ void main() {
   ) async {
     await _pump(tester, (
       path: '/Volumes/Study/media',
-      state: ManagedStoreState.ready,
+      state: StorageLocationState.ready,
     ));
 
     expect(find.text('/Volumes/Study/media'), findsOneWidget);
@@ -156,7 +269,11 @@ void main() {
   });
 }
 
-Future<void> _pump(WidgetTester tester, ManagedStoreLocation location) async {
+Future<void> _pump(
+  WidgetTester tester,
+  ManagedStoreLocation location, {
+  StorageLocationCopy copy = managedStoreCopy,
+}) async {
   await tester.pumpWidget(
     MaterialApp(
       theme: ListenTheme.dark(),
@@ -171,6 +288,7 @@ Future<void> _pump(WidgetTester tester, ManagedStoreLocation location) async {
       home: Scaffold(
         body: ManagedStoreSettings(
           location: location,
+          copy: copy,
           onChoose: () {},
           onClear: () {},
         ),

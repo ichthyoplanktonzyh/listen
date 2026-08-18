@@ -17,8 +17,9 @@ void main() {
   }) {
     final vm = DiscoveryViewModel(
       FixtureDiscoveryRepository(),
-      imports ?? TestMediaImportRepository(),
-      library ?? TestMediaLibraryRepository(),
+      importRepository: imports ?? TestMediaImportRepository(),
+      mediaLibraryRepository: library ?? TestMediaLibraryRepository(),
+      fileService: TestMediaFileService(),
     );
     addTearDown(vm.dispose);
     return vm;
@@ -78,8 +79,9 @@ void main() {
   test('an in-flight load completing after dispose stays silent', () async {
     final vm = DiscoveryViewModel(
       FixtureDiscoveryRepository(),
-      TestMediaImportRepository(),
-      TestMediaLibraryRepository(),
+      importRepository: TestMediaImportRepository(),
+      mediaLibraryRepository: TestMediaLibraryRepository(),
+      fileService: TestMediaFileService(),
     );
     final load = vm.load();
     vm.dispose();
@@ -107,6 +109,7 @@ void main() {
             TestMediaLibraryRepository.entry(
               id: 'media-i-bbc-1',
               path: '/library/[i-bbc-1].mp4',
+              retained: true,
             ),
           ],
         );
@@ -143,6 +146,7 @@ void main() {
             TestMediaLibraryRepository.entry(
               id: 'media-i-bbc-1',
               path: '/library/[i-bbc-1].mp4',
+              retained: true,
             ),
           ],
         );
@@ -434,6 +438,7 @@ void main() {
           TestMediaLibraryRepository.entry(
             id: 'media-i-bbc-1',
             path: '/library/[i-bbc-1].mp4',
+            retained: true,
           ),
         ],
       );
@@ -487,8 +492,9 @@ void main() {
       );
       final unacquirable = DiscoveryViewModel(
         source,
-        TestMediaImportRepository(),
-        TestMediaLibraryRepository(),
+        importRepository: TestMediaImportRepository(),
+        mediaLibraryRepository: TestMediaLibraryRepository(),
+        fileService: TestMediaFileService(),
       );
       addTearDown(unacquirable.dispose);
       await tester.runAsync(() => unacquirable.load());
@@ -652,8 +658,9 @@ void main() {
     }) {
       final vm = DiscoveryViewModel(
         repository,
-        importRepository ?? TestMediaImportRepository(),
-        libraryRepository ?? TestMediaLibraryRepository(),
+        importRepository: importRepository ?? TestMediaImportRepository(),
+        mediaLibraryRepository: libraryRepository ?? TestMediaLibraryRepository(),
+        fileService: TestMediaFileService(),
       );
       addTearDown(vm.dispose);
       return vm;
@@ -805,6 +812,7 @@ void main() {
         TestMediaLibraryRepository.entry(
           id: 'media-e-one',
           path: '/library/[e-one].mp4',
+          retained: true,
         ),
       );
       await vm.refreshSelectedMediaAvailability();
@@ -864,8 +872,9 @@ void main() {
     (tester) async {
       final vm = DiscoveryViewModel(
         _FeedRepositoryWithDurations(),
-        TestMediaImportRepository(resolvedDurationMs: 247000),
-        TestMediaLibraryRepository(),
+        importRepository: TestMediaImportRepository(resolvedDurationMs: 247000),
+        mediaLibraryRepository: TestMediaLibraryRepository(),
+        fileService: TestMediaFileService(),
       );
       addTearDown(vm.dispose);
       await tester.runAsync(() async {

@@ -59,9 +59,10 @@ class _FakeLibrary implements MediaLibraryRepository {
   }
 
   @override
-  @override
   Future<MediaItem> readMedia(String mediaId) async =>
       MediaItem.fromJson({});
+  @override
+  Future<MediaItem?> findRegisteredMedia(String mediaId) async => null;
   @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() async {
     listCalls++;
@@ -124,7 +125,7 @@ void main() {
     scanner: MediaLibraryScanner(probe ?? _CountingProbe()),
     repository: library,
     resolveFolder: () async =>
-        folderState ?? (path: folder.path, state: ManagedStoreState.ready),
+        folderState ?? (path: folder.path, state: StorageLocationState.ready),
     registeredPaths: registeredPaths ?? () => library.registeredPaths,
     refreshLibrary: () async {
       onRefreshLibrary?.call();
@@ -146,7 +147,7 @@ void main() {
     final appManaged = controller(
       library: library,
       probe: defaultProbe,
-      folderState: (path: folder.path, state: ManagedStoreState.appManaged),
+      folderState: (path: folder.path, state: StorageLocationState.appManaged),
     );
     await appManaged.enterLibrary();
     expect(appManaged.state.status, MediaLibraryScanStatus.completed);
@@ -157,7 +158,7 @@ void main() {
       probe: missingProbe,
       folderState: (
         path: '/volumes/gone/media',
-        state: ManagedStoreState.missing,
+        state: StorageLocationState.missing,
       ),
     );
     await missing.enterLibrary();

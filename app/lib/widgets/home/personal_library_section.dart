@@ -901,6 +901,18 @@ class MediaLibraryScanCard extends StatelessWidget {
                             color: colors.onSurfaceVariant,
                           ),
                         ),
+                        // "300 added" read as "300 things joined my library",
+                        // and then the library showed none of them: a scan
+                        // registers with `retain: false`, which is exactly not
+                        // Personal Library membership. The count now says what
+                        // it counts, and the sentence says what it is not.
+                        const SizedBox(height: ListenSpacing.gap4),
+                        Text(
+                          l.text('mediaScanRegistrationHint'),
+                          style: text.labelSmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ],
                   ),

@@ -124,20 +124,20 @@ void main() {
             'c-doc': [testArticleItem('i-doc-1', 'c-doc')],
           },
         ),
-        imports,
-        library,
-        ledger,
-        null,
-        materials,
-        _TestDocumentIntakeFileService(
+        importRepository: imports,
+        mediaLibraryRepository: library,
+        ledger: ledger,
+        learningMaterial: materials,
+        documentFileService: _TestDocumentIntakeFileService(
           utf8.encode('<article><h1>The first article</h1></article>'),
         ),
-        DocumentIntakeFlow(
+        documentIntake: DocumentIntakeFlow(
           materialRepository: materials,
           codec: LocalDocumentIntakeCodec(),
           store: FakeManagedAssetStoreService(),
           referenceStore: FakeDocumentReferenceStore(),
         ),
+        fileService: TestMediaFileService(),
       );
       addTearDown(vm.dispose);
       return (vm, imports, library, materials);
@@ -203,20 +203,20 @@ void main() {
               'c-doc': [testArticleItem('i-doc-1', 'c-doc')],
             },
           ),
-          TestMediaImportRepository(),
-          TestMediaLibraryRepository(),
-          null,
-          identities,
-          materials,
-          _TestDocumentIntakeFileService(
+          importRepository: TestMediaImportRepository(),
+          mediaLibraryRepository: TestMediaLibraryRepository(),
+          sourceIdentity: identities,
+          learningMaterial: materials,
+          documentFileService: _TestDocumentIntakeFileService(
             utf8.encode('<article><h1>The first article</h1></article>'),
           ),
-          DocumentIntakeFlow(
+          documentIntake: DocumentIntakeFlow(
             materialRepository: materials,
             codec: LocalDocumentIntakeCodec(),
             store: FakeManagedAssetStoreService(),
             referenceStore: FakeDocumentReferenceStore(),
           ),
+          fileService: TestMediaFileService(),
         );
         addTearDown(vm.dispose);
         await tester.runAsync(() async {
@@ -280,9 +280,10 @@ void main() {
               'c-bbc': [testPodcastItem('ep-001', 'c-bbc')],
             },
           ),
-          TestMediaImportRepository(),
-          library,
-          ledger,
+          importRepository: TestMediaImportRepository(),
+          mediaLibraryRepository: library,
+          ledger: ledger,
+          fileService: TestMediaFileService(),
         );
         addTearDown(vm.dispose);
         await vm.load();
@@ -333,11 +334,11 @@ void main() {
               'c-npr': [testPodcastItem('ep-1', 'c-npr')],
             },
           ),
-          imports,
-          TestMediaLibraryRepository(),
-          null,
-          identities,
-          materials,
+          importRepository: imports,
+          mediaLibraryRepository: TestMediaLibraryRepository(),
+          sourceIdentity: identities,
+          learningMaterial: materials,
+          fileService: TestMediaFileService(),
         );
         addTearDown(vm.dispose);
         await vm.load();
@@ -389,11 +390,11 @@ void main() {
               'c-npr': [testPodcastItem('ep-1', 'c-npr')],
             },
           ),
-          TestMediaImportRepository(),
-          library,
-          null,
-          identities,
-          materials,
+          importRepository: TestMediaImportRepository(),
+          mediaLibraryRepository: library,
+          sourceIdentity: identities,
+          learningMaterial: materials,
+          fileService: TestMediaFileService(),
         );
         addTearDown(vm.dispose);
         await vm.load();
@@ -406,6 +407,64 @@ void main() {
               're-read of the same item never offers a second download',
         );
         expect(vm.localPathFor('ep-1'), '/library/[npr-1].mp3');
+      },
+    );
+
+    test(
+      'recognition through the ledger records the canonical mapping once a '
+      'material exists',
+      () async {
+        // Adoption asks for the mapping the moment the media is registered —
+        // before any Material is bound to it — so the first attempt always
+        // comes back empty and nothing ever wrote the canonical key for a
+        // media item. The Material is created later, when the workbench opens
+        // the content; this is the retry that finally records it, so
+        // recognition stops depending on the app's own ledger forever.
+        final identities = _TestSourceIdentityRepository();
+        final materials = _TestMaterialRepository();
+        materials.resolvedMaterial = materialDetails(
+          materialId: 'material-npr-1',
+          mediaRenditions: [mediaRendition(mediaId: 'media-npr-1')],
+        );
+        final ledger = AcquisitionLedger.inMemory();
+        final library = TestMediaLibraryRepository(
+          seed: [
+            TestMediaLibraryRepository.entry(
+              id: 'media-npr-1',
+              path: '/library/npr-1.mp3',
+            ),
+          ],
+        );
+        final vm = DiscoveryViewModel(
+          TestDiscoveryRepository(
+            sources: [testContentSource('c-npr', name: 'NPR')],
+            entries: {
+              'c-npr': [testPodcastItem('ep-1', 'c-npr')],
+            },
+          ),
+          importRepository: TestMediaImportRepository(),
+          mediaLibraryRepository: library,
+          ledger: ledger,
+          sourceIdentity: identities,
+          learningMaterial: materials,
+          fileService: TestMediaFileService(),
+        );
+        addTearDown(vm.dispose);
+        await vm.load();
+        await ledger.record(
+          'c-npr\u0000ep-1',
+          mediaId: 'media-npr-1',
+          path: '/library/npr-1.mp3',
+        );
+
+        expect(identities.recorded, isEmpty);
+        await vm.refreshMediaAvailability('ep-1');
+        await pumpEventQueue();
+
+        expect(identities.recorded, hasLength(1));
+        expect(identities.recorded.single.sourceId, 'c-npr');
+        expect(identities.recorded.single.itemId, 'ep-1');
+        expect(identities.recorded.single.materialId, 'material-npr-1');
       },
     );
 
@@ -431,11 +490,12 @@ void main() {
               'c-npr': [testPodcastItem('ep-1', 'c-npr')],
             },
           ),
-          TestMediaImportRepository(),
-          library,
-          ledger,
-          identities,
-          materials,
+          importRepository: TestMediaImportRepository(),
+          mediaLibraryRepository: library,
+          ledger: ledger,
+          sourceIdentity: identities,
+          learningMaterial: materials,
+          fileService: TestMediaFileService(),
         );
         addTearDown(vm.dispose);
         await vm.load();

@@ -63,6 +63,12 @@ Future<void> showAppSettings({
             confirmButtonText: l.text('managedStorePickerConfirm'),
           ),
       onClearManagedStoreLocation: settingsController.clearManagedStoreLocation,
+      downloadsLocation: settingsController.downloadsLocation,
+      onChooseDownloadsLocation: () =>
+          settingsController.chooseDownloadsLocation(
+            confirmButtonText: l.text('managedStorePickerConfirm'),
+          ),
+      onClearDownloadsLocation: settingsController.clearDownloadsLocation,
       ffmpegPath: settingsController.ffmpegPath,
       ffprobePath: settingsController.ffprobePath,
       ytDlpPath: settingsController.ytDlpPath,

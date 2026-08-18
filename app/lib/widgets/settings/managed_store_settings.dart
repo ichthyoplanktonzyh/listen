@@ -5,11 +5,48 @@ import '../../settings.dart';
 import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 
-/// The managed asset store location setting: where kept material is copied and
-/// where "my media" reads from.
+/// Which set of sentences a [ManagedStoreSettings] speaks.
+///
+/// The app has two storage locations with the same three states and two
+/// genuinely different meanings — the managed store holds what was kept, the
+/// downloads folder holds what was merely acquired. One widget, two vocabularies:
+/// sharing the *shape* is right, sharing the *words* would tell the learner
+/// the two folders do the same job.
+typedef StorageLocationCopy = ({
+  String description,
+  String defaultLabel,
+  String missing,
+  String choose,
+  String change,
+  String clear,
+  String accessHint,
+});
+
+const managedStoreCopy = (
+  description: 'managedStoreDescription',
+  defaultLabel: 'managedStoreDefault',
+  missing: 'managedStoreMissing',
+  choose: 'managedStoreChoose',
+  change: 'managedStoreChange',
+  clear: 'managedStoreClear',
+  accessHint: 'managedStoreAccessHint',
+);
+
+const downloadsLocationCopy = (
+  description: 'downloadsLocationDescription',
+  defaultLabel: 'downloadsLocationDefault',
+  missing: 'downloadsLocationMissing',
+  choose: 'managedStoreChoose',
+  change: 'managedStoreChange',
+  clear: 'managedStoreClear',
+  accessHint: 'managedStoreAccessHint',
+);
+
+/// A storage location setting: the managed asset store, or the downloads
+/// folder.
 ///
 /// The three states are drawn as three different sentences on purpose. No
-/// custom location is the app-managed *default* — a real store the app owns
+/// custom location is the app-managed *default* — a real folder the app owns
 /// under Application Support — never "you have no store". A custom location
 /// that is set but gone off disk is not the default either: telling the user
 /// they never chose one would send them to re-pick instead of to remount the
@@ -20,32 +57,36 @@ class ManagedStoreSettings extends StatelessWidget {
     required this.location,
     required this.onChoose,
     required this.onClear,
+    this.copy = managedStoreCopy,
   });
 
   final ManagedStoreLocation location;
   final VoidCallback onChoose;
   final VoidCallback onClear;
 
+  /// Which location this instance is talking about.
+  final StorageLocationCopy copy;
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final missing = location.state == ManagedStoreState.missing;
-    final isDefault = location.state == ManagedStoreState.appManaged;
+    final missing = location.state == StorageLocationState.missing;
+    final isDefault = location.state == StorageLocationState.appManaged;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(l.text('managedStoreDescription'), style: text.bodyMedium),
+        Text(l.text(copy.description), style: text.bodyMedium),
         const SizedBox(height: ListenSpacing.gap8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(
               switch (location.state) {
-                ManagedStoreState.appManaged => Icons.folder_special_outlined,
-                ManagedStoreState.ready => Icons.folder_outlined,
-                ManagedStoreState.missing => Icons.warning_amber_outlined,
+                StorageLocationState.appManaged => Icons.folder_special_outlined,
+                StorageLocationState.ready => Icons.folder_outlined,
+                StorageLocationState.missing => Icons.warning_amber_outlined,
               },
               size: ListenIconSize.control,
               color: missing ? colors.error : colors.onSurfaceVariant,
@@ -56,7 +97,7 @@ class ManagedStoreSettings extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isDefault ? l.text('managedStoreDefault') : location.path,
+                    isDefault ? l.text(copy.defaultLabel) : location.path,
                     style: text.bodyMedium?.copyWith(
                       color: missing ? colors.error : colors.onSurface,
                     ),
@@ -75,7 +116,7 @@ class ManagedStoreSettings extends StatelessWidget {
                   if (missing) ...[
                     const SizedBox(height: ListenSpacing.gap2),
                     Text(
-                      l.text('managedStoreMissing'),
+                      l.text(copy.missing),
                       style: text.bodySmall?.copyWith(color: colors.error),
                     ),
                   ],
@@ -96,21 +137,19 @@ class ManagedStoreSettings extends StatelessWidget {
                 size: ListenIconSize.control,
               ),
               label: Text(
-                isDefault
-                    ? l.text('managedStoreChoose')
-                    : l.text('managedStoreChange'),
+                isDefault ? l.text(copy.choose) : l.text(copy.change),
               ),
             ),
             if (!isDefault)
               TextButton(
                 onPressed: onClear,
-                child: Text(l.text('managedStoreClear')),
+                child: Text(l.text(copy.clear)),
               ),
           ],
         ),
         const SizedBox(height: ListenSpacing.gap8),
         Text(
-          l.text('managedStoreAccessHint'),
+          l.text(copy.accessHint),
           style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant),
         ),
       ],

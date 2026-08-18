@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/downloads_controller.dart';
 import '../../controllers/material_capability_coordinator.dart';
 import '../../controllers/media_library_scan_controller.dart';
 import '../../localization.dart';
@@ -9,6 +10,7 @@ import '../../models/personal_library.dart';
 import '../../theme/breakpoints.dart';
 import '../../theme/spacing.dart';
 import '../common/api_failure_disclosure.dart';
+import 'downloads_section.dart';
 import 'personal_library_section.dart';
 
 /// The learner-facing state views of one material library.
@@ -48,10 +50,22 @@ class ListeningHome extends StatefulWidget {
     this.capabilityCoordinator,
     this.onRequestCapability,
     this.onCancelCapability,
+    this.downloads,
+    this.downloadsFailure,
+    this.onOpenDownload,
+    this.onDeleteDownload,
   });
 
   final VoidCallback onOpenMedia;
   final VoidCallback onOpenOnline;
+
+  /// Acquired media that is on this machine but not in the Personal Library.
+  /// Null while unknown; the section stays away rather than claiming an empty
+  /// shelf it has not looked at.
+  final List<DownloadedMedia>? downloads;
+  final ApiFailure? downloadsFailure;
+  final void Function(DownloadedMedia entry)? onOpenDownload;
+  final void Function(DownloadedMedia entry)? onDeleteDownload;
 
   /// The primary "Open document" action, opening the direct document session.
   final VoidCallback? onOpenDocument;
@@ -164,6 +178,10 @@ class _ListeningHomeState extends State<ListeningHome> {
           capabilityCoordinator: widget.capabilityCoordinator,
           onRequestCapability: widget.onRequestCapability,
           onCancelCapability: widget.onCancelCapability,
+          downloads: widget.downloads,
+          downloadsFailure: widget.downloadsFailure,
+          onOpenDownload: widget.onOpenDownload,
+          onDeleteDownload: widget.onDeleteDownload,
         ),
       );
     },
@@ -197,6 +215,10 @@ class _HomeContent extends StatelessWidget {
     this.capabilityCoordinator,
     this.onRequestCapability,
     this.onCancelCapability,
+    this.downloads,
+    this.downloadsFailure,
+    this.onOpenDownload,
+    this.onDeleteDownload,
   });
 
   final bool compact;
@@ -238,6 +260,10 @@ class _HomeContent extends StatelessWidget {
     MaterialCapability capability,
   )?
   onCancelCapability;
+  final List<DownloadedMedia>? downloads;
+  final ApiFailure? downloadsFailure;
+  final void Function(DownloadedMedia entry)? onOpenDownload;
+  final void Function(DownloadedMedia entry)? onDeleteDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -403,6 +429,15 @@ class _HomeContent extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
+                ),
+              ],
+              if (onOpenDownload != null && onDeleteDownload != null) ...[
+                const SizedBox(height: ListenSpacing.gap24),
+                DownloadsSection(
+                  entries: downloads,
+                  failure: downloadsFailure,
+                  onOpen: onOpenDownload!,
+                  onDelete: onDeleteDownload!,
                 ),
               ],
               if (scan != null &&

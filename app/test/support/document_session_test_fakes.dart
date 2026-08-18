@@ -58,6 +58,9 @@ class FakeManagedAssetStoreService implements ManagedAssetStoreService {
   }
 
   @override
+  bool contains(String path) => path.startsWith('/store/');
+
+  @override
   Future<void> deleteStoreCopy(String path) async {
     final name = path.split('/').last;
     contents.remove(name);

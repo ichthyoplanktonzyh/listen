@@ -121,11 +121,11 @@ void main() {
 
       final first = DiscoveryViewModel(
         feedRepository,
-        imports,
-        mediaLibrary,
-        ledger,
-        sourceIdentity,
-        materials,
+        importRepository: imports,
+        mediaLibraryRepository: mediaLibrary,
+        ledger: ledger,
+        sourceIdentity: sourceIdentity,
+        learningMaterial: materials,
       );
       addTearDown(first.dispose);
 
@@ -142,12 +142,43 @@ void main() {
         DiscoveryItemState.available,
       );
 
+      // ── Before any Keep: the download is Temporary Material ────────────
+      // Core registers an adopted download with `retain: false`, and its
+      // Personal Library projection lists retained media only. A restart at
+      // this point — the common case, since keeping is a separate deliberate
+      // act — must still recognise the episode, or the app offers a download
+      // it already made.
+      expect(
+        await mediaLibrary.listMediaLibrary(),
+        isEmpty,
+        reason: 'acquisition is not retention: nothing is in the library yet',
+      );
+
+      final beforeKeep = DiscoveryViewModel(
+        feedRepository,
+        importRepository: imports,
+        mediaLibraryRepository: mediaLibrary,
+        ledger: ledger,
+        sourceIdentity: sourceIdentity,
+        learningMaterial: materials,
+      );
+      addTearDown(beforeKeep.dispose);
+      await beforeKeep.selectChannel(feedUrl);
+      beforeKeep.selectItem('ep-001');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(
+        beforeKeep.state.acquisitionStateOf('ep-001'),
+        DiscoveryItemState.available,
+        reason: 'a downloaded-but-unkept episode is on this machine',
+      );
+      expect(beforeKeep.localPathFor('ep-001'), localPath!.mediaPath);
+
       // ── Keep: the learner keeps the media, the workbench creates the ────
       // ── material, and retention lands the row in the Personal Library. ──
       // Re-registering the same bytes is Core's fingerprint convergence: it
       // returns the very media row adoption registered, now retained.
       final media = await mediaLibrary.registerMedia(
-        localPath!.mediaPath!,
+        localPath.mediaPath!,
         retain: true,
       );
       final mediaId = media.id;
@@ -186,11 +217,11 @@ void main() {
       // a restarted app takes.
       final second = DiscoveryViewModel(
         feedRepository,
-        imports,
-        mediaLibrary,
-        ledger,
-        sourceIdentity,
-        materials,
+        importRepository: imports,
+        mediaLibraryRepository: mediaLibrary,
+        ledger: ledger,
+        sourceIdentity: sourceIdentity,
+        learningMaterial: materials,
       );
       addTearDown(second.dispose);
       await second.selectChannel(feedUrl);

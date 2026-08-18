@@ -19,6 +19,7 @@ import '../services/acquisition_ledger.dart';
 import '../services/document_decoding/document_format.dart';
 import '../services/document_intake_flow.dart';
 import '../services/document_intake_service.dart';
+import '../services/media_file_service.dart';
 import '../models/embedded_subtitle.dart';
 import '../models/saved_vocabulary_count.dart';
 
@@ -152,6 +153,13 @@ class DiscoveryState {
   );
 }
 
+/// One recognised local media plus how it was recognised.
+///
+/// [fromMapping] is true only when Core's Source Identity answered. A match
+/// found any other way means the canonical key is still unwritten, which is
+/// the signal to try recording it again.
+typedef LocalMediaMatch = ({MediaItem media, bool fromMapping});
+
 /// Owns the content discovery presentation state.
 ///
 /// Discovery's responsibility ends at "which content, and can we get its
@@ -166,8 +174,12 @@ class DiscoveryState {
 /// recorded through [SourceIdentityRepository] so a later refresh resolves
 /// the same Material instead of creating a second one.
 final class DiscoveryViewModel extends ChangeNotifier {
+  /// Collaborators are named rather than positional: the list had grown to
+  /// seven interchangeable nullable objects, and call sites were reading
+  /// `(repo, imports, library, null, identities, materials)` — a shape where
+  /// one misplaced argument is a silent behaviour change.
   DiscoveryViewModel(
-    this._repository, [
+    this._repository, {
     MediaImportRepository? importRepository,
     MediaLibraryRepository? mediaLibraryRepository,
     AcquisitionLedger? ledger,
@@ -175,19 +187,46 @@ final class DiscoveryViewModel extends ChangeNotifier {
     LearningMaterialRepository? learningMaterial,
     DocumentIntakeFileService? documentFileService,
     DocumentIntakeFlow? documentIntake,
-  ]) : _ledger = ledger ?? AcquisitionLedger.inMemory(),
+    MediaFileService fileService = const LocalMediaFileService(),
+    Future<String?> Function()? downloadsDirectory,
+  }) : _ledger = ledger ?? AcquisitionLedger.inMemory(),
+       // ignore: prefer_initializing_formals
+       _downloadsDirectory = downloadsDirectory,
        _importRepository =
            importRepository ?? const _FakeMediaImportRepository(),
        _mediaLibraryRepository =
            mediaLibraryRepository ?? const _FakeMediaLibraryRepository(),
+       // ignore: prefer_initializing_formals
        _sourceIdentity = sourceIdentity,
+       // ignore: prefer_initializing_formals
        _learningMaterial = learningMaterial,
+       // ignore: prefer_initializing_formals
        _documentFileService = documentFileService,
-       _documentIntake = documentIntake;
+       // ignore: prefer_initializing_formals
+       _documentIntake = documentIntake,
+       // ignore: prefer_initializing_formals
+       _fileService = fileService;
 
   final DiscoveryRepository _repository;
   final MediaImportRepository _importRepository;
   final MediaLibraryRepository _mediaLibraryRepository;
+
+  /// Where an acquisition writes, resolved per download from the persisted
+  /// downloads location.
+  ///
+  /// Absent in previews and in tests that do not care, which fall back to the
+  /// folder chooser — the behaviour the whole app used to have. That is what
+  /// made the picker reopen on the first download of every launch: the answer
+  /// lived in a field on this object and died with it.
+  final Future<String?> Function()? _downloadsDirectory;
+
+  /// Confirms a recognised media's bytes are still on disk.
+  ///
+  /// Core records a media row, never the file's continued existence: nothing
+  /// tells it that a folder was emptied. So "Core knows this media" and "the
+  /// episode is on this machine" are two questions, and only the second one
+  /// is what a row claiming *available* is promising.
+  final MediaFileService _fileService;
 
   /// Reads downloaded article files for the document intake path. Absent in
   /// widget previews; an article item then has no way to acquire its bytes.
@@ -262,7 +301,6 @@ final class DiscoveryViewModel extends ChangeNotifier {
   final Map<String, int> _launchTokens = {};
 
   final List<DiscoveryItem> _customEntries = [];
-  String? _downloadDirectory;
   bool _disposed = false;
 
   /// The source each entry id belongs to, remembered across channel switches.
@@ -275,8 +313,10 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
   /// The source-scoped recognition key of a row: the source identity plus the
   /// item identity. Item ids are unique inside a source, never across sources.
-  String _rowKey(String entryId) =>
-      '${_entrySources[entryId] ?? ''}\u0000$entryId';
+  String _rowKey(String entryId) => AcquisitionLedger.keyFor(
+    sourceId: _entrySources[entryId] ?? '',
+    itemId: entryId,
+  );
 
   Future<void> load() async {
     if (!_ledger.isLoaded) await _ledger.load();
@@ -390,11 +430,50 @@ final class DiscoveryViewModel extends ChangeNotifier {
       clearSelectedEntryId: entries.isEmpty,
     );
     notifyListeners();
-    if (entries.isNotEmpty) {
-      unawaited(refreshMediaAvailability(entries.first.id));
-    }
+    unawaited(_reconcileShelf(sourceId, entries));
     unawaited(_hydrateLocalDurations(entries));
     unawaited(_resolveRemoteDurations(sourceId, entries));
+  }
+
+  /// How many rows of a shelf are reconciled against local media at once.
+  ///
+  /// Each row is a couple of small local lookups, so this is about not opening
+  /// two hundred of them in the same tick, not about a rate limit.
+  static const _shelfReconcileConcurrency = 4;
+
+  /// Reconciles every row of the shelf, not only the selected one.
+  ///
+  /// Only the selected entry used to be checked, so a shelf of episodes the
+  /// learner had already downloaded rendered with a download button on every
+  /// row but one — the app had the answer and never asked for it. The selected
+  /// row goes first because it is the one being read, and the rest follow.
+  ///
+  /// The workers belong to [sourceId]: once the learner has switched channels
+  /// these rows are off screen, and their answers would land on a shelf nobody
+  /// is looking at.
+  Future<void> _reconcileShelf(
+    String sourceId,
+    List<DiscoveryItem> entries,
+  ) async {
+    if (entries.isEmpty) return;
+    await refreshMediaAvailability(entries.first.id);
+    // Nothing to ask without the core, and the row above already reported
+    // that. Fanning out would only rewrite the same unavailable answer onto
+    // every remaining row.
+    if (!_mediaLibraryRepository.isAvailable) return;
+    var index = 1;
+    await Future.wait(
+      List.generate(_shelfReconcileConcurrency, (_) async {
+        while (!_disposed && _state.selectedSourceId == sourceId) {
+          final next = index++;
+          if (next >= entries.length) return;
+          await refreshMediaAvailability(
+            entries[next].id,
+            announceChecking: false,
+          );
+        }
+      }),
+    );
   }
 
   void selectItem(String entryId) {
@@ -426,11 +505,23 @@ final class DiscoveryViewModel extends ChangeNotifier {
   ///   acquisition snapshot projected to available
   /// * no match → back to the derived state ([DiscoveryItemState.acquirable]
   ///   or [DiscoveryItemState.discoverable])
-  Future<void> refreshMediaAvailability(String entryId) {
+  ///
+  /// [announceChecking] publishes the in-progress check as a visible state.
+  /// A check the learner asked for (selecting the row, the detail panel's
+  /// recheck) should say it is working; the shelf-wide background pass should
+  /// not — a check is not a download, and the row renders an acquiring state
+  /// as a progress bar with a cancel button.
+  Future<void> refreshMediaAvailability(
+    String entryId, {
+    bool announceChecking = true,
+  }) {
     final inFlight = _availabilityChecks[entryId];
     if (inFlight != null) return inFlight;
     late final Future<void> future;
-    future = _refreshMediaAvailability(entryId).whenComplete(() {
+    future = _refreshMediaAvailability(
+      entryId,
+      announceChecking: announceChecking,
+    ).whenComplete(() {
       if (identical(_availabilityChecks[entryId], future)) {
         _availabilityChecks.remove(entryId);
       }
@@ -447,14 +538,19 @@ final class DiscoveryViewModel extends ChangeNotifier {
     await refreshMediaAvailability(selectedId);
   }
 
-  Future<void> _refreshMediaAvailability(String entryId) async {
+  Future<void> _refreshMediaAvailability(
+    String entryId, {
+    required bool announceChecking,
+  }) async {
     // Without the core there is nothing to ask, so the answer stays missing —
     // "not on this machine" would be a guess dressed up as a fact.
     if (!_mediaLibraryRepository.isAvailable) {
       _setSnapshot(entryId, ItemAcquisitionSnapshot.failedUnavailable);
       return;
     }
-    _setSnapshot(entryId, ItemAcquisitionSnapshot.checking);
+    if (announceChecking) {
+      _setSnapshot(entryId, ItemAcquisitionSnapshot.checking);
+    }
 
     final item = _state.entryById(entryId);
     if (item?.acquisition == AcquisitionMode.article) {
@@ -462,9 +558,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
       return;
     }
 
-    final MediaLibraryEntry? localEntry;
+    final LocalMediaMatch? local;
     try {
-      localEntry = await _findLocalEntry(entryId);
+      local = await _findLocalMedia(entryId);
     } catch (error) {
       debugPrint('Error searching local media entry: $error');
       if (_disposed) return;
@@ -473,7 +569,7 @@ final class DiscoveryViewModel extends ChangeNotifier {
     }
     if (_disposed) return;
 
-    if (localEntry == null) {
+    if (local == null) {
       // Definitive answer: this entry's content is not on this machine. Any
       // local identity from an earlier, now-refuted answer must go with it —
       // a stale path would let Start Learning open a file Core no longer
@@ -483,8 +579,9 @@ final class DiscoveryViewModel extends ChangeNotifier {
       // goes too: without a snapshot the item state derives from what its
       // source grants. A live download is the acquisition lifecycle's own
       // fact and survives the reconciliation.
-      _localPaths.remove(entryId);
-      _mediaIds.remove(entryId);
+      final hadLocal =
+          _localPaths.remove(entryId) != null ||
+          _mediaIds.remove(entryId) != null;
       final snapshots = Map<String, ItemAcquisitionSnapshot>.of(
         _state.acquisitionSnapshots,
       );
@@ -492,6 +589,13 @@ final class DiscoveryViewModel extends ChangeNotifier {
       if (current == null ||
           current.phase != ItemAcquisitionPhase.download) {
         snapshots.remove(entryId);
+      }
+      // A row that had nothing and still has nothing changed nothing. The
+      // shelf-wide pass reconciles every entry of a two-hundred-item feed, and
+      // most of them are simply not downloaded — rebuilding the surface once
+      // per unremarkable answer would be the whole cost of the reconciliation.
+      if (!hadLocal && snapshots.length == _state.acquisitionSnapshots.length) {
+        return;
       }
       _state = _state.copyWith(acquisitionSnapshots: snapshots);
       notifyListeners();
@@ -506,19 +610,31 @@ final class DiscoveryViewModel extends ChangeNotifier {
       DiscoveryItemState.available,
       progress: 1,
     );
-    _localPaths[entryId] = localEntry.media.path;
-    _mediaIds[entryId] = localEntry.media.id;
+    _localPaths[entryId] = local.media.path;
+    _mediaIds[entryId] = local.media.id;
+    _fingerprints[entryId] = local.media.fingerprint;
     unawaited(
       _ledger.record(
         _rowKey(entryId),
-        mediaId: localEntry.media.id,
-        path: localEntry.media.path,
+        mediaId: local.media.id,
+        path: local.media.path,
       ),
     );
-    _mediaDurations[entryId] = localEntry.media.durationMs;
+    _mediaDurations[entryId] = local.media.durationMs;
 
     _state = _state.copyWith(acquisitionSnapshots: finished);
     notifyListeners();
+
+    // Recognition that did not come from the canonical mapping means Core has
+    // no mapping yet — adoption asks for one the moment the media is
+    // registered, which is before any Material is bound to it, so the first
+    // attempt always comes back empty. The Material is created later, when
+    // the workbench opens the content; this is the retry that finally writes
+    // the canonical key down, and it is what stops recognition depending on
+    // the app's own ledger forever.
+    if (!local.fromMapping) {
+      unawaited(_recordIdentity(entryId, fileSha256: local.media.fingerprint));
+    }
   }
 
   void _setSnapshot(String entryId, ItemAcquisitionSnapshot snapshot) {
@@ -607,61 +723,84 @@ final class DiscoveryViewModel extends ChangeNotifier {
 
   /// Recognises media this app downloaded for [entryId] in an earlier session.
   ///
-  /// Throws when the library cannot be listed; the caller turns that into an
+  /// Throws when the lookup could not be made; the caller turns that into an
   /// unavailable answer rather than a claim.
   ///
   /// The canonical mapping answers first when the core recorded one: intake
   /// wrote down which Material this source item resolved to, and the media
   /// bound to that Material is the item's content. When the core has no
-  /// mapping — an older core, a preview, a mapping the core lost — the app's
-  /// own written record answers next: the app knows what it downloaded, so it
-  /// does not have to re-derive it from a filename. yt-dlp's `[id]` convention
-  /// stays as the fallback that recognises media acquired before either record
-  /// existed, and it only ever applied to the external-tool path — an
-  /// enclosure is saved under the publisher's filename, which has nothing to
-  /// do with the feed's guid.
+  /// mapping — an older core, a preview, a mapping written only after the
+  /// Material existed — the app's own written record answers next: the app
+  /// knows what it downloaded, so it does not have to re-derive it from a
+  /// filename. yt-dlp's `[id]` convention stays as the fallback that
+  /// recognises media acquired before either record existed, and it only ever
+  /// applied to the external-tool path — an enclosure is saved under the
+  /// publisher's filename, which has nothing to do with the feed's guid.
   ///
-  /// A recorded media id still has to be present in Core's library. The record
-  /// says what was acquired, not what survives: a person who emptied a folder
-  /// did not consult this file first, and a row that claimed a file that is
-  /// gone would be exactly the kind of confident lie the ledger exists to
-  /// avoid.
-  Future<MediaLibraryEntry?> _findLocalEntry(String entryId) async {
-    final library = await _mediaLibraryRepository.listMediaLibrary();
-
-    final entry = _state.entryById(entryId);
-    final item = entry;
+  /// Every candidate is confirmed against Core's *registered* media, never
+  /// against the Personal Library listing. The library projection is retained
+  /// media only, and an adopted download is deliberately Temporary Material
+  /// (`retain: false`, CONTEXT.md Retention Decision) — so asking the library
+  /// whether a downloaded episode exists always answered no, the ledger row
+  /// was then dropped as stale, and the next visit offered the very download
+  /// that had already happened. (Core's own contract test states the rule:
+  /// `temporary_registration_is_readable_but_absent_from_library`.)
+  ///
+  /// Being known to Core is still not the same as being on disk. Core records
+  /// a path, never the file's continued existence, so the bytes are confirmed
+  /// too: a person who emptied a folder did not consult this file first, and a
+  /// row that claimed a file that is gone would be exactly the kind of
+  /// confident lie the ledger exists to avoid.
+  Future<LocalMediaMatch?> _findLocalMedia(String entryId) async {
+    final item = _state.entryById(entryId);
     if (item != null) {
-      final resolved = await _resolveIdentity(item, library);
-      if (resolved != null) return resolved;
+      final resolved = await _resolveIdentity(item);
+      if (resolved != null) {
+        return (media: resolved, fromMapping: true);
+      }
     }
 
     final recorded = _ledger[_rowKey(entryId)];
     if (recorded != null) {
-      for (final libraryEntry in library) {
-        if (libraryEntry.media.id == recorded.mediaId) return libraryEntry;
-      }
-      // Recorded but no longer in the library: drop it rather than re-check
-      // this row on every visit for the life of the install.
+      final media = await _registeredMediaOnDisk(recorded.mediaId);
+      if (media != null) return (media: media, fromMapping: false);
+      // Core no longer knows this media, or its file is gone: drop the record
+      // rather than re-check this row on every visit for the life of the
+      // install.
       await _ledger.forget(_rowKey(entryId));
     }
 
-    if (item?.acquisition != AcquisitionMode.externalTool) {
-      return null;
-    }
-    for (final libraryEntry in library) {
-      if (libraryEntry.media.path.contains('[$entryId]')) return libraryEntry;
+    if (item?.acquisition != AcquisitionMode.externalTool) return null;
+    // The filename convention is the only recognition path with nothing to
+    // look up by id, so it is the one case that still has to scan. It reads
+    // the Personal Library, which is all this fallback ever saw: it exists for
+    // media acquired before either record was written, and such media is only
+    // still findable if the learner kept it.
+    for (final libraryEntry in await _mediaLibraryRepository
+        .listMediaLibrary()) {
+      if (libraryEntry.media.path.contains('[$entryId]') &&
+          _fileService.exists(libraryEntry.media.path)) {
+        return (media: libraryEntry.media, fromMapping: false);
+      }
     }
     return null;
   }
 
+  /// The registered media with [mediaId] when Core still holds it and its file
+  /// is still on disk; null when either answer is no.
+  ///
+  /// Throws when the lookup itself could not be made, so a core that went away
+  /// mid-check never reads as "the episode is gone".
+  Future<MediaItem?> _registeredMediaOnDisk(String mediaId) async {
+    final media = await _mediaLibraryRepository.findRegisteredMedia(mediaId);
+    if (media == null) return null;
+    return _fileService.exists(media.path) ? media : null;
+  }
+
   /// Asks Core's Source Identity surface whether this item was already
-  /// converged on a Material, and returns the registered media of that
-  /// Material when it is present in [library].
-  Future<MediaLibraryEntry?> _resolveIdentity(
-    DiscoveryItem item,
-    List<MediaLibraryEntry> library,
-  ) async {
+  /// converged on a Material, and returns that Material's registered media
+  /// when its bytes are still on this machine.
+  Future<MediaItem?> _resolveIdentity(DiscoveryItem item) async {
     final sourceIdentity = _sourceIdentity;
     final learningMaterial = _learningMaterial;
     if (sourceIdentity == null || learningMaterial == null) return null;
@@ -694,14 +833,20 @@ final class DiscoveryViewModel extends ChangeNotifier {
       debugPrint('Error reading mapped material: $error');
       return null;
     }
-    final mediaIds = <String>{
-      for (final rendition in details.currentRevision.mediaRenditions)
-        if (rendition.mediaId != null) rendition.mediaId!,
-    };
-    for (final libraryEntry in library) {
-      if (mediaIds.contains(libraryEntry.media.id)) {
-        return libraryEntry;
+    for (final rendition in details.currentRevision.mediaRenditions) {
+      final mediaId = rendition.mediaId;
+      if (mediaId == null) continue;
+      final MediaItem? media;
+      try {
+        media = await _registeredMediaOnDisk(mediaId);
+      } catch (error) {
+        // The mapping is good but this rendition could not be checked. Say
+        // nothing rather than claim the item was never acquired; the ledger
+        // answers next, and a later refresh asks again.
+        debugPrint('Error reading mapped media: $error');
+        return null;
       }
+      if (media != null) return media;
     }
     return null;
   }
@@ -818,31 +963,27 @@ final class DiscoveryViewModel extends ChangeNotifier {
     _launchesInFlight[entry.id] = token;
 
     try {
-      if (_downloadDirectory == null) {
-        final directory = await _importRepository.pickDownloadDirectory(
-          confirmButtonText: 'Select',
-        );
-        if (_disposed) {
-          _completeAcquisition(entry.id, null);
-          return;
-        }
-        if (directory == null) {
-          // User cancelled directory pick: the intent ends without a path.
-          _completeAcquisition(entry.id, null);
-          return;
-        }
-        _downloadDirectory = directory;
+      final directory = await _resolveDownloadsDirectory();
+      if (_disposed) {
+        _completeAcquisition(entry.id, null);
+        return;
+      }
+      if (directory == null) {
+        // No place to write: a custom downloads folder that is off disk and a
+        // chooser the learner dismissed both end the intent without a path.
+        _completeAcquisition(entry.id, null);
+        return;
       }
 
       final handle = switch (entry.acquisition) {
         AcquisitionMode.enclosure => await _importRepository
             .downloadEnclosure(
               mediaUrl,
-              _downloadDirectory!,
+              directory,
               expectedBytes: entry.mediaByteLength,
             ),
         AcquisitionMode.externalTool => await _importRepository
-            .downloadOnlineMedia(mediaUrl, _downloadDirectory!),
+            .downloadOnlineMedia(mediaUrl, directory),
         _ => throw StateError('guarded above'),
       };
       if (_disposed) {
@@ -906,24 +1047,20 @@ final class DiscoveryViewModel extends ChangeNotifier {
     _launchesInFlight[entry.id] = token;
 
     try {
-      if (_downloadDirectory == null) {
-        final directory = await _importRepository.pickDownloadDirectory(
-          confirmButtonText: 'Select',
-        );
-        if (_disposed) {
-          _completeAcquisition(entry.id, null);
-          return;
-        }
-        if (directory == null) {
-          // User cancelled directory pick: the intent ends without a path.
-          _completeAcquisition(entry.id, null);
-          return;
-        }
-        _downloadDirectory = directory;
+      final directory = await _resolveDownloadsDirectory();
+      if (_disposed) {
+        _completeAcquisition(entry.id, null);
+        return;
+      }
+      if (directory == null) {
+        // No place to write: a custom downloads folder that is off disk and a
+        // chooser the learner dismissed both end the intent without a path.
+        _completeAcquisition(entry.id, null);
+        return;
       }
       final path = await _importRepository.downloadArticle(
         entryUrl,
-        _downloadDirectory!,
+        directory,
       );
       if (_disposed || path == null) {
         _completeAcquisition(entry.id, null);
@@ -986,6 +1123,16 @@ final class DiscoveryViewModel extends ChangeNotifier {
         _launchesInFlight.remove(entry.id);
       }
     }
+  }
+
+  /// The folder this acquisition writes into.
+  ///
+  /// Falls back to the chooser when no resolver was injected, so a preview or
+  /// a test that never wired settings still behaves the way it always did.
+  Future<String?> _resolveDownloadsDirectory() async {
+    final resolve = _downloadsDirectory;
+    if (resolve != null) return resolve();
+    return _importRepository.pickDownloadDirectory(confirmButtonText: 'Select');
   }
 
   bool _isCurrentLaunch(String entryId, int token) =>
@@ -1431,6 +1578,8 @@ class _FakeMediaLibraryRepository implements MediaLibraryRepository {
       throw StateError('not used in discovery');
   @override
   Future<List<MediaLibraryEntry>> listMediaLibrary() async => [];
+  @override
+  Future<MediaItem?> findRegisteredMedia(String mediaId) async => null;
   @override
   Future<MediaLibraryEntry> setTriageIntent(
     String mediaId,

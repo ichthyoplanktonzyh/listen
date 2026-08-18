@@ -420,6 +420,16 @@ class AppLocalizations {
           'If the folder is in Documents, Desktop or Downloads, macOS asks for '
           'permission once the first time it is read. Allow it, otherwise the '
           'folder will look empty.',
+      'downloadsLocationTitle': 'Downloads',
+      'downloadsLocationDescription':
+          'Episodes and videos you download land here under the names their '
+          'publishers gave them. Downloading is not keeping: nothing joins '
+          'your library until you keep it, and keeping copies the file into '
+          'the managed asset store.',
+      'downloadsLocationDefault': 'Default app-managed folder',
+      'downloadsLocationMissing':
+          'This folder is not on disk right now, so downloads have nowhere to '
+          'go. The next download asks where to put it.',
       // ── Retention: Keep / reference / unretain ──
       'retentionKeepAction': 'Keep',
       'retentionRetainedLabel': 'In your Personal Library',
@@ -1607,12 +1617,29 @@ class AppLocalizations {
           'Store scan stopped. Everything already added stays.',
       'mediaScanFailed': 'The store scan broke down.',
       'mediaScanCounts':
-          '{new} added · {unchanged} unchanged · {skipped} skipped',
+          '{new} registered · {unchanged} unchanged · {skipped} skipped',
+      'mediaScanRegistrationHint':
+          'Scanning only registers what the folder holds, so Listen can '
+          'recognise these files. Nothing joins your library from a scan — '
+          'keeping a material is still yours to do.',
       'mediaScanCancel': 'Stop',
       'mediaScanRefresh': 'Rescan store',
       'mediaScanRetryFailed': 'Retry those files',
       'mediaScanRegisterFailed':
-          '{count} file(s) could not be added to the library.',
+          '{count} file(s) could not be registered.',
+      'downloadsSectionTitle': 'Downloads',
+      'downloadsSectionSubtitle':
+          'On this machine, not in your library. Open one to study it; keeping '
+          'it is a separate choice you make in the workbench.',
+      'downloadsSectionEmpty': 'Nothing downloaded right now.',
+      'downloadsSectionFailed': 'The downloads could not be listed.',
+      'downloadsDeleteAction': 'Delete file',
+      'downloadsDeleteTitle': 'Delete this download?',
+      'downloadsDeleteBody':
+          'The file is removed from disk. Learning records stay, and the '
+          'episode can be downloaded again from its feed.',
+      'downloadsDeleteConfirm': 'Delete',
+      'downloadsDeleteFailed': 'The file could not be deleted.',
       'sidecarSubtitleBadge': 'Subtitle file alongside',
       'queueIntensive': 'Intensive picks',
       'queueExtensive': 'Extensive listening',
@@ -2705,6 +2732,11 @@ class AppLocalizations {
       'managedStoreMissing': '这个文件夹当前不在磁盘上——可能已被移动或改名，也可能所在的磁盘没有连接。',
       'managedStoreAccessHint':
           '文件夹若位于「文稿」「桌面」或「下载」，macOS 会在首次读取时请求一次授权。请允许，否则文件夹会显示为空。',
+      'downloadsLocationTitle': '下载目录',
+      'downloadsLocationDescription':
+          '下载的节目和视频按发布方原本的文件名存放在这里。下载不等于入库：在你保留之前，它不会进入资料库；保留会把文件复制进受管素材库。',
+      'downloadsLocationDefault': '应用默认管理目录',
+      'downloadsLocationMissing': '这个文件夹当前不在磁盘上，下载无处可放。下一次下载会询问放到哪里。',
       // ── 保留：保留 / 引用 / 移除 ──
       'retentionKeepAction': '保留',
       'retentionRetainedLabel': '已在个人资料库',
@@ -3744,11 +3776,23 @@ class AppLocalizations {
       'mediaScanCompleted': '素材库扫描完成。',
       'mediaScanCancelled': '扫描已停止，已经加入的条目保留。',
       'mediaScanFailed': '素材库扫描中断。',
-      'mediaScanCounts': '新增 {new} · 未变化 {unchanged} · 跳过 {skipped}',
+      'mediaScanCounts': '已登记 {new} · 未变化 {unchanged} · 跳过 {skipped}',
+      'mediaScanRegistrationHint':
+          '扫描只是登记文件夹里有什么，好让 Listen 认得这些文件。扫描不会把任何东西加进资料库——保留哪份材料仍然由你决定。',
       'mediaScanCancel': '停止',
       'mediaScanRefresh': '重新扫描素材库',
       'mediaScanRetryFailed': '重试这些文件',
-      'mediaScanRegisterFailed': '有 {count} 个文件没能加入媒体库。',
+      'mediaScanRegisterFailed': '有 {count} 个文件没能登记。',
+      'downloadsSectionTitle': '已下载',
+      'downloadsSectionSubtitle':
+          '在本机，但不在资料库里。可以直接打开学习；要不要保留，是你在工作台另做的决定。',
+      'downloadsSectionEmpty': '目前没有已下载的内容。',
+      'downloadsSectionFailed': '无法列出已下载的内容。',
+      'downloadsDeleteAction': '删除文件',
+      'downloadsDeleteTitle': '删除这个下载？',
+      'downloadsDeleteBody': '文件会从磁盘上删除。学习记录会保留，节目也可以从订阅源再下载一次。',
+      'downloadsDeleteConfirm': '删除',
+      'downloadsDeleteFailed': '文件未能删除。',
       'sidecarSubtitleBadge': '旁边有字幕文件',
       'queueIntensive': '精听靶单',
       'queueExtensive': '泛听队列',

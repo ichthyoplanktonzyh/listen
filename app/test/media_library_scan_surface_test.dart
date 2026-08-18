@@ -236,7 +236,11 @@ void main() {
     await tester.pump();
 
     expect(find.text('正在扫描受管素材库…'), findsOneWidget);
-    expect(find.text('新增 3 · 未变化 12 · 跳过 1'), findsOneWidget);
+    expect(find.text('已登记 3 · 未变化 12 · 跳过 1'), findsOneWidget);
+    // "新增 3" read as "3 things joined my library", and then the library
+    // showed none of them: a scan registers with `retain: false`, which is
+    // exactly not Personal Library membership.
+    expect(find.textContaining('不会把任何东西加进资料库'), findsOneWidget);
     await tester.tap(find.text('停止'));
     expect(cancels, 1);
   });
@@ -268,7 +272,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('有 1 个文件没能加入媒体库。'), findsOneWidget);
+    expect(find.text('有 1 个文件没能登记。'), findsOneWidget);
     expect(find.text('bad.mp4'), findsOneWidget);
     await tester.tap(find.text('重试这些文件'));
     expect(retries, 1);

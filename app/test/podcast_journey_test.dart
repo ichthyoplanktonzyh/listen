@@ -35,6 +35,8 @@ void main() {
     List<DiscoveryItem>? entries,
     TestMediaLibraryRepository? library,
     AcquisitionLedger? ledger,
+    TestMediaFileService? fileService,
+    Future<String?> Function()? downloadsDirectory,
   }) {
     final imports = TestMediaImportRepository();
     final vm = DiscoveryViewModel(
@@ -45,9 +47,11 @@ void main() {
               entries ?? [testPodcastItem('i-bbc-1', podcastSource.id)],
         },
       ),
-      imports,
-      library ?? TestMediaLibraryRepository(),
-      ledger,
+      importRepository: imports,
+      mediaLibraryRepository: library ?? TestMediaLibraryRepository(),
+      ledger: ledger,
+      fileService: fileService ?? TestMediaFileService(),
+      downloadsDirectory: downloadsDirectory,
     );
     addTearDown(vm.dispose);
     return (vm, imports);
@@ -221,6 +225,56 @@ void main() {
     });
   });
 
+  group('where an acquisition writes', () {
+    testWidgets('every download uses the remembered folder, never the chooser',
+        (tester) async {
+      // The folder chooser used to open on the first download of every launch,
+      // and the answer was cached on the view model rather than persisted.
+      final asked = <int>[];
+      final (vm, imports) = podcastViewModel(
+        entries: [
+          testPodcastItem('i-bbc-1', podcastSource.id),
+          testPodcastItem('i-bbc-2', podcastSource.id),
+        ],
+        downloadsDirectory: () async {
+          asked.add(asked.length);
+          return '/remembered/downloads';
+        },
+      );
+      await tester.runAsync(() async {
+        await vm.load();
+        await vm.startDownload('i-bbc-1');
+        await vm.startDownload('i-bbc-2');
+      });
+
+      expect(imports.pickerPrompts, isEmpty);
+      expect(asked, hasLength(2), reason: 'read per download, so a settings '
+          'change takes effect without a restart');
+      expect(
+        imports.enclosureRequests, hasLength(2),
+      );
+      vm.cancelDownload('i-bbc-1');
+      vm.cancelDownload('i-bbc-2');
+    });
+
+    testWidgets('no folder means no acquisition, not a guess', (tester) async {
+      final (vm, imports) = podcastViewModel(
+        downloadsDirectory: () async => null,
+      );
+      await tester.runAsync(() async {
+        await vm.load();
+        await vm.startDownload('i-bbc-1');
+      });
+
+      expect(imports.enclosureRequests, isEmpty);
+      expect(imports.pickerPrompts, isEmpty);
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
+    });
+  });
+
   group('recognising media a previous session acquired', () {
     test('a podcast episode downloaded before is not offered again', () async {
       // The filename convention that answers this on the YouTube path does not
@@ -256,6 +310,163 @@ void main() {
 
       expect(vm.state.acquisitionStateOf('i-bbc-1'), DiscoveryItemState.available);
       expect(vm.localPathFor('i-bbc-1'), '/library/p0p1qc9j.mp3');
+    });
+
+    testWidgets(
+      'a download is still recognised after a restart, though the Personal '
+      'Library never lists it',
+      (tester) async {
+        // The real shape of the bug, end to end. Adoption registers a
+        // download as Temporary Material (`retain: false` — acquisition is
+        // not retention, CONTEXT.md Retention Decision), and Core's Personal
+        // Library projection lists retained media only. Recognition used to
+        // confirm its ledger row against that projection, never found the
+        // episode there, deleted the row as stale, and offered the very
+        // download that had already happened — writing `episode (2).mp3` when
+        // it was taken.
+        final directory = Directory.systemTemp.createTempSync('journey-restart-');
+        addTearDown(() => directory.deleteSync(recursive: true));
+        final library = TestMediaLibraryRepository();
+        final files = TestMediaFileService();
+
+        final (vm, imports) = podcastViewModel(
+          library: library,
+          ledger: AcquisitionLedger(directory: directory),
+          fileService: files,
+        );
+        await tester.runAsync(() async {
+          await vm.load();
+          await vm.startDownload('i-bbc-1');
+          await Future<void>.delayed(const Duration(milliseconds: 700));
+        });
+
+        expect(imports.enclosureRequests, hasLength(1));
+        expect(
+          vm.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
+        );
+        expect(
+          await library.listMediaLibrary(),
+          isEmpty,
+          reason: 'an adopted download is Temporary Material: registered and '
+              'readable, but not Personal Library membership',
+        );
+
+        // Relaunch: fresh view model, fresh ledger instance reading the same
+        // file, the same Core.
+        final (restarted, restartedImports) = podcastViewModel(
+          library: library,
+          ledger: AcquisitionLedger(directory: directory),
+          fileService: files,
+        );
+        await tester.runAsync(() async {
+          await restarted.load();
+          await pumpEventQueue();
+        });
+
+        expect(
+          restarted.state.acquisitionStateOf('i-bbc-1'),
+          DiscoveryItemState.available,
+          reason: 'the episode is on this machine; the row must not offer to '
+              'download it a second time',
+        );
+        expect(
+          restarted.localPathFor('i-bbc-1'),
+          '/path/to/downloaded/[i-bbc-1].mp4',
+        );
+
+        // And the intent opens what is there rather than fetching again.
+        final target = await tester.runAsync(
+          () => restarted.acquireForLearning('i-bbc-1'),
+        );
+        expect(target?.mediaPath, '/path/to/downloaded/[i-bbc-1].mp4');
+        expect(restartedImports.enclosureRequests, isEmpty);
+      },
+    );
+
+    test('a record whose file was deleted from disk is dropped', () async {
+      // Core records a path, never the file's continued existence. A row that
+      // still claimed "on this device" after the folder was emptied would be
+      // the same confident lie in the other direction.
+      final ledger = AcquisitionLedger.inMemory();
+      await ledger.load();
+      await ledger.record(
+        '${podcastSource.id}\u0000i-bbc-1',
+        mediaId: 'm-1',
+        path: '/library/p0p1qc9j.mp3',
+      );
+      final files = TestMediaFileService()..remove('/library/p0p1qc9j.mp3');
+
+      final (vm, _) = podcastViewModel(
+        library: TestMediaLibraryRepository(
+          seed: [
+            TestMediaLibraryRepository.entry(
+              id: 'm-1',
+              path: '/library/p0p1qc9j.mp3',
+              // Retained on purpose: Core knows this media by every route
+              // there is, so the only fact that can refute the row is the
+              // file itself being gone.
+              retained: true,
+            ),
+          ],
+        ),
+        ledger: ledger,
+        fileService: files,
+      );
+      await vm.load();
+      vm.selectItem('i-bbc-1');
+      await pumpEventQueue();
+
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-1'),
+        DiscoveryItemState.acquirable,
+      );
+      expect(ledger['${podcastSource.id}\u0000i-bbc-1'], isNull);
+    });
+
+    test('every row of the shelf reports its own local state', () async {
+      // Only the selected entry used to be reconciled, so a shelf of episodes
+      // the learner had already downloaded rendered a download button on every
+      // row but one — the answer was in the ledger the whole time.
+      final ledger = AcquisitionLedger.inMemory();
+      await ledger.load();
+      await ledger.record(
+        '${podcastSource.id}\u0000i-bbc-3',
+        mediaId: 'm-3',
+        path: '/library/three.mp3',
+      );
+
+      final (vm, _) = podcastViewModel(
+        entries: [
+          testPodcastItem('i-bbc-1', podcastSource.id),
+          testPodcastItem('i-bbc-2', podcastSource.id),
+          testPodcastItem('i-bbc-3', podcastSource.id),
+        ],
+        library: TestMediaLibraryRepository(
+          seed: [
+            TestMediaLibraryRepository.entry(
+              id: 'm-3',
+              path: '/library/three.mp3',
+            ),
+          ],
+        ),
+        ledger: ledger,
+      );
+      await vm.load();
+      await pumpEventQueue();
+
+      expect(vm.state.selectedEntryId, 'i-bbc-1');
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-3'),
+        DiscoveryItemState.available,
+        reason: 'a downloaded episode reads as downloaded without being '
+            'selected first',
+      );
+      expect(vm.localPathFor('i-bbc-3'), '/library/three.mp3');
+      expect(
+        vm.state.acquisitionStateOf('i-bbc-2'),
+        DiscoveryItemState.acquirable,
+      );
     });
 
     test('a record whose file Core no longer knows is dropped', () async {

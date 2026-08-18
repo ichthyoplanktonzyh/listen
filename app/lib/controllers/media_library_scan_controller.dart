@@ -240,10 +240,10 @@ class MediaLibraryScanController extends ChangeNotifier {
         // The default app-managed store is a real, scannable location (it is
         // created on demand by the composition root) — only a *custom*
         // location that went off disk is a missing-folder story.
-        case ManagedStoreState.appManaged:
-        case ManagedStoreState.ready:
+        case StorageLocationState.appManaged:
+        case StorageLocationState.ready:
           break;
-        case ManagedStoreState.missing:
+        case StorageLocationState.missing:
           _reset(MediaLibraryScanStatus.folderMissing);
           return;
       }

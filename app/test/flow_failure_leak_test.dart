@@ -352,6 +352,9 @@ final class _UnavailableManagedStore implements ManagedAssetStoreService {
   @override
   Future<List<int>?> readBytes(String path) async => null;
   @override
+  bool contains(String path) => false;
+
+  @override
   Future<void> deleteStoreCopy(String path) async {}
 }
 

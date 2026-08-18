@@ -93,6 +93,36 @@ class AcquisitionLedger {
 
   bool get isLoaded => _loaded;
 
+  /// Separates a source's identity from an item's inside a key.
+  ///
+  /// A NUL cannot occur in either half, so the split is unambiguous however
+  /// exotic a feed URL or a guid gets. Keys are source-scoped because two
+  /// feeds may publish the same item id, and a record written for one must
+  /// never answer for the other.
+  static const keySeparator = '\u0000';
+
+  static String keyFor({required String sourceId, required String itemId}) =>
+      '$sourceId$keySeparator$itemId';
+
+  static ({String sourceId, String itemId}) splitKey(String entryId) {
+    final index = entryId.indexOf(keySeparator);
+    if (index < 0) return (sourceId: '', itemId: entryId);
+    return (
+      sourceId: entryId.substring(0, index),
+      itemId: entryId.substring(index + keySeparator.length),
+    );
+  }
+
+  /// Every acquisition on record, oldest first.
+  ///
+  /// The order is the order things were downloaded in: the map is written and
+  /// read back in insertion order, and nothing here carries a timestamp. A
+  /// surface that wants newest-first reverses it rather than inventing a date.
+  List<({String entryId, AcquiredMedia media})> get acquisitions => [
+    for (final entry in _entries.entries)
+      (entryId: entry.key, media: entry.value),
+  ];
+
   Future<void> record(
     String entryId, {
     required String mediaId,

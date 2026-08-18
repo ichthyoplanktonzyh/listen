@@ -21,8 +21,9 @@ void main() {
 
     final discovery = DiscoveryViewModel(
       FixtureDiscoveryRepository(),
-      TestMediaImportRepository(),
-      TestMediaLibraryRepository(),
+      importRepository: TestMediaImportRepository(),
+      mediaLibraryRepository: TestMediaLibraryRepository(),
+      fileService: TestMediaFileService(),
     );
     addTearDown(discovery.dispose);
     await tester.runAsync(discovery.load);

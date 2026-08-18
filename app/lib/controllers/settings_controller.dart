@@ -103,7 +103,7 @@ class SettingsController extends ChangeNotifier {
 
   // ── Managed asset store location ──
 
-  ManagedStoreState _managedStoreState = ManagedStoreState.appManaged;
+  StorageLocationState _managedStoreState = StorageLocationState.appManaged;
 
   /// The persisted path together with what the disk says about it. Resolved
   /// when the path changes and on demand, never on every read: this is disk
@@ -159,10 +159,80 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Downloads location ──
+
+  StorageLocationState _downloadsState = StorageLocationState.appManaged;
+
+  /// Where acquired media lands, with what the disk says about it.
+  ///
+  /// Separate from [managedStoreLocation] on purpose: that store holds what
+  /// the learner kept, content-addressed and digest-named, and a download is
+  /// not kept.
+  DownloadsLocation get downloadsLocation => (
+    path: _settings.downloadsPath.isEmpty
+        ? AppSettings.defaultDownloadsPath
+        : _settings.downloadsPath,
+    state: _downloadsState,
+  );
+
+  /// The stored custom downloads path (empty when the default applies).
+  String get downloadsPath => _settings.downloadsPath;
+
+  Future<DownloadsLocation> chooseDownloadsLocation({
+    required String confirmButtonText,
+  }) async {
+    final picked = await files.pickDownloadDirectory(
+      confirmButtonText: confirmButtonText,
+    );
+    if (picked == null || picked.isEmpty) return downloadsLocation;
+    return setDownloadsPath(picked);
+  }
+
+  Future<DownloadsLocation> setDownloadsPath(String path) async {
+    _settings = _settings.copyWith(downloadsPath: path);
+    _downloadsState = await _settings.resolveDownloadsState();
+    notifyListeners();
+    await save();
+    return downloadsLocation;
+  }
+
+  /// Forgets the custom location, returning downloads to the app-managed
+  /// default.
+  Future<DownloadsLocation> clearDownloadsLocation() => setDownloadsPath('');
+
+  Future<void> refreshDownloadsState() async {
+    final next = await _settings.resolveDownloadsState();
+    if (next == _downloadsState) return;
+    _downloadsState = next;
+    notifyListeners();
+  }
+
+  /// The folder an acquisition should write into, creating the app-managed
+  /// default on first use.
+  ///
+  /// A custom location that went off disk is not silently replaced: the
+  /// chooser is opened once so the learner can say where it went, and the
+  /// answer is persisted. Null means they declined — the acquisition then ends
+  /// without a path rather than writing somewhere nobody asked for.
+  Future<String?> resolveDownloadsDirectory({
+    required String confirmButtonText,
+  }) async {
+    final resolved = await _settings.ensureDownloadsDirectory();
+    if (resolved != null) return resolved;
+    await refreshDownloadsState();
+    final picked = await files.pickDownloadDirectory(
+      confirmButtonText: confirmButtonText,
+    );
+    if (picked == null || picked.isEmpty) return null;
+    await setDownloadsPath(picked);
+    return picked;
+  }
+
   /// Load settings from disk and notify listeners.
   Future<void> load() async {
     _settings = await AppSettings.load();
     _managedStoreState = await _settings.resolveManagedStoreState();
+    _downloadsState = await _settings.resolveDownloadsState();
     notifyListeners();
   }
 
