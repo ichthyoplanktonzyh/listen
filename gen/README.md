@@ -69,6 +69,50 @@ source .venv/bin/activate && listen-gen gui
 
 The GUI workbench is served at `http://127.0.0.1:8420` and allows managing LLM, ASR (Whisper.cpp), phonetic models (Wav2Vec2), alignment, TTS, running connectivity tests, and launching generation pipelines.
 
+The workbench ships as a zero-runtime-dependency stack (Python standard
+library server + single-file frontend) with:
+
+- **Provider management** — LLM profiles (DeepSeek/OpenAI/Anthropic/Gemini/
+  custom), Whisper.cpp, Wav2Vec2, aligner and TTS configuration persisted to
+  `~/.listen-gen/profiles.json`, with connectivity tests and validation on
+  save.
+- **Generation pipeline** — submit a bounded capability request from document
+  or media input, watch the live v2 machine-event stream (accept → plan →
+  running → completed/cancelled/failed), download the produced Content
+  Package v3, or cancel a running task between stages.
+- **Run queue with a concurrency cap** — submissions run through a FIFO
+  scheduler that starts at most `$LISTEN_GEN_MAX_CONCURRENT_RUNS` workers in
+  parallel (default 2, set to 1 to fully serialize); extra requests stay
+  `queued` (with their position shown) and can be cancelled before they
+  start. This prevents a burst of clicks from spawning many heavy
+  subprocesses (`say` / `whisper.cpp`) at once.
+- **One-click rerun** — every task stores its request and config snapshot, so
+  a finished run can be re-submitted verbatim (source files re-verified on
+  disk, digests recomputed); text inputs are persisted under
+  `~/.listen-gen/sources` so they can be re-read.
+- **Persistent artifacts** — produced packages live in
+  `~/.listen-gen/artifacts` and stay downloadable across restarts.
+- **Persistent task history** — every run is recorded in
+  `~/.listen-gen/tasks.json` and survives restarts; the 任务历史 tab lists
+  past runs with per-task event replay, status, timestamps and artifact
+  download. Tasks still queued/running when the server exits are restored as
+  failed with an honest `server_restarted` error.
+- **Per-task stats & export** — the task detail panel shows total duration,
+  per-stage timings and the packaged resource/media manifest; the full event
+  log (with recorded timestamps) can be downloaded as JSON.
+- **Resilient event streaming** — SSE frames carry per-task sequence ids, so
+  a dropped connection resumes from the last delivered event
+  (`Last-Event-ID`) instead of re-reading from the start.
+- **Streaming file uploads** — documents, media and subtitles are sent as
+  `multipart/form-data` with progress feedback (no base64 memory blowups for
+  large files); stale uploads and sources are pruned after 7 days.
+
+Run the GUI test coverage with:
+
+```bash
+python -m unittest tests.test_gui -v
+```
+
 ## Deterministic release bundle
 
 A deterministic, verifiable release bundle can be built from a clean

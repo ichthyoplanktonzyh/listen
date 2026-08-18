@@ -582,6 +582,206 @@
       transform: translateY(0);
       opacity: 1;
     }
+
+    /* Nav item count badge */
+    .nav-count {
+      margin-left: auto;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 6px;
+    }
+    .nav-item.active .nav-count {
+      color: #60a5fa;
+      border-color: rgba(96, 165, 250, 0.4);
+    }
+
+    /* Task history list */
+    .task-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 0.75rem;
+      align-items: center;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .task-row:hover {
+      border-color: var(--border-focus);
+      background-color: var(--bg-surface-hover);
+    }
+    .task-row-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .task-row-meta {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .task-row-actions {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 2.5rem 1rem;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    /* Task detail */
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .detail-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .detail-meta {
+      font-size: 0.83rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Cancel button */
+    .btn-danger {
+      background-color: var(--danger);
+      color: white;
+    }
+    .btn-danger:hover {
+      filter: brightness(1.1);
+    }
+    .btn-danger:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Upload progress */
+    .upload-progress {
+      height: 4px;
+      border-radius: 9999px;
+      background-color: var(--bg-surface-hover);
+      overflow: hidden;
+      margin-top: 0.55rem;
+      display: none;
+    }
+    .upload-progress.visible {
+      display: block;
+    }
+    .upload-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary), #10b981);
+      transition: width 0.2s ease;
+    }
+
+    /* Form validation */
+    .field-error {
+      color: var(--danger);
+      font-size: 0.78rem;
+      margin-top: 0.3rem;
+      display: none;
+    }
+    .field-error.visible {
+      display: block;
+    }
+    .form-input.invalid, .form-select.invalid, .form-textarea.invalid {
+      border-color: var(--danger);
+      box-shadow: 0 0 0 3px var(--danger-bg);
+    }
+    .error-summary {
+      background-color: var(--danger-bg);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      border-radius: var(--radius-sm);
+      padding: 0.7rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .error-summary.visible {
+      display: block;
+    }
+    .error-summary ul {
+      margin: 0.4rem 0 0 1.1rem;
+    }
+
+    /* Queued badge + task stats */
+    .badge-neutral {
+      background-color: var(--bg-surface-hover);
+      color: var(--text-muted);
+    }
+    .task-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .stat-card {
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 0.85rem;
+    }
+    .stat-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.2rem;
+    }
+    .stat-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .stage-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-top: 0.5rem;
+    }
+    .stage-table th, .stage-table td {
+      text-align: left;
+      padding: 0.3rem 0.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .stage-table th {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .resource-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9999px;
+      padding: 0.15rem 0.5rem;
+      margin: 0.15rem 0.25rem 0 0;
+      color: var(--text-muted);
+    }
   </style>
 </head>
 <body>
@@ -619,6 +819,11 @@
       <button class="nav-item" data-tab="toolchain">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         <span>系统工具链</span>
+      </button>
+      <button class="nav-item" data-tab="tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <span>任务历史</span>
+        <span class="nav-count" id="nav-task-count" style="display:none;">0</span>
       </button>
     </aside>
 
@@ -826,6 +1031,8 @@
               <input type="file" id="doc-file-input" style="display: none;" accept=".md,.markdown,.txt,.pdf,.epub,.html,.htm">
             </div>
 
+            <div class="upload-progress"><div class="upload-progress-bar" id="doc-upload-bar"></div></div>
+
             <div id="doc-file-card" class="file-card" style="display: none;">
               <div class="file-card-left">
                 <span class="file-card-icon">📄</span>
@@ -859,6 +1066,8 @@
               <input type="file" id="media-file-input" style="display: none;" accept=".mp4,.m4v,.mov,.mkv,.mp3,.wav,.m4a,.flac">
             </div>
 
+            <div class="upload-progress"><div class="upload-progress-bar" id="media-upload-bar"></div></div>
+
             <div id="media-file-card" class="file-card" style="display: none;">
               <div class="file-card-left">
                 <span class="file-card-icon">🎵</span>
@@ -885,6 +1094,7 @@
               <span id="sub-file-name" style="font-size: 0.85rem; color: var(--text-muted);">未选择字幕</span>
               <button id="btn-remove-sub" class="btn-danger-link" style="display: none;" onclick="removeSubFile()">✕ 移除</button>
             </div>
+            <div class="upload-progress"><div class="upload-progress-bar" id="sub-upload-bar"></div></div>
           </div>
         </div>
 
@@ -921,6 +1131,10 @@
             </label>
           </div>
 
+          <div style="margin-top: 1rem;">
+            <div class="error-summary" id="workbench-errors"></div>
+          </div>
+
           <div style="margin-top: 1.5rem;">
             <button class="btn btn-primary" id="btn-start-produce" style="padding: 0.75rem 1.75rem; font-size: 0.95rem;">
               🚀 开始生成 Content Package v3
@@ -937,11 +1151,14 @@
 
           <div class="terminal-box" id="task-terminal"></div>
 
-          <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between;">
+          <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
             <div id="task-result-info" style="font-size: 0.88rem; color: var(--text-muted);"></div>
-            <a id="btn-download-pkg" class="btn btn-success btn-sm" style="display: none;" target="_blank">
-              📦 下载 Content Package v3 (.zip)
-            </a>
+            <div style="display: flex; gap: 0.75rem; align-items: center;">
+              <button class="btn btn-danger btn-sm" id="btn-cancel-produce" style="display: none;">⏹ 取消任务</button>
+              <a id="btn-download-pkg" class="btn btn-success btn-sm" style="display: none;" target="_blank">
+                📦 下载 Content Package v3 (.zip)
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -962,10 +1179,45 @@
         </div>
       </section>
 
+      <!-- TAB 4: Task History -->
+      <section id="tab-tasks" class="tab-pane">
+        <div class="section-header">
+          <h2 class="section-title">🕘 任务历史</h2>
+          <p class="section-desc">所有生成任务已持久化到 ~/.listen-gen/tasks.json，重启 GUI 后仍然保留；点击任务可回放完整事件流。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📋 生成任务</h3>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-tasks">🔄 刷新列表</button>
+          </div>
+          <div id="task-list" class="task-list"></div>
+        </div>
+
+        <div class="card" id="task-detail" style="display: none;">
+          <div class="detail-header">
+            <div>
+              <div class="detail-title" id="task-detail-title">任务详情</div>
+              <div class="detail-meta" id="task-detail-meta"></div>
+            </div>
+            <div style="display:flex; gap: 0.6rem; align-items:center; flex-wrap: wrap;">
+              <span id="task-detail-badge"></span>
+              <button class="btn btn-secondary btn-sm" id="btn-rerun-task" title="使用本次请求与配置快照重新生成">↻ 一键重跑</button>
+              <a id="btn-export-task" class="btn btn-secondary btn-sm" title="导出完整事件日志 JSON">⬇ 导出日志</a>
+              <button class="btn btn-danger btn-sm" id="btn-cancel-task" style="display:none;">⏹ 取消任务</button>
+              <a id="task-detail-download" class="btn btn-success btn-sm" style="display:none;" target="_blank">📦 下载产物</a>
+              <button class="btn btn-secondary btn-sm" id="btn-close-task-detail">← 返回列表</button>
+            </div>
+          </div>
+          <div class="task-stats" id="task-stats"></div>
+          <div class="terminal-box" id="task-detail-terminal" style="height: 320px;"></div>
+        </div>
+      </section>
+
     </main>
   </div>
 
-  <div id="toast"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <script>
     // Global State
@@ -977,7 +1229,17 @@
       selectedDoc: null, // { path, filename, size_bytes, media_type, preview_text }
       selectedMedia: null, // { path, filename, size_bytes, media_type }
       selectedSubtitle: null, // { path, filename }
+      tasks: [],
+      activeTaskId: null,
+      streams: [], // active EventSource handles
     };
+
+    const SUPPORTED_CAPS = ['read', 'listen', 'watch', 'synchronized_read_listen'];
+    const TERMINAL_EVENTS = ['completed', 'cancelled', 'failed'];
+
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
 
     function showToast(message) {
       const toast = document.getElementById('toast');
@@ -994,6 +1256,350 @@
       return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
+    function formatTime(ts) {
+      if (!ts) return '—';
+      return new Date(ts * 1000).toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function badgeForStatus(status) {
+      const map = {
+        queued: ['badge-neutral', '排队中'],
+        running: ['badge-warning', '运行中'],
+        completed: ['badge-success', '已完成'],
+        failed: ['badge-danger', '失败'],
+        cancelled: ['', '已取消'],
+      };
+      const [cls, label] = map[status] || ['', status || '—'];
+      return `<span class="badge ${cls}"><span class="badge-dot"></span> ${label}</span>`;
+    }
+
+    function formatDuration(ms) {
+      if (ms == null || ms < 0) return '—';
+      if (ms < 1000) return ms.toFixed(0) + 'ms';
+      const s = ms / 1000;
+      if (s < 60) return s.toFixed(1) + 's';
+      const m = Math.floor(s / 60);
+      return m + 'm ' + Math.round(s % 60) + 's';
+    }
+
+    // Aggregate per-stage timing from running events (recorded_at timestamps).
+    function stageTimes(events) {
+      const buckets = new Map();
+      for (const e of events || []) {
+        if (e.event !== 'running' && e.type !== 'running') continue;
+        const t = (e.recorded_at || 0) * 1000;
+        const label = e.stage || e.message || '…';
+        let b = buckets.get(label);
+        if (!b) { b = { count: 0, first: t || null, last: t || null }; buckets.set(label, b); }
+        b.count += 1;
+        if (t) { if (b.first === null || t < b.first) b.first = t; if (t > b.last) b.last = t; }
+      }
+      return [...buckets.entries()]
+        .map(([label, b]) => ({ label, count: b.count, ms: b.first ? Math.max(0, b.last - b.first) : 0 }))
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 8);
+    }
+
+    function renderTaskStats(task) {
+      const box = document.getElementById('task-stats');
+      const events = task.events || [];
+      const start = task.created_at ? task.created_at * 1000 : 0;
+      const end = task.completed_at
+        ? task.completed_at * 1000
+        : (events[events.length - 1]?.recorded_at || task.created_at) * 1000;
+      const durationMs = end > start ? end - start : 0;
+      const warnings = events.filter(e => e.event === 'warning').length;
+      const completed = events.find(e => e.event === 'completed');
+      const resources = completed?.resources || [];
+      const mediaRenditions = completed?.media_renditions || [];
+
+      let html = `
+        <div class="stat-card"><div class="stat-label">总耗时</div><div class="stat-value">${formatDuration(durationMs)}</div></div>
+        <div class="stat-card"><div class="stat-label">事件数</div><div class="stat-value">${events.length}</div></div>
+        <div class="stat-card"><div class="stat-label">警告</div><div class="stat-value">${warnings}</div></div>
+        <div class="stat-card"><div class="stat-label">产出资源</div><div class="stat-value">${resources.length}</div></div>
+      `;
+
+      const stages = stageTimes(events);
+      if (stages.length) {
+        html += `
+          <div class="stat-card" style="grid-column: 1 / -1;">
+            <div class="stat-label">阶段耗时（Top）</div>
+            <table class="stage-table">
+              <tr><th>阶段</th><th>耗时</th><th>事件</th></tr>
+              ${stages.map(s =>
+                `<tr><td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(s.label)}</td>` +
+                `<td>${formatDuration(s.ms)}</td><td>${s.count}</td></tr>`).join('')}
+            </table>
+          </div>`;
+      }
+
+      if (mediaRenditions.length || resources.length) {
+        html += `
+          <div class="stat-card" style="grid-column: 1 / -1;">
+            <div class="stat-label">清单</div>
+            <div>
+              ${mediaRenditions.map(r =>
+                `<span class="resource-chip">🎵 ${escapeHtml(r.rendition_id || '')} · ${escapeHtml(r.origin || '')}</span>`).join('')}
+              ${resources.map(r =>
+                `<span class="resource-chip">📄 ${escapeHtml(r.kind || '')} ${escapeHtml(r.resource_id || '')}</span>`).join('')}
+            </div>
+          </div>`;
+      }
+      box.innerHTML = html;
+    }
+
+    // ---- v2 machine protocol event rendering (shared by monitor + history) ----
+    function eventLine(event) {
+      const kind = event.event || event.type;
+      switch (kind) {
+        case 'protocol':
+          return { cls: 'info', text: `[协议] ${event.schema || ''} v${event.protocol_version || '?'} · tool ${(event.tool || {}).id || '?'}@${(event.tool || {}).version || '?'}` };
+        case 'accepted':
+          return { cls: 'info', text: `[已受理] attempt=${event.attempt_id}` };
+        case 'planned': {
+          const plan = event.plan || {};
+          const derivs = Array.isArray(plan.derivations)
+            ? plan.derivations.map(d => (d && d.kind) || d)
+            : [];
+          return { cls: 'info', text: `[计划] ${derivs.length ? derivs.length + ' 条推导: ' + derivs.join(', ') : JSON.stringify(plan)}` };
+        }
+        case 'running':
+          return { cls: 'info', text: `[执行] ${event.stage || ''}${event.message ? ' — ' + event.message : ''}` };
+        case 'warning':
+          return { cls: 'warning', text: `[警告:${event.code}] ${event.message}` };
+        case 'completed':
+          return { cls: 'success', text: `[完成] ${(event.resources || []).length} 个资源 · ${(event.media_renditions || []).length} 条媒体音轨 · sha256=${event.package_sha256 || 'n/a'}` };
+        case 'cancelled':
+          return { cls: 'warning', text: '[已取消] 用户中止了本次生成' };
+        case 'failed':
+          return { cls: 'error', text: `[失败:${event.code}] ${event.message}` };
+        case 'terminal': {
+          const cls = event.status === 'completed' ? 'success' : (event.status === 'cancelled' ? 'warning' : 'error');
+          return { cls, text: `[任务结束] ${event.status}${event.error ? ' · ' + event.error : ''}${event.package_path ? ' · ' + event.package_path : ''}` };
+        }
+        default:
+          return { cls: 'info', text: '[事件] ' + JSON.stringify(event) };
+      }
+    }
+
+    function appendTerminal(terminalEl, event) {
+      const { cls, text } = eventLine(event);
+      const line = document.createElement('div');
+      line.className = 'terminal-line ' + cls;
+      line.textContent = text;
+      terminalEl.appendChild(line);
+      terminalEl.scrollTop = terminalEl.scrollHeight;
+    }
+
+    // ---- file upload: multipart streaming with progress (no base64 blowup) ----
+    function uploadFile(file, progressEl) {
+      return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('file', file);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        if (progressEl) {
+          progressEl.closest('.upload-progress')?.classList.add('visible');
+          progressEl.style.width = '0%';
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              progressEl.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+            }
+          };
+        }
+        xhr.onload = () => {
+          let data = {};
+          try { data = JSON.parse(xhr.responseText || '{}'); } catch (_) { /* keep {} */ }
+          if (progressEl) progressEl.closest('.upload-progress')?.classList.remove('visible');
+          if (xhr.status >= 200 && xhr.status < 300 && data.status === 'ok') {
+            resolve(data);
+          } else {
+            reject(new Error(data.error || '上传失败'));
+          }
+        };
+        xhr.onerror = () => {
+          if (progressEl) progressEl.closest('.upload-progress')?.classList.remove('visible');
+          reject(new Error('上传网络错误'));
+        };
+        xhr.ontimeout = () => {
+          if (progressEl) progressEl.closest('.upload-progress')?.classList.remove('visible');
+          reject(new Error('上传超时'));
+        };
+        xhr.send(form);
+      });
+    }
+
+    // ---- task history tab ----
+    async function loadTasks(quiet) {
+      try {
+        const res = await fetch('/api/tasks');
+        const data = await res.json();
+        state.tasks = data.tasks || [];
+        renderTaskList();
+      } catch (err) {
+        if (!quiet) showToast('加载任务历史失败: ' + err.message);
+      }
+    }
+
+    function renderTaskList() {
+      const count = state.tasks.length;
+      const navCount = document.getElementById('nav-task-count');
+      navCount.textContent = String(count);
+      navCount.style.display = count > 0 ? 'inline-flex' : 'none';
+
+      const list = document.getElementById('task-list');
+      if (count === 0) {
+        list.innerHTML = '<div class="empty-state">暂无任务记录。去「生成工作台」发起一次生成，任务会出现在这里。</div>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const task of state.tasks) {
+        const row = document.createElement('div');
+        row.className = 'task-row';
+        row.tabIndex = 0;
+        row.setAttribute('role', 'button');
+        row.setAttribute('aria-label', `查看任务 ${task.task_id}`);
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTaskDetail(task.task_id); }
+        });
+
+        const queuedInfo = task.status === 'queued' && task.queued_position
+          ? ` · 排队 #${task.queued_position}` : '';
+        const info = document.createElement('div');
+        info.innerHTML = `
+          <div class="task-row-title">${escapeHtml(task.title || task.material_id || task.task_id)}</div>
+          <div class="task-row-meta">${task.task_id} · ${formatTime(task.created_at)}${queuedInfo}${task.capability ? ' · ' + task.capability : ''} · ${task.event_count} 个事件</div>
+        `;
+
+        const badge = document.createElement('div');
+        badge.innerHTML = badgeForStatus(task.status);
+
+        const actions = document.createElement('div');
+        actions.className = 'task-row-actions';
+        const detailBtn = document.createElement('button');
+        detailBtn.className = 'btn btn-secondary btn-sm';
+        detailBtn.textContent = '详情';
+        detailBtn.addEventListener('click', (e) => { e.stopPropagation(); openTaskDetail(task.task_id); });
+        actions.appendChild(detailBtn);
+        if (task.status === 'running' || task.status === 'queued') {
+          const cancelBtn = document.createElement('button');
+          cancelBtn.className = 'btn btn-danger btn-sm';
+          cancelBtn.textContent = task.status === 'queued' ? '取消排队' : '取消';
+          cancelBtn.addEventListener('click', (e) => { e.stopPropagation(); cancelTask(task.task_id); });
+          actions.appendChild(cancelBtn);
+        } else if (task.status === 'completed' && task.download_url) {
+          const dl = document.createElement('a');
+          dl.className = 'btn btn-success btn-sm';
+          dl.href = task.download_url;
+          dl.textContent = '下载';
+          actions.appendChild(dl);
+        }
+
+        row.appendChild(info);
+        row.appendChild(badge);
+        row.appendChild(actions);
+        row.addEventListener('click', () => openTaskDetail(task.task_id));
+        list.appendChild(row);
+      }
+    }
+
+    async function openTaskDetail(id) {
+      state.activeTaskId = id;
+      try {
+        const res = await fetch(`/api/tasks/${id}`);
+        const data = await res.json();
+        renderTaskDetail(data.task);
+      } catch (err) {
+        showToast('加载任务详情失败: ' + err.message);
+      }
+    }
+
+    function renderTaskDetail(task) {
+      if (!task) return;
+      const detail = document.getElementById('task-detail');
+      const terminal = document.getElementById('task-detail-terminal');
+      document.getElementById('task-detail-title').textContent = task.title || task.material_id || task.task_id;
+      document.getElementById('task-detail-meta').textContent =
+        `${task.task_id} · ${formatTime(task.created_at)}${task.completed_at ? ' → ' + formatTime(task.completed_at) : ''}${task.capability ? ' · ' + task.capability : ''}`;
+      document.getElementById('task-detail-badge').innerHTML = badgeForStatus(task.status);
+
+      const cancelBtn = document.getElementById('btn-cancel-task');
+      const isActive = task.status === 'running' || task.status === 'queued';
+      cancelBtn.style.display = isActive ? 'inline-flex' : 'none';
+      cancelBtn.disabled = false;
+      cancelBtn.textContent = task.status === 'queued' ? '⏹ 取消排队' : '⏹ 取消任务';
+
+      const rerunBtn = document.getElementById('btn-rerun-task');
+      rerunBtn.style.display = isActive ? 'none' : 'inline-flex';
+      rerunBtn.disabled = false;
+
+      const exportLink = document.getElementById('btn-export-task');
+      exportLink.href = `/api/tasks/${task.task_id}/events/export`;
+
+      const downloadBtn = document.getElementById('task-detail-download');
+      downloadBtn.style.display = task.status === 'completed' ? 'inline-flex' : 'none';
+      if (task.status === 'completed') downloadBtn.href = `/api/download/${task.task_id}`;
+
+      renderTaskStats(task);
+
+      terminal.innerHTML = '';
+      for (const event of task.events || []) appendTerminal(terminal, event);
+      detail.style.display = 'block';
+      detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      if (task.status === 'running') {
+        attachTaskStream(task.task_id, terminal, () => {
+          loadTasks(true);
+          refreshTaskSummary(task.task_id);
+        });
+      }
+    }
+
+    function refreshTaskSummary(id) {
+      fetch(`/api/tasks/${id}`)
+        .then(r => r.json())
+        .then(({ task }) => { if (task) renderTaskDetail(task); })
+        .catch(() => {});
+    }
+
+    async function cancelTask(id) {
+      try {
+        const res = await fetch(`/api/tasks/${id}/cancel`, { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || (data.status === 'cancelling'
+          ? '已发送取消请求，任务将在当前阶段结束后停止'
+          : '操作完成'));
+        loadTasks(true);
+        if (state.activeTaskId === id) refreshTaskSummary(id);
+      } catch (err) {
+        showToast('取消请求发送失败: ' + err.message);
+      }
+    }
+
+    // SSE subscription with automatic reconnect: the server sends `id: <seq>`
+    // frames, so the browser's native Last-Event-ID resumes the stream after
+    // a dropped connection and we dedupe by seq.
+    function attachTaskStream(id, terminalEl, onDone) {
+      const es = new EventSource(`/api/tasks/${id}/events`);
+      state.streams.push(es);
+      let lastShown = -1;
+      es.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          if (typeof event.seq === 'number' && event.seq <= lastShown) return; // dedupe after resume
+          if (typeof event.seq === 'number') lastShown = event.seq;
+          appendTerminal(terminalEl, event);
+          const isTerminal = event.type === 'terminal' || TERMINAL_EVENTS.includes(event.event);
+          if (isTerminal) {
+            es.close();
+            if (onDone) onDone();
+          }
+        } catch (err) { /* ignore malformed frames */ }
+      };
+      // onerror deliberately left open: EventSource retries with Last-Event-ID.
+    }
+
     // Tab Navigation
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1003,6 +1609,7 @@
         const tab = btn.dataset.tab;
         document.getElementById(`tab-${tab}`).classList.add('active');
         state.activeTab = tab;
+        if (tab === 'tasks') loadTasks(true);
       });
     });
 
@@ -1022,37 +1629,39 @@
       document.getElementById('doc-text-section').style.display = mode === 'text' ? 'block' : 'none';
     }
 
-    // Helper: Upload File to Backend
-    async function uploadFile(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          try {
-            const base64 = reader.result.split(',')[1];
-            const res = await fetch('/api/upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                filename: file.name,
-                size: file.size,
-                type: file.type,
-                content_base64: base64,
-              }),
-            });
-            const data = await res.json();
-            if (res.ok && data.status === 'ok') {
-              resolve(data);
-            } else {
-              reject(new Error(data.error || 'Upload failed'));
-            }
-          } catch (e) {
-            reject(e);
-          }
-        };
-        reader.onerror = () => reject(new Error('Failed to read file'));
-        reader.readAsDataURL(file);
-      });
-    }
+    // Task history tab controls
+    document.getElementById('btn-refresh-tasks').addEventListener('click', () => loadTasks());
+    document.getElementById('btn-close-task-detail').addEventListener('click', () => {
+      document.getElementById('task-detail').style.display = 'none';
+      state.activeTaskId = null;
+    });
+    document.getElementById('btn-cancel-task').addEventListener('click', () => {
+      if (state.activeTaskId) cancelTask(state.activeTaskId);
+    });
+
+    document.getElementById('btn-rerun-task').addEventListener('click', async () => {
+      const id = state.activeTaskId;
+      if (!id) return;
+      const btn = document.getElementById('btn-rerun-task');
+      btn.disabled = true;
+      btn.textContent = '↻ 提交中...';
+      try {
+        const res = await fetch(`/api/tasks/${id}/rerun`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          showToast('❌ 重跑失败: ' + (data.message || data.error || '未知错误'));
+        } else {
+          showToast('✅ 已提交重跑，任务 ' + data.task_id + ' 已进入队列');
+          loadTasks(true);
+          openTaskDetail(data.task_id);
+        }
+      } catch (err) {
+        showToast('❌ 重跑请求出错: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '↻ 一键重跑';
+      }
+    });
 
     // Document File Handling
     document.getElementById('doc-file-input').addEventListener('change', async (e) => {
@@ -1060,7 +1669,7 @@
       if (!file) return;
       try {
         showToast(`正在载入文档: ${file.name}...`);
-        const info = await uploadFile(file);
+        const info = await uploadFile(file, document.getElementById('doc-upload-bar'));
         state.selectedDoc = info;
         renderDocCard();
         
@@ -1109,7 +1718,7 @@
       if (!file) return;
       try {
         showToast(`正在载入音视频: ${file.name}...`);
-        const info = await uploadFile(file);
+        const info = await uploadFile(file, document.getElementById('media-upload-bar'));
         state.selectedMedia = info;
         document.getElementById('work-media-path').value = info.path;
         renderMediaCard();
@@ -1155,7 +1764,7 @@
       const file = e.target.files[0];
       if (!file) return;
       try {
-        const info = await uploadFile(file);
+        const info = await uploadFile(file, document.getElementById('sub-upload-bar'));
         state.selectedSubtitle = info;
         document.getElementById('sub-file-name').textContent = `${file.name} (${formatBytes(file.size)})`;
         document.getElementById('btn-remove-sub').style.display = 'inline-block';
@@ -1323,7 +1932,12 @@
         if (res.ok) {
           showToast('✅ 全局 Provider 配置已保存到 ~/.listen-gen/profiles.json');
         } else {
-          showToast('❌ 保存失败');
+          const data = await res.json().catch(() => ({}));
+          if (data.errors && data.errors.length) {
+            showToast('❌ ' + data.errors.join('；'));
+          } else {
+            showToast('❌ ' + (data.message || '保存失败'));
+          }
         }
       } catch (err) {
         showToast('保存出错: ' + err.message);
@@ -1427,7 +2041,73 @@
     });
 
     // Production Execution & SSE Event Stream
+    let monitorES = null;
+    let monitorTaskId = null;
+
+    function clearFieldErrors() {
+      document.querySelectorAll('.form-input.invalid, .form-select.invalid, .form-textarea.invalid')
+        .forEach(el => el.classList.remove('invalid'));
+      document.getElementById('workbench-errors').classList.remove('visible');
+    }
+
+    function markFieldInvalid(fieldId) {
+      const el = document.getElementById(fieldId);
+      if (el) el.classList.add('invalid');
+    }
+
+    function validateWorkbench() {
+      clearFieldErrors();
+      const errors = [];
+      const id = document.getElementById('work-material-id').value.trim();
+      const title = document.getElementById('work-title').value.trim();
+      const lang = document.getElementById('work-target-lang').value.trim();
+      const cap = document.getElementById('work-capability').value;
+      const docText = document.getElementById('work-doc-text').value.trim();
+      const mediaPath = document.getElementById('work-media-path').value.trim();
+
+      if (!id) { errors.push({ field: 'work-material-id', msg: '素材唯一 ID 不能为空' }); }
+      if (!title) { errors.push({ field: 'work-title', msg: '素材标题不能为空' }); }
+      if (!lang) { errors.push({ field: 'work-target-lang', msg: '目标语言不能为空' }); }
+      if (!SUPPORTED_CAPS.includes(cap)) { errors.push({ field: 'work-capability', msg: '不支持的能力: ' + cap }); }
+
+      const hasDoc = state.docMode === 'text' ? !!docText : !!state.selectedDoc;
+      const hasMedia = !!state.selectedMedia || !!mediaPath;
+      if (!hasDoc && !hasMedia) {
+        errors.push({ field: 'work-media-path', msg: '需要至少一份文档素材或音视频素材' });
+        errors.push({ field: 'work-doc-text', msg: '需要至少一份文档素材或音视频素材' });
+      }
+      if (cap === 'listen' && !hasDoc) {
+        errors.push({ field: 'work-doc-text', msg: 'listen 能力需要文档输入（文本或文件）' });
+      }
+
+      if (errors.length) {
+        const summary = document.getElementById('workbench-errors');
+        const seen = [...new Set(errors.map(e => e.msg))];
+        summary.innerHTML = '请修正以下问题：<ul>' + seen.map(m => `<li>${m}</li>`).join('') + '</ul>';
+        summary.classList.add('visible');
+        for (const e of errors) markFieldInvalid(e.field);
+      }
+      return errors.length === 0;
+    }
+
+    function renderServerErrors(taskInfo) {
+      const terminal = document.getElementById('task-terminal');
+      if (taskInfo.errors && Array.isArray(taskInfo.errors)) {
+        for (const e of taskInfo.errors) {
+          terminal.innerHTML += `<div class="terminal-line error">[校验] ${(e.field || '')}: ${e.message}</div>`;
+          if (e.field) markFieldInvalid(e.field);
+        }
+      } else {
+        terminal.innerHTML += `<div class="terminal-line error">[ERR] ${taskInfo.error || '请求失败'}</div>`;
+      }
+    }
+
     document.getElementById('btn-start-produce').addEventListener('click', async () => {
+      if (!validateWorkbench()) {
+        showToast('❌ 请先修正表单中的问题');
+        return;
+      }
+
       const materialId = document.getElementById('work-material-id').value.trim() || 'demo-material';
       const title = document.getElementById('work-title').value.trim() || 'Untitled Material';
       const targetLang = document.getElementById('work-target-lang').value.trim() || 'en-US';
@@ -1443,16 +2123,20 @@
       const statusBadge = document.getElementById('task-status-badge');
       const resultInfo = document.getElementById('task-result-info');
       const downloadBtn = document.getElementById('btn-download-pkg');
+      const cancelProduceBtn = document.getElementById('btn-cancel-produce');
 
+      if (monitorES) { monitorES.close(); monitorES = null; }
+      monitorTaskId = null;
       monitorCard.style.display = 'block';
       terminal.innerHTML = '<div class="terminal-line info">[SYS] 正在准备生成请求...</div>';
-      statusBadge.className = 'badge badge-warning';
-      statusBadge.textContent = '运行中...';
+      statusBadge.className = 'badge badge-neutral';
+      statusBadge.innerHTML = '<span class="badge-dot"></span> 排队中...';
       downloadBtn.style.display = 'none';
+      cancelProduceBtn.style.display = 'inline-flex';
+      cancelProduceBtn.disabled = false;
       resultInfo.textContent = '';
 
       const requestDoc = {
-        schema: "listen_gen.capability-request.v2",
         material_id: materialId,
         material_revision_id: `rev-${Date.now()}`,
         edition_id: `ed-${materialId}`,
@@ -1460,8 +2144,6 @@
         target_language: targetLang,
         support_languages: [],
         requested_capability: capability,
-        document_renditions: [],
-        media_renditions: [],
         available_resources: [],
       };
 
@@ -1487,74 +2169,85 @@
         });
         const taskInfo = await res.json();
 
-        if (taskInfo.error) {
-          terminal.innerHTML += `<div class="terminal-line error">[ERR] ${taskInfo.error}</div>`;
+        if (!res.ok || taskInfo.error) {
+          renderServerErrors(taskInfo);
           statusBadge.className = 'badge badge-danger';
           statusBadge.textContent = '启动失败';
+          cancelProduceBtn.style.display = 'none';
           return;
         }
 
-        terminal.innerHTML += `<div class="terminal-line info">[SYS] 任务已启动: ${taskInfo.task_id}</div>`;
-
-        const eventSource = new EventSource(taskInfo.events_url);
-
-        eventSource.onmessage = (e) => {
-          try {
-            const event = JSON.parse(e.data);
-            const line = document.createElement('div');
-            line.className = 'terminal-line';
-
-            if (event.event === 'started') {
-              line.className += ' info';
-              line.textContent = `[EVENT: started] capability=${event.requested_capability} material=${event.material_id}`;
-            } else if (event.event === 'step_started') {
-              line.className += ' info';
-              line.textContent = `[STEP: ${event.step}] ${event.detail || ''}`;
-            } else if (event.event === 'warning') {
-              line.className += ' warning';
-              line.textContent = `[WARN: ${event.code}] ${event.message}`;
-            } else if (event.event === 'committed') {
-              line.className += ' success';
-              line.textContent = `[EVENT: committed] package_sha256=${event.package_sha256}`;
-            } else if (event.event === 'completed') {
-              line.className += ' success';
-              line.textContent = `[EVENT: completed] package ready!`;
-            } else if (event.type === 'terminal') {
-              eventSource.close();
-              if (event.status === 'completed') {
-                statusBadge.className = 'badge badge-success';
-                statusBadge.textContent = '生成完成';
-                downloadBtn.href = taskInfo.download_url;
-                downloadBtn.style.display = 'inline-flex';
-                resultInfo.textContent = `✅ 产物 Content Package v3 构建成功！`;
-              } else {
-                statusBadge.className = 'badge badge-danger';
-                statusBadge.textContent = '生成失败';
-                resultInfo.textContent = `❌ 失败原因: ${event.error || '未知错误'}`;
-              }
-            } else {
-              line.textContent = `[EVENT] ${JSON.stringify(event)}`;
-            }
-
-            terminal.appendChild(line);
-            terminal.scrollTop = terminal.scrollHeight;
-          } catch (err) {
-            console.error(err);
-          }
-        };
-
-        eventSource.onerror = () => {
-          eventSource.close();
-        };
-
+        monitorTaskId = taskInfo.task_id;
+        terminal.innerHTML += `<div class="terminal-line info">[SYS] 任务已提交: ${taskInfo.task_id}${taskInfo.status === 'queued' ? '（排队中，或有空闲槽位立即运行）' : ''}</div>`;
+        loadTasks(true);
+        attachMonitor(taskInfo.task_id, terminal);
       } catch (err) {
         terminal.innerHTML += `<div class="terminal-line error">[ERR] ${err.message}</div>`;
+        cancelProduceBtn.style.display = 'none';
+      }
+    });
+
+    function attachMonitor(id, terminal) {
+      if (monitorES) { monitorES.close(); monitorES = null; }
+      const es = new EventSource(`/api/tasks/${id}/events`);
+      monitorES = es;
+      let lastShown = -1;
+      es.onmessage = (e) => {
+        try {
+          const event = JSON.parse(e.data);
+          if (typeof event.seq === 'number' && event.seq <= lastShown) return;
+          if (typeof event.seq === 'number') lastShown = event.seq;
+          const statusBadge = document.getElementById('task-status-badge');
+          // A live machine event means the run actually started (left queue).
+          if (statusBadge.textContent.includes('排队') && event.event) {
+            statusBadge.className = 'badge badge-warning';
+            statusBadge.innerHTML = '<span class="badge-dot"></span> 运行中';
+          }
+          appendTerminal(terminal, event);
+
+          const isTerminal = event.type === 'terminal' || TERMINAL_EVENTS.includes(event.event);
+          if (!isTerminal) return;
+
+          es.close();
+          monitorES = null;
+          const downloadBtn = document.getElementById('btn-download-pkg');
+          const cancelProduceBtn = document.getElementById('btn-cancel-produce');
+          const resultInfo = document.getElementById('task-result-info');
+          cancelProduceBtn.style.display = 'none';
+
+          const status = event.type === 'terminal' ? event.status : event.event;
+          if (status === 'completed') {
+            statusBadge.className = 'badge badge-success';
+            statusBadge.innerHTML = '<span class="badge-dot"></span> 生成完成';
+            downloadBtn.href = `/api/download/${id}`;
+            downloadBtn.style.display = 'inline-flex';
+            resultInfo.textContent = '✅ 产物 Content Package v3 构建成功！';
+          } else if (status === 'cancelled') {
+            statusBadge.className = 'badge';
+            statusBadge.textContent = '已取消';
+            resultInfo.textContent = '⏹ 任务已取消';
+          } else {
+            statusBadge.className = 'badge badge-danger';
+            statusBadge.textContent = '生成失败';
+            resultInfo.textContent = `❌ 失败原因: ${event.error || event.message || '未知错误'}`;
+          }
+          loadTasks(true);
+        } catch (err) { /* ignore malformed frames */ }
+      };
+      // onerror left open: EventSource reconnects with Last-Event-ID automatically.
+    }
+
+    document.getElementById('btn-cancel-produce').addEventListener('click', () => {
+      if (monitorTaskId) {
+        document.getElementById('btn-cancel-produce').disabled = true;
+        cancelTask(monitorTaskId);
       }
     });
 
     window.addEventListener('DOMContentLoaded', () => {
       loadConfig();
       loadToolchain();
+      loadTasks(true);
     });
   </script>
 </body>
