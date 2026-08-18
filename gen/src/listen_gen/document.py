@@ -35,7 +35,7 @@ import zipfile
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Callable, Protocol, Sequence
 
 from .package import ConversionError
 
@@ -790,6 +790,183 @@ class FixtureOcrProvider:
         if not text.strip():
             raise NoTextLayer("the OCR fixture contains no text")
         return text
+
+
+def _render_pdf_to_images(raw: bytes) -> list[Any]:
+    """Render a PDF into PIL images for OCR processing."""
+    # 1. Try pypdfium2 (fastest & standalone)
+    try:
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(raw)
+        images = []
+        for page in doc:
+            bitmap = page.render(scale=2.0)
+            images.append(bitmap.to_pil())
+        if images:
+            return images
+    except (ImportError, Exception):
+        pass
+
+    # 2. Try pdf2image
+    try:
+        from pdf2image import convert_from_bytes
+        images = convert_from_bytes(raw, dpi=150)
+        if images:
+            return images
+    except (ImportError, Exception):
+        pass
+
+    # 3. Try extracting embedded images from pypdf
+    try:
+        from pypdf import PdfReader
+        from PIL import Image
+        reader = PdfReader(io.BytesIO(raw))
+        images = []
+        for page in reader.pages:
+            for img_file in page.images:
+                images.append(Image.open(io.BytesIO(img_file.data)))
+        if images:
+            return images
+    except (ImportError, Exception):
+        pass
+
+    raise DocumentDecodeError(
+        "PDF page image rendering is unavailable. Install 'pypdfium2' or 'pdf2image' to enable OCR on PDF documents."
+    )
+
+
+class SuryaOcrProvider:
+    """Document OCR provider based on Surya OCR with layout analysis and reading order reconstruction."""
+
+    name = "surya"
+
+    def __init__(
+        self,
+        *,
+        langs: Sequence[str] = ("en", "zh"),
+        device: str | None = None,
+        engine: Callable[[list[Any]], str] | None = None,
+        pdf_renderer: Callable[[bytes], list[Any]] | None = None,
+    ):
+        self.langs = list(langs)
+        self.device = device
+        self.engine = engine
+        self.pdf_renderer = pdf_renderer
+
+    def extract_text(self, raw: bytes, media_type: str) -> str:
+        render_fn = self.pdf_renderer or _render_pdf_to_images
+        images = render_fn(raw)
+        if not images:
+            raise NoTextLayer("the PDF contains no renderable pages for OCR")
+
+        if self.engine is not None:
+            text = self.engine(images)
+            if not text.strip():
+                raise NoTextLayer("the OCR provider detected no text")
+            return text
+
+        try:
+            from surya.ocr import run_ocr
+            from surya.model.detection.model import (
+                load_model as load_det_model,
+                load_processor as load_det_proc,
+            )
+            from surya.model.recognition.model import (
+                load_model as load_rec_model,
+                load_processor as load_rec_proc,
+            )
+
+            det_processor, det_model = load_det_proc(), load_det_model(device=self.device)
+            rec_processor, rec_model = load_rec_proc(), load_rec_model(device=self.device)
+
+            langs_list = [self.langs for _ in images]
+            predictions = run_ocr(
+                images,
+                langs_list,
+                det_model,
+                det_processor,
+                rec_model,
+                rec_processor,
+            )
+
+            page_texts: list[str] = []
+            for pred in predictions:
+                lines = [line.text for line in getattr(pred, "text_lines", []) if line.text.strip()]
+                if lines:
+                    page_texts.append("\n".join(lines))
+
+            full_text = "\n\n".join(page_texts).strip()
+            if not full_text:
+                raise NoTextLayer("Surya OCR could not detect any text in the document")
+            return full_text
+        except ImportError as error:
+            raise DocumentDecodeError(
+                "Surya OCR is not installed. Install with 'pip install surya-ocr pypdfium2 pillow'"
+            ) from error
+        except NoTextLayer:
+            raise
+        except Exception as error:
+            raise DocumentDecodeError(f"Surya OCR failed during document extraction: {error}") from error
+
+
+class RapidOcrProvider:
+    """Fast, lightweight document OCR provider using RapidOCR (PP-OCR ONNX)."""
+
+    name = "rapidocr"
+
+    def __init__(
+        self,
+        *,
+        params: dict[str, Any] | None = None,
+        engine: Callable[[list[Any]], str] | None = None,
+        pdf_renderer: Callable[[bytes], list[Any]] | None = None,
+    ):
+        self.params = params or {}
+        self.engine = engine
+        self.pdf_renderer = pdf_renderer
+
+    def extract_text(self, raw: bytes, media_type: str) -> str:
+        render_fn = self.pdf_renderer or _render_pdf_to_images
+        images = render_fn(raw)
+        if not images:
+            raise NoTextLayer("the PDF contains no renderable pages for OCR")
+
+        if self.engine is not None:
+            text = self.engine(images)
+            if not text.strip():
+                raise NoTextLayer("the OCR provider detected no text")
+            return text
+
+        try:
+            import numpy as np
+            from rapidocr_onnxruntime import RapidOCR
+
+            ocr_engine = RapidOCR(**self.params)
+            page_texts: list[str] = []
+            for img in images:
+                img_np = np.array(img) if not isinstance(img, np.ndarray) else img
+                result, _ = ocr_engine(img_np)
+                if result:
+                    lines = [item[1] for item in result if item and len(item) > 1 and item[1].strip()]
+                    if lines:
+                        page_texts.append("\n".join(lines))
+
+            full_text = "\n\n".join(page_texts).strip()
+            if not full_text:
+                raise NoTextLayer("RapidOCR could not detect any text in the document")
+            return full_text
+        except ImportError as error:
+            raise DocumentDecodeError(
+                "RapidOCR is not installed. Install with 'pip install rapidocr-onnxruntime pypdfium2 pillow'"
+            ) from error
+        except NoTextLayer:
+            raise
+        except Exception as error:
+            raise DocumentDecodeError(f"RapidOCR failed during document extraction: {error}") from error
+        except NoTextLayer:
+            raise
+        except Exception as error:
+            raise DocumentDecodeError(f"RapidOCR failed during document extraction: {error}") from error
 
 
 def decode_pdf(raw: bytes, ocr: OcrProvider | None = None) -> str:

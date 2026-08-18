@@ -46,6 +46,7 @@ class TestGui(unittest.TestCase):
         self.assertIn("asr", cfg)
         self.assertIn("phones", cfg)
         self.assertIn("tts", cfg)
+        self.assertIn("ocr", cfg)
 
     def test_load_and_save_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -139,6 +140,10 @@ class TestConfigEnhancements(unittest.TestCase):
         bad_tts = dict(cfg)
         bad_tts["tts"] = {"provider": "bogus"}
         self.assertTrue(any("tts.provider" in p for p in validate_config(bad_tts)))
+
+        bad_ocr = dict(cfg)
+        bad_ocr["ocr"] = {"provider": "bogus"}
+        self.assertTrue(any("ocr.provider" in p for p in validate_config(bad_ocr)))
 
         bad_url = get_default_config()
         bad_url["llm_profiles"]["deepseek"]["base_url"] = "ftp://bad"

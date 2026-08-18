@@ -34,7 +34,8 @@ from .protocol_v2 import (
     MachineEventV2Emitter,
     protocol_capabilities_v2,
 )
-from .tts import FakeTtsAdapter, FixtureTtsAdapter, SayTtsAdapter
+from .document import FixtureOcrProvider, RapidOcrProvider, SuryaOcrProvider
+from .tts import FakeTtsAdapter, FixtureTtsAdapter, KokoroTtsAdapter, SayTtsAdapter
 from .whisper_cpp import WhisperCppAsrAdapter
 
 
@@ -120,8 +121,8 @@ def parser(
     produce.add_argument(
         "--tts-provider",
         default="none",
-        choices=["none", "fixture", "say", "fake"],
-        help="TTS provider for document-to-listen derivations (say is the macOS local adapter)",
+        choices=["none", "fixture", "say", "fake", "kokoro"],
+        help="TTS provider for document-to-listen derivations (say is macOS local adapter, kokoro is neural TTS)",
     )
     produce.add_argument("--tts-fixture", type=Path, help="audio fixture for the fixture TTS provider")
     produce.add_argument(
@@ -133,13 +134,18 @@ def parser(
     produce.add_argument("--tts-say-executable", default="say", help="say executable for the say TTS provider")
     produce.add_argument("--tts-afconvert-executable", default="afconvert", help="afconvert executable for the say TTS provider")
     produce.add_argument("--tts-timeout-seconds", type=float, default=600.0)
+    produce.add_argument("--tts-kokoro-voice", default="af_bella", help="Kokoro voice model (e.g. af_bella, af_sarah, am_adam)")
+    produce.add_argument("--tts-kokoro-speed", type=float, default=1.0, help="Kokoro speech speed multiplier")
+    produce.add_argument("--tts-kokoro-lang", default="a", help="Kokoro language code (e.g. 'a' for American English, 'b' for British, 'z' for Chinese)")
     produce.add_argument(
         "--ocr-provider",
         default="none",
-        choices=["none", "fixture"],
+        choices=["none", "fixture", "surya", "rapidocr"],
         help="optional OCR path for scanned PDFs; absence is an honest capability result",
     )
     produce.add_argument("--ocr-fixture", type=Path, help="committed OCR text for the fixture OCR provider")
+    produce.add_argument("--ocr-langs", default="en,zh", help="comma-separated language codes for OCR (default: en,zh)")
+    produce.add_argument("--ocr-device", default=None, help="hardware device for OCR (e.g. mps, cpu, cuda)")
     produce.add_argument(
         "--provider",
         default="none",
@@ -312,6 +318,14 @@ def _build_tts(args: argparse.Namespace) -> Any | None:
         return None
     if selected == "fake":
         return FakeTtsAdapter()
+    if selected == "kokoro":
+        return KokoroTtsAdapter(
+            voice=args.tts_kokoro_voice,
+            speed=args.tts_kokoro_speed,
+            lang_code=args.tts_kokoro_lang,
+            afconvert_executable=args.tts_afconvert_executable,
+            timeout_seconds=args.tts_timeout_seconds,
+        )
     if selected == "say":
         return SayTtsAdapter(
             voice=args.tts_voice,
@@ -327,6 +341,11 @@ def _build_tts(args: argparse.Namespace) -> Any | None:
 def _build_ocr(args: argparse.Namespace) -> Any | None:
     if args.ocr_provider == "none":
         return None
+    if args.ocr_provider == "surya":
+        langs = [item.strip() for item in args.ocr_langs.split(",") if item.strip()]
+        return SuryaOcrProvider(langs=langs, device=args.ocr_device)
+    if args.ocr_provider == "rapidocr":
+        return RapidOcrProvider()
     if args.ocr_fixture is None:
         raise ConversionError("--ocr-fixture is required for the fixture OCR provider")
     if not args.ocr_fixture.is_file():

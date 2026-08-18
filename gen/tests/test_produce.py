@@ -669,6 +669,61 @@ class ProduceCliTests(unittest.TestCase):
             self.assertEqual(events[-1]["event"], "failed")
             self.assertEqual(events[-1]["code"], "tts_provider_failed")
 
+    def test_kokoro_tts_cli_e2e_handling(self) -> None:
+        request_path = self.write_request(
+            request_document(self.directory, capability="listen")
+        )
+        output = self.directory / "package-kokoro.zip"
+        result = run_cli([
+            "package", "from-capability", str(request_path),
+            "--output", str(output),
+            "--tts-provider", "kokoro",
+            "--tts-kokoro-voice", "af_bella",
+            "--machine-events",
+        ])
+        events = parse_events(result.stdout)
+        self.assertTrue(len(events) >= 2)
+        # Either completed (if kokoro is installed) or failed with tts_provider_failed (if not installed)
+        self.assertIn(events[-1]["event"], {"completed", "failed"})
+        if events[-1]["event"] == "failed":
+            self.assertEqual(events[-1]["code"], "tts_provider_failed")
+
+    def test_surya_and_rapidocr_cli_e2e_handling(self) -> None:
+        blank = make_blank_pdf_fixture()
+        path = self.directory / "scanned-e2e.pdf"
+        path.write_bytes(blank)
+        request_path = self.write_request({
+            "schema": "listen_gen.capability-request.v2",
+            "version": 2,
+            "created_at_ms": 1,
+            "attempt_id": "attempt-ocr-e2e",
+            "material": {"material_id": "material-1", "material_revision_id": "revision-1", "title": "M"},
+            "edition": {"edition_id": "edition-1", "title": "E", "target_language": "en", "support_languages": []},
+            "requested_capability": "read",
+            "available_renditions": [{
+                "kind": "document",
+                "rendition_id": "sha256:" + "7" * 64,
+                "media_type": "application/pdf",
+                "language": "en",
+                "source_asset_id": "sha256:" + "8" * 64,
+                "blob": {"digest": sha256_of_bytes(blank), "size_bytes": len(blank), "path": str(path)},
+            }],
+            "available_resources": [],
+        })
+        for provider in ("surya", "rapidocr"):
+            output = self.directory / f"package-{provider}.zip"
+            result = run_cli([
+                "package", "from-capability", str(request_path),
+                "--output", str(output),
+                "--ocr-provider", provider,
+                "--machine-events",
+            ])
+            events = parse_events(result.stdout)
+            self.assertTrue(len(events) >= 2)
+            self.assertIn(events[-1]["event"], {"completed", "failed"})
+            if events[-1]["event"] == "failed":
+                self.assertEqual(events[-1]["code"], "document_text_unavailable")
+
     def test_deterministic_output_across_runs(self) -> None:
         request_path = self.write_request(
             request_document(self.directory, capability="synchronized_read_listen")

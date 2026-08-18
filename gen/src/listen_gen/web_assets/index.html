@@ -971,15 +971,57 @@
             <div class="form-group">
               <label class="form-label">TTS Provider</label>
               <select class="form-select" id="tts-provider">
+                <option value="kokoro">Kokoro-82M (高音质神经网络 TTS)</option>
                 <option value="say">macOS say (系统原生)</option>
                 <option value="fake">Fake (测试用虚拟生成器)</option>
                 <option value="none">None (禁用)</option>
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label">macOS Voice 发音人</label>
-              <input type="text" class="form-input" id="tts-voice" placeholder="e.g. Samantha, Daniel (留空使用系统默认)">
+              <label class="form-label">发音人 / Voice</label>
+              <input type="text" class="form-input" id="tts-voice" placeholder="Kokoro: af_bella, af_sarah, am_adam | say: Samantha">
             </div>
+            <div class="form-group">
+              <label class="form-label">语速倍率 (Speed)</label>
+              <input type="number" step="0.1" min="0.5" max="2.0" class="form-input" id="tts-speed" value="1.0">
+            </div>
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" id="btn-test-tts">🔍 测试 TTS 引擎状态</button>
+            <div id="tts-test-feedback" class="test-feedback" style="display:none; margin: 0;"></div>
+          </div>
+        </div>
+
+        <!-- 5. OCR Provider -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📄 文档识别与版面重构 (OCR)</h3>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">OCR Provider</label>
+              <select class="form-select" id="ocr-provider">
+                <option value="none">None (禁用/诚实弃权)</option>
+                <option value="surya">Surya OCR (版面分析与阅读顺序重构)</option>
+                <option value="rapidocr">RapidOCR (极速 PP-OCR ONNX)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">识别语言 (Languages)</label>
+              <input type="text" class="form-input" id="ocr-langs" value="en,zh" placeholder="e.g. en,zh,ja">
+            </div>
+            <div class="form-group">
+              <label class="form-label">计算设备 (Device)</label>
+              <select class="form-select" id="ocr-device">
+                <option value="mps">MPS (Apple Silicon GPU加速)</option>
+                <option value="cpu">CPU</option>
+                <option value="cuda">CUDA (Nvidia GPU)</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" id="btn-test-ocr">🔍 测试 OCR 环境就绪状态</button>
+            <div id="ocr-test-feedback" class="test-feedback" style="display:none; margin: 0;"></div>
           </div>
         </div>
       </section>
@@ -1840,8 +1882,14 @@
       document.getElementById('aligner-script').value = aligner.aligner_script || '';
 
       const tts = state.config.tts || {};
-      document.getElementById('tts-provider').value = tts.provider || 'say';
-      document.getElementById('tts-voice').value = tts.voice || '';
+      document.getElementById('tts-provider').value = tts.provider || 'kokoro';
+      document.getElementById('tts-voice').value = tts.voice || 'af_bella';
+      document.getElementById('tts-speed').value = tts.speed || 1.0;
+
+      const ocr = state.config.ocr || {};
+      document.getElementById('ocr-provider').value = ocr.provider || 'none';
+      document.getElementById('ocr-langs').value = ocr.langs || 'en,zh';
+      document.getElementById('ocr-device').value = ocr.device || 'mps';
     }
 
     function renderLlmForm(key) {
@@ -1921,6 +1969,14 @@
         ...(state.config.tts || {}),
         provider: document.getElementById('tts-provider').value,
         voice: document.getElementById('tts-voice').value,
+        speed: parseFloat(document.getElementById('tts-speed').value) || 1.0,
+      };
+
+      state.config.ocr = {
+        ...(state.config.ocr || {}),
+        provider: document.getElementById('ocr-provider').value,
+        langs: document.getElementById('ocr-langs').value,
+        device: document.getElementById('ocr-device').value,
       };
 
       try {
@@ -1941,6 +1997,67 @@
         }
       } catch (err) {
         showToast('保存出错: ' + err.message);
+      }
+    });
+
+    document.getElementById('btn-test-tts').addEventListener('click', async () => {
+      const payload = {
+        provider: document.getElementById('tts-provider').value,
+        voice: document.getElementById('tts-voice').value,
+      };
+      const fb = document.getElementById('tts-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.style.display = 'block';
+      fb.textContent = '正在检测 TTS 运行环境...';
+
+      try {
+        const res = await fetch('/api/test/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.ok) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ ${result.message}`;
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `⚠️ ${result.message}`;
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求错误: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btn-test-ocr').addEventListener('click', async () => {
+      const payload = {
+        provider: document.getElementById('ocr-provider').value,
+        langs: document.getElementById('ocr-langs').value,
+        device: document.getElementById('ocr-device').value,
+      };
+      const fb = document.getElementById('ocr-test-feedback');
+      fb.className = 'test-feedback active';
+      fb.style.display = 'block';
+      fb.textContent = '正在检测 OCR 运行环境...';
+
+      try {
+        const res = await fetch('/api/test/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await res.json();
+        if (result.ok) {
+          fb.className = 'test-feedback active success';
+          fb.textContent = `✅ ${result.message}`;
+        } else {
+          fb.className = 'test-feedback active error';
+          fb.textContent = `⚠️ ${result.message}`;
+        }
+      } catch (err) {
+        fb.className = 'test-feedback active error';
+        fb.textContent = `❌ 请求错误: ${err.message}`;
       }
     });
 

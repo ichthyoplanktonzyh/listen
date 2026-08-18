@@ -172,10 +172,18 @@ def get_default_config() -> dict[str, Any]:
             "timeout_seconds": 600.0,
         },
         "tts": {
-            "provider": "say" if sys.platform == "darwin" else "none",
-            "voice": "",
+            "provider": "kokoro" if sys.platform == "darwin" else "none",
+            "voice": "af_bella",
+            "speed": 1.0,
+            "lang_code": "a",
             "say_executable": "say",
             "afconvert_executable": "afconvert",
+            "timeout_seconds": 600.0,
+        },
+        "ocr": {
+            "provider": "none",
+            "langs": "en,zh",
+            "device": "mps" if sys.platform == "darwin" else "cpu",
             "timeout_seconds": 600.0,
         },
         "syntax": {
@@ -245,8 +253,11 @@ def validate_config(config: dict[str, Any]) -> list[str]:
             problems.append(f"llm_profiles.{key}.timeout_seconds must be a positive number")
 
     tts_provider = config.get("tts", {}).get("provider")
-    if tts_provider not in ("say", "fake", "fixture", "none"):
-        problems.append(f"tts.provider must be one of say/fake/fixture/none, got {tts_provider!r}")
+    if tts_provider not in ("say", "fake", "fixture", "kokoro", "none"):
+        problems.append(f"tts.provider must be one of say/fake/fixture/kokoro/none, got {tts_provider!r}")
+    ocr_provider = config.get("ocr", {}).get("provider")
+    if ocr_provider not in ("surya", "rapidocr", "fixture", "none"):
+        problems.append(f"ocr.provider must be one of surya/rapidocr/fixture/none, got {ocr_provider!r}")
     asr_provider = config.get("asr", {}).get("provider")
     if asr_provider not in ("whisper-cpp", "none"):
         problems.append(f"asr.provider must be whisper-cpp or none, got {asr_provider!r}")
@@ -1058,6 +1069,56 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             self._send_json(res)
             return
 
+        if path == "/api/test/tts":
+            provider = data.get("provider", "kokoro")
+            voice = data.get("voice", "af_bella")
+            if provider == "kokoro":
+                try:
+                    import kokoro  # type: ignore
+                    self._send_json({"ok": True, "message": f"Kokoro (PyTorch) 已就绪，默认声音: {voice}"})
+                except ImportError:
+                    try:
+                        import kokoro_onnx  # type: ignore
+                        self._send_json({"ok": True, "message": f"Kokoro-ONNX 已就绪，默认声音: {voice}"})
+                    except ImportError:
+                        self._send_json({
+                            "ok": False,
+                            "message": "未检测到 Kokoro 库。可运行: pip install kokoro soundfile 或 pip install kokoro-onnx",
+                        })
+            elif provider == "say":
+                say_bin = shutil.which(data.get("say_executable", "say"))
+                if say_bin:
+                    self._send_json({"ok": True, "message": f"macOS say 命令可用: {say_bin}"})
+                else:
+                    self._send_json({"ok": False, "message": "未找到 say 可执行文件"})
+            else:
+                self._send_json({"ok": True, "message": f"TTS 提供者已选择: {provider}"})
+            return
+
+        if path == "/api/test/ocr":
+            provider = data.get("provider", "surya")
+            if provider == "surya":
+                try:
+                    import surya  # type: ignore
+                    self._send_json({"ok": True, "message": "Surya OCR 已就绪 (版面分析与阅读顺序重构)"})
+                except ImportError:
+                    self._send_json({
+                        "ok": False,
+                        "message": "未检测到 Surya OCR。可运行: pip install surya-ocr pypdfium2 pillow",
+                    })
+            elif provider == "rapidocr":
+                try:
+                    import rapidocr_onnxruntime  # type: ignore
+                    self._send_json({"ok": True, "message": "RapidOCR (ONNX) 已就绪"})
+                except ImportError:
+                    self._send_json({
+                        "ok": False,
+                        "message": "未检测到 RapidOCR。可运行: pip install rapidocr-onnxruntime pypdfium2 pillow",
+                    })
+            else:
+                self._send_json({"ok": True, "message": f"OCR 提供者已选择: {provider}"})
+            return
+
         if path == "/api/test/whisper":
             cli_path = data.get("whisper_cli", "whisper-cli")
             model_path = data.get("whisper_model", "")
@@ -1512,7 +1573,16 @@ def _run_produce_worker(
         tts_cfg = config_dict.get("tts", {})
         tts_adapter = None
         tts_provider = tts_cfg.get("provider", "none")
-        if tts_provider == "say" and sys.platform == "darwin":
+        if tts_provider == "kokoro":
+            from .tts import KokoroTtsAdapter
+            tts_adapter = KokoroTtsAdapter(
+                voice=tts_cfg.get("voice", "af_bella"),
+                speed=float(tts_cfg.get("speed", 1.0)),
+                lang_code=tts_cfg.get("lang_code", "a"),
+                afconvert_executable=tts_cfg.get("afconvert_executable", "afconvert"),
+                timeout_seconds=float(tts_cfg.get("timeout_seconds", 600.0)),
+            )
+        elif tts_provider == "say" and sys.platform == "darwin":
             from .tts import SayTtsAdapter
             tts_adapter = SayTtsAdapter(
                 voice=tts_cfg.get("voice") or None,
@@ -1523,6 +1593,21 @@ def _run_produce_worker(
         elif tts_provider == "fake":
             from .tts import FakeTtsAdapter
             tts_adapter = FakeTtsAdapter()
+
+        # 1b. OCR Provider (for scanned PDF document extraction)
+        ocr_cfg = config_dict.get("ocr", {})
+        ocr_adapter = None
+        ocr_provider = ocr_cfg.get("provider", "none")
+        if ocr_provider == "surya":
+            from .document import SuryaOcrProvider
+            langs = [item.strip() for item in ocr_cfg.get("langs", "en,zh").split(",") if item.strip()]
+            ocr_adapter = SuryaOcrProvider(
+                langs=langs,
+                device=ocr_cfg.get("device") or None,
+            )
+        elif ocr_provider == "rapidocr":
+            from .document import RapidOcrProvider
+            ocr_adapter = RapidOcrProvider()
 
         # 2. ASR Adapter (for media or audio derivations)
         asr_adapter = None
@@ -1605,6 +1690,7 @@ def _run_produce_worker(
 
         produce_cfg = ProduceConfig(
             tts=tts_adapter,
+            ocr=ocr_adapter,
             asr=asr_adapter,
             asr_preprocessor=asr_preprocessor,
             rich=rich,

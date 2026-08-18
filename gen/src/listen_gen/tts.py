@@ -7,6 +7,7 @@ exact timing return ``alignment=None`` and synchronized reading stays
 honestly unavailable — timing is never fabricated.
 
 Adapters:
+- :class:`KokoroTtsAdapter`: high-quality neural speech synthesis using Kokoro-82M.
 - :class:`SayTtsAdapter`: the locally executable macOS ``say``/``afconvert``
   path. Speech is synthesized per sentence, every segment's real duration is
   measured with ``ffprobe``, and the segments are concatenated into one
@@ -26,10 +27,11 @@ import json
 import math
 import struct
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Any, Callable, Protocol, Sequence
 
 from .package import ConversionError
 from .process import ProcessResult, ProcessTimedOut, ProcessOutputTooLarge, run_argv
@@ -478,3 +480,217 @@ class FixtureTtsAdapter:
             model_version=None,
             config_sha256=None,
         )
+
+
+# ---------------------------------------------------------------------------
+# Kokoro Neural TTS Adapter (82M)
+# ---------------------------------------------------------------------------
+
+
+def _pcm_array_to_wav(audio_data: Any, sample_rate: int = 24000) -> bytes:
+    """Encode float or integer PCM sequence into standard 16-bit mono PCM WAV bytes."""
+    if hasattr(audio_data, "tolist"):
+        audio_data = audio_data.tolist()
+    if not isinstance(audio_data, (list, tuple)):
+        raise TtsProviderOutputInvalid("the TTS provider produced non-sequence audio samples")
+    samples: list[int] = []
+    for sample in audio_data:
+        if isinstance(sample, float):
+            clamped = max(-1.0, min(1.0, sample))
+            samples.append(int(clamped * 32767))
+        elif isinstance(sample, int):
+            samples.append(max(-32768, min(32767, sample)))
+        else:
+            raise TtsProviderOutputInvalid("the TTS provider produced invalid sample values")
+    frame_count = len(samples)
+    data_size = frame_count * 2
+    header = b"RIFF" + struct.pack("<I", 36 + data_size) + b"WAVE"
+    header += b"fmt " + struct.pack(
+        "<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16
+    )
+    header += b"data" + struct.pack("<I", data_size)
+    return header + struct.pack(f"<{frame_count}h", *samples)
+
+
+class KokoroTtsAdapter:
+    """High quality neural speech synthesis using Kokoro-82M.
+
+    Synthesizes speech per sentence anchor, measures exact audio sample length
+    to construct precise AnchorAlignment, and converts combined audio to AAC/m4a
+    (or WAV if afconvert is unavailable).
+    """
+
+    name = "kokoro"
+
+    def __init__(
+        self,
+        *,
+        voice: str = "af_bella",
+        speed: float = 1.0,
+        lang_code: str = "a",
+        sample_rate: int = 24000,
+        afconvert_executable: str = "afconvert",
+        timeout_seconds: float = 600.0,
+        synthesizer: Callable[..., Any] | None = None,
+    ):
+        self.voice = voice or "af_bella"
+        self.speed = float(speed)
+        self.lang_code = lang_code or "a"
+        self.sample_rate = int(sample_rate)
+        self.afconvert_executable = afconvert_executable
+        self.timeout_seconds = timeout_seconds
+        self._synthesizer = synthesizer
+        self._version = "kokoro-82m"
+
+    def _resolve_synthesizer(self) -> Callable[..., Any]:
+        if self._synthesizer is not None:
+            return self._synthesizer
+        try:
+            from kokoro import KPipeline
+            pipeline = KPipeline(lang_code=self.lang_code)
+
+            def _synthesize(sentence: str, voice: str, speed: float, lang_code: str) -> list[float]:
+                generator = pipeline(sentence, voice=voice, speed=speed, split_pattern=r"\n+")
+                chunks: list[float] = []
+                for _, _, audio in generator:
+                    if hasattr(audio, "tolist"):
+                        chunks.extend(audio.tolist())
+                    elif isinstance(audio, (list, tuple)):
+                        chunks.extend(audio)
+                return chunks
+
+            return _synthesize
+        except ImportError:
+            pass
+
+        try:
+            import kokoro_onnx
+
+            kokoro_inst = kokoro_onnx.Kokoro()
+
+            def _synthesize_onnx(sentence: str, voice: str, speed: float, lang_code: str) -> list[float]:
+                samples, _ = kokoro_inst.create(sentence, voice=voice, speed=speed, lang=lang_code)
+                if hasattr(samples, "tolist"):
+                    return samples.tolist()
+                return list(samples)
+
+            return _synthesize_onnx
+        except ImportError:
+            pass
+
+        raise TtsProviderStartFailed(
+            "Kokoro TTS is not installed. Install with 'pip install kokoro soundfile' or 'pip install kokoro-onnx'"
+        )
+
+    def synthesize(
+        self,
+        text: str,
+        sentence_anchors: Sequence[tuple[str, str]],
+    ) -> TtsResult:
+        if not sentence_anchors:
+            raise TtsProviderOutputInvalid(
+                "the TTS provider requires at least one sentence anchor"
+            )
+        segments: list[bytes] = []
+        alignments: list[AnchorAlignment] = []
+        cursor_ms = 0
+        synthesizer_fn = self._resolve_synthesizer()
+
+        with tempfile.TemporaryDirectory(prefix="listen-gen-kokoro-") as directory:
+            directory_path = Path(directory)
+            for index, (anchor_id, sentence) in enumerate(sentence_anchors):
+                if not sentence.strip():
+                    continue
+                try:
+                    audio_data = synthesizer_fn(
+                        sentence,
+                        voice=self.voice,
+                        speed=self.speed,
+                        lang_code=self.lang_code,
+                    )
+                except TtsProviderError:
+                    raise
+                except Exception as error:
+                    raise TtsProviderError(
+                        f"Kokoro synthesis failed on sentence: {error}"
+                    ) from error
+
+                wav_bytes = _pcm_array_to_wav(audio_data, self.sample_rate)
+                wav_path = directory_path / f"segment-{index}.wav"
+                wav_path.write_bytes(wav_bytes)
+                segments.append(wav_bytes)
+
+                try:
+                    duration_ms = _wav_duration_ms(wav_path)
+                    if duration_ms <= 0:
+                        raise TtsProviderOutputInvalid(
+                            "the TTS provider produced zero-length audio"
+                        )
+                    alignments.append(AnchorAlignment(anchor_id, cursor_ms))
+                    cursor_ms += duration_ms
+                except TtsProviderError:
+                    raise
+
+            if not segments:
+                raise TtsProviderOutputInvalid("the TTS provider produced no audio")
+
+            combined_wav = _concat_wav(segments)
+            combined_path = directory_path / "combined.wav"
+            combined_path.write_bytes(combined_wav)
+
+            media_type = "audio/wav"
+            audio_bytes = combined_wav
+            if sys.platform == "darwin":
+                m4a_path = directory_path / "speech.m4a"
+                try:
+                    self._run_afconvert(combined_path, m4a_path, "m4af", "aac")
+                    if m4a_path.is_file() and m4a_path.stat().st_size > 0:
+                        audio_bytes = m4a_path.read_bytes()
+                        media_type = "audio/mp4"
+                except Exception:
+                    pass
+
+        return TtsResult(
+            audio_bytes=audio_bytes,
+            media_type=media_type,
+            alignment=tuple(alignments),
+            duration_ms=cursor_ms,
+            provider_id="kokoro",
+            provider_version=self._version,
+            model_id=self.voice,
+            model_version="82M",
+            config_sha256=_config_identity(
+                {
+                    "voice": self.voice,
+                    "speed": self.speed,
+                    "lang_code": self.lang_code,
+                    "sample_rate_hz": self.sample_rate,
+                }
+            ),
+        )
+
+    def _run_afconvert(
+        self,
+        input_path: Path,
+        output_path: Path,
+        format_flag: str,
+        data_format: str,
+    ) -> None:
+        argv = [
+            self.afconvert_executable,
+            str(input_path),
+            "-f",
+            format_flag,
+            "-d",
+            data_format,
+            "-o",
+            str(output_path),
+        ]
+        try:
+            run_argv(argv, timeout_seconds=self.timeout_seconds, stdout_limit_bytes=None)
+        except ProcessTimedOut as error:
+            raise TtsProviderTimedOut("the TTS provider timed out") from error
+        except OSError as error:
+            raise TtsProviderStartFailed(
+                "the TTS provider could not be started"
+            ) from error
