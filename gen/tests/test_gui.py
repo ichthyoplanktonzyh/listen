@@ -23,7 +23,7 @@ from listen_gen.gui import (
     get_default_config,
     load_config,
     save_config,
-    test_llm_connection,
+    probe_llm_connection,
     validate_config,
 )
 from listen_gen.produce import ProduceOutcome
@@ -94,7 +94,7 @@ class TestGui(unittest.TestCase):
         mock_client.call_structured_json.return_value = {"status": "ok"}
         mock_create.return_value = mock_client
 
-        res = test_llm_connection({
+        res = probe_llm_connection({
             "adapter_kind": "openai_chat",
             "base_url": "https://api.test.com/v1",
             "model_id": "test-model",

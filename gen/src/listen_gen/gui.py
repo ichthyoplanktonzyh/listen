@@ -647,8 +647,13 @@ class _TaskEventSink:
         pass
 
 
-def test_llm_connection(profile_data: dict[str, Any]) -> dict[str, Any]:
-    """Tests LLM provider connectivity with a lightweight structured JSON call."""
+def probe_llm_connection(profile_data: dict[str, Any]) -> dict[str, Any]:
+    """Probes LLM provider connectivity with a lightweight structured JSON call.
+
+    Named `probe_`, not `test_`: pytest collects any module-level `test_*` it
+    can import, so the old name made this production helper a "test" that
+    failed at setup asking for a `profile_data` fixture.
+    """
     start_time = time.time()
     try:
         profile = LlmProviderProfile.from_dict(profile_data)
@@ -1065,7 +1070,7 @@ class GuiRequestHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/test/llm":
-            res = test_llm_connection(data)
+            res = probe_llm_connection(data)
             self._send_json(res)
             return
 
