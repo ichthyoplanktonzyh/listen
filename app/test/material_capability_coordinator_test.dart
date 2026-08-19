@@ -383,6 +383,41 @@ void main() {
     expect(harness.runView!.phase, CapabilityRunPhase.failed);
   });
 
+  /// A rejected install used to reach the learner as `unexpected_error` and a
+  /// screen reading "check your Core and Gen configuration". Core had in fact
+  /// named the rejection precisely — `package_installation_invalid`, "package
+  /// release is invalid or incompatible" — and three layers threw it away: the
+  /// HttpException was not recognised as an envelope, the code collapsed to
+  /// `unexpected_error`, and the view never carried a message at all. The one
+  /// real incident behind this cost an afternoon of log archaeology to find a
+  /// null `model.version` in one generated resource.
+  test('a rejected install keeps the code and sentence Core named', () async {
+    harness.repo.installRejectionBody = jsonEncode({
+      'code': 'package_installation_invalid',
+      'message': 'package release is invalid or incompatible',
+      'correlation_id': 'api-289',
+      'retryable': false,
+    });
+    final requestFuture = harness.request(MaterialCapability.read);
+    await _settle();
+    final run = harness.gen.lastRun!;
+    run
+      ..emitProtocol()
+      ..emitAccepted(attemptId: 'attempt-1');
+    await _settle();
+    run.emitCompleted();
+    await _settle();
+    await _settle();
+
+    expect(await requestFuture, isA<CapabilityFailed>());
+    final view = harness.runView!;
+    expect(view.phase, CapabilityRunPhase.failed);
+    expect(view.failureCode, 'package_installation_invalid');
+    expect(view.failureMessage, 'package release is invalid or incompatible');
+    // The durable Core attempt records the same name, not a shrug.
+    expect(harness.repo.finalizedFailures, contains('package_installation_invalid'));
+  });
+
   test('an adoption failure finalizes the attempt and fails the run', () async {
     harness.repo.adoptFailuresRemaining = 1;
     final requestFuture = harness.request(MaterialCapability.read);
@@ -845,6 +880,7 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   final List<String> installedPackagePaths = [];
   int adoptFailuresRemaining = 0;
   bool failInstall = false;
+  String? installRejectionBody;
   bool failNextStart = false;
   bool failListCapabilities = false;
 
@@ -923,6 +959,12 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
     String materialId,
     String packagePath,
   ) async {
+    final rejection = installRejectionBody;
+    if (rejection != null) {
+      // Core answers a rejected install with a typed envelope, and LocalApi
+      // hands it on as an HttpException carrying that body verbatim.
+      throw HttpException(rejection, uri: Uri.parse('http://127.0.0.1:1/x'));
+    }
     if (failInstall) throw const ApiFailure(raw: 'install failed');
     installedPackagePaths.add(packagePath);
     return _satisfyingEdition;

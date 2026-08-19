@@ -201,11 +201,23 @@ class _DocumentPreparationSurface extends StatelessWidget {
   final VoidCallback? onCancel;
   final VoidCallback onViewSource;
 
+  /// The failure's own words: the stable code, plus the producer's sentence
+  /// when it says something the code does not. Null when the run named
+  /// nothing — an empty line is worse than none.
+  static String? _failureNote(CapabilityRunView? run) {
+    final code = run?.failureCode;
+    if (code == null || code.isEmpty) return null;
+    final detail = run?.failureMessage;
+    if (detail == null || detail.isEmpty || detail == code) return code;
+    return '$code · $detail';
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final colors = Theme.of(context).colorScheme;
     final failed = run?.phase == CapabilityRunPhase.failed;
+    final failureNote = failed ? _failureNote(run) : null;
     final failureBodyKey = switch (run?.failureCode) {
       'generator_python_unavailable' =>
         'learningMaterialsPythonUnavailableBody',
@@ -251,6 +263,24 @@ class _DocumentPreparationSurface extends StatelessWidget {
                     color: colors.onSurfaceVariant,
                   ),
                 ),
+                // The stable code and the producer's own sentence, when the
+                // run carries them. "Check your Core and Gen configuration"
+                // is not a lead: a rejected install already named itself
+                // (`package_installation_invalid`, "package release is
+                // invalid or incompatible"), and swallowing that turned a
+                // one-line diagnosis into a log-archaeology session. This is
+                // the envelope's public message, never raw exception text.
+                if (failureNote != null) ...[
+                  const SizedBox(height: ListenSpacing.gap8),
+                  SelectableText(
+                    failureNote,
+                    key: const Key('document-learning-failure-note'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: ListenSpacing.gap16),
                 _ListenCapabilityAction(
                   run: run,

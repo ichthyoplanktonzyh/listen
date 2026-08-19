@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/repositories/capability_repository.dart';
-import '../models/api_failure.dart';
 import '../models/gen_machine_event.dart';
 import '../models/learning_edition.dart';
 import '../models/learning_material.dart';
 import '../models/material_capability.dart';
 import '../models/timeline.dart';
+import '../services/api_service.dart' show describeApiFailure;
 import '../services/capability_file_resolver.dart';
 import '../services/capability_generation_request.dart';
 import '../services/capability_request_encoder.dart';
@@ -597,6 +597,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     } on Object catch (error) {
       run.phase = CapabilityRunPhase.failed;
       run.failure = _friendly(error);
+      run.failureDetail = _detail(error);
       _emit();
       return null;
     }
@@ -605,6 +606,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   CapabilityOutcome _fail(_CapabilityRun run, Object error) {
     run.phase = CapabilityRunPhase.failed;
     run.failure = _friendly(error);
+    run.failureDetail = _detail(error);
     _emit();
     return CapabilityFailed(
       error: error,
@@ -618,16 +620,29 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
 
   static String _stableCode(Object error) {
     if (error is ListenGenProcessFailure) return error.code;
-    if (error is ApiFailure) return error.code ?? 'request_failed';
-    return 'unexpected_error';
+    // Core answers a rejected install with a typed envelope
+    // (`package_installation_invalid`, ...). It arrives as an HttpException
+    // carrying that body, so it goes through the transport's own describer
+    // rather than collapsing into `unexpected_error` — a run that names the
+    // rejection is the difference between a fixable report and a shrug.
+    final api = describeApiFailure(error);
+    return api.code ?? (api.isStructured ? 'request_failed' : 'unexpected_error');
   }
 
   static String _friendly(Object error) {
     if (error is ListenGenProcessFailure) return error.message ?? error.code;
-    if (error is ApiFailure) return error.code ?? 'request_failed';
-    // The UI never speaks raw exception text; an unnamed failure degrades to
-    // the stable code instead of leaking the error into a sentence.
-    return 'unexpected_error';
+    final api = describeApiFailure(error);
+    return api.code ?? (api.isStructured ? 'request_failed' : 'unexpected_error');
+  }
+
+  /// The one sentence behind [_friendly], when the failure carries one.
+  ///
+  /// Gen failures speak through their own path-free message; Core failures
+  /// speak through the envelope's `message`. Anything unstructured stays
+  /// silent rather than leaking raw exception text into the UI.
+  static String? _detail(Object error) {
+    if (error is ListenGenProcessFailure) return error.message;
+    return describeApiFailure(error).message;
   }
 
   static String _capabilityName(MaterialCapability capability) =>
@@ -722,6 +737,7 @@ final class _CapabilityRun {
   String? stage;
   final List<String> warnings = [];
   String? failure;
+  String? failureDetail;
   String? attemptId;
   String? producedPackageSha256;
   ListenGenProcessRun? processRun;
@@ -733,6 +749,7 @@ final class _CapabilityRun {
     stage: stage,
     warnings: List.unmodifiable(warnings),
     failureCode: failure,
+    failureMessage: failureDetail,
     attemptId: attemptId,
     producedPackageSha256: producedPackageSha256,
   );
