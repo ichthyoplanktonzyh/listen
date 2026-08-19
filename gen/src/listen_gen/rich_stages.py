@@ -264,12 +264,19 @@ def _words_from_transcript(
     fabricated timing.
     """
     words: list[dict[str, object]] = []
-    for segment_index, segment in enumerate(transcript.segments):
+    if len(transcript.segments) > len(sentence_ids):
+        raise ConversionError(
+            "ASR transcript carries more assembled sentences than reading anchors"
+        )
+    # ``sentence_ids`` is the explicit identity mapping established by the
+    # assembled transcript.  The media path has equal counts; the TTS path
+    # proves equal count and lexical identity before reaching this function.
+    # Extra transcript sentences are never silently dropped. Do not infer
+    # identity from a provider segment index: raw ASR segments may have been
+    # merged or split upstream.
+    for sentence_id, segment in zip(sentence_ids, transcript.segments):
         if not segment.words:
             continue
-        if segment_index >= len(sentence_ids):
-            raise ConversionError("ASR segments exceed the reading sentences")
-        sentence_id = sentence_ids[segment_index]
         sentence_text = segment.display_text or segment.text
         tokens = _tokens(sentence_text)
         token_by_span: dict[tuple[int, int], dict[str, object]] = {}

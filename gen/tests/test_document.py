@@ -125,6 +125,58 @@ class DecodeTextFamilyTests(unittest.TestCase):
         self.assertEqual(root.kind, "root")
         self.assertTrue(root.sentence_ids)
 
+    def test_structured_multiblock_offsets_are_global_and_unicode_safe(self) -> None:
+        cases = (
+            (
+                "text/markdown",
+                "# 第一章🙂\n\n首句。第二句！\n\n## 第二章\n\nNext.",
+            ),
+            (
+                "text/html",
+                "<h1>第一章🙂</h1><p>首句。第二句！</p><h2>第二章</h2><p>Next.</p>",
+            ),
+        )
+        for media_type, raw_text in cases:
+            with self.subTest(media_type=media_type):
+                decoded = decode_document(raw_text.encode("utf-8"), media_type)
+                self.assertEqual(
+                    "".join(sentence.text for sentence in decoded.sentences),
+                    decoded.text,
+                )
+                self.assertEqual(
+                    [sentence.index for sentence in decoded.sentences],
+                    list(range(len(decoded.sentences))),
+                )
+                self.assertEqual(
+                    len({sentence.id for sentence in decoded.sentences}),
+                    len(decoded.sentences),
+                )
+                for sentence in decoded.sentences:
+                    self.assertEqual(
+                        decoded.text[sentence.start_char : sentence.end_char],
+                        sentence.text,
+                    )
+                structure = build_reading_structure(
+                    decoded,
+                    language="zh-Hans",
+                    rendition_id="sha256:" + "a" * 64,
+                )
+                sentence_anchors = [
+                    anchor
+                    for anchor in structure.structured_reading["anchors"]
+                    if anchor["kind"] == "sentence"
+                ]
+                for sentence, anchor in zip(decoded.sentences, sentence_anchors):
+                    self.assertEqual(anchor["anchor_id"], sentence.id)
+                    self.assertEqual(
+                        anchor["start_offset"],
+                        len(decoded.text[: sentence.start_char].encode("utf-8")),
+                    )
+                    self.assertEqual(
+                        anchor["end_offset"],
+                        len(decoded.text[: sentence.end_char].encode("utf-8")),
+                    )
+
 
 class DecodeHtmlTests(unittest.TestCase):
     def test_scripts_and_styles_are_discarded(self) -> None:
@@ -255,6 +307,81 @@ class DecodeEpubTests(unittest.TestCase):
         )
         self.assertIn("Chapter one.", decoded.text)
         self.assertIn("Chapter two!", decoded.text)
+
+    def test_single_chapter_leaf_text_is_not_duplicated(self) -> None:
+        epub = make_epub(
+            [
+                (
+                    "chapter.xhtml",
+                    "<html><body><p>Listen, carefully! Words matter.</p></body></html>",
+                )
+            ]
+        )
+        decoded = decode_document(epub, "application/epub+zip")
+        self.assertEqual(decoded.text, "Listen, carefully! Words matter.")
+        self.assertEqual(plain_text_for_speech(decoded), decoded.text)
+        chapter = next(block for block in decoded.blocks if block.kind == "chapter")
+        children = [
+            block
+            for block in decoded.blocks
+            if block.parent_id == chapter.id
+        ]
+        self.assertEqual(len(children), 1)
+        self.assertEqual(chapter.start_char, children[0].start_char)
+        self.assertEqual(chapter.end_char, children[0].end_char)
+        self.assertEqual(chapter.sentence_ids, children[0].sentence_ids)
+
+    def test_chapters_span_children_with_global_sentence_ids(self) -> None:
+        epub = make_epub(
+            [
+                (
+                    "c1.xhtml",
+                    "<html><body><h1>第一章🙂</h1><p>首句。第二句！</p></body></html>",
+                ),
+                ("c2.xhtml", "<html><body><p>Second.</p></body></html>"),
+            ]
+        )
+        decoded = decode_document(epub, "application/epub+zip")
+        self.assertEqual(
+            decoded.text,
+            "第一章🙂\n首句。第二句！\nSecond.",
+        )
+        self.assertEqual(
+            [sentence.index for sentence in decoded.sentences],
+            list(range(len(decoded.sentences))),
+        )
+        self.assertEqual(
+            len({sentence.id for sentence in decoded.sentences}),
+            len(decoded.sentences),
+        )
+        chapters = [block for block in decoded.blocks if block.kind == "chapter"]
+        self.assertEqual(len(chapters), 2)
+        for chapter in chapters:
+            children = [
+                block
+                for block in decoded.blocks
+                if block.parent_id == chapter.id
+            ]
+            self.assertTrue(children)
+            self.assertEqual(
+                chapter.start_char,
+                min(child.start_char for child in children),
+            )
+            self.assertEqual(
+                chapter.end_char,
+                max(child.end_char for child in children),
+            )
+            child_sentence_ids = tuple(
+                sentence_id
+                for child in children
+                for sentence_id in child.sentence_ids
+            )
+            self.assertEqual(chapter.sentence_ids, child_sentence_ids)
+        for sentence in decoded.sentences:
+            self.assertEqual(
+                decoded.text[sentence.start_char : sentence.end_char],
+                sentence.text,
+            )
 
     def test_html_navigation_is_discarded(self) -> None:
         text = decode_html(

@@ -166,6 +166,24 @@ class AnchoringTests(unittest.TestCase):
         with self.assertRaises(ConversionError):
             self._build(result)
 
+    def test_upstream_sentence_assembly_identity_is_preserved_in_provenance(self) -> None:
+        result = AlignmentResult(
+            words=(AlignedWord(0, 0, "Listen", 100, 480, 0.98),),
+            provider_id="p",
+            provider_version="1",
+            config_sha256="sha256:" + "b" * 64,
+        )
+        resource, _ = build_word_timeline_from_alignment(
+            result=result,
+            segments=_segments(),
+            sentence_ids=("sentence-0", "sentence-1"),
+            subtitle_resource_id="sha256:subtitle-track",
+            context=_context(),
+            upstream_config_sha256="sha256:" + "c" * 64,
+        )
+        self.assertNotEqual(resource.provenance["config_sha256"], result.config_sha256)
+        self.assertTrue(resource.provenance["config_sha256"].startswith("sha256:"))
+
 
 if __name__ == "__main__":
     unittest.main()

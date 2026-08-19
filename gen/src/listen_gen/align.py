@@ -376,6 +376,7 @@ def build_word_timeline_from_alignment(
     sentence_ids: tuple[str, ...],
     subtitle_resource_id: str,
     context,
+    upstream_config_sha256: str | None = None,
 ) -> tuple[PackageResource, bytes]:
     """Anchor aligned words into the reading sentence tokens.
 
@@ -420,6 +421,19 @@ def build_word_timeline_from_alignment(
         "words": words,
     }
     payload_bytes = canonical_json(payload)
+    timeline_config_sha256 = result.config_sha256
+    if upstream_config_sha256 is not None:
+        timeline_config_sha256 = "sha256:" + hashlib.sha256(
+            json.dumps(
+                {
+                    "schema": "listen_gen.word-timeline-config.v1",
+                    "assembly_or_upstream_config_sha256": upstream_config_sha256,
+                    "aligner_config_sha256": result.config_sha256,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
     resource = PackageResource(
         kind=WORD_TIMELINE_RESOURCE_KIND,
         schema=WORD_TIMELINE_SCHEMA_V1,
@@ -440,7 +454,7 @@ def build_word_timeline_from_alignment(
                 if result.model_id is not None
                 else None
             ),
-            config_sha256=result.config_sha256,
+            config_sha256=timeline_config_sha256,
         ),
         quality=quality(),
         required=False,

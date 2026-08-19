@@ -38,7 +38,7 @@ from .align import (
     AlignSegment,
     build_word_timeline_from_alignment,
 )
-from .asr import AsrAdapter, AsrTranscript
+from .asr import AsrAdapter, AsrTranscript, _tokens
 from .media import FfmpegAudioPreprocessor
 from .capability import (
     CapabilityRequest,
@@ -85,6 +85,12 @@ from .rich_stages import (
     run_rich_stages,
 )
 from .subtitle import SubtitleBlock, parse_subtitle
+from .sentence_assembly import (
+    ASSEMBLY_CONFIG_SHA256,
+    AssembledSentence,
+    assemble_asr_transcript,
+    assemble_subtitle_blocks,
+)
 from .tts import AnchorAlignment, TtsAdapter, TtsProviderError, _wav_duration_ms
 
 
@@ -330,6 +336,8 @@ def _run_media_derivation(
     DerivedStructuredReading,
     tuple[AnchorAlignment, ...] | None,
     dict[str, object],
+    AsrTranscript,
+    bytes,
 ]:
     rendition = next(
         entry
@@ -352,6 +360,10 @@ def _run_media_derivation(
             raise ProductionFailure(
                 "asr_provider_failed", "the ASR provider failed"
             ) from error
+        # ASR time segments are provider windows, not linguistic sentence
+        # boundaries.  Assemble them once here; every downstream resource
+        # receives this same sentence identity and remapped word coordinates.
+        transcript = assemble_asr_transcript(transcript)
         decoded = _transcript_document(transcript)
         language = transcript.language
         structure = build_reading_structure(
@@ -382,23 +394,25 @@ def _run_media_derivation(
     return derived, alignment, producer, transcript, raw
 
 
-def _subtitle_document(blocks: tuple[SubtitleBlock, ...]) -> DecodedDocument:
+def _subtitle_document(
+    assembled: tuple[AssembledSentence, ...],
+) -> DecodedDocument:
     """Render a subtitle track as the extracted reading text.
 
-    Blocks are the exact sentence units; character offsets accumulate over
-    the joined text so reading anchors and the subtitle timing agree. Each
-    block is one sentence; embedded line breaks collapse to spaces (subtitle
-    wrapping, not meaning).
+    The caller supplies the already assembled result; this function does not
+    re-segment or infer a second sentence identity. Character offsets
+    accumulate over the joined text so reading anchors and subtitle timing
+    agree.
     """
     from .document import ExtractedText, Paragraph, Sentence, _blocks_from_paragraphs
 
     sentences: list[Sentence] = []
     cursor = 0
-    block_count = len(blocks)
-    for index, block in enumerate(blocks):
-        text = " ".join(block.text.split())
+    sentence_count = len(assembled)
+    for index, sentence in enumerate(assembled):
+        text = sentence.text
         start = cursor
-        if index < block_count - 1:
+        if index < sentence_count - 1:
             cursor += len(text) + 1
             end = cursor
             sentence_text = text + "\n"
@@ -421,7 +435,7 @@ def _subtitle_document(blocks: tuple[SubtitleBlock, ...]) -> DecodedDocument:
             id=f"block-{index}",
             index=index,
             start_char=sentence.start_char,
-            end_char=sentence.end_char - 1 if index < block_count - 1 else sentence.end_char,
+            end_char=sentence.end_char - 1 if index < sentence_count - 1 else sentence.end_char,
             sentence_ids=(sentence.id,),
         )
         for index, sentence in enumerate(sentences)
@@ -449,7 +463,7 @@ def _run_subtitle_derivation(
     DerivedStructuredReading,
     tuple[AnchorAlignment, ...],
     dict[str, object],
-    tuple[SubtitleBlock, ...],
+    tuple[AssembledSentence, ...],
     bytes,
 ]:
     """A media derivation whose reading comes from its subtitle track.
@@ -469,7 +483,8 @@ def _run_subtitle_derivation(
         blocks = parse_subtitle(config.subtitle)
     except ConversionError as error:
         raise ProductionFailure("subtitle_unavailable", str(error)) from error
-    decoded = _subtitle_document(blocks)
+    assembled = assemble_subtitle_blocks(blocks)
+    decoded = _subtitle_document(assembled)
     language = _language_for(request, rendition)
     structure = build_reading_structure(
         decoded, language=language, rendition_id=package_rendition_id
@@ -482,14 +497,18 @@ def _run_subtitle_derivation(
         provenance_document=provenance(
             created_at_ms,
             input_rendition_ids=[package_rendition_id],
+            config_sha256=ASSEMBLY_CONFIG_SHA256,
         ),
     )
     alignment = tuple(
-        AnchorAlignment(anchor_id=f"sentence-{index}", media_time_ms=block.start_ms)
-        for index, block in enumerate(blocks)
+        AnchorAlignment(anchor_id=f"sentence-{sentence.index}", media_time_ms=sentence.start_ms)
+        for sentence in assembled
     )
     raw = _blob_source_bytes(rendition.blob)
-    return derived, alignment, {}, blocks, raw
+    # Keep the subtitle blocks argument shape for rich-stage duration
+    # calculation, but return assembled sentence windows so no downstream
+    # consumer can accidentally recover the old block/sentence identity.
+    return derived, alignment, {"config_sha256": ASSEMBLY_CONFIG_SHA256}, assembled, raw
 
 
 def _transcript_document(transcript: AsrTranscript) -> DecodedDocument:
@@ -616,6 +635,15 @@ def _alignment_resource(
         "extensions": {},
     }
     payload_bytes = canonical_json(payload)
+    # A subtitle assembly has no external provider, but its algorithm/config
+    # still belongs in provenance.  Keep the optional descriptor producer
+    # absent when only that config identity is known, preserving the contract
+    # distinction between provider facts and pipeline configuration.
+    producer_descriptor = (
+        producer
+        if producer.get("provider") is not None or producer.get("model") is not None
+        else None
+    )
     resource = PackageResource(
         kind="anchor_time_alignment",
         schema=ANCHOR_TIME_ALIGNMENT_SCHEMA_V1,
@@ -635,7 +663,7 @@ def _alignment_resource(
             config_sha256=producer.get("config_sha256"),
         ),
         quality=quality(),
-        producer=producer or None,
+        producer=producer_descriptor,
     )
     return resource, payload_bytes
 
@@ -661,6 +689,42 @@ def _sentence_ids_and_times(
         for alignment in alignments:
             times[alignment.anchor_id] = alignment.media_time_ms
     return tuple(sentence_ids), times
+
+
+def _transcript_matches_reading(
+    transcript: AsrTranscript,
+    reading_payload: dict[str, object],
+) -> bool:
+    """Prove a re-transcription has the source reading's sentence identity.
+
+    TTS re-transcription is only a word-timing fallback.  It must never define
+    or shift the source document's sentence identity.  Exact token tuples are
+    compared after the transcript has undergone the same timed assembly used
+    by media input; any count or lexical/punctuation mismatch abstains the
+    complete ASR-word rich chain.
+    """
+    try:
+        source_sentences = alignment_sentences_from(
+            reading_payload=reading_payload,
+            sentence_times_ms={},
+            audio_duration_ms=None,
+        )
+    except ConversionError:
+        return False
+    if len(transcript.segments) != len(source_sentences):
+        return False
+    for segment, source_sentence in zip(transcript.segments, source_sentences):
+        transcript_tokens = tuple(
+            (token["kind"], token["text"], token["normalized"])
+            for token in _tokens(segment.display_text or segment.text)
+        )
+        source_tokens = tuple(
+            (token.kind, token.text, token.normalized)
+            for token in source_sentence.tokens
+        )
+        if transcript_tokens != source_tokens:
+            return False
+    return True
 
 
 def _attach_rich_resources(
@@ -731,6 +795,7 @@ def _attach_rich_resources(
                 sentence_ids=sentence_ids,
                 subtitle_resource_id=subtitle_resource.resource_id,
                 context=context,
+                upstream_config_sha256=producer.get("config_sha256"),
             )
         except ConversionError:
             warnings.append(
@@ -838,8 +903,10 @@ def _tts_rich_stages(
     The source text is already known and every sentence's audio window is
     measured (per-sentence synthesis), so a forced aligner produces the exact
     word timeline directly. Without an aligner, a ``tts_aligner`` ASR adapter
-    re-transcribes the derived audio as the honest fallback; without either,
-    the document path produces no word-level resources.
+    re-transcribes the derived audio as the honest fallback, but its assembled
+    transcript must exactly match the source reading's sentence/token
+    sequence before any word timing is accepted. Without either qualified
+    path, the document path produces no word-level resources.
     """
     stages = config.rich
     if stages is None or (stages.aligner is None and stages.tts_aligner is None):
@@ -903,21 +970,26 @@ def _tts_rich_stages(
                 with config.asr_preprocessor.prepare(
                     audio_path, audio_stream_index=None
                 ) as prepared:
-                    transcript = stages.tts_aligner.transcribe(prepared.path)
+                    raw_transcript = stages.tts_aligner.transcribe(prepared.path)
                 stream_index = prepared.stream_index
                 asr_input = prepared.path
             else:
-                transcript = stages.tts_aligner.transcribe(audio_path)
-            if transcript.segments:
-                transcript = AsrTranscript(
-                    language=transcript.language or language,
-                    segments=transcript.segments,
-                    provider_id=transcript.provider_id,
-                    provider_version=transcript.provider_version,
-                    model_id=transcript.model_id,
-                    model_version=transcript.model_version,
-                    config_sha256=transcript.config_sha256,
-                )
+                raw_transcript = stages.tts_aligner.transcribe(audio_path)
+            if raw_transcript.segments:
+                assembled_transcript = assemble_asr_transcript(raw_transcript)
+                if _transcript_matches_reading(assembled_transcript, reading_payload):
+                    transcript = assembled_transcript
+                else:
+                    # Re-transcription is only an evidence source.  A
+                    # fragment count or lexical mismatch must not bind its
+                    # local token indexes to a different source sentence.
+                    warnings.append(
+                        _warning(
+                            "word_timeline_abstained",
+                            "TTS re-transcription did not exactly match the source "
+                            "reading sentences; word-level rich resources are not produced",
+                        )
+                    )
             else:
                 transcript = None
         resources, bytes_by_digest, attach_warnings = _attach_rich_resources(
@@ -947,7 +1019,7 @@ def _media_rich_stages(
     alignment: tuple[AnchorAlignment, ...],
     transcript: AsrTranscript | None,
     producer: dict[str, object],
-    subtitle_blocks: tuple[SubtitleBlock, ...],
+    subtitle_blocks: tuple[AssembledSentence, ...],
     media_bytes: bytes,
     rendition_id: str,
     created_at_ms: int,
@@ -999,12 +1071,17 @@ def _media_rich_stages(
         warnings: list[Warning] = []
         aligned_result = None
         align_segments: tuple[AlignSegment, ...] = ()
-        audio_duration_ms: int | None = None
+        # The final assembled sentence window must be closed even when the
+        # ASR word-timing fallback is used.  Previously duration was computed
+        # only inside the forced-aligner branch, leaving a one-sentence
+        # subtitle track with ``end_ms == start_ms`` for ASR-only rich runs.
+        if transcript is not None and transcript.segments:
+            audio_duration_ms = transcript.segments[-1].end_ms
+        elif subtitle_blocks:
+            audio_duration_ms = subtitle_blocks[-1].end_ms
+        else:
+            audio_duration_ms = None
         if stages.aligner is not None:
-            if transcript is not None and transcript.segments:
-                audio_duration_ms = transcript.segments[-1].end_ms
-            elif subtitle_blocks:
-                audio_duration_ms = subtitle_blocks[-1].end_ms
             sentences = alignment_sentences_from(
                 reading_payload=reading_payload,
                 sentence_times_ms=sentence_times,
@@ -1237,7 +1314,7 @@ def produce(
                     )
                 )
         elif derivation.kind == DerivationKind.MEDIA_READ:
-            subtitle_blocks: tuple[SubtitleBlock, ...] = ()
+            subtitle_blocks: tuple[AssembledSentence, ...] = ()
             if config.subtitle is not None:
                 derived, alignment, producer, subtitle_blocks, source_media_bytes = (
                     _run_subtitle_derivation(

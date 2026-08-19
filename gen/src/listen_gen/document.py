@@ -241,9 +241,10 @@ def segment_text(text: str) -> tuple[tuple[Paragraph, ...], tuple[Sentence, ...]
 def _split_single_line(line: str) -> list[tuple[int, int]]:
     """Sentence bounds within one line (no trailing newline).
 
-    Trailing whitespace after terminal punctuation is not a sentence: bounds
-    whose slice is blank (e.g. the space after ``"end. "``) are dropped, so
-    the sentence units never carry empty residue.
+    Trailing whitespace after terminal punctuation is not a separate sentence,
+    but it remains owned by the preceding sentence. This keeps structured
+    sentence spans an exact cover of their block text while avoiding empty
+    residue anchors.
     """
     starts = [match.start() for match in _SENTENCE_END.finditer(line)]
     bounds: list[tuple[int, int]] = []
@@ -253,8 +254,12 @@ def _split_single_line(line: str) -> list[tuple[int, int]]:
             if end > cursor and line[cursor:end].strip():
                 bounds.append((cursor, end))
             cursor = end
-        if cursor < len(line) and line[cursor:].strip():
-            bounds.append((cursor, len(line)))
+        if cursor < len(line):
+            if line[cursor:].strip():
+                bounds.append((cursor, len(line)))
+            elif bounds:
+                previous_start, _ = bounds[-1]
+                bounds[-1] = (previous_start, len(line))
     elif line.strip():
         bounds = [(0, len(line))]
     return bounds
@@ -266,30 +271,98 @@ def _segment_raw_blocks(
     """Segment structured block texts into sentences with exact offsets.
 
     ``raw_blocks`` are ``(block_id, kind, parent_id, block_text)`` tuples; a
-    ``None`` block id gets a deterministic ``block-<index>`` id. The block
-    texts already join into ``text`` with ``"\\n"`` separators, so the
-    trailing newline of every block except the last belongs to that block's
-    final sentence.
+    ``None`` block id gets a deterministic ``block-<index>`` id. Leaf block
+    texts join into ``text`` with ``"\\n"`` separators, so the trailing
+    newline of every leaf block except the last belongs to that block's final
+    sentence. Empty container blocks (for example an EPUB ``chapter``) do not
+    contribute text; their span and sentence ids are derived from their
+    descendants.
+
+    The input block text is local to each block, but every emitted sentence is
+    anchored against the complete logical text. Keeping the layout pass
+    separate from sentence segmentation is important here: a sentence in the
+    second Markdown/HTML/EPUB block must not accidentally start at offset zero.
     """
-    sentences: list[Sentence] = []
-    blocks: list[ReadingBlock] = []
-    cursor = 0
-    sentence_index = 0
+    container_kinds = frozenset({"root", "book", "chapter", "section"})
+
+    def contributes(kind: str, block_text: str) -> bool:
+        # A synthetic hierarchy block is metadata, never another copy of its
+        # descendants' content. Empty leaf blocks likewise have no logical
+        # text and are ignored by the deterministic layout.
+        return kind not in container_kinds and bool(block_text)
+
+    expected_text = "\n".join(
+        block_text
+        for _, kind, _, block_text in raw_blocks
+        if contributes(kind, block_text)
+    )
+    if expected_text != text:
+        raise DocumentDecodeError(
+            "structured document blocks do not match their logical text"
+        )
+
+    # Resolve ids, parents, and sibling order before calculating spans. This
+    # lets a container appear before its children (the EPUB chapter shape)
+    # without making its range depend on processing order.
+    rows: list[dict[str, object]] = []
     sibling_orders: dict[str, int] = {}
+    seen_ids: set[str] = set()
     for index, (block_id, kind, parent_id, block_text) in enumerate(raw_blocks):
-        start_char = cursor
-        end_char = cursor + len(block_text)
-        if index < len(raw_blocks) - 1:
-            end_char += 1
+        resolved_id = block_id or f"block-{index}"
+        if resolved_id in seen_ids or resolved_id == "block-root":
+            raise DocumentDecodeError(
+                f"structured document block id is not unique: {resolved_id}"
+            )
+        seen_ids.add(resolved_id)
         resolved_parent = parent_id or "block-root"
         order = sibling_orders.get(resolved_parent, 0)
         sibling_orders[resolved_parent] = order + 1
+        rows.append(
+            {
+                "id": resolved_id,
+                "kind": kind,
+                "parent_id": resolved_parent,
+                "order": order,
+                "block_text": block_text,
+                "contributes": contributes(kind, block_text),
+            }
+        )
+
+    contributing_indices = [
+        index for index, row in enumerate(rows) if bool(row["contributes"])
+    ]
+    layouts: dict[int, tuple[int, int]] = {}
+    cursor = 0
+    for contribution_index, row_index in enumerate(contributing_indices):
+        block_text = str(rows[row_index]["block_text"])
+        start_char = cursor
+        end_char = start_char + len(block_text)
+        if contribution_index < len(contributing_indices) - 1:
+            end_char += 1
+        layouts[row_index] = (start_char, end_char)
+        cursor = end_char
+    if cursor != len(text):  # defensive: the join check above should imply this
+        raise DocumentDecodeError(
+            "structured document block layout does not cover logical text"
+        )
+
+    sentences: list[Sentence] = []
+    own_sentence_ids: dict[int, list[str]] = {}
+    sentence_index = 0
+    for row_index in contributing_indices:
+        row = rows[row_index]
+        block_text = str(row["block_text"])
+        block_start, _ = layouts[row_index]
         sentence_ids: list[str] = []
         line_cursor = 0
-        for line_index, raw_line in enumerate(block_text.split("\n")):
-            line_has_newline = line_index < len(block_text.split("\n")) - 1
+        lines = block_text.split("\n")
+        for line_index, raw_line in enumerate(lines):
+            line_has_newline = line_index < len(lines) - 1
             if not raw_line.strip():
-                if line_has_newline and sentences:
+                # Preserve blank-line ownership, but only within this block.
+                # A chapter's empty metadata row must never mutate the last
+                # sentence of the preceding chapter.
+                if line_has_newline and sentence_ids:
                     previous = sentences[-1]
                     previous = Sentence(
                         id=previous.id,
@@ -301,10 +374,10 @@ def _segment_raw_blocks(
                     sentences[-1] = previous
                 line_cursor += len(raw_line) + (1 if line_has_newline else 0)
                 continue
-            for (bound_start, bound_end) in _split_single_line(raw_line):
+            for bound_start, bound_end in _split_single_line(raw_line):
                 is_last_line_sentence = bound_end == len(raw_line)
-                slice_start = line_cursor + bound_start
-                slice_end = line_cursor + bound_end
+                slice_start = block_start + line_cursor + bound_start
+                slice_end = block_start + line_cursor + bound_end
                 text_slice = raw_line[bound_start:bound_end]
                 if is_last_line_sentence and line_has_newline:
                     slice_end += 1
@@ -322,18 +395,91 @@ def _segment_raw_blocks(
                 )
                 sentence_ids.append(sentence_id)
             line_cursor += len(raw_line) + (1 if line_has_newline else 0)
+        if sentence_ids:
+            # The layout gives every non-final leaf block a separator newline.
+            # Attach that separator (and any deterministic trailing residue)
+            # to the block's final sentence so sentence spans exactly cover
+            # the same text as their block span.
+            _, block_end = layouts[row_index]
+            previous = sentences[-1]
+            if previous.end_char < block_end:
+                suffix = text[previous.end_char:block_end]
+                sentences[-1] = Sentence(
+                    id=previous.id,
+                    index=previous.index,
+                    start_char=previous.start_char,
+                    end_char=block_end,
+                    text=previous.text + suffix,
+                )
+        own_sentence_ids[row_index] = sentence_ids
+
+    children: dict[str, list[int]] = {}
+    for row_index, row in enumerate(rows):
+        parent_id = str(row["parent_id"])
+        children.setdefault(parent_id, []).append(row_index)
+
+    spans: dict[int, tuple[int, int]] = dict(layouts)
+    resolved_sentence_ids: dict[int, tuple[str, ...]] = {
+        row_index: tuple(sentence_ids)
+        for row_index, sentence_ids in own_sentence_ids.items()
+    }
+    sentence_order = {
+        sentence.id: sentence.index for sentence in sentences
+    }
+
+    def resolve_container(row_index: int) -> tuple[tuple[int, int], tuple[str, ...]]:
+        if row_index in spans and row_index in resolved_sentence_ids:
+            return spans[row_index], resolved_sentence_ids[row_index]
+        row_id = str(rows[row_index]["id"])
+        child_spans: list[tuple[int, int]] = []
+        child_sentence_ids: list[str] = []
+        for child_index in children.get(row_id, []):
+            child_span, child_ids = resolve_container(child_index)
+            if child_index in spans or child_span != (0, 0):
+                child_spans.append(child_span)
+            child_sentence_ids.extend(child_ids)
+        if row_index in spans:
+            span = spans[row_index]
+        elif child_spans:
+            span = (
+                min(start for start, _ in child_spans),
+                max(end for _, end in child_spans),
+            )
+            spans[row_index] = span
+        else:
+            raise DocumentDecodeError(
+                f"structured document container has no content: {row_id}"
+            )
+        if row_index in resolved_sentence_ids:
+            sentence_ids = resolved_sentence_ids[row_index]
+        else:
+            sentence_ids = tuple(
+                sorted(set(child_sentence_ids), key=sentence_order.__getitem__)
+            )
+            resolved_sentence_ids[row_index] = sentence_ids
+        return span, sentence_ids
+
+    for row_index in range(len(rows)):
+        resolve_container(row_index)
+
+    blocks: list[ReadingBlock] = []
+    for row_index, row in enumerate(rows):
+        start_char, end_char = spans[row_index]
+        if not 0 <= start_char <= end_char <= len(text):
+            raise DocumentDecodeError(
+                f"structured document block span is invalid: {row['id']}"
+            )
         blocks.append(
             ReadingBlock(
-                id=block_id or f"block-{index}",
-                kind=kind,
-                parent_id=resolved_parent,
-                order=order,
+                id=str(row["id"]),
+                kind=str(row["kind"]),
+                parent_id=str(row["parent_id"]),
+                order=int(row["order"]),
                 start_char=start_char,
                 end_char=end_char,
-                sentence_ids=tuple(sentence_ids),
+                sentence_ids=resolved_sentence_ids.get(row_index, ()),
             )
         )
-        cursor = end_char
     root = ReadingBlock(
         id="block-root",
         kind="root",
@@ -643,9 +789,11 @@ def _epub_spine_blocks(
     """Decode an EPUB spine into structured blocks.
 
     The spine order and the OPF-relative href resolution follow the exact
-    container declarations; each spine item becomes a ``chapter`` block whose
-    heading/paragraph blocks are its children. Traversal outside the OPF
-    directory is rejected.
+    container declarations; each spine item becomes a ``chapter`` container
+    whose heading/paragraph blocks are its children. The chapter tuple has an
+    empty text contribution by design: its range is derived later from the
+    child ranges, so the chapter cannot duplicate the child text in speech or
+    structured reading. Traversal outside the OPF directory is rejected.
     """
     try:
         opf_entry = next(
@@ -713,12 +861,31 @@ def _epub_spine_blocks(
         ]
         if not chapter_parts:
             continue
-        chapter_text = "\n".join(content for _, _, _, content in chapter_parts)
-        blocks.append((chapter_id, "chapter", None, chapter_text))
+        # A chapter is hierarchy metadata, not another copy of the content.
+        # ``_segment_raw_blocks`` derives its span and sentence ids from these
+        # child blocks after laying out the leaf text globally.
+        blocks.append((chapter_id, "chapter", None, ""))
         blocks.extend(chapter_parts)
     if not blocks:
         raise DocumentDecodeError("EPUB contains no extractable text")
     return blocks
+
+
+def _logical_text_from_raw_blocks(
+    raw_blocks: Sequence[tuple[str | None, str, str | None, str]],
+) -> str:
+    """Join only text-bearing structured blocks in deterministic order.
+
+    Empty synthetic containers are intentionally omitted. Keeping this helper
+    beside the EPUB decoder makes the same rule explicit at the call site and
+    prevents a future container from reintroducing duplicate logical text.
+    """
+    container_kinds = frozenset({"root", "book", "chapter", "section"})
+    return "\n".join(
+        block_text
+        for _, kind, _, block_text in raw_blocks
+        if kind not in container_kinds and bool(block_text)
+    )
 
 
 def decode_epub(raw: bytes) -> str:
@@ -749,7 +916,7 @@ def decode_epub(raw: bytes) -> str:
             )
         root_path = root_match.group(1)
         blocks = _epub_spine_blocks(archive, root_path)
-    return "\n".join(content for _, _, _, content in blocks)
+    return _logical_text_from_raw_blocks(blocks)
 
 
 # ---------------------------------------------------------------------------
@@ -1108,7 +1275,7 @@ def decode_document(
                 )
             root_path = root_match.group(1)
             raw_blocks = _epub_spine_blocks(archive, root_path)
-        text = "\n".join(content for _, _, _, content in raw_blocks)
+        text = _logical_text_from_raw_blocks(raw_blocks)
         blocks, sentences = _segment_raw_blocks(text, raw_blocks)
         paragraphs = _paragraphs_from_blocks(blocks)
         return _assemble_document(
