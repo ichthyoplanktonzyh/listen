@@ -26,14 +26,16 @@ from listen_gen.sense_groups import (
 
 def _tokens(*texts: str) -> tuple[AlignmentToken, ...]:
     out: list[AlignmentToken] = []
+    offset = 0
     for index, text in enumerate(texts):
         if text.isalnum():
             kind, normalized = "word", text.casefold()
-        elif text in ",.!?;:":
+        elif text in ",.!?;:@/":
             kind, normalized = "punctuation", None
         else:
             kind, normalized = "whitespace", None
-        out.append(AlignmentToken(index, kind, text, normalized, 0, len(text)))
+        out.append(AlignmentToken(index, kind, text, normalized, offset, offset + len(text)))
+        offset += len(text)
     return tuple(out)
 
 
@@ -63,6 +65,157 @@ class SenseGroupThreeLayersTests(unittest.TestCase):
         self.assertEqual(groups[1].start_token_index, 13)
         self.assertEqual(groups[1].end_token_index_exclusive, len(tokens))
         self.assertEqual(groups[1].sources, ("rule",))
+
+    def test_internal_domain_dot_does_not_create_a_sense_group_boundary(self) -> None:
+        words = [
+            "We",
+            " ",
+            "learn",
+            " ",
+            "at",
+            " ",
+            "BBCLearningEnglish",
+            ".",
+            "com",
+            " ",
+            "today",
+            ".",
+        ]
+        text = "".join(words)
+        sentence = AlignmentSentence(
+            "domain",
+            0,
+            0,
+            1000,
+            text,
+            text,
+            _tokens(*words),
+        )
+        groups = partition_sentence_rule(
+            sentence,
+            config=SenseGroupPartitionConfig(soft_max_words=20, hard_max_words=20),
+        )
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].sources, ("rule",))
+
+    def test_email_decimal_and_abbreviation_internal_punctuation_is_protected(self) -> None:
+        cases = (
+            (
+                "Please email CNN10@cnn.com today.",
+                [
+                    "Please",
+                    " ",
+                    "email",
+                    " ",
+                    "CNN10",
+                    "@",
+                    "cnn",
+                    ".",
+                    "com",
+                    " ",
+                    "today",
+                    ".",
+                ],
+            ),
+            (
+                "The value is 3.14 today.",
+                [
+                    "The",
+                    " ",
+                    "value",
+                    " ",
+                    "is",
+                    " ",
+                    "3",
+                    ".",
+                    "14",
+                    " ",
+                    "today",
+                    ".",
+                ],
+            ),
+            (
+                "Ask Dr. Smith today.",
+                [
+                    "Ask",
+                    " ",
+                    "Dr",
+                    ".",
+                    " ",
+                    "Smith",
+                    " ",
+                    "today",
+                    ".",
+                ],
+            ),
+            (
+                "Visit https://example.com. Next.",
+                [
+                    "Visit",
+                    " ",
+                    "https",
+                    ":",
+                    "/",
+                    "/",
+                    "example",
+                    ".",
+                    "com",
+                    ".",
+                    " ",
+                    "Next",
+                    ".",
+                ],
+            ),
+        )
+        for text, words in cases:
+            with self.subTest(text=text):
+                sentence = AlignmentSentence(
+                    text,
+                    0,
+                    0,
+                    1000,
+                    text,
+                    text,
+                    _tokens(*words),
+                )
+                groups = partition_sentence_rule(
+                    sentence,
+                    config=SenseGroupPartitionConfig(
+                        soft_max_words=20,
+                        hard_max_words=20,
+                    ),
+                )
+                expected_groups = 2 if text.startswith("Visit https://") else 1
+                self.assertEqual(len(groups), expected_groups)
+
+    def test_real_sentence_period_still_creates_a_boundary(self) -> None:
+        text = "It ended. Completely new."
+        words = [
+            "It",
+            " ",
+            "ended",
+            ".",
+            " ",
+            "Completely",
+            " ",
+            "new",
+            ".",
+        ]
+        sentence = AlignmentSentence(
+            "real-period",
+            0,
+            0,
+            1000,
+            text,
+            text,
+            _tokens(*words),
+        )
+        groups = partition_sentence_rule(
+            sentence,
+            config=SenseGroupPartitionConfig(soft_max_words=20, hard_max_words=20),
+        )
+        self.assertEqual(len(groups), 2)
+        self.assertEqual(groups[0].sources, ("punctuation",))
 
     def test_layer2_syntax_analyzer_falls_back_when_backend_unavailable(self) -> None:
         analyzer = SyntaxSenseGroupAnalyzer(backend="spacy", model="non_existent_model")

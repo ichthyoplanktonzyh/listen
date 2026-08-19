@@ -53,6 +53,57 @@ DEFAULT_TARGET_GROUPS_PER_SENTENCE = 4
 
 LLM_SENSE_GROUP_PROMPT_CONTRACT = "sense-group-partition-v1"
 
+_ABBREVIATIONS = frozenset(
+    {
+        "mr",
+        "mrs",
+        "ms",
+        "dr",
+        "prof",
+        "rev",
+        "gen",
+        "sen",
+        "rep",
+        "st",
+        "lt",
+        "col",
+        "sgt",
+        "adm",
+        "vs",
+        "etc",
+        "fig",
+        "eq",
+        "inc",
+        "jr",
+        "sr",
+        "jan",
+        "feb",
+        "mar",
+        "apr",
+        "jun",
+        "jul",
+        "aug",
+        "sep",
+        "sept",
+        "oct",
+        "nov",
+        "dec",
+    }
+)
+
+# These patterns are only used to decide whether a punctuation token is an
+# internal token character. They never create a group by themselves and are
+# deliberately bounded to a single lossless display sentence.
+_DOMAIN_RE = re.compile(
+    r"(?ix)(?<![\w@])(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"[a-z]{2,63}(?!\w)"
+)
+_EMAIL_RE = re.compile(
+    r"(?ix)(?<![\w.+-])[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?!\w)"
+)
+_URL_RE = re.compile(r"(?ix)\b(?:https?://|ftp://|www\.)[^\s]+")
+
 
 def _config_sha256(config: dict[str, Any]) -> str:
     config_bytes = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -64,7 +115,7 @@ def _sense_group_config(cfg: SenseGroupPartitionConfig | None = None) -> dict[st
     return {
         "schema": SENSE_GROUPS_CONFIG_SCHEMA,
         "provider_id": "baseline-sense-groups",
-        "rules": ["word_aware_punctuation_length_rule_v2"],
+        "rules": ["word_aware_punctuation_length_rule_v3"],
         "min_words": c.min_words,
         "soft_max_words": c.soft_max_words,
         "hard_max_words": c.hard_max_words,
@@ -84,6 +135,65 @@ def _find_head_token_index(tokens: Sequence[AlignmentToken], start: int, end_exc
         if token.kind == "word":
             return token.index
     return None
+
+
+def _match_contains_token(
+    pattern: re.Pattern[str],
+    text: str,
+    token: AlignmentToken,
+) -> bool:
+    return any(
+        match.start() <= token.start_char and token.end_char <= match.end()
+        for match in pattern.finditer(text)
+    )
+
+
+def _is_internal_punctuation(
+    sentence: AlignmentSentence,
+    punctuation: AlignmentToken,
+    previous_word: AlignmentToken,
+    next_word: AlignmentToken,
+) -> bool:
+    """Whether punctuation belongs inside one lexical token expression.
+
+    The sentence partitioner receives lossless tokens, so character spans let
+    us distinguish the dot in ``BBCLearningEnglish.com`` from the dot ending
+    ``It ended.``. URL/e-mail/domain matches cover their ``@``, slash, colon,
+    and internal dots; the explicit guards cover decimals and abbreviations.
+    """
+    text = sentence.display_text
+    if _match_contains_token(_EMAIL_RE, text, punctuation):
+        return True
+    if _match_contains_token(_URL_RE, text, punctuation):
+        # The URL expression intentionally spans its whole non-whitespace
+        # token, which may include a sentence-closing dot. Keep URL-internal
+        # dots protected, but let ``https://example.com. Next`` retain the
+        # real sentence boundary after the hostname.
+        if punctuation.text in ".!?":
+            suffix = text[punctuation.end_char :].lstrip(
+                '"\'\u201d\u2019)]}»）】》'
+            )
+            if not suffix or suffix[0].isspace():
+                return False
+        return True
+    if _match_contains_token(_DOMAIN_RE, text, punctuation):
+        return True
+
+    if punctuation.text == ".":
+        previous_text = previous_word.text
+        next_text = next_word.text
+        if previous_text.isdigit() and next_text.isdigit():
+            return True
+        if previous_text.casefold() in _ABBREVIATIONS:
+            return True
+        if len(previous_text) == 1 and len(next_text) == 1:
+            return True
+        # ``e.g. example`` and ``U.S. citizens``: the second dot is still
+        # internal even though the following word is not a single initial.
+        prefix = text[max(0, punctuation.start_char - 8) : punctuation.end_char]
+        if re.search(r"(?:[A-Za-z]\.){2,}$", prefix):
+            return True
+    return False
 
 
 def partition_sentence_rule(
@@ -147,9 +257,17 @@ def partition_sentence_rule(
             for t in tokens
             if word.index < t.index < next_word.index and t.kind == "punctuation"
         ]
-        punct_text = "".join(t.text for t in punct_tokens)
+        internal_punctuation = {
+            token.index
+            for token in punct_tokens
+            if _is_internal_punctuation(sentence, token, word, next_word)
+        }
+        effective_punct_tokens = [
+            token for token in punct_tokens if token.index not in internal_punctuation
+        ]
+        punct_text = "".join(t.text for t in effective_punct_tokens)
         has_strong = any(c in STRONG_PUNCTUATION for c in punct_text)
-        has_punct = bool(punct_tokens)
+        has_punct = bool(effective_punct_tokens)
 
         in_phrase = any(
             start <= word.index and end >= next_word.index
@@ -247,7 +365,7 @@ class PunctuationSenseGroupBaseline:
     """
 
     provider_id = "baseline-sense-groups"
-    provider_version = "2"
+    provider_version = "3"
 
     def __init__(
         self,
@@ -268,7 +386,7 @@ class PunctuationSenseGroupBaseline:
             {
                 "schema": SENSE_GROUPS_CONFIG_SCHEMA,
                 "provider_id": self.provider_id,
-                "rules": ["word_aware_punctuation_length_rule_v2"],
+                "rules": ["word_aware_punctuation_length_rule_v3"],
                 "min_words": self.config.min_words,
                 "soft_max_words": self.config.soft_max_words,
                 "hard_max_words": self.config.hard_max_words,

@@ -285,6 +285,40 @@ class SentenceAssemblyRegressionTests(unittest.TestCase):
                 self.assertEqual(len(assembled), 1)
                 self.assertEqual(assembled[0].text, f"{first} {second}")
 
+    def test_cross_fragment_domain_continuations_are_one_sentence(self) -> None:
+        cases = (
+            (
+                "or find much more at BBCLearningEnglish.",
+                "com.",
+                "or find much more at BBCLearningEnglish.com.",
+            ),
+            ("Email us at CNN10@cnn.", "com.", "Email us at CNN10@cnn.com."),
+            ("Visit example.", "com today.", "Visit example.com today."),
+            ("Visit www.example.", "com today.", "Visit www.example.com today."),
+        )
+        for first, second, expected in cases:
+            with self.subTest(first=first):
+                assembled = assemble_subtitle_blocks(
+                    (
+                        SubtitleBlock(first, 0, 100),
+                        SubtitleBlock(second, 100, 200),
+                    )
+                )
+                self.assertEqual(len(assembled), 1)
+                self.assertEqual(assembled[0].text, expected)
+
+    def test_cross_fragment_true_sentence_is_not_merged_with_completely(self) -> None:
+        assembled = assemble_subtitle_blocks(
+            (
+                SubtitleBlock("It ended.", 0, 100),
+                SubtitleBlock("completely new.", 100, 200),
+            )
+        )
+        self.assertEqual(
+            [sentence.text for sentence in assembled],
+            ["It ended.", "completely new."],
+        )
+
     def test_true_and_unicode_terminators_stop_merging(self) -> None:
         assembled = assemble_subtitle_blocks(
             (

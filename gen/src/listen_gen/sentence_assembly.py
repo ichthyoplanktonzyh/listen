@@ -32,7 +32,7 @@ from .asr import AsrSegment, AsrTranscript, AsrWord
 
 
 ASSEMBLY_ALGORITHM_ID = "listen-gen.timed-sentence-assembly"
-ASSEMBLY_ALGORITHM_VERSION = "1"
+ASSEMBLY_ALGORITHM_VERSION = "2"
 
 # These are intentionally explicit and part of the assembly identity.  They
 # prevent an ASR provider that omits punctuation from joining an unbounded
@@ -53,7 +53,11 @@ _ASSEMBLY_CONFIG = {
     "max_inter_fragment_gap_ms": MAX_INTER_FRAGMENT_GAP_MS,
     "max_source_fragments": MAX_SOURCE_FRAGMENTS,
     "join_separator": " ",
-    "sentence_boundary_policy": "terminal-punctuation-with-abbreviation-url-decimal-guards",
+    "domain_continuation_join_separator": "",
+    "sentence_boundary_policy": (
+        "terminal-punctuation-with-abbreviation-url-decimal-and-"
+        "cross-fragment-domain-continuation-guards"
+    ),
     "split_policy": "word-timing-only",
 }
 ASSEMBLY_CONFIG_SHA256 = "sha256:" + hashlib.sha256(
@@ -105,6 +109,47 @@ _ABBREVIATIONS = frozenset(
 _CLOSERS = frozenset('"\'\u201d\u2019)]}»）】》')
 _TERMINAL_CHARS = frozenset(".!?\u3002\uff01\uff1f\u2026")
 _WORD_RE = re.compile(r"\w+(?:['\u2019]\w+)*", re.UNICODE)
+_DOMAIN_TLDS = frozenset(
+    {
+        "com",
+        "org",
+        "net",
+        "edu",
+        "gov",
+        "mil",
+        "int",
+        "info",
+        "biz",
+        "name",
+        "pro",
+        "me",
+        "tv",
+        "io",
+        "ai",
+        "app",
+        "dev",
+        "co",
+        "uk",
+        "us",
+        "ca",
+        "au",
+        "de",
+        "fr",
+        "es",
+        "it",
+        "nl",
+        "be",
+        "ch",
+        "cn",
+        "jp",
+        "kr",
+        "in",
+        "xyz",
+        "online",
+        "site",
+        "tech",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -513,8 +558,12 @@ def _piece_words(piece: _Piece, prefix_length: int) -> tuple[AssembledWord, ...]
     )
 
 
+def _join_separator(current: AssembledSentence, piece: _Piece) -> str:
+    return "" if _is_cross_fragment_domain_continuation(current.text, piece.text) else " "
+
+
 def _merged_piece(current: AssembledSentence, piece: _Piece) -> AssembledSentence:
-    separator = " "
+    separator = _join_separator(current, piece)
     prefix = len(current.text) + len(separator)
     text = current.text + separator + piece.text
     return AssembledSentence(
@@ -556,17 +605,57 @@ def _ends_in_terminal_boundary(text: str) -> bool:
     return True
 
 
+def _starts_with_domain_label(text: str) -> bool:
+    """Return whether a fragment starts with a known hostname label.
+
+    ASR providers occasionally split ``example.`` and ``com.`` into separate
+    timed fragments.  The label must be followed by a dot, whitespace, or the
+    end of the fragment; this deliberately rejects ordinary words such as
+    ``completely``.
+    """
+    match = re.match(r"\s*([A-Za-z0-9-]{2,63})(?=\.|\s|$)", text)
+    return bool(match and match.group(1).casefold() in _DOMAIN_TLDS)
+
+
+def _is_cross_fragment_domain_continuation(
+    current_text: str,
+    next_text: str,
+) -> bool:
+    """Recognize a hostname/e-mail continuation at a fragment boundary.
+
+    The current fragment's terminal dot is normally a reliable sentence end.
+    A following fragment beginning with a real top-level domain label is the
+    one provider shape that makes that dot demonstrably internal, e.g.
+    ``BBCLearningEnglish.`` + ``com.`` or ``www.example.`` + ``com/path``.
+    ``completely new`` is not a domain label and therefore remains a new
+    sentence.
+    """
+    current = current_text.rstrip()
+    if not current.endswith(".") or not _starts_with_domain_label(next_text):
+        return False
+    # A known top-level label is strong enough evidence at a provider
+    # fragment boundary: ordinary continuations such as ``completely`` do
+    # not match the label guard above. This covers bare hostnames as well as
+    # mixed-case brands, URLs, and e-mail addresses.
+    return True
+
+
 def _can_merge(current: AssembledSentence, piece: _Piece) -> bool:
     # A genuine boundary in the accumulated candidate always wins over a
     # continuation guess, including when the next provider fragment starts
     # with a lower-case word.
-    if _ends_in_terminal_boundary(current.text):
+    if _ends_in_terminal_boundary(current.text) and not _is_cross_fragment_domain_continuation(
+        current.text,
+        piece.text,
+    ):
         return False
     if piece.start_ms - current.end_ms > MAX_INTER_FRAGMENT_GAP_MS:
         return False
     if len(current.source_fragment_indices) >= MAX_SOURCE_FRAGMENTS:
         return False
-    prospective_text_length = len(current.text) + 1 + len(piece.text)
+    prospective_text_length = (
+        len(current.text) + len(_join_separator(current, piece)) + len(piece.text)
+    )
     if prospective_text_length > MAX_ASSEMBLED_CHARS:
         return False
     prospective_duration = piece.end_ms - current.start_ms
