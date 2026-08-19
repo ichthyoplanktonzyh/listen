@@ -161,7 +161,7 @@ def get_default_config() -> dict[str, Any]:
             "wav2vec2_python": sys.executable,
             "wav2vec2_sidecar": "",
             "wav2vec2_model_dir": "",
-            "wav2vec2_model_id": "facebook/wav2vec2-base-960h",
+            "wav2vec2_model_id": "facebook/wav2vec2-lv-60-espeak-cv-ft",
             "wav2vec2_model_revision": "main",
             "timeout_seconds": 600.0,
         },
@@ -1667,7 +1667,7 @@ def _run_produce_worker(
                     Path(phone_cfg.get("wav2vec2_python", sys.executable)),
                     Path(phone_cfg["wav2vec2_sidecar"]),
                     Path(phone_cfg.get("wav2vec2_model_dir", "")),
-                    phone_cfg.get("wav2vec2_model_id", "facebook/wav2vec2-base-960h"),
+                    phone_cfg.get("wav2vec2_model_id", "facebook/wav2vec2-lv-60-espeak-cv-ft"),
                     phone_cfg.get("wav2vec2_model_revision", "main"),
                     float(phone_cfg.get("timeout_seconds", 600.0)),
                 )
