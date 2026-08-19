@@ -78,8 +78,13 @@ def auto_detect_profile(
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("ANTHROPIC_API_KEY")
         or os.environ.get("GEMINI_API_KEY")
-        or "sk-849b355a8d37445489e6da3f1dbc150e"
     )
+    # No hardcoded fallback key. One used to live here, and it did more than
+    # leak a credential in a published artifact: because it was never empty,
+    # `PunctuationSenseGroupBaseline` auto-upgraded to the LLM path on every
+    # machine, including ones that had configured no provider at all. Callers
+    # who want LLM sense groups supply a key; callers who do not get the
+    # deterministic rule partitioning they asked for.
 
     # Resolve Adapter Kind
     resolved_adapter = adapter_kind or os.environ.get("LISTEN_LLM_ADAPTER") or os.environ.get("LISTEN_LLM_ADAPTER_KIND")
@@ -166,6 +171,13 @@ def auto_detect_profile(
 class BaseLlmClient:
     """Abstract wire client for structured JSON chat completions."""
 
+    #: The model string the endpoint reported on its most recent successful
+    #: reply. A profile names the model we *asked* for ("deepseek-chat"); the
+    #: response names the one that actually answered, which is often more
+    #: specific and is the only version identity provenance can honestly
+    #: declare. Stays None until a call succeeds.
+    observed_model: str | None = None
+
     def call_structured_json(
         self,
         system_prompt: str,
@@ -222,6 +234,9 @@ class OpenAiChatClient(BaseLlmClient):
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 result_json = json.loads(resp.read().decode("utf-8"))
 
+            reported = result_json.get("model")
+            if isinstance(reported, str) and reported:
+                self.observed_model = reported
             content = result_json["choices"][0]["message"]["content"]
             if isinstance(content, dict):
                 return content
@@ -278,6 +293,9 @@ class AnthropicMessagesClient(BaseLlmClient):
                 result_json = json.loads(resp.read().decode("utf-8"))
 
             # Content can be text block
+            reported = result_json.get("model")
+            if isinstance(reported, str) and reported:
+                self.observed_model = reported
             content_blocks = result_json.get("content", [])
             for block in content_blocks:
                 if block.get("type") == "text":
@@ -336,6 +354,9 @@ class GeminiClient(BaseLlmClient):
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 result_json = json.loads(resp.read().decode("utf-8"))
 
+            reported = result_json.get("modelVersion")
+            if isinstance(reported, str) and reported:
+                self.observed_model = reported
             candidates = result_json.get("candidates", [])
             if not candidates:
                 return None

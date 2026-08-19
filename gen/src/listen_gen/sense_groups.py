@@ -510,6 +510,10 @@ class LlmSenseGroupAnalyzer:
             provider_id=self.provider_id,
             provider_version=self.provider_version,
             model_id=self.profile.model_id,
+            # The version is what the endpoint said answered, not what we
+            # asked for. Absent when every call fell back, in which case the
+            # package declares no model rather than an unversioned one.
+            model_version=self.client.observed_model,
             config_sha256=self.config_sha256,
         )
 

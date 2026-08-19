@@ -133,6 +133,53 @@ class SenseGroupThreeLayersTests(unittest.TestCase):
         client_deepseek = create_llm_client(profile_deepseek)
         self.assertIsInstance(client_deepseek, OpenAiChatClient)
 
+    def test_no_credential_means_no_credential(self) -> None:
+        """An unconfigured machine must not end up with a working API key.
+
+        A hardcoded DeepSeek key used to sit at the end of the key-resolution
+        chain. Besides shipping a live credential inside a published,
+        hash-pinned artifact, it was never empty — so
+        `PunctuationSenseGroupBaseline`'s auto-upgrade fired on every machine,
+        and `--sense-groups baseline` silently became an LLM run against the
+        author's account. That is also how a null `model.version` reached
+        listen-core and got the whole package rejected.
+        """
+        import os
+        from unittest import mock
+
+        cleared = {
+            key: ""
+            for key in (
+                "LISTEN_LLM_API_KEY",
+                "LISTEN_LLM_PROFILE_PATH",
+                "DEEPSEEK_API_KEY",
+                "DASHSCOPE_API_KEY",
+                "OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "GEMINI_API_KEY",
+            )
+        }
+        with mock.patch.dict(os.environ, cleared, clear=False):
+            for key in cleared:
+                os.environ.pop(key, None)
+            self.assertFalse(auto_detect_profile().api_key)
+            # And therefore the baseline stays the baseline.
+            self.assertIsNone(PunctuationSenseGroupBaseline().llm_analyzer)
+
+    def test_an_explicit_key_still_enables_the_llm_path(self) -> None:
+        """The other half of the rule: configured means enabled, by default.
+
+        Removing the hardcoded key must not remove the opt-in — a machine that
+        supplies a credential still gets LLM sense groups without passing
+        `--sense-groups llm`.
+        """
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"LISTEN_LLM_API_KEY": "sk-configured"}):
+            self.assertEqual(auto_detect_profile().api_key, "sk-configured")
+            self.assertIsNotNone(PunctuationSenseGroupBaseline().llm_analyzer)
+
     def test_provider_profile_json_file_loading(self) -> None:
         profile_data = {
             "adapter_kind": "anthropic_messages",

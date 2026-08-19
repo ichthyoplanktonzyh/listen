@@ -74,6 +74,32 @@ def blob_declaration(digest: str, size_bytes: int, embedded: bool) -> dict[str, 
     return {"digest": digest, "size_bytes": size_bytes, "embedded": embedded}
 
 
+def _versioned_or_none(producer: dict[str, object] | None) -> dict[str, object] | None:
+    """A `versionedProducer` the contract will accept, or nothing at all.
+
+    v3 requires both `id` and `version` to be non-empty strings, and permits
+    the whole producer to be absent. Callers routinely know the id but not the
+    version — an LLM adapter knows it talked to "deepseek-chat" and nothing
+    more — and used to emit `{"id": ..., "version": null}` or `""`. Core reads
+    the release against the schema, so one such field rejected the entire
+    package with `package_installation_invalid`; the learner saw "generation
+    failed" and no reason at all.
+
+    Naming a producer we cannot fully name is worth less than staying silent
+    about it, so a half-known producer degrades to absent here rather than
+    poisoning the document. This is the only place provenance leaves this
+    module, which is why the rule lives here instead of at each call site.
+    """
+    if producer is None:
+        return None
+    identity, version = producer.get("id"), producer.get("version")
+    if not isinstance(identity, str) or not identity:
+        return None
+    if not isinstance(version, str) or not version:
+        return None
+    return producer
+
+
 def producer_declaration(
     created_at_ms: int,
     *,
@@ -84,8 +110,8 @@ def producer_declaration(
     return {
         "created_at_ms": created_at_ms,
         "tool": {"id": TOOL_ID, "version": TOOL_VERSION},
-        "provider": provider,
-        "model": model,
+        "provider": _versioned_or_none(provider),
+        "model": _versioned_or_none(model),
         "config_sha256": config_sha256,
     }
 
@@ -102,8 +128,8 @@ def provenance(
     return {
         "created_at_ms": created_at_ms,
         "tool": {"id": TOOL_ID, "version": TOOL_VERSION},
-        "provider": provider,
-        "model": model,
+        "provider": _versioned_or_none(provider),
+        "model": _versioned_or_none(model),
         "config_sha256": config_sha256,
         "input_rendition_ids": list(input_rendition_ids or []),
         "input_resource_ids": list(input_resource_ids or []),

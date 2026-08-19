@@ -296,5 +296,43 @@ class PackageWriteTests(unittest.TestCase):
             self.assertNotIn(marker, raw)
 
 
+class ProvenanceProducerTest(unittest.TestCase):
+    """v3 `versionedProducer` requires non-empty `id` *and* `version`.
+
+    The incident: an LLM sense-group run declared
+    `{"id": "deepseek-chat", "version": null}` — the adapter knew which model
+    it asked for and nothing about its version. listen-core validates the
+    release against the schema, so that single field rejected the whole
+    package with `package_installation_invalid`, and the learner was told
+    "generation failed, check your Core and Gen configuration". A sibling of
+    the same bug emitted `"version": ""`, which `minLength: 1` rejects just
+    as hard.
+
+    `producer_declaration` and `provenance` are the only two exits for
+    provenance in this package, so the rule is enforced here rather than at
+    each call site: a producer we cannot fully name is omitted, never
+    half-declared.
+    """
+
+    def test_fully_named_producer_survives(self) -> None:
+        model = {"id": "deepseek-chat", "version": "deepseek-v4-flash-20260101"}
+        self.assertEqual(provenance(1, model=model)["model"], model)
+        self.assertEqual(producer_declaration(1, model=model)["model"], model)
+
+    def test_null_version_is_omitted_not_declared(self) -> None:
+        model = {"id": "deepseek-chat", "version": None}
+        self.assertIsNone(provenance(1, model=model)["model"])
+        self.assertIsNone(producer_declaration(1, model=model)["model"])
+
+    def test_empty_version_is_omitted_not_declared(self) -> None:
+        model = {"id": "whisper", "version": ""}
+        self.assertIsNone(provenance(1, model=model)["model"])
+        self.assertIsNone(producer_declaration(1, model=model)["model"])
+
+    def test_the_rule_applies_to_provider_too(self) -> None:
+        self.assertIsNone(provenance(1, provider={"id": "tts", "version": None})["provider"])
+        self.assertIsNone(provenance(1, provider={"id": "", "version": "2"})["provider"])
+
+
 if __name__ == "__main__":
     unittest.main()
