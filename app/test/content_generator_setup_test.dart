@@ -262,4 +262,29 @@ void main() {
       expect(setup.phoneModelDir, modelDir.path);
     },
   );
+
+  test(
+    'the phoneme model directory is a model directory, never the tool runtime',
+    () async {
+      // The one lookup that asks for a directory and has no standard filename.
+      // Interpolating an empty name used to put the bare bundled/development
+      // runtime directories at the head of the candidate list, and a directory
+      // probe accepts any directory that exists — so this resolved to the
+      // folder holding ffmpeg. Gen then answered `phone_failed` on every run
+      // and quietly shipped learning packages with no phone timeline at all.
+      touch('$modelDirectory/ggml-base.bin');
+      touch('LLPlayerNext/.venv/bin/python');
+      touch('listen-core/scripts/forced-align/align-cli.py');
+      touch('listen-core/scripts/wav2vec2-phoneme-cli.py');
+      final phonemeModel = Directory(
+        '${root.path}/Library/Application Support/listen/models/wav2vec2-phoneme',
+      )..createSync(recursive: true);
+
+      final setup = await locator().resolve();
+
+      expect(setup.phoneModelDir, phonemeModel.path);
+      expect(setup.phoneModelDir, endsWith('wav2vec2-phoneme'));
+      expect(setup.phoneModelDir, isNot(contains('.backend')));
+    },
+  );
 }

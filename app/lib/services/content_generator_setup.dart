@@ -228,8 +228,14 @@ class ContentGeneratorLocator {
       if (exists) return configured;
     }
     for (final candidate in [
-      '$_bundledRuntime/$name',
-      '$_developmentRuntime/$name',
+      // An empty [name] means "this tool has no standard filename, only the
+      // explicit candidates below". Interpolating it anyway yields the bare
+      // runtime directory, which `wantDirectory: true` then happily accepts —
+      // that is how the phoneme model directory resolved to the folder
+      // holding ffmpeg, so every run shipped a `--phones-wav2vec2-model-dir`
+      // that could not load and Gen answered `phone_failed` every time.
+      if (name.isNotEmpty) '$_bundledRuntime/$name',
+      if (name.isNotEmpty) '$_developmentRuntime/$name',
       ...extraCandidates,
       if (name.isNotEmpty) '/opt/homebrew/bin/$name',
       if (name.isNotEmpty) '/usr/local/bin/$name',
