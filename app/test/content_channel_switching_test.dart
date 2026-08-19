@@ -35,7 +35,7 @@ import 'package:llplayer_next/widgets/channels/reading_channel.dart';
 import 'package:llplayer_next/widgets/channels/speaking_channel.dart';
 import 'package:llplayer_next/widgets/channels/writing_channel.dart';
 import 'package:llplayer_next/widgets/layout/content_channel_availability.dart';
-import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/widgets/layout/material_workbench.dart';
 import 'package:llplayer_next/widgets/layout/study_menu.dart';
 
 Cue _cue(int index, String text, {required int startMs, required int endMs}) =>
@@ -220,9 +220,9 @@ class _Harness {
     home: Scaffold(
       body: ListenableBuilder(
         listenable: channels.selection,
-        builder: (context, _) => MediaWorkbench(
-          mediaTitle: 'clip.mp4',
-          playerStage: const ColoredBox(color: Colors.black),
+        builder: (context, _) => MaterialWorkbench(
+          materialTitle: 'clip.mp4',
+          videoPane: const ColoredBox(color: Colors.black),
           learningPanel: const ColoredBox(color: Colors.white),
           mediaFraction: 0.42,
           onMediaFractionChanged: (_) {},

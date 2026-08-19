@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../controllers/document_session_controller.dart';
 import '../../localization.dart';
+import '../../models/content_channel.dart';
 import '../../models/document_session.dart';
 import '../../models/material_capability.dart';
 import '../../theme/breakpoints.dart';
@@ -11,9 +12,9 @@ import '../../theme/icon_size.dart';
 import '../../theme/spacing.dart';
 import '../common/listen_loading.dart';
 import '../document/document_session_view.dart';
-import 'media_workbench.dart';
+import 'material_workbench.dart';
 
-/// The workbench with a text material on it.
+/// Document-specific state and actions injected into [MaterialWorkbench].
 ///
 /// Same workbench layer as timed media — same header, same text region, same
 /// collapse — with the visual pane switched off, because a document has no
@@ -25,8 +26,8 @@ import 'media_workbench.dart';
 /// the exact PDF/EPUB/Markdown/HTML/text source remains one secondary action
 /// away for provenance and verification. The finished generation lands on
 /// this same surface — no "open the result" step and no second material.
-class DocumentWorkbench extends StatefulWidget {
-  const DocumentWorkbench({
+class DocumentMaterialSurface extends StatefulWidget {
+  const DocumentMaterialSurface({
     super.key,
     required this.controller,
     required this.mediaFraction,
@@ -38,6 +39,15 @@ class DocumentWorkbench extends StatefulWidget {
     this.onCancelListen,
     this.timedLearningPanel,
     this.learningEditionAction,
+    this.studyMenu,
+    this.translationMenu,
+    this.listeningMenu,
+    this.selectedChannel = ContentChannel.listening,
+    this.immersiveStage,
+    this.onShadow,
+    this.canShadow = false,
+    this.showShadowAction = true,
+    this.supplementalHeaderActions = const [],
   });
 
   final DocumentSessionController controller;
@@ -63,11 +73,26 @@ class DocumentWorkbench extends StatefulWidget {
   /// status. Kept separate from the source-document toggle.
   final Widget? learningEditionAction;
 
+  /// Shared workbench controls. A generated document receives the same
+  /// channel, transcript, translation and shadow controls as audio; source
+  /// preparation and the view-original action are the only document-specific
+  /// additions.
+  final Widget? studyMenu;
+  final Widget? translationMenu;
+  final Widget? listeningMenu;
+  final ContentChannel selectedChannel;
+  final Widget? immersiveStage;
+  final VoidCallback? onShadow;
+  final bool canShadow;
+  final bool showShadowAction;
+  final List<Widget> supplementalHeaderActions;
+
   @override
-  State<DocumentWorkbench> createState() => _DocumentWorkbenchState();
+  State<DocumentMaterialSurface> createState() =>
+      _DocumentMaterialSurfaceState();
 }
 
-class _DocumentWorkbenchState extends State<DocumentWorkbench> {
+class _DocumentMaterialSurfaceState extends State<DocumentMaterialSurface> {
   bool _showSource = false;
 
   @override
@@ -108,24 +133,32 @@ class _DocumentWorkbenchState extends State<DocumentWorkbench> {
           ),
           _ => DocumentSessionView(controller: widget.controller),
         };
-        return MediaWorkbench(
-          mediaTitle: title,
-          playerStage: const SizedBox.shrink(),
+        final sourceAction = ready
+            ? _SourceMaterialAction(
+                showingSource: _showSource,
+                onPressed: () => setState(() => _showSource = !_showSource),
+              )
+            : null;
+        final generationAction = hasInteractiveLearningSurface
+            ? _listenAction(state)
+            : null;
+        return MaterialWorkbench(
+          materialTitle: title,
+          videoPane: null,
           learningPanel: learningPanel,
           // Once structured text exists but generated speech is still
           // missing, generation remains available in the header as a
           // supplement. Before that, the preparation surface owns the primary
           // action so it cannot be overlooked.
-          listeningMenu: hasInteractiveLearningSurface
-              ? _listenAction(state)
-              : null,
+          studyMenu: widget.studyMenu,
+          translationMenu: widget.translationMenu,
+          listeningMenu: widget.listeningMenu,
           learningEditionAction: ready ? widget.learningEditionAction : null,
-          studyMenu: ready
-              ? _SourceMaterialAction(
-                  showingSource: _showSource,
-                  onPressed: () => setState(() => _showSource = !_showSource),
-                )
-              : null,
+          supplementalHeaderActions: [
+            ...widget.supplementalHeaderActions,
+            ?sourceAction,
+            ?generationAction,
+          ],
           // Membership belongs in the header, the same place a media session
           // keeps it. It used to be repeated inside the body next to a second
           // copy of the title, which is what made a document look like a page
@@ -136,8 +169,14 @@ class _DocumentWorkbenchState extends State<DocumentWorkbench> {
           onCollapse: widget.onCollapse,
           // No visual stream and — until a rendition is adopted — no current
           // timed sentence to shadow.
-          showMediaPane: false,
-          showShadowAction: false,
+          showShadowAction:
+              widget.showShadowAction && hasInteractiveLearningSurface,
+          canShadow: widget.canShadow && hasInteractiveLearningSurface,
+          onShadow: widget.onShadow,
+          selectedChannel: widget.selectedChannel,
+          immersiveStage: hasInteractiveLearningSurface && !_showSource
+              ? widget.immersiveStage
+              : null,
           onOpenSettings: widget.onOpenSettings,
         );
       },

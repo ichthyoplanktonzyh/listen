@@ -181,6 +181,7 @@ void main() {
       expect(harness.runView!.phase, CapabilityRunPhase.completed);
       expect(harness.runView!.producedPackageSha256, isNotNull);
       expect(harness.repo.finalizedSucceeded, 1);
+      expect(harness.repo.finalizedToolVersions, ['0.5.2']);
       expect(harness.repo.adoptedReleases, [_satisfyingEdition.releaseId]);
       expect(harness.repo.installedPackagePaths, ['/tmp/generated.zip']);
     },
@@ -415,7 +416,10 @@ void main() {
     expect(view.failureCode, 'package_installation_invalid');
     expect(view.failureMessage, 'package release is invalid or incompatible');
     // The durable Core attempt records the same name, not a shrug.
-    expect(harness.repo.finalizedFailures, contains('package_installation_invalid'));
+    expect(
+      harness.repo.finalizedFailures,
+      contains('package_installation_invalid'),
+    );
   });
 
   test('an adoption failure finalizes the attempt and fails the run', () async {
@@ -499,6 +503,7 @@ void main() {
         1,
         reason: 'an empty plan is a successful attempt',
       );
+      expect(harness.repo.finalizedToolVersions, ['0.5.2']);
       expect(harness.runView!.phase, CapabilityRunPhase.completed);
     },
   );
@@ -741,6 +746,7 @@ final class _FakeGenService implements ListenGenProcessService {
 
   _FakeGenRun? lastRun;
   int startCount = 0;
+  String verifiedToolVersion = '0.5.2';
 
   bool get hasRun => lastRun != null;
 
@@ -753,16 +759,18 @@ final class _FakeGenService implements ListenGenProcessService {
   @override
   Future<ListenGenProcessRun> start(CapabilityGenerationRequest request) async {
     startCount++;
-    final run = _FakeGenRun(request);
+    final run = _FakeGenRun(request, verifiedToolVersion: verifiedToolVersion);
     lastRun = run;
     return run;
   }
 }
 
 final class _FakeGenRun implements ListenGenProcessRun {
-  _FakeGenRun(this.request);
+  _FakeGenRun(this.request, {required this.verifiedToolVersion});
 
   final CapabilityGenerationRequest request;
+  @override
+  final String verifiedToolVersion;
   final StreamController<GenMachineEvent> _events =
       StreamController<GenMachineEvent>();
   final Completer<String> _packagePath = Completer<String>();
@@ -875,6 +883,7 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   List<LearningEdition> editions = [];
   int attemptCount = 0;
   int finalizedSucceeded = 0;
+  final List<String?> finalizedToolVersions = [];
   final List<String> finalizedFailures = [];
   final List<String> adoptedReleases = [];
   final List<String> installedPackagePaths = [];
@@ -940,6 +949,7 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   }) async {
     if (succeeded) {
       finalizedSucceeded++;
+      finalizedToolVersions.add(toolVersion);
     } else {
       finalizedFailures.add(failureReason ?? 'unknown');
     }

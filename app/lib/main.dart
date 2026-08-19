@@ -135,8 +135,8 @@ import 'widgets/flows/writing_flows.dart';
 import 'widgets/home/listening_home.dart';
 import 'widgets/layout/content_channel_availability.dart';
 import 'widgets/layout/desktop_drop_surface.dart';
-import 'widgets/layout/document_workbench.dart';
-import 'widgets/layout/media_workbench.dart';
+import 'widgets/layout/document_material_surface.dart';
+import 'widgets/layout/material_workbench.dart';
 import 'widgets/layout/playback_bar.dart';
 import 'widgets/layout/player_overlays.dart';
 import 'widgets/layout/player_stage.dart';
@@ -343,6 +343,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   );
   late final SubscriptionStore subscriptionStore =
       SubscriptionStore.forCurrentUser();
+
   /// The composition root is the only place that hands out a ledger backed by
   /// a real directory; everything else defaults to remembering nothing.
   ///
@@ -422,8 +423,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// location resolves to null and the store reports itself unavailable.
   late final managedAssetStore = LocalManagedAssetStoreService(
     resolveRoot: () => switch (settingsController.managedStoreLocation.state) {
-      StorageLocationState.appManaged ||
-      StorageLocationState.ready => settingsController.managedStoreLocation.path,
+      StorageLocationState.appManaged || StorageLocationState.ready =>
+        settingsController.managedStoreLocation.path,
       StorageLocationState.missing => null,
     },
   );
@@ -1351,7 +1352,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       ? mediaLibraryActions.openLibraryEntry(entry)
       : _openDocumentSession(entry);
 
-  void _closeDocumentWorkbench() {
+  void _closeDocumentMaterialSurface() {
     final closing = _documentSession;
     if (closing == null) return;
     _workbenchAnimController.reverse().then((_) {
@@ -1371,7 +1372,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     });
   }
 
-  Widget _documentWorkbench(DocumentSessionController controller) {
+  Widget _documentMaterialSurface(DocumentSessionController controller) {
     // Gen progress is not document state. Listen to both sources so resolving,
     // generation, install, adoption, cancellation and failure all update the
     // header while the source document remains untouched underneath.
@@ -1382,13 +1383,20 @@ class _PlayerScreenState extends State<PlayerScreen>
           DocumentSessionReady(:final details) => details,
           _ => null,
         };
-        return DocumentWorkbench(
+        return DocumentMaterialSurface(
           controller: controller,
           mediaFraction: settingsController.workbenchMediaFraction,
           onMediaFractionChanged: _setWorkbenchMediaFraction,
-          onCollapse: _closeDocumentWorkbench,
+          onCollapse: _closeDocumentMaterialSurface,
           onOpenSettings: () => unawaited(_openSettings()),
           timedLearningPanel: _sidePanel(),
+          studyMenu: _studyMenu(),
+          listeningMenu: _listeningMenu(),
+          translationMenu: _translationMenu(),
+          selectedChannel: contentChannels.selected,
+          immersiveStage: _immersiveWorkbenchStage(),
+          canShadow: subtitleController.currentPrimaryCue != null,
+          onShadow: () => unawaited(practiceActions.startShadowingPractice()),
           listenRun: material == null
               ? null
               : capabilityCoordinator.runViewFor(
@@ -3050,9 +3058,10 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                 SlideTransition(
                                                   position:
                                                       _workbenchSlideAnimation,
-                                                  child: _documentWorkbench(
-                                                    document,
-                                                  ),
+                                                  child:
+                                                      _documentMaterialSurface(
+                                                        document,
+                                                      ),
                                                 )
                                               else if (playerController
                                                       .mediaPath !=
@@ -3060,29 +3069,27 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                 SlideTransition(
                                                   position:
                                                       _workbenchSlideAnimation,
-                                                  child: MediaWorkbench(
-                                                    learningEditionAction:
-                                                        switch (mediaSession
-                                                            .currentMaterial) {
-                                                          final material? =>
-                                                            _learningEditionAction(
-                                                              materialId:
-                                                                  material
-                                                                      .material
-                                                                      .id,
-                                                              capability:
-                                                                  MaterialCapability
-                                                                      .read,
-                                                              onGenerate:
-                                                                  _generateSubtitles,
-                                                              onRegenerate:
-                                                                  () => _generateSubtitles(
-                                                                    forceRegenerate:
-                                                                        true,
-                                                                  ),
-                                                            ),
-                                                          null => null,
-                                                        },
+                                                  child: MaterialWorkbench(
+                                                    learningEditionAction: switch (mediaSession
+                                                        .currentMaterial) {
+                                                      final material? =>
+                                                        _learningEditionAction(
+                                                          materialId: material
+                                                              .material
+                                                              .id,
+                                                          capability:
+                                                              MaterialCapability
+                                                                  .read,
+                                                          onGenerate:
+                                                              _generateSubtitles,
+                                                          onRegenerate: () =>
+                                                              _generateSubtitles(
+                                                                forceRegenerate:
+                                                                    true,
+                                                              ),
+                                                        ),
+                                                      null => null,
+                                                    },
                                                     subtitleMenu:
                                                         _sessionSubtitleMenu(),
                                                     studyMenu: _studyMenu(),
@@ -3104,83 +3111,24 @@ class _PlayerScreenState extends State<PlayerScreen>
                                                         _retentionMenu(),
                                                     translationMenu:
                                                         _translationMenu(),
-                                                    mediaTitle: widget
+                                                    materialTitle: widget
                                                         .pathHelper
                                                         .basename(
                                                           playerController
                                                               .mediaPath!,
                                                         ),
-                                                    showMediaPane:
+                                                    videoPane:
                                                         playerController
-                                                            .mediaKind !=
-                                                        'audio',
-                                                    playerStage: _playerStage(),
+                                                                .mediaKind ==
+                                                            'video'
+                                                        ? _playerStage()
+                                                        : null,
                                                     learningPanel: _sidePanel(),
                                                     selectedChannel:
                                                         contentChannels
                                                             .selected,
-                                                    immersiveStage: switch (contentChannels
-                                                        .selected) {
-                                                      ContentChannel.writing =>
-                                                        WritingChannelHost(
-                                                          writingChannel:
-                                                              writingChannel,
-                                                          writingTaskController:
-                                                              writingTaskController,
-                                                        ),
-                                                      ContentChannel.speaking =>
-                                                        SpeakingChannelHost(
-                                                          speakingChannel:
-                                                              speakingChannel,
-                                                          speakingActions:
-                                                              speakingActions,
-                                                          speakingTaskController:
-                                                              speakingTaskController,
-                                                          readingTaskController:
-                                                              readingTaskController,
-                                                        ),
-                                                      ContentChannel.reading => ReadingChannelHost(
-                                                        readingChannel:
-                                                            readingChannel,
-                                                        readingController:
-                                                            readingController,
-                                                        readingTaskController:
-                                                            readingTaskController,
-                                                        readingDiffController:
-                                                            readingDiffController,
-                                                        learningController:
-                                                            learningController,
-                                                        settingsController:
-                                                            settingsController,
-                                                        subtitleController:
-                                                            subtitleController,
-                                                        playerController:
-                                                            playerController,
-                                                        vocabularyActions:
-                                                            vocabularyActions,
-                                                        onSaveSentencePattern:
-                                                            (source) =>
-                                                                _openPersonalExpression(
-                                                                  source:
-                                                                      source,
-                                                                ),
-                                                        onOpenSlicePlayback:
-                                                            _openSlicePlayback,
-                                                        onRecordReadingMark:
-                                                            _recordReadingMark,
-                                                        onOpenListeningDictionary:
-                                                            _openListeningDictionaryEntry,
-                                                        onPlayPronunciationAudio:
-                                                            _playPronunciationAudio,
-                                                        onCorrectLemma: () =>
-                                                            unawaited(
-                                                              _correctCurrentLemma(),
-                                                            ),
-                                                      ),
-                                                      ContentChannel
-                                                          .listening =>
-                                                        null,
-                                                    },
+                                                    immersiveStage:
+                                                        _immersiveWorkbenchStage(),
                                                     mediaFraction:
                                                         settingsController
                                                             .workbenchMediaFraction,
@@ -3245,6 +3193,41 @@ class _PlayerScreenState extends State<PlayerScreen>
       },
     );
   }
+
+  /// The channel body shared by every adopted material. The document adapter
+  /// injects this same stage after its TTS composition becomes interactive;
+  /// only the visual pane remains a source-rendition fact.
+  Widget? _immersiveWorkbenchStage() => switch (contentChannels.selected) {
+    ContentChannel.writing => WritingChannelHost(
+      writingChannel: writingChannel,
+      writingTaskController: writingTaskController,
+    ),
+    ContentChannel.speaking => SpeakingChannelHost(
+      speakingChannel: speakingChannel,
+      speakingActions: speakingActions,
+      speakingTaskController: speakingTaskController,
+      readingTaskController: readingTaskController,
+    ),
+    ContentChannel.reading => ReadingChannelHost(
+      readingChannel: readingChannel,
+      readingController: readingController,
+      readingTaskController: readingTaskController,
+      readingDiffController: readingDiffController,
+      learningController: learningController,
+      settingsController: settingsController,
+      subtitleController: subtitleController,
+      playerController: playerController,
+      vocabularyActions: vocabularyActions,
+      onSaveSentencePattern: (source) =>
+          _openPersonalExpression(source: source),
+      onOpenSlicePlayback: _openSlicePlayback,
+      onRecordReadingMark: _recordReadingMark,
+      onOpenListeningDictionary: _openListeningDictionaryEntry,
+      onPlayPronunciationAudio: _playPronunciationAudio,
+      onCorrectLemma: () => unawaited(_correctCurrentLemma()),
+    ),
+    ContentChannel.listening => null,
+  };
 
   /// #23: mounts the native macOS menu bar around the shell; other platforms
   /// pass through. Availability and actions are the same objects the AppBar

@@ -12,12 +12,12 @@ import 'package:llplayer_next/models/api_failure.dart';
 import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/personal_library.dart';
-import 'package:llplayer_next/widgets/layout/document_workbench.dart';
+import 'package:llplayer_next/widgets/layout/document_material_surface.dart';
 import 'package:llplayer_next/services/document_intake_flow.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
 import 'package:llplayer_next/widgets/common/api_failure_disclosure.dart';
-import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/widgets/layout/material_workbench.dart';
 
 import 'support/document_session_test_fakes.dart';
 import 'support/learning_material_fixtures.dart';
@@ -71,9 +71,9 @@ Widget _screen(
     GlobalCupertinoLocalizations.delegate,
   ],
   home: Scaffold(
-    body: DocumentWorkbench(
+    body: DocumentMaterialSurface(
       controller: controller,
-      mediaFraction: MediaWorkbench.defaultMediaFraction,
+      mediaFraction: MaterialWorkbench.defaultMediaFraction,
       onMediaFractionChanged: _ignoreFraction,
       // Mounted the way the shell mounts it: collapsing the workbench is how
       // a document is left, since there is no route to pop.
@@ -164,7 +164,7 @@ void main() {
 
     // Documents reuse the existing workbench. With no video rendition the
     // document view owns the whole body; no media pane or splitter is mounted.
-    expect(find.byType(MediaWorkbench), findsOneWidget);
+    expect(find.byType(MaterialWorkbench), findsOneWidget);
     expect(find.byKey(const Key('workbench-close')), findsOneWidget);
     expect(find.byKey(const Key('workbench-media-title')), findsNothing);
     expect(find.byKey(const Key('media-workbench-splitter')), findsNothing);

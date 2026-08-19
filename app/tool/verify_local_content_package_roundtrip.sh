@@ -30,6 +30,9 @@ set -euo pipefail
 
 readonly EXPECTED_MEDIA_TEST="local Gen bundle to local Core round trips through capability production, installation, and adoption"
 readonly EXPECTED_DOCUMENT_TEST="a document material produces listen through the fake TTS provider and its derived audio resolves from the adopted composition through Core"
+readonly EXPECTED_MATRIX_TEST="the Gen/Core/App matrix keeps one adopted package shape across document and media families"
+readonly EXPECTED_RICH_TEST="a video subtitle with fragmented cues lands as one complete sentence with every rich timeline"
+readonly EXPECTED_RENDER_TEST="Core-adopted compositions render honest audio and text surfaces for document, audio, and video"
 
 app_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -52,6 +55,23 @@ run_stage() {
 
 : "${LISTEN_CORE_REPO:?set LISTEN_CORE_REPO to an absolute listen-core path}"
 : "${LISTEN_GEN_REPO:?set LISTEN_GEN_REPO to an absolute listen-gen path}"
+
+GEN_PYTHON="${LISTEN_GEN_PYTHON:-$LISTEN_GEN_REPO/.venv/bin/python}"
+if [ -z "${VERIFY_ROUNDTRIP_STAGE_RUNNER:-}" ]; then
+  [ -x "$GEN_PYTHON" ] || fail "LISTEN_GEN_PYTHON is not an executable Python >=3.11 runtime: $GEN_PYTHON"
+fi
+if [ -z "${VERIFY_ROUNDTRIP_STAGE_RUNNER:-}" ] && ! "$GEN_PYTHON" - <<'PY'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit("listen-gen E2E requires Python >=3.11")
+try:
+    import pypdf  # noqa: F401
+except ImportError as error:
+    raise SystemExit("listen-gen E2E requires the Gen PDF dependency pypdf") from error
+PY
+then
+  fail "listen-gen PDF fixture dependencies are unavailable in $GEN_PYTHON"
+fi
 
 [ -d "$LISTEN_CORE_REPO" ] || fail "LISTEN_CORE_REPO does not exist: $LISTEN_CORE_REPO"
 [ -d "$LISTEN_GEN_REPO" ] || fail "LISTEN_GEN_REPO does not exist: $LISTEN_GEN_REPO"
@@ -112,6 +132,10 @@ snapshot_workspace() {
 
 check_repo "$LISTEN_CORE_REPO" "listen-core"
 check_repo "$LISTEN_GEN_REPO" "listen-gen"
+readonly CORE_INITIAL_HEAD="$(git -C "$LISTEN_CORE_REPO" rev-parse HEAD)"
+readonly GEN_INITIAL_HEAD="$(git -C "$LISTEN_GEN_REPO" rev-parse HEAD)"
+readonly CORE_INITIAL_STATUS="$(git -C "$LISTEN_CORE_REPO" status --porcelain)"
+readonly GEN_INITIAL_STATUS="$(git -C "$LISTEN_GEN_REPO" status --porcelain)"
 
 tmp="$(mktemp -d)"
 cleanup() { rm -rf "$tmp"; }
@@ -152,16 +176,32 @@ core_contract_manifest="$(ls "$tmp/contracts"/listen-contracts-*.manifest.json |
 # behind inside the Gen checkout (or its snapshot).
 echo "verify-roundtrip: building local Gen bundle at $GEN_HEAD"
 ( cd "$GEN_SOURCE" &&
-  run_stage gen-build env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py build \
+  run_stage gen-build env PYTHONDONTWRITEBYTECODE=1 "$GEN_PYTHON" tools/release_bundle.py build \
     --source-commit "$GEN_HEAD" \
     --core-contract-manifest "$core_contract_manifest" \
     --output-parent "$tmp/gen" )
 
 echo "verify-roundtrip: verifying Gen bundle"
+gen_manifest="$(find "$tmp/gen" -type f -name '*.release.json' -print | sort | head -1)"
+[ -n "$gen_manifest" ] || fail "local Gen build did not produce a release manifest"
+gen_dir="$(dirname "$gen_manifest")"
+gen_version="$(basename "$gen_manifest" .release.json)"
+gen_artifact="$gen_dir/$gen_version.pyz"
+[ -f "$gen_artifact" ] || fail "local Gen build did not produce $gen_version.pyz"
+case "$gen_version" in
+  listen-gen-*) ;;
+  *) fail "unexpected Gen release directory: $gen_version" ;;
+esac
 ( cd "$GEN_SOURCE" &&
-  run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 python3 tools/release_bundle.py verify \
+  run_stage gen-verify env PYTHONDONTWRITEBYTECODE=1 "$GEN_PYTHON" tools/release_bundle.py verify \
     --core-contract-manifest "$core_contract_manifest" \
-    "$tmp/gen/listen-gen-0.5.0/listen-gen-0.5.0.release.json" )
+    "$gen_manifest" )
+
+echo "verify-roundtrip: building disposable content-family fixtures"
+fixture_root="$tmp/fixtures"
+run_stage fixture-build env PYTHONDONTWRITEBYTECODE=1 "$GEN_PYTHON" \
+  "$app_root/tool/build_content_package_roundtrip_fixtures.py" \
+  --output "$fixture_root"
 
 # Build Core into a temporary target so nothing is written into the checkout
 # (or its snapshot).
@@ -181,11 +221,14 @@ echo "verify-roundtrip: running focused integration tests"
     PUB_CACHE="$pub_cache" \
     LLPLAYERNEXT_API_BINARY="$tmp/core-target/debug/api-http" \
     LLPLAYERNEXT_DB="$tmp/db.sqlite" \
-    LISTEN_GEN_RELEASE_MANIFEST="$tmp/gen/listen-gen-0.5.0/listen-gen-0.5.0.release.json" \
-    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$app_root/test/fixtures/content-package-roundtrip/sample.asr.json\"]" \
+    LISTEN_GEN_RELEASE_MANIFEST="$gen_manifest" \
+    LISTEN_E2E_GEN_PYTHON="$GEN_PYTHON" \
+    LISTEN_E2E_FIXTURE_ROOT="$fixture_root" \
+    LISTEN_GEN_PROVIDER_ARGUMENTS="[\"--provider\",\"fixture\",\"--fixture\",\"$fixture_root/sample.asr.json\"]" \
     LISTEN_PACKAGE_E2E=1 \
-    flutter test \
+      flutter test \
       test/integration/listen_gen_core_roundtrip_test.dart \
+      test/integration/content_package_e2e_test.dart \
       test/integration/material_failure_injection_test.dart \
       test/integration/discovery_feed_roundtrip_test.dart \
       --concurrency 1 \
@@ -196,10 +239,29 @@ python3 "$app_root/tool/verify_flutter_test_report.py" \
   "$tmp/flutter-report.jsonl" "$EXPECTED_MEDIA_TEST"
 python3 "$app_root/tool/verify_flutter_test_report.py" \
   "$tmp/flutter-report.jsonl" "$EXPECTED_DOCUMENT_TEST"
+python3 "$app_root/tool/verify_flutter_test_report.py" \
+  "$tmp/flutter-report.jsonl" "$EXPECTED_MATRIX_TEST"
+python3 "$app_root/tool/verify_flutter_test_report.py" \
+  "$tmp/flutter-report.jsonl" "$EXPECTED_RICH_TEST"
+python3 "$app_root/tool/verify_flutter_test_report.py" \
+  "$tmp/flutter-report.jsonl" "$EXPECTED_RENDER_TEST"
 
 # The run must leave both external checkouts untouched. Reusing check_repo also
 # fails closed if Git itself becomes unreadable during the run.
 check_repo "$LISTEN_CORE_REPO" "listen-core"
 check_repo "$LISTEN_GEN_REPO" "listen-gen"
+
+final_core_head="$(git -C "$LISTEN_CORE_REPO" rev-parse HEAD)"
+final_gen_head="$(git -C "$LISTEN_GEN_REPO" rev-parse HEAD)"
+final_core_status="$(git -C "$LISTEN_CORE_REPO" status --porcelain)"
+final_gen_status="$(git -C "$LISTEN_GEN_REPO" status --porcelain)"
+[ "$final_core_head" = "$CORE_INITIAL_HEAD" ] ||
+  fail "listen-core HEAD changed during the gate"
+[ "$final_gen_head" = "$GEN_INITIAL_HEAD" ] ||
+  fail "listen-gen HEAD changed during the gate"
+[ "$final_core_status" = "$CORE_INITIAL_STATUS" ] ||
+  fail "listen-core working tree changed during the gate"
+[ "$final_gen_status" = "$GEN_INITIAL_STATUS" ] ||
+  fail "listen-gen working tree changed during the gate"
 
 echo "verify-roundtrip: OK"

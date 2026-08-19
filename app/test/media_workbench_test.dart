@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/player_adapter.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
-import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/widgets/layout/material_workbench.dart';
 import 'package:llplayer_next/widgets/player/playback_controls.dart';
 
 void main() {
@@ -30,9 +30,9 @@ void main() {
 
     await tester.pumpWidget(
       localized(
-        const MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: ColoredBox(key: Key('media-stage'), color: Colors.black),
+        const MaterialWorkbench(
+          materialTitle: 'CNN 10.mp4',
+          videoPane: ColoredBox(key: Key('media-stage'), color: Colors.black),
           learningPanel: ColoredBox(
             key: Key('learning-panel'),
             color: Colors.white,
@@ -59,19 +59,15 @@ void main() {
 
     await tester.pumpWidget(
       localized(
-        const MediaWorkbench(
-          mediaTitle: 'An article',
-          playerStage: ColoredBox(
-            key: Key('forbidden-video-stage'),
-            color: Colors.black,
-          ),
+        const MaterialWorkbench(
+          materialTitle: 'An article',
+          videoPane: null,
           learningPanel: SizedBox.expand(
             key: Key('full-width-text-panel'),
             child: ColoredBox(color: Colors.white),
           ),
           mediaFraction: 0.42,
           onMediaFractionChanged: _noopFraction,
-          showMediaPane: false,
           showShadowAction: false,
         ),
       ),
@@ -99,9 +95,9 @@ void main() {
         'school｜June 9, 2026 [9FFSOYLiFxc].mp4';
     await tester.pumpWidget(
       localized(
-        const MediaWorkbench(
-          mediaTitle: fileName,
-          playerStage: ColoredBox(key: Key('media-stage'), color: Colors.black),
+        const MaterialWorkbench(
+          materialTitle: fileName,
+          videoPane: ColoredBox(key: Key('media-stage'), color: Colors.black),
           learningPanel: ColoredBox(
             key: Key('learning-panel'),
             color: Colors.white,
@@ -141,9 +137,9 @@ void main() {
     var opened = 0;
     await tester.pumpWidget(
       localized(
-        MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: const ColoredBox(color: Colors.black),
+        MaterialWorkbench(
+          materialTitle: 'CNN 10.mp4',
+          videoPane: const ColoredBox(color: Colors.black),
           learningPanel: const ColoredBox(color: Colors.white),
           mediaFraction: 0.42,
           onMediaFractionChanged: _noopFraction,
@@ -164,9 +160,9 @@ void main() {
 
     await tester.pumpWidget(
       localized(
-        const MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: ColoredBox(
+        const MaterialWorkbench(
+          materialTitle: 'CNN 10.mp4',
+          videoPane: ColoredBox(
             key: Key('resizable-media-stage'),
             color: Colors.black,
           ),
@@ -208,9 +204,9 @@ void main() {
     final fractions = <double>[];
     await tester.pumpWidget(
       localized(
-        MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: const ColoredBox(color: Colors.black),
+        MaterialWorkbench(
+          materialTitle: 'CNN 10.mp4',
+          videoPane: const ColoredBox(color: Colors.black),
           learningPanel: const ColoredBox(color: Colors.white),
           mediaFraction: 0.6,
           onMediaFractionChanged: fractions.add,
@@ -234,9 +230,9 @@ void main() {
 
     await tester.pumpWidget(
       localized(
-        const MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: ColoredBox(color: Colors.black),
+        const MaterialWorkbench(
+          materialTitle: 'CNN 10.mp4',
+          videoPane: ColoredBox(color: Colors.black),
           learningPanel: ColoredBox(color: Colors.white),
           mediaFraction: 0.42,
           onMediaFractionChanged: _noopFraction,
@@ -250,9 +246,9 @@ void main() {
   testWidgets('immersive channel owns the workbench body', (tester) async {
     await tester.pumpWidget(
       localized(
-        const MediaWorkbench(
-          mediaTitle: 'CNN 10.mp4',
-          playerStage: ColoredBox(key: Key('old-stage'), color: Colors.black),
+        const MaterialWorkbench(
+          materialTitle: 'CNN 10.mp4',
+          videoPane: ColoredBox(key: Key('old-stage'), color: Colors.black),
           learningPanel: ColoredBox(key: Key('old-panel'), color: Colors.white),
           immersiveStage: ColoredBox(
             key: Key('reading-stage'),

@@ -134,6 +134,11 @@ class ListenGenProcessFailure implements Exception {
 }
 
 abstract interface class ListenGenProcessRun {
+  /// The release version verified before this process was launched.
+  ///
+  /// This is a fact of the run itself, not metadata supplied by a caller when
+  /// the coordinator is constructed.
+  String get verifiedToolVersion;
   Stream<GenMachineEvent> get events;
   Future<String> get packagePath;
   void cancel();
@@ -306,10 +311,10 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
-      if (_stderrLines.length < 50) {
-        _stderrLines.add(line);
-      }
-    });
+          if (_stderrLines.length < 50) {
+            _stderrLines.add(line);
+          }
+        });
   }
 
   final List<String> _stderrLines = [];
@@ -329,6 +334,9 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
   Object? _protocolFailure;
   Timer? _termTimer;
   Timer? _killTimer;
+
+  @override
+  String get verifiedToolVersion => _expectedToolVersion;
 
   Future<void> _consumeStdout() async {
     try {
@@ -487,7 +495,9 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
       return;
     }
     if (terminal.kind == GenEventKind.failed) {
-      final errorDetail = terminal.message ?? (_stderrLines.isNotEmpty ? _stderrLines.join('\n').trim() : null);
+      final errorDetail =
+          terminal.message ??
+          (_stderrLines.isNotEmpty ? _stderrLines.join('\n').trim() : null);
       _completeFailure(terminal.code ?? 'generator_failed', errorDetail);
       return;
     }

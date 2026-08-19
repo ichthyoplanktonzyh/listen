@@ -38,7 +38,6 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     this.subtitleTrackForMedia,
     this.providerArguments = _noProviderArguments,
     this.generatorToolId = 'listen-gen',
-    this.generatorToolVersion = '0.5.0',
     CapabilityFileResolver? fileResolver,
     ReusableResourceResolver? reusableResources,
   }) : _fileResolver =
@@ -73,7 +72,6 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
   /// so a toolchain resolved after construction still applies.
   final List<String> Function() providerArguments;
   final String generatorToolId;
-  final String generatorToolVersion;
 
   final Map<String, _CapabilitySession> _sessions = {};
 
@@ -465,7 +463,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
           attemptId: attempt.attemptId,
           succeeded: true,
           toolId: generatorToolId,
-          toolVersion: generatorToolVersion,
+          toolVersion: processRun.verifiedToolVersion,
         );
       } on Object catch (_) {
         // The run is still completed; the attempt note is best-effort.
@@ -511,7 +509,7 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
         attemptId: attempt.attemptId,
         succeeded: true,
         toolId: generatorToolId,
-        toolVersion: generatorToolVersion,
+        toolVersion: processRun.verifiedToolVersion,
       );
     } on Object catch (_) {
       // The composition is adopted and durable; a failed finalize note does
@@ -626,13 +624,15 @@ class MaterialCapabilityCoordinator extends ChangeNotifier {
     // rather than collapsing into `unexpected_error` — a run that names the
     // rejection is the difference between a fixable report and a shrug.
     final api = describeApiFailure(error);
-    return api.code ?? (api.isStructured ? 'request_failed' : 'unexpected_error');
+    return api.code ??
+        (api.isStructured ? 'request_failed' : 'unexpected_error');
   }
 
   static String _friendly(Object error) {
     if (error is ListenGenProcessFailure) return error.message ?? error.code;
     final api = describeApiFailure(error);
-    return api.code ?? (api.isStructured ? 'request_failed' : 'unexpected_error');
+    return api.code ??
+        (api.isStructured ? 'request_failed' : 'unexpected_error');
   }
 
   /// The one sentence behind [_friendly], when the failure carries one.

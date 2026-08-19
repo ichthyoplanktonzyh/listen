@@ -3,7 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:llplayer_next/localization.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
-import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/widgets/layout/material_workbench.dart';
 
 /// P0-b: the session header stopped being an anonymous menu cluster. It now
 /// carries a media breadcrumb (where the learner is) and a labelled, tooltipped
@@ -24,13 +24,13 @@ void main() {
   );
 
   Widget workbench({
-    String mediaTitle = 'CNN 10.mp4',
+    String materialTitle = 'CNN 10.mp4',
     VoidCallback? onShadow,
     bool canShadow = false,
     Widget? learningEditionAction,
-  }) => MediaWorkbench(
-    mediaTitle: mediaTitle,
-    playerStage: const ColoredBox(color: Colors.black),
+  }) => MaterialWorkbench(
+    materialTitle: materialTitle,
+    videoPane: const ColoredBox(color: Colors.black),
     learningPanel: const ColoredBox(color: Colors.white),
     mediaFraction: 0.42,
     onMediaFractionChanged: _noopFraction,
@@ -158,7 +158,7 @@ void main() {
     await tester.pumpWidget(
       localized(
         workbench(
-          mediaTitle: 'A very long media title that must ellipsize.mp4',
+          materialTitle: 'A very long media title that must ellipsize.mp4',
           learningEditionAction: IconButton(
             onPressed: _noop,
             icon: const Icon(Icons.inventory_2_outlined),

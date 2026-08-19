@@ -330,6 +330,7 @@ ${_emit(_completedEvent(2))}
         );
 
         final run = await service.start(_request);
+        expect(run.verifiedToolVersion, _toolVersion);
         expect(await run.packagePath, isNotEmpty);
         expect(marker.readAsStringSync(), 'used');
         await run.cleanUp();

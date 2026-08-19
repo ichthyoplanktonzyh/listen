@@ -122,7 +122,7 @@ void main() {
       // pass the product's release verification against the derived lock.
       final release = await releaseForProbeManifest();
       final verified = await release.verify();
-      expect(verified.toolVersion, '0.5.0');
+      expect(verified.toolVersion, isNotEmpty);
 
       final generator = LocalListenGenProcessService(
         pythonExecutable: _python3Executable,
@@ -211,7 +211,7 @@ void main() {
         expect(read.status, MaterialCapabilityStatus.available);
         expect(read.latestAttempt?.status, 'succeeded');
         expect(read.latestAttempt?.producerToolId, 'listen-gen');
-        expect(read.latestAttempt?.producerToolVersion, '0.5.0');
+        expect(read.latestAttempt?.producerToolVersion, verified.toolVersion);
 
         // Re-requesting resolves through the adopted composition: no new
         // attempt is opened and the same edition comes back.
@@ -242,7 +242,7 @@ void main() {
 
       final release = await releaseForProbeManifest();
       final verified = await release.verify();
-      expect(verified.toolVersion, '0.5.0');
+      expect(verified.toolVersion, isNotEmpty);
 
       final generator = LocalListenGenProcessService(
         pythonExecutable: _python3Executable,

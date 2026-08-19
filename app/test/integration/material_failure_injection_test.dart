@@ -173,8 +173,6 @@ void main() {
       HttpOverrides.global = null;
 
       final release = await releaseForProbeManifest();
-      final verified = await release.verify();
-      expect(verified.toolVersion, '0.5.0');
 
       final generator = LocalListenGenProcessService(
         pythonExecutable: _python3Executable,

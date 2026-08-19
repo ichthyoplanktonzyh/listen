@@ -16,8 +16,8 @@ import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/services/document_intake_flow.dart';
 import 'package:llplayer_next/services/document_intake_service.dart';
 import 'package:llplayer_next/theme/listen_theme.dart';
-import 'package:llplayer_next/widgets/layout/document_workbench.dart';
-import 'package:llplayer_next/widgets/layout/media_workbench.dart';
+import 'package:llplayer_next/widgets/layout/document_material_surface.dart';
+import 'package:llplayer_next/widgets/layout/material_workbench.dart';
 
 import 'support/document_session_test_fakes.dart';
 import 'support/learning_material_fixtures.dart';
@@ -116,9 +116,9 @@ Widget _host(
     GlobalCupertinoLocalizations.delegate,
   ],
   home: Scaffold(
-    body: DocumentWorkbench(
+    body: DocumentMaterialSurface(
       controller: controller,
-      mediaFraction: MediaWorkbench.defaultMediaFraction,
+      mediaFraction: MaterialWorkbench.defaultMediaFraction,
       onMediaFractionChanged: _ignoreFraction,
       onCollapse: _ignoreCollapse,
       listenRun: listenRun,
@@ -145,7 +145,7 @@ void main() {
     await tester.pumpWidget(_host(controller));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MediaWorkbench), findsOneWidget);
+    expect(find.byType(MaterialWorkbench), findsOneWidget);
     expect(find.byKey(const Key('workbench-media-title')), findsNothing);
     expect(find.byKey(const Key('media-workbench-splitter')), findsNothing);
     expect(
@@ -176,7 +176,7 @@ void main() {
     final ground = tester.widget<Material>(
       find
           .descendant(
-            of: find.byType(MediaWorkbench),
+            of: find.byType(MaterialWorkbench),
             matching: find.byType(Material),
           )
           .first,
@@ -228,7 +228,7 @@ void main() {
 
     expect(requests, 1);
     // Still the same surface, still the same material.
-    expect(find.byType(DocumentWorkbench), findsOneWidget);
+    expect(find.byType(DocumentMaterialSurface), findsOneWidget);
     final state = controller.state as DocumentSessionReady;
     expect(state.details.material.id, 'm-42');
   });
@@ -358,7 +358,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('existing-learning-panel')), findsOneWidget);
-    expect(find.byType(MediaWorkbench), findsOneWidget);
+    expect(find.byType(MaterialWorkbench), findsOneWidget);
 
     // The original file remains a secondary verification view and returning
     // restores the very same learning panel.
@@ -409,8 +409,8 @@ void main() {
     // made three separate session surfaces exist — so the rule is checked at
     // the source rather than trusted.
     const surfaces = [
-      'DocumentWorkbench(',
-      'MediaWorkbench(',
+      'DocumentMaterialSurface(',
+      'MaterialWorkbench(',
       // Deleted with the restructure; a reappearance means a page came back.
       'DocumentSessionScreen',
       'CompositionSessionScreen',

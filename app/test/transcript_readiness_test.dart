@@ -594,6 +594,8 @@ final class _FakeGenRun implements ListenGenProcessRun {
   _FakeGenRun(this.request);
 
   final CapabilityGenerationRequest request;
+  @override
+  String get verifiedToolVersion => '0.5.0';
   final StreamController<GenMachineEvent> _events =
       StreamController<GenMachineEvent>();
   final Completer<String> _packagePath = Completer<String>();
@@ -783,10 +785,7 @@ final class _FakeCapabilityRepository implements CapabilityRepository {
   }
 
   @override
-  Future<void> deleteEdition(
-    String materialId,
-    String releaseId,
-  ) async {
+  Future<void> deleteEdition(String materialId, String releaseId) async {
     editions.removeWhere((e) => e.releaseId == releaseId);
   }
 }

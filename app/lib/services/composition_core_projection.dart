@@ -23,6 +23,7 @@ import '../models/composition.dart';
 import '../models/timeline.dart';
 
 const _packageCandidateSource = 'package:subtitle_text_track';
+
 const _packageGeneratorId = 'listen-resource-package';
 const _acousticCueArtifactKind = 'rhythm_word_acoustic_cues';
 
