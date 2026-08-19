@@ -26,7 +26,6 @@ import 'package:llplayer_next/models/learning_material.dart';
 import 'package:llplayer_next/models/material_capability.dart';
 import 'package:llplayer_next/models/timeline.dart';
 import 'package:llplayer_next/models/types.dart';
-import 'package:llplayer_next/services/composition_transcript_bridge.dart';
 import 'package:llplayer_next/services/content_generator_setup.dart';
 import 'package:llplayer_next/services/listen_gen_process_service.dart';
 import 'package:llplayer_next/services/managed_asset_store.dart';
@@ -174,6 +173,7 @@ void main() {
         final subject = _readinessViewModel(
           tracks: const [],
           canAutoPrepare: true,
+          resolveComposition: (_) async => _formalResolvedComposition(),
         );
         addTearDown(subject.vm.dispose);
 
@@ -264,6 +264,36 @@ void main() {
     );
 
     test(
+      'a detached composition transcript fails instead of entering the workbench',
+      () async {
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: true,
+          resolveComposition: (_) async =>
+              _formalResolvedComposition(track: _detachedTrack),
+        );
+        addTearDown(subject.vm.dispose);
+
+        final request = subject.vm.prepareLearningTranscript();
+        await _waitForRun(subject.coordinator, subject.repository.genService);
+        final run = subject.repository.genService.lastRun!;
+        run
+          ..emitProtocol()
+          ..emitAccepted(attemptId: run.attemptId)
+          ..emitCompleted();
+        await request;
+        await _settle();
+
+        expect(subject.subtitle.primaryTrack, isNull);
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.failed);
+        expect(
+          subject.vm.state.failure?.raw,
+          'learning_material_core_transcript_unavailable',
+        );
+      },
+    );
+
+    test(
       'adopting another package re-projects it without switching media',
       () async {
         var composition = ResolvedComposition(
@@ -320,6 +350,7 @@ void main() {
       final subject = _readinessViewModel(
         tracks: const [],
         canAutoPrepare: true,
+        resolveComposition: (_) async => _formalResolvedComposition(),
       );
       addTearDown(subject.vm.dispose);
 
@@ -343,6 +374,7 @@ void main() {
       retryRun.emitRunning('transcribing media');
       retryRun.emitCompleted();
       await request;
+      await _settle();
 
       expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
       expect(subject.repository.finalizedSucceeded, 1);
@@ -352,6 +384,7 @@ void main() {
       final subject = _readinessViewModel(
         tracks: const [],
         canAutoPrepare: true,
+        resolveComposition: (_) async => _formalResolvedComposition(),
       );
       addTearDown(subject.vm.dispose);
 
@@ -368,95 +401,38 @@ void main() {
       expect(subject.vm.state.phase, TranscriptReadinessPhase.missing);
     });
 
-    test('an already-completed capability run reads as ready', () async {
-      final subject = _readinessViewModel(
-        tracks: const [],
-        canAutoPrepare: true,
-      );
-      addTearDown(subject.vm.dispose);
-      subject.repository.capabilities = [_projectionDerivableRead];
-
-      // Complete the read capability directly through the coordinator.
-      final request = subject.coordinator.requestCapability(
-        _mediaOnlyMaterial,
-        MaterialCapability.read,
-      );
-      await _waitForRun(subject.coordinator, subject.repository.genService);
-      final run = subject.repository.genService.lastRun!;
-      run.emitProtocol();
-      run.emitAccepted(attemptId: run.attemptId);
-      run.emitRunning('transcribing media');
-      run.emitCompleted();
-      await request;
-      await _settle();
-
-      expect(subject.vm.state.phase, TranscriptReadinessPhase.ready);
-    });
-    group('composition to srt bridge', () {
-      test('builds srt from reading text and anchor times', () {
-        final srt = CompositionTranscriptBridge.compositionToSrt(
-          {
-            'text': 'Hello world. This is a test.',
-            'anchors': [
-              {
-                'anchor_id': 'sentence-0',
-                'kind': 'sentence',
-                'start_offset': 0,
-                'end_offset': 12,
-              },
-              {
-                'anchor_id': 'sentence-1',
-                'kind': 'sentence',
-                'start_offset': 13,
-                'end_offset': 28,
-              },
-            ],
-          },
-          {
-            'alignments': [
-              {'anchor_id': 'sentence-0', 'media_time_ms': 0},
-              {'anchor_id': 'sentence-1', 'media_time_ms': 4000},
-            ],
-          },
+    test(
+      'an already-completed capability run without a formal Core transcript fails',
+      () async {
+        final subject = _readinessViewModel(
+          tracks: const [],
+          canAutoPrepare: true,
         );
+        addTearDown(subject.vm.dispose);
+        subject.repository.capabilities = [_projectionDerivableRead];
 
-        expect(srt, isNotNull);
-        expect(srt, contains('00:00:00,000 --> 00:00:04,000'));
-        expect(srt, contains('Hello world.'));
-        expect(srt, contains('This is a test.'));
-      });
-
-      test('drops sentences without times and empty text', () {
-        final srt = CompositionTranscriptBridge.compositionToSrt(
-          {
-            'text': 'A. B.',
-            'anchors': [
-              {
-                'anchor_id': 'sentence-0',
-                'kind': 'sentence',
-                'start_offset': 0,
-                'end_offset': 2,
-              },
-              {
-                'anchor_id': 'sentence-1',
-                'kind': 'sentence',
-                'start_offset': 3,
-                'end_offset': 5,
-              },
-            ],
-          },
-          {
-            'alignments': [
-              {'anchor_id': 'sentence-0', 'media_time_ms': 1000},
-            ],
-          },
+        // Complete the read capability directly through the coordinator.
+        final request = subject.coordinator.requestCapability(
+          _mediaOnlyMaterial,
+          MaterialCapability.read,
         );
+        await _waitForRun(subject.coordinator, subject.repository.genService);
+        final run = subject.repository.genService.lastRun!;
+        run.emitProtocol();
+        run.emitAccepted(attemptId: run.attemptId);
+        run.emitRunning('transcribing media');
+        run.emitCompleted();
+        await request;
+        await _settle();
 
-        expect(srt, isNotNull);
-        expect(srt, contains('A.'));
-        expect(srt, isNot(contains('B.')));
-      });
-    });
+        expect(subject.subtitle.primaryTrack, isNull);
+        expect(subject.vm.state.phase, TranscriptReadinessPhase.failed);
+        expect(
+          subject.vm.state.failure?.raw,
+          'learning_material_core_transcript_unavailable',
+        );
+      },
+    );
   });
 }
 
@@ -524,6 +500,26 @@ Future<void> _waitForRun(
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
+
+ResolvedComposition _formalResolvedComposition({
+  SubtitleTrack track = _usableTrackA,
+}) => ResolvedComposition(
+  releaseId: 'release-1',
+  editionId: 'edition-1',
+  logicalText: track.cues.single.text,
+  sentences: [
+    CompositionSentence(
+      id: track.cues.single.id,
+      index: 0,
+      text: track.cues.single.text,
+      startByte: 0,
+      endByte: track.cues.single.text.length,
+    ),
+  ],
+  anchors: const [],
+  alignments: {track.cues.single.id: 0},
+  transcript: track,
+);
 
 ({SubtitleController subtitle, MediaSessionCoordinator mediaSession})
 _coordinatorHarness(List<SubtitleTrack> tracks) {
@@ -859,7 +855,8 @@ final _mediaOnlyMaterial = MaterialDetails(
 const _usableTrackA = SubtitleTrack(
   id: 'track-a',
   language: 'en',
-  source: 'generated',
+  source: 'package:subtitle_text_track',
+  mediaId: 'media-1',
   cues: [
     Cue(
       id: 'cue-1',
@@ -882,7 +879,8 @@ const _usableTrackA = SubtitleTrack(
 const _usableTrackB = SubtitleTrack(
   id: 'track-b',
   language: 'zh',
-  source: 'subtitle',
+  source: 'package:subtitle_text_track',
+  mediaId: 'media-1',
   cues: [
     Cue(
       id: 'cue-2',
@@ -892,6 +890,30 @@ const _usableTrackB = SubtitleTrack(
       text: '你好',
       tokens: [
         SubtitleToken(index: 0, kind: 'word', text: '你好', normalized: '你好'),
+      ],
+    ),
+  ],
+);
+
+const _detachedTrack = SubtitleTrack(
+  id: 'detached-track',
+  language: 'en',
+  mediaId: 'media-1',
+  source: 'composition:detached:subtitle_text_track',
+  cues: [
+    Cue(
+      id: 'detached-sentence',
+      index: 0,
+      start: Duration.zero,
+      end: Duration(seconds: 1),
+      text: 'Detached',
+      tokens: [
+        SubtitleToken(
+          index: 0,
+          kind: 'word',
+          text: 'Detached',
+          normalized: 'detached',
+        ),
       ],
     ),
   ],

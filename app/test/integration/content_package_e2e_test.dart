@@ -600,7 +600,7 @@ Future<bool> _showVideoPaneFromCore(
   // A derived document audio rendition is not a source video. The pane is
   // therefore enabled only when Core's adopted composition still carries a
   // source media binding and the material's source facts identify a video.
-  return sourceIsVideo && adopted.sourceMediaId != null;
+  return sourceIsVideo && adopted.workbenchMediaId != null;
 }
 
 void main() {

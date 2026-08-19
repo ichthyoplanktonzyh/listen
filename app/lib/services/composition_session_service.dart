@@ -10,7 +10,6 @@ import '../models/composition.dart';
 import '../models/timeline.dart';
 import 'composition_core_projection.dart';
 import 'composition_resolution.dart';
-import 'composition_resource_projection.dart';
 
 /// Resolves what the adopted-composition surface needs to render: the adopted
 /// composition (through Core's single composition interface) and its learner
@@ -71,7 +70,7 @@ class CompositionSessionService {
       derivedMediaPath = _writeMediaBlob(media, blob);
     }
 
-    final projected = await _readWorkbenchResources(materialId, adopted);
+    final projected = await _readWorkbenchResources(adopted);
 
     return resolveCompositionContent(
       composition: adopted,
@@ -87,133 +86,74 @@ class CompositionSessionService {
   /// package payload.
   ///
   /// The adopted `subtitle_text_track` is a real subtitle track under the
-  /// composition's source media; its sentence ids are global
+  /// composition's workbench media; its sentence ids are global
   /// `SubtitleSentenceId`s. Its five analysis resource families are read back
   /// through the track's LLTimeline export, already re-keyed by Core. A
-  /// document has no source media id, so a selected tokenized subtitle payload
-  /// is projected into a detached track namespace instead. The detached
-  /// namespace is display/playback-only: it does not pretend to be a Core
-  /// global sentence track. The tokenless `timed_text_track` has no Core
-  /// landing and remains the last, display-only fallback.
+  /// composition without a formal Core media binding/track has no legal
+  /// transcript projection.
   ///
-  /// Every one of these is optional by contract, so this never fails the
-  /// composition: a resource that is absent, unreadable, or unresolvable
-  /// simply contributes nothing.
+  /// The optional analysis export may be unavailable while the formal Core
+  /// transcript remains usable. The transcript itself is never replaced by a
+  /// detached payload or an App-generated timed-text fallback.
   Future<
     ({CompositionResourceProjection enhancements, SubtitleTrack? transcript})
   >
-  _readWorkbenchResources(String materialId, AdoptedComposition adopted) async {
-    final sourceMediaId = adopted.sourceMediaId;
-    if (sourceMediaId != null) {
-      try {
-        final tracks = await resources.mediaSubtitles(sourceMediaId);
-        final track = _packageSubtitleTrack(tracks);
-        if (track != null) {
-          CompositionResourceProjection enhancements =
-              const CompositionResourceProjection();
-          try {
-            final document = await resources.exportTimelineJson(track.id);
-            enhancements = projectCompositionResourcesFromCore(
-              track: track,
-              documentJson: document.json,
-            );
-          } on Object {
-            // The Core-landed transcript is still the authoritative text
-            // surface even if an optional analysis export is unavailable.
-          }
-          return (enhancements: enhancements, transcript: track);
-        }
-      } on Object {
-        // A source-media track read is best-effort. Older Core editions and
-        // temporarily unavailable resource exports must not hide a detached
-        // composition transcript that is already verified and adopted.
-      }
-    }
-
-    final detachedPayload = await _payloadOfKind(
-      materialId,
-      adopted,
-      'subtitle_text_track',
-      expectedSchema: 'listen.payload.subtitle-text-track.v1',
-    );
-    final detachedTranscript = projectCompositionDetachedSubtitleTranscript(
-      detachedPayload,
-      trackId: 'composition:detached:${adopted.editionId}:subtitle_text_track',
-    );
-    if (detachedTranscript != null) {
-      const richSchemas = <String, String>{
-        'word_timeline': 'listen.payload.word-timeline.v1',
-        'sense_group_analysis': 'listen.payload.sense-group-analysis.v1',
-        'word_acoustics': 'listen.payload.word-acoustics.v1',
-        'prosody_analysis': 'listen.payload.prosody-analysis.v1',
-        'phone_timeline': 'listen.payload.phone-timeline.v1',
-      };
-      final richPayloads = <String, List<int>>{};
-      for (final entry in richSchemas.entries) {
-        final payload = await _payloadOfKind(
-          materialId,
-          adopted,
-          entry.key,
-          expectedSchema: entry.value,
-        );
-        if (payload != null) richPayloads[entry.key] = payload;
-      }
+  _readWorkbenchResources(AdoptedComposition adopted) async {
+    final workbenchMediaId = adopted.workbenchMediaId;
+    if (workbenchMediaId == null) {
       return (
-        enhancements: projectCompositionDetachedResources(
-          track: detachedTranscript,
-          payloads: richPayloads,
-        ),
-        transcript: detachedTranscript,
+        enhancements: const CompositionResourceProjection(),
+        transcript: null,
       );
     }
-
-    final timedTrackPayload = await _payloadOfKind(
-      materialId,
-      adopted,
-      'timed_text_track',
-    );
-    return (
-      enhancements: const CompositionResourceProjection(),
-      transcript: projectCompositionTimedTranscript(
-        timedTrackPayload,
-        trackId: 'composition:${adopted.editionId}',
-      ),
-    );
+    try {
+      final tracks = await resources.mediaSubtitles(workbenchMediaId);
+      final track = _packageSubtitleTrack(adopted, tracks);
+      if (track == null) {
+        return (
+          enhancements: const CompositionResourceProjection(),
+          transcript: null,
+        );
+      }
+      CompositionResourceProjection enhancements =
+          const CompositionResourceProjection();
+      try {
+        final document = await resources.exportTimelineJson(track.id);
+        enhancements = projectCompositionResourcesFromCore(
+          track: track,
+          documentJson: document.json,
+        );
+      } on Object {
+        // The formal Core transcript remains usable when an optional export
+        // family is unavailable.
+      }
+      return (enhancements: enhancements, transcript: track);
+    } on Object {
+      return (
+        enhancements: const CompositionResourceProjection(),
+        transcript: null,
+      );
+    }
   }
 
   /// The package subtitle track Core landed for this composition, when it is
   /// still available and still carries sentences.
-  SubtitleTrack? _packageSubtitleTrack(List<SubtitleTrack> tracks) {
+  SubtitleTrack? _packageSubtitleTrack(
+    AdoptedComposition adopted,
+    List<SubtitleTrack> tracks,
+  ) {
+    final resource = adopted.resourceOfKind('subtitle_text_track');
+    if (resource == null) return null;
+    final expectedFingerprint =
+        '${adopted.materialId}:${adopted.materialRevisionId}:${resource.resourceId}';
     for (final track in tracks) {
       if (track.source == 'package:subtitle_text_track' &&
-          track.usableForLearning) {
+          track.usableForLearning &&
+          track.fingerprint == expectedFingerprint) {
         return track;
       }
     }
     return null;
-  }
-
-  /// The exact payload of one resource kind, or null when the composition
-  /// does not carry it or the read fails.
-  Future<List<int>?> _payloadOfKind(
-    String materialId,
-    AdoptedComposition adopted,
-    String kind, {
-    String? expectedSchema,
-  }) async {
-    final resource = adopted.resourceOfKind(kind);
-    if (resource == null) return null;
-    if (expectedSchema != null && resource.schema != expectedSchema) {
-      return null;
-    }
-    try {
-      return await repository.readCompositionResourcePayload(
-        materialId,
-        resource.resourceId,
-      );
-    } on Object {
-      return null;
-    }
   }
 
   /// Writes the exact derived audio bytes to a temporary file for the player.

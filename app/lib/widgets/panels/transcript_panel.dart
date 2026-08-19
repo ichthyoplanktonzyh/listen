@@ -251,7 +251,7 @@ class _TranscriptPanelState extends State<TranscriptPanel> {
                                       textAlign: TextAlign.start,
                                       // Tight prose leading so one wrapped sentence
                                       // reads as one sentence.
-                                      lineHeight: 1.35,
+                                      lineHeight: 1.45,
                                       // The playing sentence reads in the primary
                                       // hue rather than under a full-width fill
                                       // block: a fill that wide becomes the
@@ -440,26 +440,38 @@ class _TranscriptCueRow extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: selected ? accentColor : Colors.transparent,
-            width: 2.5,
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      hoverColor: colors.primary.withValues(alpha: 0.04),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: selected ? accentColor : Colors.transparent,
+              width: 2.5,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: ListenSpacing.gap24,
+            vertical: ListenSpacing.gap12,
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: ListenBreakpoints.contentColumnMax,
+              ),
+              child: child,
+            ),
           ),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: ListenSpacing.gap16,
-          vertical: ListenSpacing.gap12,
-        ),
-        child: child,
-      ),
-    ),
-  );
+    );
+  }
 }
 
 /// The header row shared by the single-sentence focus modes: an optional label
@@ -923,22 +935,29 @@ class _TranslationLine extends StatelessWidget {
     final theme = Theme.of(context).textTheme;
     if (text == null) {
       return Padding(
-        padding: const EdgeInsets.only(top: ListenSpacing.gap2),
+        padding: const EdgeInsets.only(top: ListenSpacing.gap4),
         child: Text(
           missingLabel,
           key: const Key('transcript-translation-missing'),
-          style: theme.labelSmall?.copyWith(color: colors.onSurfaceVariant),
+          style: theme.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant.withValues(alpha: 0.8),
+            height: 1.35,
+          ),
         ),
       );
     }
     return Padding(
-      padding: EdgeInsets.only(top: alone ? 0 : ListenSpacing.gap2),
+      padding: EdgeInsets.only(top: alone ? 0 : ListenSpacing.gap4),
       child: Text(
         text!,
         key: const Key('transcript-translation'),
         style: alone
-            ? theme.bodyMedium
-            : theme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+            ? theme.bodyMedium?.copyWith(height: 1.45)
+            : theme.bodyMedium?.copyWith(
+                fontSize: 13.5,
+                color: colors.onSurfaceVariant,
+                height: 1.4,
+              ),
       ),
     );
   }

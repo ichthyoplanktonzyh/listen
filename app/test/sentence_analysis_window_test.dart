@@ -23,7 +23,12 @@ Cue _cue() => const Cue(
   tokens: [],
 );
 
-({Widget widget, LearningController learning, int Function() diagnosisCalls, int Function() closes})
+({
+  Widget widget,
+  LearningController learning,
+  int Function() diagnosisCalls,
+  int Function() closes,
+})
 _harness({bool withCurrentCue = true}) {
   final subtitle = SubtitleController();
   if (withCurrentCue) {
@@ -85,38 +90,48 @@ _harness({bool withCurrentCue = true}) {
 }
 
 void main() {
-  testWidgets('opens on the text layer and marks grammar/collocation unavailable', (
-    tester,
-  ) async {
-    final h = _harness();
-    await tester.pumpWidget(h.widget);
-    await tester.pumpAndSettle();
+  testWidgets(
+    'opens on the text layer and marks grammar/collocation unavailable',
+    (tester) async {
+      final h = _harness();
+      await tester.pumpWidget(h.widget);
+      await tester.pumpAndSettle();
 
-    // The current sentence heads the text layer, and the layers that need an
-    // AI contract we do not have say so plainly instead of faking a result.
-    expect(find.text(_sentence), findsOneWidget);
-    expect(find.byKey(const Key('analysis-text-unavailable')), findsOneWidget);
-    // The voice layer's diagnosis card is not built until the reader asks for
-    // it, so nothing was fetched by merely opening the window.
-    expect(h.diagnosisCalls(), 0);
-  });
+      // The current sentence heads the text layer, and the layers that need an
+      // AI contract we do not have say so plainly instead of faking a result.
+      expect(find.text(_sentence), findsOneWidget);
+      expect(
+        find.byKey(const Key('analysis-text-unavailable')),
+        findsOneWidget,
+      );
+      // Opening the window automatically prefetches the voice diagnosis so it
+      // is ready when the reader switches tabs.
+      expect(h.diagnosisCalls(), 1);
+    },
+  );
 
-  testWidgets('switching to the voice layer fetches the diagnosis and shows pending', (
-    tester,
-  ) async {
-    final h = _harness();
-    await tester.pumpWidget(h.widget);
-    await tester.pumpAndSettle();
+  testWidgets(
+    'switching to the voice layer shows pending when diagnosis not ready',
+    (tester) async {
+      final h = _harness();
+      await tester.pumpWidget(h.widget);
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('语音'));
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byWidgetPredicate((widget) => widget is SegmentedButton),
+          matching: find.text('语音'),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(h.diagnosisCalls(), 1);
-    expect(
-      find.byKey(const Key('transcript-analysis-pending')),
-      findsOneWidget,
-    );
-  });
+      expect(h.diagnosisCalls(), 1);
+      expect(
+        find.byKey(const Key('transcript-analysis-pending')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('the close button asks the host to close', (tester) async {
     final h = _harness();

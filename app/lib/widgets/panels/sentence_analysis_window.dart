@@ -14,6 +14,7 @@ import '../../models/capability_readiness.dart'
 import '../../models/timeline.dart';
 import '../../models/types.dart';
 import '../../theme/breakpoints.dart';
+import '../../theme/icon_size.dart';
 import '../../theme/listen_theme.dart';
 import '../../theme/radii.dart';
 import '../../theme/spacing.dart';
@@ -94,6 +95,7 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
   /// only pins to an absolute spot once the reader has moved it.
   Offset? _offset;
   _AnalysisLayer _layer = _AnalysisLayer.text;
+  String? _prefetchedDiagnosisCueId;
 
   SubtitleController get subtitleController => widget.subtitleController;
   LearningController get learningController => widget.learningController;
@@ -101,6 +103,33 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
   PlaybackActionsCoordinator get playbackActions => widget.playbackActions;
   SlicePlayerController get voiceClipPlayer => widget.voiceClipPlayer;
   AppLocalizations get l => AppLocalizations.of(context);
+
+  @override
+  void initState() {
+    super.initState();
+    _prefetchDiagnosis();
+  }
+
+  @override
+  void didUpdateWidget(SentenceAnalysisWindow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _prefetchDiagnosis();
+  }
+
+  /// Starts at most one automatic diagnosis request for the current cue.
+  /// Opening the window already prefetches it, so switching layers must not
+  /// launch the same sentence request again while the first result is still
+  /// pending. The explicit retry action in the pending card remains callable.
+  void _prefetchDiagnosis() {
+    final cueId = subtitleController.currentPrimaryCue?.id;
+    if (cueId == null ||
+        learningController.diagnosis != null ||
+        _prefetchedDiagnosisCueId == cueId) {
+      return;
+    }
+    _prefetchedDiagnosisCueId = cueId;
+    unawaited(widget.onRequestDiagnosis());
+  }
 
   @override
   void dispose() {
@@ -212,7 +241,7 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
           setState(() => _layer = values.first);
           if (_layer == _AnalysisLayer.voice &&
               learningController.diagnosis == null) {
-            unawaited(widget.onRequestDiagnosis());
+            _prefetchDiagnosis();
           }
         },
       ),
@@ -281,6 +310,11 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
           _UnavailableNotice(
             title: l.text('analysisTextUnavailableTitle'),
             body: l.text('analysisTextUnavailableBody'),
+            actionLabel: l.text('analysisLayerVoice'),
+            onAction: () {
+              setState(() => _layer = _AnalysisLayer.voice);
+              _prefetchDiagnosis();
+            },
           ),
         ],
       ),
@@ -625,10 +659,17 @@ class _SentenceAnalysisWindowState extends State<SentenceAnalysisWindow> {
 
 /// The honest "this layer isn't ready" card for the text analysis layer.
 class _UnavailableNotice extends StatelessWidget {
-  const _UnavailableNotice({required this.title, required this.body});
+  const _UnavailableNotice({
+    required this.title,
+    required this.body,
+    this.actionLabel,
+    this.onAction,
+  });
 
   final String title;
   final String body;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -654,6 +695,17 @@ class _UnavailableNotice extends StatelessWidget {
               body,
               style: theme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
             ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: ListenSpacing.gap12),
+              OutlinedButton.icon(
+                icon: const Icon(
+                  Icons.record_voice_over_outlined,
+                  size: ListenIconSize.inline,
+                ),
+                label: Text(actionLabel!),
+                onPressed: onAction,
+              ),
+            ],
           ],
         ),
       ),

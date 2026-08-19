@@ -1,15 +1,15 @@
 {
   "manifest_version": 1,
   "core_repository": "ichthyoplanktonzyh/listen-core",
-  "core_git_sha": "ee3997275eb2786469e428310908f0b181e1e872",
+  "core_git_sha": "0afa9e5f8ac2124c3022f708db440dddaa125451",
   "contract": {
     "version": "4.0.0",
-    "sha256": "6abcf4d97887beb8c9eab8a09621b12c5dbdcdccb24efacc2acb48cb8542e46a"
+    "sha256": "b30800f4c910975d3a8b8b9f07dbf380dacaca04fcdbc7612c5f485ec9501769"
   },
   "runtime": {
     "version": "0.7.0",
     "platform": "macos",
     "arch": "arm64",
-    "sha256": "5ede443276ce0c912c36f704d127c746db39244fc6260cbf60d75ce558ba83ff"
+    "sha256": "eefd431d4d14921ced6354b79ca6eacc7e375d3bed816358adb0b55ee12120b5"
   }
 }

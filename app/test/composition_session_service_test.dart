@@ -11,7 +11,27 @@ import 'package:llplayer_next/services/core_timeline_export.dart';
 
 void main() {
   test(
-    'a document composition uses its verified detached subtitle payload',
+    'composition workbench media id prefers source, then derived binding',
+    () {
+      expect(
+        _adoptedComposition(
+          detached: true,
+          includeDerivedBinding: true,
+        ).workbenchMediaId,
+        'derived-media-1',
+      );
+      expect(
+        _adoptedComposition(
+          detached: false,
+          includeDerivedBinding: true,
+        ).workbenchMediaId,
+        'media-1',
+      );
+    },
+  );
+
+  test(
+    'a composition without a formal Core transcript is not projected',
     () async {
       final repository = _FakeCapabilityRepository(
         _adoptedComposition(detached: true),
@@ -29,82 +49,77 @@ void main() {
       final resolved = await service.resolveComposition('material-1');
 
       expect(resolved, isNotNull);
-      expect(resolved!.transcript, isNotNull);
-      expect(
-        resolved.transcript!.source,
-        'composition:detached:subtitle_text_track',
-      );
-      expect(resolved.transcript!.cues.single.text, 'Listen, carefully!');
-      expect(resolved.transcript!.cues.single.tokens[0].text, 'Listen');
-      expect(resolved.transcript!.cues.single.start.inMilliseconds, 100);
-      expect(resolved.enhancements.timingsBySentence['sentence-0'], isNotEmpty);
-      expect(
-        resolved.enhancements.senseGroupsBySentence['sentence-0'],
-        isNotEmpty,
-      );
-      expect(
-        resolved.enhancements.chunkPartitionsBySentence['sentence-0']!.chunks,
-        isNotEmpty,
-      );
-      expect(
-        resolved.enhancements.acousticsBySentence['sentence-0'],
-        isNotEmpty,
-      );
-      expect(
-        resolved.enhancements.prosodyAnchorsBySentence['sentence-0'],
-        hasLength(2),
-      );
-      expect(resolved.enhancements.phonesBySentence['sentence-0'], isNotEmpty);
+      expect(resolved!.transcript, isNull);
+      expect(resolved.enhancements, isEmpty);
     },
   );
 
-  test('a Core-landed source-media track wins over detached payload', () async {
-    final repository = _FakeCapabilityRepository(
-      _adoptedComposition(detached: false),
-      payloads: {
-        'structured-1': _structuredReadingPayload(),
-        'subtitle-1': _subtitlePayload(),
-      },
-    );
-    final resources = _FakeResourceRepository(
-      tracks: [
-        SubtitleTrack(
-          id: 'global-track',
-          source: 'package:subtitle_text_track',
-          cues: [
-            Cue(
-              id: 'global-sentence',
-              index: 0,
-              start: const Duration(milliseconds: 200),
-              end: const Duration(milliseconds: 600),
-              text: 'Global track.',
-              tokens: const [
-                SubtitleToken(
-                  index: 0,
-                  kind: 'word',
-                  text: 'Global',
-                  normalized: 'global',
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
-    );
-    final service = CompositionSessionService(
-      repository: repository,
-      resources: resources,
-    );
+  test(
+    'a formal Core track is selected by the adopted resource fingerprint',
+    () async {
+      final repository = _FakeCapabilityRepository(
+        _adoptedComposition(detached: false),
+        payloads: {
+          'structured-1': _structuredReadingPayload(),
+          'subtitle-1': _subtitlePayload(),
+        },
+      );
+      final resources = _FakeResourceRepository(
+        tracks: [
+          SubtitleTrack(
+            id: 'pre-landed-candidate',
+            fingerprint: 'material-1:revision-1:other-resource',
+            source: 'package:subtitle_text_track',
+            cues: [
+              Cue(
+                id: 'wrong-global-sentence',
+                index: 0,
+                start: Duration.zero,
+                end: const Duration(milliseconds: 100),
+                text: 'Wrong candidate.',
+                tokens: const [],
+              ),
+            ],
+          ),
+          SubtitleTrack(
+            id: 'global-track',
+            fingerprint: 'material-1:revision-1:subtitle-1',
+            source: 'package:subtitle_text_track',
+            cues: [
+              Cue(
+                id: 'global-sentence',
+                index: 0,
+                start: const Duration(milliseconds: 200),
+                end: const Duration(milliseconds: 600),
+                text: 'Global track.',
+                tokens: const [
+                  SubtitleToken(
+                    index: 0,
+                    kind: 'word',
+                    text: 'Global',
+                    normalized: 'global',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      );
+      final service = CompositionSessionService(
+        repository: repository,
+        resources: resources,
+      );
 
-    final resolved = await service.resolveComposition('material-1');
+      final resolved = await service.resolveComposition('material-1');
 
-    expect(resolved!.transcript!.id, 'global-track');
-    expect(resolved.transcript!.source, 'package:subtitle_text_track');
-    expect(resolved.transcript!.cues.single.text, 'Global track.');
-  });
+      expect(resolved!.transcript!.id, 'global-track');
+      expect(resolved.transcript!.source, 'package:subtitle_text_track');
+      expect(resolved.transcript!.cues.single.text, 'Global track.');
+    },
+  );
 
   test(
-    'a missing optional rich family keeps the verified document transcript usable',
+    'a missing optional rich family cannot replace the formal Core transcript',
     () async {
       final repository = _FakeCapabilityRepository(
         _adoptedComposition(detached: true, includeRichResources: false),
@@ -121,8 +136,8 @@ void main() {
       final resolved = await service.resolveComposition('material-1');
 
       expect(resolved, isNotNull);
-      expect(resolved!.transcript, isNotNull);
-      expect(resolved.transcript!.source, contains('detached'));
+      expect(resolved!.transcript, isNull);
+      expect(resolved.enhancements, isEmpty);
       expect(resolved.enhancements.timingsBySentence, isEmpty);
       expect(resolved.enhancements.senseGroupsBySentence, isEmpty);
       expect(resolved.enhancements.acousticsBySentence, isEmpty);
@@ -131,7 +146,7 @@ void main() {
     },
   );
 
-  test('an unknown rich payload schema degrades only that family', () async {
+  test('an unknown rich payload schema cannot create a transcript', () async {
     final repository = _FakeCapabilityRepository(
       _adoptedComposition(
         detached: true,
@@ -151,12 +166,8 @@ void main() {
     final resolved = await service.resolveComposition('material-1');
 
     expect(resolved, isNotNull);
-    expect(resolved!.transcript, isNotNull);
-    expect(resolved.enhancements.timingsBySentence, isNotEmpty);
-    expect(resolved.enhancements.senseGroupsBySentence, isEmpty);
-    expect(resolved.enhancements.acousticsBySentence, isNotEmpty);
-    expect(resolved.enhancements.prosodyAnchorsBySentence, isNotEmpty);
-    expect(resolved.enhancements.phonesBySentence, isNotEmpty);
+    expect(resolved!.transcript, isNull);
+    expect(resolved.enhancements, isEmpty);
   });
 
   test('malformed optional rich fields never throw', () async {
@@ -221,39 +232,37 @@ void main() {
     final resolved = await service.resolveComposition('material-1');
 
     expect(resolved, isNotNull);
-    expect(resolved!.transcript, isNotNull);
+    expect(resolved!.transcript, isNull);
     expect(resolved.enhancements.senseGroupsBySentence, isEmpty);
     expect(resolved.enhancements.prosodyAnchorsBySentence, isEmpty);
     expect(resolved.enhancements.phonesBySentence, isEmpty);
   });
 
-  test(
-    'malformed detached payload remains an honest missing transcript',
-    () async {
-      final repository = _FakeCapabilityRepository(
-        _adoptedComposition(detached: true),
-        payloads: {
-          'structured-1': _structuredReadingPayload(),
-          'subtitle-1': utf8.encode('{"sentences":[{"id":"broken"}]}'),
-        },
-      );
-      final service = CompositionSessionService(
-        repository: repository,
-        resources: _FakeResourceRepository(),
-      );
+  test('a malformed package payload cannot create a transcript', () async {
+    final repository = _FakeCapabilityRepository(
+      _adoptedComposition(detached: true),
+      payloads: {
+        'structured-1': _structuredReadingPayload(),
+        'subtitle-1': utf8.encode('{"sentences":[{"id":"broken"}]}'),
+      },
+    );
+    final service = CompositionSessionService(
+      repository: repository,
+      resources: _FakeResourceRepository(),
+    );
 
-      final resolved = await service.resolveComposition('material-1');
+    final resolved = await service.resolveComposition('material-1');
 
-      expect(resolved, isNotNull);
-      expect(resolved!.transcript, isNull);
-    },
-  );
+    expect(resolved, isNotNull);
+    expect(resolved!.transcript, isNull);
+  });
 }
 
 AdoptedComposition _adoptedComposition({
   required bool detached,
   String? senseGroupSchema,
   bool includeRichResources = true,
+  bool includeDerivedBinding = false,
 }) => AdoptedComposition(
   materialId: 'material-1',
   materialRevisionId: 'revision-1',
@@ -287,6 +296,19 @@ AdoptedComposition _adoptedComposition({
         blobAvailable: false,
         binding: AdoptedCompositionMediaBinding(mediaId: 'media-1'),
         producerToolId: 'source',
+      ),
+    if (includeDerivedBinding)
+      const AdoptedCompositionRendition(
+        renditionId: 'derived-media-1',
+        kind: 'media',
+        origin: 'derived',
+        mediaType: 'audio/wav',
+        language: 'en',
+        digest: 'derived-digest',
+        byteSize: 1,
+        blobAvailable: true,
+        binding: AdoptedCompositionMediaBinding(mediaId: 'derived-media-1'),
+        producerToolId: 'listen-gen',
       ),
   ],
 );

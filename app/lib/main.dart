@@ -66,7 +66,6 @@ import 'data/repositories/discovery_repository.dart';
 import 'data/repositories/feed_discovery_repository.dart';
 import 'services/listen_gen_process_service.dart';
 import 'services/composition_session_service.dart';
-import 'services/composition_transcript_bridge.dart';
 import 'services/listen_gen_release_service.dart';
 import 'widgets/navigation/app_sidebar.dart';
 import 'widgets/navigation/pane_segments.dart';
@@ -1110,6 +1109,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       '${_workbenchAnimController.status} value=${_workbenchAnimController.value}',
     );
     unawaited(practiceActions.closePracticeWindow());
+    learningController.setDiagnosisExpanded(false);
     _workbenchAnimController.reverse().then((_) {
       debugPrint(
         '[_collapseWorkbench] reverse settled; expanded=false; status='
@@ -1355,6 +1355,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   void _closeDocumentMaterialSurface() {
     final closing = _documentSession;
     if (closing == null) return;
+    learningController.setDiagnosisExpanded(false);
     _workbenchAnimController.reverse().then((_) {
       if (!mounted || !identical(_documentSession, closing)) return;
       final listener = _documentSessionListener;
@@ -2316,13 +2317,6 @@ class _PlayerScreenState extends State<PlayerScreen>
         preparationAvailability: _preparationAvailability,
         coordinator: capabilityCoordinator,
         currentMaterial: () => mediaSession.currentMaterial,
-        bridge: CompositionTranscriptBridge(
-          readComposition: coreRepositories.capability.readAdoptedComposition,
-          readResourcePayload:
-              coreRepositories.capability.readCompositionResourcePayload,
-          importSubtitle: (mediaId, path) =>
-              coreRepositories.mediaSession.importSubtitle(mediaId, path),
-        ),
         // Same resolver the document workbench uses: one material, one
         // adopted composition, whichever body the workbench has mounted.
         resolveComposition: compositionSessionService.resolveComposition,
@@ -3143,7 +3137,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                           );
                                         },
                                       ),
-                                      if (_documentSession == null) ...[
+                                      if (_documentSession == null ||
+                                          _documentSession?.state
+                                              is DocumentSessionReady) ...[
                                         PlayerOverlays(
                                           practiceController:
                                               practiceController,
@@ -3340,9 +3336,14 @@ class _PlayerScreenState extends State<PlayerScreen>
   /// the same flag the transcript's `解析` entry toggles — so it rebuilds when
   /// that, the current sentence, or a freshly loaded diagnosis changes.
   Widget _analysisWindow() => ListenableBuilder(
-    listenable: Listenable.merge([learningController, subtitleController]),
+    listenable: Listenable.merge([
+      learningController,
+      subtitleController,
+      _workbenchAnimController,
+    ]),
     builder: (context, _) {
-      if (!learningController.diagnosisExpanded) {
+      if (!learningController.diagnosisExpanded ||
+          (!_workbenchExpanded && _workbenchAnimController.isDismissed)) {
         return const SizedBox.shrink();
       }
       return SentenceAnalysisWindow(

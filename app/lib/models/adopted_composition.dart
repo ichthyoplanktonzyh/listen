@@ -174,17 +174,27 @@ class AdoptedComposition {
     return null;
   }
 
-  /// The media id of the composition's source media rendition, when one is
-  /// bound. This is the anchor Core lands the package `subtitle_text_track`
-  /// under, so it is the id to call `mediaSubtitles` with to read back the
-  /// subtitle track whose sentence ids are real `SubtitleSentenceId`s.
-  String? get sourceMediaId {
+  /// The media id Core uses for the composition workbench transcript.
+  ///
+  /// Source media wins for audio/video materials. Document compositions have
+  /// no source media, so Core may bind their derived TTS audio to a registered
+  /// media id; that id is the same formal Core track namespace and is the one
+  /// the App must query. A missing binding means there is no legal transcript
+  /// projection — callers must not manufacture a detached track.
+  String? get workbenchMediaId {
+    String? derivedMediaId;
     for (final rendition in _renditions) {
       if (rendition.kind == 'media' && rendition.origin == 'source') {
         final binding = rendition.binding;
         if (binding is AdoptedCompositionMediaBinding) return binding.mediaId;
       }
+      if (rendition.kind == 'media' && rendition.origin == 'derived') {
+        final binding = rendition.binding;
+        if (binding is AdoptedCompositionMediaBinding) {
+          derivedMediaId ??= binding.mediaId;
+        }
+      }
     }
-    return null;
+    return derivedMediaId;
   }
 }

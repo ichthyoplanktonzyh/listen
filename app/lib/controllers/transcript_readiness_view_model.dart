@@ -7,7 +7,6 @@ import '../models/learning_material.dart';
 import '../models/material_capability.dart';
 import '../models/timeline.dart';
 import '../models/composition.dart';
-import '../services/composition_transcript_bridge.dart';
 import 'material_capability_coordinator.dart';
 import 'media_session_coordinator.dart';
 import 'subtitle_controller.dart';
@@ -113,7 +112,6 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     required this.preparationAvailability,
     required this.coordinator,
     required this.currentMaterial,
-    this.bridge,
     this.resolveComposition,
     Listenable? refreshTrigger,
   })
@@ -143,14 +141,9 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   /// The current media's material, when one is registered.
   final MaterialDetails? Function() currentMaterial;
 
-  /// Bridges the adopted composition into the subtitle-track surface so a
-  /// prepared learning transcript appears in the workbench. Null on hosts
-  /// without the composition surface (tests, minimal hosts).
-  final CompositionTranscriptBridge? bridge;
-
   /// Resolves the material's adopted composition, so the optional analysis
-  /// resources it carries can ride onto the bridged transcript. Null on hosts
-  /// without the composition surface.
+  /// resources it carries can ride onto the formal Core transcript. Null on
+  /// hosts without the composition surface.
   final Future<ResolvedComposition?> Function(String materialId)?
   resolveComposition;
 
@@ -158,9 +151,10 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
 
   late String Function(String key) text;
   bool _disposed = false;
-  bool _bridgeAttempted = false;
-  bool _bridgeInFlight = false;
-  String? _bridgeMaterialId;
+  bool _projectionAttempted = false;
+  bool _projectionInFlight = false;
+  String? _projectionMaterialId;
+  String? _projectionFailureCode;
 
   TranscriptReadinessState _state = TranscriptReadinessState();
   TranscriptReadinessState get state => _state;
@@ -195,9 +189,7 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> prepareLearningTranscript({
-    bool forceRegenerate = false,
-  }) async {
+  Future<void> prepareLearningTranscript({bool forceRegenerate = false}) async {
     final material = currentMaterial();
     if (material == null) {
       mediaSession.player.setStatus(
@@ -229,7 +221,8 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   Future<void> retry() async {
     final material = currentMaterial();
     if (material == null) return;
-    _bridgeAttempted = false;
+    _projectionAttempted = false;
+    _projectionFailureCode = null;
     await coordinator.requestCapability(material, MaterialCapability.read);
     _recompute();
   }
@@ -246,32 +239,30 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
   /// switch before reading the new composition.
   Future<void> refreshAdoptedComposition() async {
     final materialId = currentMaterial()?.material.id;
-    if (materialId == null || _bridgeInFlight) return;
-    _bridgeMaterialId = materialId;
-    _bridgeAttempted = false;
-    _bridgeInFlight = true;
-    await _bridgePackageToTrack();
+    if (materialId == null || _projectionInFlight) return;
+    _projectionMaterialId = materialId;
+    _projectionAttempted = false;
+    _projectionFailureCode = null;
+    _projectionInFlight = true;
+    await _projectPackageToTrack();
   }
 
-  /// Imports the adopted composition's structured reading as a subtitle
-  /// track, once, through [CompositionTranscriptBridge]. The Core package
-  /// surface and the subtitle-track surface do not share storage, so a
-  /// freshly prepared learning transcript would otherwise stay invisible to
-  /// the workbench transcript panel.
-  Future<void> _bridgePackageToTrack() async {
-    final bridge = this.bridge;
+  /// Projects the adopted composition's Core-landed subtitle track once.
+  ///
+  /// A composition-local/detached transcript is not a workbench transcript:
+  /// its sentence ids are not Core-global ids and cannot be sent to diagnosis
+  /// or timeline APIs. The App therefore never promotes one to primary; Core
+  /// must have materialized the package resource as a formal subtitle track.
+  Future<void> _projectPackageToTrack() async {
     final material = currentMaterial();
     final mediaId = mediaSession.player.mediaId;
     final materialId = material?.material.id;
     try {
       if (material == null || mediaId == null || materialId == null) return;
-      // Prefer the package's exact tokenized timed-text resource. It already
-      // has the cue ids consumed by word lookup, word timing, sense groups and
-      // prosody, so routing it through SRT would throw those identities away.
       final composition = await resolveComposition?.call(materialId);
       if (!_isCurrentProjectionTarget(materialId, mediaId)) return;
       final exact = composition?.transcript;
-      if (exact != null && _hasLookupTokens(exact)) {
+      if (exact != null && _isFormalCoreTranscript(exact, mediaId)) {
         subtitle.setPrimaryTrack(exact);
         subtitle.setSubtitleResources([exact]);
         final enhancements = composition!.enhancements;
@@ -306,34 +297,14 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
         return;
       }
 
-      // Older/partial editions may only have Structured Reading plus anchor
-      // alignment. Keep the established Core import bridge for that honest
-      // fallback; Core tokenizes the imported lines before the learning panel
-      // receives them.
-      if (bridge == null) return;
-      final bridged = await bridge.bridge(materialId, mediaId);
-      if (!_isCurrentProjectionTarget(materialId, mediaId)) return;
-      if (bridged != null) {
-        await mediaSession.resourceActions.loadSubtitleResources(
-          updateStatus: false,
-        );
-        subtitle.setPrimaryTrack(bridged.track);
-        if (!subtitle.subtitleResources.any(
-          (track) => track.id == bridged.track.id,
-        )) {
-          subtitle.setSubtitleResources([
-            ...subtitle.subtitleResources,
-            bridged.track,
-          ]);
-        }
-        await _applyCompositionEnhancements(materialId, bridged);
-      }
+      _projectionFailureCode = 'learning_material_core_transcript_unavailable';
     } on Object catch (error) {
-      debugPrint('transcript bridge failed: $error');
+      _projectionFailureCode = 'learning_material_core_transcript_unavailable';
+      debugPrint('Core transcript projection failed: $error');
     } finally {
-      if (_bridgeMaterialId == materialId) {
-        _bridgeAttempted = true;
-        _bridgeInFlight = false;
+      if (_projectionMaterialId == materialId) {
+        _projectionAttempted = true;
+        _projectionInFlight = false;
         _recompute();
       }
     }
@@ -343,115 +314,46 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
       currentMaterial()?.material.id == materialId &&
       mediaSession.player.mediaId == mediaId;
 
-  static bool _hasLookupTokens(SubtitleTrack track) =>
-      track.cues.isNotEmpty &&
-      track.cues.every(
-        (cue) => cue.tokens.any((token) => token.kind == 'word'),
-      );
-
-  /// Re-keys the composition's optional analysis resources onto the cues the
-  /// bridge just created, and hands them to the transcript surface.
-  ///
-  /// The package keys these by *its* sentence ids; the workbench looks them up
-  /// by cue id. Without the bridge's mapping they would key on ids no cue has
-  /// and render nothing at all — silently, which is the worst version of it.
-  /// So an absent mapping applies nothing, exactly like an absent resource.
-  Future<void> _applyCompositionEnhancements(
-    String materialId,
-    BridgedTranscript bridged,
-  ) async {
-    final resolve = resolveComposition;
-    if (resolve == null || bridged.cueIdBySentenceId.isEmpty) return;
-    final composition = await resolve(materialId);
-    final enhancements = composition?.enhancements;
-    if (enhancements == null || enhancements.isEmpty) return;
-    if (_disposed) return;
-    subtitle.applyCompositionEnhancements(
-      timingsBySentence: _rekey(
-        enhancements.timingsBySentence,
-        bridged.cueIdBySentenceId,
-        (cueId, timings) => [
-          for (final timing in timings) timing.copyWith(sentenceId: cueId),
-        ],
-      ),
-      senseGroupsBySentence: _rekey(
-        enhancements.senseGroupsBySentence,
-        bridged.cueIdBySentenceId,
-        (cueId, groups) => groups,
-      ),
-      chunkPartitionsBySentence: _rekey(
-        enhancements.chunkPartitionsBySentence,
-        bridged.cueIdBySentenceId,
-        (cueId, partition) => partition,
-      ),
-      acousticsBySentence: _rekey(
-        enhancements.acousticsBySentence,
-        bridged.cueIdBySentenceId,
-        (cueId, acoustics) => acoustics,
-      ),
-      prosodyAnchorsBySentence: _rekey(
-        enhancements.prosodyAnchorsBySentence,
-        bridged.cueIdBySentenceId,
-        (cueId, anchors) => anchors,
-      ),
-      phonesBySentence: _rekey(
-        enhancements.phonesBySentence,
-        bridged.cueIdBySentenceId,
-        (cueId, phones) => phones,
-      ),
-    );
-  }
-
-  /// Moves [source] from package sentence ids to cue ids, dropping anything
-  /// the mapping does not cover.
-  static Map<String, T> _rekey<T>(
-    Map<String, T> source,
-    Map<String, String> cueIdBySentenceId,
-    T Function(String cueId, T value) adapt,
-  ) {
-    final result = <String, T>{};
-    for (final entry in source.entries) {
-      final cueId = cueIdBySentenceId[entry.key];
-      if (cueId == null) continue;
-      result[cueId] = adapt(cueId, entry.value);
-    }
-    return result;
-  }
+  static bool _isFormalCoreTranscript(SubtitleTrack track, String mediaId) =>
+      track.usableForLearning &&
+      track.source == 'package:subtitle_text_track' &&
+      track.mediaId == mediaId;
 
   void _recompute() {
     if (_disposed) return;
     final material = currentMaterial();
     final materialId = material?.material.id;
-    if (_bridgeMaterialId != materialId) {
-      _bridgeMaterialId = materialId;
-      _bridgeAttempted = false;
-      _bridgeInFlight = false;
+    if (_projectionMaterialId != materialId) {
+      _projectionMaterialId = materialId;
+      _projectionAttempted = false;
+      _projectionInFlight = false;
+      _projectionFailureCode = null;
     }
     final run = material == null
         ? null
         : coordinator.runViewFor(material.material.id, MaterialCapability.read);
     final runFailure = run?.failureCode;
-    final projectionAvailable = bridge != null || resolveComposition != null;
-    final completedNeedsProjection =
+    final completionNeedsProjection =
         subtitle.primaryTrack == null &&
-        run?.phase == CapabilityRunPhase.completed &&
-        projectionAvailable;
-    if (completedNeedsProjection && !_bridgeAttempted && !_bridgeInFlight) {
-      _bridgeInFlight = true;
-      unawaited(_bridgePackageToTrack());
+        run?.phase == CapabilityRunPhase.completed;
+    final projectionAvailable = resolveComposition != null;
+    if (completionNeedsProjection &&
+        projectionAvailable &&
+        !_projectionAttempted &&
+        !_projectionInFlight) {
+      _projectionInFlight = true;
+      unawaited(_projectPackageToTrack());
     }
     final projectionFailed =
-        completedNeedsProjection && _bridgeAttempted && !_bridgeInFlight;
+        completionNeedsProjection &&
+        (!projectionAvailable ||
+            (_projectionAttempted && !_projectionInFlight));
     final availability = preparationAvailability();
     final phase = switch (subtitle.primaryTrack) {
       != null => TranscriptReadinessPhase.ready,
-      _ when completedNeedsProjection && !projectionFailed =>
+      _ when completionNeedsProjection && !projectionFailed =>
         TranscriptReadinessPhase.preparing,
       _ when projectionFailed => TranscriptReadinessPhase.failed,
-      // Minimal hosts without a composition bridge retain the old completion
-      // projection; production always supplies a resolver and bridge.
-      _ when run?.phase == CapabilityRunPhase.completed =>
-        TranscriptReadinessPhase.ready,
       _ when run?.busy ?? false => TranscriptReadinessPhase.preparing,
       _ when run?.phase == CapabilityRunPhase.failed =>
         TranscriptReadinessPhase.failed,
@@ -466,7 +368,11 @@ class TranscriptReadinessViewModel extends ChangeNotifier {
           ? _preparationStageOf(run?.stage)
           : null,
       failure: projectionFailed
-          ? const ApiFailure(raw: 'learning_material_projection_failed')
+          ? ApiFailure(
+              raw:
+                  _projectionFailureCode ??
+                  'learning_material_core_transcript_unavailable',
+            )
           : runFailure == null
           ? null
           : ApiFailure(raw: runFailure),

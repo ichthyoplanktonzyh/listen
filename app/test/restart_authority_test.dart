@@ -187,6 +187,13 @@ AdoptedComposition _compositionWith({
         payloadDigest: 'b' * 64,
         payloadSizeBytes: utf8.encode(jsonEncode(alignment)).length,
       ),
+    if (withSourceMedia)
+      _resource(
+        'subtitle-1',
+        'subtitle_text_track',
+        payloadDigest: 'c' * 64,
+        payloadSizeBytes: 1,
+      ),
     for (final entry in additionalResources.entries)
       _resource(
         '${entry.key}-1',
@@ -458,6 +465,7 @@ final class _CoreWorkbenchResources implements ResourceRepository {
   static const _track = SubtitleTrack(
     id: 'package-track',
     mediaId: 'media-1',
+    fingerprint: 'material-1:revision-1:subtitle-1',
     language: 'en',
     source: 'package:subtitle_text_track',
     status: 'available',
