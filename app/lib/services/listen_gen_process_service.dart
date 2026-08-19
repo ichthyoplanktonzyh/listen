@@ -302,9 +302,17 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
   }) {
     _stdoutDone = _consumeStdout();
     _processDone = _settleProcessSafely();
-    // Drain stderr without retaining provider/tool output.
-    _process.stderr.listen((_) {});
+    _process.stderr
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen((line) {
+      if (_stderrLines.length < 50) {
+        _stderrLines.add(line);
+      }
+    });
   }
+
+  final List<String> _stderrLines = [];
 
   final Process _process;
   final Directory _directory;
@@ -467,7 +475,11 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
     }
     final terminal = _terminal;
     if (terminal == null) {
-      _completeFailure('generator_terminal_missing');
+      final stderrSummary = _stderrLines.join('\n').trim();
+      _completeFailure(
+        'generator_terminal_missing',
+        stderrSummary.isNotEmpty ? stderrSummary : null,
+      );
       return;
     }
     if (terminal.kind == GenEventKind.cancelled) {
@@ -475,11 +487,16 @@ final class _LocalListenGenProcessRun implements ListenGenProcessRun {
       return;
     }
     if (terminal.kind == GenEventKind.failed) {
-      _completeFailure(terminal.code ?? 'generator_failed', terminal.message);
+      final errorDetail = terminal.message ?? (_stderrLines.isNotEmpty ? _stderrLines.join('\n').trim() : null);
+      _completeFailure(terminal.code ?? 'generator_failed', errorDetail);
       return;
     }
     if (terminal.kind != GenEventKind.completed || exitCode != 0) {
-      _completeFailure('generator_failed');
+      final stderrSummary = _stderrLines.join('\n').trim();
+      _completeFailure(
+        'generator_failed',
+        stderrSummary.isNotEmpty ? stderrSummary : null,
+      );
       return;
     }
     final expectedDigest = terminal.packageSha256;

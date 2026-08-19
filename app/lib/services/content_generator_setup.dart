@@ -134,6 +134,9 @@ class ContentGeneratorLocator {
     // Each side is only complete when every piece it needs is present.
     final alignerPython = await _resolveExecutable(this.alignerPython, '', [
       '$_home/LLPlayerNext/.venv/bin/python',
+      '$_home/listen-gen/.venv/bin/python',
+      '$_home/listen-core/.venv/bin/python',
+      '$_home/.venv/bin/python',
     ], wantDirectory: false);
     final alignerScript = await _resolveExecutable(this.alignerScript, '', [
       '$_home/listen-core/scripts/forced-align/align-cli.py',
@@ -259,12 +262,17 @@ class ContentGeneratorLocator {
   Future<String?> _resolveModelDirectory() async {
     final configured = phoneModelDir.isNotEmpty
         ? phoneModelDir
-        : environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
-              Platform.environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
-              '';
+        : environment['LISTEN_PHONEME_MODEL_DIR'] ??
+            Platform.environment['LISTEN_PHONEME_MODEL_DIR'] ??
+            environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
+            Platform.environment['LLPLAYERNEXT_PHONEME_MODEL_DIR'] ??
+            '';
     return _resolveExecutable(configured, '', [
+      '$_home/Library/Application Support/listen/models/wav2vec2-phoneme',
+      '$_home/Library/Application Support/listen/models/phoneme',
       '$_home/Library/Application Support/LLPlayerNext/models/'
           'wav2vec2-phoneme',
+      '$_home/listen-core/models/wav2vec2-phoneme',
     ], wantDirectory: true);
   }
 
